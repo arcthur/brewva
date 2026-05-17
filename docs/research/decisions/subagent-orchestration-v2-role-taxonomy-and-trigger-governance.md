@@ -40,12 +40,12 @@
 - Delegation Gate guidance is prompt-visible and resolver-auditable. It records
   role, gate reason, task identity, `forkTurns`, model category, and model route
   facts in v3 records, but it is not a hidden scheduler or team-mode trigger.
-- Historical records remain inspectable through version-aware read-model
-  normalization, while current-version records must carry the v3 identity and
-  adoption fields.
-- Subagent A2A is bounded to parent-child audit receipts in this version. Run
-  id, task path, and nickname lookup are supported; child-to-child and sibling
-  delivery remain out of scope.
+- Current-version records must carry the v3 identity, execution, and adoption
+  fields; legacy delegation contract normalization is no longer part of the
+  read model.
+- A2A delivery belongs to channel agents. Subagents expose status, outcome,
+  cancellation, and adoption through delegation receipts rather than audit
+  messaging tools.
 - Patch and knowledge authority remains parent-owned. Worker patches require
   worker-result adoption, and librarian knowledge proposals require an explicit
   knowledge-adoption receipt before they can support authoritative docs,

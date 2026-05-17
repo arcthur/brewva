@@ -3,12 +3,8 @@ import type { BrewvaConfig, BrewvaHostedRuntimePort } from "@brewva/brewva-runti
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
-import {
-  SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
-  SUBAGENT_RUNNING_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { PatchSet } from "@brewva/brewva-runtime/patch-history";
-import type { WorkerResult } from "@brewva/brewva-runtime/patch-history";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
 import type {
   BrewvaToolOrchestration,
@@ -31,14 +27,17 @@ import {
 } from "../hosted/api.js";
 import { recordSessionShutdownIfMissing } from "../utils/runtime.js";
 import type { HostedSubagentBackgroundController } from "./background/controller.js";
-import { writeDetachedSubagentContextManifest } from "./background/protocol.js";
+import {
+  buildDelegationContextBundle,
+  buildForkContextBundle,
+} from "./build-delegation-context-bundle.js";
 import { loadHostedDelegationCatalog } from "./catalog/registry.js";
+import { writeDelegationContextBundleManifest } from "./context-manifest.js";
 import {
   buildCompletedDelegationAdoption,
   buildDelegationRunRecordSeed,
   buildDelegationTaskIdentity,
   buildForkDelegationContractRecordFields,
-  resolveDelegationRecordIdentity,
 } from "./delegation-records.js";
 import {
   HostedDelegationStore,
@@ -47,7 +46,7 @@ import {
 } from "./delegation-store.js";
 import { prepareSubagentEntry } from "./entry.js";
 import { resolveDelegationExecutionPlan } from "./execution-plan.js";
-import { renderInheritedSubagentContext } from "./fork-context.js";
+import { buildInheritedSubagentContextBlock } from "./fork-context.js";
 import {
   adoptDelegationLineageOutcome,
   ensureDelegationLineageNode,
@@ -56,7 +55,6 @@ import {
 import type { DelegationModelRoutingContext } from "./model-routing.js";
 import {
   buildDeliveryRecordFromRequest,
-  buildFailureOutcome,
   createLaunchRunFailure,
   createLaunchStartFailure,
   deliverDelegationOutcome,
@@ -68,16 +66,18 @@ import {
 } from "./orchestrator/records.js";
 import { getCanonicalForkPrompt } from "./protocol.js";
 import {
+  applyDelegationFinalizationReceipt,
   aggregateChildCost,
-  buildPatchArtifactRefs,
-  buildWorkerResult,
+  buildDelegationCompletionSummary,
+  buildDelegationFailureOutcome,
+  buildDelegationFailureFinalizationReceipt,
+  buildDelegationFinalizationReceipt,
+  rebuildDelegationFinalizationLifecycleEvent,
+  type DelegationFinalizationReceipt,
   resolveRunSummary,
 } from "./run-finalization.js";
+import { buildDelegationRunPlan } from "./run-plan.js";
 import { buildForkSubagentAgentId, buildSubagentAgentId } from "./shared.js";
-import {
-  extractStructuredOutcomeData,
-  summarizeStructuredOutcomeData,
-} from "./structured-outcome.js";
 import { resolveDelegationTarget } from "./target-resolution.js";
 import {
   mergeDelegationPacketWithTargetDefaults,
@@ -102,7 +102,6 @@ export interface HostedSubagentSessionOptions {
   managedToolNames?: readonly string[];
   managedToolMode?: ManagedToolMode;
   enableSubagents?: boolean;
-  orchestration?: BrewvaToolOrchestration;
 }
 
 export interface HostedSubagentSessionResult {
@@ -184,15 +183,11 @@ interface LiveHostedDelegationRun {
 
 interface LiveHostedDelegationRegistry {
   byRunId: Map<string, LiveHostedDelegationRun>;
-  byTaskPath: Map<string, LiveHostedDelegationRun>;
-  byNickname: Map<string, Set<LiveHostedDelegationRun>>;
 }
 
 function createLiveDelegationRegistry(): LiveHostedDelegationRegistry {
   return {
     byRunId: new Map<string, LiveHostedDelegationRun>(),
-    byTaskPath: new Map<string, LiveHostedDelegationRun>(),
-    byNickname: new Map<string, Set<LiveHostedDelegationRun>>(),
   };
 }
 
@@ -201,7 +196,6 @@ export function createHostedSubagentAdapter(
 ): NonNullable<BrewvaToolOrchestration["subagents"]> {
   const delegationStore = options.delegationStore ?? new HostedDelegationStore(options.runtime);
   const liveRunsByParentSession = new Map<string, LiveHostedDelegationRegistry>();
-  const liveRunsByChildSession = new Map<string, { parentSessionId: string; runId: string }>();
 
   function getLiveRegistry(sessionId: string): LiveHostedDelegationRegistry {
     const existing = liveRunsByParentSession.get(sessionId);
@@ -217,11 +211,6 @@ export function createHostedSubagentAdapter(
     const registry = getLiveRegistry(sessionId);
     const record = run.getView();
     registry.byRunId.set(record.runId, run);
-    registry.byTaskPath.set(record.taskPath, run);
-    const nicknameRuns =
-      registry.byNickname.get(record.nickname) ?? new Set<LiveHostedDelegationRun>();
-    nicknameRuns.add(run);
-    registry.byNickname.set(record.nickname, nicknameRuns);
   }
 
   function removeLiveRun(sessionId: string, runId: string): void {
@@ -235,21 +224,71 @@ export function createHostedSubagentAdapter(
     }
     const record = run.getView();
     registry.byRunId.delete(record.runId);
-    registry.byTaskPath.delete(record.taskPath);
-    const nicknameRuns = registry.byNickname.get(record.nickname);
-    if (nicknameRuns) {
-      nicknameRuns.delete(run);
-      if (nicknameRuns.size === 0) {
-        registry.byNickname.delete(record.nickname);
-      }
-    }
     if (registry.byRunId.size === 0) {
       liveRunsByParentSession.delete(sessionId);
     }
   }
 
-  function isLiveAddressMatch(run: LiveHostedDelegationRun): boolean {
-    return !isDelegationRunTerminalStatus(run.getView().status);
+  function applyHostedFinalization(input: {
+    parentSessionId: string;
+    runId: string;
+    delegate: string;
+    delivery?: NonNullable<SubagentRunRequest["delivery"]>;
+    initialDelivery?: DelegationRunRecord["delivery"];
+    receipt: DelegationFinalizationReceipt;
+    recordPendingTransition?: boolean;
+  }): DelegationFinalizationReceipt {
+    const deliveryResult = input.delivery
+      ? input.delivery.returnMode === "supplemental"
+        ? deliverDelegationOutcome({
+            runtime: options.runtime,
+            sessionId: input.parentSessionId,
+            delegate: input.delegate,
+            outcome: input.receipt.outcome,
+            delivery: input.delivery,
+          })
+        : (() => {
+            const result = preparePendingParentTurnDelivery();
+            if (input.recordPendingTransition) {
+              recordSessionTurnTransition(options.runtime, {
+                sessionId: input.parentSessionId,
+                reason: "subagent_delivery_pending",
+                status: "entered",
+                family: "delegation",
+              });
+            }
+            return result;
+          })()
+      : undefined;
+    const delivery = mergeDeliveryRecord(
+      delegationStore.getRun(input.parentSessionId, input.runId)?.delivery ?? input.initialDelivery,
+      deliveryResult,
+    );
+    const receipt = rebuildDelegationFinalizationLifecycleEvent({
+      ...input.receipt,
+      record: { ...input.receipt.record, delivery },
+      lineageOutcome: { ...input.receipt.lineageOutcome, delivery },
+      adoptLineageOutcome:
+        input.receipt.adoptLineageOutcome || deliveryResult?.supplementalAppended === true,
+    });
+    applyDelegationFinalizationReceipt({
+      runtime: options.runtime,
+      receipt,
+      recordLineageOutcome: (record) =>
+        recordDelegationLineageOutcome({
+          runtime: options.runtime,
+          sessionId: input.parentSessionId,
+          record,
+        }),
+      adoptLineageOutcome: (record) =>
+        adoptDelegationLineageOutcome({
+          runtime: options.runtime,
+          sessionId: input.parentSessionId,
+          record,
+          admission: "context_eligible",
+        }),
+    });
+    return receipt;
   }
 
   function collectReservedTaskPaths(parentSessionId: string): string[] {
@@ -260,31 +299,7 @@ export function createHostedSubagentAdapter(
     if (!live) {
       return persisted;
     }
-    return [...persisted, ...live.byTaskPath.keys()];
-  }
-
-  function resolveLiveRunAddress(
-    parentSessionId: string,
-    address: string,
-  ): { run: LiveHostedDelegationRun } | { error: string } {
-    const registry = liveRunsByParentSession.get(parentSessionId);
-    if (!registry) {
-      return { error: "inactive_subagent_target" };
-    }
-    const directRun = registry.byRunId.get(address) ?? registry.byTaskPath.get(address);
-    if (directRun) {
-      return isLiveAddressMatch(directRun)
-        ? { run: directRun }
-        : { error: "inactive_subagent_target" };
-    }
-    const matches = [...(registry.byNickname.get(address) ?? [])].filter(isLiveAddressMatch);
-    if (matches.length === 0) {
-      return { error: "inactive_subagent_target" };
-    }
-    if (matches.length > 1) {
-      return { error: "ambiguous_subagent_target" };
-    }
-    return { run: matches[0]! };
+    return [...persisted, ...[...live.byRunId.values()].map((run) => run.getView().taskPath)];
   }
 
   function buildFanoutParentTaskPath(input: {
@@ -308,40 +323,6 @@ export function createHostedSubagentAdapter(
       reservedTaskPaths: collectReservedTaskPaths(input.parentSessionId),
     });
     return identity.taskPath;
-  }
-
-  function recordSubagentA2AMessage(input: {
-    parentSessionId: string;
-    runId: string;
-    direction: "parent_to_child" | "child_to_parent";
-    fromAgentId?: string;
-    toAgentId: string;
-    message: string;
-    correlationId?: string;
-    depth: number;
-    hops: number;
-  }): void {
-    options.runtime.extensions.hosted.events.record({
-      sessionId: input.parentSessionId,
-      type: SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
-      payload: {
-        runId: input.runId,
-        direction: input.direction,
-        fromAgentId: input.fromAgentId ?? null,
-        toAgentId: input.toAgentId,
-        message: input.message,
-        correlationId: input.correlationId ?? null,
-        depth: input.depth,
-        hops: input.hops,
-      },
-    });
-  }
-
-  function resolveA2ALimits(): { maxDepth: number; maxHops: number } {
-    return {
-      maxDepth: options.runtime.config.channels.orchestration.limits.a2aMaxDepth,
-      maxHops: options.runtime.config.channels.orchestration.limits.a2aMaxHops,
-    };
   }
 
   async function resolveLaunchPlan(input: {
@@ -496,7 +477,7 @@ export function createHostedSubagentAdapter(
     let isolatedWorkspace: IsolatedWorkspaceHandle | undefined;
     let childSessionId: import("@brewva/brewva-runtime/core").BrewvaSessionId | undefined;
     let executionPlan: ReturnType<typeof resolveDelegationExecutionPlan> | undefined;
-    let childCostAggregated = false;
+    let runPlan: ReturnType<typeof buildDelegationRunPlan> | undefined;
     let parallelSlotReleased = false;
     let cancellationReason: string | undefined;
     let timeoutTriggered = false;
@@ -504,18 +485,19 @@ export function createHostedSubagentAdapter(
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
     const immediateFailure = (error: string): LiveHostedDelegationRun => {
+      const failedAt = Date.now();
       const failedRecord: DelegationRunRecord = {
         ...buildDelegationRunRecordSeed({
           runId,
           target: input.target,
           parentSessionId: asBrewvaSessionId(input.parentSessionId),
           createdAt: startedAt,
-          updatedAt: Date.now(),
+          updatedAt: failedAt,
           status: "failed",
           label: input.label,
           taskIdentity,
           forkTurns,
-          delivery: buildDeliveryRecordFromRequest(input.delivery, Date.now()),
+          delivery: buildDeliveryRecordFromRequest(input.delivery, failedAt),
         }),
         status: "failed",
         summary: error,
@@ -534,20 +516,16 @@ export function createHostedSubagentAdapter(
       return {
         record: failedRecord,
         outcomePromise: Promise.resolve(
-          buildFailureOutcome({
+          buildDelegationFailureOutcome({
+            target: input.target,
+            taskIdentity,
             runId,
-            agent: input.target.agent,
-            taskName: taskIdentity.taskName,
-            taskPath: taskIdentity.taskPath,
-            nickname: taskIdentity.nickname,
             delegate,
-            agentSpec: input.target.agentSpecName,
-            envelope: input.target.envelopeName,
-            skillName: input.target.skillName,
-            consultKind: input.target.consultKind,
             label: input.label,
-            error,
+            message: error,
+            status: "error",
             startedAt,
+            finishedAt: failedAt,
           }),
         ),
         async cancel() {
@@ -642,19 +620,16 @@ export function createHostedSubagentAdapter(
         };
       },
       outcomePromise: Promise.resolve(
-        buildFailureOutcome({
+        buildDelegationFailureOutcome({
+          target: input.target,
+          taskIdentity,
           runId,
-          agent: input.target.agent,
-          taskName: taskIdentity.taskName,
-          taskPath: taskIdentity.taskPath,
-          nickname: taskIdentity.nickname,
           delegate,
-          agentSpec: input.target.agentSpecName,
-          envelope: input.target.envelopeName,
-          skillName: input.target.skillName,
           label: input.label,
-          error: "uninitialized",
+          message: "uninitialized",
+          status: "error",
           startedAt,
+          finishedAt: startedAt,
         }),
       ),
     };
@@ -669,14 +644,42 @@ export function createHostedSubagentAdapter(
           }, input.timeoutMs);
         }
 
-        writeDetachedSubagentContextManifest(options.runtime.identity.workspaceRoot, runId, {
-          schema: "brewva.delegation-context-manifest.v1",
+        const inheritedBlock = buildInheritedSubagentContextBlock({
+          runtime: options.runtime,
+          sessionId: input.parentSessionId,
+          forkTurns,
+        });
+        const contextBundleResult = buildDelegationContextBundle({
+          packet: input.packet,
+          inheritedBlock,
+          createdAt: startedAt,
+        });
+        if (!contextBundleResult.ok) {
+          throw new Error(
+            `delegation_context_blocked:${contextBundleResult.blocker.overflow}:${contextBundleResult.blocker.requiredTokens}/${contextBundleResult.blocker.maxTokens}`,
+          );
+        }
+        const contextBundle = contextBundleResult.bundle;
+        runPlan = buildDelegationRunPlan({
           runId,
+          parentSessionId: input.parentSessionId,
           delegate,
-          resultMode: input.target.resultMode,
+          packet: input.packet,
+          target: input.target,
+          executionPlan,
+          taskIdentity,
+          modelRoute: executionPlan.modelRoute,
+          contextBundle,
+          delivery: input.delivery,
+          createdAt: startedAt,
+        });
+        const plan = runPlan;
+        writeDelegationContextBundleManifest(options.runtime.identity.workspaceRoot, runId, {
+          schema: "brewva.delegation-context-bundle.v1",
+          runId,
           generatedAt: Date.now(),
-          objective: input.packet.objective,
-          contextRefs: input.packet.contextRefs ?? [],
+          bundle: contextBundle,
+          hash: contextBundle.hash,
         });
         if (executionPlan.boundary === "effectful") {
           isolatedWorkspace = await createIsolatedWorkspace(options.runtime.identity.workspaceRoot);
@@ -696,78 +699,9 @@ export function createHostedSubagentAdapter(
           managedToolNames: executionPlan.managedToolNames,
           managedToolMode: executionPlan.managedToolMode,
           enableSubagents: false,
-          orchestration: {
-            a2a: {
-              send: async (messageInput) => {
-                const limits = resolveA2ALimits();
-                const depth = (messageInput.depth ?? 0) + 1;
-                const hops = (messageInput.hops ?? 0) + 1;
-                if (depth > limits.maxDepth) {
-                  return {
-                    ok: false,
-                    toAgentId: messageInput.toAgentId,
-                    error: "a2a_depth_limit_exceeded",
-                    depth,
-                    hops,
-                  };
-                }
-                if (hops > limits.maxHops) {
-                  return {
-                    ok: false,
-                    toAgentId: messageInput.toAgentId,
-                    error: "a2a_hops_limit_exceeded",
-                    depth,
-                    hops,
-                  };
-                }
-                if (messageInput.toAgentId !== "parent") {
-                  return {
-                    ok: false,
-                    toAgentId: messageInput.toAgentId,
-                    error: "child_to_child_not_allowed",
-                    depth,
-                    hops,
-                  };
-                }
-                recordSubagentA2AMessage({
-                  parentSessionId: input.parentSessionId,
-                  runId,
-                  direction: "child_to_parent",
-                  fromAgentId: messageInput.fromAgentId,
-                  toAgentId: messageInput.toAgentId,
-                  message: messageInput.message,
-                  correlationId: messageInput.correlationId,
-                  depth,
-                  hops,
-                });
-                return {
-                  ok: true,
-                  toAgentId: "parent",
-                  responseText:
-                    "subagent message recorded for parent (audit-only; v1 delivery is deferred)",
-                  depth,
-                  hops,
-                };
-              },
-              broadcast: async (messageInput) => ({
-                ok: false,
-                error: "child_broadcast_not_allowed",
-                results: messageInput.toAgentIds.map((toAgentId) => ({
-                  ok: false,
-                  toAgentId,
-                  error: "child_broadcast_not_allowed",
-                })),
-              }),
-              listAgents: async () => [{ agentId: "parent", status: "active" as const }],
-            },
-          },
         });
 
         childSessionId = asBrewvaSessionId(child.session.sessionManager.getSessionId());
-        liveRunsByChildSession.set(childSessionId, {
-          parentSessionId: input.parentSessionId,
-          runId,
-        });
         if (timeoutTriggered && child.session.abort) {
           await child.session.abort().catch(() => undefined);
         }
@@ -789,14 +723,10 @@ export function createHostedSubagentAdapter(
           parentRuntime: options.runtime,
           childRuntime: child.runtime,
           childSessionId,
-          target: input.target,
-          packet: input.packet,
+          target: plan.target,
+          packet: plan.packet,
           promptOverride: executionPlan.prompt,
-          inheritedContext: renderInheritedSubagentContext({
-            runtime: options.runtime,
-            sessionId: input.parentSessionId,
-            forkTurns,
-          }),
+          contextBundle: plan.contextBundle,
         });
         const { delegatedSkill, childOwnsSkill, prompt } = preparedEntry;
         const output = await runHostedTurnEnvelope({
@@ -810,322 +740,111 @@ export function createHostedSubagentAdapter(
           throw new Error(`subagent_thread_loop_${output.status}`);
         }
         const childCostSummary = child.runtime.inspect.cost.summary.get(childSessionId);
-        aggregateChildCost(options.runtime, input.parentSessionId, childCostSummary);
-        childCostAggregated = true;
-        const structuredOutcome = extractStructuredOutcomeData({
-          resultMode: input.target.resultMode,
-          consultKind: input.target.consultKind,
+        const completionSummary = buildDelegationCompletionSummary({
+          target: input.target,
+          delegatedSkillName: delegatedSkill,
+          childOwnsSkill,
           assistantText: output.assistantText,
-          skillName: childOwnsSkill ? delegatedSkill : undefined,
         });
-        if (structuredOutcome.parseError) {
-          options.runtime.extensions.hosted.events.record({
-            sessionId: input.parentSessionId,
-            type: "subagent_outcome_parse_failed",
-            payload: {
-              runId,
-              delegate,
-              label: input.label ?? null,
-              kind: input.target.resultMode,
-              consultKind: input.target.consultKind ?? null,
-              childSessionId,
-              error: structuredOutcome.parseError,
-            },
-          });
-        }
-        const fallbackSummary =
-          structuredOutcome.data && summarizeStructuredOutcomeData(structuredOutcome.data)
-            ? summarizeStructuredOutcomeData(structuredOutcome.data)!
-            : `Delegated ${input.target.resultMode} run completed without a final assistant summary.`;
-        const summary = resolveRunSummary(
-          structuredOutcome.narrativeText || output.assistantText,
-          fallbackSummary,
-        );
         const patches = executionPlan.producesPatches
           ? await captureIsolatedPatchSet(
               options.runtime.identity.workspaceRoot,
               isolatedWorkspace,
-              summary,
+              completionSummary.summary,
               childSessionId,
             )
           : undefined;
-        const workerResult = executionPlan.producesPatches
-          ? buildWorkerResult({
-              workerId: runId,
-              summary,
-              patches,
-            })
-          : undefined;
-        if (workerResult) {
-          options.runtime.authority.session.workerResults.record(
-            input.parentSessionId,
-            workerResult,
-          );
+        const finishedAt = Date.now();
+        let finalizationReceipt = buildDelegationFinalizationReceipt({
+          parentSessionId: plan.parentSessionId,
+          initialRecord,
+          currentRecord: delegationStore.getRun(plan.parentSessionId, plan.runId),
+          target: plan.target,
+          executionPlan: plan.executionPlan,
+          taskIdentity: plan.taskIdentity,
+          runId: plan.runId,
+          delegate: plan.delegate,
+          delegatedSkillName: delegatedSkill,
+          childOwnsSkill,
+          childSessionId,
+          label: input.label,
+          startedAt,
+          finishedAt,
+          assistantText: output.assistantText,
+          toolOutputs: output.toolOutputs,
+          childCostSummary,
+          patches,
+        });
+
+        finalizationReceipt = applyHostedFinalization({
+          parentSessionId: input.parentSessionId,
+          runId,
+          delegate,
+          delivery: input.delivery,
+          initialDelivery: initialRecord.delivery,
+          receipt: finalizationReceipt,
+          recordPendingTransition: true,
+        });
+        if (finalizationReceipt.workerResult) {
           parallelSlotReleased = true;
         }
-
-        const outcome: SubagentOutcomeSuccess = {
-          ok: true,
-          runId,
-          agent: input.target.agent,
-          taskName: taskIdentity.taskName,
-          taskPath: taskIdentity.taskPath,
-          nickname: taskIdentity.nickname,
-          delegate,
-          agentSpec: input.target.agentSpecName,
-          envelope: input.target.envelopeName,
-          skillName: delegatedSkill,
-          consultKind: input.target.consultKind,
-          label: input.label,
-          kind: input.target.resultMode,
-          status: "ok",
-          workerSessionId: childSessionId,
-          summary,
-          assistantText: output.assistantText.trim(),
-          data: structuredOutcome.data,
-          metrics: {
-            durationMs: Math.max(0, Date.now() - startedAt),
-            inputTokens: childCostSummary.inputTokens,
-            outputTokens: childCostSummary.outputTokens,
-            totalTokens: childCostSummary.totalTokens,
-            costUsd: childCostSummary.totalCostUsd,
-          },
-          patches,
-          artifactRefs: buildPatchArtifactRefs(patches),
-          evidenceRefs: [
-            {
-              kind: "event",
-              locator: `session:${childSessionId}:agent_end`,
-              summary: "Child run completed",
-              sourceSessionId: childSessionId,
-            },
-            ...output.toolOutputs.slice(0, 8).map((toolOutput) => ({
-              kind: "tool_result" as const,
-              locator: `session:${childSessionId}:tool:${toolOutput.toolCallId}`,
-              summary: `${toolOutput.toolName}:${toolOutput.verdict}`,
-              sourceSessionId: childSessionId,
-            })),
-          ],
-        };
-
-        const deliveryResult = input.delivery
-          ? input.delivery.returnMode === "supplemental"
-            ? deliverDelegationOutcome({
-                runtime: options.runtime,
-                sessionId: input.parentSessionId,
-                delegate,
-                outcome,
-                delivery: input.delivery,
-              })
-            : (() => {
-                const result = preparePendingParentTurnDelivery();
-                recordSessionTurnTransition(options.runtime, {
-                  sessionId: input.parentSessionId,
-                  reason: "subagent_delivery_pending",
-                  status: "entered",
-                  family: "delegation",
-                });
-                return result;
-              })()
-          : undefined;
-
-        const resultData = outcome.data
-          ? (structuredClone(outcome.data) as unknown as DelegationRunRecord["resultData"])
-          : undefined;
-        const completedRecord: DelegationRunRecord = {
-          ...(delegationStore.getRun(input.parentSessionId, runId) ?? initialRecord),
-          ...resolveDelegationRecordIdentity({
-            target: input.target,
-            delegatedSkillName: delegatedSkill,
-          }),
-          status: "completed",
-          updatedAt: Date.now(),
-          workerSessionId: childSessionId,
-          modelRoute: executionPlan.modelRoute,
-          adoption: buildCompletedDelegationAdoption({
-            target: input.target,
-            resultData,
-            patchChangeCount: patches?.changes.length,
-          }),
-          summary,
-          error: undefined,
-          resultData,
-          artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
-          delivery: mergeDeliveryRecord(
-            delegationStore.getRun(input.parentSessionId, runId)?.delivery ??
-              initialRecord.delivery,
-            deliveryResult,
-          ),
-          totalTokens: childCostSummary.totalTokens,
-          costUsd: childCostSummary.totalCostUsd,
-        };
-        liveRun.record = completedRecord;
-        options.runtime.extensions.hosted.events.record({
-          sessionId: input.parentSessionId,
-          type: "subagent_completed",
-          payload: {
-            ...buildDelegationLifecyclePayload(completedRecord),
-            workerStatus: workerResult?.status ?? null,
-            patchChangeCount: patches?.changes.length ?? 0,
-          },
-        });
-        recordDelegationLineageOutcome({
-          runtime: options.runtime,
-          sessionId: input.parentSessionId,
-          record: completedRecord,
-        });
-        if (deliveryResult?.supplementalAppended) {
-          adoptDelegationLineageOutcome({
-            runtime: options.runtime,
-            sessionId: input.parentSessionId,
-            record: completedRecord,
-            admission: "context_eligible",
-          });
-        }
-        return outcome;
+        liveRun.record = finalizationReceipt.record;
+        return finalizationReceipt.outcome;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (child && childSessionId && !childCostAggregated) {
-          aggregateChildCost(
-            options.runtime,
-            input.parentSessionId,
-            child.runtime.inspect.cost.summary.get(childSessionId),
-          );
-          childCostAggregated = true;
-        }
-        let workerResult: WorkerResult | undefined;
-        if (executionPlan.producesPatches) {
-          const patches = await captureIsolatedPatchSet(
-            options.runtime.identity.workspaceRoot,
-            isolatedWorkspace,
-            message,
-            childSessionId,
-          ).catch(() => undefined);
-          workerResult = buildWorkerResult({
-            workerId: runId,
-            summary: message,
-            patches,
-            errorMessage: message,
-          });
-          options.runtime.authority.session.workerResults.record(
-            input.parentSessionId,
-            workerResult,
-          );
-          parallelSlotReleased = true;
-        }
-        const terminalStatus: DelegationRunRecord["status"] = timeoutTriggered
-          ? "timeout"
-          : cancellationReason
-            ? "cancelled"
-            : "failed";
-        const artifactRefs = buildPatchArtifactRefs(workerResult?.patches);
+        const terminalStatus: Extract<
+          DelegationRunRecord["status"],
+          "failed" | "cancelled" | "timeout"
+        > = timeoutTriggered ? "timeout" : cancellationReason ? "cancelled" : "failed";
         const terminalCostSummary =
           child && childSessionId
             ? child.runtime.inspect.cost.summary.get(childSessionId)
             : undefined;
-        const outcome =
-          terminalStatus === "cancelled" || terminalStatus === "timeout"
-            ? ({
-                ok: false,
-                runId,
-                agent: input.target.agent,
-                taskName: taskIdentity.taskName,
-                taskPath: taskIdentity.taskPath,
-                nickname: taskIdentity.nickname,
-                delegate,
-                agentSpec: input.target.agentSpecName,
-                envelope: input.target.envelopeName,
-                skillName: input.target.skillName,
-                consultKind: input.target.consultKind,
-                label: input.label,
-                status: terminalStatus,
-                workerSessionId: childSessionId,
-                error: message,
-                metrics: {
-                  durationMs: Math.max(0, Date.now() - startedAt),
-                },
-                artifactRefs,
-              } satisfies SubagentOutcome)
-            : buildFailureOutcome({
-                runId,
-                agent: input.target.agent,
-                taskName: taskIdentity.taskName,
-                taskPath: taskIdentity.taskPath,
-                nickname: taskIdentity.nickname,
-                delegate,
-                agentSpec: input.target.agentSpecName,
-                envelope: input.target.envelopeName,
-                skillName: input.target.skillName,
-                consultKind: input.target.consultKind,
-                label: input.label,
-                workerSessionId: childSessionId,
-                artifactRefs,
-                error: message,
-                startedAt,
-              });
-        const deliveryResult = input.delivery
-          ? input.delivery.returnMode === "supplemental"
-            ? deliverDelegationOutcome({
-                runtime: options.runtime,
-                sessionId: input.parentSessionId,
-                delegate,
-                outcome,
-                delivery: input.delivery,
-              })
-            : preparePendingParentTurnDelivery()
+        const patches = executionPlan.producesPatches
+          ? await captureIsolatedPatchSet(
+              options.runtime.identity.workspaceRoot,
+              isolatedWorkspace,
+              message,
+              childSessionId,
+            ).catch(() => undefined)
           : undefined;
-
-        const updatedRecord: DelegationRunRecord = {
-          ...(delegationStore.getRun(input.parentSessionId, runId) ?? initialRecord),
-          ...resolveDelegationRecordIdentity({
-            target: input.target,
-            delegatedSkillName: input.target.skillName,
-          }),
-          status: terminalStatus,
-          updatedAt: Date.now(),
-          workerSessionId: childSessionId,
-          modelRoute: executionPlan.modelRoute,
-          adoption: buildCompletedDelegationAdoption({
-            target: input.target,
-            resultData: undefined,
-            patchChangeCount: workerResult?.patches?.changes.length,
-          }),
-          summary: message,
-          error: message,
-          artifactRefs,
-          delivery: mergeDeliveryRecord(
-            delegationStore.getRun(input.parentSessionId, runId)?.delivery ??
-              initialRecord.delivery,
-            deliveryResult,
+        const finishedAt = Date.now();
+        const failedPlan = runPlan;
+        let finalizationReceipt = buildDelegationFailureFinalizationReceipt({
+          parentSessionId: failedPlan?.parentSessionId ?? input.parentSessionId,
+          initialRecord,
+          currentRecord: delegationStore.getRun(
+            failedPlan?.parentSessionId ?? input.parentSessionId,
+            failedPlan?.runId ?? runId,
           ),
-          totalTokens: terminalCostSummary?.totalTokens,
-          costUsd: terminalCostSummary?.totalCostUsd,
-        };
-        liveRun.record = updatedRecord;
-        options.runtime.extensions.hosted.events.record({
-          sessionId: input.parentSessionId,
-          type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
-          payload: {
-            ...buildDelegationLifecyclePayload(updatedRecord),
-            reason: cancellationReason ?? null,
-            workerStatus: workerResult?.status ?? null,
-            patchChangeCount: workerResult?.patches?.changes.length ?? 0,
-          },
+          target: failedPlan?.target ?? input.target,
+          executionPlan: failedPlan?.executionPlan ?? executionPlan,
+          taskIdentity: failedPlan?.taskIdentity ?? taskIdentity,
+          runId: failedPlan?.runId ?? runId,
+          delegate: failedPlan?.delegate ?? delegate,
+          childSessionId,
+          label: input.label,
+          startedAt,
+          finishedAt,
+          message,
+          terminalStatus,
+          patches,
+          terminalCostSummary,
+          cancellationReason,
         });
-        recordDelegationLineageOutcome({
-          runtime: options.runtime,
-          sessionId: input.parentSessionId,
-          record: updatedRecord,
+        finalizationReceipt = applyHostedFinalization({
+          parentSessionId: input.parentSessionId,
+          runId,
+          delegate,
+          delivery: input.delivery,
+          initialDelivery: initialRecord.delivery,
+          receipt: finalizationReceipt,
         });
-        if (deliveryResult?.supplementalAppended) {
-          adoptDelegationLineageOutcome({
-            runtime: options.runtime,
-            sessionId: input.parentSessionId,
-            record: updatedRecord,
-            admission: "context_eligible",
-          });
+        if (finalizationReceipt.workerResult) {
+          parallelSlotReleased = true;
         }
-        return outcome;
+        liveRun.record = finalizationReceipt.record;
+        return finalizationReceipt.outcome;
       } finally {
         finished = true;
         if (timeoutHandle) {
@@ -1146,9 +865,6 @@ export function createHostedSubagentAdapter(
           await isolatedWorkspace.dispose();
         }
         removeLiveRun(input.parentSessionId, runId);
-        if (childSessionId) {
-          liveRunsByChildSession.delete(childSessionId);
-        }
       }
     })();
 
@@ -1278,15 +994,23 @@ export function createHostedSubagentAdapter(
         payload: buildDelegationLifecyclePayload(runningRecord),
       });
 
-      const prompt = getCanonicalForkPrompt({
-        forkTurns,
-        objective: input.request.objective,
-        deliverable: input.request.deliverable,
-        inheritedContext: renderInheritedSubagentContext({
+      const contextBundle = buildForkContextBundle({
+        inheritedBlock: buildInheritedSubagentContextBlock({
           runtime: options.runtime,
           sessionId: input.fromSessionId,
           forkTurns,
         }),
+      });
+      if (!contextBundle.ok) {
+        throw new Error(
+          `fork_context_blocked:${contextBundle.blocker.overflow}:${contextBundle.blocker.requiredTokens}/${contextBundle.blocker.maxTokens}`,
+        );
+      }
+      const prompt = getCanonicalForkPrompt({
+        forkTurns,
+        objective: input.request.objective,
+        deliverable: input.request.deliverable,
+        contextBundle: contextBundle.bundle,
       });
       const output = await runHostedTurnEnvelope({
         session: child.session,
@@ -1618,126 +1342,5 @@ export function createHostedSubagentAdapter(
     },
     fork: async ({ fromSessionId, request }): Promise<SubagentForkResult> =>
       runFork({ fromSessionId, request }),
-    sendMessage: async (input) => {
-      const limits = resolveA2ALimits();
-      const depth = (input.depth ?? 0) + 1;
-      const hops = (input.hops ?? 0) + 1;
-      if (depth > limits.maxDepth) {
-        return {
-          ok: false,
-          toAgentId: input.toAgentId,
-          error: "a2a_depth_limit_exceeded",
-          depth,
-          hops,
-        };
-      }
-      if (hops > limits.maxHops) {
-        return {
-          ok: false,
-          toAgentId: input.toAgentId,
-          error: "a2a_hops_limit_exceeded",
-          depth,
-          hops,
-        };
-      }
-      const childOrigin = liveRunsByChildSession.get(input.fromSessionId);
-      if (childOrigin) {
-        if (input.toAgentId !== "parent") {
-          return {
-            ok: false,
-            toAgentId: input.toAgentId,
-            error: "child_to_child_not_allowed",
-            depth,
-            hops,
-          };
-        }
-        recordSubagentA2AMessage({
-          parentSessionId: childOrigin.parentSessionId,
-          runId: childOrigin.runId,
-          direction: "child_to_parent",
-          fromAgentId: input.fromAgentId,
-          toAgentId: input.toAgentId,
-          message: input.message,
-          correlationId: input.correlationId,
-          depth,
-          hops,
-        });
-        return {
-          ok: true,
-          toAgentId: input.toAgentId,
-          responseText:
-            "subagent message recorded for parent (audit-only; v1 delivery is deferred)",
-          depth,
-          hops,
-        };
-      }
-      if (input.toAgentId === "parent" || input.fromAgentId === input.toAgentId) {
-        return {
-          ok: false,
-          toAgentId: input.toAgentId,
-          error: "a2a_self_target_blocked",
-          depth,
-          hops,
-        };
-      }
-      const resolved = resolveLiveRunAddress(input.fromSessionId, input.toAgentId);
-      if ("error" in resolved) {
-        return {
-          ok: false,
-          toAgentId: input.toAgentId,
-          error: resolved.error,
-          depth,
-          hops,
-        };
-      }
-      const record = resolved.run.getView();
-      recordSubagentA2AMessage({
-        parentSessionId: input.fromSessionId,
-        runId: record.runId,
-        direction: "parent_to_child",
-        fromAgentId: input.fromAgentId,
-        toAgentId: input.toAgentId,
-        message: input.message,
-        correlationId: input.correlationId,
-        depth,
-        hops,
-      });
-      return {
-        ok: true,
-        toAgentId: input.toAgentId,
-        responseText: `subagent message recorded for ${record.taskPath} (audit-only; v1 delivery is deferred)`,
-        depth,
-        hops,
-      };
-    },
-    listAgents: async (input) => {
-      const agents: Array<{
-        agentId: string;
-        primaryAddress?: string;
-        aliases?: string[];
-        kind?: "subagent";
-        status: "active" | "deleted";
-      }> = [];
-      for (const registry of liveRunsByParentSession.values()) {
-        for (const run of registry.byRunId.values()) {
-          const record = run.getView();
-          if (!input?.includeDeleted && isDelegationRunTerminalStatus(record.status)) {
-            continue;
-          }
-          const status = isDelegationRunTerminalStatus(record.status) ? "deleted" : "active";
-          const aliases = [record.taskPath, record.nickname].filter(
-            (alias, index, values) => alias !== record.runId && values.indexOf(alias) === index,
-          );
-          agents.push({
-            agentId: record.runId,
-            primaryAddress: record.taskPath,
-            aliases,
-            kind: "subagent",
-            status,
-          });
-        }
-      }
-      return agents;
-    },
   };
 }

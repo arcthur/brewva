@@ -200,11 +200,11 @@ describe("operator question collection", () => {
     });
   });
 
-  test("falls back to legacy delegated openQuestions when canonical follow-up questions are absent", async () => {
-    const workspaceRoot = createTempWorkspace("brewva-operator-legacy-open-questions-");
+  test("does not surface removed delegated openQuestions aliases", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-operator-removed-open-questions-");
     const runtime = createBrewvaRuntime({ cwd: workspaceRoot }).hosted;
-    const sessionId = "session-legacy-follow-up";
-    const runId = "run-legacy-follow-up";
+    const sessionId = "session-removed-follow-up";
+    const runId = "run-removed-follow-up";
 
     const artifactPath = writeOutcomeArtifact(workspaceRoot, runId, {
       ok: true,
@@ -214,11 +214,11 @@ describe("operator question collection", () => {
       kind: "consult",
       consultKind: "review",
       status: "ok",
-      summary: "Legacy follow-up question is available.",
+      summary: "Removed follow-up alias is ignored.",
       data: {
         kind: "consult",
         consultKind: "review",
-        conclusion: "The lane has one legacy follow-up question.",
+        conclusion: "The lane must use canonical followUpQuestions.",
         openQuestions: ["Should we inspect runtime receipts after the replay pass?"],
       },
       metrics: {
@@ -244,12 +244,7 @@ describe("operator question collection", () => {
 
     const collection = await collectOpenSessionQuestions(runtime, sessionId);
     expect(collection.warnings).toEqual([]);
-    expect(collection.questions).toHaveLength(1);
-    expect(collection.questions[0]).toMatchObject({
-      questionText: "Should we inspect runtime receipts after the replay pass?",
-      presentationKind: "follow_up",
-    });
-    expect(classifyOpenQuestion(collection.questions[0]!)).toBe("follow_up");
+    expect(collection.questions).toHaveLength(0);
   });
 
   test("keeps single custom structured requests classified as input requests", async () => {

@@ -2,6 +2,7 @@ import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { DelegationForkTurns } from "@brewva/brewva-runtime/delegation";
 import { MESSAGE_END_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import type { ContextEntryRecord } from "@brewva/brewva-runtime/session";
+import { deterministicTokenTruncate, type ContextBundleBlockInput } from "../context/api.js";
 
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 const SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE = "branch_summary_recorded";
@@ -119,7 +120,7 @@ function selectInheritedEntries(
   return count > 0 ? entries.slice(-count) : [];
 }
 
-export function renderInheritedSubagentContext(input: {
+function renderInheritedSubagentContextContent(input: {
   runtime: Pick<BrewvaRuntimeRoot, "inspect">;
   sessionId: string;
   forkTurns: DelegationForkTurns;
@@ -151,4 +152,22 @@ export function renderInheritedSubagentContext(input: {
     "",
     ...selectedEntries,
   ].join("\n");
+}
+
+export function buildInheritedSubagentContextBlock(input: {
+  runtime: Pick<BrewvaRuntimeRoot, "inspect">;
+  sessionId: string;
+  forkTurns: DelegationForkTurns;
+}): ContextBundleBlockInput | undefined {
+  const content = renderInheritedSubagentContextContent(input);
+  if (!content) {
+    return undefined;
+  }
+  return {
+    id: "delegation-inherited-parent-context",
+    content,
+    admission: "required",
+    priority: 0,
+    truncate: deterministicTokenTruncate,
+  };
 }

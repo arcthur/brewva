@@ -61,7 +61,6 @@ export {
   renderSemanticArtifactExample,
 } from "./semantic-artifact-catalog.js";
 export {
-  LEGACY_SEMANTIC_ARTIFACT_SCHEMA_ID_ALIASES,
   SEMANTIC_ARTIFACT_SCHEMA_IDS,
   isSemanticArtifactSchemaId,
   normalizeSemanticArtifactSchemaId,

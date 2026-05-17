@@ -107,6 +107,48 @@ export const SESSION_INDEX_SCHEMA_SQL = `
     last_context_entry_at double
   );
 
+  create table if not exists session_delegation_runs (
+    session_id varchar not null,
+    run_id varchar not null,
+    status varchar not null,
+    task_path varchar,
+    nickname varchar,
+    delegate varchar,
+    agent varchar,
+    kind varchar,
+    child_session_id varchar,
+    summary varchar,
+    error varchar,
+    delivery_handoff_state varchar,
+    record_json varchar not null,
+    updated_at double not null,
+    event_id varchar not null,
+    cursor_event_count integer not null,
+    schema_version integer not null
+  );
+
+  create table if not exists session_worker_results (
+    session_id varchar not null,
+    worker_id varchar not null,
+    status varchar not null,
+    summary varchar,
+    patch_set_id varchar,
+    record_json varchar not null,
+    updated_at double not null,
+    event_id varchar not null,
+    cursor_event_count integer not null,
+    schema_version integer not null
+  );
+
+  create table if not exists session_projection_cursors (
+    session_id varchar not null,
+    projection varchar not null,
+    event_count integer not null,
+    latest_event_id varchar,
+    schema_version integer not null,
+    updated_at double not null
+  );
+
   create table if not exists events (
     event_id varchar primary key,
     session_id varchar not null,
@@ -164,6 +206,14 @@ export const SESSION_INDEX_SCHEMA_SQL = `
     on session_context_entries(lineage_node_id);
   create index if not exists session_active_lineage_nodes_session_idx
     on session_active_lineage_nodes(session_id);
+  create index if not exists session_delegation_runs_session_idx
+    on session_delegation_runs(session_id);
+  create index if not exists session_delegation_runs_run_idx
+    on session_delegation_runs(run_id);
+  create index if not exists session_worker_results_session_idx
+    on session_worker_results(session_id);
+  create index if not exists session_projection_cursors_session_idx
+    on session_projection_cursors(session_id);
   create index if not exists event_tokens_token_idx
     on event_tokens(token);
   create index if not exists event_tokens_session_idx

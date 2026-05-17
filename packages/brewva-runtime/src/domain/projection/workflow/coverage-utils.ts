@@ -62,8 +62,7 @@ export function normalizeComparableText(value: string): string {
 
 export function collectVerifierCoverageTexts(outputs: Record<string, unknown>): string[] {
   const texts: string[] = [];
-  const verifierChecks =
-    readFirstArrayField(outputs, ["verifier_checks", "checks", "qa_checks"]) ?? [];
+  const verifierChecks = readFirstArrayField(outputs, ["verifier_checks", "checks"]) ?? [];
   for (const check of verifierChecks) {
     if (!isRecord(check)) {
       continue;
@@ -86,12 +85,12 @@ export function collectVerifierCoverageTexts(outputs: Record<string, unknown>): 
       texts.push(normalizeComparableText(artifactRef));
     }
   }
-  const verifierReport = readFirstStringField(outputs, ["verifier_report", "report", "qa_report"]);
+  const verifierReport = readFirstStringField(outputs, ["verifier_report", "report"]);
   if (verifierReport) {
     texts.push(normalizeComparableText(verifierReport));
   }
   for (const finding of readStringArray(
-    readFirstArrayField(outputs, ["verifier_findings", "findings", "qa_findings"]),
+    readFirstArrayField(outputs, ["verifier_findings", "findings"]),
   )) {
     texts.push(normalizeComparableText(finding));
   }

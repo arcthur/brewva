@@ -8,6 +8,81 @@ import {
 } from "./context-transform.helpers.js";
 
 describe("context transform budgeting contract", () => {
+  test("fails closed instead of dropping required compaction gate when tail budget is too small", async () => {
+    const { api, handlers } = createMockExtensionApi();
+    const runtime = createRuntimeFixture({
+      config: createRuntimeConfig((config) => {
+        config.infrastructure.contextBudget.dynamicTailTokens = 1;
+      }),
+      context: {
+        getCompactionGateStatus: () => ({
+          required: true,
+          reason: "hard_limit",
+          status: {
+            tokensUsed: 990,
+            tokensTotal: 1000,
+            tokensRemaining: 10,
+            tokensUntilForcedCompact: 0,
+            predictedTurnGrowthTokens: 1024,
+            tokensUntilPredictedOverflow: 0,
+            predictedOverflow: true,
+            usageRatio: 0.99,
+            hardLimitRatio: 0.98,
+            compactionThresholdRatio: 0.8,
+            compactionAdvised: true,
+            forcedCompaction: true,
+          },
+          recentCompaction: false,
+          windowTurns: 2,
+          lastCompactionTurn: null,
+          turnsSinceCompaction: null,
+        }),
+        getStatus: () => ({
+          tokensUsed: 990,
+          tokensTotal: 1000,
+          tokensRemaining: 10,
+          tokensUntilForcedCompact: 0,
+          predictedTurnGrowthTokens: 1024,
+          tokensUntilPredictedOverflow: 0,
+          predictedOverflow: true,
+          usageRatio: 0.99,
+          hardLimitRatio: 0.98,
+          compactionThresholdRatio: 0.8,
+          compactionAdvised: true,
+          forcedCompaction: true,
+        }),
+      },
+    });
+
+    registerContextTransform(api, runtime);
+
+    let thrown: unknown;
+    try {
+      await invokeHandlerAsync(
+        handlers,
+        "before_agent_start",
+        {
+          type: "before_agent_start",
+          prompt: "continue the investigation",
+          systemPrompt: "base prompt",
+        },
+        {
+          sessionManager: {
+            getSessionId: () => "s-required-gate-budget",
+          },
+          getContextUsage: () => ({ tokens: 990, contextWindow: 1000, percent: 0.99 }),
+        },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toContain(
+      "hosted_context_bundle_blocked:context_budget_exceeded",
+    );
+  });
+
   test("injects advisory metadata for non-critical pending compaction without arming the gate", async () => {
     const { api, handlers } = createMockExtensionApi();
     const eventTypes: string[] = [];

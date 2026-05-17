@@ -19,13 +19,10 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
   const send = agentSendTool.define({
     name: "agent_send",
     label: "Agent Send",
-    description:
-      "Send a message to another orchestrated channel agent. For live subagents this records a scoped audit-only message; v1 subagent delivery is deferred.",
-    promptSnippet:
-      "Use agent_send for channel A2A delivery, or for subagent parent-child audit receipts when no same-turn delivery is required.",
+    description: "Send a message to another orchestrated channel agent.",
+    promptSnippet: "Use agent_send for channel A2A delivery.",
     promptGuidelines: [
-      "Subagent targets are parent-child scoped and audit-only in v1; do not assume the child or parent has received a new turn.",
-      "Use subagent_status for durable subagent state. agent_send does not broadcast to sibling subagents.",
+      "Use subagent_status for durable subagent state. agent_send does not target subagents.",
     ],
     parameters: Type.Object({
       toAgentId: Type.String({ minLength: 1 }),
@@ -36,12 +33,11 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const adapter = options.runtime.orchestration?.a2a;
-      const subagentAdapter = options.runtime.orchestration?.subagents;
-      if (!adapter && !subagentAdapter?.sendMessage) {
+      if (!adapter) {
         return failTextResult("A2A orchestration is unavailable in this session.", { ok: false });
       }
       const sessionId = getSessionId(ctx);
-      const subagentResult = await subagentAdapter?.sendMessage?.({
+      const result = await adapter.send({
         fromSessionId: sessionId,
         toAgentId: params.toAgentId,
         message: params.message,
@@ -49,19 +45,6 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
         depth: params.depth,
         hops: params.hops,
       });
-      const result =
-        !adapter ||
-        (subagentResult &&
-          (subagentResult.ok || subagentResult.error !== "inactive_subagent_target"))
-          ? subagentResult!
-          : await adapter.send({
-              fromSessionId: sessionId,
-              toAgentId: params.toAgentId,
-              message: params.message,
-              correlationId: params.correlationId,
-              depth: params.depth,
-              hops: params.hops,
-            });
       if (!result.ok) {
         return failTextResult(
           `agent_send failed for ${result.toAgentId}: ${result.error}`,
@@ -127,19 +110,12 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     }),
     async execute(_toolCallId, params) {
       const adapter = options.runtime.orchestration?.a2a;
-      const subagentAdapter = options.runtime.orchestration?.subagents;
-      if (!adapter && !subagentAdapter?.listAgents) {
+      if (!adapter) {
         return failTextResult("A2A orchestration is unavailable in this session.", { ok: false });
       }
-      const [channelAgents, subagentAgents] = await Promise.all([
-        adapter?.listAgents({
-          includeDeleted: params.includeDeleted,
-        }) ?? Promise.resolve([]),
-        subagentAdapter?.listAgents?.({
-          includeDeleted: params.includeDeleted,
-        }) ?? Promise.resolve([]),
-      ]);
-      const agents = [...channelAgents, ...subagentAgents];
+      const agents = await adapter.listAgents({
+        includeDeleted: params.includeDeleted,
+      });
       if (agents.length === 0) {
         return textResult("No agents found.", {
           ok: true,

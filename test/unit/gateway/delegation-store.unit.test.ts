@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
+import { HostedDelegationStore } from "../../../packages/brewva-gateway/src/delegation/delegation-store.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
@@ -194,7 +194,7 @@ describe("HostedDelegationStore", () => {
     });
   });
 
-  test("normalizes historical records without v3 identity fields", () => {
+  test("rejects historical records without the current contract", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const store = new HostedDelegationStore(runtime);
     const sessionId = "delegation-store-historical-contract";
@@ -210,24 +210,9 @@ describe("HostedDelegationStore", () => {
       },
     });
 
-    expect(store.getRun(sessionId, "run-missing-version")).toMatchObject({
-      contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
-      runId: "run-missing-version",
-      agent: "explorer",
-      targetName: "explorer",
-      taskName: "explorer",
-      taskPath: "/historical/run-missing-version",
-      nickname: "explorer",
-      depth: 2,
-      forkTurns: "none",
-      gateReason: "make_judgment",
-      modelCategory: "deep-reasoning",
-      adoption: {
-        contractId: "delegation.consult",
-        decision: "require_human",
-      },
-      historicallyNormalized: true,
-    });
+    expect(() => store.getRun(sessionId, "run-missing-version")).toThrow(
+      "unsupported_delegation_contract_version:run-missing-version",
+    );
   });
 
   test("rejects current-version records without adoption payloads", () => {
@@ -324,5 +309,75 @@ describe("HostedDelegationStore", () => {
       kind: "consult",
       consultKind: "design",
     });
+  });
+
+  test("adopts applied worker results without prior in-memory hydration", () => {
+    const runtime = createHostedTestRuntime({ cwd: workspace });
+    const store = new HostedDelegationStore(runtime);
+    const sessionId = "delegation-store-worker-adoption";
+    const runId = "worker-run-no-hydration";
+
+    runtime.authority.session.lineage.createNode(sessionId, {
+      lineageNodeId: "lineage:main",
+      kind: "main",
+      forkPoint: { kind: "session_root" },
+    });
+    const source = runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "message_end",
+      payload: {
+        role: "user",
+        content: "Apply the worker result.",
+      },
+    });
+    runtime.authority.session.lineage.recordContextEntry(sessionId, {
+      entryId: "ctx-main",
+      lineageNodeId: "lineage:main",
+      parentEntryId: null,
+      sourceEventId: source?.id ?? "source-event",
+      sourceEventType: "message_end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "both",
+    });
+
+    recordCompletedRun({
+      runtime,
+      sessionId,
+      runId,
+      updatedAt: 100,
+      handoffState: "surfaced",
+      kind: "patch",
+      delegate: "worker",
+    });
+
+    store.installWorkerResultAdoptionSubscription();
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "worker_results_applied",
+      timestamp: 110,
+      payload: {
+        workerId: runId,
+        workerIds: [runId],
+        patchSetId: "patch-set-1",
+        appliedPaths: ["src/changed.ts"],
+      },
+    });
+
+    expect(store.getRun(sessionId, runId)).toMatchObject({
+      runId,
+      status: "merged",
+    });
+    expect(runtime.inspect.session.lineage.getNode(sessionId, "lineage:main")).toEqual(
+      expect.objectContaining({
+        adoptedOutcomes: [
+          expect.objectContaining({
+            adoptionId: `lineage:subagent:${runId}:adoption`,
+            admission: "context_required",
+          }),
+        ],
+      }),
+    );
+    store.dispose();
   });
 });

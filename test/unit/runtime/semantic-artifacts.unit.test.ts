@@ -12,14 +12,13 @@ describe("runtime semantic artifact contracts", () => {
     );
   });
 
-  test("normalizes legacy qa artifact ids to verifier artifact ids", () => {
-    expect(normalizeSemanticArtifactSchemaId("qa.qa_report.v2")).toBe(
-      "verifier.verifier_report.v2",
-    );
-    expect(normalizeSemanticArtifactSchemaId("qa.qa_checks.v2")).toBe(
-      "verifier.verifier_checks.v2",
-    );
-    expect(normalizeSemanticArtifactSchemaId("verifier.verifier_report.v2")).toBe(
+  test("accepts only current semantic artifact schema ids", () => {
+    expect(
+      ["qa.qa_report.v2", "qa.qa_checks.v2", "verifier.verifier_report.v2"].map((schemaId) =>
+        normalizeSemanticArtifactSchemaId(schemaId),
+      ),
+    ).toEqual([undefined, undefined, "verifier.verifier_report.v2"]);
+    expect(normalizeSemanticArtifactSchemaId(" verifier.verifier_report.v2 ")).toBe(
       "verifier.verifier_report.v2",
     );
   });

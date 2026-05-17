@@ -1,6 +1,8 @@
 import { ParallelBudgetManager as InternalParallelBudgetManager } from "./domain/parallel/api.js";
 import { ParallelResultStore as InternalParallelResultStore } from "./domain/parallel/api.js";
 import { createBoundExtensionPort, type ExtensionPort } from "./runtime/runtime-extensions.js";
+export { deriveParallelBudgetStateFromEvents } from "./domain/parallel/api.js";
+export type { DerivedParallelBudgetState } from "./domain/parallel/api.js";
 
 const PARALLEL_BUDGET_MANAGER_METHODS = [
   "acquire",

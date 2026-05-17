@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-runtime/context";
-import { materializeHostedContext } from "../../../packages/brewva-gateway/src/hosted/internal/context/materialization.js";
+import { buildContextBundle } from "../../../packages/brewva-gateway/src/context/context-bundle.js";
+import type { HostedContextRenderResult } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-blocks.js";
+import {
+  applyContextMaterializationReceipt,
+  buildContextMaterializationReceipt,
+} from "../../../packages/brewva-gateway/src/hosted/internal/context/materialization.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 const baseContextStatus: ContextStatus = {
@@ -58,35 +63,54 @@ function createTelemetry() {
   };
 }
 
+function contextBundleFor(rendered: HostedContextRenderResult) {
+  const result = buildContextBundle({
+    scope: "hosted_dynamic_tail",
+    blocks: rendered.blocks.map((block) => ({
+      id: block.id,
+      content: block.content,
+      admission: "advisory",
+      priority: 100,
+    })),
+    createdAt: 1,
+  });
+  if (!result.ok) {
+    throw new Error(result.blocker.reason);
+  }
+  return result.bundle;
+}
+
 describe("hosted context materialization", () => {
   test("applies direct lifecycle side effects and records prompt evidence", () => {
     const runtime = createRuntimeFixture();
     const { calls, telemetry } = createTelemetry();
+    const rendered: HostedContextRenderResult = {
+      blocks: [{ id: "active-workbench", content: "Workbench", estimatedTokens: 1 }],
+      content: "Workbench",
+      totalTokens: 1,
+      surfacedDelegationRunIds: [],
+    };
 
-    const result = materializeHostedContext({
-      runtime,
-      telemetry,
+    const receipt = buildContextMaterializationReceipt({
       sessionId: "session-1",
       turn: 3,
       contextScopeId: "scope-1",
       systemPrompt: "System prompt",
-      rendered: {
-        blocks: [{ id: "active-workbench", content: "Workbench", estimatedTokens: 1 }],
-        content: "Workbench",
-        totalTokens: 1,
-        surfacedDelegationRunIds: [],
-      },
+      contextBundle: contextBundleFor(rendered),
+      rendered,
       gateStatus: gateStatus({ required: true, reason: "hard_limit" }),
       pendingCompactionReason: "hard_limit",
       workbenchContextRendered: true,
       surfacedDelegationRunIds: [],
     });
+    applyContextMaterializationReceipt({ runtime, telemetry, receipt });
 
-    expect(result.effects).toContain("usage_observed");
-    expect(result.effects).toContain("prompt_stability_observed");
-    expect(result.effects).not.toContain("capability_disclosure_rendered");
-    expect(result.effects).not.toContain("consequence_digest_rendered");
-    expect(result.effects).not.toContain("workbench_context_rendered");
+    expect(receipt.usageObserved).toBe(true);
+    expect(receipt.telemetry).toEqual(
+      expect.objectContaining({ kind: "hard_gate_required", reason: "hard_limit" }),
+    );
+    expect(receipt.promptStability.turn).toBe(3);
+    expect(receipt.contextComposed.workbenchContextRendered).toBe(true);
     expect(calls).toEqual(["hard", "composed"]);
     expect(runtime.inspect.context.evidence.latest("session-1", "prompt_stability")).toEqual(
       expect.objectContaining({
@@ -99,24 +123,25 @@ describe("hosted context materialization", () => {
   test("emits advisory telemetry without hard gate telemetry", () => {
     const runtime = createRuntimeFixture();
     const { calls, telemetry } = createTelemetry();
+    const rendered: HostedContextRenderResult = {
+      blocks: [],
+      content: "",
+      totalTokens: 0,
+      surfacedDelegationRunIds: [],
+    };
 
-    materializeHostedContext({
-      runtime,
-      telemetry,
+    const receipt = buildContextMaterializationReceipt({
       sessionId: "session-2",
       turn: 4,
       systemPrompt: "System prompt",
-      rendered: {
-        blocks: [],
-        content: "",
-        totalTokens: 0,
-        surfacedDelegationRunIds: [],
-      },
+      contextBundle: contextBundleFor(rendered),
+      rendered,
       gateStatus: gateStatus({ required: false, reason: "usage_threshold" }),
       pendingCompactionReason: "usage_threshold",
       workbenchContextRendered: false,
       surfacedDelegationRunIds: [],
     });
+    applyContextMaterializationReceipt({ runtime, telemetry, receipt });
 
     expect(calls).toEqual(["advisory", "composed"]);
   });

@@ -1,7 +1,7 @@
 # Tool Family: Delegation
 
-Delegation tools connect subagent execution, A2A communication, operator
-questions, and review synthesis.
+Delegation tools connect subagent execution, channel A2A communication,
+operator questions, and review synthesis.
 
 ## Boundary
 
@@ -18,7 +18,7 @@ knowledge authority.
 - subagent result modes: `evidence`, `consult`, `patch`, `verifier`, and `knowledge`
 - subagent run, fanout, fork, status, diagnostic, cancel, and knowledge-adoption
   receipt tools
-- channel A2A broadcast/list/send plus subagent-scoped parent-child send/list
+- channel A2A broadcast/list/send
 - operator question prompts
 - review-lane planning, review classification, and review synthesis
 
@@ -61,15 +61,20 @@ reference, but it does not import the child branch's raw transcript.
 
 `forkTurns` controls context inheritance: `none`, a positive integer for recent
 mainline turns, or `all` for the filtered mainline history. `all` excludes raw
-tool frames, internal reasoning, and unrelated subagent messages. Public run and
+tool frames, internal reasoning, and unrelated delegation transcripts. Public run and
 fanout default to `none`; fork defaults to `all`; worker runs reject
 `forkTurns=all`.
 
-Subagent A2A is scoped parent-child only. The parent can message live children by
-run id, task path, or nickname. A child can reply only to `parent`. In v1 these
-subagent messages are replay-visible audit receipts; they are not delivered into
-the target session's next turn. Child-to-child messaging, inactive targets,
-self-targeting, and depth or hop overflow fail closed.
+Subagent prompts receive inherited context through an immutable serializable
+`ContextBundle`. The same bundle shape is used for in-process delegation,
+fork prompts, and detached background manifests. Detached manifests persist the
+bundle plus its hash in `context-bundle.json`; there is no separate legacy
+context-manifest shape with parallel rendering rules.
+
+`agent_send`, `agent_broadcast`, and `agent_list` are channel A2A tools only.
+They do not target subagents. Subagent status, cancellation, results, and
+adoption flow through delegation receipts and read models instead of
+subagent messaging tools.
 
 `subagent_fork` is represented in v3 records as
 `explorer` / `make_judgment` / `deep-reasoning` and uses the
@@ -80,6 +85,14 @@ self-targeting, and depth or hop overflow fail closed.
 Delegation does not create cross-agent saga behavior or automatic
 partial-failure repair. Parent-owned merge/apply actions create the receipt
 that matters.
+
+Run completion has one finalization path. `DelegationRunPlan` is the immutable
+resolved input for a run; `buildDelegationFinalizationReceipt(...)` describes
+the terminal outcome, worker result, lineage outcome, patch artifact refs,
+cost rollup, and slot-release intent. `applyDelegationFinalizationReceipt(...)`
+is the single effect runner. Detached execution is isolated behind
+`DetachedRunAdapter`; in-process execution stays inline and does not have a
+symmetry adapter.
 
 Review synthesis and review classification are publicly curated through
 `@brewva/brewva-tools/delegation` only. Workflow tools may consume the same

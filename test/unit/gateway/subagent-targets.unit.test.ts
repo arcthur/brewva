@@ -3,12 +3,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  buildDelegationPrompt,
   buildHostedDelegationTargetFromAgentSpec,
   loadHostedDelegationCatalog,
 } from "@brewva/brewva-gateway";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
+import { buildDelegationContextBundle } from "../../../packages/brewva-gateway/src/delegation/build-delegation-context-bundle.js";
+import { buildDelegationPrompt } from "../../../packages/brewva-gateway/src/delegation/prompt.js";
 import { requireDefined } from "../../helpers/assertions.js";
 
 function createIsolatedRuntime(name: string): BrewvaHostedRuntimePort {
@@ -18,6 +20,26 @@ function createIsolatedRuntime(name: string): BrewvaHostedRuntimePort {
 
 describe("delegation prompt and catalog composition", () => {
   test("truncates context references when prompt injection budget is small", () => {
+    const packet: DelegationPacket = {
+      objective: "Inspect the current architecture",
+      contextBudget: {
+        maxInjectionTokens: 12,
+      },
+      contextRefs: [
+        {
+          kind: "workspace_span",
+          locator: "packages/brewva-runtime/src/runtime/runtime.ts#L1",
+          summary: "Primary runtime surface",
+        },
+        {
+          kind: "workspace_span",
+          locator: "packages/brewva-gateway/src/hosted/api.ts#L1",
+          summary: "Hosted session wiring",
+        },
+      ],
+    };
+    const contextBundle = buildDelegationContextBundle({ packet });
+    expect(contextBundle.ok).toBe(true);
     const prompt = buildDelegationPrompt({
       target: {
         name: "explorer",
@@ -35,24 +57,8 @@ describe("delegation prompt and catalog composition", () => {
         producesPatches: false,
         isolationStrategy: "shared",
       },
-      packet: {
-        objective: "Inspect the current architecture",
-        contextBudget: {
-          maxInjectionTokens: 12,
-        },
-        contextRefs: [
-          {
-            kind: "workspace_span",
-            locator: "packages/brewva-runtime/src/runtime/runtime.ts#L1",
-            summary: "Primary runtime surface",
-          },
-          {
-            kind: "workspace_span",
-            locator: "packages/brewva-gateway/src/hosted/api.ts#L1",
-            summary: "Hosted session wiring",
-          },
-        ],
-      },
+      packet,
+      contextBundle: contextBundle.ok ? contextBundle.bundle : undefined,
     });
 
     expect(prompt).toContain("Context References");
@@ -140,7 +146,7 @@ describe("delegation prompt and catalog composition", () => {
     expect(prompt).toContain('"lane": "review-correctness"');
     expect(prompt).toContain('"disposition": "concern"');
     expect(prompt).toContain(
-      '"primaryClaim": "The cutover still leaves one legacy replay branch reachable."',
+      '"primaryClaim": "The cutover still leaves one non-canonical replay branch reachable."',
     );
     expect(prompt).toContain('"missingEvidence": [');
     expect(prompt).toContain('"followUpQuestions": [');

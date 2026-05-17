@@ -208,11 +208,11 @@ function buildManagedTools(
   const delegation = delegationStore
     ? {
         listRuns: (sessionId: string, query?: Parameters<HostedDelegationStore["listRuns"]>[1]) =>
-          delegationStore.listRuns(sessionId, query),
+          delegationStore.listRunsFromReadModel(sessionId, query),
         listPendingOutcomes: (
           sessionId: string,
           query?: Parameters<HostedDelegationStore["listPendingOutcomes"]>[1],
-        ) => delegationStore.listPendingOutcomes(sessionId, query),
+        ) => delegationStore.listPendingOutcomesFromReadModel(sessionId, query),
       }
     : undefined;
   return buildBrewvaTools({

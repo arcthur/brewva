@@ -8,41 +8,10 @@ import type {
   SkillDocument,
   SkillOutputContract,
 } from "@brewva/brewva-runtime/skills";
-import { estimateTokenCount } from "@brewva/brewva-token-estimation";
-import type { DelegationPacket, SubagentContextRef } from "@brewva/brewva-tools/contracts";
+import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
+import type { ContextBundle } from "../context/api.js";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";
 import type { HostedDelegationTarget } from "./targets.js";
-
-function renderContextRefs(
-  refs: readonly SubagentContextRef[] | undefined,
-  maxInjectionTokens: number | undefined,
-): string[] {
-  if (!refs || refs.length === 0) {
-    return [];
-  }
-
-  const lines: string[] = [];
-  let consumedTokens = 0;
-  for (const ref of refs) {
-    const annotations = [
-      ref.summary ? `summary=${ref.summary}` : null,
-      ref.sourceSessionId ? `sourceSession=${ref.sourceSessionId}` : null,
-      ref.hash ? `hash=${ref.hash}` : null,
-    ].filter(Boolean);
-    const line = [
-      `- [${ref.kind}] ${ref.locator}`,
-      annotations.length > 0 ? ` :: ${annotations.join(" | ")}` : "",
-    ].join("");
-    const tokens = Math.max(1, estimateTokenCount(line));
-    if (maxInjectionTokens && lines.length > 0 && consumedTokens + tokens > maxInjectionTokens) {
-      lines.push("- [truncated] Additional context references omitted to stay within budget.");
-      break;
-    }
-    lines.push(line);
-    consumedTokens += tokens;
-  }
-  return lines;
-}
 
 function renderSkillOutputContract(
   name: string,
@@ -105,6 +74,21 @@ function renderSkillContextSection(skill: SkillDocument): string[] {
   ];
 }
 
+function renderContextBundleSection(bundle: ContextBundle | undefined): string[] {
+  if (!bundle || bundle.blocks.length === 0) {
+    return [];
+  }
+  return [
+    "",
+    "## Context Bundle",
+    `Bundle: ${bundle.bundleId}`,
+    `Hash: ${bundle.hash}`,
+    `Scope: ${bundle.scope}`,
+    `Tokens: ${bundle.totalTokens}`,
+    ...bundle.blocks.flatMap((block) => ["", `### ${block.id}`, block.content]),
+  ];
+}
+
 export function buildDelegationPrompt(input: {
   target: HostedDelegationTarget;
   delegate?: string;
@@ -112,7 +96,7 @@ export function buildDelegationPrompt(input: {
   promptOverride?: string;
   skill?: SkillDocument;
   producer?: ProducerContract;
-  inheritedContext?: string;
+  contextBundle?: ContextBundle;
 }): string {
   const prompt =
     input.promptOverride ??
@@ -152,9 +136,7 @@ export function buildDelegationPrompt(input: {
     lines.push(`Turn token ceiling: ${input.packet.contextBudget.maxTurnTokens}`);
   }
 
-  if (input.inheritedContext) {
-    lines.push("", input.inheritedContext);
-  }
+  lines.push(...renderContextBundleSection(input.contextBundle));
 
   if (input.skill) {
     lines.push(
@@ -204,14 +186,6 @@ export function buildDelegationPrompt(input: {
     if (input.packet.executionHints.fallbackTools?.length) {
       lines.push(`Fallback tools: ${input.packet.executionHints.fallbackTools.join(", ")}`);
     }
-  }
-
-  const contextRefLines = renderContextRefs(
-    input.packet.contextRefs,
-    input.packet.contextBudget?.maxInjectionTokens,
-  );
-  if (contextRefLines.length > 0) {
-    lines.push("", "## Context References", ...contextRefLines);
   }
 
   lines.push(

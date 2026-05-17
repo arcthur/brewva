@@ -3,6 +3,7 @@
 Implementation anchors:
 
 - `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
+- `packages/brewva-gateway/src/context/context-bundle.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/hosted-context-blocks.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/hosted-context-support.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/context-contract.ts`
@@ -11,8 +12,8 @@ Implementation anchors:
 ## Role
 
 Hosted dynamic context is the small request-local tail attached to a hosted
-turn after the stable system contract. It is a renderer, not an admission
-pipeline.
+turn after the stable system contract. It is a `ContextBundle` renderer, not a
+context service or an admission pipeline.
 
 It exists to show the model the minimum runtime facts it cannot discover
 efficiently through ordinary tools:
@@ -57,7 +58,7 @@ capability-selection receipt. The two sections are physically separate so
 SkillCards cannot grant tools, accounts, budgets, or runtime authority.
 
 There is no `ContextSourceProvider` registry, no supplemental family registry,
-no category/provenance lane model, and no per-turn context admission budget.
+no category/provenance lane model, and no per-turn context admission service.
 The runtime does not select narrative or diagnostic context for the model. The
 model reads, recalls, notes, evicts, and compacts through explicit tools.
 
@@ -74,8 +75,31 @@ The dynamic tail is a fixed ordered list. Empty blocks are omitted:
 - requested capability detail blocks
 - read-path recovery blocks
 
-Blocks carry only `id`, `content`, and `estimatedTokens`. They do not carry
-category, provenance, family id, lane reason, or retention policy.
+Block producers still emit simple hosted context blocks, but the final
+composition step converts them into an immutable serializable `ContextBundle`.
+The bundle is a value record with:
+
+- `schema`, `bundleId`, `scope`, `hash`, and `createdAt`
+- `sourceRefs` and `admittedRefs`
+- admitted `blocks`
+- `budget` and `totalTokens`
+
+`ContextBundle` is not a service. It has no hidden telemetry hooks, no mutable
+cursor, and no runtime-owned registry. The same value shape is used by hosted
+tail rendering, delegation prompts, fork context, and detached background
+manifests.
+
+Admission is deterministic:
+
+- required blocks are considered before advisory blocks
+- advisory blocks are dropped by ascending priority when the budget is tight
+- only blocks that declare deterministic truncation may be truncated
+- required overflow returns a typed blocker:
+  - hosted dynamic context maps it to a compaction requirement
+  - delegation prompt construction maps it to an admission blocker
+
+Blocks do not carry category, provenance family, lane reason, or retention
+policy beyond explicit source references.
 
 The consequence digest is rendered from runtime inspect
 `events.effects.renderTurnDigest` for the most recent completed runtime turn.
@@ -108,13 +132,19 @@ Recall is not a per-turn admission source.
 
 Hosted dynamic context is deliberately outside the stable Brewva-owned prefix.
 It should stay small and predictable. Any new automatic per-turn block must
-prove that it does not damage provider prefix-cache economics more than it
-helps model quality.
+enter through a block producer plus `buildContextBundle(...)`, and must prove
+that it does not damage provider prefix-cache economics more than it helps
+model quality.
 
 Provider cache controls, prompt-cache keys, cache-break hashes, cache counters,
 and cache diagnostics belong to the gateway/provider request layer and inspect
 surfaces. Dynamic context telemetry records coarse block ids and token counts
 only.
+
+`buildContextBundle(...)` and `buildContextMaterializationReceipt(...)` are
+pure. The hosted lifecycle caller is the single receipt-to-effect runner for
+usage observation, context-composed telemetry, prompt-stability evidence, and
+marking surfaced delegation outcomes.
 
 ## Non-Goals
 

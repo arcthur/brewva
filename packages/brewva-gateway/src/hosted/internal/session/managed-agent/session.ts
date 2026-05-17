@@ -82,6 +82,7 @@ import {
   requestCompactionAndWait,
   shouldCompactForModelDownshift,
 } from "../../compaction/model-downshift-policy.js";
+import { decideCompaction } from "../../compaction/policy.js";
 import {
   createHostedLlmCompactionSummaryGenerator,
   DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
@@ -1343,6 +1344,19 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   requestCompaction(request?: BrewvaCompactionRequest): void {
+    if (this.#runtime) {
+      const sessionId = this.sessionManager.getSessionId();
+      const usage = this.#runtime.inspect.context.usage.get(sessionId);
+      const gateStatus = this.#runtime.inspect.context.compaction.getGateStatus(sessionId, usage);
+      const decision = decideCompaction({
+        caller: "manual",
+        gateStatus,
+      });
+      if (decision.decision !== "execute") {
+        request?.onError?.(new Error(`manual_compaction_rejected:${decision.reason}`));
+        return;
+      }
+    }
     void this.#deferredCompaction.request(request);
   }
 

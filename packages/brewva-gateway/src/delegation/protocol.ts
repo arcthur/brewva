@@ -1,5 +1,6 @@
 import type { ExplorerConsultKind, SubagentResultMode } from "@brewva/brewva-tools/contracts";
 import { ALWAYS_ON_REVIEW_LANES } from "@brewva/brewva-tools/delegation";
+import type { ContextBundle } from "../context/api.js";
 
 export const STRUCTURED_OUTCOME_OPEN = "<delegation_outcome_json>";
 export const STRUCTURED_OUTCOME_CLOSE = "</delegation_outcome_json>";
@@ -50,8 +51,19 @@ export function getCanonicalForkPrompt(input: {
   forkTurns: "none" | "all" | number;
   objective: string;
   deliverable?: string;
-  inheritedContext?: string;
+  contextBundle?: ContextBundle;
 }): string {
+  const contextBundleSection =
+    input.contextBundle && input.contextBundle.blocks.length > 0
+      ? [
+          "",
+          "Context Bundle:",
+          `Bundle: ${input.contextBundle.bundleId}`,
+          `Hash: ${input.contextBundle.hash}`,
+          `Tokens: ${input.contextBundle.totalTokens}`,
+          ...input.contextBundle.blocks.flatMap((block) => ["", `### ${block.id}`, block.content]),
+        ].join("\n")
+      : "";
   return [
     getCanonicalSubagentPrompt("consult", "investigate"),
     "",
@@ -62,7 +74,7 @@ export function getCanonicalForkPrompt(input: {
       : input.forkTurns === "none"
         ? "The fork receives no inherited turns beyond the explicit objective and deliverable."
         : `The fork receives the most recent ${input.forkTurns} filtered mainline turns.`,
-    input.inheritedContext ? ["", input.inheritedContext].join("\n") : "",
+    contextBundleSection,
     "Do not exceed the parent's authority. This fork is read-only unless a narrower runtime grants less.",
     "",
     "Objective:",
@@ -120,9 +132,10 @@ function buildJsonShapeExample(input: {
           consultKind: "diagnose",
           hypotheses: [
             {
-              hypothesis: "The child run is replaying an outdated delegation contract branch.",
+              hypothesis:
+                "The child run produced a payload that no longer satisfies the current contract.",
               likelihood: "high",
-              evidence: ["Outcome parsing still branches on legacy result modes."],
+              evidence: ["Outcome parsing rejects non-canonical result mode fields."],
               gaps: ["No failing replay trace is attached yet."],
             },
             {
@@ -131,7 +144,7 @@ function buildJsonShapeExample(input: {
               evidence: ["Prompt and structured outcome parsing have diverged before."],
             },
           ],
-          likelyRootCause: "Legacy result-mode parsing is still gating the delegated outcome path.",
+          likelyRootCause: "The structured outcome contract and child prompt drifted apart.",
           nextProbe:
             "Trace the result-mode discriminator from request normalization through parser dispatch.",
         },
@@ -180,10 +193,10 @@ function buildJsonShapeExample(input: {
           lane: ALWAYS_ON_REVIEW_LANES[0],
           disposition: "concern",
           mergePosture: "needs_changes",
-          primaryClaim: "The cutover still leaves one legacy replay branch reachable.",
+          primaryClaim: "The cutover still leaves one non-canonical replay branch reachable.",
           findings: [
             {
-              summary: "Historical delegation records are still read as legacy review kind.",
+              summary: "Delegation records are still read through a non-canonical review branch.",
               severity: "high",
               evidenceRefs: ["session:child:agent_end"],
             },

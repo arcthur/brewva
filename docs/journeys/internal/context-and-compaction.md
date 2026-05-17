@@ -11,6 +11,7 @@
 
 - hosted lifecycle `beforeAgentStart`
 - `runtime.inspect.workbench.list(...)`
+- pure `decideCompaction(...)`
 - model-facing `workbench_compact`
 - durable `session_compact` receipts
 - post-compaction turn resume
@@ -64,9 +65,9 @@ flowchart TD
    renders the dynamic tail once for the turn.
 3. Hosted logic may append fixed dynamic-tail blocks without back-modeling them
    as registered context sources.
-4. Runtime context functions derive gate status and compaction eligibility from
-   usage ratio, predicted turn growth, recovery posture, in-flight state, and
-   the recent-compaction window.
+4. Runtime context functions derive gate status. Hosted manual, hosted auto,
+   and model-downshift recovery callers then pass equivalent inputs through the
+   pure `decideCompaction(...)` function.
 5. Under forced-compaction status without recent compaction, every tool except
    `workbench_compact` and the minimal context-critical allowlist is blocked by
    the gate.
@@ -103,12 +104,14 @@ flowchart TD
 - while the compaction gate is armed, `workbench_compact` remains the required
   repair action and only the minimal context-critical allowlist remains usable;
   this is narrower than the broader control-plane tool set
-- hosted auto-compaction uses an idle-versus-active policy:
+- hosted auto-compaction uses `decideCompaction(...)` for idle-versus-active
+  decisions:
   - when the agent is active, the host records advisory state rather than
     triggering implicit compaction
   - when the session is idle, the host may trigger the auto-compaction path
-  - breaker and deferred-policy state belongs to the runtime context budget
-    manager and is replayed from compaction receipts/events
+  - breaker/cursor/retry state is supplied as policy input from event tape or
+    rebuildable session-index rows; the policy itself is not a stateful owner
+  - `session_compact` remains the only replay-visible history rewrite authority
 - transient outbound reduction runs only on the outbound provider-request copy:
   - it may clear older large text-only tool-result bodies
   - it keeps recent tool results intact
@@ -223,6 +226,7 @@ flowchart TD
 - Context-critical allowlist: `packages/brewva-runtime/src/security/control-plane-tools.ts`
 - Context budget policy: `packages/brewva-runtime/src/domain/context/budget.ts`
 - Compaction integrity: `packages/brewva-runtime/src/domain/context/context-compaction.ts`
+- Pure compaction policy: `packages/brewva-gateway/src/hosted/internal/compaction/policy.ts`
 - Hosted compaction controller: `packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.ts`
 - Hosted context shell: `packages/brewva-gateway/src/hosted/internal/context/context-transform.ts`
 - Context evidence sidecar/report: `packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.ts`

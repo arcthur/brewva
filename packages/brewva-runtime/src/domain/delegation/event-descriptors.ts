@@ -12,7 +12,6 @@ import {
 } from "../../events/descriptor-core.js";
 import {
   SUBAGENT_CANCELLED_EVENT_TYPE,
-  SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
   SUBAGENT_FAILED_EVENT_TYPE,
@@ -36,7 +35,6 @@ import { CURRENT_DELEGATION_CONTRACT_VERSION as DELEGATION_CONTRACT_VERSION } fr
 
 export {
   SUBAGENT_CANCELLED_EVENT_TYPE,
-  SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
   SUBAGENT_FAILED_EVENT_TYPE,
@@ -256,9 +254,6 @@ function readDelegationModelRouteValue(value: unknown): DelegationModelRouteReco
 function readDelegationKindValue(
   value: unknown,
 ): DelegationLifecycleEventPayload["kind"] | undefined {
-  if (value === "qa") {
-    return "verifier";
-  }
   if (
     value === "evidence" ||
     value === "consult" ||
@@ -547,11 +542,6 @@ export const DELEGATION_EVENT_DESCRIPTORS = [
 ] as const;
 
 export const DELEGATION_UNTYPED_EVENT_DEFINITIONS = [
-  defineBrewvaUntypedEventDefinition({
-    type: SUBAGENT_A2A_MESSAGE_EVENT_TYPE,
-    category: "control",
-    durability: "source_of_truth",
-  }),
   defineBrewvaUntypedEventDefinition({
     type: SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE,
     category: "control",

@@ -236,7 +236,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
         params.detailMode === "internal" || params.detailMode === "diagnostic"
           ? params.detailMode
           : "public";
-      const readModelRuns = runtime.delegation?.listRuns?.(sessionId, query);
+      const readModelRuns = await runtime.delegation?.listRuns?.(sessionId, query);
       let readModelResult:
         | {
             ok: true;

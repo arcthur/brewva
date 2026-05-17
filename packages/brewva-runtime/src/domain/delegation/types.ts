@@ -156,7 +156,6 @@ export interface DelegationRunRecord {
   visibility: DelegationVisibility;
   isolationStrategy: DelegationIsolationStrategy;
   adoption: DelegationAdoptionRecord;
-  historicallyNormalized?: true;
   lineage?: DelegationLineageRecord;
   agentSpec?: string;
   envelope?: string;

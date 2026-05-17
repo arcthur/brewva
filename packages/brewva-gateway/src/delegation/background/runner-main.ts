@@ -1,48 +1,32 @@
 import { readFile } from "node:fs/promises";
-import { relative } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import {
-  CURRENT_DELEGATION_CONTRACT_VERSION,
-  evaluateDelegationAdoption,
-} from "@brewva/brewva-runtime/delegation";
 import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type {
-  ExplorerConsultKind,
-  SubagentAgent,
-  SubagentOutcome,
-  SubagentOutcomeArtifactRef,
-  SubagentRunRequest,
-} from "@brewva/brewva-tools/contracts";
 import {
   createHostedSession,
   resolveSubagentSessionShutdownReason,
   runHostedTurnEnvelope,
 } from "../../hosted/api.js";
 import { recordSessionShutdownIfMissing } from "../../utils/runtime.js";
-import {
-  buildCompletedDelegationAdoption,
-  buildDelegationRunRecordSeed,
-} from "../delegation-records.js";
-import { HostedDelegationStore, buildDelegationLifecyclePayload } from "../delegation-store.js";
+import { readDelegationContextBundleManifest } from "../context-manifest.js";
+import { buildDelegationRunRecordSeed } from "../delegation-records.js";
+import { HostedDelegationStore } from "../delegation-store.js";
 import { prepareSubagentEntry } from "../entry.js";
 import { resolveDelegationExecutionPlan } from "../execution-plan.js";
-import { renderInheritedSubagentContext } from "../fork-context.js";
+import { buildDelegationLifecyclePayload } from "../lifecycle-payload.js";
 import { ensureDelegationLineageNode, recordDelegationLineageOutcome } from "../lineage.js";
 import { createDelegationModelRoutingContextFromAgentDir } from "../model-routing.js";
 import {
-  aggregateChildCost,
-  buildPatchArtifactRefs,
-  buildWorkerResult,
-  resolveRunSummary,
+  applyDelegationFinalizationReceipt,
+  buildDelegationCompletionSummary,
+  buildDelegationFailureFinalizationReceipt,
+  buildDelegationFinalizationReceipt,
+  type DelegationFinalizationReceipt,
 } from "../run-finalization.js";
+import { buildDelegationRunPlan } from "../run-plan.js";
 import { buildSubagentAgentId } from "../shared.js";
-import {
-  extractStructuredOutcomeData,
-  summarizeStructuredOutcomeData,
-} from "../structured-outcome.js";
 import {
   mergeDelegationPacketWithTargetDefaults,
   type HostedDelegationTarget,
@@ -58,15 +42,10 @@ import {
   readDetachedSubagentCancelRequest,
   removeDetachedSubagentCancelRequest,
   removeDetachedSubagentLiveState,
-  resolveDetachedSubagentOutcomePath,
   type DetachedSubagentRunSpec,
   writeDetachedSubagentLiveState,
   writeDetachedSubagentOutcome,
 } from "./protocol.js";
-
-function normalizeRelativePath(path: string): string {
-  return path.replaceAll("\\", "/");
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -86,75 +65,22 @@ const hostedSessionLogger = {
   },
 };
 
-function buildOutcomeArtifactRef(workspaceRoot: string, runId: string): SubagentOutcomeArtifactRef {
-  return {
-    kind: "delegation_outcome",
-    path: normalizeRelativePath(
-      relative(workspaceRoot, resolveDetachedSubagentOutcomePath(workspaceRoot, runId)),
-    ),
-    summary: `Detached delegation outcome for ${runId}`,
-  };
-}
-
-function buildFailureOutcome(input: {
-  runId: string;
-  agent: SubagentAgent;
-  taskName: string;
-  taskPath: string;
-  nickname: string;
-  delegate: string;
-  agentSpec?: string;
-  envelope?: string;
-  skillName?: string;
-  consultKind?: ExplorerConsultKind;
-  label?: string;
-  workerSessionId?: string;
-  artifactRefs?: SubagentOutcomeArtifactRef[];
-  error: string;
-  startedAt: number;
-  status?: "error" | "cancelled" | "timeout";
-}): SubagentOutcome {
-  return {
-    ok: false,
-    runId: input.runId,
-    agent: input.agent,
-    taskName: input.taskName,
-    taskPath: input.taskPath,
-    nickname: input.nickname,
-    delegate: input.delegate,
-    agentSpec: input.agentSpec,
-    envelope: input.envelope,
-    skillName: input.skillName,
-    ...(input.consultKind ? { consultKind: input.consultKind } : {}),
-    label: input.label,
-    status: input.status ?? "error",
-    workerSessionId: input.workerSessionId,
-    error: input.error,
-    metrics: {
-      durationMs: Math.max(0, Date.now() - input.startedAt),
-    },
-    artifactRefs: input.artifactRefs,
-  };
-}
-
-function applyDurableDelivery(input: {
+function applyDetachedFinalization(input: {
   runtime: BrewvaHostedRuntimePort;
-  sessionId: string;
-  delegate: string;
-  outcome: SubagentOutcome;
-  delivery: NonNullable<SubagentRunRequest["delivery"]> | undefined;
-}): DelegationRunRecord["delivery"] | undefined {
-  const createdAt = Date.now();
-  const deliveryRecord: NonNullable<DelegationRunRecord["delivery"]> = {
-    mode: input.delivery?.returnMode ?? "text_only",
-    scopeId: input.delivery?.returnScopeId,
-    label: input.delivery?.returnLabel,
-    handoffState: "pending_parent_turn",
-    readyAt: createdAt,
-    supplementalAppended: false,
-    updatedAt: createdAt,
-  };
-  return deliveryRecord;
+  spec: DetachedSubagentRunSpec;
+  receipt: DelegationFinalizationReceipt;
+}): void {
+  applyDelegationFinalizationReceipt({
+    runtime: input.runtime,
+    receipt: input.receipt,
+    recordLineageOutcome: (record) =>
+      recordDelegationLineageOutcome({
+        runtime: input.runtime,
+        sessionId: input.spec.parentSessionId,
+        record,
+      }),
+  });
+  writeDetachedSubagentOutcome(input.spec.workspaceRoot, input.spec.runId, input.receipt.outcome);
 }
 
 async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
@@ -162,7 +88,9 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   const schema =
     typeof raw.schema === "string" ? raw.schema : "missing_detached_subagent_spec_schema";
   if (schema !== "brewva.subagent-run-spec.v7") {
-    throw new Error(`unsupported_detached_subagent_spec_schema:${schema}`);
+    throw new Error(
+      `unsupported_detached_subagent_spec_schema:${schema}:clear_.orchestrator/subagent-runs`,
+    );
   }
   if (!isRecord(raw.target)) {
     throw new Error("invalid_detached_subagent_spec:missing_target");
@@ -192,45 +120,54 @@ async function main(): Promise<void> {
   const target = spec.target;
 
   const delegationTarget = target;
+  const taskIdentity = {
+    taskName: spec.taskName,
+    taskPath: spec.taskPath,
+    nickname: spec.nickname,
+    depth: spec.depth,
+  };
   const packet = mergeDelegationPacketWithTargetDefaults(delegationTarget, spec.packet);
   if (!packet) {
-    const failed = {
-      ...(existing ?? {
-        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    const finishedAt = Date.now();
+    const initialRecord =
+      existing ??
+      buildDelegationRunRecordSeed({
         runId: spec.runId,
-        agent: target.agent,
-        targetName: target.targetName,
+        target,
         delegate: spec.delegate,
-        taskName: spec.taskName,
-        taskPath: spec.taskPath,
-        nickname: spec.nickname,
-        depth: spec.depth,
-        forkTurns: spec.forkTurns,
-        gateReason: target.gateReason,
-        modelCategory: target.modelCategory,
-        executionPrimitive: "named" as const,
-        visibility: target.visibility,
-        isolationStrategy: target.isolationStrategy,
-        adoption: evaluateDelegationAdoption({ outcomeKind: target.resultMode }),
         parentSessionId: specParentSessionId,
-        status: "failed" as const,
+        status: "failed",
         createdAt: spec.createdAt,
-        updatedAt: Date.now(),
-      }),
-      status: "failed" as const,
-      updatedAt: Date.now(),
-      error: "missing_delegation_packet",
-      summary: "missing_delegation_packet",
-    };
-    parentRuntime.extensions.hosted.events.record({
-      sessionId: spec.parentSessionId,
-      type: "subagent_failed",
-      payload: buildDelegationLifecyclePayload(failed),
-    });
-    recordDelegationLineageOutcome({
+        updatedAt: finishedAt,
+        label: spec.label,
+        taskIdentity,
+        forkTurns: spec.forkTurns,
+      });
+    applyDetachedFinalization({
       runtime: parentRuntime,
-      sessionId: spec.parentSessionId,
-      record: failed,
+      spec,
+      receipt: buildDelegationFailureFinalizationReceipt({
+        parentSessionId: spec.parentSessionId,
+        initialRecord,
+        currentRecord: existing,
+        target: delegationTarget,
+        executionPlan: {
+          ...(spec.modelRoute ? { modelRoute: spec.modelRoute } : {}),
+          producesPatches: false,
+        },
+        taskIdentity,
+        runId: spec.runId,
+        delegate: spec.delegate,
+        label: spec.label,
+        startedAt: spec.createdAt,
+        finishedAt,
+        message: "missing_delegation_packet",
+        terminalStatus: "failed",
+        detached: {
+          boundary: initialRecord.boundary,
+          delivery: spec.delivery,
+        },
+      }),
     });
     removeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId);
     process.exitCode = 1;
@@ -254,6 +191,7 @@ async function main(): Promise<void> {
     modelRouting,
     preselectedModelRoute: spec.modelRoute,
   });
+  let runPlan: ReturnType<typeof buildDelegationRunPlan> | undefined;
 
   const readCancelReason = (): string | undefined =>
     readDetachedSubagentCancelRequest(spec.workspaceRoot, spec.runId)?.reason;
@@ -339,6 +277,7 @@ async function main(): Promise<void> {
       status: "running",
       label: spec.label,
       workerSessionId: childSessionId,
+      completionPredicate: spec.packet.completionPredicate,
     });
     if (cancellationReason) {
       throw new Error(cancellationReason);
@@ -352,19 +291,33 @@ async function main(): Promise<void> {
       timeout.unref?.();
     }
 
+    const contextManifest = readDelegationContextBundleManifest(spec.workspaceRoot, spec.runId);
+    if (!contextManifest || contextManifest.hash !== contextManifest.bundle.hash) {
+      throw new Error(`detached_context_bundle_invalid:${spec.runId}`);
+    }
+    runPlan = buildDelegationRunPlan({
+      runId: spec.runId,
+      parentSessionId: spec.parentSessionId,
+      delegate: spec.delegate,
+      packet,
+      target: targetRecord,
+      executionPlan,
+      taskIdentity,
+      modelRoute: executionPlan.modelRoute,
+      contextBundle: contextManifest.bundle,
+      delivery: spec.delivery,
+      createdAt: spec.createdAt,
+    });
+    const plan = runPlan;
     const preparedEntry = prepareSubagentEntry({
       parentRuntime,
       childRuntime: childSession.runtime,
       childSessionId,
-      target: targetRecord,
-      delegate: spec.delegate,
-      packet,
+      target: plan.target,
+      delegate: plan.delegate,
+      packet: plan.packet,
       promptOverride: executionPlan.prompt,
-      inheritedContext: renderInheritedSubagentContext({
-        runtime: parentRuntime,
-        sessionId: spec.parentSessionId,
-        forkTurns: spec.forkTurns,
-      }),
+      contextBundle: plan.contextBundle,
     });
     const { delegatedSkill, childOwnsSkill, prompt } = preparedEntry;
     const output = await runHostedTurnEnvelope({
@@ -378,42 +331,17 @@ async function main(): Promise<void> {
       throw new Error(`subagent_thread_loop_${output.status}`);
     }
     const childCostSummary = childSession.runtime.inspect.cost.summary.get(childSessionId);
-    aggregateChildCost(parentRuntime, spec.parentSessionId, childCostSummary);
-    const structuredOutcome = extractStructuredOutcomeData({
-      resultMode: targetRecord.resultMode,
-      consultKind: targetRecord.consultKind,
+    const completionSummary = buildDelegationCompletionSummary({
+      target: targetRecord,
+      delegatedSkillName: delegatedSkill,
+      childOwnsSkill,
       assistantText: output.assistantText,
-      skillName: childOwnsSkill ? delegatedSkill : undefined,
     });
-    if (structuredOutcome.parseError) {
-      parentRuntime.extensions.hosted.events.record({
-        sessionId: spec.parentSessionId,
-        type: "subagent_outcome_parse_failed",
-        payload: {
-          runId: spec.runId,
-          delegate: spec.delegate,
-          label: spec.label ?? null,
-          kind: targetRecord.resultMode,
-          consultKind: targetRecord.consultKind ?? null,
-          childSessionId,
-          error: structuredOutcome.parseError,
-        },
-      });
-    }
-    const structuredSummary = structuredOutcome.data
-      ? summarizeStructuredOutcomeData(structuredOutcome.data)
-      : undefined;
-
-    const summary = resolveRunSummary(
-      structuredOutcome.narrativeText || output.assistantText,
-      structuredSummary ??
-        `Delegated ${targetRecord.resultMode} run completed without a final assistant summary.`,
-    );
     const patches = executionPlan.producesPatches
       ? await capturePatchSetFromIsolatedWorkspace({
           sourceRoot: spec.workspaceRoot,
           isolatedRoot: isolatedWorkspace?.root ?? spec.workspaceRoot,
-          summary,
+          summary: completionSummary.summary,
           candidatePaths:
             isolatedWorkspace && childSessionId
               ? collectChangedPathsFromIsolatedWorkspace({
@@ -423,120 +351,36 @@ async function main(): Promise<void> {
               : undefined,
         })
       : undefined;
-
-    if (executionPlan.producesPatches) {
-      parentRuntime.authority.session.workerResults.record(
-        spec.parentSessionId,
-        buildWorkerResult({
-          workerId: spec.runId,
-          summary,
-          patches,
-        }),
-      );
-    }
-
-    const outcomeArtifactRef = buildOutcomeArtifactRef(spec.workspaceRoot, spec.runId);
-    const outcome: SubagentOutcome = {
-      ok: true,
-      runId: spec.runId,
-      agent: targetRecord.agent,
-      taskName: spec.taskName,
-      taskPath: spec.taskPath,
-      nickname: spec.nickname,
-      delegate: spec.delegate,
-      agentSpec: targetRecord.agentSpecName,
-      envelope: targetRecord.envelopeName,
-      skillName: delegatedSkill,
-      consultKind: targetRecord.consultKind,
+    const finishedAt = Date.now();
+    const finalizationReceipt = buildDelegationFinalizationReceipt({
+      parentSessionId: plan.parentSessionId,
+      initialRecord: runningRecord,
+      currentRecord: delegationStore.getRun(plan.parentSessionId, plan.runId),
+      target: plan.target,
+      executionPlan: plan.executionPlan,
+      taskIdentity: plan.taskIdentity,
+      runId: plan.runId,
+      delegate: plan.delegate,
+      delegatedSkillName: delegatedSkill,
+      childOwnsSkill,
+      childSessionId,
       label: spec.label,
-      kind: targetRecord.resultMode,
-      status: "ok",
-      workerSessionId: childSessionId,
-      summary,
-      assistantText: output.assistantText.trim(),
-      data: structuredOutcome.data,
-      metrics: {
-        durationMs: Math.max(0, Date.now() - startedAt),
-        inputTokens: childCostSummary.inputTokens,
-        outputTokens: childCostSummary.outputTokens,
-        totalTokens: childCostSummary.totalTokens,
-        costUsd: childCostSummary.totalCostUsd,
-      },
+      startedAt,
+      finishedAt,
+      assistantText: output.assistantText,
+      toolOutputs: output.toolOutputs,
+      childCostSummary,
       patches,
-      artifactRefs: [...(buildPatchArtifactRefs(patches) ?? []), outcomeArtifactRef],
-      evidenceRefs: [
-        {
-          kind: "event",
-          locator: `session:${childSessionId}:agent_end`,
-          summary: "Child run completed",
-          sourceSessionId: childSessionId,
-        },
-        ...output.toolOutputs.slice(0, 8).map((toolOutput) => ({
-          kind: "tool_result" as const,
-          locator: `session:${childSessionId}:tool:${toolOutput.toolCallId}`,
-          summary: `${toolOutput.toolName}:${toolOutput.verdict}`,
-          sourceSessionId: childSessionId,
-        })),
-      ],
-    };
-    const delivery = applyDurableDelivery({
+      detached: {
+        boundary: executionPlan.boundary,
+        delivery: spec.delivery,
+      },
+    });
+    applyDetachedFinalization({
       runtime: parentRuntime,
-      sessionId: spec.parentSessionId,
-      delegate: spec.delegate,
-      outcome,
-      delivery: spec.delivery,
+      spec,
+      receipt: finalizationReceipt,
     });
-    const resultData = outcome.data
-      ? (structuredClone(outcome.data) as unknown as DelegationRunRecord["resultData"])
-      : undefined;
-    const completedRecord: DelegationRunRecord = {
-      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ??
-        buildDelegationRunRecordSeed({
-          runId: spec.runId,
-          target: targetRecord,
-          delegate: spec.delegate,
-          delegatedSkillName: delegatedSkill,
-          parentSessionId: specParentSessionId,
-          createdAt: spec.createdAt,
-          taskIdentity: {
-            taskName: spec.taskName,
-            taskPath: spec.taskPath,
-            nickname: spec.nickname,
-            depth: spec.depth,
-          },
-          forkTurns: spec.forkTurns,
-        })),
-      status: "completed",
-      updatedAt: Date.now(),
-      workerSessionId: childSessionId,
-      label: spec.label,
-      kind: targetRecord.resultMode,
-      consultKind: targetRecord.consultKind,
-      boundary: executionPlan.boundary,
-      modelRoute: executionPlan.modelRoute,
-      adoption: buildCompletedDelegationAdoption({
-        target: targetRecord,
-        resultData,
-        patchChangeCount: patches?.changes.length,
-      }),
-      summary,
-      resultData,
-      artifactRefs: outcome.artifactRefs?.map((ref) => ({ ...ref })),
-      totalTokens: childCostSummary.totalTokens,
-      costUsd: childCostSummary.totalCostUsd,
-      delivery,
-    };
-    parentRuntime.extensions.hosted.events.record({
-      sessionId: spec.parentSessionId,
-      type: "subagent_completed",
-      payload: buildDelegationLifecyclePayload(completedRecord),
-    });
-    recordDelegationLineageOutcome({
-      runtime: parentRuntime,
-      sessionId: spec.parentSessionId,
-      record: completedRecord,
-    });
-    writeDetachedSubagentOutcome(spec.workspaceRoot, spec.runId, outcome);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const patches = executionPlan.producesPatches
@@ -553,100 +397,60 @@ async function main(): Promise<void> {
               : undefined,
         }).catch(() => undefined)
       : undefined;
-    const artifactRefs = [
-      ...(buildPatchArtifactRefs(patches) ?? []),
-      buildOutcomeArtifactRef(spec.workspaceRoot, spec.runId),
-    ];
-    const terminalStatus: DelegationRunRecord["status"] = timeoutTriggered
-      ? "timeout"
-      : cancellationReason
-        ? "cancelled"
-        : "failed";
-    if (executionPlan.producesPatches) {
-      parentRuntime.authority.session.workerResults.record(
-        spec.parentSessionId,
-        buildWorkerResult({
-          workerId: spec.runId,
-          summary: message,
-          patches,
-          errorMessage: message,
-        }),
-      );
-    }
-    const outcome = buildFailureOutcome({
-      runId: spec.runId,
-      agent: targetRecord.agent,
-      taskName: spec.taskName,
-      taskPath: spec.taskPath,
-      nickname: spec.nickname,
-      delegate: spec.delegate,
-      agentSpec: targetRecord.agentSpecName,
-      envelope: targetRecord.envelopeName,
-      skillName: targetRecord.skillName,
-      consultKind: targetRecord.consultKind,
-      label: spec.label,
-      workerSessionId: childSessionId,
-      artifactRefs,
-      error: message,
-      startedAt,
-      status:
-        terminalStatus === "cancelled" || terminalStatus === "timeout" ? terminalStatus : "error",
-    });
-    const delivery = applyDurableDelivery({
-      runtime: parentRuntime,
-      sessionId: spec.parentSessionId,
-      delegate: spec.delegate,
-      outcome,
-      delivery: spec.delivery,
-    });
-    const failedRecord: DelegationRunRecord = {
-      ...(delegationStore.getRun(spec.parentSessionId, spec.runId) ??
+    const terminalStatus: Extract<
+      DelegationRunRecord["status"],
+      "failed" | "cancelled" | "timeout"
+    > = timeoutTriggered ? "timeout" : cancellationReason ? "cancelled" : "failed";
+    const terminalCostSummary =
+      childSession && childSessionId
+        ? childSession.runtime.inspect.cost.summary.get(childSessionId)
+        : undefined;
+    const finishedAt = Date.now();
+    const failedPlan = runPlan;
+    const finalizationReceipt = buildDelegationFailureFinalizationReceipt({
+      parentSessionId: failedPlan?.parentSessionId ?? spec.parentSessionId,
+      initialRecord:
+        delegationStore.getRun(
+          failedPlan?.parentSessionId ?? spec.parentSessionId,
+          failedPlan?.runId ?? spec.runId,
+        ) ??
         buildDelegationRunRecordSeed({
-          runId: spec.runId,
-          target: targetRecord,
-          delegate: spec.delegate,
+          runId: failedPlan?.runId ?? spec.runId,
+          target: failedPlan?.target ?? targetRecord,
+          delegate: failedPlan?.delegate ?? spec.delegate,
           parentSessionId: specParentSessionId,
           createdAt: spec.createdAt,
-          taskIdentity: {
-            taskName: spec.taskName,
-            taskPath: spec.taskPath,
-            nickname: spec.nickname,
-            depth: spec.depth,
-          },
+          taskIdentity: failedPlan?.taskIdentity ?? taskIdentity,
           forkTurns: spec.forkTurns,
-        })),
-      status: terminalStatus,
-      updatedAt: Date.now(),
-      workerSessionId: childSessionId,
+        }),
+      currentRecord: delegationStore.getRun(
+        failedPlan?.parentSessionId ?? spec.parentSessionId,
+        failedPlan?.runId ?? spec.runId,
+      ),
+      target: failedPlan?.target ?? targetRecord,
+      executionPlan: failedPlan?.executionPlan ?? executionPlan,
+      taskIdentity: failedPlan?.taskIdentity ?? taskIdentity,
+      runId: failedPlan?.runId ?? spec.runId,
+      delegate: failedPlan?.delegate ?? spec.delegate,
+      childSessionId,
       label: spec.label,
-      kind: targetRecord.resultMode,
-      consultKind: targetRecord.consultKind,
-      boundary: executionPlan.boundary,
-      modelRoute: executionPlan.modelRoute,
-      adoption: buildCompletedDelegationAdoption({
-        target: targetRecord,
-        resultData: undefined,
-        patchChangeCount: patches?.changes.length,
-      }),
-      summary: message,
-      error: message,
-      artifactRefs,
-      delivery,
-    };
-    parentRuntime.extensions.hosted.events.record({
-      sessionId: spec.parentSessionId,
-      type: terminalStatus === "cancelled" ? "subagent_cancelled" : "subagent_failed",
-      payload: {
-        ...buildDelegationLifecyclePayload(failedRecord),
-        reason: cancellationReason ?? null,
+      startedAt,
+      finishedAt,
+      message,
+      terminalStatus,
+      patches,
+      terminalCostSummary,
+      cancellationReason,
+      detached: {
+        boundary: executionPlan.boundary,
+        delivery: spec.delivery,
       },
     });
-    recordDelegationLineageOutcome({
+    applyDetachedFinalization({
       runtime: parentRuntime,
-      sessionId: spec.parentSessionId,
-      record: failedRecord,
+      spec,
+      receipt: finalizationReceipt,
     });
-    writeDetachedSubagentOutcome(spec.workspaceRoot, spec.runId, outcome);
   } finally {
     removeDetachedSubagentLiveState(spec.workspaceRoot, spec.runId);
     removeDetachedSubagentCancelRequest(spec.workspaceRoot, spec.runId);

@@ -18,7 +18,7 @@ async function listPendingDelegationOutcomes(
   runtime: BrewvaToolOptions["runtime"],
   sessionId: string,
 ) {
-  const readModelResults = runtime.delegation?.listPendingOutcomes?.(sessionId, {
+  const readModelResults = await runtime.delegation?.listPendingOutcomes?.(sessionId, {
     limit: 6,
   });
   if (readModelResults) {

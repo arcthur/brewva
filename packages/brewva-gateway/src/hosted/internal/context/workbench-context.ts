@@ -7,6 +7,11 @@ import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
+import {
+  buildContextBundle,
+  renderContextBundle,
+  type ContextBundle,
+} from "../../../context/api.js";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
 import { applyWorkbenchEvictionsToMessages } from "../session/projection/workbench-visibility.js";
 import { renderCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
@@ -15,13 +20,15 @@ import { resolveContextScopeId } from "./context-shared.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
 import {
   makeHostedContextBlock,
-  renderHostedContextBlocks,
   type HostedContextBlock,
   type HostedContextRenderResult,
 } from "./hosted-context-blocks.js";
 import { prepareHostedContextSupport } from "./hosted-context-support.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
-import { materializeHostedContext } from "./materialization.js";
+import {
+  applyContextMaterializationReceipt,
+  buildContextMaterializationReceipt,
+} from "./materialization.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
@@ -105,37 +112,35 @@ function sortDelegationRuns(runs: readonly DelegationRunRecord[]): DelegationRun
   );
 }
 
-function listPendingDelegations(
+async function listPendingDelegations(
   delegationStore: HostedDelegationStore | undefined,
   sessionId: string,
-): DelegationRunRecord[] {
-  return sortDelegationRuns(
-    delegationStore?.listRuns(sessionId, {
-      statuses: ["pending", "running"],
-      includeTerminal: false,
-      limit: 6,
-    }) ?? [],
-  );
+): Promise<DelegationRunRecord[]> {
+  const runs = await delegationStore?.listRunsFromReadModel(sessionId, {
+    statuses: ["pending", "running"],
+    includeTerminal: false,
+    limit: 6,
+  });
+  return sortDelegationRuns(runs ?? []);
 }
 
-function listPendingDelegationOutcomes(
+async function listPendingDelegationOutcomes(
   delegationStore: HostedDelegationStore | undefined,
   sessionId: string,
-): DelegationRunRecord[] {
-  const pending = delegationStore?.listPendingOutcomes(sessionId, {
+): Promise<DelegationRunRecord[]> {
+  const pending = await delegationStore?.listPendingOutcomesFromReadModel(sessionId, {
     limit: 6,
   });
   if (pending) {
     return sortDelegationRuns(pending);
   }
+  const runs = await delegationStore?.listRunsFromReadModel(sessionId, {
+    statuses: ["completed", "failed", "timeout", "cancelled"],
+    includeTerminal: true,
+    limit: 6,
+  });
   return sortDelegationRuns(
-    delegationStore
-      ?.listRuns(sessionId, {
-        statuses: ["completed", "failed", "timeout", "cancelled"],
-        includeTerminal: true,
-        limit: 6,
-      })
-      .filter((run) => run.delivery?.handoffState === "pending_parent_turn") ?? [],
+    runs?.filter((run) => run.delivery?.handoffState === "pending_parent_turn") ?? [],
   );
 }
 
@@ -143,11 +148,11 @@ function formatDelegationRuns(runs: readonly DelegationRunRecord[]): string {
   return runs.map((run) => `${run.delegate}/${run.label ?? run.runId}:${run.status}`).join(", ");
 }
 
-function buildPendingDelegationsBlock(
+async function buildPendingDelegationsBlock(
   delegationStore: HostedDelegationStore | undefined,
   sessionId: string,
-): HostedContextBlock | null {
-  const runs = listPendingDelegations(delegationStore, sessionId);
+): Promise<HostedContextBlock | null> {
+  const runs = await listPendingDelegations(delegationStore, sessionId);
   if (runs.length === 0) {
     return null;
   }
@@ -159,11 +164,11 @@ function buildPendingDelegationsBlock(
   );
 }
 
-function buildCompletedDelegationOutcomes(input: {
+async function buildCompletedDelegationOutcomes(input: {
   delegationStore?: HostedDelegationStore;
   sessionId: string;
-}): { block: HostedContextBlock | null; runIds: string[] } {
-  const runs = listPendingDelegationOutcomes(input.delegationStore, input.sessionId);
+}): Promise<{ block: HostedContextBlock | null; runIds: string[] }> {
+  const runs = await listPendingDelegationOutcomes(input.delegationStore, input.sessionId);
   if (runs.length === 0) {
     return { block: null, runIds: [] };
   }
@@ -424,7 +429,16 @@ function buildConsequenceDigestBlock(input: {
   return makeHostedContextBlock("turn-consequence-digest", digest);
 }
 
-function buildHostedDynamicTail(input: {
+function isRequiredHostedContextBlock(block: HostedContextBlock): boolean {
+  return block.id === "compaction-gate";
+}
+
+interface HostedDynamicTail {
+  bundle: ContextBundle;
+  rendered: HostedContextRenderResult;
+}
+
+async function buildHostedDynamicTail(input: {
   runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   turn: number;
@@ -433,8 +447,8 @@ function buildHostedDynamicTail(input: {
   pendingCompactionReason: string | null;
   capabilityView: BuildCapabilityViewResult;
   delegationStore?: HostedDelegationStore;
-}): HostedContextRenderResult {
-  const completed = buildCompletedDelegationOutcomes({
+}): Promise<HostedDynamicTail> {
+  const completed = await buildCompletedDelegationOutcomes({
     delegationStore: input.delegationStore,
     sessionId: input.sessionId,
   });
@@ -444,38 +458,68 @@ function buildHostedDynamicTail(input: {
     gateRequired: input.gateStatus.required,
     pendingCompactionReason: input.pendingCompactionReason,
   });
-  return renderHostedContextBlocks({
-    blocks: [
-      input.gateStatus.required && compactionNudgeMode
-        ? buildCompactionGateBlock({
-            status: input.gateStatus.status,
-            mode: compactionNudgeMode,
-          })
-        : null,
-      !input.gateStatus.required && input.pendingCompactionReason
-        ? buildCompactionAdvisoryBlock({
-            reason: input.pendingCompactionReason,
-            status: input.gateStatus.status,
-            mode: compactionNudgeMode ?? "full",
-          })
-        : null,
-      buildContextStatusBlock(input.runtime, {
-        sessionId: input.sessionId,
-        usage: input.usage,
-      }),
-      buildWorkbenchBlock(input.runtime, input.sessionId),
-      buildPendingDelegationsBlock(input.delegationStore, input.sessionId),
-      completed.block,
-      buildConsequenceDigestBlock({
-        runtime: input.runtime,
-        sessionId: input.sessionId,
-        turn: input.turn,
-      }),
-      ...buildCapabilityBlocks(input.capabilityView),
-      ...buildReadPathRecoveryBlocks(input.runtime, input.sessionId),
-    ],
-    surfacedDelegationRunIds: completed.runIds,
+  const pendingDelegationsBlock = await buildPendingDelegationsBlock(
+    input.delegationStore,
+    input.sessionId,
+  );
+  const blocks = [
+    input.gateStatus.required && compactionNudgeMode
+      ? buildCompactionGateBlock({
+          status: input.gateStatus.status,
+          mode: compactionNudgeMode,
+        })
+      : null,
+    !input.gateStatus.required && input.pendingCompactionReason
+      ? buildCompactionAdvisoryBlock({
+          reason: input.pendingCompactionReason,
+          status: input.gateStatus.status,
+          mode: compactionNudgeMode ?? "full",
+        })
+      : null,
+    buildContextStatusBlock(input.runtime, {
+      sessionId: input.sessionId,
+      usage: input.usage,
+    }),
+    buildWorkbenchBlock(input.runtime, input.sessionId),
+    pendingDelegationsBlock,
+    completed.block,
+    buildConsequenceDigestBlock({
+      runtime: input.runtime,
+      sessionId: input.sessionId,
+      turn: input.turn,
+    }),
+    ...buildCapabilityBlocks(input.capabilityView),
+    ...buildReadPathRecoveryBlocks(input.runtime, input.sessionId),
+  ].filter((block): block is HostedContextBlock => Boolean(block));
+  const bundleResult = buildContextBundle({
+    scope: "hosted_dynamic_tail",
+    blocks: blocks.map((block) => ({
+      id: block.id,
+      content: block.content,
+      admission: isRequiredHostedContextBlock(block)
+        ? ("required" as const)
+        : ("advisory" as const),
+      priority: isRequiredHostedContextBlock(block) ? 0 : 100,
+    })),
+    budget: input.runtime.config.infrastructure.contextBudget.enabled
+      ? {
+          maxTokens: input.runtime.config.infrastructure.contextBudget.dynamicTailTokens,
+          overflow: "compaction_required",
+        }
+      : { overflow: "compaction_required" },
+    createdAt: input.turn,
   });
+  if (!bundleResult.ok) {
+    throw new Error(`hosted_context_bundle_blocked:${bundleResult.blocker.reason}`);
+  }
+  const rendered = renderContextBundle(bundleResult.bundle);
+  return {
+    bundle: bundleResult.bundle,
+    rendered: {
+      ...rendered,
+      surfacedDelegationRunIds: completed.runIds,
+    },
+  };
 }
 
 export function createHostedWorkbenchContextController(
@@ -507,7 +551,7 @@ export function createHostedWorkbenchContextController(
 
       const systemPromptWithContract = applyContextContract(input.systemPrompt);
 
-      const rendered = buildHostedDynamicTail({
+      const dynamicTail = await buildHostedDynamicTail({
         runtime,
         sessionId: input.sessionId,
         turn,
@@ -517,20 +561,26 @@ export function createHostedWorkbenchContextController(
         capabilityView,
         delegationStore: options.delegationStore,
       });
-      materializeHostedContext({
-        runtime,
-        telemetry,
-        delegationStore: options.delegationStore,
+      const rendered = dynamicTail.rendered;
+      const materializationReceipt = buildContextMaterializationReceipt({
         sessionId: input.sessionId,
         turn,
         contextScopeId,
         systemPrompt: systemPromptWithContract,
+        contextBundle: dynamicTail.bundle,
         rendered,
         usage: input.usage,
         gateStatus,
         pendingCompactionReason,
         workbenchContextRendered: rendered.blocks.some((block) => block.id === "active-workbench"),
         surfacedDelegationRunIds: rendered.surfacedDelegationRunIds,
+      });
+      applyContextMaterializationReceipt({
+        runtime,
+        telemetry,
+        delegationStore: options.delegationStore,
+        receipt: materializationReceipt,
+        usage: input.usage,
       });
 
       return buildHiddenContextResult({

@@ -57,6 +57,9 @@ export interface DetachedSubagentLiveState {
   status: Extract<DelegationRunRecord["status"], "pending" | "running">;
   label?: string;
   workerSessionId?: string;
+  completionPredicate?: DelegationPacket["completionPredicate"];
+  cancelRequestedAt?: number;
+  cancelReason?: string;
 }
 
 export interface DetachedSubagentCancelRequest {
@@ -132,16 +135,6 @@ export function resolveDetachedSubagentCancelPath(workspaceRoot: string, runId: 
 
 export function resolveDetachedSubagentOutcomePath(workspaceRoot: string, runId: string): string {
   return resolve(resolveDetachedSubagentRunDir(workspaceRoot, runId), "outcome.json");
-}
-
-export function resolveDetachedSubagentContextManifestPath(
-  workspaceRoot: string,
-  runId: string,
-): string {
-  return resolve(
-    resolveDetachedSubagentRunDir(workspaceRoot, runId),
-    "delegation-context-manifest.json",
-  );
 }
 
 export function writeDetachedSubagentSpec(
@@ -224,10 +217,6 @@ export function writeDetachedSubagentOutcome(
   writeJsonFile(resolveDetachedSubagentOutcomePath(workspaceRoot, runId), outcome);
 }
 
-export function writeDetachedSubagentContextManifest(
-  workspaceRoot: string,
-  runId: string,
-  manifest: unknown,
-): void {
-  writeJsonFile(resolveDetachedSubagentContextManifestPath(workspaceRoot, runId), manifest);
+export function readDetachedSubagentOutcome(workspaceRoot: string, runId: string): unknown {
+  return readJsonFile(resolveDetachedSubagentOutcomePath(workspaceRoot, runId));
 }

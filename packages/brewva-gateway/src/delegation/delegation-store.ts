@@ -1,244 +1,129 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
 import type {
   DelegationAdoptionRecord,
-  DelegationExecutionPrimitive,
-  DelegationGateReason,
-  DelegationIsolationStrategy,
   DelegationLifecycleEventPayload,
-  DelegationLineageRecord,
-  DelegationArtifactRef,
-  DelegationDeliveryRecord,
-  DelegationModelCategory,
-  DelegationModelRouteRecord,
   DelegationRunQuery,
   DelegationRunRecord,
-  DelegationVisibility,
   PendingDelegationOutcomeQuery,
-  PublicSubagentRole,
 } from "@brewva/brewva-runtime/delegation";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
-import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/events";
 import {
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
-  SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
   SUBAGENT_FAILED_EVENT_TYPE,
-  SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
+  SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
   SUBAGENT_RUNNING_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   readDelegationLifecycleEventPayload,
   readWorkerResultsAppliedEventPayload,
 } from "@brewva/brewva-runtime/events";
+import {
+  projectSessionDelegationState,
+  type SessionIndex,
+  type SessionIndexDelegationRun,
+} from "@brewva/brewva-session-index";
 import { recordSessionTurnTransition } from "../hosted/api.js";
+import { buildDelegationLifecyclePayload } from "./lifecycle-payload.js";
 import { adoptDelegationLineageOutcome } from "./lineage.js";
+type IndexedDelegationStatus = DelegationRunRecord["status"];
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+const INDEXED_DELEGATION_STATUSES = new Set<IndexedDelegationStatus>([
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "timeout",
+  "cancelled",
+  "merged",
+]);
 
-type DelegationEvent = Pick<BrewvaStructuredEvent, "sessionId" | "type" | "timestamp" | "payload">;
+function isIndexedDelegationStatus(value: string): value is IndexedDelegationStatus {
+  return INDEXED_DELEGATION_STATUSES.has(value as IndexedDelegationStatus);
+}
 
-function cloneArtifactRef(ref: DelegationArtifactRef): DelegationArtifactRef {
+function eventTypeForIndexedDelegationStatus(status: IndexedDelegationStatus): string {
+  if (status === "pending") return SUBAGENT_SPAWNED_EVENT_TYPE;
+  if (status === "running") return SUBAGENT_RUNNING_EVENT_TYPE;
+  if (status === "cancelled") return SUBAGENT_CANCELLED_EVENT_TYPE;
+  if (status === "failed" || status === "timeout") return SUBAGENT_FAILED_EVENT_TYPE;
+  return SUBAGENT_COMPLETED_EVENT_TYPE;
+}
+
+function delegationRunRecordFromIndexRow(
+  row: SessionIndexDelegationRun,
+): DelegationRunRecord | undefined {
+  if (!isIndexedDelegationStatus(row.status)) {
+    return undefined;
+  }
+  const payload = readDelegationLifecycleEventPayload({
+    type: eventTypeForIndexedDelegationStatus(row.status),
+    payload: row.record,
+  });
+  if (!payload?.runId) {
+    return undefined;
+  }
+  const runId = payload.runId;
+  const contractVersion = requireDelegationContractVersion(payload, runId);
+  const identityFields = requireCurrentIdentityFields(payload, runId);
+  const executionFields = requireExecutionContractFields(payload, runId);
   return {
-    kind: ref.kind,
-    path: ref.path,
-    summary: ref.summary,
+    contractVersion,
+    runId,
+    ...identityFields,
+    delegate: payload.delegate ?? identityFields.targetName,
+    ...executionFields,
+    adoption: requireDelegationAdoption(payload, runId),
+    lineage: payload.lineage,
+    agentSpec: payload.agentSpec,
+    envelope: payload.envelope,
+    skillName: payload.skillName,
+    parentSessionId: asBrewvaSessionId(row.sessionId),
+    status: payload.status ?? row.status,
+    createdAt: typeof row.record.createdAt === "number" ? row.record.createdAt : row.updatedAt,
+    updatedAt: row.updatedAt,
+    label: payload.label,
+    workerSessionId: payload.childSessionId,
+    parentSkill: payload.parentSkill,
+    kind: payload.kind,
+    consultKind: payload.consultKind,
+    boundary: payload.boundary,
+    modelRoute: payload.modelRoute,
+    summary: payload.summary,
+    error: payload.error ?? payload.reason,
+    resultData: payload.resultData,
+    artifactRefs: payload.artifactRefs,
+    delivery: payload.delivery,
+    totalTokens: payload.totalTokens,
+    costUsd: payload.costUsd,
   };
 }
 
-function cloneJsonRecord(
-  value: Record<string, JsonValue> | undefined,
-): Record<string, JsonValue> | undefined {
-  return value ? structuredClone(value) : undefined;
-}
-
-function cloneModelRoute(route: DelegationModelRouteRecord): DelegationModelRouteRecord {
-  return {
-    selectedModel: route.selectedModel,
-    category: route.category,
-    source: route.source,
-    mode: route.mode,
-    reason: route.reason,
-    policyId: route.policyId,
-    presetName: route.presetName,
-  };
-}
-
-function cloneAdoption(adoption: DelegationAdoptionRecord): DelegationAdoptionRecord {
-  return {
-    contractId: adoption.contractId,
-    decision: adoption.decision,
-    reason: adoption.reason,
-    requiredEvidence: adoption.requiredEvidence ? [...adoption.requiredEvidence] : undefined,
-  };
-}
-
-function cloneLineage(lineage: DelegationLineageRecord): DelegationLineageRecord {
-  return {
-    parentSessionId: lineage.parentSessionId,
-    forkTurns: lineage.forkTurns,
-  };
-}
-
-function readRawEventPayload(event: DelegationEvent): Record<string, unknown> | null {
-  return typeof event.payload === "object" &&
-    event.payload !== null &&
-    !Array.isArray(event.payload)
-    ? (event.payload as Record<string, unknown>)
-    : null;
-}
-
-function normalizeHistoricalTaskPathSegment(value: string): string {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "run";
-}
-
-function isLegacyDelegationContractVersion(value: unknown): boolean {
-  return (
-    value === undefined ||
-    value === null ||
-    value === 1 ||
-    value === 2 ||
-    value === "1" ||
-    value === "2"
-  );
-}
-
-function resolveDelegationContractVersion(
-  event: DelegationEvent,
+function requireDelegationContractVersion(
   payload: DelegationLifecycleEventPayload,
-): {
-  contractVersion: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
-  historicallyNormalized: boolean;
-} {
-  if (payload.contractVersion === CURRENT_DELEGATION_CONTRACT_VERSION) {
-    return {
-      contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
-      historicallyNormalized: false,
-    };
+  runId: string,
+): typeof CURRENT_DELEGATION_CONTRACT_VERSION {
+  if (payload.contractVersion !== CURRENT_DELEGATION_CONTRACT_VERSION) {
+    throw new Error(`unsupported_delegation_contract_version:${runId}`);
   }
-  const raw = readRawEventPayload(event);
-  const value = raw?.contractVersion;
-  if (isLegacyDelegationContractVersion(value)) {
-    return {
-      contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
-      historicallyNormalized: true,
-    };
-  }
-  const rendered =
-    typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-      ? String(value)
-      : "missing";
-  throw new Error(`unsupported_delegation_contract_version:${rendered}`);
-}
-
-function normalizeHistoricalAgent(
-  payload: DelegationLifecycleEventPayload,
-  raw: Record<string, unknown> | null,
-): PublicSubagentRole {
-  const candidates = [payload.agent, raw?.agent, raw?.targetName, raw?.delegate];
-  for (const candidate of candidates) {
-    if (
-      candidate === "navigator" ||
-      candidate === "explorer" ||
-      candidate === "worker" ||
-      candidate === "verifier" ||
-      candidate === "librarian"
-    ) {
-      return candidate;
-    }
-    if (candidate === "advisor") {
-      return "explorer";
-    }
-    if (candidate === "patch-worker") {
-      return "worker";
-    }
-    if (candidate === "qa") {
-      return "verifier";
-    }
-  }
-  return "explorer";
-}
-
-function defaultGateReasonForAgent(agent: PublicSubagentRole): DelegationGateReason {
-  switch (agent) {
-    case "navigator":
-      return "find_evidence";
-    case "worker":
-      return "implement_isolated";
-    case "verifier":
-      return "verify_reproducibly";
-    case "librarian":
-      return "compound_knowledge";
-    case "explorer":
-      return "make_judgment";
-  }
-  return "make_judgment";
-}
-
-function defaultModelCategoryForAgent(agent: PublicSubagentRole): DelegationModelCategory {
-  switch (agent) {
-    case "navigator":
-      return "fast-evidence";
-    case "worker":
-      return "isolated-execution";
-    case "verifier":
-      return "verification";
-    case "librarian":
-      return "knowledge";
-    case "explorer":
-      return "deep-reasoning";
-  }
-  return "deep-reasoning";
-}
-
-function defaultKindForAgent(agent: PublicSubagentRole): DelegationRunRecord["kind"] {
-  switch (agent) {
-    case "navigator":
-      return "evidence";
-    case "worker":
-      return "patch";
-    case "verifier":
-      return "verifier";
-    case "librarian":
-      return "knowledge";
-    case "explorer":
-      return "consult";
-  }
-  return "consult";
+  return CURRENT_DELEGATION_CONTRACT_VERSION;
 }
 
 function requireDelegationAdoption(
   payload: DelegationLifecycleEventPayload,
   runId: string,
-  historicallyNormalized: boolean,
-  kind: DelegationRunRecord["kind"],
 ): DelegationAdoptionRecord {
   if (payload.adoption) {
     return payload.adoption;
   }
-  if (historicallyNormalized) {
-    return {
-      contractId: `delegation.${kind ?? "consult"}`,
-      decision: "require_human",
-      reason: "historical delegation record normalized without a v3 adoption contract",
-    };
-  }
   throw new Error(`invalid_delegation_contract:${runId}:missing_adoption`);
 }
 
-function requireV3IdentityFields(
+function requireCurrentIdentityFields(
   payload: DelegationLifecycleEventPayload,
-  existing: DelegationRunRecord | undefined,
   runId: string,
-  input: {
-    historicallyNormalized: boolean;
-    raw: Record<string, unknown> | null;
-  },
 ): Pick<
   DelegationRunRecord,
   | "agent"
@@ -251,15 +136,15 @@ function requireV3IdentityFields(
   | "gateReason"
   | "modelCategory"
 > {
-  const agent = payload.agent ?? existing?.agent;
-  const targetName = payload.targetName ?? existing?.targetName;
-  const taskName = payload.taskName ?? existing?.taskName;
-  const taskPath = payload.taskPath ?? existing?.taskPath;
-  const nickname = payload.nickname ?? existing?.nickname;
-  const depth = payload.depth ?? existing?.depth;
-  const forkTurns = payload.forkTurns ?? existing?.forkTurns;
-  const gateReason = payload.gateReason ?? existing?.gateReason;
-  const modelCategory = payload.modelCategory ?? existing?.modelCategory;
+  const agent = payload.agent;
+  const targetName = payload.targetName;
+  const taskName = payload.taskName;
+  const taskPath = payload.taskPath;
+  const nickname = payload.nickname;
+  const depth = payload.depth;
+  const forkTurns = payload.forkTurns;
+  const gateReason = payload.gateReason;
+  const modelCategory = payload.modelCategory;
   if (
     !agent ||
     !targetName ||
@@ -271,40 +156,6 @@ function requireV3IdentityFields(
     !gateReason ||
     !modelCategory
   ) {
-    if (input.historicallyNormalized) {
-      const historicalAgent = normalizeHistoricalAgent(payload, input.raw);
-      const historicalTaskName =
-        payload.taskName ??
-        (typeof input.raw?.taskName === "string" ? input.raw.taskName : undefined) ??
-        payload.label ??
-        payload.delegate ??
-        existing?.taskName ??
-        runId;
-      const historicalTaskPath =
-        payload.taskPath ??
-        existing?.taskPath ??
-        `/historical/${normalizeHistoricalTaskPathSegment(runId)}`;
-      return {
-        agent: historicalAgent,
-        targetName: payload.targetName ?? existing?.targetName ?? historicalAgent,
-        taskName: historicalTaskName,
-        taskPath: historicalTaskPath,
-        nickname:
-          payload.nickname ??
-          existing?.nickname ??
-          payload.label ??
-          payload.delegate ??
-          historicalTaskName,
-        depth: payload.depth ?? existing?.depth ?? 2,
-        forkTurns: payload.forkTurns ?? existing?.forkTurns ?? "none",
-        gateReason:
-          payload.gateReason ?? existing?.gateReason ?? defaultGateReasonForAgent(historicalAgent),
-        modelCategory:
-          payload.modelCategory ??
-          existing?.modelCategory ??
-          defaultModelCategoryForAgent(historicalAgent),
-      };
-    }
     throw new Error(`invalid_delegation_contract:${runId}:missing_v3_identity`);
   }
   return {
@@ -322,20 +173,11 @@ function requireV3IdentityFields(
 
 function requireExecutionContractFields(
   payload: DelegationLifecycleEventPayload,
-  existing: DelegationRunRecord | undefined,
   runId: string,
-  input: {
-    historicallyNormalized: boolean;
-    agent: PublicSubagentRole;
-  },
-): {
-  executionPrimitive: DelegationExecutionPrimitive;
-  visibility: DelegationVisibility;
-  isolationStrategy: DelegationIsolationStrategy;
-} {
-  const executionPrimitive = payload.executionPrimitive ?? existing?.executionPrimitive;
-  const visibility = payload.visibility ?? existing?.visibility;
-  const isolationStrategy = payload.isolationStrategy ?? existing?.isolationStrategy;
+): Pick<DelegationRunRecord, "executionPrimitive" | "visibility" | "isolationStrategy"> {
+  const executionPrimitive = payload.executionPrimitive;
+  const visibility = payload.visibility;
+  const isolationStrategy = payload.isolationStrategy;
   if (executionPrimitive && visibility && isolationStrategy) {
     return {
       executionPrimitive,
@@ -343,361 +185,20 @@ function requireExecutionContractFields(
       isolationStrategy,
     };
   }
-  if (!input.historicallyNormalized) {
-    throw new Error(`invalid_delegation_contract:${runId}`);
-  }
-  return {
-    executionPrimitive: executionPrimitive ?? "named",
-    visibility: visibility ?? "public",
-    isolationStrategy: isolationStrategy ?? (input.agent === "worker" ? "snapshot" : "shared"),
-  };
-}
-
-function mergeDeliveryRecord(
-  payload: Pick<DelegationLifecycleEventPayload, "delivery">,
-  existing: DelegationDeliveryRecord | undefined,
-  fallbackTimestamp: number,
-): DelegationDeliveryRecord | undefined {
-  const incoming = payload.delivery;
-  if (!incoming) {
-    return existing;
-  }
-  return {
-    mode: incoming.mode,
-    scopeId: incoming.scopeId ?? existing?.scopeId,
-    label: incoming.label ?? existing?.label,
-    handoffState: incoming.handoffState ?? existing?.handoffState,
-    readyAt: incoming.readyAt ?? existing?.readyAt,
-    surfacedAt: incoming.surfacedAt ?? existing?.surfacedAt,
-    supplementalAppended: incoming.supplementalAppended ?? existing?.supplementalAppended,
-    updatedAt: incoming.updatedAt ?? fallbackTimestamp,
-  };
+  throw new Error(`invalid_delegation_contract:${runId}:missing_execution_fields`);
 }
 
 export function cloneDelegationRunRecord(record: DelegationRunRecord): DelegationRunRecord {
-  return {
-    ...record,
-    adoption: cloneAdoption(record.adoption),
-    lineage: record.lineage ? cloneLineage(record.lineage) : undefined,
-    modelRoute: record.modelRoute ? cloneModelRoute(record.modelRoute) : undefined,
-    resultData: cloneJsonRecord(record.resultData),
-    artifactRefs: record.artifactRefs?.map((ref) => cloneArtifactRef(ref)),
-    delivery: record.delivery
-      ? {
-          mode: record.delivery.mode,
-          scopeId: record.delivery.scopeId,
-          label: record.delivery.label,
-          handoffState: record.delivery.handoffState,
-          readyAt: record.delivery.readyAt,
-          surfacedAt: record.delivery.surfacedAt,
-          supplementalAppended: record.delivery.supplementalAppended,
-          updatedAt: record.delivery.updatedAt,
-        }
-      : undefined,
-  };
+  return structuredClone(record);
 }
 
-function upsertRun(
-  runs: Map<string, DelegationRunRecord>,
-  record: DelegationRunRecord,
-): DelegationRunRecord {
-  const cloned = cloneDelegationRunRecord(record);
-  runs.set(cloned.runId, cloned);
-  return cloned;
-}
-
-export function buildDelegationLifecyclePayload(
-  record: DelegationRunRecord,
-): Record<string, unknown> {
-  return {
-    contractVersion: record.contractVersion,
-    runId: record.runId,
-    agent: record.agent,
-    targetName: record.targetName,
-    delegate: record.delegate,
-    taskName: record.taskName,
-    taskPath: record.taskPath,
-    nickname: record.nickname,
-    depth: record.depth,
-    forkTurns: record.forkTurns,
-    gateReason: record.gateReason,
-    modelCategory: record.modelCategory,
-    executionPrimitive: record.executionPrimitive,
-    visibility: record.visibility,
-    isolationStrategy: record.isolationStrategy,
-    adoption: record.adoption,
-    lineage: record.lineage ?? null,
-    agentSpec: record.agentSpec ?? null,
-    envelope: record.envelope ?? null,
-    skillName: record.skillName ?? null,
-    label: record.label ?? null,
-    kind: record.kind ?? null,
-    consultKind: record.consultKind ?? null,
-    boundary: record.boundary ?? null,
-    parentSkill: record.parentSkill ?? null,
-    childSessionId: record.workerSessionId ?? null,
-    status: record.status,
-    summary: record.summary ?? null,
-    error: record.error ?? null,
-    resultData: record.resultData ?? null,
-    artifactRefs: record.artifactRefs ?? [],
-    totalTokens: record.totalTokens ?? null,
-    costUsd: record.costUsd ?? null,
-    modelRoute: record.modelRoute ?? null,
-    deliveryMode: record.delivery?.mode ?? null,
-    deliveryScopeId: record.delivery?.scopeId ?? null,
-    deliveryLabel: record.delivery?.label ?? null,
-    deliveryHandoffState: record.delivery?.handoffState ?? null,
-    deliveryReadyAt: record.delivery?.readyAt ?? null,
-    deliverySurfacedAt: record.delivery?.surfacedAt ?? null,
-    supplementalAppended: record.delivery?.supplementalAppended ?? null,
-    deliveryUpdatedAt: record.delivery?.updatedAt ?? null,
-  };
-}
-
-function applyDelegationEvent(
-  runs: Map<string, DelegationRunRecord>,
-  event: DelegationEvent,
-): void {
-  if (event.type === SUBAGENT_SPAWNED_EVENT_TYPE || event.type === SUBAGENT_RUNNING_EVENT_TYPE) {
-    const payload = readDelegationLifecycleEventPayload(event);
-    if (!payload?.runId) {
-      return;
-    }
-    const runId = payload.runId;
-    const existing = runs.get(runId);
-    const contract = resolveDelegationContractVersion(event, payload);
-    const identityFields = requireV3IdentityFields(payload, existing, runId, {
-      historicallyNormalized: contract.historicallyNormalized,
-      raw: readRawEventPayload(event),
-    });
-    const executionFields = requireExecutionContractFields(payload, existing, runId, {
-      historicallyNormalized: contract.historicallyNormalized,
-      agent: identityFields.agent,
-    });
-    const kind =
-      payload.kind ??
-      existing?.kind ??
-      (contract.historicallyNormalized ? defaultKindForAgent(identityFields.agent) : undefined);
-    upsertRun(runs, {
-      contractVersion: contract.contractVersion,
-      runId,
-      ...identityFields,
-      delegate: payload.delegate ?? existing?.delegate ?? identityFields.targetName,
-      ...executionFields,
-      adoption: requireDelegationAdoption(payload, runId, contract.historicallyNormalized, kind),
-      historicallyNormalized:
-        contract.historicallyNormalized || existing?.historicallyNormalized ? true : undefined,
-      lineage: payload.lineage ?? existing?.lineage,
-      agentSpec: payload.agentSpec ?? existing?.agentSpec,
-      envelope: payload.envelope ?? existing?.envelope,
-      skillName: payload.skillName ?? existing?.skillName,
-      parentSessionId: event.sessionId,
-      status:
-        payload.status ?? (event.type === SUBAGENT_RUNNING_EVENT_TYPE ? "running" : "pending"),
-      createdAt: existing?.createdAt ?? event.timestamp,
-      updatedAt: event.timestamp,
-      label: payload.label ?? existing?.label,
-      workerSessionId: payload.childSessionId ?? existing?.workerSessionId,
-      parentSkill: payload.parentSkill ?? existing?.parentSkill,
-      kind,
-      consultKind: payload.consultKind ?? existing?.consultKind,
-      boundary: payload.boundary ?? existing?.boundary,
-      modelRoute: payload.modelRoute ?? existing?.modelRoute,
-      summary: existing?.summary,
-      error: existing?.error,
-      resultData: existing?.resultData,
-      artifactRefs: existing?.artifactRefs,
-      delivery: mergeDeliveryRecord(payload, existing?.delivery, event.timestamp),
-      totalTokens: existing?.totalTokens,
-      costUsd: existing?.costUsd,
-    });
-    return;
-  }
-
-  if (event.type === SUBAGENT_COMPLETED_EVENT_TYPE) {
-    const payload = readDelegationLifecycleEventPayload(event);
-    if (!payload?.runId) {
-      return;
-    }
-    const runId = payload.runId;
-    const existing = runs.get(runId);
-    const contract = resolveDelegationContractVersion(event, payload);
-    const identityFields = requireV3IdentityFields(payload, existing, runId, {
-      historicallyNormalized: contract.historicallyNormalized,
-      raw: readRawEventPayload(event),
-    });
-    const executionFields = requireExecutionContractFields(payload, existing, runId, {
-      historicallyNormalized: contract.historicallyNormalized,
-      agent: identityFields.agent,
-    });
-    const kind =
-      payload.kind ??
-      existing?.kind ??
-      (contract.historicallyNormalized ? defaultKindForAgent(identityFields.agent) : undefined);
-    upsertRun(runs, {
-      contractVersion: contract.contractVersion,
-      runId,
-      ...identityFields,
-      delegate: payload.delegate ?? existing?.delegate ?? "unknown",
-      ...executionFields,
-      adoption: requireDelegationAdoption(payload, runId, contract.historicallyNormalized, kind),
-      historicallyNormalized:
-        contract.historicallyNormalized || existing?.historicallyNormalized ? true : undefined,
-      lineage: payload.lineage ?? existing?.lineage,
-      agentSpec: payload.agentSpec ?? existing?.agentSpec,
-      envelope: payload.envelope ?? existing?.envelope,
-      skillName: payload.skillName ?? existing?.skillName,
-      parentSessionId: event.sessionId,
-      status: "completed",
-      createdAt: existing?.createdAt ?? event.timestamp,
-      updatedAt: event.timestamp,
-      label: payload.label ?? existing?.label,
-      workerSessionId: payload.childSessionId ?? existing?.workerSessionId,
-      parentSkill: payload.parentSkill ?? existing?.parentSkill,
-      kind,
-      consultKind: payload.consultKind ?? existing?.consultKind,
-      boundary: payload.boundary ?? existing?.boundary,
-      modelRoute: payload.modelRoute ?? existing?.modelRoute,
-      summary: payload.summary ?? existing?.summary,
-      error: undefined,
-      resultData: payload.resultData ?? existing?.resultData,
-      artifactRefs: payload.artifactRefs ?? existing?.artifactRefs,
-      delivery: mergeDeliveryRecord(payload, existing?.delivery, event.timestamp),
-      totalTokens: payload.totalTokens ?? existing?.totalTokens,
-      costUsd: payload.costUsd ?? existing?.costUsd,
-    });
-    return;
-  }
-
-  if (event.type === SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE) {
-    const payload = readDelegationLifecycleEventPayload(event);
-    if (!payload?.runId) {
-      return;
-    }
-    const existing = runs.get(payload.runId);
-    if (!existing) {
-      return;
-    }
-    upsertRun(runs, {
-      ...existing,
-      updatedAt: event.timestamp,
-      modelRoute: payload.modelRoute ?? existing.modelRoute,
-      resultData: payload.resultData ?? existing.resultData,
-      delivery: mergeDeliveryRecord(payload, existing.delivery, event.timestamp),
-    });
-    return;
-  }
-
-  if (event.type === SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE) {
-    const payload = readDelegationLifecycleEventPayload(event);
-    if (!payload?.runId) {
-      return;
-    }
-    const existing = runs.get(payload.runId);
-    if (!existing) {
-      return;
-    }
-    upsertRun(runs, {
-      ...existing,
-      updatedAt: event.timestamp,
-      modelRoute: payload.modelRoute ?? existing.modelRoute,
-      resultData: payload.resultData ?? existing.resultData,
-      delivery: mergeDeliveryRecord(payload, existing.delivery, event.timestamp),
-    });
-    return;
-  }
-
-  if (event.type === SUBAGENT_FAILED_EVENT_TYPE || event.type === SUBAGENT_CANCELLED_EVENT_TYPE) {
-    const payload = readDelegationLifecycleEventPayload(event);
-    if (!payload?.runId) {
-      return;
-    }
-    const runId = payload.runId;
-    const existing = runs.get(runId);
-    const contract = resolveDelegationContractVersion(event, payload);
-    const identityFields = requireV3IdentityFields(payload, existing, runId, {
-      historicallyNormalized: contract.historicallyNormalized,
-      raw: readRawEventPayload(event),
-    });
-    const executionFields = requireExecutionContractFields(payload, existing, runId, {
-      historicallyNormalized: contract.historicallyNormalized,
-      agent: identityFields.agent,
-    });
-    const kind =
-      payload.kind ??
-      existing?.kind ??
-      (contract.historicallyNormalized ? defaultKindForAgent(identityFields.agent) : undefined);
-    const statusFromPayload = payload.status;
-    const fallbackError =
-      statusFromPayload === "timeout"
-        ? "timeout"
-        : event.type === SUBAGENT_CANCELLED_EVENT_TYPE
-          ? "cancelled"
-          : "failed";
-    upsertRun(runs, {
-      contractVersion: contract.contractVersion,
-      runId,
-      ...identityFields,
-      delegate: payload.delegate ?? existing?.delegate ?? "unknown",
-      ...executionFields,
-      adoption: requireDelegationAdoption(payload, runId, contract.historicallyNormalized, kind),
-      historicallyNormalized:
-        contract.historicallyNormalized || existing?.historicallyNormalized ? true : undefined,
-      lineage: payload.lineage ?? existing?.lineage,
-      agentSpec: payload.agentSpec ?? existing?.agentSpec,
-      envelope: payload.envelope ?? existing?.envelope,
-      skillName: payload.skillName ?? existing?.skillName,
-      parentSessionId: event.sessionId,
-      status:
-        statusFromPayload ??
-        (event.type === SUBAGENT_CANCELLED_EVENT_TYPE ? "cancelled" : "failed"),
-      createdAt: existing?.createdAt ?? event.timestamp,
-      updatedAt: event.timestamp,
-      label: payload.label ?? existing?.label,
-      workerSessionId: payload.childSessionId ?? existing?.workerSessionId,
-      parentSkill: payload.parentSkill ?? existing?.parentSkill,
-      kind,
-      consultKind: payload.consultKind ?? existing?.consultKind,
-      boundary: payload.boundary ?? existing?.boundary,
-      modelRoute: payload.modelRoute ?? existing?.modelRoute,
-      summary: payload.summary ?? existing?.summary,
-      error: payload.error ?? payload.reason ?? existing?.error ?? fallbackError,
-      resultData: payload.resultData ?? existing?.resultData,
-      artifactRefs: payload.artifactRefs ?? existing?.artifactRefs,
-      delivery: mergeDeliveryRecord(payload, existing?.delivery, event.timestamp),
-      totalTokens: payload.totalTokens ?? existing?.totalTokens,
-      costUsd: payload.costUsd ?? existing?.costUsd,
-    });
-    return;
-  }
-
-  if (event.type !== WORKER_RESULTS_APPLIED_EVENT_TYPE) {
-    return;
-  }
-
-  const payload = readWorkerResultsAppliedEventPayload(event);
-  if (!payload) {
-    return;
-  }
-  for (const runId of payload.workerIds) {
-    const existing = runs.get(runId);
-    if (!existing) {
-      continue;
-    }
-    upsertRun(runs, {
-      ...existing,
-      status: "merged",
-      updatedAt: event.timestamp,
-    });
-  }
-}
+export { buildDelegationLifecyclePayload };
 
 function adoptAppliedWorkerResultOutcomes(input: {
   runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   runs: Map<string, DelegationRunRecord>;
-  event: DelegationEvent;
+  event: { type: string; payload?: Record<string, unknown> };
 }): void {
   if (input.event.type !== WORKER_RESULTS_APPLIED_EVENT_TYPE) {
     return;
@@ -773,59 +274,67 @@ function filterDelegationRuns(
 }
 
 export class HostedDelegationStore {
-  private readonly sessionRuns = new Map<string, Map<string, DelegationRunRecord>>();
-  private readonly hydratedSessions = new Set<string>();
-  private readonly unsubscribe: (() => void) | undefined;
+  private unsubscribeWorkerResultAdoption: (() => void) | undefined;
 
   constructor(
     private readonly runtime: BrewvaHostedRuntimePort,
     options: {
-      subscribe?: boolean;
+      sessionIndex?: Promise<SessionIndex>;
     } = {},
   ) {
-    if (options.subscribe !== false) {
-      this.unsubscribe = runtime.inspect.events.records.subscribe((event) => {
-        const runs = this.sessionRuns.get(event.sessionId);
-        if (!runs || !this.hydratedSessions.has(event.sessionId)) {
+    this.sessionIndex = options.sessionIndex;
+  }
+
+  private readonly sessionIndex: Promise<SessionIndex> | undefined;
+
+  dispose(): void {
+    this.unsubscribeWorkerResultAdoption?.();
+    this.unsubscribeWorkerResultAdoption = undefined;
+  }
+
+  clearSession(_sessionId: string): void {}
+
+  installWorkerResultAdoptionSubscription(): void {
+    if (this.unsubscribeWorkerResultAdoption) {
+      return;
+    }
+    this.unsubscribeWorkerResultAdoption = this.runtime.inspect.events.records.subscribe(
+      (event) => {
+        if (event.type !== WORKER_RESULTS_APPLIED_EVENT_TYPE) {
           return;
         }
-        applyDelegationEvent(runs, event);
         adoptAppliedWorkerResultOutcomes({
           runtime: this.runtime,
           sessionId: event.sessionId,
-          runs,
+          runs: this.rebuildRunsFromTape(event.sessionId),
           event,
         });
-      });
-    }
-  }
-
-  dispose(): void {
-    this.unsubscribe?.();
-  }
-
-  clearSession(sessionId: string): void {
-    this.sessionRuns.delete(sessionId);
-    this.hydratedSessions.delete(sessionId);
+      },
+    );
   }
 
   getRun(sessionId: string, runId: string): DelegationRunRecord | undefined {
-    this.ensureHydrated(sessionId);
-    const record = this.getOrCreateRuns(sessionId).get(runId);
+    const record = this.rebuildRunsFromTape(sessionId).get(runId);
     return record ? cloneDelegationRunRecord(record) : undefined;
   }
 
   listRuns(sessionId: string, query: DelegationRunQuery = {}): DelegationRunRecord[] {
-    this.ensureHydrated(sessionId);
-    return filterDelegationRuns(this.getOrCreateRuns(sessionId).values(), query);
+    return filterDelegationRuns(this.rebuildRunsFromTape(sessionId).values(), query);
+  }
+
+  async listRunsFromReadModel(
+    sessionId: string,
+    query: DelegationRunQuery = {},
+  ): Promise<DelegationRunRecord[]> {
+    const indexed = await this.tryListIndexedRuns(sessionId, query);
+    return indexed ?? this.listRuns(sessionId, query);
   }
 
   listPendingOutcomes(
     sessionId: string,
     query: PendingDelegationOutcomeQuery = {},
   ): DelegationRunRecord[] {
-    this.ensureHydrated(sessionId);
-    const pending = [...this.getOrCreateRuns(sessionId).values()]
+    const pending = [...this.rebuildRunsFromTape(sessionId).values()]
       .filter(
         (record) =>
           (record.status === "completed" ||
@@ -845,6 +354,14 @@ export class HostedDelegationStore {
       return pending.slice(0, Math.trunc(query.limit));
     }
     return pending;
+  }
+
+  async listPendingOutcomesFromReadModel(
+    sessionId: string,
+    query: PendingDelegationOutcomeQuery = {},
+  ): Promise<DelegationRunRecord[]> {
+    const indexed = await this.tryListIndexedPendingOutcomes(sessionId, query);
+    return indexed ?? this.listPendingOutcomes(sessionId, query);
   }
 
   markSurfaced(input: { sessionId: string; turn: number; runIds: readonly string[] }): void {
@@ -883,25 +400,69 @@ export class HostedDelegationStore {
     }
   }
 
-  private getOrCreateRuns(sessionId: string): Map<string, DelegationRunRecord> {
-    const existing = this.sessionRuns.get(sessionId);
-    if (existing) {
-      return existing;
+  private rebuildRunsFromTape(sessionId: string): Map<string, DelegationRunRecord> {
+    const runs = new Map<string, DelegationRunRecord>();
+    const projection = projectSessionDelegationState({
+      sessionId,
+      records: this.runtime.inspect.events.records.queryStructured(sessionId),
+    });
+    for (const row of projection.runs) {
+      const record = delegationRunRecordFromIndexRow(row);
+      if (record) {
+        runs.set(record.runId, record);
+      }
     }
-    const created = new Map<string, DelegationRunRecord>();
-    this.sessionRuns.set(sessionId, created);
-    return created;
+    return runs;
   }
 
-  private ensureHydrated(sessionId: string): void {
-    if (this.hydratedSessions.has(sessionId)) {
-      return;
+  private async tryListIndexedRuns(
+    sessionId: string,
+    query: DelegationRunQuery,
+  ): Promise<DelegationRunRecord[] | undefined> {
+    if (!this.sessionIndex) {
+      return undefined;
     }
-    const runs = this.getOrCreateRuns(sessionId);
-    runs.clear();
-    for (const event of this.runtime.inspect.events.records.queryStructured(sessionId)) {
-      applyDelegationEvent(runs, event);
+    try {
+      const index = await this.sessionIndex;
+      await index.catchUp();
+      const rows = await index.listDelegationRuns({
+        sessionId,
+        includeTerminal: query.includeTerminal,
+        limit: Math.max(query.limit ?? 100, 500),
+      });
+      const records = rows
+        .map(delegationRunRecordFromIndexRow)
+        .filter((record): record is DelegationRunRecord => Boolean(record));
+      return filterDelegationRuns(records, query);
+    } catch {
+      return undefined;
     }
-    this.hydratedSessions.add(sessionId);
+  }
+
+  private async tryListIndexedPendingOutcomes(
+    sessionId: string,
+    query: PendingDelegationOutcomeQuery,
+  ): Promise<DelegationRunRecord[] | undefined> {
+    if (!this.sessionIndex) {
+      return undefined;
+    }
+    try {
+      const index = await this.sessionIndex;
+      await index.catchUp();
+      const rows = await index.listPendingDelegationOutcomes({
+        sessionId,
+        limit: Math.max(query.limit ?? 50, 50),
+      });
+      const records = rows
+        .map(delegationRunRecordFromIndexRow)
+        .filter((record): record is DelegationRunRecord => Boolean(record));
+      return filterDelegationRuns(records, {
+        statuses: ["completed", "failed", "timeout", "cancelled"],
+        includeTerminal: true,
+        limit: query.limit,
+      });
+    } catch {
+      return undefined;
+    }
   }
 }

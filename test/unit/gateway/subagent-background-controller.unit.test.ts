@@ -54,6 +54,38 @@ function buildExplorerPacket(
   };
 }
 
+function recordParentContext(
+  runtime: ReturnType<typeof createHostedTestRuntime>,
+  sessionId: string,
+  text: string,
+): void {
+  runtime.authority.session.lineage.createNode(sessionId, {
+    lineageNodeId: "lineage:main",
+    kind: "main",
+    forkPoint: { kind: "session_root" },
+  });
+  const source = runtime.extensions.hosted.events.record({
+    sessionId,
+    type: "message_end",
+    payload: {
+      message: {
+        role: "user",
+        content: [{ type: "text", text }],
+      },
+    },
+  });
+  runtime.authority.session.lineage.recordContextEntry(sessionId, {
+    entryId: "ctx-parent-1",
+    lineageNodeId: "lineage:main",
+    parentEntryId: null,
+    sourceEventId: source?.id ?? "missing-source",
+    sourceEventType: "message_end",
+    entryKind: "message",
+    admission: "context_required",
+    presentTo: "both",
+  });
+}
+
 describe("detached subagent background controller", () => {
   test("startRun persists durable live state and reports a live run", async () => {
     const workspaceRoot = createTempWorkspace("brewva-subagent-bg-controller-");
@@ -423,6 +455,63 @@ describe("detached subagent background controller", () => {
     expect(first.status).toBe("pending");
     expect(second.status).toBe("failed");
     expect(second.summary).toBe("parallel_slot_rejected:max_concurrent");
+    expect(spawnCalls).toBe(1);
+  });
+
+  test("startRun records terminal failure and releases slot when context admission blocks before spawn", async () => {
+    const workspaceRoot = createTempWorkspace("brewva-subagent-bg-context-block-");
+    const parentSessionId = "parent-bg-context-block";
+    const runtime = createHostedTestRuntime({
+      cwd: workspaceRoot,
+      config: {
+        ...structuredClone(DEFAULT_BREWVA_CONFIG),
+        parallel: {
+          ...DEFAULT_BREWVA_CONFIG.parallel,
+          enabled: true,
+          maxConcurrent: 1,
+          maxTotalPerSession: 4,
+        },
+      },
+    });
+    const delegationStore = new HostedDelegationStore(runtime);
+    recordParentContext(runtime, parentSessionId, "Inherited parent context ".repeat(200));
+    let spawnCalls = 0;
+    const controller = createDetachedSubagentBackgroundController({
+      runtime,
+      delegationStore,
+      spawnProcess() {
+        spawnCalls += 1;
+        return {
+          pid: 47010 + spawnCalls,
+          unref() {},
+        } as any;
+      },
+      isPidAlive() {
+        return true;
+      },
+    });
+
+    const blocked = await controller.startRun({
+      parentSessionId,
+      target: ADVISOR_TARGET,
+      forkTurns: "all",
+      packet: buildExplorerPacket("Inspect inherited context.", {
+        contextBudget: { maxInjectionTokens: 1 },
+      }),
+    });
+    const next = await controller.startRun({
+      parentSessionId,
+      target: ADVISOR_TARGET,
+      packet: buildExplorerPacket("Inspect runtime package."),
+    });
+
+    expect(blocked.status).toBe("failed");
+    expect(blocked.summary).toStartWith("delegation_context_blocked:delegation_blocker:");
+    expect(delegationStore.getRun(parentSessionId, blocked.runId)?.status).toBe("failed");
+    expect(
+      existsSync(join(workspaceRoot, ".orchestrator", "subagent-runs", blocked.runId, "spec.json")),
+    ).toBe(false);
+    expect(next.status).toBe("pending");
     expect(spawnCalls).toBe(1);
   });
 

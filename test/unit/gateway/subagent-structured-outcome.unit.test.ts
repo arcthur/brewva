@@ -80,7 +80,7 @@ describe("subagent structured outcome normalization", () => {
         evidence: ["Parser acceptance depends on the canonical design consult fields."],
         counterevidence: ["Some historical outcomes used plan-specific field names."],
         risks: ["Drifted contracts can silently bypass downstream consumers."],
-        followUpQuestions: ["Which workspace overlays still emit legacy plan payloads?"],
+        followUpQuestions: ["Which workspace overlays still emit non-canonical plan payloads?"],
         recommendedNextSteps: ["Reject non-canonical design consult payloads during parsing."],
         options: [
           {
@@ -157,7 +157,7 @@ describe("subagent structured outcome normalization", () => {
         proposedDestination: "docs/solutions/subagent-role-taxonomy.md",
         freshnessNotes: ["RFC updated after A2A scope review."],
         conflictNotes: [
-          "Older docs still described legacy public subagent roles before the cutover.",
+          "Older docs still described removed public subagent roles before the cutover.",
         ],
       }),
     });
@@ -189,52 +189,50 @@ describe("subagent structured outcome normalization", () => {
     ]);
   });
 
-  test("reads legacy openQuestions into canonical followUpQuestions", () => {
+  test("ignores removed openQuestions aliases", () => {
     const outcome = extractStructuredOutcomeData({
       resultMode: "consult",
       consultKind: "review",
       assistantText: buildAssistantText({
         kind: "consult",
         consultKind: "review",
-        conclusion: "Legacy review outcomes should still surface follow-up questions.",
+        conclusion: "Review outcomes must use the canonical followUpQuestions field.",
         openQuestions: ["Should the lane wait for a replay receipt audit?"],
       }),
     });
 
-    expect(outcome.data).toMatchObject({
-      kind: "consult",
-      consultKind: "review",
-      followUpQuestions: ["Should the lane wait for a replay receipt audit?"],
-    });
+    expect([outcome.data, outcome.parseError]).toEqual([
+      undefined,
+      "invalid_structured_outcome_payload",
+    ]);
   });
 
-  test("reads legacy open_questions into canonical followUpQuestions", () => {
+  test("ignores removed open_questions aliases", () => {
     const outcome = extractStructuredOutcomeData({
       resultMode: "consult",
       consultKind: "review",
       assistantText: buildAssistantText({
         kind: "consult",
         consultKind: "review",
-        conclusion: "Snake-case legacy review outcomes should still surface follow-up questions.",
+        conclusion: "Snake-case aliases are not part of the current consult outcome contract.",
         open_questions: ["Should the lane wait for a channel replay audit?"],
       }),
     });
 
-    expect(outcome.data).toMatchObject({
-      kind: "consult",
-      consultKind: "review",
-      followUpQuestions: ["Should the lane wait for a channel replay audit?"],
-    });
+    expect([outcome.data, outcome.parseError]).toEqual([
+      undefined,
+      "invalid_structured_outcome_payload",
+    ]);
   });
 
-  test("prefers canonical followUpQuestions over legacy aliases", () => {
+  test("reads only canonical followUpQuestions", () => {
     const outcome = extractStructuredOutcomeData({
       resultMode: "consult",
       consultKind: "review",
       assistantText: buildAssistantText({
         kind: "consult",
         consultKind: "review",
-        conclusion: "Canonical follow-up questions should win when both names are present.",
+        conclusion: "Canonical follow-up questions are the only accepted field.",
         followUpQuestions: ["Use the canonical follow-up question."],
         openQuestions: ["This legacy field should stay ignored."],
         open_questions: ["This snake-case legacy field should stay ignored."],

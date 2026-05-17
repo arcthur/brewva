@@ -127,7 +127,7 @@ export interface BrewvaToolOrchestration {
         agentId: string;
         primaryAddress?: string;
         aliases?: string[];
-        kind?: "channel" | "subagent";
+        kind?: "channel";
         status: "active" | "deleted";
       }>
     >;
@@ -151,24 +151,6 @@ export interface BrewvaToolOrchestration {
       fromSessionId: string;
       request: SubagentForkRequest;
     }): Promise<SubagentForkResult>;
-    sendMessage?(input: {
-      fromSessionId: string;
-      fromAgentId?: string;
-      toAgentId: string;
-      message: string;
-      correlationId?: string;
-      depth?: number;
-      hops?: number;
-    }): Promise<A2ASendResult>;
-    listAgents?(input?: { includeDeleted?: boolean }): Promise<
-      Array<{
-        agentId: string;
-        primaryAddress?: string;
-        aliases?: string[];
-        kind?: "channel" | "subagent";
-        status: "active" | "deleted";
-      }>
-    >;
   };
 }
 
@@ -176,6 +158,9 @@ export interface BrewvaToolDelegationQuery {
   listRuns?(
     sessionId: string,
     query?: Pick<DelegationRunQuery, "runIds" | "statuses" | "includeTerminal" | "limit">,
-  ): DelegationRunRecord[];
-  listPendingOutcomes?(sessionId: string, query?: { limit?: number }): DelegationRunRecord[];
+  ): DelegationRunRecord[] | Promise<DelegationRunRecord[]>;
+  listPendingOutcomes?(
+    sessionId: string,
+    query?: { limit?: number },
+  ): DelegationRunRecord[] | Promise<DelegationRunRecord[]>;
 }

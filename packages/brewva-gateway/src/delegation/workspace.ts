@@ -11,7 +11,7 @@ import {
   listPersistedPatchSets,
 } from "@brewva/brewva-runtime/patch-history";
 import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
-import { resolveDetachedSubagentContextManifestPath } from "./background/protocol.js";
+import { resolveDelegationContextBundleManifestPath } from "./context-manifest.js";
 
 const IGNORED_ROOT_SEGMENTS = new Set([".git", "node_modules", ".orchestrator"]);
 const IGNORED_RELATIVE_PATHS = new Set([".brewva/skills_index.json"]);
@@ -293,8 +293,8 @@ export async function copyDelegationContextManifestToIsolatedWorkspace(input: {
   isolatedRoot: string;
   runId: string;
 }): Promise<string | undefined> {
-  const sourcePath = resolveDetachedSubagentContextManifestPath(input.sourceRoot, input.runId);
-  const targetPath = resolveDetachedSubagentContextManifestPath(input.isolatedRoot, input.runId);
+  const sourcePath = resolveDelegationContextBundleManifestPath(input.sourceRoot, input.runId);
+  const targetPath = resolveDelegationContextBundleManifestPath(input.isolatedRoot, input.runId);
   await mkdir(dirname(targetPath), { recursive: true });
   try {
     await copyFile(sourcePath, targetPath);

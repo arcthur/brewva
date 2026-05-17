@@ -4,6 +4,7 @@ import type {
   ContextCompactionGateStatus,
   ProviderCacheObservationInput,
 } from "@brewva/brewva-runtime/context";
+import type { ContextBundle } from "../../../context/api.js";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
 import {
   recordPromptStabilityEvidence,
@@ -18,13 +19,11 @@ type VisibleReadState = Parameters<
 >[1];
 
 export interface HostedContextMaterializationInput {
-  runtime: BrewvaHostedRuntimePort;
-  telemetry: HostedContextTelemetry;
-  delegationStore?: HostedDelegationStore;
   sessionId: string;
   turn: number;
   contextScopeId?: string;
   systemPrompt: string;
+  contextBundle: ContextBundle;
   rendered: HostedContextRenderResult;
   usage?: ContextBudgetUsage;
   gateStatus: ContextCompactionGateStatus;
@@ -33,8 +32,28 @@ export interface HostedContextMaterializationInput {
   surfacedDelegationRunIds: readonly string[];
 }
 
-export interface HostedContextMaterializationResult {
-  effects: string[];
+export interface ContextMaterializationReceipt {
+  sessionId: string;
+  turn: number;
+  contextScopeId?: string;
+  contextBundle: ContextBundle;
+  usageObserved: boolean;
+  telemetry:
+    | { kind: "hard_gate_required"; reason: "hard_limit"; gateStatus: ContextCompactionGateStatus }
+    | {
+        kind: "compaction_advisory";
+        reason: string;
+        gateStatus: ContextCompactionGateStatus;
+      }
+    | null;
+  contextComposed: {
+    rendered: HostedContextRenderResult;
+    workbenchContextRendered: boolean;
+  };
+  promptStability: ReturnType<typeof buildPromptStabilityObservation>;
+  pendingCompactionReason: string | null;
+  gateRequired: boolean;
+  surfacedDelegationRunIds: string[];
 }
 
 function buildContextScopeKey(sessionId: string, contextScopeId?: string): string {
@@ -49,20 +68,12 @@ function readString(value: unknown): string | undefined {
 function recordPromptStability(input: {
   runtime: BrewvaHostedRuntimePort;
   sessionId: string;
-  turn: number;
   contextScopeId?: string;
-  systemPrompt: string;
-  rendered: HostedContextRenderResult;
+  observation: ReturnType<typeof buildPromptStabilityObservation>;
   usage?: ContextBudgetUsage;
   pendingCompactionReason: string | null;
   gateRequired: boolean;
 }): void {
-  const observation = buildPromptStabilityObservation({
-    systemPrompt: input.systemPrompt,
-    composedContent: input.rendered.content,
-    contextScopeId: input.contextScopeId,
-    turn: input.turn,
-  });
   const scopeKey = buildContextScopeKey(input.sessionId, input.contextScopeId);
   const previous = input.runtime.inspect.context.evidence.latest(
     input.sessionId,
@@ -73,18 +84,19 @@ function recordPromptStability(input: {
   const previousDynamicTailHash = readString(previous?.dynamicTailHash);
   const scopeChanged = previousScopeKey !== undefined && previousScopeKey !== scopeKey;
   const observed = {
-    turn: observation.turn,
+    turn: input.observation.turn,
     updatedAt: Date.now(),
     scopeKey,
-    stablePrefixHash: observation.stablePrefixHash,
-    dynamicTailHash: observation.dynamicTailHash,
+    stablePrefixHash: input.observation.stablePrefixHash,
+    dynamicTailHash: input.observation.dynamicTailHash,
     stablePrefix:
       previous === undefined ||
       scopeChanged ||
-      previousStablePrefixHash === observation.stablePrefixHash,
+      previousStablePrefixHash === input.observation.stablePrefixHash,
     stableTail:
       previous === undefined ||
-      (previousDynamicTailHash === observation.dynamicTailHash && previousScopeKey === scopeKey),
+      (previousDynamicTailHash === input.observation.dynamicTailHash &&
+        previousScopeKey === scopeKey),
   };
   input.runtime.operator.context.evidence.append(input.sessionId, {
     kind: "prompt_stability",
@@ -111,70 +123,100 @@ function recordPromptStability(input: {
   });
 }
 
-export function materializeHostedContext(
+export function buildContextMaterializationReceipt(
   input: HostedContextMaterializationInput,
-): HostedContextMaterializationResult {
-  const effects: string[] = [];
-
-  input.runtime.operator.context.usage.observe(input.sessionId, input.usage);
-  effects.push("usage_observed");
-
-  if (input.gateStatus.required) {
-    input.telemetry.emitHardGateRequired({
-      sessionId: input.sessionId,
-      turn: input.turn,
-      reason: "hard_limit",
-      gateStatus: input.gateStatus,
-    });
-    effects.push("hard_gate_telemetry_emitted");
-  } else if (input.pendingCompactionReason) {
-    input.telemetry.emitCompactionAdvisory({
-      sessionId: input.sessionId,
-      turn: input.turn,
-      reason: input.pendingCompactionReason,
-      gateStatus: input.gateStatus,
-    });
-    effects.push("compaction_advisory_telemetry_emitted");
-  }
-
-  input.telemetry.emitContextComposed({
-    sessionId: input.sessionId,
-    turn: input.turn,
-    rendered: input.rendered,
-    workbenchContextRendered: input.workbenchContextRendered,
-  });
-  effects.push("context_composed_emitted");
-
-  recordPromptStability({
-    runtime: input.runtime,
+): ContextMaterializationReceipt {
+  const telemetry = input.gateStatus.required
+    ? ({ kind: "hard_gate_required", reason: "hard_limit", gateStatus: input.gateStatus } as const)
+    : input.pendingCompactionReason
+      ? ({
+          kind: "compaction_advisory",
+          reason: input.pendingCompactionReason,
+          gateStatus: input.gateStatus,
+        } as const)
+      : null;
+  return {
     sessionId: input.sessionId,
     turn: input.turn,
     contextScopeId: input.contextScopeId,
-    systemPrompt: input.systemPrompt,
-    rendered: input.rendered,
-    usage: input.usage,
+    contextBundle: input.contextBundle,
+    usageObserved: true,
+    telemetry,
+    contextComposed: {
+      rendered: input.rendered,
+      workbenchContextRendered: input.workbenchContextRendered,
+    },
+    promptStability: buildPromptStabilityObservation({
+      systemPrompt: input.systemPrompt,
+      composedContent: input.rendered.content,
+      contextScopeId: input.contextScopeId,
+      turn: input.turn,
+    }),
     pendingCompactionReason: input.pendingCompactionReason,
     gateRequired: input.gateStatus.required,
-  });
-  effects.push("prompt_stability_observed");
+    surfacedDelegationRunIds: [...input.surfacedDelegationRunIds],
+  };
+}
 
-  if (input.surfacedDelegationRunIds.length > 0) {
-    input.delegationStore?.markSurfaced({
-      sessionId: input.sessionId,
-      turn: input.turn,
-      runIds: input.surfacedDelegationRunIds,
-    });
-    effects.push("delegation_outcome_surfaced");
+export function applyContextMaterializationReceipt(input: {
+  runtime: BrewvaHostedRuntimePort;
+  telemetry: HostedContextTelemetry;
+  delegationStore?: HostedDelegationStore;
+  receipt: ContextMaterializationReceipt;
+  usage?: ContextBudgetUsage;
+}): void {
+  const { receipt } = input;
+  if (receipt.usageObserved) {
+    input.runtime.operator.context.usage.observe(receipt.sessionId, input.usage);
   }
 
-  return { effects };
+  if (receipt.telemetry?.kind === "hard_gate_required") {
+    input.telemetry.emitHardGateRequired({
+      sessionId: receipt.sessionId,
+      turn: receipt.turn,
+      reason: receipt.telemetry.reason,
+      gateStatus: receipt.telemetry.gateStatus,
+    });
+  } else if (receipt.telemetry?.kind === "compaction_advisory") {
+    input.telemetry.emitCompactionAdvisory({
+      sessionId: receipt.sessionId,
+      turn: receipt.turn,
+      reason: receipt.telemetry.reason,
+      gateStatus: receipt.telemetry.gateStatus,
+    });
+  }
+
+  input.telemetry.emitContextComposed({
+    sessionId: receipt.sessionId,
+    turn: receipt.turn,
+    rendered: receipt.contextComposed.rendered,
+    workbenchContextRendered: receipt.contextComposed.workbenchContextRendered,
+  });
+
+  recordPromptStability({
+    runtime: input.runtime,
+    sessionId: receipt.sessionId,
+    contextScopeId: receipt.contextScopeId,
+    observation: receipt.promptStability,
+    usage: input.usage,
+    pendingCompactionReason: receipt.pendingCompactionReason,
+    gateRequired: receipt.gateRequired,
+  });
+
+  if (receipt.surfacedDelegationRunIds.length > 0) {
+    input.delegationStore?.markSurfaced({
+      sessionId: receipt.sessionId,
+      turn: receipt.turn,
+      runIds: receipt.surfacedDelegationRunIds,
+    });
+  }
 }
 
 export function observeHostedProviderCache(input: {
   runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   observation: ProviderCacheObservationInput;
-}): HostedContextMaterializationResult {
+}): void {
   const observed = {
     turn: input.observation.turn ?? 0,
     updatedAt: input.observation.timestamp ?? Date.now(),
@@ -209,14 +251,12 @@ export function observeHostedProviderCache(input: {
     sessionId: input.sessionId,
     observed,
   });
-  return { effects: ["provider_cache_observed"] };
 }
 
 export function rememberHostedVisibleReadState(input: {
   runtime: BrewvaHostedRuntimePort;
   sessionId: string;
   state: VisibleReadState;
-}): HostedContextMaterializationResult {
+}): void {
   input.runtime.operator.context.visibleRead.rememberState(input.sessionId, input.state);
-  return { effects: ["visible_read_state_remembered"] };
 }

@@ -11,13 +11,16 @@ import {
   type QueryTapeEvidenceInput,
   type SessionIndex,
   type SessionIndexBox,
+  type SessionIndexDelegationRun,
   type SessionIndexDigest,
   type SessionIndexEventSource,
+  type SessionIndexParallelBudgetView,
   type SessionIndexRecentSession,
   type SessionIndexRewindTarget,
   type SessionIndexStatus,
   type SessionIndexTapeEvidence,
   type SessionIndexTaskSource,
+  type SessionIndexWorkerResult,
 } from "./api.js";
 import {
   acquireDuckDBInstance,
@@ -39,6 +42,12 @@ import { selectOne, selectRows, type JsonRow } from "./duckdb/query.js";
 import { acquireWriteLease, type WriteLease } from "./lease/write-lease.js";
 import { readEventsFromLog } from "./log-reader/jsonl.js";
 import { listSessionBoxes as listProjectedSessionBoxes } from "./projection/box.js";
+import {
+  getParallelBudgetViewRow,
+  listDelegationRunRows,
+  listPendingDelegationOutcomeRows,
+  listWorkerResultRows,
+} from "./projection/delegation.js";
 import { upsertSessionEvents } from "./projection/events.js";
 import { listSessionRewindTargets as listProjectedSessionRewindTargets } from "./projection/rewind.js";
 import { rebuildSessionProjection } from "./projection/session.js";
@@ -204,6 +213,22 @@ class UnavailableSessionIndex implements SessionIndex {
   }
 
   async listSessionRewindTargets(): Promise<SessionIndexRewindTarget[]> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async listDelegationRuns(): Promise<SessionIndexDelegationRun[]> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async listPendingDelegationOutcomes(): Promise<SessionIndexDelegationRun[]> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async listWorkerResults(): Promise<SessionIndexWorkerResult[]> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async getParallelBudgetView(): Promise<SessionIndexParallelBudgetView> {
     throw new SessionIndexUnavailableError(this.message);
   }
 
@@ -442,6 +467,50 @@ class DuckDBSessionIndex implements SessionIndex {
   }): Promise<SessionIndexRewindTarget[]> {
     return await listProjectedSessionRewindTargets({
       sessionId: input.sessionId,
+      port: this.queryPort(),
+    });
+  }
+
+  async listDelegationRuns(
+    input: {
+      sessionId?: string;
+      includeTerminal?: boolean;
+      limit?: number;
+    } = {},
+  ): Promise<SessionIndexDelegationRun[]> {
+    return await listDelegationRunRows({
+      ...input,
+      port: this.queryPort(),
+    });
+  }
+
+  async listPendingDelegationOutcomes(input: {
+    sessionId: string;
+    limit?: number;
+  }): Promise<SessionIndexDelegationRun[]> {
+    return await listPendingDelegationOutcomeRows({
+      ...input,
+      port: this.queryPort(),
+    });
+  }
+
+  async listWorkerResults(
+    input: {
+      sessionId?: string;
+      limit?: number;
+    } = {},
+  ): Promise<SessionIndexWorkerResult[]> {
+    return await listWorkerResultRows({
+      ...input,
+      port: this.queryPort(),
+    });
+  }
+
+  async getParallelBudgetView(input: {
+    sessionId: string;
+  }): Promise<SessionIndexParallelBudgetView> {
+    return await getParallelBudgetViewRow({
+      ...input,
       port: this.queryPort(),
     });
   }

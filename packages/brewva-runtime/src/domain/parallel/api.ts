@@ -10,3 +10,4 @@ export type { RuntimeParallelDomainRegistration } from "./registrar.js";
 export { ParallelBudgetManager } from "./budget.js";
 export { ParallelResultStore } from "./results.js";
 export { deriveParallelBudgetStateFromEvents } from "./state.js";
+export type { DerivedParallelBudgetState } from "./state.js";

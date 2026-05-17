@@ -119,7 +119,7 @@ describe("subagent delegation catalog", () => {
     const workerTools = catalog.envelopes.get("worker")?.managedToolNames ?? [];
 
     expect(navigatorTools).toEqual(expect.arrayContaining(["grep", "read_spans", "toc_search"]));
-    expect(navigatorTools).toContain("agent_send");
+    expect(navigatorTools).not.toContain("agent_send");
     expect(navigatorTools).not.toContain("knowledge_search");
     expect(navigatorTools).not.toContain("recall_search");
     expect(navigatorTools).not.toContain("workflow_status");
@@ -127,14 +127,14 @@ describe("subagent delegation catalog", () => {
     expect(explorerTools).toEqual(
       expect.arrayContaining(["grep", "ledger_query", "task_view_state", "workflow_status"]),
     );
-    expect(explorerTools).toContain("agent_send");
+    expect(explorerTools).not.toContain("agent_send");
     expect(explorerTools).not.toContain("knowledge_search");
     expect(explorerTools).not.toContain("recall_search");
 
     expect(librarianTools).toEqual(
       expect.arrayContaining(["knowledge_search", "recall_search", "precedent_sweep"]),
     );
-    expect(librarianTools).toContain("agent_send");
+    expect(librarianTools).not.toContain("agent_send");
     expect(librarianTools).not.toContain("grep");
     expect(librarianTools).not.toContain("workflow_status");
 

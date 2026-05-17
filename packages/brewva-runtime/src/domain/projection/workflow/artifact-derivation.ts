@@ -258,8 +258,8 @@ function extractSubagentVerifierArtifact(event: BrewvaEventRecord): WorkflowDraf
   const delegate = payload.delegate ?? null;
   const skillName = payload.skillName;
   const resultData = payload.resultData;
-  const verdict = readFirstStringField(resultData, ["verdict", "verifier_verdict", "qa_verdict"]);
-  const checks = readFirstArrayField(resultData, ["checks", "verifier_checks", "qa_checks"]);
+  const verdict = readFirstStringField(resultData, ["verdict", "verifier_verdict"]);
+  const checks = readFirstArrayField(resultData, ["checks", "verifier_checks"]);
   const summary =
     compactJsonValue(payload.summary, 200) ??
     compactJsonValue(checks, 200) ??
@@ -297,25 +297,13 @@ function extractSubagentVerifierArtifact(event: BrewvaEventRecord): WorkflowDraf
         runId: payload.runId,
         verifierVerdict: verdict ?? null,
         missingEvidence: readStringArray(
-          readFirstArrayField(resultData, [
-            "missing_evidence",
-            "verifier_missing_evidence",
-            "qa_missing_evidence",
-          ]),
+          readFirstArrayField(resultData, ["missing_evidence", "verifier_missing_evidence"]),
         ),
         confidenceGaps: readStringArray(
-          readFirstArrayField(resultData, [
-            "confidence_gaps",
-            "verifier_confidence_gaps",
-            "qa_confidence_gaps",
-          ]),
+          readFirstArrayField(resultData, ["confidence_gaps", "verifier_confidence_gaps"]),
         ),
         environmentLimits: readStringArray(
-          readFirstArrayField(resultData, [
-            "environment_limits",
-            "verifier_environment_limits",
-            "qa_environment_limits",
-          ]),
+          readFirstArrayField(resultData, ["environment_limits", "verifier_environment_limits"]),
         ),
         coverageTexts: resultData ? collectVerifierCoverageTexts(resultData) : [],
       },

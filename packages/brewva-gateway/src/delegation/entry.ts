@@ -1,5 +1,6 @@
 import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
+import type { ContextBundle } from "../context/api.js";
 import { buildDelegationPrompt } from "./prompt.js";
 import type { HostedDelegationTarget } from "./targets.js";
 
@@ -17,7 +18,7 @@ export function prepareSubagentEntry(input: {
   readonly packet: DelegationPacket;
   readonly delegate?: string;
   readonly promptOverride?: string;
-  readonly inheritedContext?: string;
+  readonly contextBundle: ContextBundle;
 }): PreparedSubagentEntry {
   const delegatedSkill = input.target.skillName;
   const childOwnsSkill = Boolean(delegatedSkill && input.target.resultMode !== "consult");
@@ -36,7 +37,7 @@ export function prepareSubagentEntry(input: {
       delegate: input.delegate,
       packet: input.packet,
       promptOverride: input.promptOverride,
-      inheritedContext: input.inheritedContext,
+      contextBundle: input.contextBundle,
       skill: skillDocument,
       producer: producerContract,
     }),

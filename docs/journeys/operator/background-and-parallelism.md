@@ -156,22 +156,38 @@ Operator expectations:
   - `subagent_status`
   - `workflow_status`
   - `HostedDelegationStore.listPendingOutcomes(...)`
+  - session-index delegation and parallel views
 - durable artifacts:
   - `.orchestrator/subagent-runs/<runId>/`
   - `WorkerResult`
   - patch manifests
   - Verifier artifact refs and canonical Verifier outcome data
-  - `delegation-context-manifest.json`
+  - serialized `ContextBundle` manifests with stable bundle hashes at
+    `.orchestrator/subagent-runs/<runId>/context-bundle.json`
+- detached filesystem IPC:
+  - isolated behind `DetachedRunAdapter`
+  - spec, live state, cancel request, and outcome files are not read or written
+    directly by the background controller
+  - durable run specs are latest-only; Brewva does not migrate stale detached
+    run directories across binary upgrades, so operators should stop old
+    detached workers and clear `.orchestrator/subagent-runs/` before retrying
+    work after an upgrade
+  - context-bundle manifests are delegation run artifacts shared by in-process
+    and detached execution, not a second detached protocol shape
+  - in-process delegation intentionally remains inline
 
 ## Code Pointers
 
 - Orchestrator: `packages/brewva-gateway/src/delegation/orchestrator.ts`
 - Catalog / config: `packages/brewva-gateway/src/delegation/catalog/registry.ts`
 - Background controller: `packages/brewva-gateway/src/delegation/background/controller.ts`
+- Detached adapter: `packages/brewva-gateway/src/delegation/background/detached-run-adapter.ts`
 - Background runner: `packages/brewva-gateway/src/delegation/background/runner-main.ts`
 - Background protocol: `packages/brewva-gateway/src/delegation/background/protocol.ts`
+- Context bundle: `packages/brewva-gateway/src/context/context-bundle.ts`
 - Workspace isolation: `packages/brewva-gateway/src/delegation/workspace.ts`
 - Runtime parallel state: `packages/brewva-runtime/src/domain/parallel/parallel.ts`
+- Session-index read models: `packages/brewva-session-index/src/projection/delegation.ts`
 - Delegation store: `packages/brewva-gateway/src/delegation/delegation-store.ts`
 - Run / fan-out tools: `packages/brewva-tools/src/families/delegation/subagent-run/api.ts`
 - Status / cancel tools: `packages/brewva-tools/src/families/delegation/subagent-control.ts`

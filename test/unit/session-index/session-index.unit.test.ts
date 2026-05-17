@@ -6,12 +6,15 @@ import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import { tokenizeSearchContent } from "@brewva/brewva-search";
-import { SESSION_INDEX_SCHEMA_VERSION, createSessionIndex } from "@brewva/brewva-session-index";
 import {
   buildSessionIndexEventSearchText,
   isSessionIndexTextIndexedEvent,
 } from "@brewva/brewva-session-index/evidence";
 import { DuckDBInstance } from "@duckdb/node-api";
+import {
+  SESSION_INDEX_SCHEMA_VERSION,
+  createSessionIndex,
+} from "../../../packages/brewva-session-index/src/index.js";
 import {
   buildToolResultRecordedPayload,
   buildVerificationOutcomeRecordedPayload,
@@ -295,6 +298,159 @@ describe("session index", () => {
       { lineage_node_id: "ln-main", last_context_entry_id: "ctx-main-1" },
       { lineage_node_id: "ln-review", last_context_entry_id: "ctx-review-1" },
     ]);
+  });
+
+  test("materializes delegation and parallel read models from tape", async () => {
+    const { workspace, runtime } = createIndexedRuntime("session-index-delegation");
+    const sessionId = "indexed-delegation";
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "subagent_spawned",
+      timestamp: 1_700_000_000_000,
+      payload: {
+        runId: "run-worker",
+        agent: "worker",
+        delegate: "worker",
+        taskPath: "/worker-task",
+        nickname: "Worker task",
+        kind: "patch",
+        status: "pending",
+      },
+    });
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "subagent_running",
+      timestamp: 1_700_000_001_000,
+      payload: {
+        runId: "run-worker",
+        agent: "worker",
+        delegate: "worker",
+        taskPath: "/worker-task",
+        nickname: "Worker task",
+        kind: "patch",
+        childSessionId: "child-worker",
+        status: "running",
+      },
+    });
+    runtime.extensions.hosted.events.record({
+      sessionId,
+      type: "subagent_completed",
+      timestamp: 1_700_000_002_000,
+      payload: {
+        runId: "run-worker",
+        agent: "worker",
+        delegate: "worker",
+        taskPath: "/worker-task",
+        nickname: "Worker task",
+        kind: "patch",
+        childSessionId: "child-worker",
+        status: "completed",
+        summary: "Worker completed",
+        patchSetId: "patchset-1",
+        deliveryHandoffState: "pending_parent_turn",
+      },
+    });
+
+    const index = await createSessionIndex({
+      workspaceRoot: workspace,
+      events: runtime.inspect.events,
+      task: runtime.inspect.task,
+    });
+    try {
+      await index.catchUp();
+      const runs = await index.listDelegationRuns({ sessionId, includeTerminal: true });
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toMatchObject({
+        runId: "run-worker",
+        status: "completed",
+        taskPath: "/worker-task",
+        childSessionId: "child-worker",
+        summary: "Worker completed",
+      });
+
+      const pending = await index.listPendingDelegationOutcomes({ sessionId });
+      expect(pending.map((run) => run.runId)).toEqual(["run-worker"]);
+
+      const workers = await index.listWorkerResults({ sessionId });
+      expect(workers[0]).toMatchObject({
+        workerId: "run-worker",
+        status: "ok",
+        patchSetId: "patchset-1",
+      });
+
+      const budget = await index.getParallelBudgetView({ sessionId });
+      expect(budget.activeRunIds).toEqual([]);
+      expect(budget.totalStarted).toBe(1);
+      expect(budget.eventCount).toBe(3);
+
+      runtime.extensions.hosted.events.record({
+        sessionId,
+        type: "subagent_outcome_parse_failed",
+        timestamp: 1_700_000_002_500,
+        payload: {
+          runId: "run-worker",
+          error: "missing structured footer",
+        },
+      });
+      await index.catchUp();
+      const afterParseWarning = await index.listDelegationRuns({
+        sessionId,
+        includeTerminal: true,
+      });
+      expect(afterParseWarning[0]).toMatchObject({
+        runId: "run-worker",
+        status: "completed",
+        taskPath: "/worker-task",
+        childSessionId: "child-worker",
+      });
+      expect(afterParseWarning[0]?.record).toMatchObject({
+        agent: "worker",
+        taskPath: "/worker-task",
+        error: "missing structured footer",
+      });
+
+      runtime.extensions.hosted.events.record({
+        sessionId,
+        type: "subagent_delivery_surfaced",
+        timestamp: 1_700_000_003_000,
+        payload: {
+          runId: "run-worker",
+          agent: "worker",
+          delegate: "worker",
+          taskPath: "/worker-task",
+          nickname: "Worker task",
+          kind: "patch",
+          childSessionId: "child-worker",
+          status: "completed",
+          summary: "Worker completed",
+          patchSetId: "patchset-1",
+          deliveryHandoffState: "surfaced",
+          deliverySurfacedAt: 1_700_000_003_000,
+        },
+      });
+      runtime.extensions.hosted.events.record({
+        sessionId,
+        type: "subagent_completed",
+        timestamp: 1_700_000_004_000,
+        payload: {
+          runId: "run-explorer",
+          agent: "explorer",
+          delegate: "explorer",
+          taskPath: "/explore-task",
+          nickname: "Explore task",
+          kind: "consult",
+          status: "completed",
+          summary: "Explorer completed",
+        },
+      });
+      await index.catchUp();
+      const afterSurfaced = await index.listPendingDelegationOutcomes({ sessionId });
+      expect(afterSurfaced.map((run) => run.runId)).toEqual([]);
+      const workerResultsOnly = await index.listWorkerResults({ sessionId });
+      expect(workerResultsOnly.map((worker) => worker.workerId)).toEqual(["run-worker"]);
+    } finally {
+      await index.close();
+    }
   });
 
   test("cold catch-up uses byte offsets and does not duplicate indexed events", async () => {

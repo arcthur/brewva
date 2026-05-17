@@ -7,6 +7,7 @@ const siblingDomainImportPattern = /from\s+["']([^"']+)["']/gu;
 const topLevelSeamDomains = new Set([
   "admin",
   "channels",
+  "context",
   "daemon",
   "delegation",
   "hosted",

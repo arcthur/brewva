@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import { MESSAGE_END_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
 import type { ContextEntryRecord } from "@brewva/brewva-runtime/session";
-import { renderInheritedSubagentContext } from "../../../packages/brewva-gateway/src/delegation/fork-context.js";
+import { buildInheritedSubagentContextBlock } from "../../../packages/brewva-gateway/src/delegation/fork-context.js";
 
 const SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE = "branch_summary_recorded";
 
@@ -158,11 +158,11 @@ describe("subagent fork context", () => {
       }),
     ];
 
-    const rendered = renderInheritedSubagentContext({
+    const rendered = buildInheritedSubagentContextBlock({
       runtime: runtimeWithContext(entries, events),
       sessionId: "session-fork-context",
       forkTurns: "all",
-    });
+    })?.content;
 
     expect(rendered).toContain("Policy: forkTurns=all");
     expect(rendered).toContain("User goal");
@@ -210,15 +210,15 @@ describe("subagent fork context", () => {
     ];
     const runtime = runtimeWithContext(entries, events);
 
-    const recent = renderInheritedSubagentContext({
+    const recent = buildInheritedSubagentContextBlock({
       runtime,
       sessionId: "session-fork-context",
       forkTurns: 1,
-    });
+    })?.content;
     expect(recent).toContain("Recent context");
     expect(recent).not.toContain("Old context");
 
-    const none = renderInheritedSubagentContext({
+    const none = buildInheritedSubagentContextBlock({
       runtime,
       sessionId: "session-fork-context",
       forkTurns: "none",

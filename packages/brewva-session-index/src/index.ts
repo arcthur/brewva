@@ -3,6 +3,7 @@ export {
   SESSION_INDEX_UNAVAILABLE,
   SessionIndexUnavailableError,
   createSessionIndex,
+  projectSessionDelegationState,
 } from "./public/index.js";
 export type {
   CreateSessionIndexInput,
@@ -13,12 +14,16 @@ export type {
   QueryTapeEvidenceInput,
   SessionIndex,
   SessionIndexBox,
+  SessionIndexDelegationProjection,
+  SessionIndexDelegationRun,
   SessionIndexDigest,
   SessionIndexEventSource,
+  SessionIndexParallelBudgetView,
   SessionIndexRecentSession,
   SessionIndexRewindTarget,
   SessionIndexScope,
   SessionIndexStatus,
   SessionIndexTapeEvidence,
   SessionIndexTaskSource,
+  SessionIndexWorkerResult,
 } from "./public/index.js";

@@ -1,5 +1,6 @@
 import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import { createSessionIndex } from "@brewva/brewva-session-index";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import type { BrewvaModelPreset } from "@brewva/brewva-substrate/session";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
@@ -24,7 +25,14 @@ export function createDelegationStore(
   if (!enabled) {
     return undefined;
   }
-  const delegationStore = new HostedDelegationStore(runtime);
+  const delegationStore = new HostedDelegationStore(runtime, {
+    sessionIndex: createSessionIndex({
+      workspaceRoot: runtime.identity.workspaceRoot,
+      events: runtime.inspect.events,
+      task: runtime.inspect.task,
+    }),
+  });
+  delegationStore.installWorkerResultAdoptionSubscription();
   runtime.operator.session.state.onClear((sessionId) => {
     delegationStore.clearSession(sessionId);
   });
@@ -35,11 +43,11 @@ function createDelegationQuery(delegationStore: HostedDelegationStore | undefine
   return delegationStore
     ? {
         listRuns: (sessionId: string, query?: Parameters<HostedDelegationStore["listRuns"]>[1]) =>
-          delegationStore.listRuns(sessionId, query),
+          delegationStore.listRunsFromReadModel(sessionId, query),
         listPendingOutcomes: (
           sessionId: string,
           query?: Parameters<HostedDelegationStore["listPendingOutcomes"]>[1],
-        ) => delegationStore.listPendingOutcomes(sessionId, query),
+        ) => delegationStore.listPendingOutcomesFromReadModel(sessionId, query),
       }
     : undefined;
 }
@@ -81,7 +89,6 @@ export function createHostedOrchestration(input: {
         agentId: childOptions.agentId,
         managedToolMode: childOptions.managedToolMode,
         enableSubagents: childOptions.enableSubagents,
-        orchestration: childOptions.orchestration,
         managedToolNames: childOptions.managedToolNames,
         builtinToolNames: childOptions.builtinToolNames,
         scopeId: options.scopeId,

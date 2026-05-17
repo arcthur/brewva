@@ -5,7 +5,7 @@ import type {
 } from "@brewva/brewva-runtime/events";
 import type { SESSION_INDEX_UNAVAILABLE } from "./unavailable.js";
 
-export const SESSION_INDEX_SCHEMA_VERSION = 3;
+export const SESSION_INDEX_SCHEMA_VERSION = 4;
 
 export type SessionIndexScope = "session_local" | "user_repository_root" | "workspace_wide";
 
@@ -114,6 +114,58 @@ export interface SessionIndexRewindTarget {
   lineage: { kind: "active" } | { kind: "abandoned"; rewoundBy: string; rewoundAt: number };
 }
 
+export interface SessionIndexDelegationRun {
+  sessionId: string;
+  runId: string;
+  status: string;
+  taskPath?: string;
+  nickname?: string;
+  delegate?: string;
+  agent?: string;
+  kind?: string;
+  childSessionId?: string;
+  summary?: string;
+  error?: string;
+  updatedAt: number;
+  eventId: string;
+  record: Record<string, unknown>;
+  cursor: {
+    eventCount: number;
+    schemaVersion: typeof SESSION_INDEX_SCHEMA_VERSION;
+  };
+}
+
+export interface SessionIndexWorkerResult {
+  sessionId: string;
+  workerId: string;
+  status: string;
+  summary?: string;
+  patchSetId?: string;
+  updatedAt: number;
+  eventId: string;
+  record: Record<string, unknown>;
+  cursor: {
+    eventCount: number;
+    schemaVersion: typeof SESSION_INDEX_SCHEMA_VERSION;
+  };
+}
+
+export interface SessionIndexParallelBudgetView {
+  sessionId: string;
+  activeRunIds: string[];
+  totalStarted: number;
+  eventCount: number;
+  latestEventId?: string;
+  schemaVersion: typeof SESSION_INDEX_SCHEMA_VERSION;
+}
+
+export interface SessionIndexDelegationProjection {
+  sessionId: string;
+  runs: SessionIndexDelegationRun[];
+  workerResults: SessionIndexWorkerResult[];
+  parallelBudget: SessionIndexParallelBudgetView;
+}
+
 export type SessionIndexStatus =
   | {
       ok: true;
@@ -151,6 +203,20 @@ export interface SessionIndex {
   listRecentSessions(input: QueryRecentSessionsInput): Promise<SessionIndexRecentSession[]>;
   listSessionBoxes(input?: { sessionId?: string }): Promise<SessionIndexBox[]>;
   listSessionRewindTargets(input: { sessionId: string }): Promise<SessionIndexRewindTarget[]>;
+  listDelegationRuns(input?: {
+    sessionId?: string;
+    includeTerminal?: boolean;
+    limit?: number;
+  }): Promise<SessionIndexDelegationRun[]>;
+  listPendingDelegationOutcomes(input: {
+    sessionId: string;
+    limit?: number;
+  }): Promise<SessionIndexDelegationRun[]>;
+  listWorkerResults(input?: {
+    sessionId?: string;
+    limit?: number;
+  }): Promise<SessionIndexWorkerResult[]>;
+  getParallelBudgetView(input: { sessionId: string }): Promise<SessionIndexParallelBudgetView>;
   close(): Promise<void>;
 }
 

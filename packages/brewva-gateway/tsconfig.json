@@ -10,6 +10,7 @@
     { "path": "../brewva-ingress-telegram" },
     { "path": "../brewva-mcp-adapter" },
     { "path": "../brewva-runtime" },
+    { "path": "../brewva-session-index" },
     { "path": "../brewva-std" },
     { "path": "../brewva-substrate" },
     { "path": "../brewva-tools" },

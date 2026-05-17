@@ -331,7 +331,6 @@ const NAVIGATOR_MANAGED_TOOLS = [
   "lsp_goto_definition",
   "lsp_symbols",
   "output_search",
-  "agent_send",
 ] as const;
 
 const EXPLORER_MANAGED_TOOLS = [
@@ -350,14 +349,11 @@ const LIBRARIAN_MANAGED_TOOLS = [
   "look_at",
   "toc_search",
   "toc_document",
-  "agent_send",
 ] as const;
 
-const WORKER_TOOLS = EXPLORER_MANAGED_TOOLS.filter(
-  (tool) => tool !== "workflow_status" && tool !== "agent_send",
-);
+const WORKER_TOOLS = EXPLORER_MANAGED_TOOLS.filter((tool) => tool !== "workflow_status");
 const VERIFIER_MANAGED_TOOLS = [
-  ...EXPLORER_MANAGED_TOOLS.filter((tool) => tool !== "agent_send"),
+  ...EXPLORER_MANAGED_TOOLS,
   "exec",
   "browser_open",
   "browser_wait",

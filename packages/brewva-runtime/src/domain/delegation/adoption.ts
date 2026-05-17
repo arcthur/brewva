@@ -41,14 +41,14 @@ function readVerifierOutcome(value: unknown): VerifierSubagentOutcomeData | unde
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (record.kind !== undefined && record.kind !== "verifier" && record.kind !== "qa") {
+  if (record.kind !== undefined && record.kind !== "verifier") {
     return undefined;
   }
-  const verdict = record.verdict ?? record.verifier_verdict ?? record.qa_verdict;
+  const verdict = record.verdict ?? record.verifier_verdict;
   if (verdict !== "pass" && verdict !== "fail" && verdict !== "inconclusive") {
     return undefined;
   }
-  const checks = record.checks ?? record.verifier_checks ?? record.qa_checks;
+  const checks = record.checks ?? record.verifier_checks;
   return {
     kind: "verifier",
     verdict,

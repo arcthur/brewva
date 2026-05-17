@@ -40,7 +40,7 @@ describe("delegation adoption contracts", () => {
     });
   });
 
-  test("accepts verifier-prefixed and legacy qa verifier outcomes", () => {
+  test("accepts verifier-prefixed verifier outcomes and rejects removed qa aliases", () => {
     expect(
       evaluateDelegationAdoption({
         outcomeKind: "verifier",
@@ -80,8 +80,8 @@ describe("delegation adoption contracts", () => {
         },
       }),
     ).toMatchObject({
-      decision: "block",
-      reason: "verifier_failed",
+      decision: "require_human",
+      reason: "verifier_inconclusive_or_missing_checks",
     });
   });
 

@@ -40,15 +40,9 @@ function readStringArray(value: unknown): string[] | undefined {
 function readCanonicalStringArray(
   payload: Record<string, unknown>,
   canonicalKey: string,
-  legacyKeys: readonly string[] = [],
 ): string[] | undefined {
   if (Object.prototype.hasOwnProperty.call(payload, canonicalKey)) {
     return readStringArray(payload[canonicalKey]);
-  }
-  for (const key of legacyKeys) {
-    if (Object.prototype.hasOwnProperty.call(payload, key)) {
-      return readStringArray(payload[key]);
-    }
   }
   return undefined;
 }
@@ -325,10 +319,7 @@ function readBaseConsultPayload(payload: Record<string, unknown>) {
     evidence: readStringArray(payload.evidence),
     counterevidence: readStringArray(payload.counterevidence),
     risks: readStringArray(payload.risks),
-    followUpQuestions: readCanonicalStringArray(payload, "followUpQuestions", [
-      "openQuestions",
-      "open_questions",
-    ]),
+    followUpQuestions: readCanonicalStringArray(payload, "followUpQuestions"),
     questionRequests: readQuestionRequests(payload.questionRequests),
     recommendedNextSteps: readStringArray(payload.recommendedNextSteps),
   };

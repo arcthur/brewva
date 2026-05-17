@@ -6,6 +6,7 @@ import type {
   SessionCompactionGenerationMetadata,
 } from "@brewva/brewva-runtime/context";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { decideCompaction } from "../compaction/policy.js";
 import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
@@ -224,16 +225,16 @@ export function createHostedCompactionController(
         input.usage,
       );
       const autoPolicy = runtime.inspect.context.compaction.getAutoPolicyState(input.sessionId);
-      const eligibility = runtime.inspect.context.compaction.resolveEligibility({
-        status: gateStatus.status,
-        pendingReason: runtime.inspect.context.compaction.getPendingReason(input.sessionId),
-        recentCompaction: gateStatus.recentCompaction,
+      const pendingReason = runtime.inspect.context.compaction.getPendingReason(input.sessionId);
+      const eligibility = decideCompaction({
+        caller: "auto",
+        gateStatus,
+        pendingReason,
         hasUI: input.hasUI,
         idle: input.idle,
         recoveryPosture: "idle",
         autoCompactionInFlight: state.autoCompactionInFlight,
         autoCompactionBreakerOpen: autoPolicy.breakerOpen,
-        gateMode: "hosted_auto",
       });
 
       if (eligibility.decision === "skip" && eligibility.reason === "no_request") {
@@ -256,7 +257,7 @@ export function createHostedCompactionController(
         if (
           !runtime.operator.context.compaction.rememberDeferredReason(
             input.sessionId,
-            runtime.inspect.context.compaction.getPendingReason(input.sessionId),
+            pendingReason,
           )
         ) {
           return;

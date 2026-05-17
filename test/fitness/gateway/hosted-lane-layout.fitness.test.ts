@@ -63,20 +63,29 @@ describe("hosted lane layout", () => {
     const materializationPath =
       "packages/brewva-gateway/src/hosted/internal/context/materialization.ts";
     const materialization = readRepoFile(materializationPath);
-    expect(materialization).toContain("materializeHostedContext");
+    expect(materialization).toContain("buildContextMaterializationReceipt");
+    expect(materialization).toContain("applyContextMaterializationReceipt");
     expect(materialization).toContain("observeHostedProviderCache");
     expect(materialization).toContain("rememberHostedVisibleReadState");
     expect(materialization).not.toContain("planHostedContextMaterialization");
     expect(materialization).not.toContain("commitHostedContextMaterialization");
     expect(materialization).not.toContain("HOSTED_CONTEXT_MATERIALIZATION_EFFECT_ORDER");
-    for (const expectedEffect of [
+    for (const expectedReceiptField of [
+      "usageObserved",
+      "promptStability",
+      "surfacedDelegationRunIds",
+    ]) {
+      expect(materialization).toContain(expectedReceiptField);
+    }
+    for (const removedEffectString of [
       "usage_observed",
-      "prompt_stability_observed",
       "provider_cache_observed",
       "visible_read_state_remembered",
+      "prompt_stability_observed",
       "delegation_outcome_surfaced",
+      "effects:",
     ]) {
-      expect(materialization).toContain(expectedEffect);
+      expect(materialization).not.toContain(removedEffectString);
     }
 
     const offenders = listGatewayProductionFiles()

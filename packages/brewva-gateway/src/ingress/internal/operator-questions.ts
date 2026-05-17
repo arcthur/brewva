@@ -130,15 +130,9 @@ function buildDelegationSourceLabel(input: {
 function readCanonicalQuestionTexts(
   payload: Record<string, unknown>,
   canonicalKey: string,
-  legacyKeys: readonly string[] = [],
 ): string[] | undefined {
   if (hasOwn(payload, canonicalKey)) {
     return readStringArray(payload[canonicalKey]);
-  }
-  for (const key of legacyKeys) {
-    if (hasOwn(payload, key)) {
-      return readStringArray(payload[key]);
-    }
   }
   return undefined;
 }
@@ -359,11 +353,7 @@ async function extractDelegationQuestions(
     return { questions: structured };
   }
   const consultData = outcome.data as unknown as Record<string, unknown>;
-  const followUpQuestions =
-    readCanonicalQuestionTexts(consultData, "followUpQuestions", [
-      "openQuestions",
-      "open_questions",
-    ]) ?? [];
+  const followUpQuestions = readCanonicalQuestionTexts(consultData, "followUpQuestions") ?? [];
   return {
     questions: followUpQuestions.map((questionText: string, index: number) => ({
       questionId: buildDelegationQuestionId(runId, index),

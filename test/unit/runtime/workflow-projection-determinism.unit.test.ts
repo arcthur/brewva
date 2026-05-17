@@ -107,20 +107,20 @@ describe("workflow projection determinism", () => {
     expect(first.updatedAt).toBe(2_000);
   });
 
-  test("derives verifier artifacts from verifier-prefixed and legacy qa subagent outputs", () => {
+  test("derives verifier artifacts from current verifier subagent outputs", () => {
     const artifacts = deriveWorkflowArtifacts([
       event({
-        id: "event-verifier",
+        id: "event-removed-qa",
         type: "subagent_completed",
         timestamp: 1_000,
         payload: {
-          runId: "run-legacy-qa",
+          runId: "run-removed-qa",
           delegate: "qa",
           skillName: "qa",
           kind: "qa",
           resultData: {
             qa_verdict: "fail",
-            qa_report: "Legacy QA found a reproducible failure.",
+            qa_report: "Removed QA found a reproducible failure.",
             qa_findings: ["The browser flow still fails."],
             qa_checks: [
               {
@@ -159,29 +159,16 @@ describe("workflow projection determinism", () => {
       }),
     ]);
 
-    expect(artifacts.map((artifact) => artifact.kind)).toEqual(["verifier", "verifier"]);
-    const legacyArtifact = artifacts.find(
-      (artifact) => artifact.metadata?.runId === "run-legacy-qa",
-    );
-    const currentArtifact = artifacts.find(
-      (artifact) => artifact.metadata?.runId === "run-verifier",
-    );
-    expect(legacyArtifact).toMatchObject({
-      state: "blocked",
-      metadata: {
-        verifierVerdict: "fail",
-        missingEvidence: ["mobile browser"],
-      },
-    });
-    expect(currentArtifact).toMatchObject({
-      state: "ready",
-      metadata: {
-        verifierVerdict: "pass",
-      },
-    });
-    expect(legacyArtifact?.metadata?.coverageTexts).toContain(
-      "legacy qa found a reproducible failure",
-    );
-    expect(currentArtifact?.metadata?.coverageTexts).toContain("current verifier evidence passed");
+    expect(artifacts).toEqual([
+      expect.objectContaining({
+        kind: "verifier",
+        state: "ready",
+        metadata: expect.objectContaining({
+          runId: "run-verifier",
+          verifierVerdict: "pass",
+          coverageTexts: expect.arrayContaining(["current verifier evidence passed"]),
+        }),
+      }),
+    ]);
   });
 });

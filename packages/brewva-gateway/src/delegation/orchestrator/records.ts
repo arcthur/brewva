@@ -1,12 +1,9 @@
 import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
 import type {
-  ExplorerConsultKind,
   DelegationPacket,
   DelegationTaskPacket,
-  SubagentAgent,
   SubagentOutcome,
-  SubagentOutcomeArtifactRef,
   SubagentRunRequest,
   SubagentRunResult,
   SubagentStartResult,
@@ -43,46 +40,6 @@ export function mergeTaskPacket(
     },
     completionPredicate: taskPacket.completionPredicate ?? sharedPacket?.completionPredicate,
     effectCeiling: effectCeilingBoundary ? { boundary: effectCeilingBoundary } : undefined,
-  };
-}
-
-export function buildFailureOutcome(input: {
-  runId: string;
-  agent: SubagentAgent;
-  taskName: string;
-  taskPath: string;
-  nickname: string;
-  delegate: string;
-  agentSpec?: string;
-  envelope?: string;
-  skillName?: string;
-  consultKind?: ExplorerConsultKind;
-  label?: string;
-  workerSessionId?: string;
-  artifactRefs?: SubagentOutcomeArtifactRef[];
-  error: string;
-  startedAt: number;
-}): SubagentOutcome {
-  return {
-    ok: false,
-    runId: input.runId,
-    agent: input.agent,
-    taskName: input.taskName,
-    taskPath: input.taskPath,
-    nickname: input.nickname,
-    delegate: input.delegate,
-    agentSpec: input.agentSpec,
-    envelope: input.envelope,
-    skillName: input.skillName,
-    ...(input.consultKind ? { consultKind: input.consultKind } : {}),
-    label: input.label,
-    status: "error",
-    workerSessionId: input.workerSessionId,
-    error: input.error,
-    metrics: {
-      durationMs: Math.max(0, Date.now() - input.startedAt),
-    },
-    artifactRefs: input.artifactRefs,
   };
 }
 

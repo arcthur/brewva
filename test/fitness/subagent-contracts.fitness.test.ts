@@ -18,6 +18,7 @@ describe("subagent contract guard", () => {
     );
 
     expect(readerSource).toContain("brewva.subagent-run-spec.v7");
+    expect(readerSource).toContain("clear_.orchestrator/subagent-runs");
     expect(readerSource).not.toContain("brewva.subagent-run-spec.v6");
     expect(protocolSource).toContain('schema: "brewva.subagent-run-spec.v7"');
   });
