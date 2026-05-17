@@ -71,9 +71,30 @@ function mergeBeforeAgentStart(
   if (!next) {
     return current;
   }
+  const messages = [
+    ...(current?.message ? [current.message] : []),
+    ...(current?.messages ?? []),
+    ...(next.message ? [next.message] : []),
+    ...(next.messages ?? []),
+  ];
   return {
     ...current,
     ...next,
+    message: messages.length === 1 ? messages[0] : undefined,
+    messages: messages.length > 1 ? messages : undefined,
+  };
+}
+
+function applyBeforeAgentStartToEvent(
+  event: BeforeAgentStartEvent,
+  result: BeforeAgentStartLifecycleResult | undefined,
+): BeforeAgentStartEvent {
+  if (result?.systemPrompt === undefined) {
+    return event;
+  }
+  return {
+    ...event,
+    systemPrompt: result.systemPrompt,
   };
 }
 
@@ -151,13 +172,16 @@ async function runBeforeAgentStart(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ): Promise<BeforeAgentStartLifecycleResult | undefined> {
+  let currentEvent = event;
   let merged: BeforeAgentStartLifecycleResult | undefined;
   for (const handler of handlers) {
     if (!handler) {
       continue;
     }
-    const result = handler(event, ctx);
-    merged = mergeBeforeAgentStart(merged, isPromiseLike(result) ? await result : result);
+    const result = handler(currentEvent, ctx);
+    const resolved = isPromiseLike(result) ? await result : result;
+    merged = mergeBeforeAgentStart(merged, resolved);
+    currentEvent = applyBeforeAgentStartToEvent(currentEvent, resolved);
   }
   return merged;
 }

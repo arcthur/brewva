@@ -114,6 +114,7 @@ export interface BrewvaHostCustomMessage {
   customType: string;
   content: string;
   display?: boolean;
+  excludeFromContext?: boolean;
   details?: unknown;
 }
 
@@ -339,6 +340,7 @@ export interface BrewvaHostToolResultResult {
 
 export interface BrewvaHostBeforeAgentStartResult {
   message?: BrewvaHostCustomMessage;
+  messages?: BrewvaHostCustomMessage[];
   systemPrompt?: string;
 }
 

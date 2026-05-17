@@ -6,9 +6,9 @@ Skill parsing, merge, and inventory anchors:
 - `packages/brewva-runtime/src/domain/skills/registry.ts`
 
 This page owns skill taxonomy, SkillCard metadata, ProducerContract metadata,
-and the generated skill inventory. Hosted turns treat skills as readable files
-and advisory context. External action authority lives in capability manifests,
-selection receipts, and tool policy, not in skill frontmatter.
+and the generated skill inventory. Hosted turns may select skills as bounded
+advisory prompt context. External action authority lives in capability
+manifests, selection receipts, and tool policy, not in skill frontmatter.
 
 ## Generated Inventory
 
@@ -75,7 +75,7 @@ Skill taxonomy is split by role:
   Telegram, extraction, and goal loops
 - `operator`: replay, runtime, git, and operator-maintenance surfaces
 - `meta`: skill authoring and self-improvement surfaces
-- `project/overlays`: project-local tightening for selected skills
+- `project/overlays`: project-local tightening for targeted base skills
 - `project/shared`: repo-local guidance and provenance, not runtime authority
 
 Runtime/control-plane workflow semantics are not public skills. Verification,
@@ -128,9 +128,34 @@ Directory layout derives category and discoverability:
 - `skills/meta/*` -> `meta`
 - `skills/project/overlays/*` -> overlay for the matching skill
 
-Hosted runtime code may use SkillCard selection fields for advisory lookup, but
-selection is not authorization. Authored frontmatter cannot override `category`
-or `tier`; attempts to do so are rejected at load time.
+Hosted runtime code renders SkillCard descriptions and `selection.when_to_use`
+for model-native advisory routing, but selection metadata is not authorization.
+Authored frontmatter cannot override `category` or `tier`; attempts to do so
+are rejected at load time.
+
+## Available Skills Versus Skill-Surface Tools
+
+The trace uses two separate concepts:
+
+- an available SkillCard is prompt context rendered from `skills/**/SKILL.md`
+- a skill-surface tool is a managed tool whose registry metadata has
+  `surface="skill"`
+
+The available SkillCard catalog is reported by `skill_selection_recorded` and
+mirrored in the hidden, context-excluded `brewva-skill-selection` custom turn
+message. Explicit `$skill` mentions are mirrored as
+`tool_surface_resolved.explicitSkillMentionNames`; `skillSelectionId` and
+`skillSelectionMode` remain trace correlation fields. The event also records
+`renderedSkillContext` with character and token-estimate metadata for the
+prompt block that was injected.
+
+Skill-surface tools are counted by `skillSurfaceToolActiveCount` and
+`hiddenSkillSurfaceToolCount`. They are tool inventory counters, not selected
+SkillCard counters.
+
+No code may use available or explicitly mentioned SkillCards to grant tools,
+accounts, budgets, external authority, or mutation rights. Tool authority
+remains capability-governed.
 
 `skills/project/shared/*` remains outside the loadable skill graph and is
 treated as repository guidance, not model-callable capability. Its frontmatter
@@ -182,8 +207,8 @@ hard-coding workflow command IDs.
 - Put structured producer outputs in `skills/producers/<name>.yaml`.
 - Keep `selection` useful for humans and repository tooling, not runtime
   authorization.
-- Keep operator/meta skills inspectable even when they are not part of the
-  default model context.
+- Keep operator/meta skills advisory and inspectable; do not use them to grant
+  authority.
 - Put project-specific tightening in overlays or shared project guidance
   instead of widening the public skill catalog.
 

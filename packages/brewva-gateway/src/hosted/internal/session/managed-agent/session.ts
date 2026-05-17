@@ -169,6 +169,22 @@ import {
   resolveChannelContext,
 } from "./turn-audit.js";
 
+function toTurnLoopCustomMessage(
+  message: BrewvaHostCustomMessage,
+): Extract<BrewvaTurnLoopMessage, { role: "custom" }> {
+  return {
+    role: "custom",
+    customType: message.customType,
+    content: message.content,
+    display: message.display ?? true,
+    ...(message.excludeFromContext !== undefined
+      ? { excludeFromContext: message.excludeFromContext }
+      : {}),
+    details: message.details,
+    timestamp: Date.now(),
+  };
+}
+
 const DEFAULT_GOOGLE_CACHED_CONTENT_MANAGER = new GoogleCachedContentManager();
 
 export const MANAGED_AGENT_SESSION_TEST_ONLY = {
@@ -887,14 +903,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     );
     if (beforeStart?.messages) {
       for (const message of beforeStart.messages) {
-        messages.push({
-          role: "custom",
-          customType: message.customType,
-          content: message.content,
-          display: message.display ?? true,
-          details: message.details,
-          timestamp: Date.now(),
-        });
+        messages.push(toTurnLoopCustomMessage(message));
       }
     }
 
@@ -1194,14 +1203,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     message: BrewvaHostCustomMessage,
     options?: { triggerTurn?: boolean; deliverAs?: BrewvaHostCustomMessageDelivery },
   ): Promise<void> {
-    const customMessage: Extract<BrewvaTurnLoopMessage, { role: "custom" }> = {
-      role: "custom",
-      customType: message.customType,
-      content: message.content,
-      display: message.display ?? true,
-      details: message.details,
-      timestamp: Date.now(),
-    };
+    const customMessage = toTurnLoopCustomMessage(message);
 
     if (options?.deliverAs === "nextTurn") {
       this.#deferredTurnState.pushNextTurnMessage(customMessage);

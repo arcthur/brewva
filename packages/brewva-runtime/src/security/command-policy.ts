@@ -81,6 +81,11 @@ export interface CommandPolicyUnsupportedReason {
   command?: string;
 }
 
+export interface CommandPolicyDiagnostic {
+  code: "stderr_redirection" | "diagnostic_suppression";
+  detail?: string;
+}
+
 export interface CommandPolicyNetworkTarget {
   raw: string;
   host: string;
@@ -102,6 +107,7 @@ export interface ShellCommandAnalysis {
   networkTargets: CommandPolicyNetworkTarget[];
   filesystemIntent: FilesystemIntent;
   unsupportedReasons: CommandPolicyUnsupportedReason[];
+  diagnostics: CommandPolicyDiagnostic[];
   readonlyEligible: boolean;
 }
 
@@ -111,6 +117,7 @@ export interface CommandPolicySummary {
   effects: CommandPolicyEffect[];
   filesystemIntent: FilesystemIntent;
   unsupportedReasons: CommandPolicyUnsupportedReason[];
+  diagnostics: CommandPolicyDiagnostic[];
   networkTargets: Array<{ host: string; port?: number; protocol: "http" | "https" }>;
 }
 
@@ -143,6 +150,20 @@ function addReason(
     return;
   }
   reasons.push(reason);
+}
+
+function addDiagnostic(
+  diagnostics: CommandPolicyDiagnostic[],
+  diagnostic: CommandPolicyDiagnostic,
+): void {
+  if (
+    diagnostics.some(
+      (entry) => entry.code === diagnostic.code && entry.detail === diagnostic.detail,
+    )
+  ) {
+    return;
+  }
+  diagnostics.push(diagnostic);
 }
 
 function normalizeCommandName(token: string): string {
@@ -184,8 +205,52 @@ export function collectCommandPolicyNetworkTargets(command: string): CommandPoli
   return targets;
 }
 
-function scanUnsupportedShellSyntax(command: string): CommandPolicyUnsupportedReason[] {
+function collectDiagnosticRedirectionRanges(command: string): {
+  ranges: Array<{ start: number; end: number }>;
+  diagnostics: CommandPolicyDiagnostic[];
+} {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const diagnostics: CommandPolicyDiagnostic[] = [];
+  for (let index = 0; index < command.length; index += 1) {
+    if (command[index] !== ">" || command[index - 1] !== "2") {
+      continue;
+    }
+    let cursor = index + 1;
+    if (command[cursor] === ">") {
+      cursor += 1;
+    }
+    while (/\s/u.test(command[cursor] ?? "")) {
+      cursor += 1;
+    }
+    const target = command.slice(cursor);
+    if (target.startsWith("/dev/null")) {
+      ranges.push({ start: index - 1, end: cursor + "/dev/null".length });
+      addDiagnostic(diagnostics, { code: "stderr_redirection", detail: "2>/dev/null" });
+      addDiagnostic(diagnostics, {
+        code: "diagnostic_suppression",
+        detail: "stderr_to_dev_null",
+      });
+      continue;
+    }
+    if (target.startsWith("&1")) {
+      ranges.push({ start: index - 1, end: cursor + 2 });
+      addDiagnostic(diagnostics, { code: "stderr_redirection", detail: "2>&1" });
+    }
+  }
+  return { ranges, diagnostics };
+}
+
+function isInsideRange(index: number, ranges: ReadonlyArray<{ start: number; end: number }>) {
+  return ranges.some((range) => index >= range.start && index < range.end);
+}
+
+function scanShellSyntax(command: string): {
+  unsupportedReasons: CommandPolicyUnsupportedReason[];
+  diagnostics: CommandPolicyDiagnostic[];
+} {
   const reasons: CommandPolicyUnsupportedReason[] = [];
+  const diagnosticRedirections = collectDiagnosticRedirectionRanges(command);
+  const diagnostics = [...diagnosticRedirections.diagnostics];
   let quote: '"' | "'" | null = null;
   let escaped = false;
 
@@ -235,6 +300,9 @@ function scanUnsupportedShellSyntax(command: string): CommandPolicyUnsupportedRe
     }
 
     if (char === ">") {
+      if (isInsideRange(index, diagnosticRedirections.ranges)) {
+        continue;
+      }
       addReason(reasons, { code: "write_redirection", detail: ">" });
       continue;
     }
@@ -248,7 +316,7 @@ function scanUnsupportedShellSyntax(command: string): CommandPolicyUnsupportedRe
     addReason(reasons, { code: "shell_function", detail: "function definition" });
   }
 
-  return reasons;
+  return { unsupportedReasons: reasons, diagnostics };
 }
 
 function splitShellSegments(command: string): {
@@ -588,7 +656,9 @@ function mergeFilesystemIntent(
 }
 
 function analyzeShellCommandInternal(command: string, depth: number): ShellCommandAnalysis {
-  const unsupportedReasons = scanUnsupportedShellSyntax(command);
+  const shellSyntax = scanShellSyntax(command);
+  const unsupportedReasons = shellSyntax.unsupportedReasons;
+  const diagnostics = shellSyntax.diagnostics;
   if (command.length > MAX_COMMAND_LENGTH) {
     addReason(unsupportedReasons, {
       code: "command_too_long",
@@ -665,6 +735,7 @@ function analyzeShellCommandInternal(command: string, depth: number): ShellComma
           }
         }
         unsupportedReasons.push(...nested.unsupportedReasons);
+        diagnostics.push(...nested.diagnostics);
         filesystemIntent = mergeFilesystemIntent(filesystemIntent, nested.filesystemIntent);
       }
     }
@@ -711,6 +782,10 @@ function analyzeShellCommandInternal(command: string, depth: number): ShellComma
   for (const reason of unsupportedReasons) {
     addReason(dedupedReasons, reason);
   }
+  const dedupedDiagnostics: CommandPolicyDiagnostic[] = [];
+  for (const diagnostic of diagnostics) {
+    addDiagnostic(dedupedDiagnostics, diagnostic);
+  }
 
   const readonlyEligible =
     commands.length > 0 &&
@@ -724,6 +799,7 @@ function analyzeShellCommandInternal(command: string, depth: number): ShellComma
     networkTargets,
     filesystemIntent,
     unsupportedReasons: dedupedReasons,
+    diagnostics: dedupedDiagnostics,
     readonlyEligible,
   };
 }
@@ -741,6 +817,7 @@ export function summarizeShellCommandAnalysis(
     effects: [...analysis.effects],
     filesystemIntent: analysis.filesystemIntent,
     unsupportedReasons: analysis.unsupportedReasons.map((reason) => ({ ...reason })),
+    diagnostics: analysis.diagnostics.map((diagnostic) => ({ ...diagnostic })),
     networkTargets: analysis.networkTargets.map((target) => ({
       host: target.host,
       port: target.port,

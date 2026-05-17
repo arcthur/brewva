@@ -1,13 +1,19 @@
 # Skill And Memory Event Families
 
-This page covers the remaining skill catalog refresh events plus recall,
-workbench, semantic extraction, and iteration-fact events.
+This page covers skill catalog refresh and advisory selection events plus
+recall, workbench, semantic extraction, and iteration-fact events.
 
 ## Skill Catalog
 
-Skills are catalog documents. Runtime events may record catalog refresh and
-inventory maintenance, but there is no activation, completion, repair, or
-active-skill lifecycle state.
+Skills are catalog documents. Runtime events may record catalog refresh,
+inventory maintenance, and advisory prompt-context selection, but there is no
+activation, completion, repair, or active-skill lifecycle state.
+
+`skill_selection_recorded` records the prompt-visible SkillCard catalog size,
+explicit `$skill` mentions, and rendered context size. The hosted turn also
+carries a hidden, context-excluded `brewva-skill-selection` custom message with
+the explicit mention names and selection id for active-turn traceability. Both
+are evidence for model attention, not authority receipts.
 
 ## Skill Budget
 

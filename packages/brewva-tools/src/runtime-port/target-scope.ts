@@ -1,7 +1,14 @@
-import { resolve, sep } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { dirname, resolve, sep } from "node:path";
+import { TURN_INPUT_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
-import { resolveToolRuntimeTaskPort } from "./extensions.js";
+import { resolveToolRuntimeEventPort, resolveToolRuntimeTaskPort } from "./extensions.js";
 import { getToolSessionId } from "./parallel-read.js";
+
+const PROMPT_UNQUOTED_ABSOLUTE_PATH_PATTERN =
+  /(?:file:\/\/)?\/(?:Users|home|tmp|private\/tmp|private\/var\/folders|var\/folders|Volumes|mnt)(?:\/[^\s"'`<>{}[\]|&;,，。；：！？、]+)+\/?/gu;
+const PROMPT_QUOTED_ABSOLUTE_PATH_PATTERN =
+  /(?:"((?:file:\/\/)?\/(?:Users|home|tmp|private\/tmp|private\/var\/folders|var\/folders|Volumes|mnt)(?:\/[^"\r\n]+)+\/?)"|'((?:file:\/\/)?\/(?:Users|home|tmp|private\/tmp|private\/var\/folders|var\/folders|Volumes|mnt)(?:\/[^'\r\n]+)+\/?)'|`((?:file:\/\/)?\/(?:Users|home|tmp|private\/tmp|private\/var\/folders|var\/folders|Volumes|mnt)(?:\/[^`\r\n]+)+\/?)`)/gu;
 
 function isPathInsideRoot(path: string, root: string): boolean {
   const resolvedPath = resolve(path);
@@ -11,6 +18,174 @@ function isPathInsideRoot(path: string, root: string): boolean {
   }
   const prefix = resolvedRoot.endsWith(sep) ? resolvedRoot : `${resolvedRoot}${sep}`;
   return resolvedPath.startsWith(prefix);
+}
+
+function uniqueResolvedRoots(roots: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const root of roots) {
+    const resolvedRoot = resolve(root);
+    if (seen.has(resolvedRoot)) {
+      continue;
+    }
+    seen.add(resolvedRoot);
+    out.push(resolvedRoot);
+  }
+  return out;
+}
+
+function isRootCoveredBy(root: string, existingRoots: readonly string[]): boolean {
+  return existingRoots.some((existingRoot) => isPathInsideRoot(root, existingRoot));
+}
+
+function readRecordPayload(record: unknown): unknown {
+  return record && typeof record === "object" && !Array.isArray(record)
+    ? (record as { payload?: unknown }).payload
+    : undefined;
+}
+
+function readPromptText(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return undefined;
+  }
+  const promptText = (payload as { promptText?: unknown }).promptText;
+  return typeof promptText === "string" && promptText.trim().length > 0 ? promptText : undefined;
+}
+
+function queryLatestTurnPromptText(
+  runtime: BrewvaToolRuntime | undefined,
+  sessionId: string | undefined,
+): string | undefined {
+  if (!sessionId) {
+    return undefined;
+  }
+  const records = resolveToolRuntimeEventPort(runtime)?.records;
+  const queried = records?.query?.(sessionId, {
+    type: TURN_INPUT_RECORDED_EVENT_TYPE,
+    last: 1,
+  });
+  const payload = queried?.at(-1);
+  return readPromptText(readRecordPayload(payload));
+}
+
+function decodeFilePath(value: string): string {
+  try {
+    return decodeURI(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizePromptPathMention(value: string): string {
+  const isFileUrl = value.startsWith("file://");
+  const withoutScheme = isFileUrl ? value.slice("file://".length) : value;
+  const decoded = isFileUrl ? decodeFilePath(withoutScheme) : withoutScheme;
+  return decoded
+    .replace(/:\d+(?::\d+)?$/u, "")
+    .replace(/[),.:;!?\uFF0C\u3002\uFF1B\uFF1A\uFF01\uFF1F]+$/u, "")
+    .replace(/\/+$/u, "");
+}
+
+function hasOpeningQuoteBeforeMatch(text: string, index: number | undefined): boolean {
+  if (index === undefined || index <= 0) {
+    return false;
+  }
+  return ['"', "'", "`"].includes(text[index - 1] ?? "");
+}
+
+function extractPromptAbsolutePathMentions(promptText: string): string[] {
+  const quotedMentions = [...promptText.matchAll(PROMPT_QUOTED_ABSOLUTE_PATH_PATTERN)].map(
+    (match) => match[1] ?? match[2] ?? match[3] ?? "",
+  );
+  const unquotedMentions = [...promptText.matchAll(PROMPT_UNQUOTED_ABSOLUTE_PATH_PATTERN)]
+    .filter((match) => !hasOpeningQuoteBeforeMatch(promptText, match.index))
+    .map((match) => match[0] ?? "");
+  return uniqueResolvedRoots(
+    [...quotedMentions, ...unquotedMentions]
+      .map((match) => normalizePromptPathMention(match))
+      .filter((value) => value.length > 0),
+  );
+}
+
+function statExistingPath(path: string): { isDirectory(): boolean } | undefined {
+  try {
+    return existsSync(path) ? statSync(path) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveExistingPathAnchor(path: string): string | undefined {
+  const resolvedPath = resolve(path);
+  const stat = statExistingPath(resolvedPath);
+  if (!stat) {
+    return undefined;
+  }
+  try {
+    const canonicalPath = realpathSync(resolvedPath);
+    return stat.isDirectory() ? canonicalPath : dirname(canonicalPath);
+  } catch {
+    return undefined;
+  }
+}
+
+function findAncestor(startDir: string, predicate: (dir: string) => boolean): string | undefined {
+  let current = resolve(startDir);
+  while (true) {
+    if (predicate(current)) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+}
+
+function hasRepositoryMarker(dir: string): boolean {
+  return existsSync(resolve(dir, ".git")) || existsSync(resolve(dir, ".brewva", "brewva.json"));
+}
+
+function pathSegments(path: string): string[] {
+  return resolve(path).split(sep).filter(Boolean);
+}
+
+function isShallowPromptRoot(root: string): boolean {
+  const segments = pathSegments(root);
+  const [first, second, third] = segments;
+  if (first === "Users" || first === "home") {
+    return segments.length <= 2;
+  }
+  if (first === "Volumes" || first === "mnt") {
+    return segments.length <= 2;
+  }
+  if (first === "tmp") {
+    return segments.length <= 1;
+  }
+  if (first === "private" && second === "tmp") {
+    return segments.length <= 2;
+  }
+  if (first === "var" && second === "folders") {
+    return segments.length <= 2;
+  }
+  if (first === "private" && second === "var" && third === "folders") {
+    return segments.length <= 3;
+  }
+  return false;
+}
+
+function resolvePromptMentionTargetRoots(promptText: string | undefined): string[] {
+  if (!promptText) {
+    return [];
+  }
+  return uniqueResolvedRoots(
+    extractPromptAbsolutePathMentions(promptText)
+      .map(resolveExistingPathAnchor)
+      .filter((anchor): anchor is string => Boolean(anchor))
+      .map((anchor) => findAncestor(anchor, hasRepositoryMarker) ?? anchor)
+      .filter((root) => !isShallowPromptRoot(root)),
+  );
 }
 
 export interface ToolTargetScope {
@@ -40,10 +215,18 @@ export function resolveToolTargetScope(
       ? (taskPort.target.getDescriptor(sessionId) as ToolTargetDescriptor)
       : undefined;
   const primaryRoot = resolve(descriptor?.primaryRoot ?? fallbackCwd);
-  const allowedRoots =
+  const descriptorRoots =
     descriptor?.roots && descriptor.roots.length > 0
       ? descriptor.roots.map((root) => resolve(root))
       : [primaryRoot];
+  const promptRoots = resolvePromptMentionTargetRoots(
+    queryLatestTurnPromptText(runtime, sessionId),
+  );
+  const coveredDescriptorRoots = uniqueResolvedRoots(descriptorRoots);
+  const externalPromptRoots = promptRoots.filter(
+    (root) => !isRootCoveredBy(root, coveredDescriptorRoots),
+  );
+  const allowedRoots = uniqueResolvedRoots([...coveredDescriptorRoots, ...externalPromptRoots]);
   const baseCwd = allowedRoots.some((root) => isPathInsideRoot(fallbackCwd, root))
     ? fallbackCwd
     : primaryRoot;

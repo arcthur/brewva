@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
 import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-tools/contracts";
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
+import { resolveToolTargetScope } from "@brewva/brewva-tools/runtime-port";
 import { sleep, waitUntil } from "../../helpers/process.js";
 import {
   createRuntimeForExecTests,
@@ -233,6 +237,469 @@ describe("exec box routing", () => {
     expect(
       events.find((event) => event.type === "box.exec.started")?.payload?.effectiveBoxCwd,
     ).toBe("/workspace/packages/app");
+  });
+
+  test("box backend mounts sibling target roots readonly and rewrites host path arguments", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const siblingRoot = mkdtempSync(join(tmpdir(), "brewva-box-sibling-"));
+    writeFileSync(join(siblingRoot, "sibling-file.txt"), "ok\n", "utf8");
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      result: {
+        stdout: "sibling-file.txt\n",
+        stderr: "",
+        exitCode: 0,
+      },
+    };
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot, siblingRoot],
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-sibling-root",
+      {
+        command: `ls ${siblingRoot} | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-sibling-root"),
+    );
+
+    const siblingVolume = calls.scopes[0]?.capabilities.extraVolumes.find(
+      (volume) => volume.hostPath === siblingRoot,
+    );
+    expect(siblingVolume?.readonly).toBe(true);
+    expect(siblingVolume?.guestPath).toContain("/workspace-roots/");
+    expect(calls.execs[0]?.argv.join(" ")).toContain("/workspace-roots/");
+    expect(calls.execs[0]?.argv.join(" ")).not.toContain(siblingRoot);
+    expect(extractTextContent(result)).toContain("sibling-file.txt");
+    expect(extractTextContent(result)).not.toContain("(no output)");
+
+    const started = events.find((event) => event.type === "box.exec.started");
+    expect(started?.payload?.rootMappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hostPath: workspaceRoot,
+          guestPath: "/workspace",
+          primary: true,
+          readonly: false,
+        }),
+        expect.objectContaining({
+          hostPath: siblingRoot,
+          primary: false,
+          readonly: true,
+        }),
+      ]),
+    );
+  });
+
+  test("box backend mounts prompt-mentioned absolute roots readonly before task spec targets exist", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const siblingRoot = mkdtempSync(join(tmpdir(), "brewva-box-prompt-root-"));
+    const canonicalSiblingRoot = realpathSync(siblingRoot);
+    writeFileSync(join(siblingRoot, "prompt-root-file.txt"), "ok\n", "utf8");
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      result: {
+        stdout: "prompt-root-file.txt\n",
+        stderr: "",
+        exitCode: 0,
+      },
+    };
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+      turnPromptText: `Compare ${siblingRoot} against this workspace before setting TaskSpec targets.`,
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-prompt-mentioned-root",
+      {
+        command: `ls ${siblingRoot} | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-prompt-mentioned-root"),
+    );
+
+    const siblingVolume = calls.scopes[0]?.capabilities.extraVolumes.find(
+      (volume) => volume.hostPath === canonicalSiblingRoot,
+    );
+    expect(siblingVolume?.readonly).toBe(true);
+    expect(siblingVolume?.guestPath).toContain("/workspace-roots/");
+    expect(calls.execs[0]?.argv.join(" ")).toContain("/workspace-roots/");
+    expect(calls.execs[0]?.argv.join(" ")).not.toContain(siblingRoot);
+    expect(extractTextContent(result)).toContain("prompt-root-file.txt");
+
+    const started = events.find((event) => event.type === "box.exec.started");
+    expect(started?.payload?.rootMappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          hostPath: canonicalSiblingRoot,
+          primary: false,
+          readonly: true,
+        }),
+      ]),
+    );
+  });
+
+  test("box backend mounts quoted prompt-mentioned roots with spaces", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const siblingRoot = mkdtempSync(join(tmpdir(), "brewva box prompt root "));
+    const canonicalSiblingRoot = realpathSync(siblingRoot);
+    writeFileSync(join(siblingRoot, "quoted-prompt-root-file.txt"), "ok\n", "utf8");
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      result: {
+        stdout: "quoted-prompt-root-file.txt\n",
+        stderr: "",
+        exitCode: 0,
+      },
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+      turnPromptText: `Compare "${siblingRoot}" against this workspace before setting TaskSpec targets.`,
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-quoted-prompt-root",
+      {
+        command: `ls "${siblingRoot}" | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-quoted-prompt-root"),
+    );
+
+    const siblingVolume = calls.scopes[0]?.capabilities.extraVolumes.find(
+      (volume) => volume.hostPath === canonicalSiblingRoot,
+    );
+    expect(siblingVolume?.readonly).toBe(true);
+    expect(siblingVolume?.guestPath).toContain("/workspace-roots/");
+    expect(calls.execs[0]?.argv.join(" ")).toContain("/workspace-roots/");
+    expect(calls.execs[0]?.argv.join(" ")).not.toContain(siblingRoot);
+    expect(extractTextContent(result)).toContain("quoted-prompt-root-file.txt");
+  });
+
+  test("box backend mounts prompt-mentioned roots before Chinese punctuation", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const firstRoot = mkdtempSync(join(tmpdir(), "brewva-box-prompt-first-"));
+    const secondRoot = mkdtempSync(join(tmpdir(), "brewva-box-prompt-second-"));
+    const canonicalSecondRoot = realpathSync(secondRoot);
+    writeFileSync(join(secondRoot, "second-root-file.txt"), "ok\n", "utf8");
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      result: {
+        stdout: "second-root-file.txt\n",
+        stderr: "",
+        exitCode: 0,
+      },
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+      turnPromptText: `Compare ${firstRoot} 和 ${secondRoot}，then inspect both roots.`,
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-prompt-root-before-chinese-punctuation",
+      {
+        command: `ls ${secondRoot} | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-prompt-root-before-chinese-punctuation"),
+    );
+
+    const secondVolume = calls.scopes[0]?.capabilities.extraVolumes.find(
+      (volume) => volume.hostPath === canonicalSecondRoot,
+    );
+    expect(secondVolume?.readonly).toBe(true);
+    expect(calls.execs[0]?.argv.join(" ")).toContain("/workspace-roots/");
+    expect(calls.execs[0]?.argv.join(" ")).not.toContain(secondRoot);
+    expect(extractTextContent(result)).toContain("second-root-file.txt");
+  });
+
+  test("box backend rejects prompt-mentioned shallow home roots", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const homeRoot = homedir();
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+      turnPromptText: `Inspect ${homeRoot} before setting TaskSpec targets.`,
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-prompt-home-root",
+      {
+        command: `ls "${homeRoot}" | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-prompt-home-root"),
+    );
+
+    expect(calls.scopes).toHaveLength(0);
+    expect(extractTextContent(result)).toContain("Exec rejected (box_unmapped_host_path).");
+  });
+
+  test("box backend rejects prompt-mentioned symlinks to shallow home roots", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const linkParent = mkdtempSync(join(tmpdir(), "brewva-box-prompt-link-"));
+    const homeLink = join(linkParent, "home-link");
+    symlinkSync(homedir(), homeLink, "dir");
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+      turnPromptText: `Inspect ${homeLink} before setting TaskSpec targets.`,
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-prompt-home-symlink-root",
+      {
+        command: `ls "${homeLink}" | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-prompt-home-symlink-root"),
+    );
+
+    expect(calls.scopes).toHaveLength(0);
+    expect(extractTextContent(result)).toContain("Exec rejected (box_unmapped_host_path).");
+  });
+
+  test("box backend keeps nested target roots under the primary workspace mapping", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const nestedRoot = join(workspaceRoot, "packages", "app");
+    mkdirSync(nestedRoot, { recursive: true });
+    writeFileSync(join(nestedRoot, "workspace-file.txt"), "ok\n", "utf8");
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      result: {
+        stdout: "workspace-file.txt\n",
+        stderr: "",
+        exitCode: 0,
+      },
+    };
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot, nestedRoot],
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-nested-target-root",
+      {
+        command: `ls ${nestedRoot} | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-nested-target-root"),
+    );
+
+    const command = calls.execs[0]?.argv.join(" ") ?? "";
+    expect(calls.scopes[0]?.capabilities.extraVolumes).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ hostPath: nestedRoot })]),
+    );
+    expect(command).toContain("/workspace/packages/app");
+    expect(command).not.toContain("/workspace-roots/");
+    expect(command).not.toContain(nestedRoot);
+    expect(extractTextContent(result)).toContain("workspace-file.txt");
+
+    const started = events.find((event) => event.type === "box.exec.started");
+    expect(started?.payload?.rootMappings).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ hostPath: nestedRoot })]),
+    );
+  });
+
+  test("target scope omits prompt-mentioned roots already covered by the primary workspace", () => {
+    const workspaceRoot = realpathSync(mkdtempSync(join(tmpdir(), "brewva-box-workspace-")));
+    const nestedRoot = join(workspaceRoot, "packages", "app");
+    mkdirSync(nestedRoot, { recursive: true });
+    writeFileSync(join(nestedRoot, "workspace-file.txt"), "ok\n", "utf8");
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+      turnPromptText: `Inspect ${nestedRoot}/workspace-file.txt before running.`,
+    });
+
+    const scope = resolveToolTargetScope(runtime, fakeContext("s13-exec-box-covered-prompt-root"));
+
+    expect(scope.primaryRoot).toBe(workspaceRoot);
+    expect(scope.allowedRoots).toEqual([workspaceRoot]);
+  });
+
+  test("box backend rewrites mapped workspace paths outside macOS-style host prefixes", async () => {
+    const workspaceRoot = "/home/brewva/workspace";
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      result: {
+        stdout: "linux-file.txt\n",
+        stderr: "",
+        exitCode: 0,
+      },
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-linux-host-prefix",
+      {
+        command: "ls /home/brewva/workspace/src | head -30",
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-linux-host-prefix"),
+    );
+
+    const command = calls.execs[0]?.argv.join(" ") ?? "";
+    expect(command).toContain("/workspace/src");
+    expect(command).not.toContain("/home/brewva/workspace");
+    expect(extractTextContent(result)).toContain("linux-file.txt");
+  });
+
+  test("box backend rewrites quoted sibling root paths with spaces", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const siblingRoot = mkdtempSync(join(tmpdir(), "brewva box sibling "));
+    writeFileSync(join(siblingRoot, "quoted-file.txt"), "ok\n", "utf8");
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      result: {
+        stdout: "quoted-file.txt\n",
+        stderr: "",
+        exitCode: 0,
+      },
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot, siblingRoot],
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-quoted-sibling-root",
+      {
+        command: `ls "${siblingRoot}" | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-quoted-sibling-root"),
+    );
+
+    const command = calls.execs[0]?.argv.join(" ") ?? "";
+    expect(command).toContain("/workspace-roots/");
+    expect(command).not.toContain("brewva box sibling");
+    expect(command).not.toContain(siblingRoot);
+    expect(extractTextContent(result)).toContain("quoted-file.txt");
+    expect(extractTextContent(result)).not.toContain("(no output)");
+  });
+
+  test("box backend rewrites only shell path tokens, not embedded string literals or comments", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-box-workspace-"));
+    const siblingRoot = mkdtempSync(join(tmpdir(), "brewva-box-sibling-"));
+    writeFileSync(join(siblingRoot, "token-file.txt"), "ok\n", "utf8");
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      result: {
+        stdout: "token-file.txt\n",
+        stderr: "",
+        exitCode: 0,
+      },
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot, siblingRoot],
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-box-token-rewrite",
+      {
+        command: `printf 'literal="${siblingRoot}"'; ls ${siblingRoot} # ${siblingRoot}`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-token-rewrite"),
+    );
+
+    const siblingVolume = calls.scopes[0]?.capabilities.extraVolumes.find(
+      (volume) => volume.hostPath === siblingRoot,
+    );
+    const command = calls.execs[0]?.argv.join(" ") ?? "";
+    expect(siblingVolume?.guestPath).toContain("/workspace-roots/");
+    expect(command).toContain(`ls ${siblingVolume?.guestPath}`);
+    expect(command).toContain(`literal="${siblingRoot}"`);
+    expect(command).toContain(`# ${siblingRoot}`);
+    expect(extractTextContent(result)).toContain("token-file.txt");
   });
 
   test("box backend records failed events for non-zero process exits", async () => {

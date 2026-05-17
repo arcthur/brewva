@@ -67,7 +67,7 @@ helper material, not session-state durability surfaces in the taxonomy above.
 
 - Generated skill index: `.brewva/skills_index.json`
   - workspace-root inspect artifact with `schemaVersion=3`
-  - includes selected skill roots (`roots`) and the complete loaded-skill catalog (`skills`)
+  - includes configured skill roots (`roots`) and the complete loaded-skill catalog (`skills`)
   - `summary` reports loaded, selectable, and overlay counts
 - each skill entry keeps advisory SkillCard metadata plus generated
   `selectable`, `overlay`, normalized `selection` metadata, source paths,

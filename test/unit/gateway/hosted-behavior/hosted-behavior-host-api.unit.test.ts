@@ -24,6 +24,27 @@ interface RuntimeCalls {
   observedContext: Array<{ sessionId: string; usage: unknown }>;
 }
 
+interface BeforeAgentStartResult {
+  systemPrompt?: string;
+  message?: { content?: unknown };
+  messages?: Array<{ content?: unknown }>;
+}
+
+function collectBeforeAgentStartContent(results: BeforeAgentStartResult[]): string {
+  const chunks: string[] = [];
+  for (const result of results) {
+    if (typeof result.message?.content === "string") {
+      chunks.push(result.message.content);
+    }
+    for (const message of result.messages ?? []) {
+      if (typeof message.content === "string") {
+        chunks.push(message.content);
+      }
+    }
+  }
+  return chunks.join("\n");
+}
+
 function makeContextStatus(
   usageRatio: number,
   hardLimitRatio = 0.98,
@@ -270,10 +291,7 @@ describe("hosted behavior host-api installation", () => {
       registerTools: false,
     }).register(api);
 
-    const results = await invokeHandlersAsync<{
-      systemPrompt?: string;
-      message?: { content?: string };
-    }>(
+    const results = await invokeHandlersAsync<BeforeAgentStartResult>(
       handlers,
       "before_agent_start",
       {
@@ -283,13 +301,13 @@ describe("hosted behavior host-api installation", () => {
       },
       createSessionContext("hosted-before-start"),
     );
-    const beforeStart = results.find(
-      (result) =>
-        typeof result?.systemPrompt === "string" || typeof result?.message?.content === "string",
-    );
+    const systemPrompt = results.find(
+      (result) => typeof result?.systemPrompt === "string",
+    )?.systemPrompt;
+    const content = collectBeforeAgentStartContent(results);
 
-    expect(beforeStart?.systemPrompt).toContain("[Brewva Context Contract]");
-    expect(beforeStart?.message?.content).toContain("[ContextCompactionGate]");
+    expect(systemPrompt).toContain("[Brewva Context Contract]");
+    expect(content).toContain("[ContextCompactionGate]");
     expect(calls.events.map((event) => event.type)).toContain("context_composed");
     expect(calls.observedContext).toHaveLength(1);
     expect(calls.observedContext[0]?.sessionId).toBe("hosted-before-start");
@@ -303,9 +321,7 @@ describe("hosted behavior host-api installation", () => {
       registerTools: false,
     }).register(api);
 
-    const firstResults = await invokeHandlersAsync<{
-      message?: { content?: string };
-    }>(
+    const firstResults = await invokeHandlersAsync<BeforeAgentStartResult>(
       handlers,
       "before_agent_start",
       {
@@ -315,9 +331,7 @@ describe("hosted behavior host-api installation", () => {
       },
       createSessionContext("hosted-nudge-throttle"),
     );
-    const secondResults = await invokeHandlersAsync<{
-      message?: { content?: string };
-    }>(
+    const secondResults = await invokeHandlersAsync<BeforeAgentStartResult>(
       handlers,
       "before_agent_start",
       {
@@ -328,9 +342,8 @@ describe("hosted behavior host-api installation", () => {
       createSessionContext("hosted-nudge-throttle"),
     );
 
-    const firstContent = firstResults.find((result) => result?.message?.content)?.message?.content;
-    const secondContent = secondResults.find((result) => result?.message?.content)?.message
-      ?.content;
+    const firstContent = collectBeforeAgentStartContent(firstResults);
+    const secondContent = collectBeforeAgentStartContent(secondResults);
     expect(firstContent).toContain("Context has reached the forced compaction limit.");
     expect(secondContent).toContain("[ContextCompactionGate]");
     expect(secondContent).toContain("action: call `workbench_compact` now.");

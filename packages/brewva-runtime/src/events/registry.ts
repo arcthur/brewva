@@ -168,7 +168,10 @@ import {
   TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "../domain/sessions/events.js";
 import { SKILLS_UNTYPED_EVENT_DEFINITIONS } from "../domain/skills/event-descriptors.js";
-import { SKILL_REFRESH_RECORDED_EVENT_TYPE } from "../domain/skills/events.js";
+import {
+  SKILL_REFRESH_RECORDED_EVENT_TYPE,
+  SKILL_SELECTION_RECORDED_EVENT_TYPE,
+} from "../domain/skills/events.js";
 import { TAPE_EVENT_DEFINITIONS } from "../domain/tape/event-descriptors.js";
 import { TAPE_ANCHOR_EVENT_TYPE, TAPE_CHECKPOINT_EVENT_TYPE } from "../domain/tape/events.js";
 import {
@@ -372,6 +375,7 @@ export {
   SESSION_TURN_TRANSITION_EVENT_TYPE,
   SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE,
   SKILL_REFRESH_RECORDED_EVENT_TYPE,
+  SKILL_SELECTION_RECORDED_EVENT_TYPE,
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,

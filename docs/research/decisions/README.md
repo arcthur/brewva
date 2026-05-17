@@ -16,6 +16,7 @@ Every accepted decision inherits these rules:
 
 - [architecture-doc-precision-review](./architecture-doc-precision-review.md)
 - [action-policy-registry-and-least-privilege-governance](./action-policy-registry-and-least-privilege-governance.md)
+- [advisory-skill-selection-and-cross-root-box-execution](./advisory-skill-selection-and-cross-root-box-execution.md)
 - [authority-surface-narrowing-and-runtime-facade-compression](./authority-surface-narrowing-and-runtime-facade-compression.md)
 - [brewva-c2-full-internalization-and-kernel-substrate-boundaries](./brewva-c2-full-internalization-and-kernel-substrate-boundaries.md)
 - [boundary-first-subtraction-and-model-native-recovery](./boundary-first-subtraction-and-model-native-recovery.md)

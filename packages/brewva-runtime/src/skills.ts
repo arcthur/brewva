@@ -81,20 +81,16 @@ export {
   listProducerOutputs,
   parseProducerContractFile,
 } from "./domain/skills/producers.js";
-export {
-  FIELD_TO_PLANE,
-  SELECTION_PROFILE_SOURCE_FIELDS,
-  buildSkillSelectionProfile,
-  hasSelectionProfileSignals,
-  type SkillFieldPath,
-} from "./domain/skills/profiles.js";
 export { discoverSkillRegistryRoots, SkillRegistry } from "./domain/skills/registry.js";
 export {
   collectPlanningRiskCategories,
   coercePlanningArtifactSet,
 } from "./domain/skills/planning-normalization.js";
 export { coerceReviewReportArtifact } from "./domain/skills/review-normalization.js";
-export { SKILL_REFRESH_RECORDED_EVENT_TYPE } from "./domain/skills/events.js";
+export {
+  SKILL_REFRESH_RECORDED_EVENT_TYPE,
+  SKILL_SELECTION_RECORDED_EVENT_TYPE,
+} from "./domain/skills/events.js";
 export { SKILLS_EVENT_DESCRIPTORS } from "./domain/skills/event-descriptors.js";
 export {
   createSkillsInspectSurface,

@@ -28,6 +28,13 @@ explicitly documents a wider observation boundary. A navigation tool that
 discovers a wider path should surface that as evidence instead of silently
 expanding authority.
 
+Current task target roots include existing absolute paths explicitly mentioned
+in the latest turn input. These prompt-mentioned roots are read scope only and
+must still pass each tool's ordinary runtime capability checks. Shallow host
+roots are ignored to avoid widening navigation across a whole home or volume.
+Prompt-mentioned roots are canonicalized to their real paths before filtering,
+so symlinks cannot disguise a shallow host root.
+
 ## Failure Semantics
 
 Navigation failures should return explicit diagnostics and avoid mutating

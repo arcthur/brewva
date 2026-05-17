@@ -40,6 +40,25 @@ describe("command policy", () => {
     expect(tee.filesystemIntent).toBe("write");
   });
 
+  test("classifies stderr redirection to dev null as diagnostic suppression", () => {
+    const analysis = analyzeShellCommand(
+      "ls /Users/bytedance/new_py/pi-mono 2>/dev/null | head -30",
+    );
+
+    expect(analysis.readonlyEligible).toBe(true);
+    expect(analysis.filesystemIntent).toBe("read");
+    expect(analysis.effects).toEqual(["workspace_read"]);
+    expect(analysis.unsupportedReasons).not.toContainEqual(
+      expect.objectContaining({ code: "write_redirection" }),
+    );
+    expect(analysis.diagnostics).toEqual(
+      expect.arrayContaining([
+        { code: "stderr_redirection", detail: "2>/dev/null" },
+        { code: "diagnostic_suppression", detail: "stderr_to_dev_null" },
+      ]),
+    );
+  });
+
   test("rejects mutation and execution options", () => {
     const sed = analyzeShellCommand("sed -i s/a/b/ package.json");
     expect(sed.readonlyEligible).toBe(false);

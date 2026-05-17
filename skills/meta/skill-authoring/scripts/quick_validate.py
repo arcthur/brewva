@@ -197,9 +197,14 @@ def validate_selection(
         if not ok:
             return ok, message
 
-    if when_to_use is None and not selection.get("triggers") and not selection.get("path_globs"):
+    if (
+        when_to_use is None
+        and not selection.get("triggers")
+        and not selection.get("path_globs")
+    ):
         return False, (
-            "Field 'selection' must declare at least one of: when_to_use, triggers, path_globs"
+            "Field 'selection' must declare at least one of: "
+            "when_to_use, triggers, path_globs"
         )
     return True, None
 

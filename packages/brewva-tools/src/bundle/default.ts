@@ -35,6 +35,7 @@ import {
   createReadSpansTool,
   createTocTools,
 } from "../families/navigation/api.js";
+import { createDiscoverSkillsTool } from "../families/skills/api.js";
 import {
   createCostViewTool,
   createFollowUpTool,
@@ -67,6 +68,7 @@ export function buildDefaultBundledBrewvaTools(
     createReadSpansTool({ runtime }),
     createLookAtTool({ runtime }),
     createGrepTool({ runtime }),
+    createDiscoverSkillsTool({ runtime }),
     createGitStatusTool({ runtime }),
     createGitDiffTool({ runtime }),
     createGitLogTool({ runtime }),

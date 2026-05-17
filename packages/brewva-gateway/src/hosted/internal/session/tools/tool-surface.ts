@@ -20,6 +20,10 @@ import {
   OPERATOR_BREWVA_TOOL_NAMES,
 } from "@brewva/brewva-tools/registry";
 import {
+  readLatestSkillSelectionReceipt,
+  skillSelectionSummaryForTrace,
+} from "../skills/skill-selection.js";
+import {
   formatCapabilitySelectionSection,
   loadRuntimeCapabilityRegistry,
   recordCapabilitySelectionReceipt,
@@ -76,11 +80,11 @@ export interface ToolSurfaceLifecycle {
 type SurfaceCounts = {
   managedActiveCount: number;
   baseActiveCount: number;
-  skillActiveCount: number;
+  skillSurfaceToolActiveCount: number;
   controlPlaneActiveCount: number;
   operatorActiveCount: number;
   externalActiveCount: number;
-  hiddenSkillCount: number;
+  hiddenSkillSurfaceToolCount: number;
   hiddenControlPlaneCount: number;
   hiddenOperatorCount: number;
 };
@@ -213,11 +217,11 @@ function computeSurfaceCounts(input: {
       MANAGED_BREWVA_TOOL_NAMES.includes(toolName),
     ).length,
     baseActiveCount: countActiveBySurface("base"),
-    skillActiveCount: countActiveBySurface("skill"),
+    skillSurfaceToolActiveCount: countActiveBySurface("skill"),
     controlPlaneActiveCount: countActiveBySurface("control_plane"),
     operatorActiveCount: countActiveBySurface("operator"),
     externalActiveCount: countActiveBySurface(undefined),
-    hiddenSkillCount: countHiddenBySurface("skill"),
+    hiddenSkillSurfaceToolCount: countHiddenBySurface("skill"),
     hiddenControlPlaneCount: countHiddenBySurface("control_plane"),
     hiddenOperatorCount: countHiddenBySurface("operator"),
   };
@@ -350,6 +354,12 @@ function resolveAndActivateToolSurface(input: {
     (toolName) => allToolNameSet.has(toolName) && !activeToolNames.includes(toolName),
   );
   const counts = computeSurfaceCounts({ allToolNames, activeToolNames });
+  const skillSelection = skillSelectionSummaryForTrace(
+    readLatestSkillSelectionReceipt({
+      runtime: input.runtime,
+      sessionId: input.sessionId,
+    }),
+  );
 
   input.runtime.recordEvent({
     sessionId: input.sessionId,
@@ -365,18 +375,19 @@ function resolveAndActivateToolSurface(input: {
       ignoredRequestedToolNames,
       operatorProfile,
       baseActiveCount: counts.baseActiveCount,
-      skillActiveCount: counts.skillActiveCount,
+      skillSurfaceToolActiveCount: counts.skillSurfaceToolActiveCount,
       controlPlaneActiveCount: counts.controlPlaneActiveCount,
       operatorActiveCount: counts.operatorActiveCount,
       externalActiveCount: counts.externalActiveCount,
-      hiddenSkillCount: counts.hiddenSkillCount,
+      hiddenSkillSurfaceToolCount: counts.hiddenSkillSurfaceToolCount,
       hiddenControlPlaneCount: counts.hiddenControlPlaneCount,
       hiddenOperatorCount: counts.hiddenOperatorCount,
       modelOperated: true,
-      removedGates: ["task_spec", "active_skill", "repair_posture"],
+      removedGates: ["task_spec", "repair_posture"],
       operatorRequested: requestedToolNames.filter((toolName) =>
         OPERATOR_BREWVA_TOOL_NAMES.includes(toolName),
       ),
+      ...skillSelection,
       selectedCapabilityNames:
         input.selectedCapabilityReceipt?.selected_capabilities.map((entry) => entry.name) ?? [],
       capabilitySelectionId: input.selectedCapabilityReceipt?.selection_id ?? null,

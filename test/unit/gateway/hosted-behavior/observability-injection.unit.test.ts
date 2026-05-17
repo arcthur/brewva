@@ -119,9 +119,15 @@ describe("Hosted behavior integration: observability injection", () => {
       .map((message) => (typeof message.content === "string" ? message.content : ""))
       .join("\n");
 
+    const workbenchContent = (result?.messages ?? [])
+      .filter((message) => message.customType === "brewva-workbench-context")
+      .map((message) => (typeof message.content === "string" ? message.content : ""))
+      .join("\n");
+
     expect(result?.systemPrompt).toContain("[Brewva Context Contract]");
-    expect(messageTypes).toEqual(["brewva-workbench-context"]);
-    expect(mergedContent.length).toBeGreaterThan(0);
+    expect(messageTypes).toContain("brewva-skill-selection");
+    expect(messageTypes).toContain("brewva-workbench-context");
+    expect(workbenchContent.length).toBeGreaterThan(0);
     expect(mergedContent.includes("brewva.memory-recall")).toBe(false);
   });
 

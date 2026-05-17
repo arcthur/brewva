@@ -1,4 +1,3 @@
-import { posix, relative, resolve } from "node:path";
 import {
   BrewvaBoxScope,
   type BrewvaBoundaryError,
@@ -19,6 +18,7 @@ import {
 } from "../../../internal/box/index.js";
 import { resolveConfiguredBoxPlane } from "../box-plane-runtime.js";
 import { startManagedBoxExec } from "../exec-process-registry/api.js";
+import { mapHostPathToGuest, type BoxRootMapping } from "./box-root-map.js";
 import type { ResolvedExecutionPolicy } from "./policy.js";
 import {
   ExecAbortedError,
@@ -96,6 +96,7 @@ export interface ExecuteBoxCommandInput {
   policy: ResolvedExecutionPolicy;
   runtime?: BrewvaBundledToolRuntime;
   workspaceRoot: string;
+  rootMappings: readonly BoxRootMapping[];
   requestedCwd?: string;
   requestedEnv?: Record<string, string>;
   requestedTimeoutSec?: number;
@@ -144,15 +145,17 @@ function buildBoxCommand(input: {
 function resolveBoxGuestCwd(input: {
   requestedCwd?: string;
   workspaceRoot: string;
-  workspaceGuestPath: string;
+  rootMappings: readonly BoxRootMapping[];
 }): string {
-  if (!input.requestedCwd) return input.workspaceGuestPath;
-  const relativeCwd = relative(resolve(input.workspaceRoot), resolve(input.requestedCwd));
-  if (relativeCwd === "") return input.workspaceGuestPath;
-  if (relativeCwd.startsWith("..") || relativeCwd.startsWith("/")) {
-    throw new BoxWorkdirOutsideWorkspaceError(input.requestedCwd);
+  const requestedCwd = input.requestedCwd ?? input.workspaceRoot;
+  const guestCwd = mapHostPathToGuest({
+    hostPath: requestedCwd,
+    mappings: input.rootMappings,
+  });
+  if (!guestCwd) {
+    throw new BoxWorkdirOutsideWorkspaceError(requestedCwd);
   }
-  return posix.join(input.workspaceGuestPath, ...relativeCwd.split(/[\\/]+/u));
+  return guestCwd;
 }
 
 function resolveBoxPlane(
@@ -162,11 +165,20 @@ function resolveBoxPlane(
   return resolveConfiguredBoxPlane(runtime, policy.box);
 }
 
-function buildBoxCapabilities(policy: ResolvedExecutionPolicy): BoxCapabilitySet {
+function buildBoxCapabilities(
+  policy: ResolvedExecutionPolicy,
+  rootMappings: readonly BoxRootMapping[],
+): BoxCapabilitySet {
   return {
     network: policy.box.network,
     gpu: false,
-    extraVolumes: [],
+    extraVolumes: rootMappings
+      .filter((mapping) => !mapping.primary)
+      .map((mapping) => ({
+        hostPath: mapping.hostPath,
+        guestPath: mapping.guestPath,
+        readonly: mapping.readonly,
+      })),
     secrets: [],
     ports: [],
   };
@@ -176,13 +188,14 @@ function buildBoxScope(input: {
   ownerSessionId: string;
   policy: ResolvedExecutionPolicy;
   workspaceRoot: string;
+  rootMappings: readonly BoxRootMapping[];
 }): BoxScope {
   return {
     kind: input.policy.box.scopeDefault,
     id: input.ownerSessionId,
     image: input.policy.box.image,
     workspaceRoot: input.workspaceRoot,
-    capabilities: buildBoxCapabilities(input.policy),
+    capabilities: buildBoxCapabilities(input.policy, input.rootMappings),
   };
 }
 
@@ -223,7 +236,7 @@ export function executeBoxCommandEffect(
           resolveBoxGuestCwd({
             requestedCwd: input.requestedCwd,
             workspaceRoot: input.workspaceRoot,
-            workspaceGuestPath: input.policy.box.workspaceGuestPath,
+            rootMappings: input.rootMappings,
           }),
         catch: (error) =>
           error instanceof BoxWorkdirOutsideWorkspaceError
@@ -245,6 +258,7 @@ export function executeBoxCommandEffect(
         ownerSessionId: input.ownerSessionId,
         policy: input.policy,
         workspaceRoot: input.workspaceRoot,
+        rootMappings: input.rootMappings,
       });
       const bootstrapStartedAt = Date.now();
       input.onBootstrapStarted?.(scope);

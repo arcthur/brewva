@@ -20,6 +20,11 @@ import {
   redactTextForAudit,
 } from "./exec/audit.js";
 import { executeBoxCommandWithAudit } from "./exec/box-dispatch.js";
+import {
+  buildBoxRootMappings,
+  rewriteBoxCommandHostPaths,
+  serializeBoxRootMappings,
+} from "./exec/box-root-map.js";
 import { buildHostEnv, executeHostCommand } from "./exec/host-lane.js";
 import {
   DENY_LIST_BEST_EFFORT_MESSAGE,
@@ -293,13 +298,58 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
           return await runHost();
         }
 
+        const boxRootMappings = buildBoxRootMappings({
+          workspaceRoot: boxWorkspaceRoot,
+          allowedRoots: targetScope.allowedRoots,
+          workspaceGuestPath: policy.box.workspaceGuestPath,
+        });
+        const boxCommandPathRewrite = rewriteBoxCommandHostPaths({
+          command,
+          mappings: boxRootMappings,
+        });
+        if (boxCommandPathRewrite.unmappedPaths.length > 0) {
+          const rootMappings = serializeBoxRootMappings(boxRootMappings);
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            EXEC_FAILED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                resolvedBackend: "box",
+                reason: "box_unmapped_host_path",
+                unmappedPaths: boxCommandPathRewrite.unmappedPaths,
+                rootMappings,
+                ...buildCommandPolicyAuditPayload(commandPolicy),
+                ...buildVirtualReadonlyAuditPayload(virtualReadonly),
+              },
+            }),
+          );
+          return textResult(
+            "Exec rejected (box_unmapped_host_path).",
+            withVerdict(
+              {
+                status: "failed",
+                reason: "box_unmapped_host_path",
+                unmappedPaths: boxCommandPathRewrite.unmappedPaths,
+                mappedRoots: rootMappings,
+                ...buildCommandPolicyAuditPayload(commandPolicy),
+              },
+              "fail",
+            ),
+          );
+        }
+
         return await executeBoxCommandWithAudit({
           ownerSessionId,
           toolCallId,
-          command,
+          command: boxCommandPathRewrite.command,
           policy,
           runtime,
           boxWorkspaceRoot,
+          boxRootMappings,
           boxRequestedCwd,
           requestedEnv,
           timeoutSec,

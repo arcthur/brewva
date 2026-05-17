@@ -31,6 +31,7 @@ import {
   BoxWorkdirOutsideWorkspaceError,
   executeBoxCommand,
 } from "./box-lane.js";
+import { serializeBoxRootMappings, type BoxRootMapping } from "./box-root-map.js";
 import { type ResolvedExecutionPolicy, shouldSnapshotBeforeBoxExec } from "./policy.js";
 import { execDisplayResult, isExecAbortedError, type RequestedEnvResolution } from "./shared.js";
 
@@ -41,6 +42,7 @@ export async function executeBoxCommandWithAudit(input: {
   policy: ResolvedExecutionPolicy;
   runtime: BrewvaBundledToolRuntime | undefined;
   boxWorkspaceRoot: string;
+  boxRootMappings: readonly BoxRootMapping[];
   boxRequestedCwd: string | undefined;
   requestedEnv: RequestedEnvResolution;
   timeoutSec: number | undefined;
@@ -57,6 +59,7 @@ export async function executeBoxCommandWithAudit(input: {
     policy,
     runtime,
     boxWorkspaceRoot,
+    boxRootMappings,
     boxRequestedCwd,
     requestedEnv,
     timeoutSec,
@@ -75,6 +78,7 @@ export async function executeBoxCommandWithAudit(input: {
       policy,
       runtime,
       workspaceRoot: boxWorkspaceRoot,
+      rootMappings: boxRootMappings,
       requestedCwd: boxRequestedCwd,
       requestedEnv: requestedEnv.env,
       requestedTimeoutSec: timeoutSec,
@@ -97,6 +101,7 @@ export async function executeBoxCommandWithAudit(input: {
               scopeKind: scope.kind,
               scopeId: scope.id,
               workspaceRoot: scope.workspaceRoot,
+              rootMappings: serializeBoxRootMappings(boxRootMappings),
               image: scope.image,
               networkMode: scope.capabilities.network.mode,
             },
@@ -116,6 +121,7 @@ export async function executeBoxCommandWithAudit(input: {
               scopeKind: scope.kind,
               scopeId: scope.id,
               workspaceRoot: scope.workspaceRoot,
+              rootMappings: serializeBoxRootMappings(boxRootMappings),
               image: scope.image,
               phase,
             },
@@ -137,6 +143,7 @@ export async function executeBoxCommandWithAudit(input: {
               scopeKind: box.scope.kind,
               scopeId: box.scope.id,
               acquisitionReason: box.acquisitionReason,
+              rootMappings: serializeBoxRootMappings(boxRootMappings),
               durationMs,
             },
           }),
@@ -156,6 +163,7 @@ export async function executeBoxCommandWithAudit(input: {
               scopeKind: scope.kind,
               scopeId: scope.id,
               workspaceRoot: scope.workspaceRoot,
+              rootMappings: serializeBoxRootMappings(boxRootMappings),
               image: scope.image,
               durationMs,
               reason: "box_bootstrap_failed",
@@ -180,6 +188,7 @@ export async function executeBoxCommandWithAudit(input: {
               scopeId: box.scope.id,
               acquisitionReason: box.acquisitionReason,
               workspaceRoot: box.scope.workspaceRoot,
+              rootMappings: serializeBoxRootMappings(boxRootMappings),
               image: box.scope.image,
             },
           }),
@@ -219,6 +228,7 @@ export async function executeBoxCommandWithAudit(input: {
               resolvedBackend: preferredBackend,
               requestedCwd: boxRequestedCwd,
               effectiveBoxCwd: effectiveCwd,
+              rootMappings: serializeBoxRootMappings(boxRootMappings),
               requestedEnvKeys: requestedEnv.requestedKeys,
               appliedEnvKeys: requestedEnv.appliedKeys,
               droppedEnvKeys: requestedEnv.droppedKeys,
@@ -281,6 +291,7 @@ export async function executeBoxCommandWithAudit(input: {
         command,
         backend: "box",
         requestedCwd: result.requestedCwd,
+        rootMappings: serializeBoxRootMappings(boxRootMappings),
         requestedEnvKeys: result.requestedEnvKeys,
         appliedEnvKeys: result.appliedEnvKeys,
         droppedEnvKeys: result.droppedEnvKeys,
@@ -317,6 +328,7 @@ export async function executeBoxCommandWithAudit(input: {
       command,
       backend: "box",
       requestedCwd: result.requestedCwd,
+      rootMappings: serializeBoxRootMappings(boxRootMappings),
       requestedEnvKeys: result.requestedEnvKeys,
       appliedEnvKeys: result.appliedEnvKeys,
       droppedEnvKeys: result.droppedEnvKeys,

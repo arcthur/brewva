@@ -26,7 +26,6 @@ import {
   parseSkillDocument,
 } from "./contract.js";
 import { parseProducerContractFile } from "./producers.js";
-import { buildSkillSelectionProfile, hasSelectionProfileSignals } from "./profiles.js";
 import { resolveBundledSystemSkillsRoot } from "./system-install.js";
 import type {
   LoadableSkillCategory,
@@ -339,10 +338,6 @@ function resolveSkillResources(
   };
 }
 
-function hasSelectionSignals(skill: SkillDocument): boolean {
-  return hasSelectionProfileSignals(buildSkillSelectionProfile(skill));
-}
-
 function failProjectGuidance(filePath: string, message: string): never {
   throw new Error(`[project_guidance] ${filePath}: ${message}`);
 }
@@ -635,7 +630,7 @@ export class SkillRegistry {
   }
 
   private isSelectable(skill: SkillDocument): boolean {
-    return hasSelectionSignals(skill);
+    return skill.category !== "internal";
   }
 
   private buildLoadReport(): SkillRegistryLoadReport {

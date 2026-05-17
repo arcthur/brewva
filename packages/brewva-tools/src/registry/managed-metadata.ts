@@ -40,17 +40,29 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "extensions.tools.onClearState",
     "extensions.tools.recordEvent",
   ]),
-  git_status: metadata("base", "workspace_read"),
-  git_diff: metadata("base", "workspace_read"),
-  git_log: metadata("base", "workspace_read"),
+  git_status: metadata("base", "workspace_read", [
+    "inspect.events.records.query",
+    "inspect.task.target.getDescriptor",
+  ]),
+  git_diff: metadata("base", "workspace_read", [
+    "inspect.events.records.query",
+    "inspect.task.target.getDescriptor",
+  ]),
+  git_log: metadata("base", "workspace_read", [
+    "inspect.events.records.query",
+    "inspect.task.target.getDescriptor",
+  ]),
   read_spans: metadata("base", "workspace_read", [
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
   look_at: metadata("base", "workspace_read", [
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
+  discover_skills: metadata("base", "runtime_observe", ["inspect.skills.catalog.list"]),
   toc_search: metadata("base", "workspace_read", [
     "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
@@ -74,6 +86,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "inspect.tools.resourceLeases.list",
   ]),
   exec: metadata("base", "local_exec_effectful", [
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.onClearState",
     "extensions.tools.recordEvent",
@@ -82,6 +95,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   lsp_diagnostics: metadata("base", "workspace_read", [
     "authority.tools.parallel.acquireAsync",
     "authority.tools.parallel.release",
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
@@ -92,10 +106,14 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   workbench_note: metadata("base", "memory_write", ["authority.workbench.note"]),
   workbench_evict: metadata("base", "memory_write", ["authority.workbench.evict"]),
   workbench_undo_evict: metadata("base", "memory_write", ["authority.workbench.undoEviction"]),
-  knowledge_capture: metadata("skill", "workspace_patch", ["inspect.task.target.getDescriptor"]),
+  knowledge_capture: metadata("skill", "workspace_patch", [
+    "inspect.events.records.query",
+    "inspect.task.target.getDescriptor",
+  ]),
   recall_search: metadata("skill", "workspace_read", [
     "inspect.events.log.getPath",
     "inspect.events.records.list",
+    "inspect.events.records.query",
     "inspect.events.log.listSessionIds",
     "inspect.events.records.subscribe",
     "inspect.skills.catalog.getProducer",
@@ -109,9 +127,18 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
-  knowledge_search: metadata("skill", "workspace_read", ["inspect.task.target.getDescriptor"]),
-  precedent_audit: metadata("skill", "workspace_read", ["inspect.task.target.getDescriptor"]),
-  precedent_sweep: metadata("skill", "workspace_read", ["inspect.task.target.getDescriptor"]),
+  knowledge_search: metadata("skill", "workspace_read", [
+    "inspect.events.records.query",
+    "inspect.task.target.getDescriptor",
+  ]),
+  precedent_audit: metadata("skill", "workspace_read", [
+    "inspect.events.records.query",
+    "inspect.task.target.getDescriptor",
+  ]),
+  precedent_sweep: metadata("skill", "workspace_read", [
+    "inspect.events.records.query",
+    "inspect.task.target.getDescriptor",
+  ]),
   browser_open: metadata("skill", "local_exec_effectful", [
     "inspect.tools.access.explain",
     "extensions.tools.recordEvent",
@@ -128,6 +155,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   browser_state_save: metadata("skill", "local_exec_effectful"),
   browser_close: metadata("skill", "local_exec_effectful"),
   toc_document: metadata("skill", "workspace_read", [
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
@@ -150,26 +178,31 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   lsp_find_references: metadata("skill", "workspace_read", [
     "authority.tools.parallel.acquireAsync",
     "authority.tools.parallel.release",
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
   lsp_goto_definition: metadata("skill", "workspace_read", [
     "authority.tools.parallel.acquireAsync",
     "authority.tools.parallel.release",
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
   ast_prepare_rename: metadata("skill", "workspace_read", [
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
   ast_rename_in_file: metadata("skill", "workspace_patch", [
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),
   lsp_symbols: metadata("skill", "workspace_read", [
     "authority.tools.parallel.acquireAsync",
     "authority.tools.parallel.release",
+    "inspect.events.records.query",
     "inspect.task.target.getDescriptor",
     "extensions.tools.recordEvent",
   ]),

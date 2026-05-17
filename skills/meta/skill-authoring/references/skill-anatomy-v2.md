@@ -199,7 +199,7 @@ cannot be reproduced with current information".
 
 ## Description Field Rules (CSO)
 
-The YAML `description` and `selection.when_to_use` fields are trigger
+The YAML `description`, `selection.when_to_use`, and `selection.triggers` fields are trigger
 conditions ONLY. Never summarize the workflow.
 
 Testing revealed that when a description summarizes workflow, the model

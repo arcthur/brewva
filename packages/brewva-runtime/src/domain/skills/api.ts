@@ -30,7 +30,10 @@ export type {
   SkillsIndexEntry,
   SkillsIndexFile,
 } from "./types.js";
-export { SKILL_REFRESH_RECORDED_EVENT_TYPE } from "./events.js";
+export {
+  SKILL_REFRESH_RECORDED_EVENT_TYPE,
+  SKILL_SELECTION_RECORDED_EVENT_TYPE,
+} from "./events.js";
 export { SKILLS_EVENT_DESCRIPTORS } from "./event-descriptors.js";
 export {
   createSkillsInspectSurface,

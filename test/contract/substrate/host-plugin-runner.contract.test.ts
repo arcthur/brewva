@@ -480,6 +480,58 @@ describe("substrate host plugin runner", () => {
     });
   });
 
+  test("collects before-agent-start message arrays from a single handler", async () => {
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        testPlugin(
+          "before-agent-start-message-array-plugin",
+          ["context_messages.write", "system_prompt.write"],
+          (api) => {
+            api.on("before_agent_start", async () => ({
+              messages: [
+                { customType: "note", content: "alpha", excludeFromContext: true },
+                { customType: "note", content: "beta" },
+              ],
+              systemPrompt: "system-array",
+            }));
+          },
+        ),
+        testPlugin("before-agent-start-message-plugin", ["context_messages.write"], (api) => {
+          api.on("before_agent_start", async () => ({
+            message: { customType: "note", content: "gamma" },
+          }));
+        }),
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+      },
+    });
+
+    const result = await runner.emitBeforeAgentStart(
+      {
+        type: "before_agent_start",
+        prompt: "ship it",
+        parts: textPrompt("ship it"),
+        systemPrompt: "base",
+      },
+      createHostContext(),
+    );
+
+    expect(result).toEqual({
+      messages: [
+        { customType: "note", content: "alpha", excludeFromContext: true },
+        { customType: "note", content: "beta" },
+        { customType: "note", content: "gamma" },
+      ],
+      systemPrompt: "system-array",
+    });
+  });
+
   test("fails closed when a manifest plugin writes system prompt without capability", async () => {
     const violations: CapabilityViolation[] = [];
     const runner = await createBrewvaHostPluginRunner({

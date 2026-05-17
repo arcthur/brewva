@@ -486,7 +486,11 @@ export async function createBrewvaHostPluginRunner(
         if (!result) {
           continue;
         }
-        if (result.message) {
+        const resultMessages = [
+          ...(result.message ? [result.message] : []),
+          ...(Array.isArray(result.messages) ? result.messages : []),
+        ];
+        for (const message of resultMessages) {
           assertHandlerCapability(
             options.actions,
             record,
@@ -494,7 +498,7 @@ export async function createBrewvaHostPluginRunner(
             "before_agent_start.message",
             "before_agent_start",
           );
-          messages.push(result.message);
+          messages.push(message);
         }
         if (result.systemPrompt !== undefined) {
           assertHandlerCapability(

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createExecTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireRecord } from "../../helpers/assertions.js";
 import {
@@ -216,6 +219,62 @@ describe("exec command policy routing", () => {
         },
       ],
     });
+  });
+
+  test("unmapped host path with suppressed stderr fails before box execution", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-policy-workspace-"));
+    const siblingRoot = mkdtempSync(join(tmpdir(), "brewva-policy-sibling-"));
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-unmapped-host-path",
+      {
+        command: `ls ${siblingRoot} 2>/dev/null | head -30`,
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-unmapped-host-path"),
+    );
+
+    expect(extractTextContent(result)).toContain("Exec rejected (box_unmapped_host_path).");
+    expect(extractTextContent(result)).not.toContain("(no output)");
+    expect(result.details).toMatchObject({
+      status: "failed",
+      reason: "box_unmapped_host_path",
+      unmappedPaths: [siblingRoot],
+    });
+    expect(eventTypes(events)).toContain("exec.failed");
+    expect(eventTypes(events)).not.toContain("box.exec.started");
+    const failed = requireDefined(
+      events.find((event) => event.type === "exec.failed"),
+      "Expected exec.failed event.",
+    );
+    expect(failed.payload).toMatchObject({
+      reason: "box_unmapped_host_path",
+      unmappedPaths: [siblingRoot],
+    });
+    const commandPolicy = requireRecord(
+      failed.payload?.commandPolicy,
+      "Expected commandPolicy payload.",
+    ) as CommandPolicyPayload & {
+      diagnostics?: Array<{ code?: string; detail?: string }>;
+    };
+    expect(commandPolicy.readonlyEligible).toBe(true);
+    expect(commandPolicy.unsupportedReasons).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "write_redirection" })]),
+    );
+    expect(commandPolicy.diagnostics).toEqual(
+      expect.arrayContaining([
+        { code: "stderr_redirection", detail: "2>/dev/null" },
+        { code: "diagnostic_suppression", detail: "stderr_to_dev_null" },
+      ]),
+    );
   });
 
   test("exec drops prototype-polluting environment keys before host execution", async () => {

@@ -89,8 +89,9 @@ implementation detail behind `explorer`.
 - Read generated blocks in reference docs for exact names.
 - Use `brewva inspect` for persisted session truth.
 - Use `docs/guide/category-and-skills.md` for skill category orientation.
-- Use `docs/reference/skill-routing.md` for skill routing deletion,
-  capability-selection priority, and handoff semantics.
+- Use `docs/reference/skill-routing.md` for advisory skill selection,
+  removed active-skill gates, capability-selection priority, and handoff
+  semantics.
 
 ## Related Docs
 

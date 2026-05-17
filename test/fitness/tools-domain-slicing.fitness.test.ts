@@ -35,6 +35,7 @@ const PUBLIC_TOOLS_SUBPATHS = [
   "execution",
   "memory",
   "delegation",
+  "skills",
   "workflow",
 ] as const;
 const RUNTIME_FREE_MANAGED_FACTORY_TOOL_NAMES = new Set([

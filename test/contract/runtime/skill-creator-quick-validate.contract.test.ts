@@ -178,6 +178,8 @@ describe("skill-authoring quick validator", () => {
           "description: Validate recursive item contracts.",
           "selection:",
           "  when_to_use: Use when the task needs the routed test skill.",
+          "  triggers:",
+          "    - routed test",
           "---",
           "# contractcraft",
           "",

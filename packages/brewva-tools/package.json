@@ -49,6 +49,12 @@
       "import": "./dist/families/memory/api.js",
       "default": "./dist/families/memory/api.js"
     },
+    "./skills": {
+      "types": "./dist/families/skills/api.d.ts",
+      "bun": "./src/families/skills/api.ts",
+      "import": "./dist/families/skills/api.js",
+      "default": "./dist/families/skills/api.js"
+    },
     "./delegation": {
       "types": "./dist/families/delegation/api.d.ts",
       "bun": "./src/families/delegation/api.ts",

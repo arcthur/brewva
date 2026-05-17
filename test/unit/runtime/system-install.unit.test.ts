@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { DEFAULT_BREWVA_CONFIG } from "../../../packages/brewva-runtime/src/config/defaults.js";
+import { SkillRegistry } from "../../../packages/brewva-runtime/src/domain/skills/registry.js";
 import {
   ensureBundledSystemSkills,
   resolveBundledSystemSkillsMarkerPath,
@@ -83,6 +85,37 @@ describe("bundled system skill installer", () => {
         "utf8",
       ),
     ).toContain("version two");
+  });
+
+  test("installs repository skills with authored selection metadata into the runtime catalog", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const globalRoot = mkdtempSync(join(tmpdir(), "brewva-system-skills-repo-home-"));
+    const result = ensureBundledSystemSkills({
+      globalRootDir: globalRoot,
+      bundledSourceDir: join(repoRoot, "skills"),
+    });
+    const systemRoot = resolveBundledSystemSkillsRoot(globalRoot);
+    const registry = new SkillRegistry({
+      workspaceRoot: repoRoot,
+      config: structuredClone(DEFAULT_BREWVA_CONFIG),
+      roots: [
+        {
+          rootDir: globalRoot,
+          skillDir: systemRoot,
+          source: "system_root",
+        },
+      ],
+    });
+
+    registry.load();
+
+    expect(result.installed).toBe(true);
+    expect(registry.get("architecture")?.card.selection?.whenToUse).toContain(
+      "architecture improvement",
+    );
+    expect(registry.get("repository-analysis")?.card.selection?.whenToUse).toContain(
+      "repository orientation",
+    );
   });
 
   test("cleans up the legacy global seed manifest before installing the system tree", () => {

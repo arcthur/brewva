@@ -3,8 +3,8 @@
 This guide is a human-readable operating map for Brewva advisory skills.
 Runtime authority lives in capability manifests, selection receipts, tool
 policy, and proposal/effect governance. Skill frontmatter helps locate context;
-it does not grant authority or create automatic cascades, aliases, or
-`suggested_chains`.
+it does not grant authority or create automatic cascades, compatibility aliases,
+or `suggested_chains`.
 
 ## Trigger Table
 

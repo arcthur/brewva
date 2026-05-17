@@ -358,6 +358,7 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   glob: workspaceRead(),
   read_spans: workspaceRead(),
   look_at: workspaceRead(),
+  discover_skills: runtimeObserve(),
   toc_document: workspaceRead(),
   toc_search: workspaceRead(),
   ast_grep_search: workspaceRead(),

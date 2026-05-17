@@ -12,6 +12,26 @@ import {
 } from "../../../helpers/extension.js";
 import { createRuntimeConfig, createRuntimeFixture } from "./fixtures/runtime.js";
 
+interface BeforeAgentStartResult {
+  message?: { content?: unknown };
+  messages?: Array<{ content?: unknown }>;
+}
+
+function collectMessageContent(results: BeforeAgentStartResult[]): string {
+  const chunks: string[] = [];
+  for (const result of results) {
+    if (typeof result.message?.content === "string") {
+      chunks.push(result.message.content);
+    }
+    for (const message of result.messages ?? []) {
+      if (typeof message.content === "string") {
+        chunks.push(message.content);
+      }
+    }
+  }
+  return chunks.join("\n");
+}
+
 describe("context composition parity", () => {
   test("keeps gate-clearing semantics aligned between direct context registration and hosted behavior", async () => {
     const config = createRuntimeConfig((draft) => {
@@ -48,7 +68,7 @@ describe("context composition parity", () => {
         getContextUsage: () => ({ tokens: 150, contextWindow: 1000, percent: 0.15 }),
       },
     );
-    const fullAfter = await invokeHandlerAsync<{ message?: { content?: string } }>(
+    const fullAfter = await invokeHandlerAsync<BeforeAgentStartResult>(
       full.handlers,
       "before_agent_start",
       { type: "before_agent_start", prompt: "after compact", systemPrompt: "base" },
@@ -84,7 +104,7 @@ describe("context composition parity", () => {
         getContextUsage: () => ({ tokens: 150, contextWindow: 1000, percent: 0.15 }),
       },
     );
-    const hostedResults = await invokeHandlersAsync<{ message?: { content?: string } }>(
+    const hostedResults = await invokeHandlersAsync<BeforeAgentStartResult>(
       hosted.handlers,
       "before_agent_start",
       { type: "before_agent_start", prompt: "after compact", systemPrompt: "base" },
@@ -93,12 +113,8 @@ describe("context composition parity", () => {
         getContextUsage: () => ({ tokens: 150, contextWindow: 1000, percent: 0.15 }),
       },
     );
-    const hostedAfter = hostedResults.find(
-      (value): value is { message: { content: string } } =>
-        typeof value === "object" &&
-        value !== null &&
-        typeof (value as { message?: { content?: unknown } }).message?.content === "string",
-    );
+    const fullContent = collectMessageContent([fullAfter]);
+    const hostedContent = collectMessageContent(hostedResults);
 
     expect(fullRuntime.inspect.context.compaction.getGateStatus("parity-clear").required).toBe(
       false,
@@ -106,8 +122,8 @@ describe("context composition parity", () => {
     expect(hostedRuntime.inspect.context.compaction.getGateStatus("parity-clear").required).toBe(
       false,
     );
-    expect(fullAfter.message?.content?.includes("[ContextCompactionGate]")).toBe(false);
-    expect(hostedAfter?.message.content.includes("[ContextCompactionGate]")).toBe(false);
-    expect(hostedAfter?.message.content.includes("[OperationalDiagnostics]")).toBe(false);
+    expect(fullContent.includes("[ContextCompactionGate]")).toBe(false);
+    expect(hostedContent.includes("[ContextCompactionGate]")).toBe(false);
+    expect(hostedContent.includes("[OperationalDiagnostics]")).toBe(false);
   });
 });

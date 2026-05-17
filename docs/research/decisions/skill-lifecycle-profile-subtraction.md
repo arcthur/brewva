@@ -12,24 +12,19 @@
   - `docs/reference/tools.md`
   - `docs/architecture/cognitive-product-architecture.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/skills/profiles.ts`
-  - `packages/brewva-gateway/src/hosted/internal/session/skill-first.ts`
-  - `packages/brewva-tools/src/families/workflow/skill-load.ts`
-  - `test/contract/runtime/skill-lifecycle-profiles.contract.test.ts`
-  - `test/contract/extensions/skill-routing-eval.contract.test.ts`
-  - `test/contract/runtime/skill-document-parsing.contract.test.ts`
-  - `test/contract/runtime/skills-discovery.contract.test.ts`
-  - `test/contract/tools/tools-skill-complete.contract.test.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.ts`
+  - `packages/brewva-tools/src/families/skills/discover-skills.ts`
+  - `test/unit/gateway/hosted-behavior/skill-selection.unit.test.ts`
 
 ## Decision Summary
 
 - Discovery answers who exists. It supports catalog and inspect surfaces, not hit-rate scoring.
-- Selection answers whether a skill should be chosen. It has separate `forScorer` and `forModel` views over the same approved source fields.
-- Activation answers what the model should see after explicit `skill_load`. It carries effect posture, budget summary, required outputs, required and missing inputs, bounded consumed outputs, relevant normalization issues, and effective instructions.
-- Handoff answers whether a shortlisted candidate is `blocked`, `available`, or `ready` now. It can require inputs or allow an actionable shortlisted candidate to proceed, but it cannot score cold-start selection.
-- The default hit-rate rule is code-owned: no field affects hit rate unless it belongs to the selection projection.
+- The former `profiles.ts`, `skill-first`, `skill-load`, and lifecycle-profile tests have since been removed.
+- Hosted turns now render the available SkillCard catalog and leave semantic matching to the model.
+- Optional deep search lives in `discover_skills`, backed by shared `@brewva/brewva-search` ranking.
 
 ## Superseded by
 
 - `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
 - `docs/research/decisions/capability-selection-and-authority-isolation.md`
+- `docs/research/decisions/advisory-skill-selection-and-cross-root-box-execution.md`

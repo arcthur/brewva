@@ -1,4 +1,6 @@
 import { resolve } from "node:path";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { TURN_INPUT_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import {
@@ -45,12 +47,14 @@ export function createRuntimeForExecTests(input?: {
   boxPlane?: BoxPlane;
   cwd?: string;
   targetRoots?: string[];
+  turnPromptText?: string;
   boxDetach?: boolean;
 }) {
   const mode = input?.mode ?? "standard";
   const events: RecordedExecTestEvent[] = [];
   const clearStateListeners: Array<(sessionId: string) => void> = [];
   const cwd = resolve(input?.cwd ?? process.cwd());
+  const turnPromptText = input?.turnPromptText;
   const targetRoots =
     input?.targetRoots && input.targetRoots.length > 0
       ? input.targetRoots.map((root) => resolve(root))
@@ -111,6 +115,25 @@ export function createRuntimeForExecTests(input?: {
   const runtimeFixture = createRuntimeFixture({
     config,
     inspect: {
+      events:
+        turnPromptText === undefined
+          ? undefined
+          : {
+              records: {
+                query: (sessionId, query?: { type?: string }) =>
+                  query?.type === TURN_INPUT_RECORDED_EVENT_TYPE
+                    ? [
+                        {
+                          id: "evt-turn-input-test",
+                          sessionId: asBrewvaSessionId(sessionId),
+                          type: TURN_INPUT_RECORDED_EVENT_TYPE,
+                          timestamp: 0,
+                          payload: { promptText: turnPromptText },
+                        },
+                      ]
+                    : [],
+              },
+            },
       task: {
         target: {
           getDescriptor: () => ({

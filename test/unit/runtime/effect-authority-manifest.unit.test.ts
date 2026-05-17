@@ -139,6 +139,7 @@ describe("effect authority manifest", () => {
           effects: [],
           filesystemIntent: "read",
           unsupportedReasons: [],
+          diagnostics: [],
           networkTargets: [],
         },
         virtualReadonly: {
@@ -170,6 +171,7 @@ describe("effect authority manifest", () => {
           effects: [],
           filesystemIntent: "read",
           unsupportedReasons: [],
+          diagnostics: [],
           networkTargets: [],
         },
         virtualReadonly: {

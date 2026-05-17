@@ -4,6 +4,7 @@ import type {
   BrewvaRuntimeInstance,
   BrewvaRuntimeOptions,
 } from "@brewva/brewva-runtime";
+import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
 import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import type { InternalHostPlugin, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { defineInternalHostPlugin } from "@brewva/brewva-substrate/host-api";
@@ -28,6 +29,7 @@ import {
   type TurnLifecyclePort,
 } from "../thread-loop/lifecycle/turn-lifecycle-port.js";
 import { toHostedRuntimePort, toToolRuntimePort } from "./runtime-ports.js";
+import { createSkillSelectionLifecycle } from "./skills/skill-selection.js";
 import {
   createHostedToolExecutionCoordinator,
   type HostedToolExecutionCoordinator,
@@ -149,6 +151,22 @@ export {
   type ToolSurfaceRuntime,
 } from "./tools/tool-surface.js";
 export {
+  buildSkillCatalogContextForPrompt,
+  createSkillSelectionLifecycle,
+  describeAvailableSkillForDisplay,
+  explicitSkillMentionNamesFromReceipt,
+  formatSkillSelectionSection,
+  readLatestSkillSelectionReceipt,
+  skillSelectionSummaryForTrace,
+  type AvailableSkillPromptContext,
+  type ExplicitSkillMention,
+  type SkillSelectionLifecycle,
+  type SkillSelectionReceipt,
+  type SkillSelectionReceiptWriter,
+  type SkillSelectionResult,
+  type SkillSelectionRuntime,
+} from "./skills/skill-selection.js";
+export {
   distillToolOutput,
   estimateTokens,
   type ToolOutputDistillation,
@@ -250,6 +268,19 @@ function installHostedBehavior(
   const qualityGate = createQualityGateLifecycle(runtime, {
     toolDefinitionsByName,
   });
+  const skillSelection = createSkillSelectionLifecycle(
+    {
+      inspect: runtime.inspect,
+    },
+    {
+      record: (input) =>
+        runtime.extensions.hosted.events.record({
+          sessionId: input.sessionId,
+          type: SKILL_SELECTION_RECORDED_EVENT_TYPE,
+          payload: input.receipt,
+        }),
+    },
+  );
   const toolSurface = createToolSurfaceLifecycle(hostApi, toolSurfaceRuntime, {
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
   });
@@ -267,10 +298,15 @@ function installHostedBehavior(
   registerTurnLifecyclePorts(hostApi, [
     localHookManager.lifecycle,
     {
+      beforeAgentStart: skillSelection.beforeAgentStart,
+    },
+    {
       turnStart: contextTransform.turnStart,
-      beforeAgentStart: toolSurface.beforeAgentStart,
       sessionCompact: contextTransform.sessionCompact,
       sessionShutdown: contextTransform.sessionShutdown,
+    },
+    {
+      beforeAgentStart: toolSurface.beforeAgentStart,
     },
     {
       input: qualityGate.input,

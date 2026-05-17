@@ -1867,14 +1867,26 @@ describe("managed agent session compaction", () => {
       ],
     });
     const replayModel = fauxProvider.getModel();
-    const observedContexts: Array<Array<{ role?: unknown; content?: unknown }>> = [];
+    const observedContexts: Array<
+      Array<{
+        role?: unknown;
+        content?: unknown;
+        customType?: unknown;
+        excludeFromContext?: unknown;
+      }>
+    > = [];
     const captureContextPlugin = testHostPlugin(
       "capture-replay-context",
       ["context_messages.write"],
       (api) => {
         api.on("context", (event) => {
           observedContexts.push(
-            structuredClone(event.messages) as Array<{ role?: unknown; content?: unknown }>,
+            structuredClone(event.messages) as Array<{
+              role?: unknown;
+              content?: unknown;
+              customType?: unknown;
+              excludeFromContext?: unknown;
+            }>,
           );
           return event;
         });
@@ -1959,7 +1971,7 @@ describe("managed agent session compaction", () => {
       });
 
       try {
-        await session.prompt(textPrompt("Resume from the restored context."), {
+        await session.prompt(textPrompt("Use $plan while resuming from the restored context."), {
           expandPromptTemplates: false,
         });
 
@@ -1970,6 +1982,7 @@ describe("managed agent session compaction", () => {
           "custom",
           "branchSummary",
           "user",
+          "custom",
           "custom",
         ]);
         expect(observedContexts[0]?.[0]).toEqual(
@@ -1999,12 +2012,22 @@ describe("managed agent session compaction", () => {
         expect(observedContexts[0]?.[4]).toEqual(
           expect.objectContaining({
             role: "user",
-            content: [{ type: "text", text: "Resume from the restored context." }],
+            content: [
+              { type: "text", text: "Use $plan while resuming from the restored context." },
+            ],
           }),
         );
         expect(observedContexts[0]?.[5]).toEqual(
           expect.objectContaining({
             role: "custom",
+            customType: "brewva-skill-selection",
+            excludeFromContext: true,
+          }),
+        );
+        expect(observedContexts[0]?.[6]).toEqual(
+          expect.objectContaining({
+            role: "custom",
+            customType: "brewva-workbench-context",
           }),
         );
       } finally {
@@ -2928,7 +2951,13 @@ describe("managed agent session compaction", () => {
       } as BrewvaSessionMessageEntry["message"]);
 
       const observedContexts: Array<
-        Array<{ role?: unknown; summary?: unknown; content?: unknown }>
+        Array<{
+          role?: unknown;
+          summary?: unknown;
+          content?: unknown;
+          customType?: unknown;
+          excludeFromContext?: unknown;
+        }>
       > = [];
       const captureContextPlugin = testHostPlugin(
         "capture-compaction-context",
@@ -2940,6 +2969,8 @@ describe("managed agent session compaction", () => {
                 role?: unknown;
                 summary?: unknown;
                 content?: unknown;
+                customType?: unknown;
+                excludeFromContext?: unknown;
               }>,
             );
             return event;
@@ -3017,7 +3048,7 @@ describe("managed agent session compaction", () => {
           });
         });
 
-        await session.prompt(textPrompt("Continue from the compacted state."), {
+        await session.prompt(textPrompt("Use $plan while continuing from the compacted state."), {
           expandPromptTemplates: false,
         });
 
@@ -3033,7 +3064,21 @@ describe("managed agent session compaction", () => {
           "assistant",
           "user",
           "custom",
+          "custom",
         ]);
+        expect(observedContexts[0]?.[4]).toEqual(
+          expect.objectContaining({
+            role: "custom",
+            customType: "brewva-skill-selection",
+            excludeFromContext: true,
+          }),
+        );
+        expect(observedContexts[0]?.[5]).toEqual(
+          expect.objectContaining({
+            role: "custom",
+            customType: "brewva-workbench-context",
+          }),
+        );
       } finally {
         session.dispose();
       }
@@ -3440,6 +3485,128 @@ describe("managed agent session compaction", () => {
       expect(observedToolNames[0]).not.toContain("read");
       expect(observedToolNames[0]).not.toContain("edit");
       expect(observedToolNames[0]).not.toContain("write");
+    } finally {
+      fauxProvider.unregister();
+    }
+  });
+
+  test("persists skill catalog trace message while applying skill catalog context to the provider turn", async () => {
+    const workspace = createTestWorkspace("managed-agent-session-skill-catalog-trace");
+    writeRoutableSkill(workspace);
+    const runtime = createHostedTestRuntime({ cwd: workspace });
+    const sessionStore = new HostedRuntimeTapeSessionStore(
+      runtime,
+      "managed-agent-session-skill-catalog-trace-session",
+    );
+    const fauxProvider = registerFauxProvider({
+      api: "managed-session-skill-catalog-trace-faux",
+      provider: "managed-session-skill-catalog-trace",
+      models: [
+        {
+          id: "managed-session-skill-catalog-trace-model",
+          name: "Managed Session Skill Catalog Trace Model",
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 128000,
+          maxTokens: 4096,
+        },
+      ],
+    });
+    const model = fauxProvider.getModel();
+    const observedMessages: unknown[][] = [];
+    const observedSystemPrompts: string[] = [];
+
+    try {
+      sessionStore.appendModelChange(model.provider, model.id);
+      sessionStore.appendThinkingLevelChange("off");
+      const modelCatalog = createInMemoryModelCatalog();
+      modelCatalog.registerProvider(model.provider, {
+        baseUrl: model.baseUrl,
+        apiKey: "test-key",
+        models: [
+          {
+            id: model.id,
+            name: model.name,
+            api: model.api,
+            reasoning: model.reasoning,
+            input: model.input,
+            cost: model.cost,
+            contextWindow: model.contextWindow,
+            maxTokens: model.maxTokens,
+          },
+        ],
+      });
+
+      fauxProvider.setResponses([
+        (context) => {
+          observedMessages.push([...context.messages]);
+          observedSystemPrompts.push(context.systemPrompt ?? "");
+          return {
+            role: "assistant",
+            content: [{ type: "text", text: "Skill catalog trace observed." }],
+            api: model.api,
+            provider: model.provider,
+            model: model.id,
+            usage: createUsage(),
+            stopReason: "stop",
+            timestamp: Date.now(),
+          };
+        },
+      ]);
+
+      const session = await createBrewvaManagedAgentSession({
+        cwd: workspace,
+        agentDir: join(workspace, ".brewva-agent"),
+        sessionStore,
+        settings: createSettingsStub(),
+        modelCatalog,
+        resourceLoader: await createResourceLoader(workspace),
+        customTools: [],
+        extensions: [createHostedBehaviorHostAdapter({ runtime, registerTools: true })],
+        initialModel: model,
+        initialThinkingLevel: "off",
+      });
+
+      try {
+        await session.prompt(textPrompt("Use runtime-tool-probe to investigate runtime behavior."));
+        await session.waitForIdle();
+      } finally {
+        session.dispose();
+      }
+
+      expect(observedSystemPrompts[0]).toContain("# Available Brewva Skills");
+      expect(observedSystemPrompts[0]).toContain("runtime-tool-probe");
+      expect(JSON.stringify(observedMessages[0] ?? [])).not.toContain("Available Brewva Skills:");
+
+      const messageEnds = runtime.inspect.events.records.query(sessionStore.getSessionId(), {
+        type: "message_end",
+      });
+      const traceSkillMessage = messageEnds.find((event) => {
+        const message = (event.payload as { message?: unknown } | undefined)?.message;
+        return (
+          typeof message === "object" &&
+          message !== null &&
+          (message as { role?: unknown }).role === "custom" &&
+          (message as { customType?: unknown }).customType === "brewva-skill-selection"
+        );
+      });
+      const traceMessage = (
+        traceSkillMessage?.payload as { message?: Record<string, unknown> } | undefined
+      )?.message;
+      expect(traceMessage).toEqual(
+        expect.objectContaining({
+          role: "custom",
+          customType: "brewva-skill-selection",
+          content: expect.stringContaining("Explicit Brewva Skill Mentions: none"),
+          display: false,
+          excludeFromContext: true,
+          details: expect.objectContaining({
+            explicitSkillMentionNames: [],
+            mode: "available_catalog_prompt_context",
+          }),
+        }),
+      );
     } finally {
       fauxProvider.unregister();
     }
