@@ -480,16 +480,12 @@ describe("opentui solid shell runtime: interaction events", () => {
       runtime.ui.setEditorText("/model beta");
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "enter",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "composer.submit" },
         });
         await runtime.handleInput({
-          key: "enter",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "overlay.primary" },
         });
       });
 
@@ -524,10 +520,8 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
     runtime.ui.setEditorText("/in");
     await runtime.handleInput({
-      key: "down",
-      ctrl: false,
-      meta: false,
-      shift: false,
+      type: "keymap.effect",
+      effect: { type: "completion.move", delta: 1 },
     });
 
     const testSetup = await openTuiSolidTestRender(
@@ -571,10 +565,8 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
     runtime.ui.setEditorText("/help");
     await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
+      type: "keymap.effect",
+      effect: { type: "composer.submit" },
     });
 
     const testSetup = await openTuiSolidTestRender(
@@ -763,7 +755,10 @@ describe("opentui solid shell runtime: interaction events", () => {
 
     await runtime.start();
     await invokePaletteCommand(runtime, "agent.connect");
-    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+    await runtime.handleInput({
+      type: "keymap.effect",
+      effect: { type: "overlay.primary" },
+    });
     await Bun.sleep(0);
 
     const testSetup = await openTuiSolidTestRender(
@@ -1117,10 +1112,8 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "pagedown",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "overlay.scrollPage", direction: 1 },
         });
       });
       await testSetup.renderOnce();
@@ -1180,10 +1173,8 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "enter",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "overlay.primary" },
         });
       });
       await testSetup.renderOnce();
@@ -1196,10 +1187,8 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "escape",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "overlay.closeActive", cancelled: true },
         });
       });
       await testSetup.renderOnce();
@@ -1238,10 +1227,9 @@ describe("opentui solid shell runtime: interaction events", () => {
     try {
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "n",
-          ctrl: true,
-          meta: false,
-          shift: false,
+          type: "keymap.command",
+          commandId: "operator.inbox",
+          source: "keybinding",
         });
       });
       await testSetup.renderOnce();
@@ -1314,10 +1302,8 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "home",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "transcript.navigate", kind: "top" },
         });
       });
       await testSetup.renderOnce();
@@ -1329,10 +1315,8 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "end",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "transcript.navigate", kind: "bottom" },
         });
       });
       await testSetup.renderOnce();
@@ -1379,10 +1363,8 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "home",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "transcript.navigate", kind: "top" },
         });
       });
       await testSetup.renderOnce();
@@ -1393,10 +1375,8 @@ describe("opentui solid shell runtime: interaction events", () => {
       await openTuiSolidAct(async () => {
         for (let index = 0; index < 5; index += 1) {
           await runtime.handleInput({
-            key: "pagedown",
-            ctrl: false,
-            meta: false,
-            shift: false,
+            type: "keymap.effect",
+            effect: { type: "transcript.navigate", kind: "pageDown" },
           });
         }
       });
@@ -1455,10 +1435,9 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "b",
-          ctrl: true,
-          meta: false,
-          shift: false,
+          type: "keymap.command",
+          commandId: "session.queue",
+          source: "keybinding",
         });
       });
       await testSetup.renderOnce();
@@ -1489,10 +1468,8 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "escape",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "overlay.closeActive", cancelled: true },
         });
       });
       await testSetup.renderOnce();

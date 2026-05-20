@@ -21,6 +21,7 @@ import type {
 } from "@brewva/brewva-substrate/session";
 import { DEFAULT_TUI_THEME } from "../../../packages/brewva-cli/src/internal/tui/index.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
+import type { ShellEffect } from "../../../packages/brewva-cli/src/shell/domain/effects.js";
 import type {
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
@@ -58,6 +59,25 @@ function latestUserTextFromProviderContext(context: ProviderContext): string {
       .join("");
   }
   return "";
+}
+
+async function keymapEffect(runtime: CliShellRuntime, effect: ShellEffect): Promise<boolean> {
+  return await runtime.handleInput({
+    type: "keymap.effect",
+    effect,
+  });
+}
+
+async function keymapCommand(runtime: CliShellRuntime, commandId: string): Promise<boolean> {
+  return await runtime.handleInput({
+    type: "keymap.command",
+    commandId,
+    source: "keybinding",
+  });
+}
+
+async function submitComposer(runtime: CliShellRuntime): Promise<boolean> {
+  return await keymapEffect(runtime, { type: "composer.submit" });
 }
 
 function createFakeBundle(
@@ -474,12 +494,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/theme list");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
       level: "info",
@@ -487,22 +502,12 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/theme paper");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(runtime.getViewState().theme.name).toBe("paper");
 
     runtime.ui.setEditorText("/theme missing");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
       level: "warning",
@@ -526,7 +531,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/lineage");
-    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+    await submitComposer(runtime);
 
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "lineage",
@@ -591,7 +596,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/lineage");
-    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+    await submitComposer(runtime);
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "lineage",
       selectedIndex: 1,
@@ -604,8 +609,8 @@ describe("shell runtime: session lifecycle", () => {
       )?.nodes.find((node) => node.lineageNodeId === "lineage:main")?.leafEntryId,
     ).toBe(mainAnswerEntryId);
 
-    await runtime.handleInput({ key: "up", ctrl: false, meta: false, shift: false });
-    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+    await keymapEffect(runtime, { type: "overlay.moveSelection", delta: -1 });
+    await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(store.getLineageNodeId()).toBe("lineage:main");
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
@@ -631,12 +636,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/help");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "helpHub",
@@ -664,12 +664,7 @@ describe("shell runtime: session lifecycle", () => {
       createSession: async () => fixture.bundle,
     });
 
-    await runtime.handleInput({
-      key: "tab",
-      ctrl: false,
-      meta: false,
-      shift: true,
-    });
+    await keymapCommand(runtime, "agent.preset.next");
 
     expect(fixture.getModelPresetState().activeName).toBe("Claude Lead");
     expect(runtime.getViewState().status.entries.preset).toBe("Claude Lead");
@@ -703,12 +698,7 @@ describe("shell runtime: session lifecycle", () => {
       createSession: async () => fixture.bundle,
     });
 
-    await runtime.handleInput({
-      key: "tab",
-      ctrl: false,
-      meta: false,
-      shift: true,
-    });
+    await keymapCommand(runtime, "agent.preset.next");
 
     expect(fixture.getModelPresetState()).toMatchObject({
       activeName: "Default",
@@ -718,12 +708,7 @@ describe("shell runtime: session lifecycle", () => {
 
     fixture.setStreaming(false);
     runtime.ui.setEditorText("next turn");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(prompts).toEqual(["next turn"]);
     expect(fixture.getModelPresetState()).toMatchObject({
@@ -762,12 +747,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/model ");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "modelPicker",
@@ -785,12 +765,7 @@ describe("shell runtime: session lifecycle", () => {
       { provider: "anthropic", id: "claude-opus-4-6" },
     ]);
 
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(fixture.getCurrentModel()).toMatchObject({
       provider: "anthropic",
@@ -836,57 +811,32 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/model ");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "modelPicker",
       selectedIndex: 0,
     });
 
-    await runtime.handleInput({
-      key: "n",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.moveSelection", delta: 1 });
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "modelPicker",
       selectedIndex: 1,
     });
 
-    await runtime.handleInput({
-      key: "p",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.moveSelection", delta: -1 });
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "modelPicker",
       selectedIndex: 0,
     });
 
-    await runtime.handleInput({
-      key: "arrowdown",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.moveSelection", delta: 1 });
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "modelPicker",
       selectedIndex: 1,
     });
 
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(fixture.getCurrentModel()).toMatchObject({
       provider: "openai",
@@ -947,12 +897,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/model gpt");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     const payload = runtime.getViewState().overlay.active?.payload;
     expect(payload).toMatchObject({
@@ -988,12 +933,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/model gemini");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     const payload = runtime.getViewState().overlay.active?.payload;
     if (payload?.kind !== "modelPicker") {
@@ -1084,18 +1024,8 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/model codex");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
+    await keymapEffect(runtime, { type: "overlay.primary" });
     await Bun.sleep(0);
 
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
@@ -1137,12 +1067,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/model gmni");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     const payload = runtime.getViewState().overlay.active?.payload;
     if (payload?.kind !== "modelPicker") {
@@ -1180,12 +1105,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     runtime.ui.setEditorText("/model ");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
     await runtime.handleInput({
       key: "character",
       text: "codex",
@@ -1268,12 +1188,7 @@ describe("shell runtime: session lifecycle", () => {
       },
     });
 
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(runtime.getSessionBundle().session.sessionManager.getSessionId()).toBe("session-2");
     expect(runtime.ui.getEditorText()).toBe("");
@@ -1299,12 +1214,7 @@ describe("shell runtime: session lifecycle", () => {
       },
     });
 
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(runtime.getSessionBundle().session.sessionManager.getSessionId()).toBe("session-1");
     expect(runtime.ui.getEditorText()).toBe("draft one");
@@ -1365,12 +1275,7 @@ describe("shell runtime: session lifecycle", () => {
       draftStateBySessionId: {},
     });
 
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(runtime.getSessionBundle().session.sessionManager.getSessionId()).toBe("session-2");
     expect(runtime.getViewState().queue).toEqual(secondQueuedPrompts);
@@ -1404,12 +1309,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     await runtime.start();
-    await runtime.handleInput({
-      key: "g",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    await keymapCommand(runtime, "session.list");
     await runtime.handleInput({
       key: "character",
       text: "runtime",
@@ -1448,12 +1348,7 @@ describe("shell runtime: session lifecycle", () => {
 
     await runtime.start();
     runtime.ui.setEditorText("draft");
-    await runtime.handleInput({
-      key: "b",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    await keymapCommand(runtime, "session.queue");
 
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "queue",
@@ -1498,12 +1393,7 @@ describe("shell runtime: session lifecycle", () => {
     });
 
     await runtime.start();
-    await runtime.handleInput({
-      key: "b",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    await keymapCommand(runtime, "session.queue");
 
     fixture.emitSessionEvent({
       type: "queue.changed",
@@ -1544,12 +1434,7 @@ describe("shell runtime: session lifecycle", () => {
 
     await runtime.start();
     runtime.ui.setEditorText("draft before first turn");
-    await runtime.handleInput({
-      key: "g",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    await keymapCommand(runtime, "session.list");
 
     const payload = runtime.getViewState().overlay.active?.payload;
     expect(payload).toMatchObject({

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "brewva BrewvaTuiConfigFile",
+  "description": "JSON Schema for Brewva interactive TUI config files.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "theme": {
+      "type": "string"
+    },
+    "keymap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "leader": {
+          "type": "string"
+        },
+        "leaderTimeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "showThinking": {
+          "type": "boolean"
+        },
+        "toolDetails": {
+          "type": "boolean"
+        },
+        "diff": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "style": {
+              "enum": ["auto", "stacked"]
+            },
+            "wrapMode": {
+              "enum": ["word", "none"]
+            }
+          }
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "largePasteThreshold": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minLines": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minCharacters": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "scroll": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "acceleration": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "enum": ["linear", "exponential"]
+            },
+            "speed": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

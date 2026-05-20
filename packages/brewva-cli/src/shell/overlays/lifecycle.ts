@@ -190,6 +190,8 @@ export interface ShellOverlayLifecycleHandlerContext {
     }
   >;
   getCommandProvider(): ShellCommandProvider;
+  getShortcutLabel(id: string): string | undefined;
+  getShortcutOverlayLines(): readonly string[];
   transcriptProjector: TranscriptProjectorDelegate;
   buildSessionStatusActions(): ShellAction[];
   commit(actions: readonly ShellAction[], options?: ShellOverlayCommitOptions): void;
@@ -611,12 +613,31 @@ export class ShellOverlayLifecycleHandler {
       buildCommandPalettePayload({
         commandProvider: this.context.getCommandProvider(),
         query,
+        shortcutLabel: (id) => this.context.getShortcutLabel(id),
       }),
     );
   }
 
   openHelpHub(): void {
-    this.openOverlay(buildHelpHubPayload(this.context.getCommandProvider()));
+    this.openOverlay(
+      buildHelpHubPayload(this.context.getCommandProvider(), {
+        shortcutLabel: (id) => this.context.getShortcutLabel(id),
+      }),
+    );
+  }
+
+  openShortcutOverlay(): void {
+    const primary = this.context.getShortcutLabel("overlay.primary");
+    const close = this.context.getShortcutLabel("overlay.close");
+    this.openOverlay({
+      kind: "shortcutOverlay",
+      title: "Shortcuts",
+      lines: [...this.context.getShortcutOverlayLines()],
+      footer:
+        [primary ? `${primary} close` : undefined, close ? `${close} close` : undefined]
+          .filter(Boolean)
+          .join(" · ") || undefined,
+    });
   }
 
   openSessionsOverlay(): void {

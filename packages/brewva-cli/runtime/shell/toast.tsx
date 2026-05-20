@@ -16,6 +16,7 @@ function isToastVisible(notification: CliShellNotification, nowMs: number): bool
 export function ToastStrip(input: {
   notifications: readonly CliShellNotification[];
   theme: SessionPalette;
+  inboxShortcutLabel?: string;
 }) {
   const dimensions = useTerminalDimensions();
   const [nowMs, setNowMs] = createSignal(Date.now());
@@ -39,9 +40,14 @@ export function ToastStrip(input: {
     return notification && isToastVisible(notification, nowMs()) ? notification : undefined;
   });
   const toastWidth = createMemo(() => resolveToastMaxWidth(dimensions().width));
-  const message = createMemo(() =>
-    latest() ? `${renderNotificationSummary(latest()!)} · Ctrl+N inbox` : "",
-  );
+  const message = createMemo(() => {
+    const notification = latest();
+    if (!notification) {
+      return "";
+    }
+    const summary = renderNotificationSummary(notification);
+    return input.inboxShortcutLabel ? `${summary} · ${input.inboxShortcutLabel} inbox` : summary;
+  });
   return (
     <Show when={latest()}>
       <box

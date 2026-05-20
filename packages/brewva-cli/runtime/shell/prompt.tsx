@@ -8,6 +8,7 @@ import {
 } from "../../src/shell/domain/prompt-parts.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import type { SubagentActivityItem } from "../../src/shell/domain/subagent-activity.js";
+import type { BrewvaTuiConfig } from "../../src/shell/domain/tui.js";
 import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
 import type { OpenTuiTextareaHandle } from "../internal-opentui-runtime.js";
 import {
@@ -187,6 +188,9 @@ export function PromptPanel(input: {
   lineageLabel: string;
   subagentActivity: readonly SubagentActivityItem[];
   subagentActivityTotal: number;
+  tuiConfig: BrewvaTuiConfig;
+  shortcutLabel(id: string): string | undefined;
+  syncComposerFromEditor(): Promise<void>;
   setAnchor(node: BoxRenderable): void;
   setTextarea(node: OpenTuiTextareaHandle): void;
 }) {
@@ -253,13 +257,26 @@ export function PromptPanel(input: {
   const showFooterStatus = createMemo(
     () => (!input.composer.completion || input.overlayActive) && Boolean(footerStatus()),
   );
+  const shortcut = (id: string) => input.shortcutLabel(id);
+  const shortcutHint = (id: string, suffix: string): string | undefined => {
+    const label = shortcut(id);
+    return label ? `${label} ${suffix}` : undefined;
+  };
   const completionHints = createMemo(() =>
     input.composer.completion
-      ? input.composer.completion.trigger === "/"
-        ? "enter run · tab complete · esc close"
-        : selectedCompletion()?.kind === "directory"
-          ? "tab expand · enter accept · esc close"
-          : "tab insert · enter accept · esc close"
+      ? [
+          input.composer.completion.trigger === "/"
+            ? shortcutHint("completion.submit", "run")
+            : selectedCompletion()?.kind === "directory"
+              ? shortcutHint("completion.accept", "expand")
+              : shortcutHint("completion.accept", "insert"),
+          input.composer.completion.trigger === "/"
+            ? shortcutHint("completion.accept", "complete")
+            : shortcutHint("completion.submit", "accept"),
+          shortcutHint("completion.dismiss", "close"),
+        ]
+          .filter(Boolean)
+          .join(" · ") || undefined
       : undefined,
   );
   const promptAccent = createMemo(() =>
@@ -271,13 +288,14 @@ export function PromptPanel(input: {
   );
   const promptHints = createMemo(() =>
     [
-      "enter send",
-      "ctrl+k commands",
+      shortcutHint("composer.submit", "send"),
+      shortcutHint("app.commandPalette", "commands"),
       "/help",
       "/ slash",
-      "ctrl+b queue",
-      "ctrl+o questions",
-      "ctrl+s stash",
+      shortcutHint("session.queue", "queue"),
+      shortcutHint("operator.questions", "questions"),
+      shortcutHint("composer.stash", "stash"),
+      shortcutHint("app.shortcutOverlay", "shortcuts"),
       completionHints(),
     ]
       .filter(Boolean)
@@ -354,12 +372,13 @@ export function PromptPanel(input: {
             onKeyDown={handleTextareaKeyDown}
             initialValue={input.composer.text}
             onSubmit={() => {
-              void input.runtime.handleInput({
-                key: "enter",
-                ctrl: false,
-                meta: false,
-                shift: false,
-              });
+              void (async () => {
+                await input.syncComposerFromEditor();
+                await input.runtime.handleInput({
+                  type: "keymap.effect",
+                  effect: { type: "composer.submit" },
+                });
+              })();
             }}
             onPaste={(event: PasteEvent) => {
               const node = textarea;
@@ -374,7 +393,8 @@ export function PromptPanel(input: {
                 return;
               }
               const lineCount = (trimmed.match(/\n/gu)?.length ?? 0) + 1;
-              if (lineCount < 3 && trimmed.length <= 150) {
+              const threshold = input.tuiConfig.input.largePasteThreshold;
+              if (lineCount < threshold.minLines && trimmed.length <= threshold.minCharacters) {
                 return;
               }
               event.preventDefault();
@@ -430,7 +450,9 @@ export function PromptPanel(input: {
               </For>
               <Show when={input.queue.length > 3}>
                 <text fg={input.theme.textDim} wrapMode="none">
-                  {`+${input.queue.length - 3} more · Ctrl+B to manage`}
+                  {`+${input.queue.length - 3} more${
+                    shortcut("session.queue") ? ` · ${shortcut("session.queue")} to manage` : ""
+                  }`}
                 </text>
               </Show>
             </box>

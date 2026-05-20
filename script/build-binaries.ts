@@ -79,12 +79,19 @@ const BREWVA_CONFIG_SCHEMA_PATH = join(
   "schema",
   "brewva.schema.json",
 );
+const BREWVA_TUI_CONFIG_SCHEMA_PATH = join(
+  process.cwd(),
+  "packages",
+  "brewva-cli",
+  "schema",
+  "brewva-tui.schema.json",
+);
 const BREWVA_LICENSE_PATH = join(process.cwd(), "LICENSE");
 const BREWVA_BINARY_TARGETS_ENV = "BREWVA_BINARY_TARGETS";
 const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 const BREWVA_OPENTUI_SUPPORTED_ENV = "BREWVA_OPENTUI_SUPPORTED";
 const BREWVA_OPENTUI_ENV_PREFIX = "BREWVA_OPENTUI_*";
-const OPEN_TUI_VERSION = "0.2.6";
+const OPEN_TUI_VERSION = "0.2.14";
 const DUCKDB_NODE_API_VERSION = "1.5.2-r.1";
 const BOXLITE_VERSION = "0.9.3";
 
@@ -356,6 +363,7 @@ This directory contains the packaged runtime assets that ship with \`${packageNa
 
 - \`brewva\` platform binary
 - \`brewva.schema.json\` runtime config schema
+- \`brewva-tui.schema.json\` interactive TUI config schema
 - \`jieba_rs_wasm_bg.wasm\` mandatory Chinese search tokenizer asset
 - \`theme/\` interactive UI assets
 - \`export-html/\` HTML export assets
@@ -403,6 +411,7 @@ async function copyRuntimeAssets(outDir: string, platform: PlatformTarget): Prom
   copyFile(PHOTON_WASM_PATH, join(outDir, "photon_rs_bg.wasm"));
   copyRequiredFile(JIEBA_WASM_PATH, join(outDir, "jieba_rs_wasm_bg.wasm"), "jieba-wasm asset");
   copyFile(BREWVA_CONFIG_SCHEMA_PATH, join(outDir, "brewva.schema.json"));
+  copyFile(BREWVA_TUI_CONFIG_SCHEMA_PATH, join(outDir, "brewva-tui.schema.json"));
   copyFile(BREWVA_LICENSE_PATH, join(outDir, "LICENSE"));
   copyDirectory(BREWVA_THEME_ASSETS_DIR, join(outDir, "theme"));
   copyDirectory(BREWVA_EXPORT_HTML_ASSETS_DIR, join(outDir, "export-html"));

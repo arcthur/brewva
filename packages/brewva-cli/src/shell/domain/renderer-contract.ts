@@ -1,5 +1,6 @@
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { ShellInput } from "./input.js";
+import type { BrewvaResolvedKeymapBindings, BrewvaTuiConfig } from "./tui.js";
 import type { ShellViewModel } from "./view-model.js";
 
 export interface ShellRendererNotifier {
@@ -10,6 +11,9 @@ export interface ShellRendererController {
   readonly ui: ShellRendererNotifier;
   getViewState(): ShellViewModel;
   getToolDefinitions(): ReadonlyMap<string, BrewvaToolDefinition>;
+  getTuiConfig(): BrewvaTuiConfig;
+  getKeymapBindings(): BrewvaResolvedKeymapBindings;
+  getShortcutLabel(id: string): string | undefined;
   getSessionIdentity(): {
     sessionId: string;
     assistantLabel: string;

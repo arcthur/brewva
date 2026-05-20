@@ -8,7 +8,7 @@ describe("tui entrypoint surface", () => {
     expect(typeof tui.FrameScheduler).toBe("function");
     expect(typeof tui.FocusManager).toBe("function");
     expect(typeof tui.OverlayManager).toBe("function");
-    expect(typeof tui.createKeybindingResolver).toBe("function");
+    expect("createKeybindingResolver" in tui).toBe(false);
     expect(typeof tui.createHeadlessTerminalHarness).toBe("function");
     expect("createHostedSession" in tui).toBe(false);
     expect("createBrewvaSession" in tui).toBe(false);

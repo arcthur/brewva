@@ -18,6 +18,7 @@ distribution/brewva-*/bin/CHANGELOG.md
 distribution/brewva-*/bin/photon_rs_bg.wasm
 distribution/brewva-*/bin/jieba_rs_wasm_bg.wasm
 distribution/brewva-*/bin/brewva.schema.json
+distribution/brewva-*/bin/brewva-tui.schema.json
 distribution/brewva-*/bin/docs
 distribution/brewva-*/bin/examples
 distribution/brewva-*/bin/theme

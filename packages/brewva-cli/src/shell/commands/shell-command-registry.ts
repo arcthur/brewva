@@ -11,7 +11,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Search and run available Brewva TUI actions.",
     category: "System",
     discovery: { help: false },
-    keybinding: { key: "k", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+k"],
     suggested: true,
   },
   {
@@ -20,6 +20,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Open Brewva TUI help and discovery shortcuts.",
     category: "System",
     slash: { name: "help" },
+    shortcuts: ["leader h"],
     suggested: true,
   },
   {
@@ -28,21 +29,21 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Exit the interactive shell.",
     category: "System",
     slash: { name: "quit", aliases: ["exit"], argumentMode: "none" },
-    keybinding: { key: "q", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+q"],
   },
   {
     id: "app.abortOrExit",
     title: "Abort or exit",
     description: "Abort the current turn; exits when no turn is streaming.",
     category: "System",
-    keybinding: { key: "c", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+c"],
   },
   {
     id: "composer.editor",
     title: "Open external editor",
     description: "Edit the current prompt in VISUAL or EDITOR.",
     category: "Composer",
-    keybinding: { key: "e", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+e"],
   },
   {
     id: "session.new",
@@ -57,7 +58,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Browse and switch replay sessions.",
     category: "Session",
     slash: { name: "sessions" },
-    keybinding: { key: "g", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+g"],
     suggested: true,
   },
   {
@@ -66,7 +67,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Replay-first inspect report for the current session.",
     category: "Session",
     slash: { name: "inspect" },
-    keybinding: { key: "i", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+i"],
   },
   {
     id: "session.context",
@@ -118,7 +119,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Inspect and delete queued prompts for the current session.",
     category: "Session",
     discovery: { help: false },
-    keybinding: { key: "b", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+b"],
     suggested: true,
   },
   {
@@ -155,7 +156,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     title: "Next model preset",
     description: "Cycle the model preset for the current session.",
     category: "Agent",
-    keybinding: { key: "tab", ctrl: false, meta: false, shift: true },
+    shortcuts: ["shift+tab"],
     discovery: { help: false },
   },
   {
@@ -213,7 +214,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Review queued approval requests.",
     category: "Operator",
     slash: { name: "approvals" },
-    keybinding: { key: "a", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+a"],
   },
   {
     id: "operator.authority",
@@ -229,7 +230,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Open pending operator questions and shell notifications.",
     category: "Operator",
     slash: { name: "inbox" },
-    keybinding: { key: "n", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+n"],
     suggested: true,
   },
   {
@@ -238,7 +239,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Open pending operator questions only.",
     category: "Operator",
     discovery: { help: false },
-    keybinding: { key: "o", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+o"],
   },
   {
     id: "operator.tasks",
@@ -246,7 +247,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Inspect background task runs.",
     category: "Operator",
     slash: { name: "tasks" },
-    keybinding: { key: "t", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+t"],
   },
   {
     id: "operator.notifications",
@@ -314,7 +315,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Browse stashed prompt drafts.",
     category: "Composer",
     discovery: { help: false },
-    keybinding: { key: "s", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+s"],
   },
   {
     id: "composer.unstash",
@@ -322,7 +323,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Restore the latest stashed prompt.",
     category: "Composer",
     discovery: { help: false },
-    keybinding: { key: "y", ctrl: true, meta: false, shift: false },
+    shortcuts: ["ctrl+y"],
   },
 ];
 

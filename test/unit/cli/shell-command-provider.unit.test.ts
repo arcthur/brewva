@@ -4,7 +4,7 @@ import { ShellCommandProvider } from "../../../packages/brewva-cli/src/shell/com
 import { registerShellCommands } from "../../../packages/brewva-cli/src/shell/commands/shell-command-registry.js";
 
 describe("shell command provider", () => {
-  test("derives palette, help, slash, and keybound command surfaces independently", () => {
+  test("derives palette, help, slash, and shortcut command surfaces independently", () => {
     const provider = new ShellCommandProvider();
     provider.register({
       id: "agent.model",
@@ -12,7 +12,7 @@ describe("shell command provider", () => {
       description: "Select a model.",
       category: "Agent",
       slash: { name: "model", argumentMode: "optional" },
-      keybinding: { key: "m", ctrl: true, meta: false, shift: false },
+      shortcuts: ["ctrl+m"],
       suggested: true,
     });
     provider.register({
@@ -27,7 +27,7 @@ describe("shell command provider", () => {
       title: "Disabled command",
       category: "System",
       slash: { name: "disabled" },
-      keybinding: { key: "d", ctrl: true, meta: false, shift: false },
+      shortcuts: ["ctrl+d"],
       enabled: false,
     });
 
@@ -57,11 +57,11 @@ describe("shell command provider", () => {
         slashName: "model",
       },
     ]);
-    expect(provider.keyboundCommands()).toMatchObject([
+    expect(provider.keymapCommandBindings()).toMatchObject([
       {
-        id: "command.agent.model",
-        action: "command:agent.model",
-        context: "global",
+        id: "agent.model",
+        shortcuts: ["ctrl+m"],
+        layer: "global",
       },
     ]);
   });
@@ -157,14 +157,14 @@ describe("shell command provider", () => {
     ]);
   });
 
-  test("fails fast on duplicate ids, slash names, and keybindings", () => {
+  test("fails fast on duplicate ids, slash names, and shortcuts", () => {
     const provider = new ShellCommandProvider();
     provider.register({
       id: "one",
       title: "One",
       category: "System",
       slash: { name: "one" },
-      keybinding: { key: "k", ctrl: true, meta: false, shift: false },
+      shortcuts: ["ctrl+k"],
     });
 
     expect(() =>
@@ -185,11 +185,11 @@ describe("shell command provider", () => {
     expect(() =>
       provider.register({
         id: "three",
-        title: "Duplicate keybinding",
+        title: "Duplicate shortcut",
         category: "System",
-        keybinding: { key: "k", ctrl: true, meta: false, shift: false },
+        shortcuts: ["ctrl+k"],
       }),
-    ).toThrow("Duplicate shell command keybinding");
+    ).toThrow("Duplicate shell command shortcut");
   });
 
   test("supports hidden callable slash commands and explicit reserved names", () => {
@@ -320,18 +320,17 @@ describe("shell command provider", () => {
     expect(provider.searchPaletteCommands("connect").map((command) => command.id)).toContain(
       "agent.connect",
     );
-    expect(provider.keyboundCommands()).toEqual(
+    expect(provider.keymapCommandBindings()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "command.agent.preset.next",
-          action: "command:agent.preset.next",
-          trigger: { key: "tab", ctrl: false, meta: false, shift: true },
+          id: "agent.preset.next",
+          shortcuts: ["shift+tab"],
         }),
       ]),
     );
-    expect(
-      provider.keyboundCommands().some((command) => command.action === "command:app.exit"),
-    ).toBe(true);
+    expect(provider.keymapCommandBindings().some((command) => command.id === "app.exit")).toBe(
+      true,
+    );
   });
 
   test("built-in registry exposes the promoted interactive command surface", () => {

@@ -1,3 +1,4 @@
+import type { BrewvaTuiScrollAcceleration } from "../../src/shell/domain/tui.js";
 import { SyntaxStyle, type ScrollAcceleration } from "../opentui/index.js";
 
 export const SPLIT_BORDER_CHARS = {
@@ -24,7 +25,32 @@ export class FixedScrollAcceleration implements ScrollAcceleration {
   reset(): void {}
 }
 
-export const DEFAULT_SCROLL_ACCELERATION = new FixedScrollAcceleration(3);
+class ExponentialScrollAcceleration implements ScrollAcceleration {
+  #current: number;
+
+  constructor(private readonly speed: number) {
+    this.#current = speed;
+  }
+
+  tick(): number {
+    const value = this.#current;
+    this.#current = Math.min(this.speed * 8, this.#current * 1.35);
+    return value;
+  }
+
+  reset(): void {
+    this.#current = this.speed;
+  }
+}
+
+export function createScrollAcceleration(
+  config: BrewvaTuiScrollAcceleration | undefined,
+): ScrollAcceleration {
+  const speed = Math.max(1, config?.speed ?? 3);
+  return config?.type === "exponential"
+    ? new ExponentialScrollAcceleration(speed)
+    : new FixedScrollAcceleration(speed);
+}
 
 export interface SessionPalette {
   readonly background: string;

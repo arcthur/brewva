@@ -267,12 +267,21 @@ export interface CliCommandPaletteOverlayPayload {
   query: string;
   selectedIndex: number;
   items: CliPickerItem[];
+  footer?: string;
 }
 
 export interface CliHelpHubOverlayPayload {
   kind: "helpHub";
   title: string;
   lines: string[];
+  footer?: string;
+}
+
+export interface CliShortcutOverlayPayload {
+  kind: "shortcutOverlay";
+  title: string;
+  lines: string[];
+  footer?: string;
 }
 
 export interface OverlayPayloadMap {
@@ -296,6 +305,7 @@ export interface OverlayPayloadMap {
   oauthWait: CliOAuthWaitOverlayPayload;
   commandPalette: CliCommandPaletteOverlayPayload;
   helpHub: CliHelpHubOverlayPayload;
+  shortcutOverlay: CliShortcutOverlayPayload;
   context: CliContextOverlayPayload;
   authority: CliAuthorityOverlayPayload;
   skills: CliSkillsOverlayPayload;

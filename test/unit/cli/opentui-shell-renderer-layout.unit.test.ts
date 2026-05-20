@@ -906,11 +906,11 @@ describe("opentui solid shell runtime: layout contract", () => {
       await testSetup.renderOnce();
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
-      expect(frame).toContain("enter");
+      expect(frame).toContain("Enter");
       expect(frame).toContain("send");
-      expect(frame).toContain("ctrl+k");
+      expect(frame).toContain("Ctrl+K");
       expect(frame).toContain("/help");
-      expect(frame).toContain("ctrl+o");
+      expect(frame).toContain("Ctrl+O");
       expect(frame).toContain("approvals=0");
       expect(frame).toContain("questions=0");
     } finally {
@@ -1042,10 +1042,8 @@ describe("opentui solid shell runtime: layout contract", () => {
       expect(frame).toContain("1 + export const value = 2;");
 
       await runtime.handleInput({
-        key: "f",
-        ctrl: true,
-        meta: false,
-        shift: false,
+        type: "keymap.effect",
+        effect: { type: "overlay.toggleFullscreen" },
       });
       await testSetup.renderOnce();
       frame = testSetup.captureCharFrame();
@@ -1320,18 +1318,14 @@ describe("opentui solid shell runtime: layout contract", () => {
       await testSetup.renderOnce();
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "enter",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "overlay.primary" },
         });
       });
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
-          key: "pagedown",
-          ctrl: false,
-          meta: false,
-          shift: false,
+          type: "keymap.effect",
+          effect: { type: "overlay.scrollPage", direction: 1 },
         });
       });
       await testSetup.renderOnce();

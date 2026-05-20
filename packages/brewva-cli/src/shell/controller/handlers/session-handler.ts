@@ -67,6 +67,7 @@ export interface ShellSessionHandlerContext {
   commit(input: ShellCommitInput, options?: ShellCommitOptions): void;
   runShellEffects(effects: readonly ShellEffect[]): Promise<void>;
   handleShellCommand(prompt: string): Promise<boolean>;
+  getShortcutLabel(id: string): string | undefined;
   buildSessionStatusActions(): CliShellAction[];
   dismissPendingInteractiveQuestionRequests(input?: { sessionId?: string }): void;
   mountSession(bundle: CliShellSessionBundle): void;
@@ -87,6 +88,7 @@ export class ShellSessionHandler {
   >();
   #interactiveTurnSequence = 0;
   #preserveComposerAfterShellCommand = false;
+  #submittingComposer = false;
 
   constructor(private readonly context: ShellSessionHandlerContext) {}
 
@@ -152,6 +154,18 @@ export class ShellSessionHandler {
   }
 
   async submitComposer(): Promise<void> {
+    if (this.#submittingComposer) {
+      return;
+    }
+    this.#submittingComposer = true;
+    try {
+      await this.submitComposerNow();
+    } finally {
+      this.#submittingComposer = false;
+    }
+  }
+
+  private async submitComposerNow(): Promise<void> {
     const promptText = this.context.getState().composer.text;
     const promptParts = cloneCliShellPromptParts(this.context.getState().composer.parts);
     const prompt = promptText.trim();
@@ -194,10 +208,14 @@ export class ShellSessionHandler {
     const unknownSlashCommand = parseLeadingSlashCommand(prompt);
     if (unknownSlashCommand) {
       const commandLabel = unknownSlashCommand.name ? `: /${unknownSlashCommand.name}` : "";
+      const commandPaletteShortcut = this.context.getShortcutLabel("app.commandPalette");
+      const commandPaletteHint = commandPaletteShortcut
+        ? ` or press ${commandPaletteShortcut} for commands`
+        : "";
       this.context
         .getUi()
         .notify(
-          `Unknown slash command${commandLabel}. Type /help or press Ctrl+K for commands.`,
+          `Unknown slash command${commandLabel}. Type /help${commandPaletteHint}.`,
           "warning",
         );
       return;

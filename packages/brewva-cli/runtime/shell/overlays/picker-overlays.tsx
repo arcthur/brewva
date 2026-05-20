@@ -8,6 +8,7 @@ import type {
   CliHelpHubOverlayPayload,
   CliModelPickerOverlayPayload,
   CliProviderPickerOverlayPayload,
+  CliShortcutOverlayPayload,
   CliThinkingPickerOverlayPayload,
 } from "../../../src/shell/domain/overlays/payloads.js";
 import type { OpenTuiScrollBoxHandle } from "../../internal-opentui-runtime.js";
@@ -22,7 +23,8 @@ import {
   resolveHighDensityPickerRows,
   resolveModelPickerTopInset,
 } from "../overlay-style.js";
-import { DEFAULT_SCROLL_ACCELERATION, type SessionPalette } from "../palette.js";
+import type { SessionPalette } from "../palette.js";
+import { useShellRenderContext } from "../render-context.js";
 import { TextLineBlock } from "../transcript.js";
 import { visibleLineWindow } from "../utils.js";
 import { DialogSelectFrame, OverlaySurface, truncateDialogText } from "./frame.js";
@@ -233,6 +235,7 @@ function PickerList(input: {
   variant: PickerRowVariant;
   resetKey?: string;
 }) {
+  const shellContext = useShellRenderContext();
   let scrollbox: OpenTuiScrollBoxHandle | undefined;
   let previousResetKey: string | undefined;
   const rows = createMemo(() => buildPickerRenderRows(input.items));
@@ -273,7 +276,7 @@ function PickerList(input: {
       width="100%"
       height={viewportRows()}
       scrollbarOptions={{ visible: false }}
-      scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+      scrollAcceleration={shellContext.scrollAcceleration()}
     >
       <PickerRows
         rows={rows()}
@@ -468,7 +471,7 @@ export function CommandPaletteOverlay(input: {
       }
       footer={
         <box paddingLeft={DIALOG_HORIZONTAL_PADDING} paddingRight={DIALOG_HORIZONTAL_PADDING}>
-          <text fg={input.theme.textMuted}>Enter run · Esc close · type to search</text>
+          <text fg={input.theme.textMuted}>{input.payload.footer}</text>
         </box>
       }
     >
@@ -496,8 +499,8 @@ export function CommandPaletteOverlay(input: {
   );
 }
 
-export function HelpHubOverlay(input: {
-  payload: CliHelpHubOverlayPayload;
+function TextLinesOverlay(input: {
+  payload: CliHelpHubOverlayPayload | CliShortcutOverlayPayload;
   theme: SessionPalette;
   width: number;
   height: number;
@@ -512,9 +515,12 @@ export function HelpHubOverlay(input: {
       width={input.width}
       height={input.height}
       theme={input.theme}
-      footer="Enter/Esc close"
+      footer={input.payload.footer}
     >
       <TextLineBlock lines={lineWindow().visibleLines} color={input.theme.text} />
     </OverlaySurface>
   );
 }
+
+export const HelpHubOverlay = TextLinesOverlay;
+export const ShortcutOverlay = TextLinesOverlay;

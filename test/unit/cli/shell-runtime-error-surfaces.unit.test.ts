@@ -25,6 +25,7 @@ import type {
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
+import type { ShellEffect } from "../../../packages/brewva-cli/src/shell/domain/effects.js";
 import type {
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
@@ -56,6 +57,21 @@ async function invokePaletteCommand(runtime: CliShellRuntime, commandId: string)
     commandId,
     args: "",
     source: "palette",
+  });
+}
+
+async function keymapEffect(runtime: CliShellRuntime, effect: ShellEffect): Promise<boolean> {
+  return await runtime.handleInput({
+    type: "keymap.effect",
+    effect,
+  });
+}
+
+async function keymapCommand(runtime: CliShellRuntime, commandId: string): Promise<boolean> {
+  return await runtime.handleInput({
+    type: "keymap.command",
+    commandId,
+    source: "keybinding",
   });
 }
 
@@ -392,12 +408,7 @@ describe("shell runtime: error surfaces and overlays", () => {
       createSession: async () => fixture.bundle,
     });
 
-    await runtime.handleInput({
-      key: "tab",
-      ctrl: false,
-      meta: false,
-      shift: true,
-    });
+    await keymapCommand(runtime, "agent.preset.next");
 
     expect(fixture.getModelPresetState().activeName).toBe("Default");
     expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
@@ -464,7 +475,7 @@ describe("shell runtime: error surfaces and overlays", () => {
     });
 
     await invokePaletteCommand(runtime, "agent.connect");
-    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+    await keymapEffect(runtime, { type: "overlay.primary" });
     await Bun.sleep(0);
 
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
@@ -472,8 +483,8 @@ describe("shell runtime: error surfaces and overlays", () => {
       title: "Connect Kimi",
     });
 
-    await runtime.handleInput({ key: "down", ctrl: false, meta: false, shift: false });
-    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+    await keymapEffect(runtime, { type: "overlay.moveSelection", delta: 1 });
+    await keymapEffect(runtime, { type: "overlay.primary" });
     await Bun.sleep(0);
 
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
@@ -491,7 +502,7 @@ describe("shell runtime: error surfaces and overlays", () => {
       meta: false,
       shift: false,
     });
-    await runtime.handleInput({ key: "enter", ctrl: false, meta: false, shift: false });
+    await keymapEffect(runtime, { type: "overlay.primary" });
     await Bun.sleep(0);
 
     expect(fixture.providerConnects).toEqual([
@@ -628,12 +639,7 @@ describe("shell runtime: error surfaces and overlays", () => {
       scrollOffsets: [0, 0],
     });
 
-    const consumedEnter = await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    const consumedEnter = await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(consumedEnter).toBe(true);
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
@@ -643,11 +649,9 @@ describe("shell runtime: error surfaces and overlays", () => {
       scrollOffset: 0,
     });
 
-    const consumedEscape = await runtime.handleInput({
-      key: "escape",
-      ctrl: false,
-      meta: false,
-      shift: false,
+    const consumedEscape = await keymapEffect(runtime, {
+      type: "overlay.closeActive",
+      cancelled: true,
     });
 
     expect(consumedEscape).toBe(true);
@@ -753,12 +757,7 @@ describe("shell runtime: error surfaces and overlays", () => {
       },
     });
 
-    const consumedEnter = await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    const consumedEnter = await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(consumedEnter).toBe(true);
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
@@ -801,12 +800,7 @@ describe("shell runtime: error surfaces and overlays", () => {
     runtime.ui.notify("older notification", "info");
     runtime.ui.notify("latest notification", "warning");
 
-    const consumedOpen = await runtime.handleInput({
-      key: "n",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    const consumedOpen = await keymapCommand(runtime, "operator.inbox");
 
     expect(consumedOpen).toBe(true);
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
@@ -814,36 +808,21 @@ describe("shell runtime: error surfaces and overlays", () => {
       selectedIndex: 0,
     });
 
-    const consumedDown = await runtime.handleInput({
-      key: "down",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    const consumedDown = await keymapEffect(runtime, { type: "overlay.moveSelection", delta: 1 });
     expect(consumedDown).toBe(true);
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "inbox",
       selectedIndex: 1,
     });
 
-    const consumedUp = await runtime.handleInput({
-      key: "up",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    const consumedUp = await keymapEffect(runtime, { type: "overlay.moveSelection", delta: -1 });
     expect(consumedUp).toBe(true);
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
       kind: "inbox",
       selectedIndex: 0,
     });
 
-    const consumedEnter = await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    const consumedEnter = await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(consumedEnter).toBe(true);
     expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
@@ -851,12 +830,7 @@ describe("shell runtime: error surfaces and overlays", () => {
       title: "Notification [warning]",
     });
 
-    await runtime.handleInput({
-      key: "escape",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await keymapEffect(runtime, { type: "overlay.closeActive", cancelled: true });
 
     const consumedDismiss = await runtime.handleInput({
       key: "character",
@@ -906,12 +880,7 @@ describe("shell runtime: error surfaces and overlays", () => {
       scrollOffset: 0,
     });
 
-    const consumed = await runtime.handleInput({
-      key: "e",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    const consumed = await keymapEffect(runtime, { type: "pager.externalActive" });
 
     expect(consumed).toBe(true);
     expect(pagerCalls).toEqual([
@@ -962,12 +931,7 @@ describe("shell runtime: error surfaces and overlays", () => {
       scrollOffsets: [0, 0],
     });
 
-    const consumed = await runtime.handleInput({
-      key: "e",
-      ctrl: true,
-      meta: false,
-      shift: false,
-    });
+    const consumed = await keymapEffect(runtime, { type: "pager.externalActive" });
 
     expect(consumed).toBe(true);
     expect(pagerCalls).toEqual([

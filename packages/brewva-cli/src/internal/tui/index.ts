@@ -10,12 +10,6 @@ export {
   type KeybindingTrigger,
   type NormalizedInputEvent,
 } from "./input.js";
-export {
-  createKeybindingResolver,
-  type KeybindingContext,
-  type KeybindingDefinition,
-  type KeybindingResolver,
-} from "./keybindings.js";
 export { FocusManager } from "./focus.js";
 export { OverlayManager, type OverlayEntry, type OverlayPriority } from "./overlay.js";
 export { createViewportState, scrollViewport, type ViewportState } from "./viewport.js";

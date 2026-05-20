@@ -24,7 +24,7 @@ import type { OpenTuiScrollBoxHandle } from "../internal-opentui-runtime.js";
 import { useTerminalDimensions } from "../opentui/index.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
 import { DIALOG_Z_INDEX } from "./overlay-style.js";
-import { DEFAULT_SCROLL_ACCELERATION, SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
+import { SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
 import { useShellRenderContext } from "./render-context.js";
 import {
   asRecord,
@@ -425,7 +425,7 @@ export function InlineApprovalPrompt(input: {
                     }}
                     height={previewHeight()}
                     backgroundColor={input.theme.backgroundPanel}
-                    scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+                    scrollAcceleration={shellContext.scrollAcceleration()}
                     verticalScrollbarOptions={{
                       trackOptions: {
                         backgroundColor: input.theme.backgroundElement,
@@ -525,6 +525,7 @@ export function InlineQuestionPrompt(input: {
   payload: CliQuestionOverlayPayload;
   theme: SessionPalette;
 }) {
+  const shellContext = useShellRenderContext();
   const requests = createMemo(() => questionRequestsFromOverlay(input.payload));
   const request = createMemo(() => {
     const items = requests();
@@ -744,7 +745,7 @@ export function InlineQuestionPrompt(input: {
                     }}
                     height={questionOptionsViewportRows()}
                     backgroundColor={input.theme.backgroundPanel}
-                    scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+                    scrollAcceleration={shellContext.scrollAcceleration()}
                     verticalScrollbarOptions={{
                       trackOptions: {
                         backgroundColor: input.theme.backgroundElement,

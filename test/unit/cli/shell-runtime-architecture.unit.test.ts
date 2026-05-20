@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { KeybindingResolver } from "../../../packages/brewva-cli/src/internal/tui/index.js";
 import type { ShellAction } from "../../../packages/brewva-cli/src/shell/domain/actions.js";
 import { routeShellInput } from "../../../packages/brewva-cli/src/shell/domain/input-router.js";
-import {
-  decodeShellKeybindingEffect,
-  normalizeShellInputTrigger,
-  shellBuiltInKeybindings,
-} from "../../../packages/brewva-cli/src/shell/domain/keymap.js";
+import { normalizeShellInputTrigger } from "../../../packages/brewva-cli/src/shell/domain/keymap.js";
 import {
   updateShellIntent,
   type ShellUpdateContext,
@@ -16,6 +11,7 @@ import {
   reduceShellRuntimeAction,
 } from "../../../packages/brewva-cli/src/shell/domain/runtime-state.js";
 import type { CliShellViewState } from "../../../packages/brewva-cli/src/shell/domain/state.js";
+import { BREWVA_BUILT_IN_KEYMAP_BINDINGS } from "../../../packages/brewva-cli/src/shell/keymap/keymap-bindings.js";
 
 function containsFunction(value: unknown, seen = new Set<object>()): boolean {
   if (typeof value === "function") {
@@ -29,24 +25,6 @@ function containsFunction(value: unknown, seen = new Set<object>()): boolean {
   }
   seen.add(value);
   return Object.values(value).some((entry) => containsFunction(entry, seen));
-}
-
-function createStaticKeybindingResolver(action?: string): KeybindingResolver {
-  return {
-    resolve() {
-      return action
-        ? {
-            id: "test.binding",
-            context: "global",
-            trigger: { key: "enter", ctrl: false, meta: false, shift: false },
-            action,
-          }
-        : undefined;
-    },
-    list() {
-      return [];
-    },
-  };
 }
 
 function createUpdateContext(input: Partial<ShellUpdateContext> = {}): ShellUpdateContext {
@@ -66,18 +44,14 @@ function createUpdateContext(input: Partial<ShellUpdateContext> = {}): ShellUpda
 }
 
 describe("shell runtime architecture", () => {
-  test("built-in keybindings decode directly to typed shell effects", () => {
-    expect(shellBuiltInKeybindings).toContainEqual(
+  test("built-in keymap bindings carry typed shell effects", () => {
+    expect(BREWVA_BUILT_IN_KEYMAP_BINDINGS).toContainEqual(
       expect.objectContaining({
         id: "composer.submit",
-        action: "shell:composer.submit",
+        shortcuts: ["return"],
+        effect: { type: "composer.submit" },
       }),
     );
-
-    expect(decodeShellKeybindingEffect("shell:composer.submit")).toEqual({
-      type: "composer.submit",
-    });
-    expect(decodeShellKeybindingEffect("submit")).toEqual(undefined);
   });
 
   test("modified key names normalize into keybinding triggers", () => {
@@ -132,7 +106,7 @@ describe("shell runtime architecture", () => {
     expect(viewState.composer.text).toBe("");
   });
 
-  test("input router emits semantic intents without executing shell work", () => {
+  test("input router leaves ordinary shortcuts to the renderer keymap", () => {
     expect(
       routeShellInput({
         input: { key: "enter", ctrl: false, meta: false, shift: false },
@@ -142,15 +116,8 @@ describe("shell runtime architecture", () => {
           canNavigatePromptHistoryPrevious: false,
           canNavigatePromptHistoryNext: false,
         },
-        keybindings: createStaticKeybindingResolver("shell:composer.submit"),
       }),
-    ).toEqual({
-      handled: true,
-      intent: {
-        type: "effect.dispatch",
-        effect: { type: "composer.submit" },
-      },
-    });
+    ).toEqual({ handled: false });
   });
 
   test("shell update dispatches routed keybinding effects without a second mapping layer", () => {
@@ -265,7 +232,6 @@ describe("shell runtime architecture", () => {
           canNavigatePromptHistoryPrevious: true,
           canNavigatePromptHistoryNext: false,
         },
-        keybindings: createStaticKeybindingResolver(),
       }),
     ).toEqual({
       handled: true,
@@ -284,7 +250,6 @@ describe("shell runtime architecture", () => {
           canNavigatePromptHistoryPrevious: true,
           canNavigatePromptHistoryNext: false,
         },
-        keybindings: createStaticKeybindingResolver(),
       }),
     ).toEqual({
       handled: true,

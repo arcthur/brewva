@@ -1,3 +1,4 @@
+import type { ShellEffect } from "./effects.js";
 import type { CliShellPromptPart } from "./prompt.js";
 
 export interface ShellKeyboardInput {
@@ -21,6 +22,15 @@ export type ShellInput =
       readonly text: string;
       readonly cursor: number;
       readonly parts?: readonly CliShellPromptPart[];
+    }
+  | {
+      readonly type: "keymap.command";
+      readonly commandId: string;
+      readonly source: "keybinding";
+    }
+  | {
+      readonly type: "keymap.effect";
+      readonly effect: ShellEffect;
     }
   | {
       readonly type: "completion.select";

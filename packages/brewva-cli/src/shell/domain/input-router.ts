@@ -1,7 +1,6 @@
-import type { KeybindingContext, KeybindingResolver } from "../../internal/tui/index.js";
 import type { CliShellInput } from "./input.js";
 import type { ShellIntent } from "./intent.js";
-import { decodeShellKeybindingEffect, normalizeShellInputTrigger } from "./keymap.js";
+import { normalizeShellInputTrigger } from "./keymap.js";
 import type { CliShellOverlayPayload } from "./overlays/payloads.js";
 
 export interface ShellInputRouterState {
@@ -20,22 +19,6 @@ export type ShellInputRoute =
       handled: true;
       intent?: ShellIntent;
     };
-
-export function shellInputContexts(state: {
-  activeOverlayKind?: CliShellOverlayPayload["kind"];
-  hasCompletion: boolean;
-}): KeybindingContext[] {
-  if (state.activeOverlayKind === "pager") {
-    return ["pager", "overlay", "global"];
-  }
-  if (state.activeOverlayKind) {
-    return ["overlay", "global"];
-  }
-  if (state.hasCompletion) {
-    return ["completion", "composer", "global"];
-  }
-  return ["composer", "global"];
-}
 
 function isPickerOverlay(kind: CliShellOverlayPayload["kind"] | undefined): boolean {
   return kind === "commandPalette" || kind === "modelPicker" || kind === "providerPicker";
@@ -57,7 +40,6 @@ function questionOverlayAcceptsShellInput(shellInput: CliShellInput): boolean {
 export function routeShellInput(input: {
   input: CliShellInput;
   state: ShellInputRouterState;
-  keybindings: KeybindingResolver;
 }): ShellInputRoute {
   const overlayKind = input.state.activeOverlayKind;
   if (overlayKind === "input") {
@@ -74,15 +56,6 @@ export function routeShellInput(input: {
   }
 
   const normalizedTrigger = normalizeShellInputTrigger(input.input);
-  const binding = input.keybindings.resolve(shellInputContexts(input.state), normalizedTrigger);
-  if (binding) {
-    const effect = decodeShellKeybindingEffect(binding.action);
-    return {
-      handled: true,
-      ...(effect ? { intent: { type: "effect.dispatch", effect } } : {}),
-    };
-  }
-
   const key = normalizedTrigger.key;
   if (!overlayKind && !input.state.hasCompletion && key === "escape" && input.state.isStreaming) {
     return {

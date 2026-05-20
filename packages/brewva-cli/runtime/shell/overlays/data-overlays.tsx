@@ -34,11 +34,8 @@ import {
   resolveHighDensityPickerTopInset,
   resolveOverlaySurfaceSelectionRows,
 } from "../overlay-style.js";
-import {
-  DEFAULT_SCROLL_ACCELERATION,
-  SPLIT_BORDER_CHARS,
-  type SessionPalette,
-} from "../palette.js";
+import { SPLIT_BORDER_CHARS, type SessionPalette } from "../palette.js";
+import { useShellRenderContext } from "../render-context.js";
 import { TextLineBlock } from "../transcript.js";
 import { visibleLineWindow, windowSelection } from "../utils.js";
 import {
@@ -394,6 +391,7 @@ function SessionsList(input: {
   height: number;
   topInset: number;
 }) {
+  const shellContext = useShellRenderContext();
   let scrollbox: OpenTuiScrollBoxHandle | undefined;
   let previousResetKey: string | undefined;
   const rows = createMemo(() => buildSessionsOverlayRows(input.payload.sessions));
@@ -436,7 +434,7 @@ function SessionsList(input: {
       width="100%"
       height={viewportRows()}
       scrollbarOptions={{ visible: false }}
-      scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+      scrollAcceleration={shellContext.scrollAcceleration()}
     >
       <For each={rows()}>
         {(row, index) => {

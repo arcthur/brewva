@@ -29,8 +29,13 @@ class CliInteractiveOpenTuiShellRuntime {
   constructor(private readonly shellRuntime: CliShellRuntime) {}
 
   async run(): Promise<void> {
-    const automaticTheme = resolveAutomaticTuiTheme(await getOpenTuiTerminalBackgroundMode());
-    this.shellRuntime.ui.setTheme(automaticTheme.name);
+    const configuredTheme = this.shellRuntime.getTuiConfig().theme;
+    if (configuredTheme === "auto") {
+      const automaticTheme = resolveAutomaticTuiTheme(await getOpenTuiTerminalBackgroundMode());
+      this.shellRuntime.ui.setTheme(automaticTheme.name);
+    } else {
+      this.shellRuntime.ui.setTheme(configuredTheme);
+    }
     await this.mount();
     await this.shellRuntime.start();
     try {

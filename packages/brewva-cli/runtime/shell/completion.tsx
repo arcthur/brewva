@@ -7,7 +7,8 @@ import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
 import type { OpenTuiScrollBoxHandle } from "../internal-opentui-runtime.js";
 import type { BoxRenderable } from "../opentui/index.js";
 import { COMPLETION_Z_INDEX } from "./overlay-style.js";
-import { DEFAULT_SCROLL_ACCELERATION, SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
+import { SPLIT_BORDER_CHARS, type SessionPalette } from "./palette.js";
+import { useShellRenderContext } from "./render-context.js";
 import { completionItemAuxText } from "./utils.js";
 
 function truncateCompletionText(text: string, maxWidth: number): string {
@@ -33,6 +34,7 @@ export function CompletionOverlay(input: {
   height: number;
   theme: SessionPalette;
 }) {
+  const shellContext = useShellRenderContext();
   let scrollbox: OpenTuiScrollBoxHandle | undefined;
   const [pointerMode, setPointerMode] = createSignal<"keyboard" | "mouse">("keyboard");
   const [positionTick, setPositionTick] = createSignal(0);
@@ -150,7 +152,7 @@ export function CompletionOverlay(input: {
         height={overlayContentHeight()}
         backgroundColor={input.theme.backgroundMenu}
         scrollbarOptions={{ visible: false }}
-        scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+        scrollAcceleration={shellContext.scrollAcceleration()}
       >
         <Show
           when={input.completion.items.length > 0}

@@ -33,6 +33,7 @@ export interface ShellEffectDispatcherContext {
   toggleOverlayFullscreen(): void;
   openCommandPalette(query?: string): void;
   openHelpHub(): void;
+  openShortcutOverlay(): void;
   openInbox(): void;
   openSessions(): void;
   openLineage(): void;
@@ -180,6 +181,9 @@ export async function dispatchShellEffect(
       return;
     case "overlay.openHelpHub":
       context.openHelpHub();
+      return;
+    case "overlay.openShortcutOverlay":
+      context.openShortcutOverlay();
       return;
     case "overlay.openInbox":
       context.openInbox();

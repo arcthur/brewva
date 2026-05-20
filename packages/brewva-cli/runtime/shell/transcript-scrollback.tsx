@@ -4,7 +4,7 @@ import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { For } from "solid-js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import { renderOpenTuiScrollbackLines } from "../internal-opentui-runtime.js";
-import { createPalette } from "./palette.js";
+import { createPalette, createScrollAcceleration } from "./palette.js";
 import { ShellRenderProvider } from "./render-context.js";
 import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";
 import { TranscriptMessageView } from "./transcript.js";
@@ -25,6 +25,8 @@ function TranscriptScrollbackDocument(input: {
     diffStyle: () => viewState.diff.style,
     diffWrapMode: () => viewState.diff.wrapMode,
     showThinking: () => viewState.view.showThinking,
+    scrollAcceleration: () =>
+      createScrollAcceleration(input.runtime.getTuiConfig().scroll.acceleration),
   };
   return (
     <ShellRenderProvider value={shellRenderContext}>

@@ -186,6 +186,11 @@ export function cloneOverlayPayload(payload: CliShellOverlayPayload): CliShellOv
       return {
         ...payload,
       };
+    case "shortcutOverlay":
+      return {
+        ...payload,
+        lines: [...payload.lines],
+      };
     default: {
       const exhaustiveCheck: never = payload;
       return exhaustiveCheck;

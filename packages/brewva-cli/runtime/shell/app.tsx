@@ -21,12 +21,14 @@ import {
   type PasteEvent,
   useKeyboard,
   usePaste,
+  useRenderer,
   useTerminalDimensions,
 } from "../opentui/index.js";
 import { CompletionOverlay } from "./completion.js";
 import { InlineApprovalPrompt, InlineQuestionPrompt } from "./inline-cards.js";
+import { BrewvaKeymapRoot, registerBrewvaKeymap } from "./keymap.js";
 import { ModalOverlay } from "./overlays/modal-overlay.js";
-import { createPalette, DEFAULT_SCROLL_ACCELERATION } from "./palette.js";
+import { createPalette, createScrollAcceleration } from "./palette.js";
 import { PromptPanel, createPromptPartStyle } from "./prompt.js";
 import { ShellRenderProvider } from "./render-context.js";
 import {
@@ -47,6 +49,15 @@ import {
   useShellState,
 } from "./utils.js";
 
+function supportsOpenTuiKeymap(renderer: OpenTuiRenderer): boolean {
+  const candidate = renderer as unknown as {
+    root?: unknown;
+    keyInput?: unknown;
+    currentFocusedRenderable?: unknown;
+  };
+  return Boolean(candidate.root && candidate.keyInput);
+}
+
 export function BrewvaOpenTuiShell(input: {
   runtime: ShellRendererController;
   toolRenderCache?: ToolRenderCache;
@@ -56,12 +67,17 @@ export function BrewvaOpenTuiShell(input: {
   const toolRenderCache = input.toolRenderCache ?? createToolRenderCache();
   const state = useShellState(input.runtime);
   const dimensions = useTerminalDimensions();
+  const renderer = (input.renderer ?? useRenderer()) as OpenTuiRenderer;
   const theme = createMemo(() => createPalette(state.theme));
+  const scrollAcceleration = createMemo(() =>
+    createScrollAcceleration(input.runtime.getTuiConfig().scroll.acceleration),
+  );
   const shellRenderContext = {
     runtime: input.runtime,
     diffStyle: () => state.diff.style,
     diffWrapMode: () => state.diff.wrapMode,
     showThinking: () => state.view.showThinking,
+    scrollAcceleration,
   };
   const showScrollbar = createMemo(() => dimensions().width >= 96);
   // Belt-and-braces vs seed-scoped message ids alone: ids fix Solid reconcile collisions;
@@ -171,14 +187,59 @@ export function BrewvaOpenTuiShell(input: {
 
   const copySelection = async (): Promise<boolean> =>
     await copyOpenTuiSelection({
-      renderer: input.renderer,
+      renderer,
       copyText: input.copyTextToClipboard,
       notifier: input.runtime.ui,
     });
+  const syncComposerFromEditor = async (): Promise<void> => {
+    const node = textarea();
+    if (!node || node.isDestroyed) {
+      return;
+    }
+    await input.runtime.handleInput({
+      type: "composer.editorSync",
+      text: node.plainText,
+      cursor: textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
+      parts: readPromptPartsFromExtmarks(node),
+    });
+  };
+
+  const keymapRenderer = supportsOpenTuiKeymap(renderer) ? renderer : undefined;
+  const keymapController = keymapRenderer
+    ? registerBrewvaKeymap({
+        renderer: keymapRenderer,
+        runtime: input.runtime,
+        copySelection,
+        clearSelection: () => renderer.clearSelection?.(),
+        syncComposerFromEditor,
+      })
+    : undefined;
+
+  onCleanup(() => keymapController?.dispose());
+
+  const keymapMode = createMemo(() => {
+    if (renderer.getSelection?.()) {
+      return "selection" as const;
+    }
+    const payload = state.overlay.active?.payload;
+    if (payload?.kind === "pager") {
+      return "pager" as const;
+    }
+    if (payload) {
+      return "overlay" as const;
+    }
+    if (state.composer.completion) {
+      return "completion" as const;
+    }
+    return "composer" as const;
+  });
 
   createEffect(() => {
-    const renderer = input.renderer;
-    if (!renderer?.console) {
+    keymapController?.setMode(keymapMode());
+  });
+
+  createEffect(() => {
+    if (!renderer.console) {
       return;
     }
     const handleCopySelection = (text: string): void => {
@@ -317,8 +378,14 @@ export function BrewvaOpenTuiShell(input: {
   });
 
   useKeyboard((event) => {
+    if ((event as { propagationStopped?: boolean }).propagationStopped === true) {
+      return;
+    }
+    if (keymapController) {
+      return;
+    }
     const key = event as OpenTuiKeyEvent;
-    if (!input.renderer?.getSelection?.()) {
+    if (!renderer.getSelection?.()) {
       return;
     }
     if (key.ctrl && key.name.toLowerCase() === "c") {
@@ -330,13 +397,16 @@ export function BrewvaOpenTuiShell(input: {
     if (key.name === "escape") {
       event.preventDefault();
       event.stopPropagation();
-      input.renderer.clearSelection?.();
+      renderer.clearSelection?.();
       return;
     }
-    input.renderer.clearSelection?.();
+    renderer.clearSelection?.();
   }, {});
 
   useKeyboard((event) => {
+    if ((event as { propagationStopped?: boolean }).propagationStopped === true) {
+      return;
+    }
     const semanticInput = toSemanticInput(event as OpenTuiKeyEvent);
     if (!input.runtime.wantsInput(semanticInput)) {
       return;
@@ -422,7 +492,7 @@ export function BrewvaOpenTuiShell(input: {
     return undefined;
   });
 
-  return (
+  const shell = (
     <ShellRenderProvider value={shellRenderContext}>
       <box
         width="100%"
@@ -457,7 +527,7 @@ export function BrewvaOpenTuiShell(input: {
             stickyStart="bottom"
             viewportCulling={true}
             flexGrow={1}
-            scrollAcceleration={DEFAULT_SCROLL_ACCELERATION}
+            scrollAcceleration={scrollAcceleration()}
             backgroundColor={theme().background}
           >
             <box height={1} />
@@ -509,11 +579,18 @@ export function BrewvaOpenTuiShell(input: {
             lineageLabel={lineageLabel()}
             subagentActivity={subagentActivity()}
             subagentActivityTotal={state.operator.taskRuns.length}
+            tuiConfig={input.runtime.getTuiConfig()}
+            shortcutLabel={(id) => input.runtime.getShortcutLabel(id)}
+            syncComposerFromEditor={syncComposerFromEditor}
             setAnchor={(node) => setPromptAnchor(node)}
             setTextarea={(node) => setTextarea(node)}
           />
 
-          <ToastStrip notifications={state.notifications} theme={theme()} />
+          <ToastStrip
+            notifications={state.notifications}
+            theme={theme()}
+            inboxShortcutLabel={input.runtime.getShortcutLabel("operator.inbox")}
+          />
 
           <Show when={state.composer.completion && !state.overlay.active}>
             <CompletionOverlay
@@ -538,5 +615,11 @@ export function BrewvaOpenTuiShell(input: {
         </box>
       </box>
     </ShellRenderProvider>
+  );
+
+  return keymapController ? (
+    <BrewvaKeymapRoot controller={keymapController}>{shell}</BrewvaKeymapRoot>
+  ) : (
+    shell
   );
 }

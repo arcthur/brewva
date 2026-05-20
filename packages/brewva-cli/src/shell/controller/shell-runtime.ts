@@ -19,11 +19,7 @@ import type {
   BrewvaPromptSessionEvent,
   BrewvaQueuedPromptView,
 } from "@brewva/brewva-substrate/session";
-import {
-  createKeybindingResolver,
-  type KeybindingResolver,
-  type OverlayPriority,
-} from "../../internal/tui/index.js";
+import { type OverlayPriority } from "../../internal/tui/index.js";
 import {
   buildSessionInspectReport,
   formatInspectText,
@@ -39,6 +35,7 @@ import {
 import { buildCommandPalettePayload, parseShellSlashPrompt } from "../commands/command-palette.js";
 import { ShellCommandProvider } from "../commands/command-provider.js";
 import { registerShellCommands } from "../commands/shell-command-registry.js";
+import { loadBrewvaTuiConfig } from "../config/tui-config.js";
 import type { ShellAction } from "../domain/actions.js";
 import type { ShellCommitBatch, ShellCommitInput, ShellCommitOptions } from "../domain/actions.js";
 import {
@@ -53,7 +50,6 @@ import type { ShellEffect } from "../domain/effects.js";
 import { routeShellInput } from "../domain/input-router.js";
 import { isShellKeyboardInput, type CliShellInput, type ShellInput } from "../domain/input.js";
 import type { ShellIntent } from "../domain/intent.js";
-import { shellBuiltInKeybindings } from "../domain/keymap.js";
 import type { OperatorSurfaceSnapshot } from "../domain/operator-snapshot.js";
 import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
 import { renderTranscriptAsMarkdown } from "../domain/overlays/projectors/transcript-markdown.js";
@@ -67,7 +63,14 @@ import {
 } from "../domain/runtime-state.js";
 import { selectActiveOverlayPayload, selectHasCompletion } from "../domain/selectors.js";
 import { type CliShellAction, type CliShellViewState } from "../domain/state.js";
+import type { BrewvaResolvedKeymapBindings, BrewvaTuiConfig } from "../domain/tui.js";
 import { projectShellViewModel, type ShellViewModel } from "../domain/view-model.js";
+import {
+  BREWVA_BUILT_IN_KEYMAP_BINDINGS,
+  buildBrewvaKeymapBindings,
+  buildShortcutOverlayLines,
+  pickShortcutLabel,
+} from "../keymap/keymap-bindings.js";
 import { ShellOverlayLifecycleHandler } from "../overlays/lifecycle.js";
 import { createShellConfigPort } from "../ports/config-adapter.js";
 import { createOperatorSurfacePort } from "../ports/operator-adapter.js";
@@ -98,7 +101,7 @@ import {
   normalizeShellViewPreferences,
 } from "./handlers/view-preferences-handler.js";
 import { ShellOperatorSnapshotSync } from "./operator-snapshot-sync.js";
-import { handleShellRendererInput } from "./renderer-input-handler.js";
+import { handleShellRendererInput, type ShellRendererInput } from "./renderer-input-handler.js";
 
 export interface CliShellRuntimeOptions {
   cwd: string;
@@ -119,6 +122,12 @@ export interface CliShellRuntimeOptions {
 const execFileAsync = promisify(execFile);
 const GIT_EVIDENCE_SECTION_MAX_LINES = 5_000;
 const GIT_EVIDENCE_SECTION_MAX_CHARS = 200_000;
+
+function isShellKeymapInput(
+  input: ShellInput,
+): input is Extract<ShellInput, { type: "keymap.command" | "keymap.effect" }> {
+  return input.type === "keymap.command" || input.type === "keymap.effect";
+}
 
 type GitCommandResult =
   | {
@@ -264,7 +273,8 @@ export class CliShellRuntime {
   readonly #commandProvider = new ShellCommandProvider();
   readonly #completionProvider: ShellCompletionProvider;
   readonly #completionHandler: ShellCompletionHandler;
-  readonly #keybindings: KeybindingResolver;
+  readonly #tuiConfig: BrewvaTuiConfig;
+  readonly #keymapBindings: BrewvaResolvedKeymapBindings;
   readonly #modelSelectionHandler: ShellModelSelectionHandler;
   readonly #operatorOverlayHandler: ShellOperatorOverlayHandler;
   readonly #overlayHandler: ShellOverlayLifecycleHandler;
@@ -277,10 +287,6 @@ export class CliShellRuntime {
   readonly #transcriptProjector: ShellTranscriptProjector;
   readonly #viewPreferencesHandler: ShellViewPreferencesHandler;
   #operatorSnapshotSync: ShellOperatorSnapshotSync;
-
-  private buildLocalKeybindings() {
-    return [...shellBuiltInKeybindings];
-  }
   readonly #listeners = new Set<() => void>();
   readonly #uiController;
   readonly #operatorPort;
@@ -343,13 +349,32 @@ export class CliShellRuntime {
       createSession: () => options.createSession(),
     });
     registerShellCommands(this.#commandProvider);
+    const commandKeymapBindings = this.#commandProvider.keymapCommandBindings();
+    const knownKeymapIds = new Set([
+      ...BREWVA_BUILT_IN_KEYMAP_BINDINGS.map((binding) => binding.id),
+      ...commandKeymapBindings.map((binding) => binding.id),
+    ]);
+    const tuiConfigResolution = loadBrewvaTuiConfig({
+      cwd: options.cwd,
+      knownBindingIds: knownKeymapIds,
+    });
+    this.#tuiConfig = tuiConfigResolution.config;
+    for (const warning of tuiConfigResolution.warnings) {
+      process.stderr.write(`[tui-config:${warning.code}] ${warning.path}: ${warning.message}\n`);
+    }
+    this.#keymapBindings = buildBrewvaKeymapBindings({
+      commandBindings: commandKeymapBindings,
+      overrides: this.#tuiConfig.keymap.bindings,
+    });
     const completionUsageStore = createInMemoryCompletionUsageStore(
       promptStore.loadCompletionUsage(),
       (entry) => promptStore.recordCompletionUsage(entry),
     );
     this.#completionProvider = new ShellCompletionProvider({
       sources: [
-        createCommandCompletionSource(this.#commandProvider),
+        createCommandCompletionSource(this.#commandProvider, {
+          shortcutLabel: (id) => pickShortcutLabel(this.#keymapBindings, id),
+        }),
         createAgentCompletionSource(() => this.listCompletionAgents()),
         createWorkspaceReferenceCompletionSource({ cwd: options.cwd }),
       ],
@@ -382,10 +407,6 @@ export class CliShellRuntime {
       },
       CliShellRuntime.PROMPT_HISTORY_LIMIT,
     );
-    this.#keybindings = createKeybindingResolver([
-      ...this.buildLocalKeybindings(),
-      ...this.#commandProvider.keyboundCommands(),
-    ]);
     const copyTextToClipboard = options.copyTextToClipboard;
     this.#uiController = createCliShellUiPortController({
       commit: (action) => this.commit(action),
@@ -471,6 +492,7 @@ export class CliShellRuntime {
           buildCommandPalettePayload({
             commandProvider: this.#commandProvider,
             query,
+            shortcutLabel: (id) => pickShortcutLabel(this.#keymapBindings, id),
           }),
         openOverlay: (payload, priority) => this.#overlayHandler.openOverlay(payload, priority),
         replaceActiveOverlay: (payload) => this.#overlayHandler.replaceActiveOverlay(payload),
@@ -496,6 +518,7 @@ export class CliShellRuntime {
       commit: (actions, commitOptions) => this.commit(actions, commitOptions),
       runShellEffects: (effects) => this.runShellEffects(effects),
       handleShellCommand: (prompt) => this.handleShellCommand(prompt),
+      getShortcutLabel: (id) => pickShortcutLabel(this.#keymapBindings, id),
       buildSessionStatusActions: () => this.buildSessionStatusActions(),
       dismissPendingInteractiveQuestionRequests: (input) =>
         this.dismissPendingInteractiveQuestionRequests(input),
@@ -513,6 +536,8 @@ export class CliShellRuntime {
       getOperatorSnapshot: () => this.#operatorSnapshot,
       getDraftsBySessionId: () => this.#sessionHandler.getDraftsBySessionId(),
       getCommandProvider: () => this.#commandProvider,
+      getShortcutLabel: (id) => pickShortcutLabel(this.#keymapBindings, id),
+      getShortcutOverlayLines: () => buildShortcutOverlayLines(this.#keymapBindings),
       transcriptProjector: this.#transcriptProjector,
       buildSessionStatusActions: () => this.buildSessionStatusActions(),
       commit: (actions, commitOptions) => this.commit(actions, commitOptions),
@@ -591,6 +616,18 @@ export class CliShellRuntime {
 
   getToolDefinitions(): CliShellSessionBundle["toolDefinitions"] {
     return this.#bundle.toolDefinitions;
+  }
+
+  getTuiConfig(): BrewvaTuiConfig {
+    return this.#tuiConfig;
+  }
+
+  getKeymapBindings(): BrewvaResolvedKeymapBindings {
+    return this.#keymapBindings;
+  }
+
+  getShortcutLabel(id: string): string | undefined {
+    return pickShortcutLabel(this.#keymapBindings, id);
   }
 
   getSessionIdentity(): {
@@ -728,7 +765,7 @@ export class CliShellRuntime {
   }
 
   async handleInput(input: ShellInput): Promise<boolean> {
-    if (!isShellKeyboardInput(input)) {
+    if (!isShellKeyboardInput(input) && !isShellKeymapInput(input)) {
       return await this.handleInputNow(input);
     }
     const task = this.#semanticInputQueue.then(() => this.handleInputNow(input));
@@ -742,7 +779,22 @@ export class CliShellRuntime {
   private async handleInputNow(input: ShellInput): Promise<boolean> {
     try {
       if (!isShellKeyboardInput(input)) {
-        return await this.handleRendererInput(input);
+        switch (input.type) {
+          case "keymap.command":
+            return await this.handleShellIntent({
+              type: "command.invoke",
+              commandId: input.commandId,
+              args: "",
+              source: input.source,
+            });
+          case "keymap.effect":
+            return await this.handleShellIntent({
+              type: "effect.dispatch",
+              effect: input.effect,
+            });
+          default:
+            return await this.handleRendererInput(input);
+        }
       }
       const route = this.routeInput(input);
       if (!route.handled) {
@@ -761,7 +813,7 @@ export class CliShellRuntime {
     }
   }
 
-  private async handleRendererInput(input: Exclude<ShellInput, CliShellInput>): Promise<boolean> {
+  private async handleRendererInput(input: ShellRendererInput): Promise<boolean> {
     return await handleShellRendererInput(
       {
         getState: () => this.#state,
@@ -786,7 +838,6 @@ export class CliShellRuntime {
         canNavigatePromptHistoryPrevious: this.#promptMemoryHandler.canNavigate(-1, input),
         canNavigatePromptHistoryNext: this.#promptMemoryHandler.canNavigate(1, input),
       },
-      keybindings: this.#keybindings,
     });
   }
 
@@ -803,14 +854,20 @@ export class CliShellRuntime {
     const restoredDraft = this.#sessionHandler.getDraftsBySessionId().get(sessionId);
     this.#promptMemoryHandler.resetNavigation();
     this.#completionHandler.clearDismissedForCurrentSession();
-    const shellViewPreferences = normalizeShellViewPreferences(
-      this.#sessionPort.getShellViewPreferences(),
-    );
+    const shellViewPreferences = normalizeShellViewPreferences({
+      ...this.#sessionPort.getShellViewPreferences(),
+      showThinking: this.#tuiConfig.view.showThinking,
+      toolDetails: this.#tuiConfig.view.toolDetails,
+    });
+    const diffPreferences = normalizeDiffPreferences({
+      ...this.#sessionPort.getDiffPreferences(),
+      ...this.#tuiConfig.view.diff,
+    });
     const hydratedMessages = this.#transcriptProjector.composeSeedTranscript();
     const actions: ShellAction[] = [
       {
         type: "diff.setPreferences",
-        preferences: normalizeDiffPreferences(this.#sessionPort.getDiffPreferences()),
+        preferences: diffPreferences,
       },
       {
         type: "view.setPreferences",
@@ -1115,6 +1172,7 @@ export class CliShellRuntime {
       toggleOverlayFullscreen: () => this.#overlayHandler.toggleFullscreen(),
       openCommandPalette: (query) => this.#overlayHandler.openCommandPalette(query ?? ""),
       openHelpHub: () => this.#overlayHandler.openHelpHub(),
+      openShortcutOverlay: () => this.#overlayHandler.openShortcutOverlay(),
       openInbox: () => this.#overlayHandler.openInboxOverlay(),
       openSessions: () => this.#overlayHandler.openSessionsOverlay(),
       openLineage: () => this.#overlayHandler.openLineageOverlay(),
@@ -1824,7 +1882,7 @@ export class CliShellRuntime {
   }
 
   private async openActivePagerExternally(): Promise<void> {
-    const externalPagerTarget = this.getExternalPagerTarget("pager");
+    const externalPagerTarget = this.getExternalPagerTarget();
     if (!externalPagerTarget) {
       return;
     }

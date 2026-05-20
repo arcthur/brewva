@@ -76,6 +76,7 @@ export interface ShellCommandCompletionItem {
   readonly category: string;
   readonly slashName?: string;
   readonly slashAliases: readonly string[];
+  readonly shortcutLabel?: string;
   readonly suggested: boolean;
 }
 
@@ -413,6 +414,7 @@ export class ShellCompletionProvider {
 
 export function createCommandCompletionSource(
   commandProvider: ShellCommandCompletionProvider,
+  input: { shortcutLabel?: (id: string) => string | undefined } = {},
 ): ShellCompletionSource {
   return {
     id: "command",
@@ -422,6 +424,9 @@ export function createCommandCompletionSource(
         const source = commandProvider.getCommand(command.id);
         const argumentMode = source?.slash?.argumentMode ?? "none";
         const slashName = command.slashName ?? command.id;
+        const shortcutLabel = input.shortcutLabel
+          ? input.shortcutLabel(command.id)
+          : command.shortcutLabel;
         return {
           id: `command:${command.id}`,
           kind: "command",
@@ -430,7 +435,7 @@ export function createCommandCompletionSource(
           value: slashName,
           insertText: `/${slashName} `,
           description: command.description,
-          detail: command.category,
+          detail: [command.category, shortcutLabel].filter(Boolean).join(" · ") || undefined,
           aliases: command.slashAliases,
           searchText: [command.title, command.category],
           suggested: command.suggested,

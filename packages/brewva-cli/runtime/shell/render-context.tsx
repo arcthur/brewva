@@ -1,5 +1,6 @@
 import { createContext, useContext, type Accessor, type JSX } from "solid-js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import type { ScrollAcceleration } from "../opentui/index.js";
 import type { ShellDiffStyle, ShellDiffWrapMode } from "./diff-view.js";
 
 export interface ShellRenderContextValue {
@@ -7,6 +8,7 @@ export interface ShellRenderContextValue {
   diffStyle: Accessor<ShellDiffStyle>;
   diffWrapMode: Accessor<ShellDiffWrapMode>;
   showThinking: Accessor<boolean>;
+  scrollAcceleration: Accessor<ScrollAcceleration>;
 }
 
 const ShellRenderContext = createContext<ShellRenderContextValue>();

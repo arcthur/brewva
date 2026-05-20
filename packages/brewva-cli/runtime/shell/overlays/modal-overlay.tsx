@@ -26,6 +26,7 @@ import {
   HelpHubOverlay,
   ModelPickerOverlay,
   ProviderPickerOverlay,
+  ShortcutOverlay,
   ThinkingPickerOverlay,
 } from "./picker-overlays.js";
 
@@ -214,6 +215,16 @@ export function ModalOverlay(input: {
       <Show when={overlayPayloadOf(payload(), "helpHub")}>
         {(current) => (
           <HelpHubOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "shortcutOverlay")}>
+        {(current) => (
+          <ShortcutOverlay
             payload={current()}
             theme={input.theme}
             width={input.width}

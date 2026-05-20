@@ -5,7 +5,12 @@ import { cloneCliShellPromptParts, promptPartArraysEqual } from "../domain/promp
 import type { CliShellViewState } from "../domain/state.js";
 import type { ShellCompletionHandler } from "./handlers/completion-handler.js";
 
-export type ShellRendererInput = Exclude<ShellInput, import("../domain/input.js").CliShellInput>;
+export type ShellRendererInput = Exclude<
+  ShellInput,
+  | import("../domain/input.js").CliShellInput
+  | { readonly type: "keymap.command" }
+  | { readonly type: "keymap.effect" }
+>;
 
 export interface ShellRendererInputHandlerContext {
   getState(): CliShellViewState;

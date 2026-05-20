@@ -1,6 +1,10 @@
-import type { KeybindingDefinition, KeybindingTrigger } from "../../internal/tui/index.js";
 import type { ShellIntent } from "../domain/intent.js";
 import { fuzzyScore, normalizeSearchQuery } from "../domain/search-scoring.js";
+import {
+  formatShortcutLabels,
+  normalizeShortcutSequence,
+  type BrewvaKeymapBindingDefinition,
+} from "../keymap/keymap-bindings.js";
 
 export interface ShellCommandRunInput {
   readonly args: string;
@@ -34,7 +38,7 @@ export interface ShellCommand {
     readonly help?: boolean;
   };
   readonly slash?: ShellSlashMetadata;
-  readonly keybinding?: KeybindingTrigger;
+  readonly shortcuts?: readonly string[];
   readonly enabled?: boolean;
   readonly suggested?: boolean;
   readonly createIntent?: ShellCommandIntentFactory;
@@ -47,33 +51,9 @@ export interface ShellCommandListItem {
   readonly category: string;
   readonly slashName?: string;
   readonly slashAliases: readonly string[];
-  readonly keybinding?: KeybindingTrigger;
+  readonly shortcuts: readonly string[];
+  readonly shortcutLabel?: string;
   readonly suggested: boolean;
-}
-
-function keybindingIdentity(trigger: KeybindingTrigger): string {
-  return [
-    trigger.ctrl ? "ctrl" : "",
-    trigger.meta ? "meta" : "",
-    trigger.shift ? "shift" : "",
-    trigger.key,
-  ]
-    .filter(Boolean)
-    .join("+");
-}
-
-export function formatKeybindingLabel(trigger: KeybindingTrigger | undefined): string | undefined {
-  if (!trigger) {
-    return undefined;
-  }
-  return [
-    trigger.ctrl ? "Ctrl" : "",
-    trigger.meta ? "Meta" : "",
-    trigger.shift ? "Shift" : "",
-    trigger.key.length === 1 ? trigger.key.toUpperCase() : trigger.key,
-  ]
-    .filter(Boolean)
-    .join("+");
 }
 
 function takeBetterScore(current: number | null, next: number | null): number | null {
@@ -122,7 +102,7 @@ export class ShellCommandProvider {
   readonly #commands = new Map<string, ShellCommand>();
   readonly #slashNames = new Map<string, string>();
   readonly #reservedSlashNames = new Map<string, ShellSlashReservation>();
-  readonly #keybindings = new Map<string, string>();
+  readonly #shortcuts = new Map<string, string>();
 
   static #isEnabled(command: ShellCommand): boolean {
     return command.enabled !== false;
@@ -177,15 +157,15 @@ export class ShellCommandProvider {
         this.#slashNames.set(normalized, command.id);
       }
     }
-    if (command.keybinding) {
-      const identity = keybindingIdentity(command.keybinding);
-      const existing = this.#keybindings.get(identity);
+    for (const shortcut of command.shortcuts ?? []) {
+      const identity = normalizeShortcutSequence(shortcut);
+      const existing = this.#shortcuts.get(identity);
       if (existing) {
         throw new Error(
-          `Duplicate shell command keybinding '${identity}' for ${command.id}; already used by ${existing}`,
+          `Duplicate shell command shortcut '${identity}' for ${command.id}; already used by ${existing}`,
         );
       }
-      this.#keybindings.set(identity, command.id);
+      this.#shortcuts.set(identity, command.id);
     }
     this.#commands.set(command.id, command);
   }
@@ -251,21 +231,23 @@ export class ShellCommandProvider {
           category: item.category,
           slashName: item.slashName,
           slashAliases: item.slashAliases,
-          keybinding: item.keybinding,
+          shortcuts: item.shortcuts,
+          shortcutLabel: item.shortcutLabel,
           suggested: item.suggested,
         };
       })
       .toSorted(compareSlashCommandItems);
   }
 
-  keyboundCommands(): KeybindingDefinition[] {
+  keymapCommandBindings(): BrewvaKeymapBindingDefinition[] {
     return [...this.#commands.values()]
-      .filter((command) => command.keybinding && ShellCommandProvider.#isEnabled(command))
+      .filter((command) => command.shortcuts && ShellCommandProvider.#isEnabled(command))
       .map((command) => ({
-        id: `command.${command.id}`,
-        context: "global",
-        trigger: command.keybinding as KeybindingTrigger,
-        action: `command:${command.id}`,
+        id: command.id,
+        title: command.title,
+        category: command.category,
+        layer: "global",
+        shortcuts: command.shortcuts?.map(normalizeShortcutSequence) ?? [],
       }));
   }
 
@@ -348,7 +330,8 @@ export class ShellCommandProvider {
       category: command.category,
       slashName: slash?.name,
       slashAliases: slash?.aliases ?? [],
-      keybinding: command.keybinding,
+      shortcuts: command.shortcuts?.map(normalizeShortcutSequence) ?? [],
+      shortcutLabel: formatShortcutLabels(command.shortcuts ?? []),
       suggested: command.suggested === true,
     };
   }

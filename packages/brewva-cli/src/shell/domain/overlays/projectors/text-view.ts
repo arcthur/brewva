@@ -229,7 +229,7 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
         title: payload.title,
         lines: [
           `Search: ${payload.query}`,
-          "Use ↑/↓ to choose, type to filter, Enter to run, Esc to close.",
+          payload.footer ?? "Type to filter.",
           "",
           ...(payload.items.length > 0
             ? renderPickerInspectLines(payload.items, payload.selectedIndex)
@@ -254,6 +254,11 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
     case "skills":
       return {
         title: "Skills",
+        lines: payload.lines,
+      };
+    case "shortcutOverlay":
+      return {
+        title: payload.title,
         lines: payload.lines,
       };
     case "oauthWait":

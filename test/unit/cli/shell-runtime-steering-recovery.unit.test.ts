@@ -20,6 +20,7 @@ import type {
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
+import type { ShellEffect } from "../../../packages/brewva-cli/src/shell/domain/effects.js";
 import type {
   ProviderAuthMethod,
   ProviderConnectionDescriptor,
@@ -61,6 +62,25 @@ function latestUserTextFromProviderContext(context: ProviderContext): string {
       .join("");
   }
   return "";
+}
+
+async function keymapEffect(runtime: CliShellRuntime, effect: ShellEffect): Promise<boolean> {
+  return await runtime.handleInput({
+    type: "keymap.effect",
+    effect,
+  });
+}
+
+async function keymapCommand(runtime: CliShellRuntime, commandId: string): Promise<boolean> {
+  return await runtime.handleInput({
+    type: "keymap.command",
+    commandId,
+    source: "keybinding",
+  });
+}
+
+async function submitComposer(runtime: CliShellRuntime): Promise<boolean> {
+  return await keymapEffect(runtime, { type: "composer.submit" });
 }
 
 function createFakeBundle(
@@ -444,18 +464,8 @@ describe("shell runtime: steering and recovery", () => {
       createSession: async () => fixture.bundle,
     });
 
-    await runtime.handleInput({
-      key: "tab",
-      ctrl: false,
-      meta: false,
-      shift: true,
-    });
-    await runtime.handleInput({
-      key: "tab",
-      ctrl: false,
-      meta: false,
-      shift: true,
-    });
+    await keymapCommand(runtime, "agent.preset.next");
+    await keymapCommand(runtime, "agent.preset.next");
 
     expect(fixture.getModelPresetState()).toMatchObject({
       activeName: "Default",
@@ -489,19 +499,9 @@ describe("shell runtime: steering and recovery", () => {
 
     try {
       runtime.ui.setEditorText("first prompt");
-      await runtime.handleInput({
-        key: "enter",
-        ctrl: false,
-        meta: false,
-        shift: false,
-      });
+      await submitComposer(runtime);
       runtime.ui.setEditorText("second prompt");
-      await runtime.handleInput({
-        key: "enter",
-        ctrl: false,
-        meta: false,
-        shift: false,
-      });
+      await submitComposer(runtime);
 
       expect(turnIds).toEqual(["interactive:1710000000000:1", "interactive:1710000000000:2"]);
     } finally {
@@ -529,12 +529,7 @@ describe("shell runtime: steering and recovery", () => {
     });
 
     runtime.ui.setEditorText("/redo");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(redoCalls).toBe(0);
     expect(
@@ -560,12 +555,7 @@ describe("shell runtime: steering and recovery", () => {
 
     await runtime.start();
     runtime.ui.setEditorText("你是谁");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     // submitComposer adds the user message; simulate the session also emitting
     // message_end for the same user turn (the normal session behaviour).
@@ -626,12 +616,7 @@ describe("shell runtime: steering and recovery", () => {
       ],
     });
 
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     const submittedText = `review ${pastedText} now`;
     expect(prompts).toEqual([submittedText]);
@@ -664,12 +649,7 @@ describe("shell runtime: steering and recovery", () => {
     });
 
     runtime.ui.setEditorText("trigger failure");
-    const consumed = await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    const consumed = await submitComposer(runtime);
 
     expect(consumed).toBe(true);
     expect(runtime.getViewState().notifications.at(-1)).toMatchObject({
@@ -739,12 +719,7 @@ describe("shell runtime: steering and recovery", () => {
     await runtime.start();
 
     runtime.ui.setEditorText("/steer keep this boundary in mind");
-    await runtime.handleInput({
-      key: "enter",
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
+    await submitComposer(runtime);
 
     expect(steers).toEqual(["keep this boundary in mind"]);
     expect(runtime.getViewState().notifications.at(-1)).toMatchObject({

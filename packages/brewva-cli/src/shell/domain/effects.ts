@@ -32,6 +32,7 @@ export type ShellEffect =
   | { type: "overlay.toggleFullscreen" }
   | { type: "overlay.openCommandPalette"; query?: string }
   | { type: "overlay.openHelpHub" }
+  | { type: "overlay.openShortcutOverlay" }
   | { type: "overlay.openInbox" }
   | { type: "overlay.openSessions" }
   | { type: "overlay.openLineage" }

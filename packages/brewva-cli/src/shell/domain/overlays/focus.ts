@@ -43,6 +43,7 @@ export function resolveOverlayFocusOwner(
     case "oauthWait":
     case "commandPalette":
     case "helpHub":
+    case "shortcutOverlay":
     case "context":
     case "authority":
     case "skills":
