@@ -62,4 +62,28 @@ describe("canonical tape internals", () => {
 
     expect(runtimeTape.tape.list("s1", { type: "custom" })).toHaveLength(1);
   });
+
+  test("query windows apply last before offset and limit", () => {
+    const runtimeTape = createRuntimeTape();
+    for (let index = 0; index < 5; index += 1) {
+      runtimeTape.commit.commit({
+        id: `evt-window-${index}`,
+        sessionId: "s1",
+        type: "turn.started",
+        timestamp: 1_000 + index,
+        payload: { prompt: `turn ${index}`, content: [{ type: "text", text: `turn ${index}` }] },
+      });
+    }
+
+    expect(
+      runtimeTape.tape
+        .list("s1", {
+          type: "turn.started",
+          last: 3,
+          offset: 1,
+          limit: 1,
+        })
+        .map((event) => event.id),
+    ).toEqual(["evt-window-3"]);
+  });
 });

@@ -53,6 +53,19 @@
         }
       }
 
+      const toolResultMap = new Map();
+      for (const entry of entries) {
+        if (
+          entry.type === 'message' &&
+          entry.message.role === 'toolResult' &&
+          entry.message.toolCallId
+        ) {
+          if (!toolResultMap.has(entry.message.toolCallId)) {
+            toolResultMap.set(entry.message.toolCallId, entry.message);
+          }
+        }
+      }
+
       // Label lookup (entryId -> label string)
       // Labels are stored in 'label' entries that reference their target via targetId
       const labelMap = new Map();
@@ -144,8 +157,18 @@
         return path;
       }
 
-      // Tree node lookup for finding leaves
-      let treeNodeMap = null;
+      const treeRoots = buildTree();
+      const treeNodeMap = new Map();
+      for (const root of treeRoots) {
+        const stack = [root];
+        while (stack.length > 0) {
+          const node = stack.pop();
+          treeNodeMap.set(node.entry.id, node);
+          for (let index = node.children.length - 1; index >= 0; index--) {
+            stack.push(node.children[index]);
+          }
+        }
+      }
 
       /**
        * Find the newest leaf node reachable from a given node.
@@ -153,17 +176,6 @@
        * Children are sorted by timestamp, so the newest is always last.
        */
       function findNewestLeaf(nodeId) {
-        // Build tree node map lazily
-        if (!treeNodeMap) {
-          treeNodeMap = new Map();
-          const tree = buildTree();
-          function mapNodes(node) {
-            treeNodeMap.set(node.entry.id, node);
-            node.children.forEach(mapNodes);
-          }
-          tree.forEach(mapNodes);
-        }
-
         const node = treeNodeMap.get(nodeId);
         if (!node) return nodeId;
 
@@ -345,6 +357,15 @@
         return parts.join(' ').toLowerCase();
       }
 
+      const searchableTextMap = new Map();
+      function getCachedSearchableText(entry, label) {
+        const cached = searchableTextMap.get(entry.id);
+        if (cached !== undefined) return cached;
+        const text = getSearchableText(entry, label);
+        searchableTextMap.set(entry.id, text);
+        return text;
+      }
+
       /**
        * Filter flat nodes based on current filterMode and searchQuery.
        */
@@ -393,7 +414,7 @@
 
           // Apply search filter
           if (searchTokens.length > 0) {
-            const nodeText = getSearchableText(entry, label);
+            const nodeText = getCachedSearchableText(entry, label);
             if (!searchTokens.every(t => nodeText.includes(t))) return false;
           }
 
@@ -663,22 +684,37 @@
       let currentLeafId = leafId;
       let currentTargetId = urlTargetId || leafId;
       let treeRendered = false;
+      let renderedTreeIds = new Set();
+      let renderedTreeStats = { visible: 0, total: entries.length };
+      const treeContainer = document.getElementById('tree-container');
+
+      treeContainer.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const node = target?.closest('.tree-node');
+        if (!node || !treeContainer.contains(node)) return;
+        const entryId = node.dataset.id;
+        if (!entryId) return;
+        const leafId = findNewestLeaf(entryId);
+        navigateTo(leafId, 'target', entryId);
+      });
 
       function renderTree() {
-        const tree = buildTree();
         const activePathIds = buildActivePathIds(currentLeafId);
-        const flatNodes = flattenTree(tree, activePathIds);
-        const filtered = filterNodes(flatNodes, currentLeafId);
-        const container = document.getElementById('tree-container');
+        const needsFullRender = !treeRendered || !renderedTreeIds.has(currentTargetId);
 
         // Full render only on first call or when filter/search changes
-        if (!treeRendered) {
-          container.innerHTML = '';
+        if (needsFullRender) {
+          const flatNodes = flattenTree(treeRoots, activePathIds);
+          const filtered = filterNodes(flatNodes, currentLeafId);
+          treeContainer.innerHTML = '';
+          renderedTreeIds = new Set();
+          renderedTreeStats = { visible: filtered.length, total: flatNodes.length };
 
           for (const flatNode of filtered) {
             const entry = flatNode.node.entry;
             const isOnPath = activePathIds.has(entry.id);
             const isTarget = entry.id === currentTargetId;
+            renderedTreeIds.add(entry.id);
 
             const div = document.createElement('div');
             div.className = 'tree-node';
@@ -702,19 +738,14 @@
             div.appendChild(prefixSpan);
             div.appendChild(marker);
             div.appendChild(content);
-            // Navigate to the newest leaf through this node, but scroll to the clicked node
-            div.addEventListener('click', () => {
-              const leafId = findNewestLeaf(entry.id);
-              navigateTo(leafId, 'target', entry.id);
-            });
 
-            container.appendChild(div);
+            treeContainer.appendChild(div);
           }
 
           treeRendered = true;
         } else {
           // Just update markers and classes
-          const nodes = container.querySelectorAll('.tree-node');
+          const nodes = treeContainer.querySelectorAll('.tree-node');
           for (const node of nodes) {
             const id = node.dataset.id;
             const isOnPath = activePathIds.has(id);
@@ -730,11 +761,11 @@
           }
         }
 
-        document.getElementById('tree-status').textContent = `${filtered.length} / ${flatNodes.length} entries`;
+        document.getElementById('tree-status').textContent = `${renderedTreeStats.visible} / ${renderedTreeStats.total} entries`;
 
         // Scroll active node into view after layout
         setTimeout(() => {
-          const activeNode = container.querySelector('.tree-node.active');
+          const activeNode = treeContainer.querySelector('.tree-node.active');
           if (activeNode) {
             activeNode.scrollIntoView({ block: 'nearest' });
           }
@@ -789,14 +820,7 @@
       }
 
       function findToolResult(toolCallId) {
-        for (const entry of entries) {
-          if (entry.type === 'message' && entry.message.role === 'toolResult') {
-            if (entry.message.toolCallId === toolCallId) {
-              return entry.message;
-            }
-          }
-        }
-        return null;
+        return toolResultMap.get(toolCallId) || null;
       }
 
       function formatExpandableOutput(text, maxLines, lang) {
@@ -1343,6 +1367,17 @@
 
       // Cache for rendered entry DOM nodes
       const entryCache = new Map();
+      const messagesEl = document.getElementById('messages');
+
+      messagesEl.addEventListener('click', (event) => {
+        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+        const button = target?.closest('.copy-link-btn');
+        if (!button || !messagesEl.contains(button)) return;
+        event.stopPropagation();
+        const entryId = button.dataset.entryId;
+        if (!entryId) return;
+        copyToClipboard(buildShareUrl(entryId), button);
+      });
 
       function renderEntryToNode(entry) {
         // Check cache first
@@ -1375,7 +1410,6 @@
         document.getElementById('header-container').innerHTML = renderHeader();
 
         // Build messages using cached DOM nodes
-        const messagesEl = document.getElementById('messages');
         const fragment = document.createDocumentFragment();
 
         for (const entry of path) {
@@ -1387,16 +1421,6 @@
 
         messagesEl.innerHTML = '';
         messagesEl.appendChild(fragment);
-
-        // Attach click handlers for copy-link buttons
-        messagesEl.querySelectorAll('.copy-link-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const entryId = btn.dataset.entryId;
-            const shareUrl = buildShareUrl(entryId);
-            copyToClipboard(shareUrl, btn);
-          });
-        });
 
         // Use setTimeout(0) to ensure DOM is fully laid out before scrolling
         setTimeout(() => {

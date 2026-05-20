@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join, relative } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import Fuse from "fuse.js";
@@ -271,21 +271,46 @@ function collectMarkdownFiles(rootDir: string): string[] {
 interface LoadedKnowledgeCorpus {
   docs: KnowledgeDocRecord[];
   searchedRoots: string[];
+  fingerprint: string;
 }
 
-function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKnowledgeCorpus {
-  const docs: KnowledgeDocRecord[] = [];
-  const searchedRoots: string[] = [];
-  for (const sourceRoot of KNOWLEDGE_SOURCE_ROOTS) {
-    const absoluteDir = join(searchRoot, sourceRoot.relativeDir);
-    if (!existsSync(absoluteDir) || !statSync(absoluteDir).isDirectory()) {
-      continue;
-    }
-    searchedRoots.push(relative(workspaceRoot, absoluteDir).replace(/\\/g, "/"));
+interface KnowledgeLoadSource {
+  sourceRoot: KnowledgeSourceRoot;
+  files: string[];
+}
 
-    for (const absolutePath of collectMarkdownFiles(absoluteDir)) {
+interface KnowledgeLoadPlan {
+  sources: KnowledgeLoadSource[];
+  searchedRoots: string[];
+  fingerprint: string;
+}
+
+const MAX_KNOWLEDGE_CORPUS_CACHE_ENTRIES = 32;
+const MAX_KNOWLEDGE_FUSE_CACHE_ENTRIES = 32;
+const knowledgeCorpusCache = new Map<
+  string,
+  {
+    fingerprint: string;
+    corpus: LoadedKnowledgeCorpus;
+  }
+>();
+const knowledgeFuseCache = new Map<string, Fuse<KnowledgeDocRecord>>();
+
+function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKnowledgeCorpus {
+  const resolvedSearchRoot = resolve(searchRoot);
+  const resolvedWorkspaceRoot = resolve(workspaceRoot);
+  const plan = buildKnowledgeLoadPlan(resolvedSearchRoot, resolvedWorkspaceRoot);
+  const cacheKey = `${resolvedWorkspaceRoot}\0${resolvedSearchRoot}`;
+  const cached = knowledgeCorpusCache.get(cacheKey);
+  if (cached?.fingerprint === plan.fingerprint) {
+    return cached.corpus;
+  }
+
+  const docs: KnowledgeDocRecord[] = [];
+  for (const source of plan.sources) {
+    for (const absolutePath of source.files) {
       const raw = readFileSync(absolutePath, "utf8");
-      const relativePath = relative(workspaceRoot, absolutePath).replace(/\\/g, "/");
+      const relativePath = relative(resolvedWorkspaceRoot, absolutePath).replace(/\\/g, "/");
       let data: Record<string, unknown>;
       let body: string;
       try {
@@ -320,7 +345,7 @@ function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKno
       docs.push({
         absolutePath,
         relativePath,
-        sourceType: sourceRoot.sourceType,
+        sourceType: source.sourceRoot.sourceType,
         title,
         body,
         searchTokens,
@@ -335,9 +360,47 @@ function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKno
       });
     }
   }
-  return {
+  const corpus = {
     docs,
+    searchedRoots: plan.searchedRoots,
+    fingerprint: plan.fingerprint,
+  };
+  knowledgeCorpusCache.set(cacheKey, { fingerprint: plan.fingerprint, corpus });
+  if (knowledgeCorpusCache.size > MAX_KNOWLEDGE_CORPUS_CACHE_ENTRIES) {
+    const oldestKey = knowledgeCorpusCache.keys().next().value;
+    if (oldestKey) {
+      knowledgeCorpusCache.delete(oldestKey);
+    }
+  }
+  return corpus;
+}
+
+function buildKnowledgeLoadPlan(searchRoot: string, workspaceRoot: string): KnowledgeLoadPlan {
+  const sources: KnowledgeLoadSource[] = [];
+  const searchedRoots: string[] = [];
+  const fingerprintParts: string[] = [];
+  for (const sourceRoot of KNOWLEDGE_SOURCE_ROOTS) {
+    const absoluteDir = join(searchRoot, sourceRoot.relativeDir);
+    if (!existsSync(absoluteDir) || !statSync(absoluteDir).isDirectory()) {
+      fingerprintParts.push(`${sourceRoot.relativeDir}:missing`);
+      continue;
+    }
+    const searchedRoot = relative(workspaceRoot, absoluteDir).replace(/\\/g, "/");
+    const files = collectMarkdownFiles(absoluteDir);
+    searchedRoots.push(searchedRoot);
+    sources.push({ sourceRoot, files });
+    fingerprintParts.push(`${sourceRoot.relativeDir}:dir:${searchedRoot}`);
+    for (const absolutePath of files) {
+      const stats = statSync(absolutePath);
+      fingerprintParts.push(
+        `${relative(workspaceRoot, absolutePath).replace(/\\/g, "/")}:${stats.size}:${stats.mtimeMs}`,
+      );
+    }
+  }
+  return {
+    sources,
     searchedRoots,
+    fingerprint: fingerprintParts.join("\n"),
   };
 }
 
@@ -577,6 +640,29 @@ function createKnowledgeFuse(docs: readonly KnowledgeDocRecord[]): Fuse<Knowledg
   });
 }
 
+function cachedKnowledgeFuse(
+  corpusFingerprint: string | undefined,
+  docs: readonly KnowledgeDocRecord[],
+): Fuse<KnowledgeDocRecord> {
+  if (!corpusFingerprint) {
+    return createKnowledgeFuse(docs);
+  }
+  const cacheKey = `${corpusFingerprint}\0${docs.map((doc) => doc.absolutePath).join("\0")}`;
+  const cached = knowledgeFuseCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const fuse = createKnowledgeFuse(docs);
+  knowledgeFuseCache.set(cacheKey, fuse);
+  if (knowledgeFuseCache.size > MAX_KNOWLEDGE_FUSE_CACHE_ENTRIES) {
+    const oldestKey = knowledgeFuseCache.keys().next().value;
+    if (oldestKey) {
+      knowledgeFuseCache.delete(oldestKey);
+    }
+  }
+  return fuse;
+}
+
 function searchDocs(
   docs: readonly KnowledgeDocRecord[],
   input: {
@@ -589,6 +675,7 @@ function searchDocs(
     problemKind?: string;
     status?: string;
     limit: number;
+    corpusFingerprint?: string;
   },
 ): RankedKnowledgeDoc[] {
   const filteredDocs = docs.filter((doc) =>
@@ -621,7 +708,7 @@ function searchDocs(
       .slice(0, input.limit);
   }
 
-  const fuse = createKnowledgeFuse(filteredDocs);
+  const fuse = cachedKnowledgeFuse(input.corpusFingerprint, filteredDocs);
   const queryTokens = tokenizeSearchQuery(input.query);
   const rankedByPath = new Map<string, RankedKnowledgeDoc>();
   for (const rankedEntry of fuse.search(input.query).map((fuseEntry) => {
@@ -744,6 +831,7 @@ export function executeKnowledgeSearch(
     ).values(),
   ];
   const searchedRoots = [...new Set(corpora.flatMap((corpus) => corpus.searchedRoots))].toSorted();
+  const corpusFingerprint = corpora.map((corpus) => corpus.fingerprint).join("\0");
 
   let results: RankedKnowledgeDoc[] = [];
   let searchPlan: ExecutedKnowledgeSearch["searchPlan"];
@@ -758,6 +846,7 @@ export function executeKnowledgeSearch(
       problemKind,
       status,
       limit,
+      corpusFingerprint,
     });
     searchPlan = {
       queryIntent,
@@ -777,6 +866,7 @@ export function executeKnowledgeSearch(
       problemKind,
       status,
       limit,
+      corpusFingerprint,
     });
     const scopedIncidentResults =
       module || boundary
@@ -790,6 +880,7 @@ export function executeKnowledgeSearch(
             problemKind,
             status,
             limit,
+            corpusFingerprint,
           })
         : [];
     const hasScopedRepositoryPrecedent =
@@ -833,6 +924,7 @@ export function executeKnowledgeSearch(
         problemKind,
         status,
         limit,
+        corpusFingerprint,
       });
       results = dedupeScoredDocs([...solutionResults, ...bootstrapResults])
         .toSorted(compareScoredDocs)

@@ -587,29 +587,101 @@ export function createHostedRuntimeOps(options: {
   }
 
   function listEvents(sessionId: string, query?: BrewvaEventQuery): RuntimeEventRecord[] {
-    let events = options.runtime.tape
-      .list(sessionId)
-      .map(canonicalToOperationalEvent)
-      .toSorted((left, right) => left.timestamp - right.timestamp);
-    if (query?.type) {
-      events = events.filter((event) => event.type === query.type);
+    const sourceEvents = options.runtime.tape.list(sessionId);
+    let orderedEvents = sourceEvents;
+    for (let index = 1; index < sourceEvents.length; index += 1) {
+      const previous = sourceEvents[index - 1];
+      const current = sourceEvents[index];
+      if (previous && current && previous.timestamp > current.timestamp) {
+        orderedEvents = [...sourceEvents].toSorted(
+          (left, right) => left.timestamp - right.timestamp,
+        );
+        break;
+      }
     }
-    if (typeof query?.after === "number") {
-      events = events.filter((event) => event.timestamp > query.after!);
+
+    const after =
+      typeof query?.after === "number" && Number.isFinite(query.after)
+        ? query.after
+        : typeof query?.since === "number" && Number.isFinite(query.since)
+          ? query.since
+          : null;
+    const before =
+      typeof query?.before === "number" && Number.isFinite(query.before) ? query.before : null;
+    const offset =
+      typeof query?.offset === "number" && Number.isFinite(query.offset)
+        ? Math.max(0, Math.trunc(query.offset))
+        : null;
+    const limit =
+      typeof query?.limit === "number" && Number.isFinite(query.limit)
+        ? Math.max(0, Math.trunc(query.limit))
+        : null;
+    const last =
+      typeof query?.last === "number" && Number.isFinite(query.last)
+        ? Math.max(0, Math.trunc(query.last))
+        : null;
+
+    const matchesQuery = (event: RuntimeEventRecord): boolean => {
+      if (query?.type && event.type !== query.type) {
+        return false;
+      }
+      if (query?.category && event.category !== query.category) {
+        return false;
+      }
+      if (after !== null && event.timestamp <= after) {
+        return false;
+      }
+      if (before !== null && event.timestamp >= before) {
+        return false;
+      }
+      return true;
+    };
+
+    if (last !== null) {
+      if (last === 0) {
+        return [];
+      }
+      const tail: RuntimeEventRecord[] = [];
+      for (let index = orderedEvents.length - 1; index >= 0; index -= 1) {
+        const event = orderedEvents[index];
+        if (!event) {
+          continue;
+        }
+        const operationalEvent = canonicalToOperationalEvent(event);
+        if (!matchesQuery(operationalEvent)) {
+          continue;
+        }
+        tail.push(operationalEvent);
+        if (tail.length >= last) {
+          break;
+        }
+      }
+      tail.reverse();
+      let window = tail;
+      if (offset !== null && offset > 0) {
+        window = window.slice(offset);
+      }
+      if (limit !== null) {
+        window = window.slice(0, limit);
+      }
+      return window;
     }
-    if (typeof query?.before === "number") {
-      events = events.filter((event) => event.timestamp < query.before!);
+
+    const matches: RuntimeEventRecord[] = [];
+    for (const event of orderedEvents) {
+      const operationalEvent = canonicalToOperationalEvent(event);
+      if (matchesQuery(operationalEvent)) {
+        matches.push(operationalEvent);
+      }
     }
-    if (typeof query?.offset === "number" && Number.isFinite(query.offset)) {
-      events = events.slice(Math.max(0, Math.trunc(query.offset)));
+    let window = matches;
+    if (offset !== null && offset > 0) {
+      window = window.slice(offset);
     }
-    if (typeof query?.limit === "number" && Number.isFinite(query.limit)) {
-      events = events.slice(0, Math.max(0, Math.trunc(query.limit)));
+    if (limit !== null) {
+      window = window.slice(0, limit);
     }
-    if (typeof query?.last === "number" && Number.isFinite(query.last)) {
-      events = events.slice(-Math.max(0, Math.trunc(query.last)));
-    }
-    return [...events];
+    return window;
   }
 
   function queryEvents(sessionId: string, query?: BrewvaEventQuery): RuntimeEventRecord[] {

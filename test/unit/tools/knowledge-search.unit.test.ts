@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { findKnowledgeDocByRelativePath } from "@brewva/brewva-recall/knowledge";
 import { createKnowledgeSearchTool } from "@brewva/brewva-tools/memory";
@@ -109,6 +109,55 @@ updated_at: 2026-04-19
 
     expect(Array.isArray(doc?.searchTokens)).toBe(true);
     expect(doc?.searchTokens).toEqual(expect.arrayContaining(["数据库", "连接"]));
+  });
+
+  test("invalidates cached knowledge documents when files change", () => {
+    const workspace = createTestWorkspace("knowledge-search-cache-invalidation");
+    const relativePath = "docs/solutions/runtime/cache-invalidation.md";
+    writeKnowledgeDoc(
+      workspace,
+      relativePath,
+      `---
+title: Old cache title
+status: active
+problem_kind: bugfix
+module: brewva-runtime
+updated_at: 2026-04-19
+---
+
+# Old cache title
+
+Old cached body.
+`,
+    );
+
+    expect(findKnowledgeDocByRelativePath([workspace], relativePath)?.title).toBe(
+      "Old cache title",
+    );
+
+    const absolutePath = join(workspace, relativePath);
+    writeKnowledgeDoc(
+      workspace,
+      relativePath,
+      `---
+title: New cache title
+status: active
+problem_kind: bugfix
+module: brewva-runtime
+updated_at: 2026-04-20
+---
+
+# New cache title
+
+New cached body.
+`,
+    );
+    const future = new Date(Date.now() + 5_000);
+    utimesSync(absolutePath, future, future);
+
+    expect(findKnowledgeDocByRelativePath([workspace], relativePath)?.title).toBe(
+      "New cache title",
+    );
   });
 
   test("returns source-typed repository precedents with relevance and authority details", async () => {

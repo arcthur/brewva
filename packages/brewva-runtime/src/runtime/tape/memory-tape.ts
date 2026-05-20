@@ -81,6 +81,9 @@ function filterEvents(
   events: readonly CanonicalEvent[],
   query: TapeQuery | undefined,
 ): readonly CanonicalEvent[] {
+  if (!query) {
+    return events.map(cloneEvent);
+  }
   const after =
     typeof query?.after === "number" && Number.isFinite(query.after) ? query.after : null;
   const before =
@@ -89,7 +92,7 @@ function filterEvents(
   const offset = normalizeWindowCount(query?.offset);
   const limit = normalizeWindowCount(query?.limit);
 
-  let matches = events.filter((event) => {
+  const matchesQuery = (event: CanonicalEvent): boolean => {
     if (query?.type && event.type !== query.type) {
       return false;
     }
@@ -100,18 +103,49 @@ function filterEvents(
       return false;
     }
     return true;
-  });
+  };
 
   if (last !== null) {
-    matches = matches.slice(-last);
+    if (last === 0) {
+      return [];
+    }
+    const tail: CanonicalEvent[] = [];
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (!event || !matchesQuery(event)) {
+        continue;
+      }
+      tail.push(event);
+      if (tail.length >= last) {
+        break;
+      }
+    }
+    tail.reverse();
+    let window = tail;
+    if (offset !== null && offset > 0) {
+      window = window.slice(offset);
+    }
+    if (limit !== null) {
+      window = window.slice(0, limit);
+    }
+    return window.map(cloneEvent);
   }
+
+  const matches: CanonicalEvent[] = [];
+  for (const event of events) {
+    if (matchesQuery(event)) {
+      matches.push(event);
+    }
+  }
+
+  let window = matches;
   if (offset !== null && offset > 0) {
-    matches = matches.slice(offset);
+    window = window.slice(offset);
   }
   if (limit !== null) {
-    matches = matches.slice(0, limit);
+    window = window.slice(0, limit);
   }
-  return matches.map(cloneEvent);
+  return window.map(cloneEvent);
 }
 
 function extractCause(event: CanonicalEvent): RuntimeRecoveryCause | null {

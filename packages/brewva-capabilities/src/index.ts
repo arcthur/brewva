@@ -348,15 +348,18 @@ function textTokens(value: string | undefined): Set<string> {
   return new Set((value ?? "").toLowerCase().match(/[a-z0-9_-]+/gu) ?? []);
 }
 
-function intersects(left: readonly string[] | undefined, right: readonly string[]): boolean {
+function intersects(left: readonly string[] | undefined, right: ReadonlySet<string>): boolean {
   if (!left || left.length === 0) return true;
-  const rightSet = new Set(right);
-  return left.some((entry) => rightSet.has(entry));
+  return left.some((entry) => right.has(entry));
 }
 
-function scoreManifest(manifest: CapabilityManifest, intentText: string | undefined): number {
-  const intentTokens = textTokens(intentText);
-  if (intentTokens.size === 0) return 0;
+const manifestTokenCache = new WeakMap<CapabilityManifest, Set<string>>();
+
+function manifestTokens(manifest: CapabilityManifest): Set<string> {
+  const cached = manifestTokenCache.get(manifest);
+  if (cached) {
+    return cached;
+  }
   const haystack = [
     manifest.name,
     manifest.provider,
@@ -370,10 +373,20 @@ function scoreManifest(manifest: CapabilityManifest, intentText: string | undefi
   ]
     .filter((entry): entry is string => Boolean(entry))
     .join(" ");
-  const manifestTokens = textTokens(haystack);
+  const tokens = textTokens(haystack);
+  manifestTokenCache.set(manifest, tokens);
+  return tokens;
+}
+
+function scoreManifestTokens(
+  manifest: CapabilityManifest,
+  intentTokens: ReadonlySet<string>,
+): number {
+  if (intentTokens.size === 0) return 0;
+  const tokens = manifestTokens(manifest);
   let score = 0;
   for (const token of intentTokens) {
-    if (manifestTokens.has(token)) {
+    if (tokens.has(token)) {
       score += 1;
     }
   }
@@ -382,16 +395,14 @@ function scoreManifest(manifest: CapabilityManifest, intentText: string | undefi
 
 function policyDefaultMatchesIntent(input: {
   manifest: CapabilityManifest;
-  defaultKey: string;
-  intentText: string | undefined;
+  defaultKeyTokens: ReadonlySet<string>;
+  intentTokens: ReadonlySet<string>;
 }): boolean {
-  const intentTokens = textTokens(input.intentText);
-  if (intentTokens.size === 0) return false;
-  const defaultKeyTokens = textTokens(input.defaultKey);
-  for (const token of defaultKeyTokens) {
-    if (intentTokens.has(token)) return true;
+  if (input.intentTokens.size === 0) return false;
+  for (const token of input.defaultKeyTokens) {
+    if (input.intentTokens.has(token)) return true;
   }
-  return scoreManifest(input.manifest, input.intentText) > 0;
+  return scoreManifestTokens(input.manifest, input.intentTokens) > 0;
 }
 
 export function computeCapabilityRegistryVersion(manifests: readonly CapabilityManifest[]): string {
@@ -426,15 +437,18 @@ function buildSelectionId(input: Omit<CapabilitySelectionReceipt, "selection_id"
 export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySelectionReceipt {
   const maxCandidates = Math.max(0, Math.min(3, input.maxCandidates ?? 3));
   const policy = input.policy ?? {};
+  const intentTokens = textTokens(input.intentText);
+  const agentScope = new Set(policy.agentScope ?? []);
+  const workspaceScope = new Set(policy.workspaceScope ?? []);
   const filteredOut: CapabilitySelectionFilteredOut[] = [];
   const policyDecisions: string[] = [];
 
   const scoped = input.manifests.filter((manifest) => {
-    if (!intersects(manifest.agentScope, [...(policy.agentScope ?? [])])) {
+    if (!intersects(manifest.agentScope, agentScope)) {
       filteredOut.push({ name: manifest.name, reason: "agent_scope" });
       return false;
     }
-    if (!intersects(manifest.workspaceScope, [...(policy.workspaceScope ?? [])])) {
+    if (!intersects(manifest.workspaceScope, workspaceScope)) {
       filteredOut.push({ name: manifest.name, reason: "workspace_scope" });
       return false;
     }
@@ -469,14 +483,17 @@ export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySe
 
   if (selected.length === 0 && policy.defaults) {
     const defaultEntries = Object.entries(policy.defaults);
+    const defaultKeyTokens = new Map(
+      defaultEntries.map(([key]) => [key, textTokens(key)] as const),
+    );
     const defaultMatches = scoped.filter((manifest) =>
       defaultEntries.some(
         ([key, capabilityName]) =>
           capabilityName === manifest.name &&
           policyDefaultMatchesIntent({
             manifest,
-            defaultKey: key,
-            intentText: input.intentText,
+            defaultKeyTokens: defaultKeyTokens.get(key) ?? new Set<string>(),
+            intentTokens,
           }),
       ),
     );
@@ -500,7 +517,7 @@ export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySe
     const ranked = scoped
       .map((manifest) => ({
         manifest,
-        score: scoreManifest(manifest, input.intentText),
+        score: scoreManifestTokens(manifest, intentTokens),
       }))
       .filter((entry) => entry.score > 0)
       .toSorted(

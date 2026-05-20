@@ -341,12 +341,11 @@ function resolveUnmatchedPresetSubagentModelKeys(input: {
 }
 
 function readLatestEventPayload<T extends object>(
-  runtime: HostedRuntimeAdapterPort,
-  sessionId: string,
+  events: readonly BrewvaEventRecord[],
   type: string,
   coerce: (payload: Record<string, unknown>) => T = (payload) => payload as T,
 ): { payload: T; timestamp: number } | null {
-  const event = queryCliRuntimeEvents(runtime, sessionId, { type, last: 1 })[0];
+  const event = events.toReversed().find((candidate) => candidate.type === type);
   if (!event?.payload) return null;
   return {
     payload: coerce(event.payload as Record<string, unknown>),
@@ -503,23 +502,19 @@ function listSessionPendingRecoveryWal(
     );
 }
 
-function hasReplayEvent(
-  runtime: HostedRuntimeAdapterPort,
-  sessionId: string,
-  type: string,
-): boolean {
-  return queryCliRuntimeEvents(runtime, sessionId, { type, last: 1 }).length > 0;
-}
-
 function scoreDefaultReplaySession(runtime: HostedRuntimeAdapterPort, sessionId: string): number {
-  if (hasReplayEvent(runtime, sessionId, "session_bootstrap")) {
+  const events = queryCliRuntimeEvents(runtime, sessionId);
+  if (events.some((event) => event.type === "session_bootstrap")) {
     return 3;
   }
   if (
-    hasReplayEvent(runtime, sessionId, "message_end") ||
-    hasReplayEvent(runtime, sessionId, "turn_start") ||
-    hasReplayEvent(runtime, sessionId, "agent_end") ||
-    hasReplayEvent(runtime, sessionId, "session_start")
+    events.some(
+      (event) =>
+        event.type === "message_end" ||
+        event.type === "turn_start" ||
+        event.type === "agent_end" ||
+        event.type === "session_start",
+    )
   ) {
     return 2;
   }
@@ -575,8 +570,17 @@ function buildInspectReport(
       (entry: { sessionId: string }) => entry.sessionId === sessionId,
     ) ?? null;
   const events = queryCliRuntimeEvents(runtime, sessionId);
-  const taskEvents = queryCliRuntimeEvents(runtime, sessionId, { type: TASK_EVENT_TYPE });
-  const claimEvents = queryCliRuntimeEvents(runtime, sessionId, { type: CLAIM_EVENT_TYPE });
+  const eventsByType = new Map<string, BrewvaEventRecord[]>();
+  for (const event of events) {
+    const bucket = eventsByType.get(event.type);
+    if (bucket) {
+      bucket.push(event);
+    } else {
+      eventsByType.set(event.type, [event]);
+    }
+  }
+  const taskEvents = eventsByType.get(TASK_EVENT_TYPE) ?? [];
+  const claimEvents = eventsByType.get(CLAIM_EVENT_TYPE) ?? [];
   const taskState = foldTaskLedgerEvents(taskEvents);
   const claimState = foldClaimLedgerEvents(claimEvents);
   const tapeStatus = getCliRuntimeTapeStatus(runtime, sessionId);
@@ -585,8 +589,7 @@ function buildInspectReport(
   const rewindState = getCliRuntimeRewindState(runtime, sessionId);
   const rewindTargets = listCliRuntimeRewindTargets(runtime, sessionId);
   const bootstrap = readLatestEventPayload<InspectBootstrapPayload>(
-    runtime,
-    sessionId,
+    events,
     "session_bootstrap",
   )?.payload;
   const bootstrapArtifactRoots =

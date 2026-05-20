@@ -2159,22 +2159,96 @@ export function parseCronExpression(expression: string): ParseCronExpressionResu
   return { ok: true, expression: normalized };
 }
 
-function localTimePartsFor(
-  timeZone: string,
-  date: Date,
-): {
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+interface LocalMinuteParts {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
   readonly hour: number;
   readonly minute: number;
-} {
-  const parts = new Intl.DateTimeFormat("en-US", {
+}
+
+const localMinuteFormatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function getLocalMinuteFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = localMinuteFormatterCache.get(timeZone);
+  if (cached) {
+    return cached;
+  }
+  const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
     hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).formatToParts(date);
-  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
-  return { hour, minute };
+  });
+  localMinuteFormatterCache.set(timeZone, formatter);
+  return formatter;
+}
+
+function localTimePartsFor(formatter: Intl.DateTimeFormat, date: Date): LocalMinuteParts {
+  const values = new Map(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.get("year") ?? "0"),
+    month: Number(values.get("month") ?? "0"),
+    day: Number(values.get("day") ?? "0"),
+    hour: Number(values.get("hour") ?? "0"),
+    minute: Number(values.get("minute") ?? "0"),
+  };
+}
+
+function addCalendarDays(
+  parts: Pick<LocalMinuteParts, "year" | "month" | "day">,
+  days: number,
+): Pick<LocalMinuteParts, "year" | "month" | "day"> {
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
+}
+
+function localMinuteMatches(actual: LocalMinuteParts, expected: LocalMinuteParts): boolean {
+  return (
+    actual.year === expected.year &&
+    actual.month === expected.month &&
+    actual.day === expected.day &&
+    actual.hour === expected.hour &&
+    actual.minute === expected.minute
+  );
+}
+
+function timeZoneOffsetMs(formatter: Intl.DateTimeFormat, date: Date): number {
+  const local = localTimePartsFor(formatter, date);
+  const localAsUtc = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute);
+  return localAsUtc - (date.getTime() - (date.getTime() % MINUTE_MS));
+}
+
+function localMinuteInstants(formatter: Intl.DateTimeFormat, local: LocalMinuteParts): number[] {
+  const localAsUtc = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute);
+  const offsets = new Set<number>();
+  for (const sampleHour of [-36, -24, -12, 0, 12, 24, 36]) {
+    offsets.add(timeZoneOffsetMs(formatter, new Date(localAsUtc + sampleHour * HOUR_MS)));
+  }
+
+  const seen = new Set<number>();
+  const instants: number[] = [];
+  for (const offset of offsets) {
+    const instant = localAsUtc - offset;
+    if (seen.has(instant)) {
+      continue;
+    }
+    if (localMinuteMatches(localTimePartsFor(formatter, new Date(instant)), local)) {
+      seen.add(instant);
+      instants.push(instant);
+    }
+  }
+  return instants.toSorted((left, right) => left - right);
 }
 
 export function getNextCronRunAt(
@@ -2195,13 +2269,21 @@ export function getNextCronRunAt(
   const targetMinute = Number.parseInt(minuteRaw ?? "0", 10);
   const targetHour = Number.parseInt(hourRaw ?? "0", 10);
   const timeZone = normalizeTimeZone(options.timeZone);
-  const start = from.getTime() + 60_000 - (from.getTime() % 60_000);
-  const maxMinutes = 366 * 24 * 60;
-  for (let index = 0; index < maxMinutes; index += 1) {
-    const candidate = new Date(start + index * 60_000);
-    const local = localTimePartsFor(timeZone, candidate);
-    if (local.hour === targetHour && local.minute === targetMinute) {
-      return candidate;
+  const formatter = getLocalMinuteFormatter(timeZone);
+  const start = from.getTime() + MINUTE_MS - (from.getTime() % MINUTE_MS);
+  const startLocal = localTimePartsFor(formatter, new Date(start));
+
+  for (let dayOffset = 0; dayOffset <= 366; dayOffset += 1) {
+    const localDate = addCalendarDays(startLocal, dayOffset);
+    const localTarget = {
+      ...localDate,
+      hour: targetHour,
+      minute: targetMinute,
+    };
+    for (const instant of localMinuteInstants(formatter, localTarget)) {
+      if (instant >= start) {
+        return new Date(instant);
+      }
     }
   }
   return new Date(start);
