@@ -1,9 +1,12 @@
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type {
   AssistantMessage,
   ProviderEventSink,
   Model,
+  ProviderStreamError,
   ProviderSessionResources,
 } from "../../contracts/index.js";
+import { providerTryPromise } from "../../stream/effect-interop.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
 import { processResponsesStream } from "../openai-responses/stream-events.js";
 import {
@@ -389,7 +392,7 @@ function cloneProtocolPayload<T>(value: T): T {
   return structuredClone(value);
 }
 
-export async function processWebSocketStream(
+export function processWebSocketStream(
   url: string,
   body: RequestBody,
   headers: Headers,
@@ -399,61 +402,66 @@ export async function processWebSocketStream(
   toolCalls: IncrementalToolCallFolder,
   onStart: () => void,
   options?: OpenAICodexResponsesOptions,
-): Promise<void> {
-  const { socket, release } = await acquireWebSocket(
-    url,
-    headers,
-    options?.sessionId,
-    options?.signal,
-  );
-  let keepConnection = true;
-  const sessionGeneration = options?.sessionId
-    ? readCodexSessionGeneration(options.sessionId)
-    : undefined;
-  const continuation = options?.sessionId
-    ? readCodexContinuationState(options.sessionId, model)
-    : undefined;
-  const outboundBody = buildCodexContinuationRequest(
-    body,
-    continuation,
-    options?.previousResponseId,
-  );
-  const tracker: CodexResponseTracker = { outputItems: [] };
-  try {
-    socket.send(JSON.stringify({ type: "response.create", ...outboundBody }));
-    onStart();
-    await processResponsesStream(
-      mapCodexEvents(trackCodexResponse(parseWebSocket(socket, options?.signal), tracker)),
-      output,
-      stream,
-      model,
-      toolCalls,
+): BrewvaEffect.Effect<void, ProviderStreamError> {
+  return BrewvaEffect.gen(function* () {
+    const { socket, release } = yield* providerTryPromise(() =>
+      acquireWebSocket(url, headers, options?.sessionId, options?.signal),
     );
-    const responseId = tracker.responseId ?? output.responseId;
-    if (
-      options?.sessionId &&
-      responseId &&
-      sessionGeneration !== undefined &&
-      codexSessionGenerationMatches(options.sessionId, sessionGeneration)
-    ) {
-      rememberCodexContinuationState(options.sessionId, {
-        model: model.id,
-        previousRequest: cloneProtocolPayload(body),
-        lastResponse: {
-          responseId,
-          outputItems: cloneProtocolPayload(tracker.outputItems),
-        },
-      });
-    }
-    if (options?.signal?.aborted) {
-      keepConnection = false;
-    }
-  } catch (error) {
-    keepConnection = false;
-    throw error;
-  } finally {
-    release({ keep: keepConnection });
-  }
+    let keepConnection = true;
+    const sessionGeneration = options?.sessionId
+      ? readCodexSessionGeneration(options.sessionId)
+      : undefined;
+    const continuation = options?.sessionId
+      ? readCodexContinuationState(options.sessionId, model)
+      : undefined;
+    const outboundBody = buildCodexContinuationRequest(
+      body,
+      continuation,
+      options?.previousResponseId,
+    );
+    const tracker: CodexResponseTracker = { outputItems: [] };
+
+    yield* BrewvaEffect.gen(function* () {
+      socket.send(JSON.stringify({ type: "response.create", ...outboundBody }));
+      onStart();
+      yield* processResponsesStream(
+        mapCodexEvents(trackCodexResponse(parseWebSocket(socket, options?.signal), tracker)),
+        output,
+        stream,
+        model,
+        toolCalls,
+      );
+      const responseId = tracker.responseId ?? output.responseId;
+      if (
+        options?.sessionId &&
+        responseId &&
+        sessionGeneration !== undefined &&
+        codexSessionGenerationMatches(options.sessionId, sessionGeneration)
+      ) {
+        rememberCodexContinuationState(options.sessionId, {
+          model: model.id,
+          previousRequest: cloneProtocolPayload(body),
+          lastResponse: {
+            responseId,
+            outputItems: cloneProtocolPayload(tracker.outputItems),
+          },
+        });
+      }
+      if (options?.signal?.aborted) {
+        keepConnection = false;
+      }
+    }).pipe(
+      BrewvaEffect.catch((error) => {
+        keepConnection = false;
+        return BrewvaEffect.fail(error);
+      }),
+      BrewvaEffect.ensuring(
+        providerTryPromise(async () => {
+          release({ keep: keepConnection });
+        }).pipe(BrewvaEffect.catch(() => BrewvaEffect.void)),
+      ),
+    );
+  });
 }
 
 export const sessionResources: ProviderSessionResources = {

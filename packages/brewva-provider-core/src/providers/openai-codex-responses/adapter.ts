@@ -1,9 +1,5 @@
 import type * as NodeOs from "node:os";
-import {
-  fromAbortableBoundaryPromise,
-  retryWithBrewvaPolicy,
-  runBoundaryOperation,
-} from "@brewva/brewva-effect";
+import { fromAbortableBoundaryPromise, retryWithBrewvaPolicy } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { supportsXhigh } from "../../catalog/index.js";
 import type {
@@ -13,6 +9,11 @@ import type {
   StreamFunction,
   Transport,
 } from "../../contracts/index.js";
+import {
+  failProviderStream,
+  providerTryPromise,
+  toProviderStreamError,
+} from "../../stream/effect-interop.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
 import { buildProviderPayloadMetadata } from "../_shared/payload-metadata.js";
 import { buildBaseOptions, clampReasoning } from "../_shared/simple-options.js";
@@ -298,44 +299,42 @@ export const streamOpenAICodexResponses: StreamFunction<
 ) => {
   return runProviderStream(
     model,
-    async ({ stream, output, ensureStarted, composer, signal }) => {
-      const apiKey = options?.apiKey || "";
-      if (!apiKey) {
-        throw new Error(`No API key for provider: ${model.provider}`);
-      }
+    ({ stream, output, ensureStarted, composer, signal }) =>
+      BrewvaEffect.gen(function* () {
+        const apiKey = options?.apiKey || "";
+        if (!apiKey) {
+          return yield* failProviderStream(`No API key for provider: ${model.provider}`);
+        }
 
-      const accountId = extractAccountId(apiKey);
-      let body = buildRequestBody(model, context, options);
-      const nextBody = await options?.onPayload?.(
-        body,
-        model,
-        buildProviderPayloadMetadata(model, options, body),
-      );
-      if (nextBody !== undefined) {
-        body = nextBody as RequestBody;
-      }
-      const websocketRequestId = options?.sessionId || createCodexRequestId();
-      const sseHeaders = buildSSEHeaders(
-        model.headers,
-        options?.headers,
-        accountId,
-        apiKey,
-        options?.sessionId,
-      );
-      const websocketHeaders = buildWebSocketHeaders(
-        model.headers,
-        options?.headers,
-        accountId,
-        apiKey,
-        websocketRequestId,
-      );
-      const transport = resolveCodexTransport(options);
-      const linkedOptions: OpenAICodexResponsesOptions = { ...options, signal };
+        const accountId = yield* providerTryPromise(async () => extractAccountId(apiKey));
+        let body = buildRequestBody(model, context, options);
+        const nextBody = yield* providerTryPromise(async () =>
+          options?.onPayload?.(body, model, buildProviderPayloadMetadata(model, options, body)),
+        );
+        if (nextBody !== undefined) {
+          body = nextBody as RequestBody;
+        }
+        const websocketRequestId = options?.sessionId || createCodexRequestId();
+        const sseHeaders = buildSSEHeaders(
+          model.headers,
+          options?.headers,
+          accountId,
+          apiKey,
+          options?.sessionId,
+        );
+        const websocketHeaders = buildWebSocketHeaders(
+          model.headers,
+          options?.headers,
+          accountId,
+          apiKey,
+          websocketRequestId,
+        );
+        const transport = resolveCodexTransport(options);
+        const linkedOptions: OpenAICodexResponsesOptions = { ...options, signal };
 
-      if (shouldAttemptCodexWebSocketTransport(transport, options?.sessionId)) {
-        let websocketStarted = false;
-        try {
-          await processWebSocketStream(
+        if (shouldAttemptCodexWebSocketTransport(transport, options?.sessionId)) {
+          let websocketStarted = false;
+          const websocketResult = yield* processWebSocketStream(
             resolveCodexWebSocketUrl(model.baseUrl),
             body,
             websocketHeaders,
@@ -347,38 +346,38 @@ export const streamOpenAICodexResponses: StreamFunction<
               websocketStarted = true;
             },
             linkedOptions,
+          ).pipe(
+            BrewvaEffect.map(() => ({ ok: true as const })),
+            BrewvaEffect.catch((error) => BrewvaEffect.succeed({ ok: false as const, error })),
           );
 
-          if (signal.aborted) {
-            throw new Error("Request was aborted");
+          if (websocketResult.ok) {
+            if (signal.aborted) {
+              return yield* failProviderStream("Request was aborted");
+            }
+            return;
           }
-          return;
-        } catch (error) {
+
           if (transport === "websocket" || websocketStarted) {
-            throw error;
+            return yield* BrewvaEffect.fail(websocketResult.error);
           }
           recordCodexWebSocketFallback(options?.sessionId);
         }
-      }
 
-      const response = await runBoundaryOperation(
-        "provider.openaiCodexResponses.fetchSse",
-        fetchCodexSseResponseEffect({
+        const response = yield* fetchCodexSseResponseEffect({
           url: resolveCodexUrl(model.baseUrl),
           headers: sseHeaders,
           bodyJson: JSON.stringify(body),
           signal,
-        }),
-        { signal },
-      );
+        }).pipe(BrewvaEffect.mapError(toProviderStreamError));
 
-      if (!response.body) {
-        throw new Error("No response body");
-      }
+        if (!response.body) {
+          return yield* failProviderStream("No response body");
+        }
 
-      await ensureStarted();
-      await processStream(response, output, stream, model, composer.toolCalls);
-    },
+        yield* ensureStarted();
+        yield* processStream(response, output, stream, model, composer.toolCalls);
+      }),
     {
       signal: options?.signal,
       sessionId: options?.sessionId,

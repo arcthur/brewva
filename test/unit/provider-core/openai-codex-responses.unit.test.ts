@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { Model } from "@brewva/brewva-provider-core/contracts";
 import { buildBaseOptions } from "../../../packages/brewva-provider-core/src/providers/_shared/simple-options.js";
 import {
@@ -25,6 +26,7 @@ import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-cor
 import {
   collectProviderEvents,
   createRecordingProviderEventStream,
+  runProviderCoreEffect,
 } from "../../helpers/effect-stream.js";
 import { sleep } from "../../helpers/process.js";
 
@@ -96,7 +98,7 @@ const CODEX_MODEL: Model<"openai-codex-responses"> = {
 function createCodexStreamHarness() {
   const stream = createRecordingProviderEventStream();
   const output = createAssistantMessage(CODEX_MODEL);
-  const toolCalls = new IncrementalToolCallFolder(output, stream, async () => {});
+  const toolCalls = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void);
   return { stream, output, toolCalls };
 }
 
@@ -220,38 +222,42 @@ describe("openai codex responses continuation", () => {
     clearCodexSessionState("session-concurrent-clear");
     try {
       const first = createCodexStreamHarness();
-      const firstRun = processWebSocketStream(
-        "wss://chatgpt.example/codex/responses",
-        {
-          model: CODEX_MODEL.id,
-          stream: true,
-          input: [],
-        },
-        new Headers(),
-        first.output,
-        first.stream,
-        CODEX_MODEL,
-        first.toolCalls,
-        () => undefined,
-        { sessionId: "session-concurrent-clear" },
+      const firstRun = runProviderCoreEffect(
+        processWebSocketStream(
+          "wss://chatgpt.example/codex/responses",
+          {
+            model: CODEX_MODEL.id,
+            stream: true,
+            input: [],
+          },
+          new Headers(),
+          first.output,
+          first.stream,
+          CODEX_MODEL,
+          first.toolCalls,
+          () => undefined,
+          { sessionId: "session-concurrent-clear" },
+        ),
       ).catch(() => undefined);
       const cachedSocket = await waitForSentSocket(0);
 
       const second = createCodexStreamHarness();
-      const secondRun = processWebSocketStream(
-        "wss://chatgpt.example/codex/responses",
-        {
-          model: CODEX_MODEL.id,
-          stream: true,
-          input: [],
-        },
-        new Headers(),
-        second.output,
-        second.stream,
-        CODEX_MODEL,
-        second.toolCalls,
-        () => undefined,
-        { sessionId: "session-concurrent-clear" },
+      const secondRun = runProviderCoreEffect(
+        processWebSocketStream(
+          "wss://chatgpt.example/codex/responses",
+          {
+            model: CODEX_MODEL.id,
+            stream: true,
+            input: [],
+          },
+          new Headers(),
+          second.output,
+          second.stream,
+          CODEX_MODEL,
+          second.toolCalls,
+          () => undefined,
+          { sessionId: "session-concurrent-clear" },
+        ),
       );
       const uncachedSocket = await waitForSentSocket(1);
 
@@ -293,20 +299,22 @@ describe("openai codex responses continuation", () => {
     clearCodexSessionState("session-websocket-start-owner");
     try {
       const harness = createCodexStreamHarness();
-      const run = processWebSocketStream(
-        "wss://chatgpt.example/codex/responses",
-        {
-          model: CODEX_MODEL.id,
-          stream: true,
-          input: [],
-        },
-        new Headers(),
-        harness.output,
-        harness.stream,
-        CODEX_MODEL,
-        harness.toolCalls,
-        () => undefined,
-        { sessionId: "session-websocket-start-owner" },
+      const run = runProviderCoreEffect(
+        processWebSocketStream(
+          "wss://chatgpt.example/codex/responses",
+          {
+            model: CODEX_MODEL.id,
+            stream: true,
+            input: [],
+          },
+          new Headers(),
+          harness.output,
+          harness.stream,
+          CODEX_MODEL,
+          harness.toolCalls,
+          () => undefined,
+          { sessionId: "session-websocket-start-owner" },
+        ),
       );
       const socket = await waitForSentSocket(0);
       socket.dispatchMessage({

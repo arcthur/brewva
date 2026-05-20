@@ -1,3 +1,4 @@
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import { buildProviderCacheBucketKey, normalizeProviderCachePolicy } from "../../cache/policy.js";
 import type {
@@ -10,6 +11,7 @@ import type {
   ProviderCacheCapability,
   ProviderCacheRenderResult,
   ProviderEventSink,
+  ProviderStreamError,
   SimpleStreamOptions,
   StreamFunction,
   StreamOptions,
@@ -23,6 +25,7 @@ import {
   registerExternalApiProvider,
   unregisterApiProviders,
 } from "../../registry/api-registry.js";
+import { failProviderStream, providerTryPromise } from "../../stream/effect-interop.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
 import { buildProviderPayloadMetadata } from "../_shared/payload-metadata.js";
 
@@ -377,6 +380,10 @@ function createAbortedMessage(partial: AssistantMessage): AssistantMessage {
   };
 }
 
+function createAbortedErrorMessage(partial: AssistantMessage): string {
+  return createAbortedMessage(partial).errorMessage ?? "Request was aborted";
+}
+
 function scheduleChunk(chunk: string, tokensPerSecond: number | undefined): Promise<void> {
   if (!tokensPerSecond || tokensPerSecond <= 0) {
     return new Promise((resolve) => queueMicrotask(resolve));
@@ -385,125 +392,129 @@ function scheduleChunk(chunk: string, tokensPerSecond: number | undefined): Prom
   return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
-async function streamWithDeltas(
+function streamWithDeltas(
   stream: ProviderEventSink,
   message: AssistantMessage,
   minTokenSize: number,
   maxTokenSize: number,
   tokensPerSecond: number | undefined,
   signal: AbortSignal | undefined,
-): Promise<AssistantMessage> {
-  const partial: AssistantMessage = { ...message, content: [] };
-  if (signal?.aborted) {
-    throw new Error(createAbortedMessage(partial).errorMessage);
-  }
-
-  await stream.push({ type: "start", partial: { ...partial } });
-
-  for (let index = 0; index < message.content.length; index++) {
+): BrewvaEffect.Effect<AssistantMessage, ProviderStreamError> {
+  return BrewvaEffect.gen(function* () {
+    const partial: AssistantMessage = { ...message, content: [] };
     if (signal?.aborted) {
-      throw new Error(createAbortedMessage(partial).errorMessage);
+      return yield* failProviderStream(createAbortedErrorMessage(partial));
     }
 
-    const block = message.content[index]!;
+    yield* stream.push({ type: "start", partial: { ...partial } });
 
-    if (block.type === "thinking") {
-      partial.content = [...partial.content, { type: "thinking", thinking: "" }];
-      await stream.push({
-        type: "thinking_start",
-        contentIndex: index,
-        partial: { ...partial },
-      });
-      for (const chunk of splitStringByTokenSize(block.thinking, minTokenSize, maxTokenSize)) {
-        await scheduleChunk(chunk, tokensPerSecond);
-        if (signal?.aborted) {
-          throw new Error(createAbortedMessage(partial).errorMessage);
-        }
-        (partial.content[index] as ThinkingContent).thinking += chunk;
-        await stream.push({
-          type: "thinking_delta",
-          contentIndex: index,
-          delta: chunk,
-          partial: { ...partial },
-        });
-      }
-      await stream.push({
-        type: "thinking_end",
-        contentIndex: index,
-        content: block.thinking,
-        partial: { ...partial },
-      });
-      continue;
-    }
-
-    if (block.type === "text") {
-      partial.content = [...partial.content, { type: "text", text: "" }];
-      await stream.push({
-        type: "text_start",
-        contentIndex: index,
-        partial: { ...partial },
-      });
-      for (const chunk of splitStringByTokenSize(block.text, minTokenSize, maxTokenSize)) {
-        await scheduleChunk(chunk, tokensPerSecond);
-        if (signal?.aborted) {
-          throw new Error(createAbortedMessage(partial).errorMessage);
-        }
-        (partial.content[index] as TextContent).text += chunk;
-        await stream.push({
-          type: "text_delta",
-          contentIndex: index,
-          delta: chunk,
-          partial: { ...partial },
-        });
-      }
-      await stream.push({
-        type: "text_end",
-        contentIndex: index,
-        content: block.text,
-        partial: { ...partial },
-      });
-      continue;
-    }
-
-    partial.content = [
-      ...partial.content,
-      { type: "toolCall", id: block.id, name: block.name, arguments: {} },
-    ];
-    await stream.push({
-      type: "toolcall_start",
-      contentIndex: index,
-      partial: { ...partial },
-    });
-    for (const chunk of splitStringByTokenSize(
-      JSON.stringify(block.arguments),
-      minTokenSize,
-      maxTokenSize,
-    )) {
-      await scheduleChunk(chunk, tokensPerSecond);
+    for (let index = 0; index < message.content.length; index++) {
       if (signal?.aborted) {
-        throw new Error(createAbortedMessage(partial).errorMessage);
+        return yield* failProviderStream(createAbortedErrorMessage(partial));
       }
-      await stream.push({
-        type: "toolcall_delta",
+
+      const block = message.content[index]!;
+
+      if (block.type === "thinking") {
+        partial.content = [...partial.content, { type: "thinking", thinking: "" }];
+        yield* stream.push({
+          type: "thinking_start",
+          contentIndex: index,
+          partial: { ...partial },
+        });
+        for (const chunk of splitStringByTokenSize(block.thinking, minTokenSize, maxTokenSize)) {
+          yield* providerTryPromise(() => scheduleChunk(chunk, tokensPerSecond));
+          if (signal?.aborted) {
+            return yield* failProviderStream(createAbortedErrorMessage(partial));
+          }
+          (partial.content[index] as ThinkingContent).thinking += chunk;
+          yield* stream.push({
+            type: "thinking_delta",
+            contentIndex: index,
+            delta: chunk,
+            partial: { ...partial },
+          });
+        }
+        yield* stream.push({
+          type: "thinking_end",
+          contentIndex: index,
+          content: block.thinking,
+          partial: { ...partial },
+        });
+        continue;
+      }
+
+      if (block.type === "text") {
+        partial.content = [...partial.content, { type: "text", text: "" }];
+        yield* stream.push({
+          type: "text_start",
+          contentIndex: index,
+          partial: { ...partial },
+        });
+        for (const chunk of splitStringByTokenSize(block.text, minTokenSize, maxTokenSize)) {
+          yield* providerTryPromise(() => scheduleChunk(chunk, tokensPerSecond));
+          if (signal?.aborted) {
+            return yield* failProviderStream(createAbortedErrorMessage(partial));
+          }
+          (partial.content[index] as TextContent).text += chunk;
+          yield* stream.push({
+            type: "text_delta",
+            contentIndex: index,
+            delta: chunk,
+            partial: { ...partial },
+          });
+        }
+        yield* stream.push({
+          type: "text_end",
+          contentIndex: index,
+          content: block.text,
+          partial: { ...partial },
+        });
+        continue;
+      }
+
+      partial.content = [
+        ...partial.content,
+        { type: "toolCall", id: block.id, name: block.name, arguments: {} },
+      ];
+      yield* stream.push({
+        type: "toolcall_start",
         contentIndex: index,
-        delta: chunk,
+        partial: { ...partial },
+      });
+      for (const chunk of splitStringByTokenSize(
+        JSON.stringify(block.arguments),
+        minTokenSize,
+        maxTokenSize,
+      )) {
+        yield* providerTryPromise(() => scheduleChunk(chunk, tokensPerSecond));
+        if (signal?.aborted) {
+          return yield* failProviderStream(createAbortedErrorMessage(partial));
+        }
+        yield* stream.push({
+          type: "toolcall_delta",
+          contentIndex: index,
+          delta: chunk,
+          partial: { ...partial },
+        });
+      }
+      (partial.content[index] as ToolCall).arguments = block.arguments;
+      yield* stream.push({
+        type: "toolcall_end",
+        contentIndex: index,
+        toolCall: block,
         partial: { ...partial },
       });
     }
-    (partial.content[index] as ToolCall).arguments = block.arguments;
-    await stream.push({
-      type: "toolcall_end",
-      contentIndex: index,
-      toolCall: block,
-      partial: { ...partial },
-    });
-  }
 
-  if (message.stopReason === "error" || message.stopReason === "aborted") {
-    throw new Error(message.errorMessage || `Faux provider returned ${message.stopReason}`);
-  }
+    if (message.stopReason === "error" || message.stopReason === "aborted") {
+      return yield* failProviderStream(
+        message.errorMessage || `Faux provider returned ${message.stopReason}`,
+      );
+    }
 
-  return message;
+    return message;
+  });
 }
 
 export function registerFauxProvider(
@@ -562,43 +573,52 @@ export function registerFauxProvider(
 
     return runProviderStream(
       requestModel,
-      async ({ stream: sink, output, signal }) => {
-        const cacheRender = resolveFauxCacheRender(requestModel, streamOptions);
-        await streamOptions?.onCacheRender?.(cacheRender, requestModel);
-        const payload = buildFauxPayload(context, requestModel);
-        await streamOptions?.onPayload?.(
-          payload,
-          requestModel,
-          buildProviderPayloadMetadata(requestModel, streamOptions, payload, cacheRender),
-        );
+      ({ stream: sink, output, signal }) =>
+        BrewvaEffect.gen(function* () {
+          const cacheRender = resolveFauxCacheRender(requestModel, streamOptions);
+          yield* providerTryPromise(async () => {
+            await streamOptions?.onCacheRender?.(cacheRender, requestModel);
+          });
+          const payload = buildFauxPayload(context, requestModel);
+          yield* providerTryPromise(async () => {
+            await streamOptions?.onPayload?.(
+              payload,
+              requestModel,
+              buildProviderPayloadMetadata(requestModel, streamOptions, payload, cacheRender),
+            );
+          });
 
-        if (!step) {
-          let message = createErrorMessage(
-            new Error("No more faux responses queued"),
-            api,
-            provider,
-            requestModel.id,
-          );
+          if (!step) {
+            let message = createErrorMessage(
+              new Error("No more faux responses queued"),
+              api,
+              provider,
+              requestModel.id,
+            );
+            message = withUsageEstimate(message, context, streamOptions, promptCache);
+            return yield* failProviderStream(
+              message.errorMessage ?? "No more faux responses queued",
+            );
+          }
+
+          const resolved =
+            typeof step === "function"
+              ? yield* providerTryPromise(() =>
+                  Promise.resolve(step(context, streamOptions, state, requestModel)),
+                )
+              : step;
+          let message = cloneMessage(resolved, api, provider, requestModel.id);
           message = withUsageEstimate(message, context, streamOptions, promptCache);
-          throw new Error(message.errorMessage);
-        }
-
-        const resolved =
-          typeof step === "function"
-            ? await step(context, streamOptions, state, requestModel)
-            : step;
-        let message = cloneMessage(resolved, api, provider, requestModel.id);
-        message = withUsageEstimate(message, context, streamOptions, promptCache);
-        const finalMessage = await streamWithDeltas(
-          sink,
-          message,
-          minTokenSize,
-          maxTokenSize,
-          tokensPerSecond,
-          signal,
-        );
-        Object.assign(output, finalMessage);
-      },
+          const finalMessage = yield* streamWithDeltas(
+            sink,
+            message,
+            minTokenSize,
+            maxTokenSize,
+            tokensPerSecond,
+            signal,
+          );
+          Object.assign(output, finalMessage);
+        }),
       { signal: streamOptions?.signal, sessionId: streamOptions?.sessionId },
     );
   };

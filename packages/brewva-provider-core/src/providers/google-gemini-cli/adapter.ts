@@ -1,11 +1,12 @@
-import {
-  fromAbortableBoundaryPromise,
-  retryWithBrewvaPolicy,
-  runBoundaryOperation,
-} from "@brewva/brewva-effect";
+import { fromAbortableBoundaryPromise, retryWithBrewvaPolicy } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { asPartialObject } from "@brewva/brewva-std/unknown";
 import type { Context, Model, SimpleStreamOptions, StreamFunction } from "../../contracts/index.js";
+import {
+  failProviderStream,
+  providerTryPromise,
+  toProviderStreamError,
+} from "../../stream/effect-interop.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
 import { readSseFrames } from "../../stream/sse-frame-reader.js";
 import { buildProviderPayloadMetadata } from "../_shared/payload-metadata.js";
@@ -163,16 +164,12 @@ function processGoogleGeminiCliStreamEffect(input: {
     count: number;
   };
 }): BrewvaEffect.Effect<void, GoogleGeminiCliRequestError> {
-  return fromAbortableBoundaryPromise(
-    () =>
-      processGoogleGeminiCliSseStream(
-        createChunkStream(input.response),
-        input.output,
-        input.stream,
-        input.model,
-        input.toolCalls,
-      ),
-    input.signal,
+  return processGoogleGeminiCliSseStream(
+    createChunkStream(input.response),
+    input.output,
+    input.stream,
+    input.model,
+    input.toolCalls,
   ).pipe(
     BrewvaEffect.mapError(toError),
     BrewvaEffect.catch((error) => {
@@ -203,69 +200,72 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli", GoogleGe
 ) => {
   return runProviderStream(
     model,
-    async ({ stream, output, ensureStarted, composer, signal }) => {
-      if (!options?.apiKey) {
-        throw new Error(
-          `Google Gemini CLI requires Google Cloud credentials. ${GOOGLE_CLOUD_CODE_ASSIST_CREDENTIAL_HINT}`,
+    ({ stream, output, ensureStarted, composer, signal }) =>
+      BrewvaEffect.gen(function* () {
+        const apiKey = options?.apiKey;
+        if (!apiKey) {
+          return yield* failProviderStream(
+            `Google Gemini CLI requires Google Cloud credentials. ${GOOGLE_CLOUD_CODE_ASSIST_CREDENTIAL_HINT}`,
+          );
+        }
+
+        const { token, projectId: credentialProjectId } = yield* providerTryPromise(async () =>
+          parseGoogleGeminiCliCredential(apiKey),
         );
-      }
-
-      const { token, projectId: credentialProjectId } = parseGoogleGeminiCliCredential(
-        options.apiKey,
-      );
-      const projectId = options.projectId || credentialProjectId;
-      let requestBody = buildRequest(model, context, projectId, options);
-      const nextRequestBody = await options.onPayload?.(
-        requestBody,
-        model,
-        buildProviderPayloadMetadata(model, options, requestBody),
-      );
-      if (nextRequestBody !== undefined) {
-        requestBody = {
-          ...requestBody,
-          ...asPartialObject<typeof requestBody>(nextRequestBody),
+        const projectId = options.projectId || credentialProjectId;
+        let requestBody = buildRequest(model, context, projectId, options);
+        const nextRequestBody = yield* providerTryPromise(async () =>
+          options.onPayload?.(
+            requestBody,
+            model,
+            buildProviderPayloadMetadata(model, options, requestBody),
+          ),
+        );
+        if (nextRequestBody !== undefined) {
+          requestBody = {
+            ...requestBody,
+            ...asPartialObject<typeof requestBody>(nextRequestBody),
+          };
+        }
+        const requestUrlBase = DEFAULT_ENDPOINT;
+        const headers = {
+          ...GEMINI_CLI_HEADERS,
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         };
-      }
-      const requestUrlBase = DEFAULT_ENDPOINT;
-      const headers = {
-        ...GEMINI_CLI_HEADERS,
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      };
 
-      await ensureStarted();
+        yield* ensureStarted();
 
-      const emptyStreamRetries = { count: 0 };
-      const attempt = BrewvaEffect.gen(function* () {
-        const response = yield* fetchGoogleGeminiCliResponseEffect({
-          requestUrl: `${requestUrlBase}/v1internal:streamGenerateContent?alt=sse`,
-          headers,
-          requestBody,
-          signal,
+        const emptyStreamRetries = { count: 0 };
+        const attempt = BrewvaEffect.gen(function* () {
+          const response = yield* fetchGoogleGeminiCliResponseEffect({
+            requestUrl: `${requestUrlBase}/v1internal:streamGenerateContent?alt=sse`,
+            headers,
+            requestBody,
+            signal,
+          });
+          yield* processGoogleGeminiCliStreamEffect({
+            response,
+            output,
+            stream,
+            model,
+            toolCalls: composer.toolCalls,
+            signal,
+            emptyStreamRetries,
+          });
         });
-        yield* processGoogleGeminiCliStreamEffect({
-          response,
-          output,
-          stream,
-          model,
-          toolCalls: composer.toolCalls,
-          signal,
-          emptyStreamRetries,
-        });
-      });
 
-      await runBoundaryOperation(
-        "provider.googleGeminiCli.stream",
-        retryWithBrewvaPolicy(attempt, {
+        yield* retryWithBrewvaPolicy(attempt, {
           maxRetries: MAX_RETRIES,
           baseDelayMs: BASE_DELAY_MS,
           delayFor: (error) =>
             error instanceof GoogleGeminiCliRetryableRequestError ? error.retryDelayMs : undefined,
           while: (error) => error instanceof GoogleGeminiCliRetryableRequestError,
-        }).pipe(BrewvaEffect.mapError(unwrapGoogleGeminiCliRequestError)),
-        { signal },
-      );
-    },
+        }).pipe(
+          BrewvaEffect.mapError(unwrapGoogleGeminiCliRequestError),
+          BrewvaEffect.mapError(toProviderStreamError),
+        );
+      }),
     {
       signal: options?.signal,
       sessionId: options?.sessionId,

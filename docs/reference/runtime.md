@@ -175,11 +175,26 @@ Budget: root <= 8; canonical event types <= 14.
 
 ## Effect Boundary
 
-Effect remains infrastructure, not public runtime API. It may own resource
-scope, dependency layers, cancellation, retry, and concurrency adapters inside
-the assembly. Public runtime types must not expose Effect values or require
-callers to understand Effect layers.
+Effect remains infrastructure, not public runtime API. Public runtime types must
+not expose Effect values or require callers to understand Effect layers. The
+runtime package must stay plain TypeScript and must not import raw Effect,
+Effect primitive aliases, or semantic Effect services.
 
-After the four-port ownership cut stabilizes, remaining Effect usage should be
-audited for whether it is serving real infrastructure needs or only preserving
-shallow seams from the old domain lattice.
+Effect is allowed in infrastructure islands that need resource ownership:
+provider-core streams, gateway channel and daemon mechanics, tool execution
+process management, substrate plugin guards, ingress, and worker operations.
+Those islands should keep stream, queue, schedule, retry, and finalizer logic
+Effect-native until a declared adapter boundary maps the result back to a
+Promise or async iterable.
+
+When an infrastructure island needs a long-lived service plus a Promise-facing
+adapter, it should use `createBrewvaServiceRuntime(...)` from
+`@brewva/brewva-effect/runtime`. That keeps scoped service construction,
+finalizers, and boundary execution in one shared foundation path instead of
+repeating package-local Scope/ManagedRuntime wiring.
+
+`runBoundaryOperation` is an edge adapter tool, not a general helper. It belongs
+only in the Effect foundation, testing helpers, and declared adapter files
+covered by fitness tests. Runtime turn handoffs use the plain TypeScript
+`createAsyncBridge(...)` utility for backpressure, abort, failure, close, and
+early-consumer-exit cleanup.

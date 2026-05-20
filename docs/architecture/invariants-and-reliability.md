@@ -43,10 +43,11 @@ recovery, and bounded execution.
     branch topology, context-entry paths, and capability state are replay-derived;
     state-only records do not become model context without explicit admitted
     context entries, lineage summaries, or outcome adoption.
-13. Effect runtime substrate:
-    scopes, fibers, layers, schedules, and streams own in-memory execution
-    mechanics only; they never replace event tape, WAL, receipts, or
-    capability-scoped authority.
+13. Effect infrastructure island:
+    scopes, fibers, layers, schedules, streams, queues, and finalizers own
+    in-memory infrastructure mechanics only; they never replace event tape,
+    WAL, receipts, capability-scoped authority, or the plain TypeScript
+    four-port runtime root.
 
 ## Failure Semantics
 
@@ -64,6 +65,10 @@ recovery, and bounded execution.
   cancellation, rollback, recovery, and failure evidence must still be recorded
   through runtime events, receipts, WAL, or ledger rows when the boundary
   requires it.
+- Promise/Effect boundary crossings are adapter mechanics. Repeated boundary
+  crossings inside provider stream core, channel queue core, tool execution
+  internals, or runtime package code are reliability bugs, not implementation
+  details.
 
 ## State Roles
 
@@ -81,16 +86,16 @@ recovery, and bounded execution.
 
 - `packages/brewva-runtime/src/runtime/runtime.ts`
 - `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
 - `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
 - `packages/brewva-runtime/src/runtime/kernel/policy/tool-decision.ts`
+- `packages/brewva-std/src/async.ts`
 - `packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`
+- `packages/brewva-gateway/src/channels/effect-serial-queue.ts`
 - `packages/brewva-effect/src/index.ts`
-- `packages/brewva-effect/src/runtime-spine.ts`
 - `packages/brewva-effect/src/schedules.ts`
 - runtime turn execution: `packages/brewva-runtime/src/runtime/engine/turn.ts`
 - `packages/brewva-provider-core/src/stream/run-provider-stream.ts`
+- `packages/brewva-tools/src/families/execution/exec-process-registry/service.ts`
 
 ## Related Docs
 

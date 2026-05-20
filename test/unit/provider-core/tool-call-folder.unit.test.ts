@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { AssistantMessageEvent, Model, Tool } from "@brewva/brewva-provider-core/contracts";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -12,11 +13,12 @@ import { createAssistantMessage } from "../../../packages/brewva-provider-core/s
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
 import {
   createRecordingProviderEventStream,
+  runProviderCoreEffect,
   type RecordingProviderEventStream,
 } from "../../helpers/effect-stream.js";
 
 async function collectEvents(stream: RecordingProviderEventStream) {
-  await stream.end();
+  await runProviderCoreEffect(stream.end());
   return stream.events;
 }
 
@@ -57,16 +59,16 @@ describe("incremental tool call folder", () => {
   test("tracks interleaved incremental tool calls without leaking partialJson", async () => {
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {});
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void);
 
-    await folder.begin("call:1", { id: "call_1", name: "search" });
-    await folder.begin("call:2", { id: "call_2", name: "read" });
-    await folder.appendArgumentsDelta("call:1", '{"query":"alpha"');
-    await folder.appendArgumentsDelta("call:2", '{"path":"README');
-    await folder.replaceArguments("call:1", '{"query":"alpha","limit":2}');
-    await folder.replaceArguments("call:2", '{"path":"README.md"}');
-    await folder.finalize("call:2");
-    await folder.finalize("call:1");
+    await runProviderCoreEffect(folder.begin("call:1", { id: "call_1", name: "search" }));
+    await runProviderCoreEffect(folder.begin("call:2", { id: "call_2", name: "read" }));
+    await runProviderCoreEffect(folder.appendArgumentsDelta("call:1", '{"query":"alpha"'));
+    await runProviderCoreEffect(folder.appendArgumentsDelta("call:2", '{"path":"README'));
+    await runProviderCoreEffect(folder.replaceArguments("call:1", '{"query":"alpha","limit":2}'));
+    await runProviderCoreEffect(folder.replaceArguments("call:2", '{"path":"README.md"}'));
+    await runProviderCoreEffect(folder.finalize("call:2"));
+    await runProviderCoreEffect(folder.finalize("call:1"));
 
     const events = await collectEvents(stream);
     expect(events.map((event) => event.type)).toEqual([
@@ -104,17 +106,19 @@ describe("incremental tool call folder", () => {
   test("supports atomic tool calls with one shared seam", async () => {
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {});
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void);
 
-    await folder.pushAtomic(
-      {
-        type: "toolCall",
-        id: "call_3",
-        name: "lookup",
-        arguments: { id: 3 },
-        thoughtSignature: "sig_3",
-      },
-      "call:3",
+    await runProviderCoreEffect(
+      folder.pushAtomic(
+        {
+          type: "toolCall",
+          id: "call_3",
+          name: "lookup",
+          arguments: { id: 3 },
+          thoughtSignature: "sig_3",
+        },
+        "call:3",
+      ),
     );
 
     const events = await collectEvents(stream);
@@ -137,10 +141,12 @@ describe("incremental tool call folder", () => {
   test("emits parseStatus undefined when no registry is provided", async () => {
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {});
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void);
 
-    await folder.begin("call:1", { id: "call_1", name: "search" }, '{"query":"alpha"}');
-    await folder.finalize("call:1");
+    await runProviderCoreEffect(
+      folder.begin("call:1", { id: "call_1", name: "search" }, '{"query":"alpha"}'),
+    );
+    await runProviderCoreEffect(folder.finalize("call:1"));
 
     const events = await collectEvents(stream);
     const startEvent = findToolCallEvent(events, "toolcall_start");
@@ -164,10 +170,10 @@ describe("incremental tool call folder", () => {
 
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void, registry);
 
     // Start with empty arguments — should be "pending" (missing required path is OK during streaming)
-    await folder.begin("call:1", { id: "call_1", name: "read" }, "{}");
+    await runProviderCoreEffect(folder.begin("call:1", { id: "call_1", name: "read" }, "{}"));
     const eventsAfterStart = await collectEvents(stream);
 
     const startEvent = findToolCallEvent(eventsAfterStart, "toolcall_start");
@@ -184,10 +190,12 @@ describe("incremental tool call folder", () => {
 
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void, registry);
 
-    await folder.begin("call:1", { id: "call_1", name: "health", arguments: {} });
-    await folder.finalize("call:1");
+    await runProviderCoreEffect(
+      folder.begin("call:1", { id: "call_1", name: "health", arguments: {} }),
+    );
+    await runProviderCoreEffect(folder.finalize("call:1"));
 
     const events = await collectEvents(stream);
     const startEvent = findToolCallEvent(events, "toolcall_start");
@@ -208,9 +216,11 @@ describe("incremental tool call folder", () => {
 
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void, registry);
 
-    await folder.begin("call:1", { id: "call_1", name: "action" }, '{"mode":"delete"}');
+    await runProviderCoreEffect(
+      folder.begin("call:1", { id: "call_1", name: "action" }, '{"mode":"delete"}'),
+    );
 
     const events = await collectEvents(stream);
     const startEvent = findToolCallEvent(events, "toolcall_start");
@@ -230,10 +240,12 @@ describe("incremental tool call folder", () => {
 
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void, registry);
 
     // Partial: only path present, content missing. In streaming, this is "pending".
-    await folder.begin("call:1", { id: "call_1", name: "write" }, '{"path":"/tmp/test.txt"}');
+    await runProviderCoreEffect(
+      folder.begin("call:1", { id: "call_1", name: "write" }, '{"path":"/tmp/test.txt"}'),
+    );
     const events = await collectEvents(stream);
 
     const startEvent = findToolCallEvent(events, "toolcall_start");
@@ -250,10 +262,12 @@ describe("incremental tool call folder", () => {
 
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void, registry);
 
     // "unknown_tool" is not in the registry — should fall back to permissive
-    await folder.begin("call:1", { id: "call_1", name: "unknown_tool" }, '{"data":123}');
+    await runProviderCoreEffect(
+      folder.begin("call:1", { id: "call_1", name: "unknown_tool" }, '{"data":123}'),
+    );
     const events = await collectEvents(stream);
 
     const startEvent = findToolCallEvent(events, "toolcall_start");
@@ -273,12 +287,12 @@ describe("incremental tool call folder", () => {
 
     const output = createAssistantMessage(TEST_MODEL);
     const stream = createRecordingProviderEventStream();
-    const folder = new IncrementalToolCallFolder(output, stream, async () => {}, registry);
+    const folder = new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void, registry);
 
-    await folder.begin("call:1", { id: "call_1", name: "read" });
-    await folder.appendArgumentsDelta("call:1", '{"path":"/tmp');
-    await folder.appendArgumentsDelta("call:1", '/test.txt"}');
-    await folder.finalize("call:1");
+    await runProviderCoreEffect(folder.begin("call:1", { id: "call_1", name: "read" }));
+    await runProviderCoreEffect(folder.appendArgumentsDelta("call:1", '{"path":"/tmp'));
+    await runProviderCoreEffect(folder.appendArgumentsDelta("call:1", '/test.txt"}'));
+    await runProviderCoreEffect(folder.finalize("call:1"));
 
     const events = await collectEvents(stream);
     const deltaEvents = filterToolCallEvents(events, "toolcall_delta");

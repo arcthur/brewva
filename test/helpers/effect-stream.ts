@@ -35,6 +35,10 @@ export function collectProviderEvents(
   );
 }
 
+export function runProviderCoreEffect<A, E>(effect: BrewvaEffect.Effect<A, E>): Promise<A> {
+  return runPromiseAtBoundary(effect);
+}
+
 export interface RecordingProviderEventSink {
   readonly sink: ProviderEventSink;
   readonly events: AssistantMessageEvent[];
@@ -49,12 +53,13 @@ export function createRecordingProviderEventSink(): RecordingProviderEventSink {
   return {
     events,
     sink: {
-      async push(event) {
-        events.push(event);
+      push(event) {
+        return BrewvaEffect.sync(() => {
+          events.push(event);
+        });
       },
-      async end() {
-        // Recording sinks are synchronous test probes; Effect stream completion is
-        // covered by collectProviderEvents.
+      end() {
+        return BrewvaEffect.void;
       },
     },
   };

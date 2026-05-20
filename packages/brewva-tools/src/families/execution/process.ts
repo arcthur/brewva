@@ -3,21 +3,8 @@ import { addMilliseconds, isBefore } from "date-fns";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { textResult, withVerdict } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
-import {
-  deleteManagedSession,
-  drainSessionOutput,
-  getFinishedBoxSession,
-  getFinishedSession,
-  getRunningBoxSession,
-  getRunningSession,
-  listFinishedBoxBackgroundSessions,
-  listFinishedBackgroundSessions,
-  listRunningBoxBackgroundSessions,
-  listRunningBackgroundSessions,
-  readSessionLog,
-  terminateRunningBoxSession,
-  terminateRunningSession,
-} from "./exec-process-registry/api.js";
+import { drainSessionOutput, readSessionLog } from "./exec-process-registry/api.js";
+import { resolveManagedExecProcessRegistryRuntime } from "./exec-process-registry/runtime.js";
 import { executeDetachedBoxIdentityAction } from "./process/detached-box.js";
 import {
   defaultTailHint,
@@ -35,7 +22,7 @@ import {
   type ProcessAction,
   type ProcessToolOptions,
 } from "./process/schema.js";
-import { waitForPollCondition, writeToStdin } from "./process/stdin.js";
+import { writeToStdin } from "./process/stdin.js";
 
 export function createProcessTool(options?: ProcessToolOptions): ToolDefinition {
   const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options?.runtime, "process");
@@ -50,11 +37,12 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
     ],
     parameters: ProcessSchema,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const registry = resolveManagedExecProcessRegistryRuntime(runtime);
       const ownerSessionId = getSessionId(ctx);
       const action = params.action as ProcessAction;
 
       if (action === "list") {
-        const running = listRunningBackgroundSessions(ownerSessionId).map((session) => ({
+        const running = (await registry.listRunningBackground(ownerSessionId)).map((session) => ({
           sessionId: session.id,
           status: "running",
           backend: "host",
@@ -65,7 +53,7 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           tail: session.tail,
           truncated: session.truncated,
         }));
-        const finished = listFinishedBackgroundSessions(ownerSessionId).map((session) => ({
+        const finished = (await registry.listFinishedBackground(ownerSessionId)).map((session) => ({
           sessionId: session.id,
           status: session.status,
           backend: "host",
@@ -78,34 +66,38 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           tail: session.tail,
           truncated: session.truncated,
         }));
-        const runningBox = listRunningBoxBackgroundSessions(ownerSessionId).map((session) => ({
-          sessionId: session.id,
-          status: "running",
-          backend: "box",
-          boxId: session.boxId,
-          executionId: session.executionId,
-          fingerprint: session.fingerprint,
-          startedAt: session.startedAt,
-          command: session.command,
-          cwd: session.cwd,
-          tail: session.tail,
-          truncated: session.truncated,
-        }));
-        const finishedBox = listFinishedBoxBackgroundSessions(ownerSessionId).map((session) => ({
-          sessionId: session.id,
-          status: session.status,
-          backend: "box",
-          boxId: session.boxId,
-          executionId: session.executionId,
-          fingerprint: session.fingerprint,
-          startedAt: session.startedAt,
-          endedAt: session.endedAt,
-          command: session.command,
-          cwd: session.cwd,
-          exitCode: session.exitCode ?? undefined,
-          tail: session.tail,
-          truncated: session.truncated,
-        }));
+        const runningBox = (await registry.listRunningBoxBackground(ownerSessionId)).map(
+          (session) => ({
+            sessionId: session.id,
+            status: "running",
+            backend: "box",
+            boxId: session.boxId,
+            executionId: session.executionId,
+            fingerprint: session.fingerprint,
+            startedAt: session.startedAt,
+            command: session.command,
+            cwd: session.cwd,
+            tail: session.tail,
+            truncated: session.truncated,
+          }),
+        );
+        const finishedBox = (await registry.listFinishedBoxBackground(ownerSessionId)).map(
+          (session) => ({
+            sessionId: session.id,
+            status: session.status,
+            backend: "box",
+            boxId: session.boxId,
+            executionId: session.executionId,
+            fingerprint: session.fingerprint,
+            startedAt: session.startedAt,
+            endedAt: session.endedAt,
+            command: session.command,
+            cwd: session.cwd,
+            exitCode: session.exitCode ?? undefined,
+            tail: session.tail,
+            truncated: session.truncated,
+          }),
+        );
 
         const sessions = [...running, ...finished, ...runningBox, ...finishedBox];
         const lines = sessions
@@ -153,9 +145,9 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
 
       if (action === "poll") {
         const timeoutMs = resolvePollTimeoutMs(params);
-        await waitForPollCondition(ownerSessionId, sessionId, timeoutMs);
+        await registry.waitActivity(ownerSessionId, sessionId, timeoutMs);
 
-        const running = getRunningSession(ownerSessionId, sessionId);
+        const running = await registry.getRunning(ownerSessionId, sessionId);
         if (running) {
           if (!running.backgrounded) {
             return textResult(
@@ -178,7 +170,7 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           );
         }
 
-        const runningBox = getRunningBoxSession(ownerSessionId, sessionId);
+        const runningBox = await registry.getRunningBox(ownerSessionId, sessionId);
         if (runningBox) {
           const output = normalizeOutputText(drainSessionOutput(runningBox), "(no new output)");
           return textResult(
@@ -197,8 +189,10 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           );
         }
 
-        const finished = getFinishedSession(ownerSessionId, sessionId);
-        const finishedBox = finished ? undefined : getFinishedBoxSession(ownerSessionId, sessionId);
+        const finished = await registry.getFinished(ownerSessionId, sessionId);
+        const finishedBox = finished
+          ? undefined
+          : await registry.getFinishedBox(ownerSessionId, sessionId);
         const finishedSession = finished ?? finishedBox;
         if (!finishedSession) {
           return textResult(
@@ -225,14 +219,16 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
       }
 
       if (action === "log") {
-        const running = getRunningSession(ownerSessionId, sessionId);
-        const runningBox = running ? undefined : getRunningBoxSession(ownerSessionId, sessionId);
+        const running = await registry.getRunning(ownerSessionId, sessionId);
+        const runningBox = running
+          ? undefined
+          : await registry.getRunningBox(ownerSessionId, sessionId);
         const finished =
-          running || runningBox ? undefined : getFinishedSession(ownerSessionId, sessionId);
+          running || runningBox ? undefined : await registry.getFinished(ownerSessionId, sessionId);
         const finishedBox =
           running || runningBox || finished
             ? undefined
-            : getFinishedBoxSession(ownerSessionId, sessionId);
+            : await registry.getFinishedBox(ownerSessionId, sessionId);
         const session = running ?? runningBox ?? finished ?? finishedBox;
         if (!session) {
           return textResult(
@@ -273,8 +269,10 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
       }
 
       if (action === "write") {
-        const running = getRunningSession(ownerSessionId, sessionId);
-        const runningBox = running ? undefined : getRunningBoxSession(ownerSessionId, sessionId);
+        const running = await registry.getRunning(ownerSessionId, sessionId);
+        const runningBox = running
+          ? undefined
+          : await registry.getRunningBox(ownerSessionId, sessionId);
         if (runningBox) {
           return textResult(
             `Session ${sessionId} is a box execution; stdin reattach is not supported.`,
@@ -324,8 +322,10 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
       }
 
       if (action === "kill") {
-        const running = getRunningSession(ownerSessionId, sessionId);
-        const runningBox = running ? undefined : getRunningBoxSession(ownerSessionId, sessionId);
+        const running = await registry.getRunning(ownerSessionId, sessionId);
+        const runningBox = running
+          ? undefined
+          : await registry.getRunningBox(ownerSessionId, sessionId);
         if (!running && !runningBox) {
           return textResult(
             `No active session found for ${sessionId}`,
@@ -340,8 +340,8 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
         }
 
         const terminated = running
-          ? terminateRunningSession(running, true)
-          : await terminateRunningBoxSession(runningBox!, true);
+          ? await registry.terminateHost(running, true)
+          : await registry.terminateBox(runningBox!, true);
         const killedSession = running ?? runningBox!;
         if (!terminated) {
           return textResult(
@@ -364,23 +364,27 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
       }
 
       if (action === "clear") {
-        const finished = getFinishedSession(ownerSessionId, sessionId);
-        const finishedBox = finished ? undefined : getFinishedBoxSession(ownerSessionId, sessionId);
+        const finished = await registry.getFinished(ownerSessionId, sessionId);
+        const finishedBox = finished
+          ? undefined
+          : await registry.getFinishedBox(ownerSessionId, sessionId);
         if (!finished && !finishedBox) {
           return textResult(
             `No finished session found for ${sessionId}`,
             withVerdict({ status: "failed" }, "fail"),
           );
         }
-        deleteManagedSession(ownerSessionId, sessionId);
+        await registry.delete(ownerSessionId, sessionId);
         return textResult(`Cleared session ${sessionId}.`, { status: "completed" });
       }
 
       if (action === "remove") {
-        const running = getRunningSession(ownerSessionId, sessionId);
-        const runningBox = running ? undefined : getRunningBoxSession(ownerSessionId, sessionId);
+        const running = await registry.getRunning(ownerSessionId, sessionId);
+        const runningBox = running
+          ? undefined
+          : await registry.getRunningBox(ownerSessionId, sessionId);
         if (running) {
-          terminateRunningSession(running, true);
+          await registry.terminateHost(running, true);
           const deadline = addMilliseconds(Date.now(), 3_000).getTime();
           while (!running.exited && isBefore(Date.now(), deadline)) {
             await new Promise((r) => setTimeout(r, 50));
@@ -393,7 +397,7 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           }
         }
         if (runningBox) {
-          await terminateRunningBoxSession(runningBox, true);
+          await registry.terminateBox(runningBox, true);
           const deadline = addMilliseconds(Date.now(), 3_000).getTime();
           while (!runningBox.exited && isBefore(Date.now(), deadline)) {
             await new Promise((r) => setTimeout(r, 50));
@@ -405,7 +409,7 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
             );
           }
         }
-        const removed = deleteManagedSession(ownerSessionId, sessionId);
+        const removed = await registry.delete(ownerSessionId, sessionId);
         if (!removed) {
           return textResult(
             `No session found for ${sessionId}`,

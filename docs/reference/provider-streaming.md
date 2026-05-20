@@ -42,10 +42,16 @@ The stable event families are:
 - async provider event sink backpressure
 - final `AssistantMessage` result delivery
 
-Provider-local event folding writes through `ProviderEventSink.push(...)`, which
-returns a promise. Adapters must await each push. The sink awaits the underlying
-Effect stream queue, so a slow consumer applies backpressure to the provider
-driver instead of silently dropping normalized events.
+Provider-local event folding writes through Effect-returning
+`ProviderEventSink.push(...)` and `ProviderEventSink.end(...)` methods. Adapters
+compose SDK promises with `BrewvaEffect.tryPromise` and sequence sink writes
+inside the provider Effect workflow. The sink awaits the underlying Effect
+stream queue, so a slow consumer applies backpressure to the provider driver
+instead of silently dropping normalized events.
+
+The Promise completion helpers are adapter boundaries. Provider stream core does
+not run `runBoundaryOperation(...)` while offering events, finishing folders, or
+closing queues.
 
 Provider retries use the shared Effect retry policy where a provider owns a
 retryable request loop. Drivers still classify protocol-specific failures

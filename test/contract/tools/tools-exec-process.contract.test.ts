@@ -220,7 +220,7 @@ describe("exec/process tool flow", () => {
       backend: "host",
     });
     const execTool = createExecTool({ runtime });
-    const processTool = createProcessTool();
+    const processTool = createProcessTool({ runtime });
     const sessionId = "s13-exec-process";
 
     const started = await execTool.execute(
@@ -371,7 +371,7 @@ describe("exec/process tool flow", () => {
       backend: "host",
     });
     const execTool = createExecTool({ runtime });
-    const processTool = createProcessTool();
+    const processTool = createProcessTool({ runtime });
     const sessionId = "s13-process-kill";
 
     const started = await execTool.execute(

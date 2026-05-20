@@ -1,4 +1,4 @@
-import { startScopedSchedule, type ScopedScheduleHandle } from "@brewva/brewva-effect";
+import { startBoundaryInterval, type BoundaryIntervalHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { HostedRuntimeAdapterPort } from "../../session/runtime-ports.js";
 import {
@@ -8,7 +8,7 @@ import {
 
 type IntervalHandle = ReturnType<typeof setInterval>;
 type WatchdogTimer =
-  | { kind: "managed"; handle: ScopedScheduleHandle }
+  | { kind: "managed"; handle: BoundaryIntervalHandle }
   | { kind: "injected"; handle: IntervalHandle };
 
 const DEFAULT_POLL_INTERVAL_MS = 60_000;
@@ -65,7 +65,7 @@ export class TaskProgressWatchdog {
     }
     this.timer = {
       kind: "managed",
-      handle: startScopedSchedule({
+      handle: startBoundaryInterval({
         intervalMs: this.pollIntervalMs,
         run: () => BrewvaEffect.sync(() => this.poll()),
       }),

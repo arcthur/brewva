@@ -1,6 +1,8 @@
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type {
   AssistantMessage,
   ProviderEventSink,
+  ProviderStreamError,
   StreamingParseStatus,
   ToolCall,
 } from "../contracts/index.js";
@@ -28,7 +30,7 @@ export class IncrementalToolCallFolder {
   constructor(
     private readonly output: AssistantMessage,
     private readonly stream: ProviderEventSink,
-    private readonly ensureStarted: () => Promise<void>,
+    private readonly ensureStarted: () => BrewvaEffect.Effect<void, ProviderStreamError>,
     private readonly parseRegistry?: StreamingParseRegistry,
   ) {}
 
@@ -53,160 +55,182 @@ export class IncrementalToolCallFolder {
     );
   }
 
-  async begin(key: string, seed: ToolCallSeed, partialJson = ""): Promise<number> {
-    const state = this.#states.get(key);
-    if (state) {
-      state.block.id = seed.id || state.block.id;
-      state.block.name = seed.name || state.block.name;
-      if (seed.thoughtSignature) {
-        state.block.thoughtSignature = seed.thoughtSignature;
+  begin(
+    key: string,
+    seed: ToolCallSeed,
+    partialJson = "",
+  ): BrewvaEffect.Effect<number, ProviderStreamError> {
+    const self = this;
+    return BrewvaEffect.gen(function* () {
+      const state = self.#states.get(key);
+      if (state) {
+        state.block.id = seed.id || state.block.id;
+        state.block.name = seed.name || state.block.name;
+        if (seed.thoughtSignature) {
+          state.block.thoughtSignature = seed.thoughtSignature;
+        }
+        return state.contentIndex;
       }
-      return state.contentIndex;
-    }
 
-    await this.ensureStarted();
+      yield* self.ensureStarted();
 
-    const parseResult = this.#parseSeedArguments(seed, partialJson);
-    const block: ToolCall = {
-      type: "toolCall",
-      id: seed.id,
-      name: seed.name,
-      arguments: parseResult.output,
-      ...(seed.thoughtSignature ? { thoughtSignature: seed.thoughtSignature } : {}),
-    };
-    this.output.content.push(block);
-    const nextState: ToolCallFolderState = {
-      contentIndex: this.output.content.length - 1,
-      block,
-      partialJson,
-      lastParseStatus: parseResult.parseStatus,
-    };
-    this.#states.set(key, nextState);
-    this.#order.push(key);
-    await this.stream.push({
-      type: "toolcall_start",
-      contentIndex: nextState.contentIndex,
-      partial: this.output,
-      parseStatus: parseResult.parseStatus,
+      const parseResult = self.#parseSeedArguments(seed, partialJson);
+      const block: ToolCall = {
+        type: "toolCall",
+        id: seed.id,
+        name: seed.name,
+        arguments: parseResult.output,
+        ...(seed.thoughtSignature ? { thoughtSignature: seed.thoughtSignature } : {}),
+      };
+      self.output.content.push(block);
+      const nextState: ToolCallFolderState = {
+        contentIndex: self.output.content.length - 1,
+        block,
+        partialJson,
+        lastParseStatus: parseResult.parseStatus,
+      };
+      self.#states.set(key, nextState);
+      self.#order.push(key);
+      yield* self.stream.push({
+        type: "toolcall_start",
+        contentIndex: nextState.contentIndex,
+        partial: self.output,
+        parseStatus: parseResult.parseStatus,
+      });
+      return nextState.contentIndex;
     });
-    return nextState.contentIndex;
   }
 
-  async appendArgumentsDelta(
+  appendArgumentsDelta(
     key: string,
     delta: string,
     patch?: Partial<Pick<ToolCall, "id" | "name" | "thoughtSignature">>,
-  ): Promise<void> {
-    const state = this.#states.get(key);
-    if (!state) {
-      return;
-    }
-    if (patch?.id) {
-      state.block.id = patch.id;
-    }
-    if (patch?.name) {
-      state.block.name = patch.name;
-    }
-    if (patch?.thoughtSignature) {
-      state.block.thoughtSignature = patch.thoughtSignature;
-    }
-    if (delta.length > 0) {
-      state.partialJson += delta;
-      const parseResult = parseStreamingJson(
-        state.partialJson,
-        state.block.name,
-        this.parseRegistry,
-      );
-      state.block.arguments = parseResult.output;
-      state.lastParseStatus = parseResult.parseStatus;
-    }
-    await this.stream.push({
-      type: "toolcall_delta",
-      contentIndex: state.contentIndex,
-      delta,
-      partial: this.output,
-      parseStatus: state.lastParseStatus,
-    });
-  }
-
-  async replaceArguments(
-    key: string,
-    fullJson: string,
-    patch?: Partial<Pick<ToolCall, "id" | "name" | "thoughtSignature">>,
-  ): Promise<void> {
-    const state = this.#states.get(key);
-    if (!state) {
-      return;
-    }
-    const previousPartialJson = state.partialJson;
-    state.partialJson = fullJson;
-    const parseResult = parseStreamingJson(fullJson, state.block.name, this.parseRegistry);
-    state.block.arguments = parseResult.output;
-    state.lastParseStatus = parseResult.parseStatus;
-    if (patch?.id) {
-      state.block.id = patch.id;
-    }
-    if (patch?.name) {
-      state.block.name = patch.name;
-    }
-    if (patch?.thoughtSignature) {
-      state.block.thoughtSignature = patch.thoughtSignature;
-    }
-    const delta = fullJson.startsWith(previousPartialJson)
-      ? fullJson.slice(previousPartialJson.length)
-      : "";
-    if (delta.length > 0) {
-      await this.stream.push({
+  ): BrewvaEffect.Effect<void, ProviderStreamError> {
+    const self = this;
+    return BrewvaEffect.gen(function* () {
+      const state = self.#states.get(key);
+      if (!state) {
+        return;
+      }
+      if (patch?.id) {
+        state.block.id = patch.id;
+      }
+      if (patch?.name) {
+        state.block.name = patch.name;
+      }
+      if (patch?.thoughtSignature) {
+        state.block.thoughtSignature = patch.thoughtSignature;
+      }
+      if (delta.length > 0) {
+        state.partialJson += delta;
+        const parseResult = parseStreamingJson(
+          state.partialJson,
+          state.block.name,
+          self.parseRegistry,
+        );
+        state.block.arguments = parseResult.output;
+        state.lastParseStatus = parseResult.parseStatus;
+      }
+      yield* self.stream.push({
         type: "toolcall_delta",
         contentIndex: state.contentIndex,
         delta,
-        partial: this.output,
-        parseStatus: parseResult.parseStatus,
+        partial: self.output,
+        parseStatus: state.lastParseStatus,
       });
-    }
+    });
   }
 
-  async finalize(
+  replaceArguments(
+    key: string,
+    fullJson: string,
+    patch?: Partial<Pick<ToolCall, "id" | "name" | "thoughtSignature">>,
+  ): BrewvaEffect.Effect<void, ProviderStreamError> {
+    const self = this;
+    return BrewvaEffect.gen(function* () {
+      const state = self.#states.get(key);
+      if (!state) {
+        return;
+      }
+      const previousPartialJson = state.partialJson;
+      state.partialJson = fullJson;
+      const parseResult = parseStreamingJson(fullJson, state.block.name, self.parseRegistry);
+      state.block.arguments = parseResult.output;
+      state.lastParseStatus = parseResult.parseStatus;
+      if (patch?.id) {
+        state.block.id = patch.id;
+      }
+      if (patch?.name) {
+        state.block.name = patch.name;
+      }
+      if (patch?.thoughtSignature) {
+        state.block.thoughtSignature = patch.thoughtSignature;
+      }
+      const delta = fullJson.startsWith(previousPartialJson)
+        ? fullJson.slice(previousPartialJson.length)
+        : "";
+      if (delta.length > 0) {
+        yield* self.stream.push({
+          type: "toolcall_delta",
+          contentIndex: state.contentIndex,
+          delta,
+          partial: self.output,
+          parseStatus: parseResult.parseStatus,
+        });
+      }
+    });
+  }
+
+  finalize(
     key: string,
     patch?: Partial<Pick<ToolCall, "id" | "name" | "thoughtSignature">>,
-  ): Promise<ToolCall | null> {
-    const state = this.#states.get(key);
-    if (!state) {
-      return null;
-    }
-    if (patch?.id) {
-      state.block.id = patch.id;
-    }
-    if (patch?.name) {
-      state.block.name = patch.name;
-    }
-    if (patch?.thoughtSignature) {
-      state.block.thoughtSignature = patch.thoughtSignature;
-    }
-    const parseResult = this.#parseStateArguments(state);
-    state.block.arguments = parseResult.output;
-    this.output.content[state.contentIndex] = state.block;
-    await this.stream.push({
-      type: "toolcall_end",
-      contentIndex: state.contentIndex,
-      toolCall: state.block,
-      partial: this.output,
-      parseStatus: parseResult.parseStatus,
+  ): BrewvaEffect.Effect<ToolCall | null, ProviderStreamError> {
+    const self = this;
+    return BrewvaEffect.gen(function* () {
+      const state = self.#states.get(key);
+      if (!state) {
+        return null;
+      }
+      if (patch?.id) {
+        state.block.id = patch.id;
+      }
+      if (patch?.name) {
+        state.block.name = patch.name;
+      }
+      if (patch?.thoughtSignature) {
+        state.block.thoughtSignature = patch.thoughtSignature;
+      }
+      const parseResult = self.#parseStateArguments(state);
+      state.block.arguments = parseResult.output;
+      self.output.content[state.contentIndex] = state.block;
+      yield* self.stream.push({
+        type: "toolcall_end",
+        contentIndex: state.contentIndex,
+        toolCall: state.block,
+        partial: self.output,
+        parseStatus: parseResult.parseStatus,
+      });
+      self.#states.delete(key);
+      return state.block;
     });
-    this.#states.delete(key);
-    return state.block;
   }
 
-  async finalizeAll(): Promise<void> {
-    for (const key of this.#order) {
-      await this.finalize(key);
-    }
+  finalizeAll(): BrewvaEffect.Effect<void, ProviderStreamError> {
+    const self = this;
+    return BrewvaEffect.gen(function* () {
+      for (const key of self.#order) {
+        yield* self.finalize(key);
+      }
+    });
   }
 
-  async pushAtomic(toolCall: ToolCall, key: string): Promise<void> {
-    const argumentsJson = JSON.stringify(toolCall.arguments ?? {});
-    await this.begin(key, toolCall, argumentsJson);
-    await this.appendArgumentsDelta(key, argumentsJson, toolCall);
-    await this.finalize(key, toolCall);
+  pushAtomic(toolCall: ToolCall, key: string): BrewvaEffect.Effect<void, ProviderStreamError> {
+    const self = this;
+    return BrewvaEffect.gen(function* () {
+      const argumentsJson = JSON.stringify(toolCall.arguments ?? {});
+      yield* self.begin(key, toolCall, argumentsJson);
+      yield* self.appendArgumentsDelta(key, argumentsJson, toolCall);
+      yield* self.finalize(key, toolCall);
+    });
   }
 }

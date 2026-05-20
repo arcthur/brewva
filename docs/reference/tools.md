@@ -224,6 +224,9 @@ Boundary rules:
 - internal process, host command, and box execution use Effect scopes,
   finalizers, streams, and timeout/schedule helpers for lifecycle mechanics;
   those mechanics do not replace capability checks or durable receipts
+- host, box, and process-session state is owned by the package-created
+  `ManagedExecProcessRegistryRuntime`; module-level default registries and
+  exported global session maps are not stable ownership paths
 
 ## Target Roots And Read Scope
 

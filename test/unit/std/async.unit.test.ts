@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  AsyncBridgeAbortedError,
+  AsyncBridgeClosedError,
   createConcurrencyLimiter,
+  createAsyncBridge,
   createDeferred,
   createNonOverlappingTaskRunner,
+  linkAbortSignal,
   mapConcurrent,
 } from "@brewva/brewva-std/async";
 
@@ -159,5 +163,120 @@ describe("std async utilities", () => {
     await secondFailure;
     expect(limiter.activeCount()).toBe(0);
     expect(limiter.pendingCount()).toBe(0);
+  });
+
+  test("createAsyncBridge applies backpressure when full", async () => {
+    const bridge = createAsyncBridge<string>({ capacity: 1 });
+    await bridge.write("first");
+
+    let secondResolved = false;
+    const second = bridge.write("second").then(() => {
+      secondResolved = true;
+    });
+    await Promise.resolve();
+    expect(secondResolved).toBe(false);
+
+    const iterator = bridge[Symbol.asyncIterator]();
+    expect(await iterator.next()).toEqual({ done: false, value: "first" });
+    await second;
+    expect(secondResolved).toBe(true);
+    expect(await iterator.next()).toEqual({ done: false, value: "second" });
+    bridge.close();
+    expect(await iterator.next()).toEqual({ done: true, value: undefined });
+  });
+
+  test("createAsyncBridge close drains queued items and rejects new writes", async () => {
+    const bridge = createAsyncBridge<number>({ capacity: 2 });
+    await bridge.write(1);
+    await bridge.write(2);
+    bridge.close();
+
+    const values: number[] = [];
+    for await (const value of bridge) {
+      values.push(value);
+    }
+    expect(values).toEqual([1, 2]);
+
+    try {
+      await bridge.write(3);
+      expect.unreachable("expected closed bridge writes to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AsyncBridgeClosedError);
+    }
+  });
+
+  test("createAsyncBridge fail wakes pending readers and writers", async () => {
+    const bridge = createAsyncBridge<string>({ capacity: 1 });
+    await bridge.write("first");
+    const pendingWrite = bridge.write("second");
+    const failure = new Error("bridge failed");
+    bridge.fail(failure);
+
+    await pendingWrite.then(
+      () => expect.unreachable("expected pending write to fail"),
+      (error) => expect(error).toBe(failure),
+    );
+    await bridge[Symbol.asyncIterator]()
+      .next()
+      .then(
+        () => expect.unreachable("expected pending read to fail"),
+        (error) => expect(error).toBe(failure),
+      );
+  });
+
+  test("createAsyncBridge abort rejects pending and future writes", async () => {
+    const bridge = createAsyncBridge<string>({ capacity: 1 });
+    await bridge.write("first");
+    const pendingWrite = bridge.write("second");
+    bridge.abort("stopped");
+
+    await pendingWrite.then(
+      () => expect.unreachable("expected pending write to abort"),
+      (error) => expect(error).toBeInstanceOf(AsyncBridgeAbortedError),
+    );
+    await bridge.write("third").then(
+      () => expect.unreachable("expected future write to abort"),
+      (error) => expect(error).toBeInstanceOf(AsyncBridgeAbortedError),
+    );
+  });
+
+  test("createAsyncBridge iterator return calls onCancel", async () => {
+    let cancelled = false;
+    const bridge = createAsyncBridge<string>({
+      onCancel() {
+        cancelled = true;
+      },
+    });
+    await bridge.write("first");
+
+    for await (const value of bridge) {
+      expect(value).toBe("first");
+      break;
+    }
+
+    expect(cancelled).toBe(true);
+    await bridge.write("second").then(
+      () => expect.unreachable("expected closed bridge write to fail"),
+      (error) => expect(error).toBeInstanceOf(AsyncBridgeClosedError),
+    );
+  });
+
+  test("linkAbortSignal propagates abort and unregisters cleanup", () => {
+    const source = new AbortController();
+    const target = new AbortController();
+    const unlink = linkAbortSignal(source.signal, target);
+
+    source.abort("cancelled");
+    expect(target.signal.aborted).toBe(true);
+    expect(target.signal.reason).toBe("cancelled");
+
+    const secondSource = new AbortController();
+    const secondTarget = new AbortController();
+    const secondUnlink = linkAbortSignal(secondSource.signal, secondTarget);
+    secondUnlink();
+    secondSource.abort("ignored");
+    expect(secondTarget.signal.aborted).toBe(false);
+
+    unlink();
   });
 });

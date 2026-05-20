@@ -16,8 +16,8 @@ import { recordSessionShutdownIfMissing } from "../../utils/runtime.js";
 import { AgentRegistry } from "../agent-registry.js";
 import { AgentRuntimeManager } from "../agent-runtime-manager.js";
 import {
-  createChannelEffectSerialQueue,
-  type ChannelEffectSerialQueue,
+  createChannelSerialQueueRuntime,
+  type ChannelSerialQueueRuntime,
 } from "../effect-serial-queue.js";
 import type { AgentSessionUsage } from "../policy/eviction.js";
 import { selectIdleEvictableAgentsByTtl, selectLruEvictableAgent } from "../policy/eviction.js";
@@ -93,7 +93,7 @@ interface ChannelSessionState {
   agentSessionId: string;
   result: HostedSessionResult;
   representativeTurn: TurnEnvelope;
-  taskQueue: ChannelEffectSerialQueue;
+  taskQueue: ChannelSerialQueueRuntime;
   inFlightTasks: number;
   outboundSequence: number;
   lastUsedAt: number;
@@ -148,7 +148,7 @@ export function createChannelSessionCoordinator(input: {
   const sessions = new Map<string, ChannelSessionState>();
   const sessionByAgentSessionId = new Map<string, ChannelSessionState>();
   const sessionEpochByAgent = new Map<string, number>();
-  const cleanupQueuesByAgent = new Map<string, ChannelEffectSerialQueue>();
+  const cleanupQueuesByAgent = new Map<string, ChannelSerialQueueRuntime>();
   const createSessionTasks = new Map<
     string,
     {
@@ -164,10 +164,10 @@ export function createChannelSessionCoordinator(input: {
 
   const getSessionEpoch = (agentId: string): number => sessionEpochByAgent.get(agentId) ?? 0;
 
-  const getAgentCleanupQueue = (agentId: string): ChannelEffectSerialQueue => {
+  const getAgentCleanupQueue = (agentId: string): ChannelSerialQueueRuntime => {
     let queue = cleanupQueuesByAgent.get(agentId);
     if (!queue) {
-      queue = createChannelEffectSerialQueue({
+      queue = createChannelSerialQueueRuntime({
         name: `channel-agent-cleanup:${agentId}`,
       });
       cleanupQueuesByAgent.set(agentId, queue);
@@ -177,14 +177,17 @@ export function createChannelSessionCoordinator(input: {
 
   const releaseAgentCleanupQueueWhenIdle = (
     agentId: string,
-    queue: ChannelEffectSerialQueue,
+    queue: ChannelSerialQueueRuntime,
   ): void => {
     void queue
       .whenIdle()
       .then(async () => {
-        if (cleanupQueuesByAgent.get(agentId) === queue && queue.isIdle()) {
+        if (cleanupQueuesByAgent.get(agentId) === queue && (await queue.isIdle())) {
           cleanupQueuesByAgent.delete(agentId);
-          await queue.close();
+          const closed = await queue.closeIfIdle();
+          if (!closed && !cleanupQueuesByAgent.has(agentId)) {
+            cleanupQueuesByAgent.set(agentId, queue);
+          }
         }
       })
       .catch(() => undefined);
@@ -406,7 +409,7 @@ export function createChannelSessionCoordinator(input: {
       const key = buildAgentScopedConversationKey(agentId, scopeKey);
       while (true) {
         const cleanupQueue = cleanupQueuesByAgent.get(agentId);
-        if (cleanupQueue && !cleanupQueue.isIdle()) {
+        if (cleanupQueue && !(await cleanupQueue.isIdle())) {
           await cleanupQueue.whenIdle().catch(() => undefined);
           continue;
         }
@@ -477,7 +480,7 @@ export function createChannelSessionCoordinator(input: {
               agentSessionId,
               result,
               representativeTurn: turn,
-              taskQueue: createChannelEffectSerialQueue({
+              taskQueue: createChannelSerialQueueRuntime({
                 name: `channel-session:${agentSessionId}`,
               }),
               inFlightTasks: 0,

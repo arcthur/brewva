@@ -39,16 +39,22 @@ paths.
 ## Runtime Effect Substrate
 
 The Effect runtime library is an execution substrate, not the authority
-manifest. It may run the model stream, tool execution, provider request,
-channel handler, IPC call, schedule, or cleanup finalizer that supports a
-commitment, but the commitment remains governed by Brewva authority.
+manifest. It may run provider stream production, tool execution process
+management, channel handlers, IPC calls, schedules, retries, queues, or cleanup
+finalizers that support a commitment, but the commitment remains governed by
+Brewva authority.
+
+Effect usage is intentionally island-shaped. Effect-native internals own
+resource lifetime until a declared adapter boundary maps the workflow back to a
+Promise or async iterable. The four-port runtime itself remains ordinary
+TypeScript and does not expose Effect services, layers, or values.
 
 Use the distinction precisely:
 
 - `EffectAuthorityManifest` decides whether an effectful tool invocation may
   commit.
-- `@brewva/brewva-effect` coordinates in-memory execution mechanics beneath
-  that decision.
+- `@brewva/brewva-effect` coordinates in-memory infrastructure mechanics
+  beneath that decision.
 
 ## Non-Goals
 

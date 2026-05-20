@@ -2,9 +2,9 @@ import {
   addScopedFinalizer,
   fromAbortableBoundaryPromise,
   runEdgeOperation,
-  startScopedSchedule,
+  startBoundaryInterval,
   type BrewvaBoundaryError,
-  type ScopedScheduleHandle,
+  type BoundaryIntervalHandle,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
 import { createNonOverlappingTaskRunner } from "@brewva/brewva-std/async";
@@ -110,7 +110,7 @@ export function runChannelHostLifecycleEffect(
       }
     }
   });
-  let recoveryWalCompactTimer: ScopedScheduleHandle | null = null;
+  let recoveryWalCompactTimer: BoundaryIntervalHandle | null = null;
   let bridgeStarted = false;
   let bundleStarted = false;
 
@@ -167,7 +167,7 @@ export function runChannelHostLifecycleEffect(
     input.recoveryWalStore.compact();
 
     if (input.recoveryWalStore.isWalEnabled()) {
-      recoveryWalCompactTimer = startScopedSchedule({
+      recoveryWalCompactTimer = startBoundaryInterval({
         intervalMs: input.recoveryWalCompactIntervalMs,
         run: () => BrewvaEffect.promise(() => recoveryWalMaintenance.run()),
       });

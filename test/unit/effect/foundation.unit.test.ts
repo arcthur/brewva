@@ -19,8 +19,7 @@ import {
   runEdgeOperationSync,
   runPromiseAtBoundary,
   scopedResource,
-  startManagedInterval,
-  startScopedSchedule,
+  startBoundaryInterval,
   withBrewvaObservability,
   withAbortSignal,
 } from "@brewva/brewva-effect";
@@ -32,7 +31,10 @@ import {
   BrewvaLayer,
 } from "@brewva/brewva-effect/primitives";
 import { BrewvaContext } from "@brewva/brewva-effect/primitives";
-import { createBrewvaRuntimeSpine } from "@brewva/brewva-effect/runtime";
+import {
+  createBrewvaRuntimeSpine,
+  createBrewvaServiceRuntime,
+} from "@brewva/brewva-effect/runtime";
 import { BrewvaTestClock, createTestRuntime } from "@brewva/brewva-effect/testing";
 import { sleep } from "../../helpers/process.js";
 
@@ -233,7 +235,7 @@ describe("brewva-effect foundation helpers", () => {
     let calls = 0;
     let inFlight = 0;
     let maxInFlight = 0;
-    const handle = startManagedInterval({
+    const handle = startBoundaryInterval({
       intervalMs: 1,
       run: () =>
         BrewvaEffect.promise(async () => {
@@ -259,7 +261,7 @@ describe("brewva-effect foundation helpers", () => {
     let calls = 0;
     let inFlight = 0;
     let maxInFlight = 0;
-    const handle = startScopedSchedule({
+    const handle = startBoundaryInterval({
       intervalMs: 1,
       runImmediately: true,
       run: () =>
@@ -545,6 +547,41 @@ describe("brewva-effect foundation helpers", () => {
     expect(releases).toBe(0);
 
     await spine.dispose();
+
+    expect(releases).toBe(1);
+  });
+
+  test("service runtimes expose one adapter boundary for scoped Effect services", async () => {
+    class SpineProbe extends BrewvaContext.Service<SpineProbe, { readonly value: number }>()(
+      "@brewva/test/ServiceRuntimeProbe",
+    ) {}
+
+    let releases = 0;
+    const layer = BrewvaLayer.effect(
+      SpineProbe,
+      BrewvaEffect.acquireRelease(
+        BrewvaEffect.sync(() => SpineProbe.of({ value: 41 })),
+        () =>
+          BrewvaEffect.sync(() => {
+            releases += 1;
+          }),
+      ),
+    );
+    const runtime = createBrewvaServiceRuntime(SpineProbe, layer, {
+      name: "test-service-runtime",
+    });
+
+    const value = await runtime.runService((probe) =>
+      BrewvaEffect.gen(function* () {
+        const yielded = yield* SpineProbe;
+        return probe.value + yielded.value;
+      }),
+    );
+
+    expect(value).toBe(82);
+    expect(releases).toBe(0);
+
+    await runtime.dispose();
 
     expect(releases).toBe(1);
   });

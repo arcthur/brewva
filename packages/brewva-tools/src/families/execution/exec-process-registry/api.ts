@@ -1,10 +1,10 @@
 export * from "./types.js";
-export * from "./host.js";
-export * from "./box.js";
-export * from "./sessions.js";
+export { terminateRunningSession } from "./host.js";
+export { drainSessionOutput, readSessionLog } from "./sessions.js";
+export { ManagedExecProcessRegistryService, type ManagedExecProcessRegistry } from "./service.js";
 export {
-  ManagedExecProcessRegistryService,
-  createManagedExecProcessRegistry,
-  disposeManagedExecProcessRegistry,
-  type ManagedExecProcessRegistry,
-} from "./internal/state.js";
+  createManagedExecProcessRegistryRuntime,
+  registerManagedExecProcessRegistryRuntimeHooks,
+  resolveManagedExecProcessRegistryRuntime,
+  type ManagedExecProcessRegistryRuntime,
+} from "./runtime.js";

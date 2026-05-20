@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { startScopedSchedule, type ScopedScheduleHandle } from "@brewva/brewva-effect";
+import { startBoundaryInterval, type BoundaryIntervalHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { parseJsonc } from "@brewva/brewva-runtime/config";
 import { toErrorMessage } from "../utils/errors.js";
@@ -107,7 +107,7 @@ export interface HeartbeatSchedulerStatus {
 export class HeartbeatScheduler {
   private policy: HeartbeatPolicy;
   private readonly nextRunByRule = new Map<string, number>();
-  private timer: ScopedScheduleHandle | null = null;
+  private timer: BoundaryIntervalHandle | null = null;
 
   constructor(
     private readonly options: {
@@ -124,7 +124,7 @@ export class HeartbeatScheduler {
   start(): void {
     if (this.timer) return;
     const tickIntervalMs = Math.max(1000, this.options.tickIntervalMs ?? 15_000);
-    this.timer = startScopedSchedule({
+    this.timer = startBoundaryInterval({
       intervalMs: tickIntervalMs,
       run: () => BrewvaEffect.promise(() => this.tick()),
       onError: (error) => {

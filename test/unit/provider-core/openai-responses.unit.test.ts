@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { AssistantMessage } from "@brewva/brewva-provider-core/contracts";
 import { buildOpenAIResponsesDefaultHeaders } from "../../../packages/brewva-provider-core/src/providers/openai-responses/adapter.js";
 import { convertResponsesMessages } from "../../../packages/brewva-provider-core/src/providers/openai-responses/messages.js";
@@ -6,6 +7,7 @@ import { processResponsesStream } from "../../../packages/brewva-provider-core/s
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
 import {
   createRecordingProviderEventStream,
+  runProviderCoreEffect,
   type RecordingProviderEventStream,
 } from "../../helpers/effect-stream.js";
 
@@ -13,7 +15,7 @@ function createTestToolCalls(
   output: unknown,
   stream: RecordingProviderEventStream,
 ): IncrementalToolCallFolder {
-  return new IncrementalToolCallFolder(output as AssistantMessage, stream, async () => {});
+  return new IncrementalToolCallFolder(output as AssistantMessage, stream, () => BrewvaEffect.void);
 }
 
 const TEST_MODEL = {
@@ -154,64 +156,67 @@ describe("openai responses stream processing", () => {
     const stream = createRecordingProviderEventStream();
     const observed: Array<{ type: string; delta?: string }> = [];
     const push = stream.push.bind(stream);
-    stream.push = async (event) => {
-      observed.push(event);
-      await push(event);
-    };
+    stream.push = (event) =>
+      BrewvaEffect.gen(function* () {
+        observed.push(event);
+        yield* push(event);
+      });
 
-    await processResponsesStream(
-      [
-        {
-          type: "response.created",
-          response: { id: "resp_1" },
-        },
-        {
-          type: "response.output_item.added",
-          item: { id: "rs_1", type: "reasoning", summary: [] },
-        },
-        {
-          type: "response.reasoning_summary_part.added",
-          item_id: "rs_1",
-          summary_index: 0,
-        },
-        {
-          type: "response.reasoning_summary_text.delta",
-          item_id: "rs_1",
-          summary_index: 0,
-          delta: "Step",
-        },
-        {
-          type: "response.reasoning_summary_text.delta",
-          item_id: "rs_1",
-          summary_index: 0,
-          delta: " one",
-        },
-        {
-          type: "response.output_item.done",
-          item: {
-            id: "rs_1",
-            type: "reasoning",
-            summary: [{ type: "summary_text", text: "Step one" }],
+    await runProviderCoreEffect(
+      processResponsesStream(
+        [
+          {
+            type: "response.created",
+            response: { id: "resp_1" },
           },
-        },
-        {
-          type: "response.completed",
-          response: {
-            id: "resp_1",
-            status: "completed",
-            usage: {
-              input_tokens: 1,
-              output_tokens: 2,
-              total_tokens: 3,
-              input_tokens_details: { cached_tokens: 0 },
+          {
+            type: "response.output_item.added",
+            item: { id: "rs_1", type: "reasoning", summary: [] },
+          },
+          {
+            type: "response.reasoning_summary_part.added",
+            item_id: "rs_1",
+            summary_index: 0,
+          },
+          {
+            type: "response.reasoning_summary_text.delta",
+            item_id: "rs_1",
+            summary_index: 0,
+            delta: "Step",
+          },
+          {
+            type: "response.reasoning_summary_text.delta",
+            item_id: "rs_1",
+            summary_index: 0,
+            delta: " one",
+          },
+          {
+            type: "response.output_item.done",
+            item: {
+              id: "rs_1",
+              type: "reasoning",
+              summary: [{ type: "summary_text", text: "Step one" }],
             },
           },
-        },
-      ] as never,
-      output as never,
-      stream,
-      TEST_MODEL as never,
-      createTestToolCalls(output, stream),
+          {
+            type: "response.completed",
+            response: {
+              id: "resp_1",
+              status: "completed",
+              usage: {
+                input_tokens: 1,
+                output_tokens: 2,
+                total_tokens: 3,
+                input_tokens_details: { cached_tokens: 0 },
+              },
+            },
+          },
+        ] as never,
+        output as never,
+        stream,
+        TEST_MODEL as never,
+        createTestToolCalls(output, stream),
+      ),
     );
 
     expect(
@@ -251,43 +256,45 @@ describe("openai responses stream processing", () => {
     };
     const stream = createRecordingProviderEventStream();
 
-    await processResponsesStream(
-      [
-        {
-          type: "response.output_item.added",
-          item: {
-            id: "fc_1",
-            call_id: "call_1",
-            type: "function_call",
-            name: "search",
-            arguments: "",
+    await runProviderCoreEffect(
+      processResponsesStream(
+        [
+          {
+            type: "response.output_item.added",
+            item: {
+              id: "fc_1",
+              call_id: "call_1",
+              type: "function_call",
+              name: "search",
+              arguments: "",
+            },
           },
-        },
-        {
-          type: "response.function_call_arguments.delta",
-          item_id: "fc_1",
-          delta: '{"query":"needle"',
-        },
-        {
-          type: "response.function_call_arguments.done",
-          item_id: "fc_1",
-          arguments: '{"query":"needle","limit":2}',
-        },
-        {
-          type: "response.output_item.done",
-          item: {
-            id: "fc_1",
-            call_id: "call_1",
-            type: "function_call",
-            name: "search",
+          {
+            type: "response.function_call_arguments.delta",
+            item_id: "fc_1",
+            delta: '{"query":"needle"',
+          },
+          {
+            type: "response.function_call_arguments.done",
+            item_id: "fc_1",
             arguments: '{"query":"needle","limit":2}',
           },
-        },
-      ] as never,
-      output as never,
-      stream,
-      TEST_MODEL as never,
-      createTestToolCalls(output, stream),
+          {
+            type: "response.output_item.done",
+            item: {
+              id: "fc_1",
+              call_id: "call_1",
+              type: "function_call",
+              name: "search",
+              arguments: '{"query":"needle","limit":2}',
+            },
+          },
+        ] as never,
+        output as never,
+        stream,
+        TEST_MODEL as never,
+        createTestToolCalls(output, stream),
+      ),
     );
 
     expect(output.content as unknown[]).toEqual([
@@ -330,73 +337,75 @@ describe("openai responses stream processing", () => {
     };
     const stream = createRecordingProviderEventStream();
 
-    await processResponsesStream(
-      [
-        {
-          type: "response.output_item.added",
-          item: {
-            id: "fc_1",
-            call_id: "call_1",
-            type: "function_call",
-            name: "search",
-            arguments: "",
+    await runProviderCoreEffect(
+      processResponsesStream(
+        [
+          {
+            type: "response.output_item.added",
+            item: {
+              id: "fc_1",
+              call_id: "call_1",
+              type: "function_call",
+              name: "search",
+              arguments: "",
+            },
           },
-        },
-        {
-          type: "response.output_item.added",
-          item: {
-            id: "fc_2",
-            call_id: "call_2",
-            type: "function_call",
-            name: "read",
-            arguments: "",
+          {
+            type: "response.output_item.added",
+            item: {
+              id: "fc_2",
+              call_id: "call_2",
+              type: "function_call",
+              name: "read",
+              arguments: "",
+            },
           },
-        },
-        {
-          type: "response.function_call_arguments.delta",
-          item_id: "fc_1",
-          delta: '{"query":"alpha"',
-        },
-        {
-          type: "response.function_call_arguments.delta",
-          item_id: "fc_2",
-          delta: '{"path":"README',
-        },
-        {
-          type: "response.function_call_arguments.done",
-          item_id: "fc_1",
-          arguments: '{"query":"alpha","limit":2}',
-        },
-        {
-          type: "response.function_call_arguments.done",
-          item_id: "fc_2",
-          arguments: '{"path":"README.md"}',
-        },
-        {
-          type: "response.output_item.done",
-          item: {
-            id: "fc_2",
-            call_id: "call_2",
-            type: "function_call",
-            name: "read",
-            arguments: '{"path":"README.md"}',
+          {
+            type: "response.function_call_arguments.delta",
+            item_id: "fc_1",
+            delta: '{"query":"alpha"',
           },
-        },
-        {
-          type: "response.output_item.done",
-          item: {
-            id: "fc_1",
-            call_id: "call_1",
-            type: "function_call",
-            name: "search",
+          {
+            type: "response.function_call_arguments.delta",
+            item_id: "fc_2",
+            delta: '{"path":"README',
+          },
+          {
+            type: "response.function_call_arguments.done",
+            item_id: "fc_1",
             arguments: '{"query":"alpha","limit":2}',
           },
-        },
-      ] as never,
-      output as never,
-      stream,
-      TEST_MODEL as never,
-      createTestToolCalls(output, stream),
+          {
+            type: "response.function_call_arguments.done",
+            item_id: "fc_2",
+            arguments: '{"path":"README.md"}',
+          },
+          {
+            type: "response.output_item.done",
+            item: {
+              id: "fc_2",
+              call_id: "call_2",
+              type: "function_call",
+              name: "read",
+              arguments: '{"path":"README.md"}',
+            },
+          },
+          {
+            type: "response.output_item.done",
+            item: {
+              id: "fc_1",
+              call_id: "call_1",
+              type: "function_call",
+              name: "search",
+              arguments: '{"query":"alpha","limit":2}',
+            },
+          },
+        ] as never,
+        output as never,
+        stream,
+        TEST_MODEL as never,
+        createTestToolCalls(output, stream),
+      ),
     );
 
     expect(output.content as unknown[]).toEqual([

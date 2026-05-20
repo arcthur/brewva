@@ -28,6 +28,29 @@ export interface BrewvaRuntimeSpine<R, ER = never> {
   readonly dispose: () => Promise<void>;
 }
 
+export interface BrewvaServiceRuntime<I, S, ER = never> {
+  readonly name: string | undefined;
+  readonly spine: BrewvaRuntimeSpine<I, ER>;
+  readonly run: <A, E>(effect: Effect.Effect<A, E, I>, options?: Effect.RunOptions) => Promise<A>;
+  readonly runExit: <A, E>(
+    effect: Effect.Effect<A, E, I>,
+    options?: Effect.RunOptions,
+  ) => Promise<Exit.Exit<A, E | ER>>;
+  readonly runFork: <A, E>(
+    effect: Effect.Effect<A, E, I>,
+    options?: Effect.RunOptions,
+  ) => Fiber.Fiber<A, E | ER>;
+  readonly runService: <A, E>(
+    operation: (service: S) => Effect.Effect<A, E, I>,
+    options?: Effect.RunOptions,
+  ) => Promise<A>;
+  readonly runServiceExit: <A, E>(
+    operation: (service: S) => Effect.Effect<A, E, I>,
+    options?: Effect.RunOptions,
+  ) => Promise<Exit.Exit<A, E | ER>>;
+  readonly dispose: () => Promise<void>;
+}
+
 export function createBrewvaRuntimeSpine<R, ER = never>(
   layer: Layer.Layer<R, ER>,
   options: BrewvaRuntimeSpineOptions = {},
@@ -49,5 +72,28 @@ export function createBrewvaRuntimeSpine<R, ER = never>(
     runPromise: (effect, runOptions) => managedRuntime.runPromise(effect, runOptions),
     runPromiseExit: (effect, runOptions) => managedRuntime.runPromiseExit(effect, runOptions),
     dispose: () => managedRuntime.dispose(),
+  };
+}
+
+export function createBrewvaServiceRuntime<I, S, ER = never>(
+  service: Context.Service<I, S>,
+  layer: Layer.Layer<I, ER>,
+  options: BrewvaRuntimeSpineOptions = {},
+): BrewvaServiceRuntime<I, S, ER> {
+  const spine = createBrewvaRuntimeSpine(layer, options);
+  const serviceEffect = <A, E>(
+    operation: (service: S) => Effect.Effect<A, E, I>,
+  ): Effect.Effect<A, E, I> => service.use(operation);
+
+  return {
+    name: options.name,
+    spine,
+    run: (effect, runOptions) => spine.runPromise(effect, runOptions),
+    runExit: (effect, runOptions) => spine.runPromiseExit(effect, runOptions),
+    runFork: (effect, runOptions) => spine.runFork(effect, runOptions),
+    runService: (operation, runOptions) => spine.runPromise(serviceEffect(operation), runOptions),
+    runServiceExit: (operation, runOptions) =>
+      spine.runPromiseExit(serviceEffect(operation), runOptions),
+    dispose: () => spine.dispose(),
   };
 }

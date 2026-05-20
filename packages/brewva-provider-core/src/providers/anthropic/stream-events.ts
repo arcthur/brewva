@@ -1,13 +1,16 @@
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type {
   AssistantMessage,
   ProviderEventSink,
   Model,
+  ProviderStreamError,
   StopReason,
   TextContent,
   ThinkingContent,
   Tool,
   ToolCall,
 } from "../../contracts/index.js";
+import { runAsyncIterableEffect } from "../../stream/effect-interop.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
 import { fromClaudeCodeName } from "./compat.js";
 import { applyAnthropicUsageTotals } from "./usage.js";
@@ -36,7 +39,7 @@ type AnthropicBlockState =
   | AnthropicThinkingBlockState
   | AnthropicToolCallBlockState;
 
-export async function processAnthropicStream(
+export function processAnthropicStream(
   anthropicStream: AsyncIterable<any>,
   output: AssistantMessage,
   stream: ProviderEventSink,
@@ -46,186 +49,193 @@ export async function processAnthropicStream(
     isOAuth: boolean;
     tools?: Tool[];
   },
-): Promise<void> {
-  const blocks = new Map<number, AnthropicBlockState>();
+): BrewvaEffect.Effect<void, ProviderStreamError> {
+  return BrewvaEffect.gen(function* () {
+    const blocks = new Map<number, AnthropicBlockState>();
 
-  for await (const event of anthropicStream) {
-    if (event.type === "message_start") {
-      output.responseId = event.message.id;
-      output.usage.input = event.message.usage.input_tokens || 0;
-      output.usage.output = event.message.usage.output_tokens || 0;
-      output.usage.cacheRead = event.message.usage.cache_read_input_tokens || 0;
-      output.usage.cacheWrite = event.message.usage.cache_creation_input_tokens || 0;
-      applyAnthropicUsageTotals(output, model);
-      continue;
-    }
-
-    if (event.type === "content_block_start") {
-      if (event.content_block.type === "text") {
-        const block: TextContent = {
-          type: "text",
-          text: "",
-        };
-        output.content.push(block);
-        const outputIndex = output.content.length - 1;
-        blocks.set(event.index, { type: "text", outputIndex, block });
-        await stream.push({
-          type: "text_start",
-          contentIndex: outputIndex,
-          partial: output,
-        });
-        continue;
-      }
-
-      if (event.content_block.type === "thinking") {
-        const block: ThinkingContent = {
-          type: "thinking",
-          thinking: "",
-          thinkingSignature: "",
-        };
-        output.content.push(block);
-        const outputIndex = output.content.length - 1;
-        blocks.set(event.index, { type: "thinking", outputIndex, block });
-        await stream.push({
-          type: "thinking_start",
-          contentIndex: outputIndex,
-          partial: output,
-        });
-        continue;
-      }
-
-      if (event.content_block.type === "redacted_thinking") {
-        const block: ThinkingContent = {
-          type: "thinking",
-          thinking: "[Reasoning redacted]",
-          thinkingSignature: event.content_block.data,
-          redacted: true,
-        };
-        output.content.push(block);
-        const outputIndex = output.content.length - 1;
-        blocks.set(event.index, { type: "thinking", outputIndex, block });
-        await stream.push({
-          type: "thinking_start",
-          contentIndex: outputIndex,
-          partial: output,
-        });
-        continue;
-      }
-
-      if (event.content_block.type === "tool_use") {
-        const outputIndex = await toolCalls.begin(
-          `anthropic:${event.index}`,
-          {
-            id: event.content_block.id,
-            name: options.isOAuth
-              ? fromClaudeCodeName(event.content_block.name, options.tools)
-              : event.content_block.name,
-            arguments: (event.content_block.input as Record<string, unknown>) ?? {},
-          },
-          "",
-        );
-        const block = output.content[outputIndex];
-        if (!block || block.type !== "toolCall") {
-          continue;
+    yield* runAsyncIterableEffect(anthropicStream, (event) =>
+      BrewvaEffect.gen(function* () {
+        if (event.type === "message_start") {
+          output.responseId = event.message.id;
+          output.usage.input = event.message.usage.input_tokens || 0;
+          output.usage.output = event.message.usage.output_tokens || 0;
+          output.usage.cacheRead = event.message.usage.cache_read_input_tokens || 0;
+          output.usage.cacheWrite = event.message.usage.cache_creation_input_tokens || 0;
+          applyAnthropicUsageTotals(output, model);
+          return;
         }
-        blocks.set(event.index, {
-          type: "toolCall",
-          outputIndex,
-          block,
-          partialJson: "",
-        });
-      }
-      continue;
-    }
 
-    if (event.type === "content_block_delta") {
-      const state = blocks.get(event.index);
-      if (!state) {
-        continue;
-      }
+        if (event.type === "content_block_start") {
+          if (event.content_block.type === "text") {
+            const block: TextContent = {
+              type: "text",
+              text: "",
+            };
+            output.content.push(block);
+            const outputIndex = output.content.length - 1;
+            blocks.set(event.index, { type: "text", outputIndex, block });
+            yield* stream.push({
+              type: "text_start",
+              contentIndex: outputIndex,
+              partial: output,
+            });
+            return;
+          }
 
-      if (event.delta.type === "text_delta" && state.type === "text") {
-        state.block.text += event.delta.text;
-        await stream.push({
-          type: "text_delta",
-          contentIndex: state.outputIndex,
-          delta: event.delta.text,
-          partial: output,
-        });
-        continue;
-      }
+          if (event.content_block.type === "thinking") {
+            const block: ThinkingContent = {
+              type: "thinking",
+              thinking: "",
+              thinkingSignature: "",
+            };
+            output.content.push(block);
+            const outputIndex = output.content.length - 1;
+            blocks.set(event.index, { type: "thinking", outputIndex, block });
+            yield* stream.push({
+              type: "thinking_start",
+              contentIndex: outputIndex,
+              partial: output,
+            });
+            return;
+          }
 
-      if (event.delta.type === "thinking_delta" && state.type === "thinking") {
-        state.block.thinking += event.delta.thinking;
-        await stream.push({
-          type: "thinking_delta",
-          contentIndex: state.outputIndex,
-          delta: event.delta.thinking,
-          partial: output,
-        });
-        continue;
-      }
+          if (event.content_block.type === "redacted_thinking") {
+            const block: ThinkingContent = {
+              type: "thinking",
+              thinking: "[Reasoning redacted]",
+              thinkingSignature: event.content_block.data,
+              redacted: true,
+            };
+            output.content.push(block);
+            const outputIndex = output.content.length - 1;
+            blocks.set(event.index, { type: "thinking", outputIndex, block });
+            yield* stream.push({
+              type: "thinking_start",
+              contentIndex: outputIndex,
+              partial: output,
+            });
+            return;
+          }
 
-      if (event.delta.type === "input_json_delta" && state.type === "toolCall") {
-        state.partialJson += event.delta.partial_json;
-        await toolCalls.appendArgumentsDelta(`anthropic:${event.index}`, event.delta.partial_json);
-        continue;
-      }
+          if (event.content_block.type === "tool_use") {
+            const outputIndex = yield* toolCalls.begin(
+              `anthropic:${event.index}`,
+              {
+                id: event.content_block.id,
+                name: options.isOAuth
+                  ? fromClaudeCodeName(event.content_block.name, options.tools)
+                  : event.content_block.name,
+                arguments: (event.content_block.input as Record<string, unknown>) ?? {},
+              },
+              "",
+            );
+            const block = output.content[outputIndex];
+            if (!block || block.type !== "toolCall") {
+              return;
+            }
+            blocks.set(event.index, {
+              type: "toolCall",
+              outputIndex,
+              block,
+              partialJson: "",
+            });
+          }
+          return;
+        }
 
-      if (event.delta.type === "signature_delta" && state.type === "thinking") {
-        state.block.thinkingSignature = state.block.thinkingSignature || "";
-        state.block.thinkingSignature += event.delta.signature;
-      }
-      continue;
-    }
+        if (event.type === "content_block_delta") {
+          const state = blocks.get(event.index);
+          if (!state) {
+            return;
+          }
 
-    if (event.type === "content_block_stop") {
-      const state = blocks.get(event.index);
-      if (!state) {
-        continue;
-      }
-      blocks.delete(event.index);
-      if (state.type === "text") {
-        await stream.push({
-          type: "text_end",
-          contentIndex: state.outputIndex,
-          content: state.block.text,
-          partial: output,
-        });
-        continue;
-      }
-      if (state.type === "thinking") {
-        await stream.push({
-          type: "thinking_end",
-          contentIndex: state.outputIndex,
-          content: state.block.thinking,
-          partial: output,
-        });
-        continue;
-      }
-      await toolCalls.finalize(`anthropic:${event.index}`);
-      continue;
-    }
+          if (event.delta.type === "text_delta" && state.type === "text") {
+            state.block.text += event.delta.text;
+            yield* stream.push({
+              type: "text_delta",
+              contentIndex: state.outputIndex,
+              delta: event.delta.text,
+              partial: output,
+            });
+            return;
+          }
 
-    if (event.type === "message_delta") {
-      if (event.delta.stop_reason) {
-        output.stopReason = mapAnthropicStopReason(event.delta.stop_reason);
-      }
-      if (event.usage.input_tokens != null) {
-        output.usage.input = event.usage.input_tokens;
-      }
-      if (event.usage.output_tokens != null) {
-        output.usage.output = event.usage.output_tokens;
-      }
-      if (event.usage.cache_read_input_tokens != null) {
-        output.usage.cacheRead = event.usage.cache_read_input_tokens;
-      }
-      if (event.usage.cache_creation_input_tokens != null) {
-        output.usage.cacheWrite = event.usage.cache_creation_input_tokens;
-      }
-      applyAnthropicUsageTotals(output, model);
-    }
-  }
+          if (event.delta.type === "thinking_delta" && state.type === "thinking") {
+            state.block.thinking += event.delta.thinking;
+            yield* stream.push({
+              type: "thinking_delta",
+              contentIndex: state.outputIndex,
+              delta: event.delta.thinking,
+              partial: output,
+            });
+            return;
+          }
+
+          if (event.delta.type === "input_json_delta" && state.type === "toolCall") {
+            state.partialJson += event.delta.partial_json;
+            yield* toolCalls.appendArgumentsDelta(
+              `anthropic:${event.index}`,
+              event.delta.partial_json,
+            );
+            return;
+          }
+
+          if (event.delta.type === "signature_delta" && state.type === "thinking") {
+            state.block.thinkingSignature = state.block.thinkingSignature || "";
+            state.block.thinkingSignature += event.delta.signature;
+          }
+          return;
+        }
+
+        if (event.type === "content_block_stop") {
+          const state = blocks.get(event.index);
+          if (!state) {
+            return;
+          }
+          blocks.delete(event.index);
+          if (state.type === "text") {
+            yield* stream.push({
+              type: "text_end",
+              contentIndex: state.outputIndex,
+              content: state.block.text,
+              partial: output,
+            });
+            return;
+          }
+          if (state.type === "thinking") {
+            yield* stream.push({
+              type: "thinking_end",
+              contentIndex: state.outputIndex,
+              content: state.block.thinking,
+              partial: output,
+            });
+            return;
+          }
+          yield* toolCalls.finalize(`anthropic:${event.index}`);
+          return;
+        }
+
+        if (event.type === "message_delta") {
+          if (event.delta.stop_reason) {
+            output.stopReason = mapAnthropicStopReason(event.delta.stop_reason);
+          }
+          if (event.usage.input_tokens != null) {
+            output.usage.input = event.usage.input_tokens;
+          }
+          if (event.usage.output_tokens != null) {
+            output.usage.output = event.usage.output_tokens;
+          }
+          if (event.usage.cache_read_input_tokens != null) {
+            output.usage.cacheRead = event.usage.cache_read_input_tokens;
+          }
+          if (event.usage.cache_creation_input_tokens != null) {
+            output.usage.cacheWrite = event.usage.cache_creation_input_tokens;
+          }
+          applyAnthropicUsageTotals(output, model);
+        }
+      }),
+    );
+  });
 }
 
 export function mapAnthropicStopReason(reason: string): StopReason {

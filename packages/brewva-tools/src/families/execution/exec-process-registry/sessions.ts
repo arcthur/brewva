@@ -1,24 +1,20 @@
-import { addScopedFinalizer, runBoundaryOperation } from "@brewva/brewva-effect";
+import { addScopedFinalizer } from "@brewva/brewva-effect";
 import {
-  BrewvaCause,
   BrewvaDeferred,
   BrewvaDuration,
   BrewvaEffect,
-  BrewvaQueue,
   BrewvaStream,
 } from "@brewva/brewva-effect/primitives";
+import { createAsyncBridge } from "@brewva/brewva-std/async";
 import { subscribeManagedSessionOutput } from "./internal/output.js";
 import {
   cleanupExpiredFinishedSessions,
   clampNonNegativeInt,
-  finishedBoxSessions,
-  finishedSessions,
   getManagedSession,
   isManagedSessionFinished,
   isManagedSessionRunning,
+  type ManagedExecProcessRegistryState,
   resolveBackend,
-  runningBoxSessions,
-  runningSessions,
 } from "./internal/state.js";
 import {
   DEFAULT_LOG_TAIL_LINES,
@@ -32,14 +28,18 @@ import {
   type SessionLogSlice,
 } from "./types.js";
 
-export function markSessionBackgrounded(ownerSessionId: string, sessionId: string): boolean {
-  cleanupExpiredFinishedSessions();
-  const running = runningSessions.get(sessionId);
+export function markSessionBackgrounded(
+  registry: ManagedExecProcessRegistryState,
+  ownerSessionId: string,
+  sessionId: string,
+): boolean {
+  cleanupExpiredFinishedSessions(registry);
+  const running = registry.runningSessions.get(sessionId);
   if (running && running.ownerSessionId === ownerSessionId) {
     running.backgrounded = true;
     return true;
   }
-  const finished = finishedSessions.get(sessionId);
+  const finished = registry.finishedSessions.get(sessionId);
   if (finished && finished.ownerSessionId === ownerSessionId) {
     finished.backgrounded = true;
     return true;
@@ -47,140 +47,156 @@ export function markSessionBackgrounded(ownerSessionId: string, sessionId: strin
   return false;
 }
 
-export function listRunningBackgroundSessions(ownerSessionId: string): ManagedExecRunningSession[] {
-  cleanupExpiredFinishedSessions();
-  return [...runningSessions.values()].filter(
+export function listRunningBackgroundSessions(
+  registry: ManagedExecProcessRegistryState,
+  ownerSessionId: string,
+): ManagedExecRunningSession[] {
+  cleanupExpiredFinishedSessions(registry);
+  return [...registry.runningSessions.values()].filter(
     (session) => session.ownerSessionId === ownerSessionId && session.backgrounded,
   );
 }
 
 export function listRunningBoxBackgroundSessions(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
 ): ManagedBoxExecRunningSession[] {
-  cleanupExpiredFinishedSessions();
-  return [...runningBoxSessions.values()].filter(
+  cleanupExpiredFinishedSessions(registry);
+  return [...registry.runningBoxSessions.values()].filter(
     (session) => session.ownerSessionId === ownerSessionId && session.backgrounded,
   );
 }
 
 export function listFinishedBackgroundSessions(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
 ): ManagedExecFinishedSession[] {
-  cleanupExpiredFinishedSessions();
-  return [...finishedSessions.values()].filter(
+  cleanupExpiredFinishedSessions(registry);
+  return [...registry.finishedSessions.values()].filter(
     (session) => session.ownerSessionId === ownerSessionId && session.backgrounded,
   );
 }
 
 export function listFinishedBoxBackgroundSessions(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
 ): ManagedBoxExecFinishedSession[] {
-  cleanupExpiredFinishedSessions();
-  return [...finishedBoxSessions.values()].filter(
+  cleanupExpiredFinishedSessions(registry);
+  return [...registry.finishedBoxSessions.values()].filter(
     (session) => session.ownerSessionId === ownerSessionId && session.backgrounded,
   );
 }
 
 export function getRunningSession(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
   sessionId: string,
 ): ManagedExecRunningSession | undefined {
-  cleanupExpiredFinishedSessions();
-  const session = runningSessions.get(sessionId);
+  cleanupExpiredFinishedSessions(registry);
+  const session = registry.runningSessions.get(sessionId);
   if (!session || session.ownerSessionId !== ownerSessionId) return undefined;
   return session;
 }
 
 export function getRunningBoxSession(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
   sessionId: string,
 ): ManagedBoxExecRunningSession | undefined {
-  cleanupExpiredFinishedSessions();
-  const session = runningBoxSessions.get(sessionId);
+  cleanupExpiredFinishedSessions(registry);
+  const session = registry.runningBoxSessions.get(sessionId);
   if (!session || session.ownerSessionId !== ownerSessionId) return undefined;
   return session;
 }
 
 export function getFinishedSession(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
   sessionId: string,
 ): ManagedExecFinishedSession | undefined {
-  cleanupExpiredFinishedSessions();
-  const session = finishedSessions.get(sessionId);
+  cleanupExpiredFinishedSessions(registry);
+  const session = registry.finishedSessions.get(sessionId);
   if (!session || session.ownerSessionId !== ownerSessionId) return undefined;
   return session;
 }
 
 export function getFinishedBoxSession(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
   sessionId: string,
 ): ManagedBoxExecFinishedSession | undefined {
-  cleanupExpiredFinishedSessions();
-  const session = finishedBoxSessions.get(sessionId);
+  cleanupExpiredFinishedSessions(registry);
+  const session = registry.finishedBoxSessions.get(sessionId);
   if (!session || session.ownerSessionId !== ownerSessionId) return undefined;
   return session;
 }
 
 export function streamManagedSessionOutput(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
   sessionId: string,
 ): BrewvaStream.Stream<ManagedExecOutputEvent, ManagedExecSessionNotFoundError> {
-  return BrewvaStream.callback(
-    (queue) =>
-      BrewvaEffect.gen(function* () {
-        const session = getManagedSession(ownerSessionId, sessionId);
-        if (!session) {
-          BrewvaQueue.failCauseUnsafe(
-            queue,
-            BrewvaCause.fail(new ManagedExecSessionNotFoundError(sessionId)),
-          );
-          return;
-        }
+  return BrewvaStream.unwrap(
+    BrewvaEffect.gen(function* () {
+      const session = getManagedSession(registry, ownerSessionId, sessionId);
+      if (!session) {
+        return yield* BrewvaEffect.fail(new ManagedExecSessionNotFoundError(sessionId));
+      }
 
-        const offerEvent = async (event: ManagedExecOutputEvent): Promise<boolean> => {
-          if (event.ownerSessionId !== ownerSessionId) {
-            return true;
-          }
-          const offered = await runBoundaryOperation(
-            "tools.exec.sessionOutput.offer",
-            BrewvaQueue.offer(queue, event),
-          );
-          if (event.type === "exit") {
-            BrewvaQueue.endUnsafe(queue);
-          }
-          return offered;
-        };
-        const unsubscribe = subscribeManagedSessionOutput(sessionId, offerEvent);
-        yield* addScopedFinalizer(unsubscribe);
-
-        if (isManagedSessionFinished(session)) {
-          void offerEvent({
-            type: "exit",
-            sessionId: session.id,
-            ownerSessionId: session.ownerSessionId,
-            backend: resolveBackend(session),
-            status: session.status,
-            exitCode: session.exitCode,
-            exitSignal: session.exitSignal,
-            emittedAt: "endedAt" in session ? session.endedAt : Date.now(),
-          });
+      let unsubscribe: (() => void) | undefined;
+      const bridge = createAsyncBridge<ManagedExecOutputEvent>({
+        capacity: 64,
+        onCancel: () => unsubscribe?.(),
+      });
+      const offerEvent = async (event: ManagedExecOutputEvent): Promise<boolean> => {
+        if (event.ownerSessionId !== ownerSessionId) {
+          return true;
         }
-      }),
-    { bufferSize: 64, strategy: "suspend" },
+        await bridge.write(event);
+        if (event.type === "exit") {
+          bridge.close();
+        }
+        return true;
+      };
+      unsubscribe = subscribeManagedSessionOutput(registry, sessionId, offerEvent);
+      yield* addScopedFinalizer(() => {
+        unsubscribe?.();
+        bridge.abort("managed session output stream closed");
+      });
+
+      if (isManagedSessionFinished(session)) {
+        void offerEvent({
+          type: "exit",
+          sessionId: session.id,
+          ownerSessionId: session.ownerSessionId,
+          backend: resolveBackend(session),
+          status: session.status,
+          exitCode: session.exitCode,
+          exitSignal: session.exitSignal,
+          emittedAt: "endedAt" in session ? session.endedAt : Date.now(),
+        });
+      }
+      return BrewvaStream.fromAsyncIterable(
+        bridge,
+        () => new ManagedExecSessionNotFoundError(sessionId),
+      );
+    }),
   );
 }
 
 export function consumeManagedSessionOutputEffect<E = never, R = never>(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
   sessionId: string,
   sink: (event: ManagedExecOutputEvent) => BrewvaEffect.Effect<void, E, R> | void,
 ): BrewvaEffect.Effect<void, ManagedExecSessionNotFoundError | E, R> {
-  return streamManagedSessionOutput(ownerSessionId, sessionId).pipe(
+  return streamManagedSessionOutput(registry, ownerSessionId, sessionId).pipe(
     BrewvaStream.runForEach((event) => sink(event) ?? BrewvaEffect.void),
   );
 }
 
 export function waitForManagedSessionActivityEffect(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
   sessionId: string,
   timeoutMs: number,
@@ -190,13 +206,13 @@ export function waitForManagedSessionActivityEffect(
   }
   return BrewvaEffect.scoped(
     BrewvaEffect.gen(function* () {
-      const current = getManagedSession(ownerSessionId, sessionId);
+      const current = getManagedSession(registry, ownerSessionId, sessionId);
       if (!isManagedSessionRunning(current) || (current && hasPendingOutput(current))) {
         return;
       }
 
       const activity = yield* BrewvaDeferred.make<void>();
-      const unsubscribe = subscribeManagedSessionOutput(sessionId, (event) => {
+      const unsubscribe = subscribeManagedSessionOutput(registry, sessionId, (event) => {
         if (event.ownerSessionId !== ownerSessionId) {
           return;
         }
@@ -204,7 +220,7 @@ export function waitForManagedSessionActivityEffect(
       });
       yield* addScopedFinalizer(unsubscribe);
 
-      const afterSubscribe = getManagedSession(ownerSessionId, sessionId);
+      const afterSubscribe = getManagedSession(registry, ownerSessionId, sessionId);
       if (
         !isManagedSessionRunning(afterSubscribe) ||
         (afterSubscribe && hasPendingOutput(afterSubscribe))
@@ -271,37 +287,41 @@ export function readSessionLog(
   };
 }
 
-export function deleteManagedSession(ownerSessionId: string, sessionId: string): boolean {
-  cleanupExpiredFinishedSessions();
-  const running = runningSessions.get(sessionId);
+export function deleteManagedSession(
+  registry: ManagedExecProcessRegistryState,
+  ownerSessionId: string,
+  sessionId: string,
+): boolean {
+  cleanupExpiredFinishedSessions(registry);
+  const running = registry.runningSessions.get(sessionId);
   if (running && running.ownerSessionId === ownerSessionId) {
     if (!running.exited) return false;
     running.removed = true;
-    runningSessions.delete(sessionId);
-    finishedSessions.delete(sessionId);
+    registry.runningSessions.delete(sessionId);
+    registry.finishedSessions.delete(sessionId);
     return true;
   }
 
-  const finished = finishedSessions.get(sessionId);
+  const finished = registry.finishedSessions.get(sessionId);
   if (finished && finished.ownerSessionId === ownerSessionId) {
     finished.removed = true;
-    finishedSessions.delete(sessionId);
+    registry.finishedSessions.delete(sessionId);
     return true;
   }
 
-  const runningBox = runningBoxSessions.get(sessionId);
+  const runningBox = registry.runningBoxSessions.get(sessionId);
   if (runningBox && runningBox.ownerSessionId === ownerSessionId) {
     if (!runningBox.exited) return false;
     runningBox.removed = true;
-    runningBoxSessions.delete(sessionId);
-    finishedBoxSessions.delete(sessionId);
+    registry.runningBoxSessions.delete(sessionId);
+    registry.finishedBoxSessions.delete(sessionId);
     return true;
   }
 
-  const finishedBox = finishedBoxSessions.get(sessionId);
+  const finishedBox = registry.finishedBoxSessions.get(sessionId);
   if (finishedBox && finishedBox.ownerSessionId === ownerSessionId) {
     finishedBox.removed = true;
-    finishedBoxSessions.delete(sessionId);
+    registry.finishedBoxSessions.delete(sessionId);
     return true;
   }
   return false;

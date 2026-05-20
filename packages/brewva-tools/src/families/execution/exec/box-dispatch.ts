@@ -19,6 +19,7 @@ import type {
   VirtualReadonlyEligibility,
 } from "@brewva/brewva-runtime/security";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
+import { resolveManagedExecProcessRegistryRuntime } from "../exec-process-registry/runtime.js";
 import {
   buildCommandPolicyAuditPayload,
   buildExecAuditPayload,
@@ -29,7 +30,7 @@ import {
 import {
   BoxCommandFailedError,
   BoxWorkdirOutsideWorkspaceError,
-  executeBoxCommand,
+  executeBoxCommandEffect,
 } from "./box-lane.js";
 import { serializeBoxRootMappings, type BoxRootMapping } from "./box-root-map.js";
 import { type ResolvedExecutionPolicy, shouldSnapshotBeforeBoxExec } from "./policy.js";
@@ -72,212 +73,215 @@ export async function executeBoxCommandWithAudit(input: {
 
   try {
     const startedAt = Date.now();
-    const result = await executeBoxCommand({
-      ownerSessionId,
-      command,
-      policy,
-      runtime,
-      workspaceRoot: boxWorkspaceRoot,
-      rootMappings: boxRootMappings,
-      requestedCwd: boxRequestedCwd,
-      requestedEnv: requestedEnv.env,
-      requestedTimeoutSec: timeoutSec,
-      snapshotBefore: shouldSnapshotBeforeBoxExec({
-        commandPolicy,
-        boxPolicy: policy.boxPolicy,
+    const registry = resolveManagedExecProcessRegistryRuntime(runtime);
+    const result = await registry.runEffect(
+      executeBoxCommandEffect({
+        ownerSessionId,
+        command,
+        policy,
+        runtime,
+        workspaceRoot: boxWorkspaceRoot,
+        rootMappings: boxRootMappings,
+        requestedCwd: boxRequestedCwd,
+        requestedEnv: requestedEnv.env,
+        requestedTimeoutSec: timeoutSec,
+        snapshotBefore: shouldSnapshotBeforeBoxExec({
+          commandPolicy,
+          boxPolicy: policy.boxPolicy,
+        }),
+        background,
+        signal,
+        onBootstrapStarted: (scope) => {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_BOOTSTRAP_STARTED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                scopeKind: scope.kind,
+                scopeId: scope.id,
+                workspaceRoot: scope.workspaceRoot,
+                rootMappings: serializeBoxRootMappings(boxRootMappings),
+                image: scope.image,
+                networkMode: scope.capabilities.network.mode,
+              },
+            }),
+          );
+        },
+        onBootstrapProgress: (scope, phase) => {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_BOOTSTRAP_PROGRESS_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                scopeKind: scope.kind,
+                scopeId: scope.id,
+                workspaceRoot: scope.workspaceRoot,
+                rootMappings: serializeBoxRootMappings(boxRootMappings),
+                image: scope.image,
+                phase,
+              },
+            }),
+          );
+        },
+        onBootstrapCompleted: (box, durationMs) => {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                boxId: box.id,
+                fingerprint: box.fingerprint,
+                scopeKind: box.scope.kind,
+                scopeId: box.scope.id,
+                acquisitionReason: box.acquisitionReason,
+                rootMappings: serializeBoxRootMappings(boxRootMappings),
+                durationMs,
+              },
+            }),
+          );
+        },
+        onBootstrapFailed: (scope, error, durationMs) => {
+          const message = error instanceof Error ? error.message : String(error);
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                scopeKind: scope.kind,
+                scopeId: scope.id,
+                workspaceRoot: scope.workspaceRoot,
+                rootMappings: serializeBoxRootMappings(boxRootMappings),
+                image: scope.image,
+                durationMs,
+                reason: "box_bootstrap_failed",
+                error: redactTextForAudit(message),
+              },
+            }),
+          );
+        },
+        onAcquired: (box) => {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_ACQUIRED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                boxId: box.id,
+                fingerprint: box.fingerprint,
+                scopeKind: box.scope.kind,
+                scopeId: box.scope.id,
+                acquisitionReason: box.acquisitionReason,
+                workspaceRoot: box.scope.workspaceRoot,
+                rootMappings: serializeBoxRootMappings(boxRootMappings),
+                image: box.scope.image,
+              },
+            }),
+          );
+        },
+        onSnapshot: (box, snapshot) => {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_SNAPSHOT_CREATED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                boxId: box.id,
+                fingerprint: box.fingerprint,
+                snapshotId: snapshot.id,
+                snapshotName: snapshot.name,
+                reason: "snapshot_before_workspace_write",
+              },
+            }),
+          );
+        },
+        onStarted: (box, effectiveCwd) => {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_EXEC_STARTED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                boxId: box.id,
+                fingerprint: box.fingerprint,
+                resolvedBackend: preferredBackend,
+                requestedCwd: boxRequestedCwd,
+                effectiveBoxCwd: effectiveCwd,
+                rootMappings: serializeBoxRootMappings(boxRootMappings),
+                requestedEnvKeys: requestedEnv.requestedKeys,
+                appliedEnvKeys: requestedEnv.appliedKeys,
+                droppedEnvKeys: requestedEnv.droppedKeys,
+                requestedTimeoutSec: timeoutSec,
+                ...buildCommandPolicyAuditPayload(commandPolicy),
+                ...buildVirtualReadonlyAuditPayload(virtualReadonly),
+              },
+            }),
+          );
+        },
+        onFailed: (box, failedResult) => {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_EXEC_FAILED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                boxId: box.id,
+                fingerprint: box.fingerprint,
+                exitCode: failedResult.exitCode,
+                durationMs: Date.now() - startedAt,
+                reason: "box_process_nonzero",
+              },
+            }),
+          );
+        },
+        onReleased: (box, reason) => {
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            BOX_RELEASED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              payload: {
+                boxId: box.id,
+                fingerprint: box.fingerprint,
+                scopeKind: box.scope.kind,
+                scopeId: box.scope.id,
+                reason,
+              },
+            }),
+          );
+        },
       }),
-      background,
-      signal,
-      onBootstrapStarted: (scope) => {
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_BOOTSTRAP_STARTED_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              scopeKind: scope.kind,
-              scopeId: scope.id,
-              workspaceRoot: scope.workspaceRoot,
-              rootMappings: serializeBoxRootMappings(boxRootMappings),
-              image: scope.image,
-              networkMode: scope.capabilities.network.mode,
-            },
-          }),
-        );
-      },
-      onBootstrapProgress: (scope, phase) => {
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_BOOTSTRAP_PROGRESS_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              scopeKind: scope.kind,
-              scopeId: scope.id,
-              workspaceRoot: scope.workspaceRoot,
-              rootMappings: serializeBoxRootMappings(boxRootMappings),
-              image: scope.image,
-              phase,
-            },
-          }),
-        );
-      },
-      onBootstrapCompleted: (box, durationMs) => {
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              boxId: box.id,
-              fingerprint: box.fingerprint,
-              scopeKind: box.scope.kind,
-              scopeId: box.scope.id,
-              acquisitionReason: box.acquisitionReason,
-              rootMappings: serializeBoxRootMappings(boxRootMappings),
-              durationMs,
-            },
-          }),
-        );
-      },
-      onBootstrapFailed: (scope, error, durationMs) => {
-        const message = error instanceof Error ? error.message : String(error);
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              scopeKind: scope.kind,
-              scopeId: scope.id,
-              workspaceRoot: scope.workspaceRoot,
-              rootMappings: serializeBoxRootMappings(boxRootMappings),
-              image: scope.image,
-              durationMs,
-              reason: "box_bootstrap_failed",
-              error: redactTextForAudit(message),
-            },
-          }),
-        );
-      },
-      onAcquired: (box) => {
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_ACQUIRED_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              boxId: box.id,
-              fingerprint: box.fingerprint,
-              scopeKind: box.scope.kind,
-              scopeId: box.scope.id,
-              acquisitionReason: box.acquisitionReason,
-              workspaceRoot: box.scope.workspaceRoot,
-              rootMappings: serializeBoxRootMappings(boxRootMappings),
-              image: box.scope.image,
-            },
-          }),
-        );
-      },
-      onSnapshot: (box, snapshot) => {
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_SNAPSHOT_CREATED_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              boxId: box.id,
-              fingerprint: box.fingerprint,
-              snapshotId: snapshot.id,
-              snapshotName: snapshot.name,
-              reason: "snapshot_before_workspace_write",
-            },
-          }),
-        );
-      },
-      onStarted: (box, effectiveCwd) => {
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_EXEC_STARTED_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              boxId: box.id,
-              fingerprint: box.fingerprint,
-              resolvedBackend: preferredBackend,
-              requestedCwd: boxRequestedCwd,
-              effectiveBoxCwd: effectiveCwd,
-              rootMappings: serializeBoxRootMappings(boxRootMappings),
-              requestedEnvKeys: requestedEnv.requestedKeys,
-              appliedEnvKeys: requestedEnv.appliedKeys,
-              droppedEnvKeys: requestedEnv.droppedKeys,
-              requestedTimeoutSec: timeoutSec,
-              ...buildCommandPolicyAuditPayload(commandPolicy),
-              ...buildVirtualReadonlyAuditPayload(virtualReadonly),
-            },
-          }),
-        );
-      },
-      onFailed: (box, failedResult) => {
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_EXEC_FAILED_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              boxId: box.id,
-              fingerprint: box.fingerprint,
-              exitCode: failedResult.exitCode,
-              durationMs: Date.now() - startedAt,
-              reason: "box_process_nonzero",
-            },
-          }),
-        );
-      },
-      onReleased: (box, reason) => {
-        recordExecEvent(
-          runtime,
-          ownerSessionId,
-          BOX_RELEASED_EVENT_TYPE,
-          buildExecAuditPayload({
-            toolCallId,
-            policy,
-            command,
-            payload: {
-              boxId: box.id,
-              fingerprint: box.fingerprint,
-              scopeKind: box.scope.kind,
-              scopeId: box.scope.id,
-              reason,
-            },
-          }),
-        );
-      },
-    });
+    );
 
     if (result.status === "running") {
       return execDisplayResult(result.output, {

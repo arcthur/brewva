@@ -1,6 +1,8 @@
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type {
   AssistantMessage,
   ProviderEventSink,
+  ProviderStreamError,
   TextContent,
   ThinkingContent,
 } from "../contracts/index.js";
@@ -13,108 +15,114 @@ export class AssistantBlockAccumulator {
   constructor(
     private readonly output: AssistantMessage,
     private readonly stream: ProviderEventSink,
-    private readonly ensureStarted: () => Promise<void>,
+    private readonly ensureStarted: () => BrewvaEffect.Effect<void, ProviderStreamError>,
   ) {}
 
   get hasContent(): boolean {
     return this.output.content.length > 0;
   }
 
-  async appendText(
+  appendText(
     text: string,
     options: {
       thinking?: boolean;
       signature?: string;
     } = {},
-  ): Promise<void> {
-    const thinking = options.thinking === true;
-    if (
-      !this.#currentBlock ||
-      (thinking && this.#currentBlock.type !== "thinking") ||
-      (!thinking && this.#currentBlock.type !== "text")
-    ) {
-      await this.endCurrent();
-      await this.ensureStarted();
-      if (thinking) {
-        this.#currentBlock = {
-          type: "thinking",
-          thinking: "",
-          thinkingSignature: undefined,
-        };
-        this.output.content.push(this.#currentBlock);
-        await this.stream.push({
-          type: "thinking_start",
-          contentIndex: this.blockIndex(),
-          partial: this.output,
-        });
-      } else {
-        this.#currentBlock = {
-          type: "text",
-          text: "",
-          textSignature: undefined,
-        };
-        this.output.content.push(this.#currentBlock);
-        await this.stream.push({
-          type: "text_start",
-          contentIndex: this.blockIndex(),
-          partial: this.output,
-        });
+  ): BrewvaEffect.Effect<void, ProviderStreamError> {
+    const self = this;
+    return BrewvaEffect.gen(function* () {
+      const thinking = options.thinking === true;
+      if (
+        !self.#currentBlock ||
+        (thinking && self.#currentBlock.type !== "thinking") ||
+        (!thinking && self.#currentBlock.type !== "text")
+      ) {
+        yield* self.endCurrent();
+        yield* self.ensureStarted();
+        if (thinking) {
+          self.#currentBlock = {
+            type: "thinking",
+            thinking: "",
+            thinkingSignature: undefined,
+          };
+          self.output.content.push(self.#currentBlock);
+          yield* self.stream.push({
+            type: "thinking_start",
+            contentIndex: self.blockIndex(),
+            partial: self.output,
+          });
+        } else {
+          self.#currentBlock = {
+            type: "text",
+            text: "",
+            textSignature: undefined,
+          };
+          self.output.content.push(self.#currentBlock);
+          yield* self.stream.push({
+            type: "text_start",
+            contentIndex: self.blockIndex(),
+            partial: self.output,
+          });
+        }
       }
-    }
 
-    if (this.#currentBlock.type === "thinking") {
-      this.#currentBlock.thinking += text;
+      if (self.#currentBlock.type === "thinking") {
+        self.#currentBlock.thinking += text;
+        if (options.signature) {
+          self.#currentBlock.thinkingSignature = options.signature;
+        }
+        yield* self.stream.push({
+          type: "thinking_delta",
+          contentIndex: self.blockIndex(),
+          delta: text,
+          partial: self.output,
+        });
+        return;
+      }
+
+      self.#currentBlock.text += text;
       if (options.signature) {
-        this.#currentBlock.thinkingSignature = options.signature;
+        self.#currentBlock.textSignature = options.signature;
       }
-      await this.stream.push({
-        type: "thinking_delta",
-        contentIndex: this.blockIndex(),
+      yield* self.stream.push({
+        type: "text_delta",
+        contentIndex: self.blockIndex(),
         delta: text,
-        partial: this.output,
+        partial: self.output,
       });
-      return;
-    }
-
-    this.#currentBlock.text += text;
-    if (options.signature) {
-      this.#currentBlock.textSignature = options.signature;
-    }
-    await this.stream.push({
-      type: "text_delta",
-      contentIndex: this.blockIndex(),
-      delta: text,
-      partial: this.output,
     });
   }
 
-  async finish(): Promise<void> {
-    await this.endCurrent();
+  finish(): BrewvaEffect.Effect<void, ProviderStreamError> {
+    return this.endCurrent();
   }
 
   private blockIndex(): number {
     return this.output.content.length - 1;
   }
 
-  private async endCurrent(): Promise<void> {
-    if (!this.#currentBlock) {
-      return;
-    }
-    if (this.#currentBlock.type === "thinking") {
-      await this.stream.push({
-        type: "thinking_end",
-        contentIndex: this.blockIndex(),
-        content: this.#currentBlock.thinking,
-        partial: this.output,
-      });
-    } else {
-      await this.stream.push({
-        type: "text_end",
-        contentIndex: this.blockIndex(),
-        content: this.#currentBlock.text,
-        partial: this.output,
-      });
-    }
-    this.#currentBlock = null;
+  private endCurrent(): BrewvaEffect.Effect<void, ProviderStreamError> {
+    const self = this;
+    return BrewvaEffect.gen(function* () {
+      if (!self.#currentBlock) {
+        return;
+      }
+      if (self.#currentBlock.type === "thinking") {
+        yield* self.stream.push({
+          type: "thinking_end",
+          contentIndex: self.blockIndex(),
+          content: self.#currentBlock.thinking,
+          partial: self.output,
+        });
+      } else {
+        yield* self.stream.push({
+          type: "text_end",
+          contentIndex: self.blockIndex(),
+          content: self.#currentBlock.text,
+          partial: self.output,
+        });
+      }
+      self.#currentBlock = null;
+    });
   }
 }

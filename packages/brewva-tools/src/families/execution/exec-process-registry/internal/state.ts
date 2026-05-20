@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { BrewvaContext, BrewvaEffect, BrewvaLayer } from "@brewva/brewva-effect/primitives";
 import { differenceInMilliseconds } from "date-fns";
 import {
   FINISHED_TTL_MS,
@@ -11,25 +10,28 @@ import {
   type ManagedOutputSession,
   type ManagedSession,
 } from "../types.js";
+import type { ManagedOutputSubscriber } from "./output.js";
 
-export interface ManagedExecProcessRegistry {
+export interface ManagedExecProcessRegistryState {
   readonly runningSessions: Map<string, ManagedExecRunningSession>;
   readonly finishedSessions: Map<string, ManagedExecFinishedSession>;
   readonly runningBoxSessions: Map<string, ManagedBoxExecRunningSession>;
   readonly finishedBoxSessions: Map<string, ManagedBoxExecFinishedSession>;
+  readonly outputSubscribers: Map<string, Set<ManagedOutputSubscriber>>;
 }
 
-export function createManagedExecProcessRegistry(): ManagedExecProcessRegistry {
+export function createManagedExecProcessRegistryState(): ManagedExecProcessRegistryState {
   return {
     runningSessions: new Map<string, ManagedExecRunningSession>(),
     finishedSessions: new Map<string, ManagedExecFinishedSession>(),
     runningBoxSessions: new Map<string, ManagedBoxExecRunningSession>(),
     finishedBoxSessions: new Map<string, ManagedBoxExecFinishedSession>(),
+    outputSubscribers: new Map<string, Set<ManagedOutputSubscriber>>(),
   };
 }
 
 export async function disposeManagedExecProcessRegistry(
-  registry: ManagedExecProcessRegistry,
+  registry: ManagedExecProcessRegistryState,
 ): Promise<void> {
   const terminateHost = [...registry.runningSessions.values()].map(async (session) => {
     session.removed = true;
@@ -59,42 +61,21 @@ export async function disposeManagedExecProcessRegistry(
   registry.finishedSessions.clear();
   registry.runningBoxSessions.clear();
   registry.finishedBoxSessions.clear();
+  registry.outputSubscribers.clear();
 }
 
-const makeManagedExecProcessRegistry = BrewvaEffect.fn("tools.exec.processRegistry.make")(
-  function* () {
-    const registry = createManagedExecProcessRegistry();
-    yield* BrewvaEffect.addFinalizer(() =>
-      BrewvaEffect.promise(() => disposeManagedExecProcessRegistry(registry)),
-    );
-    return registry;
-  },
-);
-
-export class ManagedExecProcessRegistryService extends BrewvaContext.Service<
-  ManagedExecProcessRegistryService,
-  ManagedExecProcessRegistry
->()("@brewva/Tools/ManagedExecProcessRegistry") {
-  static layer() {
-    return BrewvaLayer.effect(this, makeManagedExecProcessRegistry());
-  }
-}
-
-export const defaultManagedExecProcessRegistry = createManagedExecProcessRegistry();
-export const runningSessions = defaultManagedExecProcessRegistry.runningSessions;
-export const finishedSessions = defaultManagedExecProcessRegistry.finishedSessions;
-export const runningBoxSessions = defaultManagedExecProcessRegistry.runningBoxSessions;
-export const finishedBoxSessions = defaultManagedExecProcessRegistry.finishedBoxSessions;
-
-export function cleanupExpiredFinishedSessions(now = Date.now()): void {
-  for (const [sessionId, session] of finishedSessions.entries()) {
+export function cleanupExpiredFinishedSessions(
+  registry: ManagedExecProcessRegistryState,
+  now = Date.now(),
+): void {
+  for (const [sessionId, session] of registry.finishedSessions.entries()) {
     if (differenceInMilliseconds(now, session.endedAt) > FINISHED_TTL_MS) {
-      finishedSessions.delete(sessionId);
+      registry.finishedSessions.delete(sessionId);
     }
   }
-  for (const [sessionId, session] of finishedBoxSessions.entries()) {
+  for (const [sessionId, session] of registry.finishedBoxSessions.entries()) {
     if (differenceInMilliseconds(now, session.endedAt) > FINISHED_TTL_MS) {
-      finishedBoxSessions.delete(sessionId);
+      registry.finishedBoxSessions.delete(sessionId);
     }
   }
 }
@@ -113,19 +94,20 @@ export function resolveBackend(session: Pick<ManagedOutputSession, "kind">): Man
 }
 
 export function getManagedSession(
+  registry: ManagedExecProcessRegistryState,
   ownerSessionId: string,
   sessionId: string,
 ): ManagedSession | undefined {
-  const running = runningSessions.get(sessionId);
+  const running = registry.runningSessions.get(sessionId);
   if (running?.ownerSessionId === ownerSessionId) return running;
 
-  const runningBox = runningBoxSessions.get(sessionId);
+  const runningBox = registry.runningBoxSessions.get(sessionId);
   if (runningBox?.ownerSessionId === ownerSessionId) return runningBox;
 
-  const finished = finishedSessions.get(sessionId);
+  const finished = registry.finishedSessions.get(sessionId);
   if (finished?.ownerSessionId === ownerSessionId) return finished;
 
-  const finishedBox = finishedBoxSessions.get(sessionId);
+  const finishedBox = registry.finishedBoxSessions.get(sessionId);
   if (finishedBox?.ownerSessionId === ownerSessionId) return finishedBox;
 
   return undefined;

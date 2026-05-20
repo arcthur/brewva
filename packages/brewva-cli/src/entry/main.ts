@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
-import { startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import { startBoundaryTimeout, type BoundaryTimeoutHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
   recordAbnormalSessionShutdown,
@@ -668,7 +668,7 @@ export async function runCliRootOperation(): Promise<void> {
       source: "cli_signal",
     };
 
-    const timeout: ScopedTimeoutHandle = startScopedTimeout({
+    const timeout: BoundaryTimeoutHandle = startBoundaryTimeout({
       delayMs: gracefulTimeoutMs,
       run: () =>
         BrewvaEffect.promise(async () => {

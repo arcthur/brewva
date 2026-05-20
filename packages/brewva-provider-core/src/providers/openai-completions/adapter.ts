@@ -1,3 +1,4 @@
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { asPartialObject } from "@brewva/brewva-std/unknown";
 import OpenAI from "openai";
 import {
@@ -12,6 +13,8 @@ import type {
   SimpleStreamOptions,
   StreamFunction,
 } from "../../contracts/index.js";
+import { ProviderStreamError } from "../../contracts/index.js";
+import { failProviderStream, providerTryPromise } from "../../stream/effect-interop.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
 import {
   buildCopilotDynamicHeaders,
@@ -65,80 +68,90 @@ export const streamOpenAICompletions: StreamFunction<
 > = (model: Model<"openai-completions">, context: Context, options?: OpenAICompletionsOptions) => {
   return runProviderStream(
     model,
-    async ({ stream, output, ensureStarted, composer, signal }) => {
-      const apiKey = options?.apiKey || "";
-      const compat = resolveOpenAICompletionsCompat(model);
-      const cacheRender = resolveOpenAICompletionsCacheRender({
-        provider: model.provider,
-        modelId: model.id,
-        baseUrl: model.baseUrl,
-        sessionId: options?.sessionId,
-        policy: options?.cachePolicy,
-        transport: options?.transport,
-        cacheControlFormat: compat.cacheControlFormat,
-        supportsPromptCacheKey: compat.supportsPromptCacheKey,
-        supportsLongCacheRetention: compat.supportsLongCacheRetention,
-      });
-      const client = createClient(
-        model,
-        context,
-        apiKey,
-        options?.headers,
-        cacheRender,
-        compat,
-        options?.sessionId,
-      );
-      void options?.onCacheRender?.(cacheRender, model);
-      let params: OpenAICompletionsRequestCompat = buildOpenAICompletionsParams(
-        model,
-        context,
-        options,
-        cacheRender,
-      );
-      const nextParams = await options?.onPayload?.(
-        params,
-        model,
-        buildProviderPayloadMetadata(model, options, params, cacheRender),
-      );
-      if (nextParams !== undefined) {
-        const payloadOverride = asPartialObject<OpenAICompletionsRequestCompat>(nextParams) ?? {};
-        params = {
-          ...params,
-          ...payloadOverride,
-          stream: true,
-        };
-      }
-      const openaiStream = await client.chat.completions.create(asStreamingParams(params), {
-        signal,
-      });
-      await ensureStarted();
-      try {
-        await processOpenAICompletionsStream(
+    ({ stream, output, ensureStarted, composer, signal }) =>
+      BrewvaEffect.gen(function* () {
+        const apiKey = options?.apiKey || "";
+        const compat = resolveOpenAICompletionsCompat(model);
+        const cacheRender = resolveOpenAICompletionsCacheRender({
+          provider: model.provider,
+          modelId: model.id,
+          baseUrl: model.baseUrl,
+          sessionId: options?.sessionId,
+          policy: options?.cachePolicy,
+          transport: options?.transport,
+          cacheControlFormat: compat.cacheControlFormat,
+          supportsPromptCacheKey: compat.supportsPromptCacheKey,
+          supportsLongCacheRetention: compat.supportsLongCacheRetention,
+        });
+        const client = createClient(
+          model,
+          context,
+          apiKey,
+          options?.headers,
+          cacheRender,
+          compat,
+          options?.sessionId,
+        );
+        yield* providerTryPromise(async () => {
+          await options?.onCacheRender?.(cacheRender, model);
+        });
+        let params: OpenAICompletionsRequestCompat = buildOpenAICompletionsParams(
+          model,
+          context,
+          options,
+          cacheRender,
+        );
+        const nextParams = yield* providerTryPromise(async () =>
+          options?.onPayload?.(
+            params,
+            model,
+            buildProviderPayloadMetadata(model, options, params, cacheRender),
+          ),
+        );
+        if (nextParams !== undefined) {
+          const payloadOverride = asPartialObject<OpenAICompletionsRequestCompat>(nextParams) ?? {};
+          params = {
+            ...params,
+            ...payloadOverride,
+            stream: true,
+          };
+        }
+        const openaiStream = yield* providerTryPromise(() =>
+          client.chat.completions.create(asStreamingParams(params), {
+            signal,
+          }),
+        );
+        yield* ensureStarted();
+        yield* processOpenAICompletionsStream(
           openaiStream,
           output,
           stream,
           model,
           composer.toolCalls,
+        ).pipe(
+          BrewvaEffect.mapError((error) => {
+            const rawMetadata = readErrorRawMetadata(error.cause);
+            if (!rawMetadata) {
+              return error;
+            }
+            return new ProviderStreamError({
+              message: `${error.message}\n${rawMetadata}`,
+              cause: error.cause,
+            });
+          }),
         );
-      } catch (error) {
-        const rawMetadata = readErrorRawMetadata(error);
-        if (rawMetadata) {
-          throw new Error(
-            `${error instanceof Error ? error.message : JSON.stringify(error)}\n${rawMetadata}`,
+        if (signal.aborted) {
+          return yield* failProviderStream("Request was aborted");
+        }
+        if (output.stopReason === "aborted") {
+          return yield* failProviderStream("Request was aborted");
+        }
+        if (output.stopReason === "error") {
+          return yield* failProviderStream(
+            output.errorMessage || "Provider returned an error stop reason",
           );
         }
-        throw error;
-      }
-      if (signal.aborted) {
-        throw new Error("Request was aborted");
-      }
-      if (output.stopReason === "aborted") {
-        throw new Error("Request was aborted");
-      }
-      if (output.stopReason === "error") {
-        throw new Error(output.errorMessage || "Provider returned an error stop reason");
-      }
-    },
+      }),
     {
       signal: options?.signal,
       sessionId: options?.sessionId,

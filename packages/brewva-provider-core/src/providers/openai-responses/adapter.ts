@@ -1,3 +1,4 @@
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import OpenAI from "openai";
 import type { ResponseCreateParamsStreaming } from "openai/resources/responses/responses.js";
 import {
@@ -12,6 +13,7 @@ import type {
   SimpleStreamOptions,
   StreamFunction,
 } from "../../contracts/index.js";
+import { failProviderStream, providerTryPromise } from "../../stream/effect-interop.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
 import {
   buildCopilotDynamicHeaders,
@@ -31,40 +33,45 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
 ) => {
   return runProviderStream(
     model,
-    async ({ stream, output, ensureStarted, composer, signal }) => {
-      const apiKey = options?.apiKey || "";
-      const compat = resolveOpenAIResponsesCompat(model);
-      const cacheRender = resolveOpenAIResponsesCacheRender({
-        api: "openai-responses",
-        baseUrl: model.baseUrl,
-        provider: model.provider,
-        modelId: model.id,
-        transport: options?.transport,
-        sessionId: options?.sessionId,
-        policy: options?.cachePolicy,
-      });
-      const client = createClient(model, context, apiKey, options?.headers, cacheRender, compat);
-      let params = buildOpenAIResponsesParams(model, context, options, cacheRender);
-      const nextParams = await options?.onPayload?.(
-        params,
-        model,
-        buildProviderPayloadMetadata(model, options, params, cacheRender),
-      );
-      if (nextParams !== undefined) {
-        params = nextParams as ResponseCreateParamsStreaming;
-      }
-      const openaiStream = await client.responses.create(params, { signal });
-      await ensureStarted();
+    ({ stream, output, ensureStarted, composer, signal }) =>
+      BrewvaEffect.gen(function* () {
+        const apiKey = options?.apiKey || "";
+        const compat = resolveOpenAIResponsesCompat(model);
+        const cacheRender = resolveOpenAIResponsesCacheRender({
+          api: "openai-responses",
+          baseUrl: model.baseUrl,
+          provider: model.provider,
+          modelId: model.id,
+          transport: options?.transport,
+          sessionId: options?.sessionId,
+          policy: options?.cachePolicy,
+        });
+        const client = createClient(model, context, apiKey, options?.headers, cacheRender, compat);
+        let params = buildOpenAIResponsesParams(model, context, options, cacheRender);
+        const nextParams = yield* providerTryPromise(async () =>
+          options?.onPayload?.(
+            params,
+            model,
+            buildProviderPayloadMetadata(model, options, params, cacheRender),
+          ),
+        );
+        if (nextParams !== undefined) {
+          params = nextParams as ResponseCreateParamsStreaming;
+        }
+        const openaiStream = yield* providerTryPromise(() =>
+          client.responses.create(params, { signal }),
+        );
+        yield* ensureStarted();
 
-      await processResponsesStream(openaiStream, output, stream, model, composer.toolCalls, {
-        serviceTier: options?.serviceTier,
-        applyServiceTierPricing,
-      });
+        yield* processResponsesStream(openaiStream, output, stream, model, composer.toolCalls, {
+          serviceTier: options?.serviceTier,
+          applyServiceTierPricing,
+        });
 
-      if (output.stopReason === "aborted" || output.stopReason === "error") {
-        throw new Error("An unknown error occurred");
-      }
-    },
+        if (output.stopReason === "aborted" || output.stopReason === "error") {
+          return yield* failProviderStream("An unknown error occurred");
+        }
+      }),
     {
       signal: options?.signal,
       sessionId: options?.sessionId,

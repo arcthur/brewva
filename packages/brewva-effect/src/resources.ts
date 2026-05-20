@@ -1,9 +1,9 @@
 import { Effect, Scope } from "effect";
 import { BrewvaBoundaryFailure } from "./errors.js";
 import {
-  startScopedSchedule,
-  type ManagedIntervalHandle,
-  type ManagedIntervalOptions,
+  makeScopedInterval,
+  type BoundaryIntervalOptions,
+  type ScopedInterval,
 } from "./schedules.js";
 
 export function addScopedFinalizer(
@@ -32,10 +32,7 @@ export function scopedResource<A>(
 }
 
 export function scopedInterval<E = unknown>(
-  options: ManagedIntervalOptions<E>,
-): Effect.Effect<ManagedIntervalHandle, never, Scope.Scope> {
-  return Effect.acquireRelease(
-    Effect.sync(() => startScopedSchedule(options)),
-    (handle) => Effect.promise(() => handle.close()),
-  );
+  options: BoundaryIntervalOptions<E>,
+): Effect.Effect<ScopedInterval, never, Scope.Scope> {
+  return makeScopedInterval(options);
 }

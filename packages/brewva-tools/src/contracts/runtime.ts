@@ -71,6 +71,7 @@ import type {
   WorkerMergeReport,
   WorkerResult,
 } from "@brewva/brewva-runtime/protocol";
+import type { ManagedExecProcessRegistryRuntime } from "../families/execution/exec-process-registry/runtime.js";
 import type { BoxPlane } from "../internal/box/index.js";
 import type { BrewvaToolDelegationQuery, BrewvaToolOrchestration } from "./delegation.js";
 import type { BrewvaToolRuntimeExtensions, BrewvaToolRuntimeToolsExtension } from "./metadata.js";
@@ -567,6 +568,7 @@ export type CapabilityScopedBrewvaToolRuntime<
 
 export type BrewvaBundledToolRuntime = BrewvaToolRuntime & {
   boxPlane?: BoxPlane;
+  execProcessRegistry?: ManagedExecProcessRegistryRuntime;
 };
 
 export interface BrewvaToolOptions<TRuntime extends BrewvaToolRuntime = BrewvaToolRuntime> {

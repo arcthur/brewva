@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import type { BrewvaBoundaryFailure, ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import type { BrewvaBoundaryFailure, BoundaryTimeoutHandle } from "@brewva/brewva-effect";
 import type { BoxExec, BoxPlane } from "../../../internal/box/index.js";
 
 export const MAX_AGGREGATED_OUTPUT_CHARS = 1_000_000;
@@ -84,7 +84,7 @@ export interface ManagedExecRunningSession extends ManagedExecBase {
   kind: "running";
   child: ChildProcessWithoutNullStreams;
   stdin: ChildProcessWithoutNullStreams["stdin"];
-  timeoutHandle?: ScopedTimeoutHandle;
+  timeoutHandle?: BoundaryTimeoutHandle;
 }
 
 export interface ManagedExecFinishedSession extends ManagedExecBase {
@@ -99,7 +99,7 @@ export interface ManagedBoxExecRunningSession extends ManagedExecBase {
   executionId: string;
   fingerprint?: string;
   execution: BoxExec;
-  timeoutHandle?: ScopedTimeoutHandle;
+  timeoutHandle?: BoundaryTimeoutHandle;
 }
 
 export interface ManagedBoxExecFinishedSession extends ManagedExecBase {

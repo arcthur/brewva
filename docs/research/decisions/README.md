@@ -30,6 +30,7 @@ Every accepted decision inherits these rules:
 - [durability-taxonomy-and-rebuildable-surface-narrowing](./durability-taxonomy-and-rebuildable-surface-narrowing.md)
 - [consequence-aware-effect-commitment-model](./consequence-aware-effect-commitment-model.md)
 - [effect-native-runtime-foundation](./effect-native-runtime-foundation.md)
+- [effect-infrastructure-island-boundary-rfc](./effect-infrastructure-island-boundary-rfc.md)
 - [effect-authority-manifest](./effect-authority-manifest.md)
 - [four-port-runtime-simplification-rfc](./four-port-runtime-simplification-rfc.md)
 - [iteration-facts-and-model-native-optimization-protocols](./iteration-facts-and-model-native-optimization-protocols.md)

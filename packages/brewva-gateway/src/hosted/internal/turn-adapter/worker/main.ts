@@ -1,8 +1,8 @@
 import {
   BrewvaWorkerScope,
   runEdgeOperation,
-  startScopedSchedule,
-  type ScopedScheduleHandle,
+  startBoundaryInterval,
+  type BoundaryIntervalHandle,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect, BrewvaStream } from "@brewva/brewva-effect/primitives";
 import type {
@@ -54,8 +54,8 @@ let expectedParentPid = 0;
 let initialized = false;
 let sessionResult: GatewaySessionResult | null = null;
 let lastPingAt = Date.now();
-let watchdog: ScopedScheduleHandle | null = null;
-let heartbeatTicker: ScopedScheduleHandle | null = null;
+let watchdog: BoundaryIntervalHandle | null = null;
+let heartbeatTicker: BoundaryIntervalHandle | null = null;
 let taskProgressWatchdog: TaskProgressWatchdog | null = null;
 let shuttingDown = false;
 let activeTurnId: string | null = null;
@@ -341,7 +341,7 @@ async function shutdown(exitCode = 0, reason = "shutdown", shutdownError?: unkno
 function startBridgeWatchdog(): void {
   if (watchdog) return;
 
-  watchdog = startScopedSchedule({
+  watchdog = startBoundaryInterval({
     intervalMs: 1000,
     run: () =>
       BrewvaEffect.sync(() => {
@@ -357,7 +357,7 @@ function startBridgeWatchdog(): void {
       }),
   });
 
-  heartbeatTicker = startScopedSchedule({
+  heartbeatTicker = startBoundaryInterval({
     intervalMs: BRIDGE_HEARTBEAT_INTERVAL_MS,
     run: () =>
       BrewvaEffect.sync(() => {
@@ -368,7 +368,7 @@ function startBridgeWatchdog(): void {
 
 async function stopBridgeWatchdog(): Promise<void> {
   const handles = [watchdog, heartbeatTicker].filter(
-    (handle): handle is ScopedScheduleHandle => handle !== null,
+    (handle): handle is BoundaryIntervalHandle => handle !== null,
   );
   watchdog = null;
   heartbeatTicker = null;

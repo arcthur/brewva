@@ -11,6 +11,19 @@ retirement_sensitivity: review_only
 - Alias-based import models outside package entrypoints.
 - `as any`, `@ts-ignore`, or `@ts-expect-error` quick fixes.
 - A mixed top-level runtime implementation surface or bypasses around semantic root surfaces.
+- Importing Effect, Effect primitive aliases, Effect services, or Effect layers
+  into `@brewva/brewva-runtime`.
+- Calling `runBoundaryOperation` from provider stream core, channel queue core,
+  tool execution internals, or runtime package code instead of from a declared
+  adapter boundary.
+- Hand-rolling package-local Scope/ManagedRuntime adapter assemblies for
+  long-lived infrastructure services when `createBrewvaServiceRuntime(...)`
+  provides the shared scoped service boundary.
+- Reintroducing module-level managed exec process registry ownership, default
+  registry singletons, per-runtime fallback registry WeakMaps, or exported
+  global process-session maps.
+- Using ad hoc async queues for runtime provider/tool handoff where
+  `createAsyncBridge(...)` is the accepted backpressure and cancellation seam.
 - Reintroducing or presenting removed `@brewva/brewva-runtime/internal` helpers as a default integration surface or stable product contract.
 - Passing full gateway hosted adapter bundles into leaf modules that only need a
   hosted, tool, or operator port.

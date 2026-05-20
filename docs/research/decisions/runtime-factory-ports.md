@@ -26,3 +26,4 @@
 ## Superseded by
 
 - `docs/research/decisions/four-port-runtime-simplification-rfc.md`
+- `docs/research/decisions/effect-infrastructure-island-boundary-rfc.md`

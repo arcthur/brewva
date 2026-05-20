@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { startScopedSchedule, type ScopedScheduleHandle } from "@brewva/brewva-effect";
+import { startBoundaryInterval, type BoundaryIntervalHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
   SessionSupervisor,
@@ -200,12 +200,12 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     }
   });
   const summaryInterval = parsed.verbose
-    ? startScopedSchedule({
+    ? startBoundaryInterval({
         intervalMs: 60_000,
         run: () => BrewvaEffect.sync(() => emitSummaryWindow("tick")),
       })
     : null;
-  const closeSummaryInterval = async (handle: ScopedScheduleHandle | null): Promise<void> => {
+  const closeSummaryInterval = async (handle: BoundaryIntervalHandle | null): Promise<void> => {
     await handle?.close();
   };
   let scheduler: SchedulerService | null = null;

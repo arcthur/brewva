@@ -1,4 +1,4 @@
-import type { ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import type { BoundaryTimeoutHandle } from "@brewva/brewva-effect";
 import {
   type ManagedBoxExecFinishedSession,
   type ManagedBoxExecRunningSession,
@@ -7,15 +7,9 @@ import {
   type ManagedExecRunningSession,
 } from "../types.js";
 import { appendOutput, publishOutputEvent } from "./output.js";
-import {
-  cleanupExpiredFinishedSessions,
-  finishedBoxSessions,
-  finishedSessions,
-  runningBoxSessions,
-  runningSessions,
-} from "./state.js";
+import { cleanupExpiredFinishedSessions, type ManagedExecProcessRegistryState } from "./state.js";
 
-export function closeSessionTimeout(session: { timeoutHandle?: ScopedTimeoutHandle }): void {
+export function closeSessionTimeout(session: { timeoutHandle?: BoundaryTimeoutHandle }): void {
   const timeoutHandle = session.timeoutHandle;
   if (!timeoutHandle) {
     return;
@@ -25,6 +19,7 @@ export function closeSessionTimeout(session: { timeoutHandle?: ScopedTimeoutHand
 }
 
 export function finalizeBoxSession(
+  registry: ManagedExecProcessRegistryState,
   session: ManagedBoxExecRunningSession,
   params: {
     exitCode: number | null;
@@ -34,12 +29,12 @@ export function finalizeBoxSession(
   },
 ): ManagedBoxExecFinishedSession {
   closeSessionTimeout(session);
-  runningBoxSessions.delete(session.id);
+  registry.runningBoxSessions.delete(session.id);
   if (params.output) {
-    appendOutput(session, params.output, "system");
+    appendOutput(registry, session, params.output, "system");
   }
   if (params.error) {
-    appendOutput(session, `\n\n${params.error}`, "system");
+    appendOutput(registry, session, `\n\n${params.error}`, "system");
   }
   if (params.timedOut) {
     session.timedOut = true;
@@ -73,10 +68,10 @@ export function finalizeBoxSession(
   };
 
   if (!finished.removed) {
-    finishedBoxSessions.set(finished.id, finished);
-    cleanupExpiredFinishedSessions();
+    registry.finishedBoxSessions.set(finished.id, finished);
+    cleanupExpiredFinishedSessions(registry);
   }
-  void publishOutputEvent({
+  void publishOutputEvent(registry, {
     type: "exit",
     sessionId: finished.id,
     ownerSessionId: finished.ownerSessionId,
@@ -89,9 +84,12 @@ export function finalizeBoxSession(
   return finished;
 }
 
-export function finalizeSession(session: ManagedExecRunningSession): ManagedExecFinishedSession {
+export function finalizeSession(
+  registry: ManagedExecProcessRegistryState,
+  session: ManagedExecRunningSession,
+): ManagedExecFinishedSession {
   closeSessionTimeout(session);
-  runningSessions.delete(session.id);
+  registry.runningSessions.delete(session.id);
 
   const status: ManagedExecResultStatus =
     session.exitCode === 0 && session.exitSignal == null && !session.timedOut
@@ -120,10 +118,10 @@ export function finalizeSession(session: ManagedExecRunningSession): ManagedExec
   };
 
   if (!finished.removed) {
-    finishedSessions.set(finished.id, finished);
-    cleanupExpiredFinishedSessions();
+    registry.finishedSessions.set(finished.id, finished);
+    cleanupExpiredFinishedSessions(registry);
   }
-  void publishOutputEvent({
+  void publishOutputEvent(registry, {
     type: "exit",
     sessionId: finished.id,
     ownerSessionId: finished.ownerSessionId,

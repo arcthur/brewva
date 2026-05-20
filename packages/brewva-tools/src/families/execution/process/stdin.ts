@@ -1,8 +1,4 @@
-import { runBoundaryOperation } from "@brewva/brewva-effect";
-import {
-  waitForManagedSessionActivityEffect,
-  type ManagedExecRunningSession,
-} from "../exec-process-registry/api.js";
+import { type ManagedExecRunningSession } from "../exec-process-registry/api.js";
 
 export async function writeToStdin(
   session: ManagedExecRunningSession,
@@ -18,15 +14,4 @@ export async function writeToStdin(
   if (eof) {
     session.stdin.end();
   }
-}
-
-export async function waitForPollCondition(
-  ownerSessionId: string,
-  sessionId: string,
-  timeoutMs: number,
-): Promise<void> {
-  await runBoundaryOperation(
-    "tools.process.waitForPollCondition",
-    waitForManagedSessionActivityEffect(ownerSessionId, sessionId, timeoutMs),
-  );
 }

@@ -32,6 +32,7 @@ import {
   resolveToolAuthority,
   type ToolActionAdmissionOverrides,
 } from "@brewva/brewva-runtime/protocol";
+import { createAsyncBridge, linkAbortSignal } from "@brewva/brewva-std/async";
 import { toJsonValue, type JsonValue } from "@brewva/brewva-std/json";
 import type {
   BrewvaAgentProtocolAssistantMessage,
@@ -579,8 +580,10 @@ export function createHostedRuntimeProviderPort(
       if (!resolvedAuth.ok) {
         throw new Error(`hosted_runtime_provider_auth_failed:${resolvedAuth.error}`);
       }
+      const providerAbort = new AbortController();
+      const unlinkAbort = linkAbortSignal(input.turn.signal, providerAbort);
       const options: ProviderStreamOptions = {
-        signal: input.turn.signal,
+        signal: providerAbort.signal,
         apiKey: resolvedAuth.apiKey,
         headers: cloneHeaders(resolvedAuth.headers),
         sessionId: input.turn.sessionId,
@@ -603,26 +606,20 @@ export function createHostedRuntimeProviderPort(
         toProviderContext(session, input),
         options,
       );
-      const queue: RuntimeProviderQueueItem[] = [];
-      let resume: ((item: RuntimeProviderQueueItem) => void) | null = null;
       let sawIncrementalFrame = false;
-      const push = (item: RuntimeProviderQueueItem): void => {
-        if (resume) {
-          const resolve = resume;
-          resume = null;
-          resolve(item);
-          return;
-        }
-        queue.push(item);
-      };
+      const bridge = createAsyncBridge<RuntimeProviderQueueItem>({
+        onCancel() {
+          providerAbort.abort();
+        },
+      });
       const consume = runBoundaryOperation(
         "gateway.hosted.provider.consume",
         providerStream.pipe(
           BrewvaStream.runForEach((event) =>
-            BrewvaEffect.sync(() => {
+            BrewvaEffect.promise(async () => {
               if (event.type === "error") {
                 session.observeRuntimeAssistantMessage?.(toTurnLoopAssistantMessage(event.error));
-                push({
+                await bridge.write({
                   kind: "error",
                   error: new Error(event.error.errorMessage ?? "provider_stream_failed"),
                 });
@@ -631,14 +628,14 @@ export function createHostedRuntimeProviderPort(
               const frame = frameFromProviderEvent(event);
               if (frame) {
                 sawIncrementalFrame = true;
-                push({ kind: "frame", frame });
+                await bridge.write({ kind: "frame", frame });
                 return;
               }
               if (event.type === "done") {
                 session.observeRuntimeAssistantMessage?.(toTurnLoopAssistantMessage(event.message));
                 if (!sawIncrementalFrame) {
                   for (const fallback of framesFromAssistantMessage(event.message)) {
-                    push({ kind: "frame", frame: fallback });
+                    await bridge.write({ kind: "frame", frame: fallback });
                   }
                 }
               }
@@ -646,17 +643,16 @@ export function createHostedRuntimeProviderPort(
           ),
           BrewvaEffect.provide(providerRuntimeLayer),
         ),
+        { signal: providerAbort.signal },
       )
-        .then(() => push({ kind: "done" }))
-        .catch((error) => push({ kind: "error", error }));
+        .then(() => bridge.write({ kind: "done" }))
+        .then(() => {
+          bridge.close();
+        })
+        .catch((error) => bridge.fail(error));
 
       try {
-        for (;;) {
-          const next =
-            queue.shift() ??
-            (await new Promise<RuntimeProviderQueueItem>((resolve) => {
-              resume = resolve;
-            }));
+        for await (const next of bridge) {
           if (next.kind === "frame") {
             yield next.frame;
             continue;
@@ -667,7 +663,10 @@ export function createHostedRuntimeProviderPort(
           break;
         }
       } finally {
-        await consume;
+        providerAbort.abort();
+        unlinkAbort();
+        bridge.close();
+        void consume.catch(() => undefined);
       }
     },
   };

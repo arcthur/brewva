@@ -34,16 +34,18 @@ async function collectEvents(stream: ProviderAssistantMessageStream) {
 
 describe("provider stream runner", () => {
   test("finishes composer-owned text and tool call blocks before done", async () => {
-    const stream = runProviderStream(model, async (session) => {
-      await session.composer.blocks.appendText("hello");
-      await session.composer.toolCalls.begin("call", {
-        id: "call_1",
-        name: "search",
-        arguments: {},
-      });
-      await session.composer.toolCalls.appendArgumentsDelta("call", '{"query":"needle"}');
-      session.output.stopReason = "toolUse";
-    });
+    const stream = runProviderStream(model, (session) =>
+      BrewvaEffect.gen(function* () {
+        yield* session.composer.blocks.appendText("hello");
+        yield* session.composer.toolCalls.begin("call", {
+          id: "call_1",
+          name: "search",
+          arguments: {},
+        });
+        yield* session.composer.toolCalls.appendArgumentsDelta("call", '{"query":"needle"}');
+        session.output.stopReason = "toolUse";
+      }),
+    );
 
     const events = await collectEvents(stream);
     expect("result" in stream).toBe(false);
@@ -70,20 +72,26 @@ describe("provider stream runner", () => {
     });
     let observedAbort = false;
 
-    const stream = runProviderStream(model, async (session) => {
-      await session.ensureStarted();
-      markStarted();
-      await new Promise<void>((_resolve, reject) => {
-        session.signal.addEventListener(
-          "abort",
-          () => {
-            observedAbort = true;
-            reject(new Error("aborted"));
-          },
-          { once: true },
-        );
-      });
-    });
+    const stream = runProviderStream(model, (session) =>
+      BrewvaEffect.gen(function* () {
+        yield* session.ensureStarted();
+        markStarted();
+        yield* BrewvaEffect.tryPromise({
+          try: () =>
+            new Promise<void>((_resolve, reject) => {
+              session.signal.addEventListener(
+                "abort",
+                () => {
+                  observedAbort = true;
+                  reject(new Error("aborted"));
+                },
+                { once: true },
+              );
+            }),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        });
+      }),
+    );
 
     const fiber = BrewvaEffect.runFork(
       stream.pipe(BrewvaStream.runDrain, BrewvaEffect.provide(providerRuntimeLayer)),
@@ -109,20 +117,25 @@ describe("provider stream runner", () => {
 
     const stream = runProviderStream(
       model,
-      async (session) => {
-        await session.ensureStarted();
-        order.push("pushed:start");
-        await session.stream.push({ type: "text_start", contentIndex: 0, partial: session.output });
-        order.push("pushed:first");
-        markThirdPushStarted();
-        await session.stream.push({
-          type: "text_delta",
-          contentIndex: 0,
-          delta: "hello",
-          partial: session.output,
-        });
-        order.push("pushed:second");
-      },
+      (session) =>
+        BrewvaEffect.gen(function* () {
+          yield* session.ensureStarted();
+          order.push("pushed:start");
+          yield* session.stream.push({
+            type: "text_start",
+            contentIndex: 0,
+            partial: session.output,
+          });
+          order.push("pushed:first");
+          markThirdPushStarted();
+          yield* session.stream.push({
+            type: "text_delta",
+            contentIndex: 0,
+            delta: "hello",
+            partial: session.output,
+          });
+          order.push("pushed:second");
+        }),
       { startMode: "lazy" },
     );
 

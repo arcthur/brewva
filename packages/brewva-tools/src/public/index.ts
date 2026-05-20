@@ -5,6 +5,10 @@ import type {
   BrewvaToolDelegationQuery,
   BrewvaToolOrchestration,
 } from "../contracts/index.js";
+import {
+  createManagedExecProcessRegistryRuntime,
+  registerManagedExecProcessRegistryRuntimeHooks,
+} from "../families/execution/exec-process-registry/runtime.js";
 
 export interface BuildBrewvaToolsOptions {
   runtime: BrewvaBundledToolRuntime;
@@ -19,10 +23,17 @@ function extendBundledToolRuntime(
   runtime: BrewvaBundledToolRuntime,
   options: Pick<BuildBrewvaToolsOptions, "orchestration" | "delegation">,
 ): BrewvaBundledToolRuntime {
-  return {
+  const execProcessRegistry =
+    runtime.execProcessRegistry ?? createManagedExecProcessRegistryRuntime();
+  const extended = {
     ...runtime,
+    execProcessRegistry,
     ...(options.orchestration ? { orchestration: options.orchestration } : {}),
     ...(options.delegation ? { delegation: options.delegation } : {}),
+  };
+  registerManagedExecProcessRegistryRuntimeHooks(extended, execProcessRegistry);
+  return {
+    ...extended,
   };
 }
 

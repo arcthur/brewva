@@ -142,12 +142,19 @@ Runtime implementation ownership now lives under four semantic roots:
 read-only projections under `tape-views`. The former `domain/<name>/` seven-file
 lattice is not a valid pattern for new runtime work.
 
-## Effect Runtime Spine
+## Effect Infrastructure Island
 
-Effect is the internal runtime mechanics substrate for long-running effectful
-execution. It owns dependency layers, scopes, fibers, streams, schedules,
-typed runtime errors, and structural observability in the runtime, substrate,
-gateway, tools, and provider execution paths.
+Effect is an infrastructure mechanics substrate, not the semantic runtime
+spine. The runtime package remains ordinary TypeScript: no Effect services, no
+Effect layers, no raw Effect imports, and no public Effect values on
+`BrewvaRuntime`.
+
+Effect owns resourceful mechanics in infrastructure islands: provider-core
+stream production, gateway channel and daemon mechanics, tool execution process
+management, substrate plugin callback guards, ingress, and worker operations.
+Those islands use scoped services, dependency layers, finalizers, fibers,
+streams, queues, schedules, retry policy, typed infrastructure failures, and
+structural observability where they provide real leverage.
 
 Effect does not create authority. A layer dependency means an implementation
 needs a service; it never means a tool or plugin may access a runtime
@@ -157,7 +164,13 @@ and plugins gain runtime access.
 Public edges stay Promise-friendly where appropriate. CLI commands, TUI
 launch, HTTP handlers, Telegram/channel ingress, MCP calls, plugin callbacks,
 and worker IPC run one Effect program per logical operation and translate
-external `AbortSignal` cancellation once at that boundary.
+external `AbortSignal` cancellation once at that boundary. Internal queue,
+stream, schedule, and registry mechanics stay Effect-native until a declared
+adapter boundary.
+
+Runtime turn handoff stays plain TypeScript. Producer-consumer paths that must
+not import Effect use `@brewva/brewva-std/async` `createAsyncBridge(...)` for
+bounded backpressure, abort, failure, close, and early-consumer-exit cleanup.
 
 The foundation package wires Effect spans and log annotations structurally. The
 default observability layer is inert until configured, and the Node runtime path
@@ -194,12 +207,11 @@ compatibility story.
   tape projections, and internal infrastructure needed to preserve old hosted
   adapter behavior during cutover.
 - `@brewva/brewva-effect`: internal Effect foundation package. It owns Effect
-  platform dependencies, boundary runners, scope/schedule helpers, typed
-  runtime errors, runtime spine helpers, config service helpers, and
-  observability adapters. Its root entrypoint is a thin re-export spine, with
-  explicit internal subpaths for platform adapters, runtime spine, edge runners,
-  and test utilities. Other packages import Effect primitives only through this
-  package.
+  platform dependencies, boundary runners, scoped resource and schedule
+  helpers, typed infrastructure errors, config service helpers, retry policy,
+  observability adapters, and test utilities. Its root entrypoint is
+  boundary-oriented, while Effect primitive aliases remain explicit through the
+  `@brewva/brewva-effect/primitives` subpath.
 - `@brewva/brewva-substrate`: contract-only root vocabulary plus explicit
   mechanism subpaths for session lifecycle, prompt/resource loading,
   provenance, sequential execution primitives, pure compaction mechanics,

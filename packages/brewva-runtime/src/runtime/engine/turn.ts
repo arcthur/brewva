@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createAsyncBridge, linkAbortSignal } from "@brewva/brewva-std/async";
 import type {
   KernelPort,
   ModelPort,
@@ -116,58 +117,43 @@ export function createTurnRunner(input: {
         | {
             readonly kind: "done";
             readonly result: Awaited<ReturnType<RuntimeToolExecutorPort["execute"]>>;
-          }
-        | { readonly kind: "error"; readonly error: unknown };
-      const queue: ToolExecutionQueueItem[] = [];
-      let resume: ((item: ToolExecutionQueueItem) => void) | null = null;
-      const push = (item: ToolExecutionQueueItem): void => {
-        if (resume) {
-          const resolve = resume;
-          resume = null;
-          resolve(item);
-          return;
-        }
-        queue.push(item);
-      };
-      Promise.resolve()
-        .then(() =>
-          input.toolExecutor?.execute(decision.commitment, {
-            signal: turn.signal,
-            onProgress(update) {
-              push({
-                kind: "progress",
-                frame: {
-                  type: "tool.progress",
-                  progress: {
-                    toolCallId: decision.commitment.call.toolCallId,
-                    toolName: decision.commitment.call.toolName,
-                    update,
-                  },
+          };
+      const controller = new AbortController();
+      const unlinkAbort = linkAbortSignal(turn.signal, controller);
+      const bridge = createAsyncBridge<ToolExecutionQueueItem>({
+        onCancel() {
+          controller.abort();
+        },
+      });
+      const producer = input.toolExecutor
+        .execute(decision.commitment, {
+          signal: controller.signal,
+          async onProgress(update) {
+            await bridge.write({
+              kind: "progress",
+              frame: {
+                type: "tool.progress",
+                progress: {
+                  toolCallId: decision.commitment.call.toolCallId,
+                  toolName: decision.commitment.call.toolName,
+                  update,
                 },
-              });
-            },
-          }),
-        )
-        .then((result) => {
-          if (!result) {
-            throw new Error("missing_tool_executor");
-          }
-          push({ kind: "done", result });
+              },
+            });
+          },
         })
-        .catch((error) => push({ kind: "error", error }));
+        .then((result) => {
+          return bridge.write({ kind: "done", result });
+        })
+        .then(() => {
+          bridge.close();
+        })
+        .catch((error) => bridge.fail(error));
       try {
-        for (;;) {
-          const next =
-            queue.shift() ??
-            (await new Promise<ToolExecutionQueueItem>((resolve) => {
-              resume = resolve;
-            }));
+        for await (const next of bridge) {
           if (next.kind === "progress") {
             yield next.frame;
             continue;
-          }
-          if (next.kind === "error") {
-            throw next.error;
           }
           const committed = await input.kernel.commitToolResult({
             commitmentId: decision.commitment.id,
@@ -182,6 +168,10 @@ export function createTurnRunner(input: {
           reason: error instanceof Error ? error.message : "tool_execution_failed",
         });
         yield { type: "runtime.event", event: aborted.event };
+      } finally {
+        bridge.close();
+        unlinkAbort();
+        void producer.catch(() => undefined);
       }
       return "continue";
     }

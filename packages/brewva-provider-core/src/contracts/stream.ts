@@ -68,8 +68,8 @@ export type ProviderAssistantMessageStream = BrewvaStream.Stream<
 >;
 
 export interface ProviderEventSink {
-  push(event: AssistantMessageEvent): Promise<void>;
-  end(): Promise<void>;
+  push(event: AssistantMessageEvent): BrewvaEffect.Effect<void, ProviderStreamError>;
+  end(): BrewvaEffect.Effect<void, ProviderStreamError>;
 }
 
 export interface ProviderPayloadMetadata {

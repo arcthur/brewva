@@ -8,8 +8,8 @@ import type { ChannelReplyWriter } from "./channel-reply-writer.js";
 import type { ChannelCommandDispatchResult, ChannelPreparedCommand } from "./command/dispatch.js";
 import type { ChannelCommandMatch, CommandRouter } from "./command/parser.js";
 import {
-  createChannelEffectSerialQueue,
-  type ChannelEffectSerialQueue,
+  createChannelSerialQueueRuntime,
+  type ChannelSerialQueueRuntime,
 } from "./effect-serial-queue.js";
 
 const LAST_TURN_CACHE_MAX_ENTRIES_DEFAULT = 2_048;
@@ -81,7 +81,7 @@ export function createChannelTurnDispatcher(input: {
   isShuttingDown(): boolean;
   lastTurnCacheMaxEntries?: number;
 }): ChannelTurnDispatcher {
-  const scopeQueues = new Map<string, ChannelEffectSerialQueue>();
+  const scopeQueues = new Map<string, ChannelSerialQueueRuntime>();
   const lastTurnCacheMaxEntries = normalizeLastTurnCacheMaxEntries(input.lastTurnCacheMaxEntries);
   const lastTurnByScope = new LRUCache<string, TurnEnvelope>({
     max: lastTurnCacheMaxEntries,
@@ -265,7 +265,7 @@ export function createChannelTurnDispatcher(input: {
 
       let queue = scopeQueues.get(scopeKey);
       if (!queue) {
-        queue = createChannelEffectSerialQueue({
+        queue = createChannelSerialQueueRuntime({
           name: `channel-turn:${scopeKey}`,
         });
         scopeQueues.set(scopeKey, queue);
@@ -278,9 +278,12 @@ export function createChannelTurnDispatcher(input: {
         void queue
           .whenIdle()
           .then(async () => {
-            if (scopeQueues.get(scopeKey) === queue && queue.isIdle()) {
+            if (scopeQueues.get(scopeKey) === queue && (await queue.isIdle())) {
               scopeQueues.delete(scopeKey);
-              await queue.close();
+              const closed = await queue.closeIfIdle();
+              if (!closed && !scopeQueues.has(scopeKey)) {
+                scopeQueues.set(scopeKey, queue);
+              }
             }
           })
           .catch(() => undefined);

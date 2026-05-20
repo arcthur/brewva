@@ -794,7 +794,7 @@ describe("exec box routing", () => {
       boxPlane: createCapturingBoxPlane(calls),
     });
     const execTool = createExecTool({ runtime });
-    const processTool = createProcessTool();
+    const processTool = createProcessTool({ runtime });
     const sessionId = "s13-exec-box-background";
 
     const started = await execTool.execute(
@@ -851,7 +851,7 @@ describe("exec box routing", () => {
       boxPlane: createCapturingBoxPlane(calls),
     });
     const execTool = createExecTool({ runtime });
-    const processTool = createProcessTool();
+    const processTool = createProcessTool({ runtime });
     const sessionId = "s13-exec-box-background-release";
 
     const started = await execTool.execute(

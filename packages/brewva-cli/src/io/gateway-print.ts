@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { writeSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
-import { startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import { startBoundaryTimeout, type BoundaryTimeoutHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { connectGatewayClient, readGatewayToken } from "@brewva/brewva-gateway";
 import { queryGatewayStatus, resolveGatewayPaths } from "@brewva/brewva-gateway/admin";
@@ -160,9 +160,9 @@ export async function tryGatewayPrint(input: TryGatewayPrintInput): Promise<Gate
   let completionSettled = false;
   let resolveCompletionRef: ((text: string) => void) | undefined;
   let rejectCompletionRef: ((error: unknown) => void) | undefined;
-  let completionTimeout: ScopedTimeoutHandle | undefined;
+  let completionTimeout: BoundaryTimeoutHandle | undefined;
   const completion = new Promise<string>((resolveCompletion, rejectCompletion) => {
-    completionTimeout = startScopedTimeout({
+    completionTimeout = startBoundaryTimeout({
       delayMs: requestTimeoutMs,
       run: () =>
         BrewvaEffect.sync(() => {

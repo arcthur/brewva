@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import {
   runBoundaryOperation,
   runSyncAtBoundary,
-  startScopedSchedule,
-  type ScopedScheduleHandle,
+  startBoundaryInterval,
+  type BoundaryIntervalHandle,
 } from "@brewva/brewva-effect";
 import {
   BrewvaDuration,
@@ -475,9 +475,9 @@ export class SessionSupervisor implements SessionBackend {
   private readonly workerRpc: SessionWorkerRpcController;
   private readonly turnQueue: SessionTurnQueueCoordinator;
   private readonly supervisorScope: BrewvaScope.Closeable;
-  private pingLoop: ScopedScheduleHandle | null = null;
-  private idleSweepLoop: ScopedScheduleHandle | null = null;
-  private recoveryWalCompactLoop: ScopedScheduleHandle | null = null;
+  private pingLoop: BoundaryIntervalHandle | null = null;
+  private idleSweepLoop: BoundaryIntervalHandle | null = null;
+  private recoveryWalCompactLoop: BoundaryIntervalHandle | null = null;
 
   readonly testHooks: SessionSupervisorTestHooks = {
     seedWorker: (input) => {
@@ -583,7 +583,7 @@ export class SessionSupervisor implements SessionBackend {
 
   async stop(): Promise<void> {
     const loops = [this.pingLoop, this.idleSweepLoop, this.recoveryWalCompactLoop].filter(
-      (loop): loop is ScopedScheduleHandle => loop !== null,
+      (loop): loop is BoundaryIntervalHandle => loop !== null,
     );
     this.pingLoop = null;
     this.idleSweepLoop = null;
@@ -1163,7 +1163,7 @@ export class SessionSupervisor implements SessionBackend {
       return;
     }
 
-    this.pingLoop = startScopedSchedule({
+    this.pingLoop = startBoundaryInterval({
       intervalMs: BRIDGE_PING_INTERVAL_MS,
       run: () =>
         BrewvaEffect.sync(() => {
@@ -1197,7 +1197,7 @@ export class SessionSupervisor implements SessionBackend {
       return;
     }
 
-    this.idleSweepLoop = startScopedSchedule({
+    this.idleSweepLoop = startBoundaryInterval({
       intervalMs: this.sessionIdleSweepIntervalMs,
       run: () =>
         BrewvaEffect.tryPromise({
@@ -1312,7 +1312,7 @@ export class SessionSupervisor implements SessionBackend {
     if (!this.recoveryWalStore?.isWalEnabled() || this.recoveryWalCompactLoop) {
       return;
     }
-    this.recoveryWalCompactLoop = startScopedSchedule({
+    this.recoveryWalCompactLoop = startBoundaryInterval({
       intervalMs: this.recoveryWalCompactIntervalMs,
       run: () =>
         BrewvaEffect.sync(() => {

@@ -1,5 +1,11 @@
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { ResponseStreamEvent } from "openai/resources/responses/responses.js";
-import type { AssistantMessage, ProviderEventSink, Model } from "../../contracts/index.js";
+import type {
+  AssistantMessage,
+  ProviderEventSink,
+  Model,
+  ProviderStreamError,
+} from "../../contracts/index.js";
 import { readSseFrames } from "../../stream/sse-frame-reader.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
 import { processResponsesStream } from "../openai-responses/stream-events.js";
@@ -21,15 +27,15 @@ const CODEX_RESPONSE_STATUSES = new Set<CodexResponseStatus>([
   "in_progress",
 ]);
 
-export async function processStream(
+export function processStream(
   response: Response,
   output: AssistantMessage,
   stream: ProviderEventSink,
   model: Model<"openai-codex-responses">,
   toolCalls: IncrementalToolCallFolder,
-): Promise<void> {
+): BrewvaEffect.Effect<void, ProviderStreamError> {
   const events = parseSSE(response);
-  await processResponsesStream(mapCodexEvents(events), output, stream, model, toolCalls);
+  return processResponsesStream(mapCodexEvents(events), output, stream, model, toolCalls);
 }
 
 export async function* mapCodexEvents(

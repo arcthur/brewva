@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { AssistantMessage } from "@brewva/brewva-provider-core/contracts";
 import { processOpenAICompletionsStream } from "../../../packages/brewva-provider-core/src/providers/openai-completions/stream-events.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
 import {
   createRecordingProviderEventStream,
+  runProviderCoreEffect,
   type RecordingProviderEventStream,
 } from "../../helpers/effect-stream.js";
 
@@ -11,7 +13,7 @@ function createTestToolCalls(
   output: AssistantMessage,
   stream: RecordingProviderEventStream,
 ): IncrementalToolCallFolder {
-  return new IncrementalToolCallFolder(output, stream, async () => {});
+  return new IncrementalToolCallFolder(output, stream, () => BrewvaEffect.void);
 }
 
 function createOutput(): AssistantMessage {
@@ -35,7 +37,7 @@ function createOutput(): AssistantMessage {
 }
 
 async function collectQueuedEvents(stream: RecordingProviderEventStream) {
-  await stream.end();
+  await runProviderCoreEffect(stream.end());
   return stream.events;
 }
 
@@ -44,104 +46,106 @@ describe("openai completions stream processor", () => {
     const output = createOutput();
     const stream = createRecordingProviderEventStream();
 
-    await processOpenAICompletionsStream(
-      (async function* () {
-        yield {
-          id: "resp_1",
-          created: 1,
-          model: "gpt-4o",
-          object: "chat.completion.chunk",
-          usage: {
-            prompt_tokens: 12,
-            completion_tokens: 2,
-            total_tokens: 14,
-          },
-          choices: [
-            {
-              delta: {
-                content: "Hello",
-              },
+    await runProviderCoreEffect(
+      processOpenAICompletionsStream(
+        (async function* () {
+          yield {
+            id: "resp_1",
+            created: 1,
+            model: "gpt-4o",
+            object: "chat.completion.chunk",
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 2,
+              total_tokens: 14,
             },
-          ],
-        };
-        yield {
-          id: "resp_1",
-          created: 1,
-          model: "gpt-4o",
-          object: "chat.completion.chunk",
-          choices: [
-            {
-              delta: {
-                reasoning: "Need tool",
+            choices: [
+              {
+                delta: {
+                  content: "Hello",
+                },
               },
-            },
-          ],
-        };
-        yield {
-          id: "resp_1",
-          created: 1,
-          model: "gpt-4o",
-          object: "chat.completion.chunk",
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_1",
-                    function: {
-                      name: "search",
-                      arguments: '{"query":"needle"',
+            ],
+          };
+          yield {
+            id: "resp_1",
+            created: 1,
+            model: "gpt-4o",
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                delta: {
+                  reasoning: "Need tool",
+                },
+              },
+            ],
+          };
+          yield {
+            id: "resp_1",
+            created: 1,
+            model: "gpt-4o",
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      id: "call_1",
+                      function: {
+                        name: "search",
+                        arguments: '{"query":"needle"',
+                      },
                     },
-                  },
-                ],
+                  ],
+                },
               },
-            },
-          ],
-        };
-        yield {
-          id: "resp_1",
-          created: 1,
-          model: "gpt-4o",
-          object: "chat.completion.chunk",
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_1",
-                    function: {
-                      arguments: ',"limit":3}',
+            ],
+          };
+          yield {
+            id: "resp_1",
+            created: 1,
+            model: "gpt-4o",
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      id: "call_1",
+                      function: {
+                        arguments: ',"limit":3}',
+                      },
                     },
-                  },
-                ],
-                reasoning_details: [
-                  {
-                    type: "reasoning.encrypted",
-                    id: "call_1",
-                    data: "encrypted",
-                  },
-                ],
+                  ],
+                  reasoning_details: [
+                    {
+                      type: "reasoning.encrypted",
+                      id: "call_1",
+                      data: "encrypted",
+                    },
+                  ],
+                },
+                finish_reason: "tool_calls",
               },
-              finish_reason: "tool_calls",
-            },
-          ],
-        };
-      })() as unknown as AsyncIterable<any>,
-      output,
-      stream,
-      {
-        api: "openai-completions",
-        id: "gpt-4o",
-        name: "GPT-4o",
-        provider: "openai",
-        baseUrl: "https://api.openai.com/v1",
-        reasoning: true,
-        input: ["text"],
-        contextWindow: 128_000,
-        maxTokens: 16_384,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      },
-      createTestToolCalls(output, stream),
+            ],
+          };
+        })() as unknown as AsyncIterable<any>,
+        output,
+        stream,
+        {
+          api: "openai-completions",
+          id: "gpt-4o",
+          name: "GPT-4o",
+          provider: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 128_000,
+          maxTokens: 16_384,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+        createTestToolCalls(output, stream),
+      ),
     );
 
     const events = await collectQueuedEvents(stream);
@@ -192,41 +196,43 @@ describe("openai completions stream processor", () => {
     const output = createOutput();
     const stream = createRecordingProviderEventStream();
 
-    await processOpenAICompletionsStream(
-      (async function* () {
-        yield {
-          id: "resp_2",
-          created: 1,
-          model: "gpt-4o",
-          object: "chat.completion.chunk",
-          choices: [
-            {
-              delta: {},
-              usage: {
-                prompt_tokens: 5,
-                completion_tokens: 1,
-                total_tokens: 6,
+    await runProviderCoreEffect(
+      processOpenAICompletionsStream(
+        (async function* () {
+          yield {
+            id: "resp_2",
+            created: 1,
+            model: "gpt-4o",
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                delta: {},
+                usage: {
+                  prompt_tokens: 5,
+                  completion_tokens: 1,
+                  total_tokens: 6,
+                },
+                finish_reason: "content_filter",
               },
-              finish_reason: "content_filter",
-            },
-          ],
-        };
-      })() as unknown as AsyncIterable<any>,
-      output,
-      stream,
-      {
-        api: "openai-completions",
-        id: "gpt-4o",
-        name: "GPT-4o",
-        provider: "openai",
-        baseUrl: "https://api.openai.com/v1",
-        reasoning: true,
-        input: ["text"],
-        contextWindow: 128_000,
-        maxTokens: 16_384,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      },
-      createTestToolCalls(output, stream),
+            ],
+          };
+        })() as unknown as AsyncIterable<any>,
+        output,
+        stream,
+        {
+          api: "openai-completions",
+          id: "gpt-4o",
+          name: "GPT-4o",
+          provider: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 128_000,
+          maxTokens: 16_384,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+        createTestToolCalls(output, stream),
+      ),
     );
 
     await collectQueuedEvents(stream);
@@ -239,81 +245,83 @@ describe("openai completions stream processor", () => {
     const output = createOutput();
     const stream = createRecordingProviderEventStream();
 
-    await processOpenAICompletionsStream(
-      (async function* () {
-        yield {
-          id: "resp_3",
-          created: 1,
-          model: "gpt-4o",
-          object: "chat.completion.chunk",
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    index: 0,
-                    id: "call_1",
-                    function: {
-                      name: "search",
-                      arguments: '{"query":"alpha"',
+    await runProviderCoreEffect(
+      processOpenAICompletionsStream(
+        (async function* () {
+          yield {
+            id: "resp_3",
+            created: 1,
+            model: "gpt-4o",
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_1",
+                      function: {
+                        name: "search",
+                        arguments: '{"query":"alpha"',
+                      },
                     },
-                  },
-                  {
-                    index: 1,
-                    id: "call_2",
-                    function: {
-                      name: "read",
-                      arguments: '{"path":"README',
+                    {
+                      index: 1,
+                      id: "call_2",
+                      function: {
+                        name: "read",
+                        arguments: '{"path":"README',
+                      },
                     },
-                  },
-                ],
+                  ],
+                },
               },
-            },
-          ],
-        };
-        yield {
-          id: "resp_3",
-          created: 1,
-          model: "gpt-4o",
-          object: "chat.completion.chunk",
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    index: 0,
-                    function: {
-                      arguments: ',"limit":2}',
+            ],
+          };
+          yield {
+            id: "resp_3",
+            created: 1,
+            model: "gpt-4o",
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      function: {
+                        arguments: ',"limit":2}',
+                      },
                     },
-                  },
-                  {
-                    index: 1,
-                    function: {
-                      arguments: '.md"}',
+                    {
+                      index: 1,
+                      function: {
+                        arguments: '.md"}',
+                      },
                     },
-                  },
-                ],
+                  ],
+                },
+                finish_reason: "tool_calls",
               },
-              finish_reason: "tool_calls",
-            },
-          ],
-        };
-      })() as unknown as AsyncIterable<any>,
-      output,
-      stream,
-      {
-        api: "openai-completions",
-        id: "gpt-4o",
-        name: "GPT-4o",
-        provider: "openai",
-        baseUrl: "https://api.openai.com/v1",
-        reasoning: true,
-        input: ["text"],
-        contextWindow: 128_000,
-        maxTokens: 16_384,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      },
-      createTestToolCalls(output, stream),
+            ],
+          };
+        })() as unknown as AsyncIterable<any>,
+        output,
+        stream,
+        {
+          api: "openai-completions",
+          id: "gpt-4o",
+          name: "GPT-4o",
+          provider: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 128_000,
+          maxTokens: 16_384,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+        createTestToolCalls(output, stream),
+      ),
     );
 
     await collectQueuedEvents(stream);

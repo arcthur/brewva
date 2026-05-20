@@ -3,7 +3,6 @@ import {
   type BrewvaBoundaryError,
   BrewvaBoundaryFailure,
   fromAbortableBoundaryPromise,
-  runBoundaryOperation,
   withBrewvaObservability,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
@@ -17,7 +16,7 @@ import {
   type ReleaseReason,
 } from "../../../internal/box/index.js";
 import { resolveConfiguredBoxPlane } from "../box-plane-runtime.js";
-import { startManagedBoxExec } from "../exec-process-registry/api.js";
+import { ManagedExecProcessRegistryService } from "../exec-process-registry/service.js";
 import { mapHostPathToGuest, type BoxRootMapping } from "./box-root-map.js";
 import type { ResolvedExecutionPolicy } from "./policy.js";
 import {
@@ -219,9 +218,11 @@ function resolveBoxCompletionReleaseReason(
 
 export const executeBoxCommandEffect: (
   input: ExecuteBoxCommandInput,
-) => BrewvaEffect.Effect<ExecuteBoxCommandResult, BoxCommandExecutionError> = BrewvaEffect.fn(
-  "tools.exec.box",
-)(function* (input: ExecuteBoxCommandInput) {
+) => BrewvaEffect.Effect<
+  ExecuteBoxCommandResult,
+  BoxCommandExecutionError,
+  ManagedExecProcessRegistryService
+> = BrewvaEffect.fn("tools.exec.box")(function* (input: ExecuteBoxCommandInput) {
   const observability = {
     sessionId: input.ownerSessionId,
     backend: "box",
@@ -229,6 +230,7 @@ export const executeBoxCommandEffect: (
 
   return yield* BrewvaEffect.scoped(
     BrewvaEffect.gen(function* () {
+      const registry = yield* ManagedExecProcessRegistryService;
       if (input.signal?.aborted) {
         return yield* BrewvaEffect.fail(new ExecAbortedError());
       }
@@ -340,7 +342,7 @@ export const executeBoxCommandEffect: (
 
       if (input.background) {
         executionDetached = true;
-        const started = startManagedBoxExec({
+        const started = yield* registry.startBox({
           ownerSessionId: input.ownerSessionId,
           command: input.command,
           cwd: effectiveCwd,
@@ -407,12 +409,6 @@ export const executeBoxCommandEffect: (
     withBrewvaObservability("brewva.tools.box.exec", observability),
   );
 });
-
-export async function executeBoxCommand(
-  input: ExecuteBoxCommandInput,
-): Promise<ExecuteBoxCommandResult> {
-  return await runBoundaryOperation("tools.exec.box", executeBoxCommandEffect(input));
-}
 
 function killBoxExecutionBestEffort(execution: BoxExec): Promise<void> {
   return execution.kill("SIGKILL").catch(() => undefined);

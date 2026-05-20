@@ -12,6 +12,7 @@ import { resolveToolRuntimeCredentialBindings } from "../../runtime-port/extensi
 import { isPathInsideRoots, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { textResult, withVerdict } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
+import { resolveManagedExecProcessRegistryRuntime } from "./exec-process-registry/runtime.js";
 import {
   buildCommandPolicyAuditPayload,
   buildExecAuditPayload,
@@ -25,7 +26,7 @@ import {
   rewriteBoxCommandHostPaths,
   serializeBoxRootMappings,
 } from "./exec/box-root-map.js";
-import { buildHostEnv, executeHostCommand } from "./exec/host-lane.js";
+import { buildHostEnv, executeHostCommandEffect } from "./exec/host-lane.js";
 import {
   DENY_LIST_BEST_EFFORT_MESSAGE,
   resolveExecutionPolicy,
@@ -74,6 +75,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
       ],
       parameters: ExecSchema,
       async execute(toolCallId, params, signal, _onUpdate, ctx) {
+        const execProcessRegistry = resolveManagedExecProcessRegistryRuntime(runtime);
         const ownerSessionId = getSessionId(ctx);
         const targetScope = resolveToolTargetScope(runtime, ctx);
         const baseCwd = targetScope.baseCwd;
@@ -262,17 +264,20 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
           }
         }
 
-        const runHost = async () =>
-          executeHostCommand({
-            ownerSessionId,
-            command,
-            cwd: hostCwd,
-            env: hostEnv,
-            timeoutSec,
-            background,
-            yieldMs,
-            signal,
-          });
+        const runHost = async () => {
+          return await execProcessRegistry.runEffect(
+            executeHostCommandEffect({
+              ownerSessionId,
+              command,
+              cwd: hostCwd,
+              env: hostEnv,
+              timeoutSec,
+              background,
+              yieldMs,
+              signal,
+            }),
+          );
+        };
 
         if (preferredBackend === "host") {
           recordExecEvent(

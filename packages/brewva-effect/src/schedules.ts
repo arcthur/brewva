@@ -1,23 +1,32 @@
-import { Duration, Effect, Exit, Schedule, Scope } from "effect";
-import { runPromiseAtBoundary } from "./boundary.js";
+import { Duration, Effect, Exit, Fiber, Schedule, Scope } from "effect";
+import { runPromiseAtBoundary, runSyncAtBoundary } from "./boundary.js";
 
-export interface ManagedIntervalHandle {
+export interface BoundaryHandle {
   close(): Promise<void>;
 }
 
-export interface ScopedScheduleHandle {
-  close(): Promise<void>;
-}
+export type BoundaryIntervalHandle = BoundaryHandle;
+export type BoundaryTimeoutHandle = BoundaryHandle;
 
-export interface ScopedTimeoutHandle {
-  close(): Promise<void>;
-}
-
-export interface ManagedIntervalOptions<E = unknown> {
+export interface BoundaryIntervalOptions<E = unknown> {
   intervalMs: number;
   run: () => Effect.Effect<void, E>;
   onError?: (error: unknown) => void;
   runImmediately?: boolean;
+}
+
+export interface BoundaryTimeoutOptions<E = unknown> {
+  delayMs: number;
+  run: () => Effect.Effect<void, E>;
+  onError?: (error: unknown) => void;
+}
+
+export interface ScopedInterval {
+  close: Effect.Effect<void>;
+}
+
+export interface ScopedTimeout {
+  close: Effect.Effect<void>;
 }
 
 function normalizeIntervalMs(intervalMs: number): number {
@@ -41,16 +50,6 @@ function normalizeSleepDelayMs(delayMs: number): number {
   return Math.max(0, Math.trunc(delayMs));
 }
 
-export function sleepAtBoundary(delayMs: number): Promise<void> {
-  return runPromiseAtBoundary(Effect.sleep(Duration.millis(normalizeSleepDelayMs(delayMs))));
-}
-
-export function startManagedInterval<E = unknown>(
-  options: ManagedIntervalOptions<E>,
-): ManagedIntervalHandle {
-  return startScopedSchedule(options);
-}
-
 function scheduledTick<E = unknown>(options: {
   run: () => Effect.Effect<void, E>;
   onError?: (error: unknown) => void;
@@ -65,13 +64,14 @@ function scheduledTick<E = unknown>(options: {
   );
 }
 
-export function startScopedSchedule<E = unknown>(
-  options: ManagedIntervalOptions<E>,
-): ScopedScheduleHandle {
-  const interval = Duration.millis(normalizeIntervalMs(options.intervalMs));
-  const scope = Effect.runSync(Scope.make());
-  let closed = false;
+export function sleepAtBoundary(delayMs: number): Promise<void> {
+  return runPromiseAtBoundary(Effect.sleep(Duration.millis(normalizeSleepDelayMs(delayMs))));
+}
 
+export function makeScopedInterval<E = unknown>(
+  options: BoundaryIntervalOptions<E>,
+): Effect.Effect<ScopedInterval, never, Scope.Scope> {
+  const interval = Duration.millis(normalizeIntervalMs(options.intervalMs));
   const tick = scheduledTick(options);
   const loop = (
     options.runImmediately
@@ -81,17 +81,45 @@ export function startScopedSchedule<E = unknown>(
         )
   ).pipe(Effect.asVoid);
 
-  const launch = Effect.runPromise(
-    Scope.provide(scope)(
-      loop.pipe(
-        Effect.forkScoped({
-          startImmediately: true,
-        }),
-      ),
-    ),
-  ).catch((error: unknown) => {
-    options.onError?.(error);
+  return Effect.gen(function* () {
+    const fiber = yield* loop.pipe(
+      Effect.forkScoped({
+        startImmediately: true,
+      }),
+    );
+    return {
+      close: Fiber.interrupt(fiber).pipe(Effect.asVoid),
+    };
   });
+}
+
+export function makeScopedTimeout<E = unknown>(
+  options: BoundaryTimeoutOptions<E>,
+): Effect.Effect<ScopedTimeout, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const fiber = yield* Effect.sleep(Duration.millis(normalizeDelayMs(options.delayMs))).pipe(
+      Effect.andThen(scheduledTick(options)),
+      Effect.forkScoped({
+        startImmediately: true,
+      }),
+    );
+    return {
+      close: Fiber.interrupt(fiber).pipe(Effect.asVoid),
+    };
+  });
+}
+
+export function startBoundaryInterval<E = unknown>(
+  options: BoundaryIntervalOptions<E>,
+): BoundaryIntervalHandle {
+  const scope = runSyncAtBoundary(Scope.make());
+  let closed = false;
+  const acquired = runPromiseAtBoundary(Scope.provide(scope)(makeScopedInterval(options))).catch(
+    (error: unknown) => {
+      options.onError?.(error);
+      return undefined;
+    },
+  );
 
   return {
     async close(): Promise<void> {
@@ -99,36 +127,23 @@ export function startScopedSchedule<E = unknown>(
         return;
       }
       closed = true;
-      await launch;
-      await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)));
+      await acquired;
+      await runPromiseAtBoundary(Scope.close(scope, Exit.succeed(undefined)));
     },
   };
 }
 
-export interface ScopedTimeoutOptions<E = unknown> {
-  delayMs: number;
-  run: () => Effect.Effect<void, E>;
-  onError?: (error: unknown) => void;
-}
-
-export function startScopedTimeout<E = unknown>(
-  options: ScopedTimeoutOptions<E>,
-): ScopedTimeoutHandle {
-  const scope = Effect.runSync(Scope.make());
+export function startBoundaryTimeout<E = unknown>(
+  options: BoundaryTimeoutOptions<E>,
+): BoundaryTimeoutHandle {
+  const scope = runSyncAtBoundary(Scope.make());
   let closed = false;
-
-  const launch = Effect.runPromise(
-    Scope.provide(scope)(
-      Effect.sleep(Duration.millis(normalizeDelayMs(options.delayMs))).pipe(
-        Effect.andThen(scheduledTick(options)),
-        Effect.forkScoped({
-          startImmediately: true,
-        }),
-      ),
-    ),
-  ).catch((error: unknown) => {
-    options.onError?.(error);
-  });
+  const acquired = runPromiseAtBoundary(Scope.provide(scope)(makeScopedTimeout(options))).catch(
+    (error: unknown) => {
+      options.onError?.(error);
+      return undefined;
+    },
+  );
 
   return {
     async close(): Promise<void> {
@@ -136,8 +151,8 @@ export function startScopedTimeout<E = unknown>(
         return;
       }
       closed = true;
-      await launch;
-      await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)));
+      await acquired;
+      await runPromiseAtBoundary(Scope.close(scope, Exit.succeed(undefined)));
     },
   };
 }

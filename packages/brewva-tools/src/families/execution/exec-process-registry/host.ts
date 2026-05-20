@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { BrewvaBoundaryFailure, startScopedTimeout } from "@brewva/brewva-effect";
+import { BrewvaBoundaryFailure, startBoundaryTimeout } from "@brewva/brewva-effect";
 import { BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
 import { resolveShellConfig as getShellConfig } from "@brewva/brewva-substrate/host-api";
 import { finalizeSession } from "./internal/lifecycle.js";
@@ -8,7 +8,7 @@ import { appendOutput, appendOutputWithBackpressure } from "./internal/output.js
 import {
   cleanupExpiredFinishedSessions,
   createSessionId,
-  runningSessions,
+  type ManagedExecProcessRegistryState,
 } from "./internal/state.js";
 import type {
   ManagedExecFinishedSession,
@@ -69,8 +69,11 @@ export function terminateRunningSession(
   return true;
 }
 
-export function startManagedExec(input: ManagedExecStartInput): ManagedExecStartResult {
-  cleanupExpiredFinishedSessions();
+export function startManagedExec(
+  registry: ManagedExecProcessRegistryState,
+  input: ManagedExecStartInput,
+): ManagedExecStartResult {
+  cleanupExpiredFinishedSessions(registry);
 
   const id = createSessionId();
   const cwd = resolve(input.cwd);
@@ -103,17 +106,18 @@ export function startManagedExec(input: ManagedExecStartInput): ManagedExecStart
     timedOut: false,
     removed: false,
   };
-  runningSessions.set(session.id, session);
+  registry.runningSessions.set(session.id, session);
 
   if (typeof input.timeoutSec === "number" && input.timeoutSec > 0) {
     const timeoutMs = Math.trunc(input.timeoutSec * 1000);
-    session.timeoutHandle = startScopedTimeout({
+    session.timeoutHandle = startBoundaryTimeout({
       delayMs: timeoutMs,
       run: () =>
         BrewvaEffect.sync(() => {
           if (session.exited || session.removed) return;
           session.timedOut = true;
           appendOutput(
+            registry,
             session,
             `\n\nCommand timed out after ${input.timeoutSec} seconds.`,
             "system",
@@ -134,14 +138,14 @@ export function startManagedExec(input: ManagedExecStartInput): ManagedExecStart
       session.exitCode = params.exitCode;
       session.exitSignal = params.exitSignal;
       if (params.spawnError) {
-        appendOutput(session, `\n\n${params.spawnError}`, "system");
+        appendOutput(registry, session, `\n\n${params.spawnError}`, "system");
       }
-      resolveCompletion(finalizeSession(session));
+      resolveCompletion(finalizeSession(registry, session));
     };
 
     child.stdout.on("data", (chunk) => {
       child.stdout.pause();
-      void appendOutputWithBackpressure(session, chunk, "stdout").finally(() => {
+      void appendOutputWithBackpressure(registry, session, chunk, "stdout").finally(() => {
         if (!session.exited && !session.removed) {
           child.stdout.resume();
         }
@@ -149,7 +153,7 @@ export function startManagedExec(input: ManagedExecStartInput): ManagedExecStart
     });
     child.stderr.on("data", (chunk) => {
       child.stderr.pause();
-      void appendOutputWithBackpressure(session, chunk, "stderr").finally(() => {
+      void appendOutputWithBackpressure(registry, session, chunk, "stderr").finally(() => {
         if (!session.exited && !session.removed) {
           child.stderr.resume();
         }
@@ -174,10 +178,11 @@ export function startManagedExec(input: ManagedExecStartInput): ManagedExecStart
 }
 
 export function startManagedExecEffect(
+  registry: ManagedExecProcessRegistryState,
   input: ManagedExecStartInput,
 ): BrewvaEffect.Effect<ManagedExecStartResult, ManagedExecStartError> {
   return BrewvaEffect.tryPromise({
-    try: () => Promise.resolve(startManagedExec(input)),
+    try: () => Promise.resolve(startManagedExec(registry, input)),
     catch: (error) =>
       error instanceof BrewvaBoundaryFailure
         ? error
@@ -189,9 +194,10 @@ export function startManagedExecEffect(
 }
 
 export function scopedManagedExec(
+  registry: ManagedExecProcessRegistryState,
   input: ManagedExecStartInput,
 ): BrewvaEffect.Effect<ManagedExecStartResult, ManagedExecStartError, BrewvaScope.Scope> {
-  return BrewvaEffect.acquireRelease(startManagedExecEffect(input), (started) =>
+  return BrewvaEffect.acquireRelease(startManagedExecEffect(registry, input), (started) =>
     BrewvaEffect.sync(() => {
       if (!started.session.backgrounded && !started.session.exited) {
         terminateRunningSession(started.session, true);

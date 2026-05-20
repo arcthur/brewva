@@ -5,16 +5,17 @@ import {
   type ManagedExecOutputEvent,
   type ManagedOutputSession,
 } from "../types.js";
-import { resolveBackend } from "./state.js";
+import { type ManagedExecProcessRegistryState, resolveBackend } from "./state.js";
 
 export type ManagedOutputSubscriber = (
   event: ManagedExecOutputEvent,
 ) => void | boolean | Promise<void | boolean>;
 
-const outputSubscribers = new Map<string, Set<ManagedOutputSubscriber>>();
-
-export async function publishOutputEvent(event: ManagedExecOutputEvent): Promise<void> {
-  const subscribers = outputSubscribers.get(event.sessionId);
+export async function publishOutputEvent(
+  registry: ManagedExecProcessRegistryState,
+  event: ManagedExecOutputEvent,
+): Promise<void> {
+  const subscribers = registry.outputSubscribers.get(event.sessionId);
   if (!subscribers || subscribers.size === 0) {
     return;
   }
@@ -31,21 +32,22 @@ export async function publishOutputEvent(event: ManagedExecOutputEvent): Promise
     }),
   );
   if (subscribers.size === 0) {
-    outputSubscribers.delete(event.sessionId);
+    registry.outputSubscribers.delete(event.sessionId);
   }
 }
 
 export function subscribeManagedSessionOutput(
+  registry: ManagedExecProcessRegistryState,
   sessionId: string,
   subscriber: ManagedOutputSubscriber,
 ): () => void {
-  const subscribers = outputSubscribers.get(sessionId) ?? new Set();
+  const subscribers = registry.outputSubscribers.get(sessionId) ?? new Set();
   subscribers.add(subscriber);
-  outputSubscribers.set(sessionId, subscribers);
+  registry.outputSubscribers.set(sessionId, subscribers);
   return () => {
     subscribers.delete(subscriber);
     if (subscribers.size === 0) {
-      outputSubscribers.delete(sessionId);
+      registry.outputSubscribers.delete(sessionId);
     }
   };
 }
@@ -85,6 +87,7 @@ export function appendOutputToSession(
 }
 
 export function appendOutput(
+  registry: ManagedExecProcessRegistryState,
   session: ManagedOutputSession,
   chunk: Buffer | string,
   channel: ManagedExecOutputChannel = "system",
@@ -93,10 +96,11 @@ export function appendOutput(
   if (!event) {
     return;
   }
-  void publishOutputEvent(event);
+  void publishOutputEvent(registry, event);
 }
 
 export async function appendOutputWithBackpressure(
+  registry: ManagedExecProcessRegistryState,
   session: ManagedOutputSession,
   chunk: Buffer | string,
   channel: ManagedExecOutputChannel = "system",
@@ -105,7 +109,7 @@ export async function appendOutputWithBackpressure(
   if (!event) {
     return;
   }
-  await publishOutputEvent(event);
+  await publishOutputEvent(registry, event);
 }
 
 export function sliceUtf8FromByteOffset(text: string, offset: number): string {

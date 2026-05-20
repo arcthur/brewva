@@ -481,7 +481,7 @@ export interface RuntimeProviderPort {
 
 export interface RuntimeToolExecutorInput {
   readonly signal?: AbortSignal;
-  readonly onProgress?: (update: ToolExecutionResult) => void | Promise<void>;
+  readonly onProgress?: (update: ToolExecutionResult) => Promise<void>;
 }
 
 export interface RuntimeToolExecutorPort {

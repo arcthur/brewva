@@ -6,6 +6,7 @@ import {
 } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
+import { createManagedExecProcessRegistryRuntime } from "@brewva/brewva-tools/execution";
 import {
   createInMemoryBoxPlane,
   type BoxPlane,
@@ -173,6 +174,7 @@ export function createRuntimeForExecTests(input?: {
     config: runtimeFixture.config,
     capabilities: runtimeOps,
     boxPlane: input?.boxPlane ?? createInMemoryBoxPlane(),
+    execProcessRegistry: createManagedExecProcessRegistryRuntime(),
     extensions: {
       tools: {
         onClearState: (listener) => {

@@ -1,9 +1,5 @@
-import {
-  BrewvaBoundaryFailure,
-  runBoundaryOperation,
-  startScopedTimeout,
-} from "@brewva/brewva-effect";
-import { BrewvaDuration, BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
+import { BrewvaBoundaryFailure, startBoundaryTimeout } from "@brewva/brewva-effect";
+import { BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
 import { finalizeBoxSession } from "./internal/lifecycle.js";
 import {
   appendOutput,
@@ -14,7 +10,7 @@ import {
 import {
   cleanupExpiredFinishedSessions,
   createSessionId,
-  runningBoxSessions,
+  type ManagedExecProcessRegistryState,
 } from "./internal/state.js";
 import {
   BOX_OBSERVE_MAX_BYTES,
@@ -27,8 +23,11 @@ import {
   type ManagedExecStartError,
 } from "./types.js";
 
-export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBoxExecStartResult {
-  cleanupExpiredFinishedSessions();
+export function startManagedBoxExec(
+  registry: ManagedExecProcessRegistryState,
+  input: ManagedBoxExecStartInput,
+): ManagedBoxExecStartResult {
+  cleanupExpiredFinishedSessions(registry);
 
   const id = createSessionId();
   let stdoutOffset = 0;
@@ -60,7 +59,7 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
     timedOut: false,
     removed: false,
   };
-  runningBoxSessions.set(session.id, session);
+  registry.runningBoxSessions.set(session.id, session);
 
   const completion = new Promise<ManagedBoxExecFinishedSession>((resolveNow) => {
     resolveCompletion = resolveNow;
@@ -86,7 +85,7 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
   }): ManagedBoxExecFinishedSession => {
     if (finalized) return finalized;
     session.exited = true;
-    finalized = finalizeBoxSession(session, params);
+    finalized = finalizeBoxSession(registry, session, params);
     if (!input.releaseOnCompletion) {
       releaseCompleted = true;
       resolveCompletion(finalized);
@@ -104,7 +103,12 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
         await input.releaseOnCompletion();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        appendOutput(finished, `\n\nBox release after execution failed: ${message}`, "system");
+        appendOutput(
+          registry,
+          finished,
+          `\n\nBox release after execution failed: ${message}`,
+          "system",
+        );
       }
     }
     resolveCompletion(finished);
@@ -157,7 +161,9 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
               ? appendOutputToSession(session, observation.stderr, "stderr")
               : undefined,
           ].filter((event): event is ManagedExecOutputEvent => event !== undefined);
-          const publishOutput = Promise.all(outputEvents.map((event) => publishOutputEvent(event)));
+          const publishOutput = Promise.all(
+            outputEvents.map((event) => publishOutputEvent(registry, event)),
+          );
           if (
             !keepPolling &&
             typeof observation.exitCode === "number" &&
@@ -189,22 +195,20 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
     while (!session.exited && !session.removed) {
       const keepPolling = await appendObservedOutput();
       if (!keepPolling) break;
-      await runBoundaryOperation(
-        "tools.exec.box.observeSleep",
-        BrewvaEffect.sleep(BrewvaDuration.millis(BOX_OBSERVE_POLL_MS)),
-      );
+      await new Promise((resolveSleep) => setTimeout(resolveSleep, BOX_OBSERVE_POLL_MS));
     }
   })();
 
   if (typeof input.timeoutSec === "number" && input.timeoutSec > 0) {
     const timeoutMs = Math.trunc(input.timeoutSec * 1000);
-    session.timeoutHandle = startScopedTimeout({
+    session.timeoutHandle = startBoundaryTimeout({
       delayMs: timeoutMs,
       run: () =>
         BrewvaEffect.sync(() => {
           if (session.exited || session.removed) return;
           session.timedOut = true;
           appendOutput(
+            registry,
             session,
             `\n\nCommand timed out after ${input.timeoutSec} seconds.`,
             "system",
@@ -248,10 +252,11 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
 }
 
 export function startManagedBoxExecEffect(
+  registry: ManagedExecProcessRegistryState,
   input: ManagedBoxExecStartInput,
 ): BrewvaEffect.Effect<ManagedBoxExecStartResult, ManagedExecStartError> {
   return BrewvaEffect.tryPromise({
-    try: () => Promise.resolve(startManagedBoxExec(input)),
+    try: () => Promise.resolve(startManagedBoxExec(registry, input)),
     catch: (error) =>
       error instanceof BrewvaBoundaryFailure
         ? error
@@ -263,9 +268,10 @@ export function startManagedBoxExecEffect(
 }
 
 export function scopedManagedBoxExec(
+  registry: ManagedExecProcessRegistryState,
   input: ManagedBoxExecStartInput,
 ): BrewvaEffect.Effect<ManagedBoxExecStartResult, ManagedExecStartError, BrewvaScope.Scope> {
-  return BrewvaEffect.acquireRelease(startManagedBoxExecEffect(input), (started) =>
+  return BrewvaEffect.acquireRelease(startManagedBoxExecEffect(registry, input), (started) =>
     BrewvaEffect.promise(async () => {
       if (!started.session.backgrounded && !started.session.exited) {
         await terminateRunningBoxSession(started.session, true);

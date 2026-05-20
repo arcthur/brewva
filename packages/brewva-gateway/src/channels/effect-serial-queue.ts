@@ -1,17 +1,12 @@
+import { type BrewvaBoundaryError } from "@brewva/brewva-effect";
 import {
-  runBoundaryOperation,
-  runSyncAtBoundary,
-  type BrewvaBoundaryError,
-} from "@brewva/brewva-effect";
-import {
-  BrewvaDeferred,
   BrewvaContext,
+  BrewvaDeferred,
   BrewvaEffect,
-  BrewvaExit,
   BrewvaLayer,
   BrewvaQueue,
-  BrewvaScope,
 } from "@brewva/brewva-effect/primitives";
+import { createBrewvaServiceRuntime } from "@brewva/brewva-effect/runtime";
 
 export class ChannelSerialQueueClosedError extends Error {
   constructor(name: string) {
@@ -22,9 +17,31 @@ export class ChannelSerialQueueClosedError extends Error {
 
 type ChannelSerialQueueError = Error | BrewvaBoundaryError;
 
-interface ChannelSerialQueueRequest<T> {
-  readonly run: () => Promise<T>;
-  readonly deferred: BrewvaDeferred.Deferred<T, ChannelSerialQueueError>;
+interface ChannelSerialQueueRequest {
+  readonly run: () => BrewvaEffect.Effect<void>;
+}
+
+export interface ChannelSerialQueueOptions {
+  readonly name: string;
+}
+
+export interface ChannelSerialQueueServiceShape {
+  readonly name: string;
+  enqueue<T>(
+    run: () => BrewvaEffect.Effect<T, unknown>,
+  ): BrewvaEffect.Effect<T, ChannelSerialQueueError>;
+  whenIdle(): BrewvaEffect.Effect<void>;
+  isIdle(): BrewvaEffect.Effect<boolean>;
+  close(): BrewvaEffect.Effect<void>;
+}
+
+export interface ChannelSerialQueueRuntime {
+  readonly name: string;
+  enqueue<T>(run: () => Promise<T>): Promise<T>;
+  whenIdle(): Promise<void>;
+  isIdle(): Promise<boolean>;
+  closeIfIdle(): Promise<boolean>;
+  close(): Promise<void>;
 }
 
 function toChannelSerialQueueError(error: unknown): ChannelSerialQueueError {
@@ -34,59 +51,30 @@ function toChannelSerialQueueError(error: unknown): ChannelSerialQueueError {
   return new Error(String(error));
 }
 
-export interface ChannelEffectSerialQueueOptions {
-  readonly name: string;
-}
-
-export interface ChannelEffectSerialQueue {
-  readonly name: string;
-  enqueue<T>(run: () => Promise<T>): Promise<T>;
-  whenIdle(): Promise<void>;
-  isIdle(): boolean;
-  close(): Promise<void>;
-}
-
-const makeChannelEffectSerialQueue = BrewvaEffect.fn("gateway.channel.serialQueue.make")(function* (
-  options: ChannelEffectSerialQueueOptions,
+const makeChannelSerialQueue = BrewvaEffect.fn("gateway.channel.serialQueue.make")(function* (
+  options: ChannelSerialQueueOptions,
 ) {
-  const queue = createChannelEffectSerialQueue(options);
-  yield* BrewvaEffect.addFinalizer(() => BrewvaEffect.promise(() => queue.close()));
-  return queue;
-});
-
-export class ChannelEffectSerialQueueService extends BrewvaContext.Service<
-  ChannelEffectSerialQueueService,
-  ChannelEffectSerialQueue
->()("@brewva/Gateway/ChannelEffectSerialQueue") {
-  static layer(options: ChannelEffectSerialQueueOptions) {
-    return BrewvaLayer.effect(this, makeChannelEffectSerialQueue(options));
-  }
-}
-
-export function createChannelEffectSerialQueue(
-  options: ChannelEffectSerialQueueOptions,
-): ChannelEffectSerialQueue {
-  const scope = runSyncAtBoundary(BrewvaScope.make());
-  const queue = runSyncAtBoundary(BrewvaQueue.unbounded<ChannelSerialQueueRequest<unknown>>());
-  const pending = new Set<BrewvaDeferred.Deferred<unknown, ChannelSerialQueueError>>();
-  const pendingPromises = new Set<Promise<unknown>>();
-  const closeError = () => new ChannelSerialQueueClosedError(options.name);
+  const queue = yield* BrewvaQueue.unbounded<ChannelSerialQueueRequest>();
+  const pending = new Set<(error: ChannelSerialQueueError) => void>();
+  let idleSignal = yield* BrewvaDeferred.make<void>();
   let closed = false;
 
-  const runRequest = (request: ChannelSerialQueueRequest<unknown>) =>
-    BrewvaEffect.gen(function* () {
-      const exit = yield* BrewvaEffect.tryPromise({
-        try: request.run,
-        catch: toChannelSerialQueueError,
-      }).pipe(BrewvaEffect.exit);
-      yield* BrewvaDeferred.done(request.deferred, exit);
-    });
-
-  const failPending = (error: ChannelSerialQueueError): void => {
-    for (const deferred of pending) {
-      BrewvaDeferred.doneUnsafe(deferred, BrewvaEffect.fail(error));
+  const closeError = () => new ChannelSerialQueueClosedError(options.name);
+  const ensureOpen = () => (closed ? BrewvaEffect.fail(closeError()) : BrewvaEffect.void);
+  const signalIdleIfNeeded = (): void => {
+    if (pending.size === 0) {
+      BrewvaDeferred.doneUnsafe(idleSignal, BrewvaEffect.void);
     }
   };
+  const failPending = (error: ChannelSerialQueueError): void => {
+    for (const fail of pending) {
+      fail(error);
+    }
+    pending.clear();
+    signalIdleIfNeeded();
+  };
+
+  const runRequest = (request: ChannelSerialQueueRequest) => request.run();
 
   const drain = BrewvaQueue.take(queue).pipe(
     BrewvaEffect.flatMap((request) => runRequest(request)),
@@ -94,91 +82,204 @@ export function createChannelEffectSerialQueue(
     BrewvaEffect.catch(() => BrewvaEffect.void),
   );
 
-  runSyncAtBoundary(
-    BrewvaScope.addFinalizer(
-      scope,
-      BrewvaEffect.sync(() => {
-        failPending(closeError());
-      }),
-    ),
+  yield* drain.pipe(
+    BrewvaEffect.forkScoped({
+      startImmediately: true,
+    }),
+  );
+  yield* BrewvaEffect.addFinalizer(() =>
+    BrewvaEffect.sync(() => {
+      closed = true;
+      failPending(closeError());
+    }),
   );
 
-  const drainLaunch = runBoundaryOperation(
-    "gateway.channel.serialQueue.drain",
-    BrewvaScope.provide(scope)(
-      drain.pipe(
-        BrewvaEffect.forkScoped({
-          startImmediately: true,
-        }),
-      ),
-    ),
-  ).catch(() => undefined);
+  return {
+    name: options.name,
+    enqueue<T>(
+      run: () => BrewvaEffect.Effect<T, unknown>,
+    ): BrewvaEffect.Effect<T, ChannelSerialQueueError> {
+      return BrewvaEffect.gen(function* () {
+        yield* ensureOpen();
+        if (pending.size === 0) {
+          idleSignal = yield* BrewvaDeferred.make<void>();
+        }
+        const deferred = yield* BrewvaDeferred.make<T, ChannelSerialQueueError>();
+        const fail = (error: ChannelSerialQueueError): void => {
+          BrewvaDeferred.doneUnsafe(deferred, BrewvaEffect.fail(error));
+        };
+        pending.add(fail);
+        const offered = yield* BrewvaQueue.offer(queue, {
+          run: () =>
+            run().pipe(
+              BrewvaEffect.catch((error) => BrewvaEffect.fail(toChannelSerialQueueError(error))),
+              BrewvaEffect.exit,
+              BrewvaEffect.flatMap((exit) => BrewvaDeferred.done(deferred, exit)),
+              BrewvaEffect.ensuring(
+                BrewvaEffect.sync(() => {
+                  pending.delete(fail);
+                  signalIdleIfNeeded();
+                }),
+              ),
+            ),
+        });
+        if (!offered) {
+          pending.delete(fail);
+          signalIdleIfNeeded();
+          return yield* BrewvaEffect.fail(closeError());
+        }
+        return yield* BrewvaDeferred.await(deferred);
+      });
+    },
+    whenIdle(): BrewvaEffect.Effect<void> {
+      return BrewvaEffect.gen(function* () {
+        while (pending.size > 0) {
+          yield* BrewvaDeferred.await(idleSignal);
+        }
+      });
+    },
+    isIdle(): BrewvaEffect.Effect<boolean> {
+      return BrewvaEffect.sync(() => pending.size === 0);
+    },
+    close(): BrewvaEffect.Effect<void> {
+      return BrewvaEffect.gen(function* () {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        yield* BrewvaQueue.interrupt(queue);
+        failPending(closeError());
+        yield* BrewvaDeferred.await(idleSignal);
+      });
+    },
+  } satisfies ChannelSerialQueueServiceShape;
+});
 
-  const offerRequest = async (request: ChannelSerialQueueRequest<unknown>): Promise<boolean> => {
-    return await runBoundaryOperation(
-      "gateway.channel.serialQueue.offer",
-      BrewvaQueue.offer(queue, request),
-    );
+export class ChannelSerialQueueService extends BrewvaContext.Service<
+  ChannelSerialQueueService,
+  ChannelSerialQueueServiceShape
+>()("@brewva/Gateway/ChannelSerialQueue") {
+  static layer(options: ChannelSerialQueueOptions) {
+    return BrewvaLayer.effect(this, makeChannelSerialQueue(options));
+  }
+}
+
+export function createChannelSerialQueueRuntime(
+  options: ChannelSerialQueueOptions,
+): ChannelSerialQueueRuntime {
+  const runtime = createBrewvaServiceRuntime(
+    ChannelSerialQueueService,
+    ChannelSerialQueueService.layer(options),
+    {
+      name: `gateway.channel.serialQueue.${options.name}`,
+    },
+  );
+  let closed = false;
+  let activeSubmissions = 0;
+  const submissionIdleWaiters = new Set<() => void>();
+
+  const withService = async <T>(
+    operation: (queue: ChannelSerialQueueServiceShape) => BrewvaEffect.Effect<T, unknown>,
+  ): Promise<T> => {
+    return await runtime.runService(operation);
+  };
+  const signalSubmissionsIdleIfNeeded = (): void => {
+    if (activeSubmissions !== 0) {
+      return;
+    }
+    for (const resolve of submissionIdleWaiters) {
+      resolve();
+    }
+    submissionIdleWaiters.clear();
+  };
+  const reserveSubmission = (): (() => void) => {
+    activeSubmissions += 1;
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      activeSubmissions -= 1;
+      signalSubmissionsIdleIfNeeded();
+    };
+  };
+  const waitForSubmissionIdle = async (): Promise<void> => {
+    if (activeSubmissions === 0) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      submissionIdleWaiters.add(resolve);
+    });
+    await waitForSubmissionIdle();
   };
 
   return {
     name: options.name,
-
-    async enqueue<T>(run: () => Promise<T>): Promise<T> {
+    enqueue<T>(run: () => Promise<T>): Promise<T> {
       if (closed) {
-        throw closeError();
+        return Promise.reject(new ChannelSerialQueueClosedError(options.name));
       }
-
-      const deferred = runSyncAtBoundary(BrewvaDeferred.make<unknown, ChannelSerialQueueError>());
-      pending.add(deferred);
-
-      const request: ChannelSerialQueueRequest<unknown> = {
-        run: async () => await run(),
-        deferred,
-      };
-      const offered = await offerRequest(request);
-      if (!offered) {
-        pending.delete(deferred);
-        throw closeError();
-      }
-
-      const result = runBoundaryOperation(
-        "gateway.channel.serialQueue.await",
-        BrewvaDeferred.await(deferred),
-      ).finally(() => {
-        pending.delete(deferred);
-        pendingPromises.delete(result);
-      });
-      pendingPromises.add(result);
-      return (await result) as T;
+      const releaseSubmission = reserveSubmission();
+      const result = withService((queue) =>
+        queue.enqueue(() =>
+          BrewvaEffect.tryPromise({
+            try: run,
+            catch: toChannelSerialQueueError,
+          }),
+        ),
+      );
+      return result.finally(releaseSubmission);
     },
-
     async whenIdle(): Promise<void> {
-      while (pendingPromises.size > 0) {
-        await Promise.allSettled(pendingPromises);
+      if (closed) {
+        return;
+      }
+      while (true) {
+        await waitForSubmissionIdle();
+        if (closed) {
+          return;
+        }
+        await runtime.runService((queue) => queue.whenIdle());
+        if (activeSubmissions === 0) {
+          return;
+        }
       }
     },
-
-    isIdle(): boolean {
-      return pendingPromises.size === 0;
+    async isIdle(): Promise<boolean> {
+      if (closed) {
+        return true;
+      }
+      if (activeSubmissions > 0) {
+        return false;
+      }
+      return await runtime.runService((queue) => queue.isIdle());
     },
-
+    async closeIfIdle(): Promise<boolean> {
+      if (closed) {
+        return true;
+      }
+      if (activeSubmissions > 0) {
+        return false;
+      }
+      const serviceIdle = await runtime.runService((queue) => queue.isIdle());
+      if (!serviceIdle || activeSubmissions > 0 || closed) {
+        return false;
+      }
+      closed = true;
+      await runtime.runService((queue) => queue.close());
+      await waitForSubmissionIdle();
+      await runtime.dispose();
+      return true;
+    },
     async close(): Promise<void> {
       if (closed) {
         return;
       }
       closed = true;
-      await runBoundaryOperation(
-        "gateway.channel.serialQueue.interrupt",
-        BrewvaQueue.interrupt(queue),
-      );
-      await this.whenIdle();
-      failPending(closeError());
-      await drainLaunch;
-      await runBoundaryOperation(
-        "gateway.channel.serialQueue.closeScope",
-        BrewvaScope.close(scope, BrewvaExit.succeed(undefined)),
-      );
+      await runtime.runService((queue) => queue.close());
+      await waitForSubmissionIdle();
+      await runtime.dispose();
     },
   };
 }

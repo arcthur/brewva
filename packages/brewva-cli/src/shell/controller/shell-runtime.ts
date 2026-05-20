@@ -3,9 +3,9 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 import {
-  startScopedSchedule,
-  startScopedTimeout,
-  type ScopedScheduleHandle,
+  startBoundaryInterval,
+  startBoundaryTimeout,
+  type BoundaryIntervalHandle,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
@@ -294,7 +294,7 @@ export class CliShellRuntime {
     sessions: [],
   };
   #unsubscribeSession: (() => void) | undefined;
-  #pollTimer: ScopedScheduleHandle | undefined;
+  #pollTimer: BoundaryIntervalHandle | undefined;
   #statusTimer: { close(): Promise<void> } | undefined;
   #queuedStatusActions: CliShellAction[] = [];
   #resolveExit: (() => void) | undefined;
@@ -667,7 +667,7 @@ export class CliShellRuntime {
     this.#started = true;
     this.initializeState();
     this.mountSession(this.#bundle);
-    this.#pollTimer = startScopedSchedule({
+    this.#pollTimer = startBoundaryInterval({
       intervalMs: this.options.operatorPollIntervalMs ?? 750,
       run: () =>
         BrewvaEffect.promise(() =>
@@ -1290,7 +1290,7 @@ export class CliShellRuntime {
     if (this.#statusTimer) {
       return;
     }
-    this.#statusTimer = startScopedTimeout({
+    this.#statusTimer = startBoundaryTimeout({
       delayMs,
       run: () =>
         BrewvaEffect.sync(() => {

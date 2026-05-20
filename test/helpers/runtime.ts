@@ -12,6 +12,7 @@ import type {
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
+import { createManagedExecProcessRegistryRuntime } from "@brewva/brewva-tools/execution";
 
 export type {
   BrewvaRuntimeOptions,
@@ -229,6 +230,7 @@ export function createBundledToolRuntime(
     extensions: {
       tools: runtime.extensions.tools,
     },
+    execProcessRegistry: createManagedExecProcessRegistryRuntime(),
     ...extras,
   };
 }

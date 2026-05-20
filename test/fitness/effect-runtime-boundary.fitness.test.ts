@@ -218,6 +218,18 @@ describe("Effect runtime boundary fitness", () => {
     expect(offenders).toEqual([]);
   });
 
+  test("boundary schedule adapters close only the owning scope", () => {
+    const source = readFileSync(
+      resolve(repoRoot, "packages/brewva-effect/src/schedules.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("makeScopedInterval");
+    expect(source).toContain("makeScopedTimeout");
+    expect(source).toContain("Scope.close(scope, Exit.succeed(undefined))");
+    expect(source).not.toContain("resource.close");
+  });
+
   test("direct runPromiseAtBoundary usage stays at declared runtime edges", () => {
     const allowed = new Set([
       "packages/brewva-effect/src/boundary.ts",
@@ -239,6 +251,33 @@ describe("Effect runtime boundary fitness", () => {
     expect(offenders).toEqual([]);
   });
 
+  test("runBoundaryOperation stays in explicit adapter edges", () => {
+    const allowed = new Set([
+      "packages/brewva-effect/src/edge-runner.ts",
+      "packages/brewva-gateway/src/channels/bridges/telegram/launcher.ts",
+      "packages/brewva-gateway/src/daemon/gateway-daemon.ts",
+      "packages/brewva-gateway/src/daemon/session-supervisor/index.ts",
+      "packages/brewva-gateway/src/daemon/session-supervisor/worker-rpc.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts",
+      "packages/brewva-gateway/src/utils/async.ts",
+      "packages/brewva-provider-core/src/stream/index.ts",
+      "packages/brewva-substrate/src/host-api/plugin-runner.ts",
+      "packages/brewva-substrate/src/host-api/plugin.ts",
+    ]);
+    const offenders: string[] = [];
+
+    for (const sourceFile of collectSourceFiles("packages")) {
+      const path = repoPath(sourceFile);
+      const source = readFileSync(sourceFile, "utf8");
+      if (!source.includes("runBoundaryOperation")) continue;
+      if (!allowed.has(path)) {
+        offenders.push(path);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
   test("reusable effectful runtime operations keep Effect.fn identity", () => {
     const expectedOperations = [
       {
@@ -247,7 +286,7 @@ describe("Effect runtime boundary fitness", () => {
       },
       {
         file: "packages/brewva-tools/src/families/execution/exec/box-lane.ts",
-        operation: 'BrewvaEffect.fn(\n  "tools.exec.box"',
+        operation: 'BrewvaEffect.fn("tools.exec.box")',
       },
     ];
 
@@ -262,17 +301,19 @@ describe("Effect runtime boundary fitness", () => {
       "utf8",
     );
 
-    expect(source).toContain("class ChannelEffectSerialQueueService extends BrewvaContext.Service");
+    expect(source).toContain("class ChannelSerialQueueService extends BrewvaContext.Service");
     expect(source).toContain('BrewvaEffect.fn("gateway.channel.serialQueue.make")');
-    expect(source).toContain("BrewvaLayer.effect(this, makeChannelEffectSerialQueue(options))");
+    expect(source).toContain("BrewvaLayer.effect(this, makeChannelSerialQueue(options))");
     expect(source).toContain("BrewvaEffect.addFinalizer");
+    expect(source).toContain("createBrewvaServiceRuntime");
+    expect(source).not.toContain("const pending = new Set<Promise");
   });
 
   test("managed exec process registry has a scoped Effect service boundary", () => {
     const source = readFileSync(
       resolve(
         repoRoot,
-        "packages/brewva-tools/src/families/execution/exec-process-registry/internal/state.ts",
+        "packages/brewva-tools/src/families/execution/exec-process-registry/service.ts",
       ),
       "utf8",
     );
@@ -281,7 +322,33 @@ describe("Effect runtime boundary fitness", () => {
       "class ManagedExecProcessRegistryService extends BrewvaContext.Service",
     );
     expect(source).toContain('BrewvaEffect.fn("tools.exec.processRegistry.make")');
-    expect(source).toContain("disposeManagedExecProcessRegistry");
+    expect(source).toContain("startHost");
+    expect(source).toContain("startBox");
+    expect(source).toContain("streamOutput");
     expect(source).toContain("BrewvaLayer.effect(this, makeManagedExecProcessRegistry())");
+    expect(source).not.toContain("export function createManagedExecProcessRegistry");
+
+    const runtimeSource = readFileSync(
+      resolve(
+        repoRoot,
+        "packages/brewva-tools/src/families/execution/exec-process-registry/runtime.ts",
+      ),
+      "utf8",
+    );
+    expect(runtimeSource).toContain("createBrewvaServiceRuntime");
+    expect(runtimeSource).not.toContain("runtimeFallbackRegistries");
+    expect(runtimeSource).not.toContain("new WeakMap<object, ManagedExecProcessRegistryRuntime>");
+
+    const apiSource = readFileSync(
+      resolve(
+        repoRoot,
+        "packages/brewva-tools/src/families/execution/exec-process-registry/api.ts",
+      ),
+      "utf8",
+    );
+    expect(apiSource).not.toMatch(/\bcreateManagedExecProcessRegistry\b(?!Runtime)/u);
+    expect(apiSource).not.toContain('export * from "./host.js"');
+    expect(apiSource).not.toContain('export * from "./box.js"');
+    expect(apiSource).not.toContain('export * from "./sessions.js"');
   });
 });

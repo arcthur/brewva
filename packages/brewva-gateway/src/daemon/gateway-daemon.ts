@@ -6,10 +6,10 @@ import process from "node:process";
 import {
   BrewvaGatewayScope,
   runBoundaryOperation,
-  startScopedSchedule,
+  startBoundaryInterval,
   withBrewvaObservability,
   type BrewvaObservationFields,
-  type ScopedScheduleHandle,
+  type BoundaryIntervalHandle,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { BrewvaScheduleSelfImproveConfig } from "@brewva/brewva-runtime/config";
@@ -354,7 +354,7 @@ export class GatewayDaemon {
   private currentPort: number;
   private currentHealthHttpPort?: number;
   private eventSeq = 0;
-  private tickTimer: ScopedScheduleHandle | null = null;
+  private tickTimer: BoundaryIntervalHandle | null = null;
   private stopping = false;
   private ownsPidRecord = false;
   private onSigInt: (() => void) | null = null;
@@ -980,7 +980,7 @@ export class GatewayDaemon {
       return;
     }
 
-    this.tickTimer = startScopedSchedule({
+    this.tickTimer = startBoundaryInterval({
       intervalMs: this.tickIntervalMs,
       run: () =>
         this.withGatewayObservability(
