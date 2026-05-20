@@ -1,106 +1,147 @@
 import { describe, expect, test } from "bun:test";
-import { buildBrewvaSystemPrompt } from "@brewva/brewva-substrate/prompt";
+import {
+  buildBrewvaCapabilitySelectionPromptBlock,
+  buildBrewvaSystemPromptDocument,
+  renderBrewvaSystemPromptText,
+} from "@brewva/brewva-substrate/prompt";
 
-describe("Brewva system prompt", () => {
-  function extractCommunicationSection(prompt: string): string {
-    const start = prompt.indexOf("Communication:");
-    expect(start).toBeGreaterThanOrEqual(0);
-    const end = prompt.indexOf("\nCurrent date:", start);
-    expect(end).toBeGreaterThan(start);
-    return prompt.slice(start, end).trim();
-  }
-
-  test("injects the canonical communication policy into the default prompt", () => {
-    const prompt = buildBrewvaSystemPrompt({
-      selectedTools: ["read", "exec"],
-      toolSnippets: {
-        read: "Read files from the workspace.",
-        exec: "Run deterministic shell commands.",
-      },
-      cwd: "/workspace",
-    });
-
-    expect(prompt).toContain("Communication:");
-    expect(prompt).toContain("Start with one direct conclusion sentence.");
-    expect(prompt).toContain("Use Markdown tables for three or more comparable items.");
-    expect(prompt).toContain(
-      "Use Mermaid for flows, dependencies, state changes, timing, or replay analysis.",
-    );
-    expect(prompt).toContain("Do not restate a table or diagram in prose.");
-  });
-
-  test("injects the canonical communication policy into custom prompts", () => {
-    const prompt = buildBrewvaSystemPrompt({
-      customPrompt: "You are Brewva.",
-      selectedTools: ["read"],
-      cwd: "/workspace",
-    });
-
-    expect(prompt).toContain("You are Brewva.");
-    expect(prompt).toContain("Communication:");
-    expect(prompt).toContain("Start with one direct conclusion sentence.");
-  });
-
-  test("keeps the canonical communication policy inside the prompt budget", () => {
-    const prompt = buildBrewvaSystemPrompt({
-      selectedTools: ["read", "exec", "question"],
-      toolSnippets: {
-        read: "Read files from the workspace.",
-        exec: "Run deterministic shell commands.",
-        question: "Ask the user one or more structured questions and wait for their answers.",
-      },
-      cwd: "/workspace",
-    });
-    const communicationSection = extractCommunicationSection(prompt);
-    const estimatedCommunicationTokens = Math.ceil(communicationSection.length / 4);
-    const estimatedPromptTokens = Math.ceil(prompt.length / 4);
-
-    expect(communicationSection.length).toBeLessThanOrEqual(900);
-    expect(estimatedCommunicationTokens).toBeLessThanOrEqual(225);
-    expect(estimatedPromptTokens).toBeLessThanOrEqual(650);
-  });
-
-  test("adds question guidance when the question tool is visible", () => {
-    const prompt = buildBrewvaSystemPrompt({
+describe("Brewva system prompt document", () => {
+  test("renders populated blocks in canonical order", () => {
+    const document = buildBrewvaSystemPromptDocument({
       selectedTools: ["read", "question"],
       toolSnippets: {
         read: "Read files from the workspace.",
-        question: "Ask the user one or more structured questions and wait for their answers.",
+        question: "Ask a blocking question.",
+      },
+      customInstructions: "Use the project voice.",
+      projectInstructions: [
+        {
+          path: "/workspace/AGENTS.md",
+          content: "Follow repository rules.",
+          source: "ancestor",
+        },
+      ],
+      capabilitySelection: {
+        selectedCapabilities: [{ name: "github", profile: "user", reason: "requested" }],
       },
       cwd: "/workspace",
     });
 
-    expect(prompt).toContain("question: Ask the user one or more structured questions");
-    expect(prompt).toContain(
-      "When progress depends on a blocking user choice or missing requirement, use the question tool",
+    expect(document.schema).toBe("brewva.system_prompt.document.v1");
+    expect(document.blocks.map((block) => block.id)).toEqual([
+      "identity",
+      "operating_contract",
+      "communication_contract",
+      "tool_policy",
+      "custom_instructions",
+      "project_instructions",
+      "capability_selection",
+      "environment",
+    ]);
+  });
+
+  test("marks contract, advisory, and receipt blocks with stability metadata", () => {
+    const document = buildBrewvaSystemPromptDocument({
+      customInstructions: "Team preference.",
+      projectInstructions: [
+        {
+          path: "/workspace/CLAUDE.md",
+          content: "Project preference.",
+          source: "ancestor",
+        },
+      ],
+      capabilitySelection: {
+        forbiddenCandidates: [{ name: "gmail", reason: "not declared" }],
+      },
+      cwd: "/workspace",
+    });
+    const blocksById = new Map(document.blocks.map((block) => [block.id, block]));
+
+    expect(blocksById.get("identity")).toMatchObject({
+      stability: "stable",
+      authority: "contract",
+    });
+    expect(blocksById.get("custom_instructions")).toMatchObject({
+      stability: "session",
+      authority: "advisory",
+    });
+    expect(blocksById.get("project_instructions")).toMatchObject({
+      stability: "session",
+      authority: "advisory",
+    });
+    expect(blocksById.get("capability_selection")).toMatchObject({
+      stability: "turn",
+      authority: "receipt",
+    });
+    expect(document.blocks.every((block) => typeof block.estimatedTokens === "number")).toBe(true);
+  });
+
+  test("keeps Brewva foundation blocks when custom instructions are present", () => {
+    const document = buildBrewvaSystemPromptDocument({
+      customInstructions: "Replace the foundation prompt.",
+      cwd: "/workspace",
+    });
+    const prompt = renderBrewvaSystemPromptText(document);
+
+    expect(prompt).toContain("You are an expert coding assistant operating inside Brewva");
+    expect(prompt).toContain("# Operating Contract");
+    expect(prompt).toContain("# Communication Contract");
+    expect(prompt).toContain("# Custom Instructions");
+    expect(prompt.indexOf("# Operating Contract")).toBeLessThan(
+      prompt.indexOf("# Custom Instructions"),
     );
   });
 
-  test("summarizes advisory skills without listing skill names", () => {
-    const prompt = buildBrewvaSystemPrompt({
-      selectedTools: ["read"],
-      toolSnippets: {
-        read: "Read files from the workspace.",
-      },
-      cwd: "/workspace",
-      skills: [
-        {
-          name: "gmail",
-          description: "Send Gmail messages",
-          filePath: "/workspace/skills/domain/gmail/SKILL.md",
+  test("captures execution, update, skill, and delegation contracts", () => {
+    const prompt = renderBrewvaSystemPromptText(
+      buildBrewvaSystemPromptDocument({
+        selectedTools: ["read", "exec", "question"],
+        toolSnippets: {
+          read: "Read files.",
+          exec: "Run commands.",
+          question: "Ask questions.",
         },
-        {
-          name: "review",
-          description: "Review code",
-          filePath: "/workspace/skills/core/review/SKILL.md",
-        },
-      ],
+        cwd: "/workspace",
+      }),
+    );
+
+    expect(prompt).toContain("Default to execution");
+    expect(prompt).toContain("Verify before claiming completion");
+    expect(prompt).toContain("Use direct local search for exact path, symbol, or string lookup");
+    expect(prompt).toContain("SkillCards are current-turn advisory context only");
+    expect(prompt).toContain("Use short working updates during long-running work");
+    expect(prompt).toContain("The user may not see raw tool output");
+    expect(prompt).toContain("navigator for evidence, explorer for judgment");
+    expect(prompt).toContain("When progress depends on a blocking user choice");
+  });
+
+  test("does not render the legacy base SkillCard category summary", () => {
+    const prompt = renderBrewvaSystemPromptText(
+      buildBrewvaSystemPromptDocument({
+        selectedTools: ["read"],
+        toolSnippets: { read: "Read files." },
+        cwd: "/workspace",
+      }),
+    );
+
+    expect(prompt).not.toContain("# Available Skills");
+    expect(prompt).not.toContain("Skill categories visible");
+  });
+
+  test("builds capability selection as a receipt block", () => {
+    const block = buildBrewvaCapabilitySelectionPromptBlock({
+      selectedCapabilities: [{ name: "github", profile: "user", reason: "user requested" }],
+      forbiddenCandidates: [{ name: "gmail", reason: "not configured" }],
+      selectionReason: "workspace policy",
     });
 
-    expect(prompt).toContain("# Available Skills");
-    expect(prompt).toContain("- core: 1");
-    expect(prompt).toContain("- domain: 1");
-    expect(prompt).not.toContain("gmail: Send Gmail messages");
-    expect(prompt).not.toContain("review: Review code");
+    expect(block).toMatchObject({
+      id: "capability_selection",
+      stability: "turn",
+      authority: "receipt",
+    });
+    expect(block?.text).toContain("[CapabilitySelection]");
+    expect(block?.text).toContain("github");
+    expect(block?.text).toContain("gmail: not configured");
   });
 });

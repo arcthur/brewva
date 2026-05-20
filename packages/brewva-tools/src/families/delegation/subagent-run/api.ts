@@ -35,6 +35,8 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
         "Use delegated runs for navigator evidence, explorer judgment, worker patches, verifier verification, or librarian knowledge proposals.",
       promptGuidelines: [
         "Set agent explicitly: navigator, explorer, worker, verifier, or librarian.",
+        "Use local read/search tools first for direct path, symbol, or exact-string lookup; delegation is for broader epistemic or isolated execution roles.",
+        "Route task-local evidence collection to navigator, cross-module judgment or diagnosis to explorer, institutional/history knowledge to librarian, bounded isolated implementation to worker, and non-trivial implementation checks to verifier.",
         "Delegation Gate vocabulary: find_evidence -> navigator, make_judgment -> explorer, implement_isolated -> worker, verify_reproducibly -> verifier, compound_knowledge -> librarian.",
         "Use skillName only as an optional semantic contract compatible with the selected agent.",
         "Use gateReason when the reason is not obvious from the role; the resolver validates it instead of auto-spawning teams.",
@@ -104,6 +106,8 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
         "Use this for explicit fan-out when several repository slices can run independently under the same role and result contract.",
       promptGuidelines: [
         "Set agent explicitly and keep each task independently addressable with taskName when useful.",
+        "Use local read/search tools first for direct path, symbol, or exact-string lookup; fanout is for independent slices that benefit from parallel role-bound work.",
+        "Route evidence slices to navigator, judgment or diagnosis slices to explorer, institutional/history lookup to librarian, isolated implementation slices to worker, and post-implementation checks to verifier.",
         "Delegation Gate vocabulary: find_evidence -> navigator, make_judgment -> explorer, implement_isolated -> worker, verify_reproducibly -> verifier, compound_knowledge -> librarian.",
         "Use skillName only as an optional semantic contract compatible with the selected agent.",
         "For consult-style fan-out, provide one shared brief unless the parent can safely complete without advisory framing.",

@@ -1,3 +1,5 @@
+import { appendHostedSystemPromptSection } from "../system-prompt-text.js";
+
 const CONTEXT_CONTRACT_MARKER = "[Brewva Context Contract]";
 const STATIC_CONTEXT_CONTRACT_BLOCK = [
   CONTEXT_CONTRACT_MARKER,
@@ -22,7 +24,10 @@ export function applyContextContract(systemPrompt: unknown): string {
   if (baseWithoutContract.trim().length === 0) {
     return contract;
   }
-  return `${baseWithoutContract}\n\n${contract}`;
+  return appendHostedSystemPromptSection({
+    systemPrompt: baseWithoutContract,
+    section: contract,
+  });
 }
 
 export { CONTEXT_CONTRACT_MARKER };

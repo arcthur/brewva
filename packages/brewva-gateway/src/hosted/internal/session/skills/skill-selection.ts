@@ -6,13 +6,69 @@ import type {
   BrewvaHostCustomMessage,
 } from "@brewva/brewva-substrate/host-api";
 import { estimateModelTokens } from "@brewva/brewva-token-estimation";
+import { appendHostedSystemPromptSection } from "../../system-prompt-text.js";
+import { extractPromptTargetPaths, pathGlobMatches } from "../prompt-paths.js";
 import { recordRuntimeSkillSelection } from "../runtime-ports.js";
 
-const DEFAULT_SKILL_CATALOG_TOKEN_BUDGET = 2_000;
+const MAX_RENDERED_SKILLCARDS = 8;
 const HIDDEN_CATEGORIES = new Set<LoadableSkillCategory>(["internal"]);
+const STOP_WORDS = new Set([
+  "about",
+  "after",
+  "against",
+  "agent",
+  "before",
+  "build",
+  "change",
+  "changes",
+  "code",
+  "create",
+  "current",
+  "debug",
+  "document",
+  "file",
+  "files",
+  "from",
+  "have",
+  "implement",
+  "implementation",
+  "into",
+  "need",
+  "plan",
+  "project",
+  "request",
+  "review",
+  "task",
+  "test",
+  "tests",
+  "that",
+  "this",
+  "update",
+  "when",
+  "with",
+  "work",
+  "workflow",
+]);
 
 export type SkillSelectionTrigger = "user_message";
-export type SkillSelectionMode = "available_catalog_prompt_context";
+export type SkillSelectionMode =
+  | "shortlist_prompt_context"
+  | "explicit_over_budget_prompt_context"
+  | "discover_guidance_prompt_context";
+export type SkillSelectionReason =
+  | "explicit_mention"
+  | "path_glob"
+  | "trigger"
+  | "name_match"
+  | "text_match";
+
+const REASON_PRIORITY: Record<SkillSelectionReason, number> = {
+  explicit_mention: 500,
+  path_glob: 400,
+  trigger: 300,
+  name_match: 200,
+  text_match: 100,
+};
 
 export interface SkillSelectionRuntime {
   ops: {
@@ -48,6 +104,8 @@ export interface AvailableSkillPromptContext {
   category: LoadableSkillCategory;
   description: string;
   whenToUse?: string;
+  triggers: readonly string[];
+  pathGlobs: readonly string[];
   filePath: string;
 }
 
@@ -58,22 +116,33 @@ export interface ExplicitSkillMention {
   filePath: string;
 }
 
+export interface RenderedSkillReason {
+  name: string;
+  category: LoadableSkillCategory;
+  reasons: SkillSelectionReason[];
+  score: number;
+  filePath: string;
+}
+
 export interface SkillSelectionReceipt {
   selectionId: string;
   trigger: SkillSelectionTrigger;
   explicitSkillMentions: ExplicitSkillMention[];
   availableSkillCount: number;
+  candidateSkillCount: number;
+  renderedSkillCount: number;
+  omittedSkillCount: number;
+  selectionMode: SkillSelectionMode;
+  renderedSkillReasons: RenderedSkillReason[];
   renderedSkillContext: {
     charCount: number;
     estimatedTokens: number;
     tokenEncoding: string;
     tokenEstimateMethod: string;
     tokenEstimateApproximation: boolean;
-    tokenBudget: number;
-    truncated: boolean;
-    detailCharLimit: number;
+    maxRenderedSkillCount: number;
+    overBudgetReason?: string;
   };
-  mode: SkillSelectionMode;
 }
 
 export interface SkillSelectionResult {
@@ -86,11 +155,19 @@ export interface SkillSelectionLifecycle {
   beforeAgentStart: (event: unknown, ctx: unknown) => BrewvaHostBeforeAgentStartResult | undefined;
 }
 
-interface RenderedSkillCatalog {
+interface SkillCandidate {
+  skill: AvailableSkillPromptContext;
+  reasons: SkillSelectionReason[];
+  score: number;
+}
+
+interface RenderedSkillShortlist {
   section: string;
-  truncated: boolean;
-  detailCharLimit: number;
   tokenEstimate: ReturnType<typeof estimateModelTokens>;
+  renderedCandidates: SkillCandidate[];
+  candidateCount: number;
+  selectionMode: SkillSelectionMode;
+  overBudgetReason?: string;
 }
 
 function getSessionId(ctx: unknown): string | null {
@@ -117,9 +194,23 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
+function normalizeWhitespace(value: string): string {
+  return value.trim().replace(/\s+/gu, " ");
+}
+
 function hasExplicitMention(prompt: string, skillName: string): boolean {
   const escapedName = escapeRegExp(skillName);
   return new RegExp(`(?:^|[^A-Za-z0-9_-])\\$${escapedName}(?=$|[^A-Za-z0-9_-])`, "iu").test(prompt);
+}
+
+function hasNameMatch(prompt: string, skillName: string): boolean {
+  const escapedName = escapeRegExp(skillName);
+  return new RegExp(`(?:^|[^A-Za-z0-9_-])${escapedName}(?=$|[^A-Za-z0-9_-])`, "iu").test(prompt);
+}
+
+function hasTriggerMatch(prompt: string, trigger: string): boolean {
+  const normalizedTrigger = normalizeWhitespace(trigger).toLowerCase();
+  return normalizedTrigger.length > 0 && prompt.toLowerCase().includes(normalizedTrigger);
 }
 
 function listPromptVisibleSkills(skills: readonly SkillDocument[]): SkillDocument[] {
@@ -137,157 +228,257 @@ function toPromptContext(skill: SkillDocument): AvailableSkillPromptContext {
     category: skill.category,
     description: skill.description,
     ...(skill.card.selection?.whenToUse ? { whenToUse: skill.card.selection.whenToUse } : {}),
+    triggers: skill.card.selection?.triggers ?? [],
+    pathGlobs: skill.card.selection?.pathGlobs ?? [],
     filePath: skill.filePath,
   };
 }
 
-function truncateDetail(value: string, charLimit: number): string {
-  const normalized = value.trim().replace(/\s+/gu, " ");
-  if (normalized.length <= charLimit) {
-    return normalized;
+function tokenizeForTextMatch(text: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const rawToken of text.toLowerCase().match(/[a-z0-9][a-z0-9_-]{2,}/gu) ?? []) {
+    const token = rawToken.replace(/^[-_]+|[-_]+$/gu, "");
+    if (token.length < 4 || STOP_WORDS.has(token)) {
+      continue;
+    }
+    tokens.add(token);
   }
-  if (charLimit <= 0) {
-    return "[truncated]";
-  }
-  const clipped = normalized.slice(0, charLimit).trimEnd();
-  return `${clipped}... [truncated]`;
+  return tokens;
 }
 
-function renderSkillEntry(skill: AvailableSkillPromptContext, detailCharLimit: number): string {
+function hasTextMatch(
+  promptTokens: ReadonlySet<string>,
+  skill: AvailableSkillPromptContext,
+): boolean {
+  const skillTokens = tokenizeForTextMatch([skill.description, skill.whenToUse ?? ""].join(" "));
+  let overlap = 0;
+  for (const token of skillTokens) {
+    if (!promptTokens.has(token)) {
+      continue;
+    }
+    overlap += 1;
+    if (overlap >= 2 || token.length >= 8) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function rankReasons(reasons: ReadonlySet<SkillSelectionReason>): SkillSelectionReason[] {
+  return [...reasons].toSorted(
+    (left, right) => REASON_PRIORITY[right] - REASON_PRIORITY[left] || left.localeCompare(right),
+  );
+}
+
+function scoreReasons(reasons: readonly SkillSelectionReason[]): number {
+  return Math.max(0, ...reasons.map((reason) => REASON_PRIORITY[reason]));
+}
+
+function buildCandidate(input: {
+  skill: AvailableSkillPromptContext;
+  prompt: string;
+  promptTokens: ReadonlySet<string>;
+  promptPaths: readonly string[];
+}): SkillCandidate | null {
+  const reasons = new Set<SkillSelectionReason>();
+  if (hasExplicitMention(input.prompt, input.skill.name)) {
+    reasons.add("explicit_mention");
+  }
+  if (input.skill.pathGlobs.some((pathGlob) => pathGlobMatches(pathGlob, input.promptPaths))) {
+    reasons.add("path_glob");
+  }
+  if (input.skill.triggers.some((trigger) => hasTriggerMatch(input.prompt, trigger))) {
+    reasons.add("trigger");
+  }
+  if (hasNameMatch(input.prompt, input.skill.name)) {
+    reasons.add("name_match");
+  }
+  if (hasTextMatch(input.promptTokens, input.skill)) {
+    reasons.add("text_match");
+  }
+  if (reasons.size === 0) {
+    return null;
+  }
+  const rankedReasons = rankReasons(reasons);
+  return {
+    skill: input.skill,
+    reasons: rankedReasons,
+    score: scoreReasons(rankedReasons),
+  };
+}
+
+function compareCandidates(left: SkillCandidate, right: SkillCandidate): number {
+  return (
+    right.score - left.score ||
+    left.skill.category.localeCompare(right.skill.category) ||
+    left.skill.name.localeCompare(right.skill.name)
+  );
+}
+
+function renderSkillEntry(candidate: SkillCandidate): string {
+  const skill = candidate.skill;
   const lines = [
     `## ${skill.name}`,
     `category: ${skill.category}`,
     `filePath: ${skill.filePath}`,
-    `description: ${truncateDetail(skill.description, detailCharLimit)}`,
+    `selectionReasons: ${candidate.reasons.join(", ")}`,
+    `description: ${normalizeWhitespace(skill.description)}`,
   ];
   if (skill.whenToUse) {
-    lines.push(`whenToUse: ${truncateDetail(skill.whenToUse, detailCharLimit)}`);
+    lines.push(`whenToUse: ${normalizeWhitespace(skill.whenToUse)}`);
+  }
+  if (skill.triggers.length > 0) {
+    lines.push(`triggers: ${skill.triggers.map(normalizeWhitespace).join(", ")}`);
+  }
+  if (skill.pathGlobs.length > 0) {
+    lines.push(`pathGlobs: ${skill.pathGlobs.map(normalizeWhitespace).join(", ")}`);
   }
   return lines.join("\n");
 }
 
-function renderSkillCatalogWithLimit(
-  skills: readonly AvailableSkillPromptContext[],
-  detailCharLimit: number,
-): string {
-  if (skills.length === 0) {
-    return "";
+function renderShortlistSection(candidates: readonly SkillCandidate[]): string {
+  if (candidates.length === 0) {
+    return [
+      "",
+      "",
+      "# Available Brewva SkillCards",
+      "",
+      "SkillCards are advisory, turn-scoped prompt context. They do not grant tools, permissions, accounts, budgets, side effects, or runtime authority.",
+      "No SkillCards were deterministically shortlisted for this turn. Use discover_skills if a specialized workflow would materially help.",
+    ].join("\n");
   }
   return [
     "",
     "",
-    "# Available Brewva Skills",
+    "# Available Brewva SkillCards",
     "",
-    "These SkillCards are advisory prompt context. They do not grant tools, permissions, accounts, budgets, side effects, or runtime authority.",
-    "If the user mentions $skill-name OR the task matches the description above, follow that SkillCard for this turn. When you decide to use a skill, read its filePath first and follow only that SkillCard's instructions.",
+    "These SkillCards are advisory, turn-scoped prompt context. They do not grant tools, permissions, accounts, budgets, side effects, or runtime authority.",
+    "If you use a SkillCard, read its filePath first, then load only directly relevant references or scripts.",
+    "Do not carry a SkillCard workflow into later turns unless that later turn triggers it again.",
     "",
-    ...skills.map((skill) => renderSkillEntry(skill, detailCharLimit)),
+    ...candidates.map(renderSkillEntry),
   ].join("\n");
 }
 
-function estimateSkillCatalogSection(
-  skills: readonly AvailableSkillPromptContext[],
-  detailCharLimit: number,
-): RenderedSkillCatalog {
-  const section = renderSkillCatalogWithLimit(skills, detailCharLimit);
-  const tokenEstimate = estimateModelTokens(section);
+function buildSkillShortlist(input: {
+  skills: readonly AvailableSkillPromptContext[];
+  prompt: string;
+  maxRenderedSkills: number;
+}): RenderedSkillShortlist {
+  const promptPaths = extractPromptTargetPaths(input.prompt);
+  const promptTokens = tokenizeForTextMatch(input.prompt);
+  const candidates = input.skills
+    .map((skill) =>
+      buildCandidate({
+        skill,
+        prompt: input.prompt,
+        promptTokens,
+        promptPaths,
+      }),
+    )
+    .filter((candidate): candidate is SkillCandidate => candidate !== null)
+    .toSorted(compareCandidates);
+  const explicitCandidates = candidates.filter((candidate) =>
+    candidate.reasons.includes("explicit_mention"),
+  );
+  const overExplicitBudget = explicitCandidates.length > input.maxRenderedSkills;
+  const renderedCandidates = overExplicitBudget
+    ? explicitCandidates
+    : candidates.slice(0, input.maxRenderedSkills);
+  const selectionMode: SkillSelectionMode =
+    candidates.length === 0
+      ? "discover_guidance_prompt_context"
+      : overExplicitBudget
+        ? "explicit_over_budget_prompt_context"
+        : "shortlist_prompt_context";
+  const section = renderShortlistSection(renderedCandidates);
   return {
     section,
-    tokenEstimate,
-    truncated: skills.some(
-      (skill) =>
-        skill.description.trim().replace(/\s+/gu, " ").length > detailCharLimit ||
-        (skill.whenToUse?.trim().replace(/\s+/gu, " ").length ?? 0) > detailCharLimit,
-    ),
-    detailCharLimit,
-  };
-}
-
-function resolveMaxDetailCharLimit(skills: readonly AvailableSkillPromptContext[]): number {
-  return Math.max(
-    0,
-    ...skills.flatMap((skill) => [
-      skill.description.trim().replace(/\s+/gu, " ").length,
-      skill.whenToUse?.trim().replace(/\s+/gu, " ").length ?? 0,
-    ]),
-  );
-}
-
-function renderBoundedSkillCatalog(input: {
-  skills: readonly AvailableSkillPromptContext[];
-  tokenBudget: number;
-}): RenderedSkillCatalog {
-  const maxDetailCharLimit = resolveMaxDetailCharLimit(input.skills);
-  const full = estimateSkillCatalogSection(input.skills, maxDetailCharLimit);
-  if (full.tokenEstimate.tokens <= input.tokenBudget) {
-    return full;
-  }
-
-  let low = 0;
-  let high = maxDetailCharLimit;
-  let best = estimateSkillCatalogSection(input.skills, 0);
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const candidate = estimateSkillCatalogSection(input.skills, mid);
-    if (candidate.tokenEstimate.tokens <= input.tokenBudget) {
-      best = candidate;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return {
-    ...best,
-    truncated: true,
+    tokenEstimate: estimateModelTokens(section),
+    renderedCandidates,
+    candidateCount: candidates.length,
+    selectionMode,
+    ...(overExplicitBudget ? { overBudgetReason: "explicit_mentions_exceed_render_cap" } : {}),
   };
 }
 
 function makeSelectionId(input: {
   trigger: SkillSelectionTrigger;
   prompt: string;
-  explicitNames: readonly string[];
+  renderedSkillReasons: readonly RenderedSkillReason[];
   availableSkillNames: readonly string[];
 }): string {
   const digest = sha256Hex(
     [
       input.trigger,
       input.prompt,
-      input.explicitNames.join("\0"),
+      input.renderedSkillReasons
+        .map((skill) => `${skill.name}:${skill.reasons.join(",")}`)
+        .join("\0"),
       input.availableSkillNames.join("\0"),
     ].join("\0"),
   ).slice(0, 16);
   return `skill_selection_${digest}`;
 }
 
+function toRenderedSkillReason(candidate: SkillCandidate): RenderedSkillReason {
+  return {
+    name: candidate.skill.name,
+    category: candidate.skill.category,
+    reasons: [...candidate.reasons],
+    score: candidate.score,
+    filePath: candidate.skill.filePath,
+  };
+}
+
+function toExplicitSkillMention(candidate: SkillCandidate): ExplicitSkillMention {
+  return {
+    name: candidate.skill.name,
+    category: candidate.skill.category,
+    reason: "explicit_mention",
+    filePath: candidate.skill.filePath,
+  };
+}
+
 function buildReceipt(input: {
   trigger: SkillSelectionTrigger;
   prompt: string;
-  explicitSkillMentions: readonly ExplicitSkillMention[];
   availableSkillNames: readonly string[];
-  renderedSkillCatalog: RenderedSkillCatalog;
-  tokenBudget: number;
+  renderedShortlist: RenderedSkillShortlist;
+  maxRenderedSkillCount: number;
 }): SkillSelectionReceipt {
+  const renderedSkillReasons =
+    input.renderedShortlist.renderedCandidates.map(toRenderedSkillReason);
+  const explicitSkillMentions = input.renderedShortlist.renderedCandidates
+    .filter((candidate) => candidate.reasons.includes("explicit_mention"))
+    .map(toExplicitSkillMention);
   return {
     selectionId: makeSelectionId({
       trigger: input.trigger,
       prompt: input.prompt,
-      explicitNames: input.explicitSkillMentions.map((skill) => skill.name),
+      renderedSkillReasons,
       availableSkillNames: input.availableSkillNames,
     }),
     trigger: input.trigger,
-    explicitSkillMentions: input.explicitSkillMentions.map((skill) => ({ ...skill })),
+    explicitSkillMentions,
     availableSkillCount: input.availableSkillNames.length,
+    candidateSkillCount: input.renderedShortlist.candidateCount,
+    renderedSkillCount: input.renderedShortlist.renderedCandidates.length,
+    omittedSkillCount:
+      input.availableSkillNames.length - input.renderedShortlist.renderedCandidates.length,
+    selectionMode: input.renderedShortlist.selectionMode,
+    renderedSkillReasons,
     renderedSkillContext: {
-      charCount: input.renderedSkillCatalog.section.length,
-      estimatedTokens: input.renderedSkillCatalog.tokenEstimate.tokens,
-      tokenEncoding: input.renderedSkillCatalog.tokenEstimate.encoding,
-      tokenEstimateMethod: input.renderedSkillCatalog.tokenEstimate.method,
-      tokenEstimateApproximation: input.renderedSkillCatalog.tokenEstimate.approximation,
-      tokenBudget: input.tokenBudget,
-      truncated: input.renderedSkillCatalog.truncated,
-      detailCharLimit: input.renderedSkillCatalog.detailCharLimit,
+      charCount: input.renderedShortlist.section.length,
+      estimatedTokens: input.renderedShortlist.tokenEstimate.tokens,
+      tokenEncoding: input.renderedShortlist.tokenEstimate.encoding,
+      tokenEstimateMethod: input.renderedShortlist.tokenEstimate.method,
+      tokenEstimateApproximation: input.renderedShortlist.tokenEstimate.approximation,
+      maxRenderedSkillCount: input.maxRenderedSkillCount,
+      ...(input.renderedShortlist.overBudgetReason
+        ? { overBudgetReason: input.renderedShortlist.overBudgetReason }
+        : {}),
     },
-    mode: "available_catalog_prompt_context",
   };
 }
 
@@ -302,46 +493,36 @@ export function readLatestSkillSelectionReceipt(input: {
   const receipt = payload as Partial<SkillSelectionReceipt>;
   return typeof receipt.selectionId === "string" &&
     Array.isArray(receipt.explicitSkillMentions) &&
-    receipt.mode === "available_catalog_prompt_context"
+    typeof receipt.selectionMode === "string"
     ? (receipt as SkillSelectionReceipt)
     : undefined;
 }
 
-export function buildSkillCatalogContextForPrompt(input: {
+export function buildSkillShortlistContextForPrompt(input: {
   runtime: Pick<SkillSelectionRuntime, "ops">;
   prompt: string;
-  tokenBudget?: number;
+  maxRenderedSkills?: number;
 }): SkillSelectionResult {
   const trigger: SkillSelectionTrigger = "user_message";
   const skills = listPromptVisibleSkills(listSkillCatalog(input.runtime));
   const availableSkills = skills.map(toPromptContext);
-  const explicitSkillMentions = skills
-    .filter((skill) => hasExplicitMention(input.prompt, skill.name))
-    .map(
-      (skill): ExplicitSkillMention => ({
-        name: skill.name,
-        category: skill.category,
-        reason: "explicit_mention",
-        filePath: skill.filePath,
-      }),
-    );
-  const tokenBudget = input.tokenBudget ?? DEFAULT_SKILL_CATALOG_TOKEN_BUDGET;
-  const renderedSkillCatalog = renderBoundedSkillCatalog({
+  const maxRenderedSkills = input.maxRenderedSkills ?? MAX_RENDERED_SKILLCARDS;
+  const renderedShortlist = buildSkillShortlist({
     skills: availableSkills,
-    tokenBudget,
+    prompt: input.prompt,
+    maxRenderedSkills,
   });
   const receipt = buildReceipt({
     trigger,
     prompt: input.prompt,
-    explicitSkillMentions,
     availableSkillNames: availableSkills.map((skill) => skill.name),
-    renderedSkillCatalog,
-    tokenBudget,
+    renderedShortlist,
+    maxRenderedSkillCount: maxRenderedSkills,
   });
   return {
     receipt,
     availableSkills,
-    renderedSection: renderedSkillCatalog.section,
+    renderedSection: renderedShortlist.section,
   };
 }
 
@@ -354,12 +535,15 @@ function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): Brewv
   return {
     customType: "brewva-skill-selection",
     content: [
-      `Available Brewva Skills: ${receipt.availableSkillCount}`,
-      `Explicit Brewva Skill Mentions: ${
+      `Available Brewva SkillCards: ${receipt.availableSkillCount}`,
+      `Candidate Brewva SkillCards: ${receipt.candidateSkillCount}`,
+      `Rendered Brewva SkillCards: ${receipt.renderedSkillCount}`,
+      `Omitted Brewva SkillCards: ${receipt.omittedSkillCount}`,
+      `Explicit Brewva SkillCard Mentions: ${
         explicitSkillMentionNames.length > 0 ? explicitSkillMentionNames.join(", ") : "none"
       }`,
       `Selection ID: ${receipt.selectionId}`,
-      `Mode: ${receipt.mode}`,
+      `Selection Mode: ${receipt.selectionMode}`,
     ].join("\n"),
     display: false,
     excludeFromContext: true,
@@ -368,8 +552,12 @@ function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): Brewv
       explicitSkillMentionNames,
       explicitSkillMentions: receipt.explicitSkillMentions,
       availableSkillCount: receipt.availableSkillCount,
+      candidateSkillCount: receipt.candidateSkillCount,
+      renderedSkillCount: receipt.renderedSkillCount,
+      omittedSkillCount: receipt.omittedSkillCount,
+      renderedSkillReasons: receipt.renderedSkillReasons,
       renderedSkillContext: receipt.renderedSkillContext,
-      mode: receipt.mode,
+      selectionMode: receipt.selectionMode,
       trigger: receipt.trigger,
     },
   };
@@ -386,7 +574,7 @@ export function createSkillSelectionLifecycle(
         return undefined;
       }
       const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
-      const selection = buildSkillCatalogContextForPrompt({ runtime, prompt });
+      const selection = buildSkillShortlistContextForPrompt({ runtime, prompt });
       recordRuntimeSkillSelection(runtime, sessionId, selection.receipt);
       const section = formatSkillSelectionSection(selection);
       if (!section) {
@@ -395,7 +583,10 @@ export function createSkillSelectionLifecycle(
       const systemPrompt = typeof rawEvent.systemPrompt === "string" ? rawEvent.systemPrompt : "";
       return {
         message: formatSkillSelectionTraceMessage(selection.receipt),
-        systemPrompt: `${systemPrompt}${section}`,
+        systemPrompt: appendHostedSystemPromptSection({
+          systemPrompt,
+          section,
+        }),
       };
     },
   };
@@ -415,7 +606,7 @@ export function skillSelectionSummaryForTrace(receipt: SkillSelectionReceipt | u
   return {
     explicitSkillMentionNames: explicitSkillMentionNamesFromReceipt(receipt),
     skillSelectionId: receipt?.selectionId ?? null,
-    skillSelectionMode: receipt?.mode ?? null,
+    skillSelectionMode: receipt?.selectionMode ?? null,
   };
 }
 

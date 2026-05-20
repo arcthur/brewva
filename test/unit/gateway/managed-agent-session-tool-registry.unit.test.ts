@@ -87,9 +87,21 @@ describe("managed-agent-session tool registry", () => {
     const prompt = buildManagedSessionBaseSystemPrompt({
       cwd: "/tmp/demo",
       resourceLoader: {
-        getSystemPrompt: () => "Base prompt",
-        getAppendSystemPrompt: () => ["Append prompt"],
-        getAgentsFiles: () => ({ agentsFiles: [] }),
+        getCustomInstructions: () => "Base prompt",
+        getAppendInstructions: () => ["Append prompt"],
+        getProjectInstructions: () => ({
+          files: [
+            {
+              path: "/tmp/demo/AGENTS.md",
+              content: "Project instructions",
+              fileName: "AGENTS.md",
+              directory: "/tmp/demo",
+              source: "ancestor",
+            },
+          ],
+          diagnostics: [],
+        }),
+        getProjectInstructionsForTarget: () => ({ files: [], diagnostics: [] }),
         getSkills: () => ({ skills: [] }),
       } as never,
       activeToolNames: ["write"],
@@ -97,7 +109,9 @@ describe("managed-agent-session tool registry", () => {
     });
 
     expect(prompt).toContain("Base prompt");
-    expect(prompt).toContain("Base prompt");
+    expect(prompt).toContain("Append prompt");
+    expect(prompt).toContain("Project instructions");
+    expect(prompt).toContain("# Operating Contract");
     expect(registry.buildPromptInputs(["write"])).toEqual({
       selectedTools: ["write"],
       toolSnippets: { write: "Use write carefully" },

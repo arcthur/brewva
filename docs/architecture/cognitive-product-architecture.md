@@ -36,18 +36,26 @@ The workbench should remain deliberately small:
 - `workbench_compact` creates a compact baseline when the model or hard context
   limit requires it.
 
-No runtime service should rebuild a hidden thought path by preselecting skills,
-recall entries, task stages, or finish posture before the model asks.
+No runtime service should rebuild a hidden thought path by preselecting recall
+entries, task stages, or finish posture before the model asks. SkillCards are
+the exception only in a narrow sense: Brewva may render a deterministic,
+turn-scoped advisory shortlist from explicit mention, path glob, trigger,
+name, or text match. That shortlist manages attention; it does not create
+authority or persistent workflow state.
 
 ## Context Product
 
 Context composition is request materialization over runtime facts. Its default
 shape is:
 
-1. stable contracts and tool schemas
-2. active workbench entries
-3. explicitly requested details such as recall results or capability details
-4. numeric context status and other small dynamic-tail facts
+1. rendered `BrewvaSystemPromptDocument` blocks: stable contracts, tool
+   policy, custom instructions, project instructions, capability receipt, and
+   environment
+2. hosted lifecycle additions such as a turn-scoped SkillCard shortlist or
+   target-scoped project instructions
+3. active workbench entries
+4. explicitly requested details such as recall results or capability details
+5. numeric context status and other small dynamic-tail facts
 
 Context composition preserves provenance, cache posture, and hard-limit
 instructions. It is not the product layer that decides salience.

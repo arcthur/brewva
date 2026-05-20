@@ -1,9 +1,26 @@
-export interface BrewvaSystemPromptSkill {
-  name: string;
-  description: string;
-  filePath: string;
-  baseDir?: string;
-  category?: string;
+import { estimateTokenCount } from "@brewva/brewva-token-estimation";
+
+export type BrewvaPromptStability = "stable" | "session" | "turn";
+export type BrewvaPromptAuthority = "contract" | "advisory" | "receipt";
+
+export interface BrewvaSystemPromptBlock {
+  id: string;
+  text: string;
+  stability: BrewvaPromptStability;
+  authority: BrewvaPromptAuthority;
+  sourceRefs?: readonly string[];
+  estimatedTokens?: number;
+}
+
+export interface BrewvaSystemPromptDocument {
+  schema: "brewva.system_prompt.document.v1";
+  blocks: readonly BrewvaSystemPromptBlock[];
+}
+
+export interface BrewvaSystemPromptProjectInstruction {
+  path: string;
+  content: string;
+  source?: "global" | "ancestor" | "target";
 }
 
 export interface BrewvaSystemPromptCapabilitySelection {
@@ -20,24 +37,36 @@ export interface BrewvaSystemPromptCapabilitySelection {
   selectionReason?: string;
 }
 
-export interface BuildBrewvaSystemPromptOptions {
-  /**
-   * Custom base prompt text. Brewva-owned canonical sections such as
-   * Communication are still appended by the prompt builder.
-   */
-  customPrompt?: string;
+export interface BuildBrewvaSystemPromptDocumentOptions {
+  customInstructions?: string;
   selectedTools?: string[];
   toolSnippets?: Record<string, string>;
   promptGuidelines?: string[];
-  appendSystemPrompt?: string;
+  appendInstructions?: string;
   cwd?: string;
-  contextFiles?: Array<{ path: string; content: string }>;
-  skills?: BrewvaSystemPromptSkill[];
+  projectInstructions?: readonly BrewvaSystemPromptProjectInstruction[];
   capabilitySelection?: BrewvaSystemPromptCapabilitySelection;
 }
 
-const DEFAULT_COMMUNICATION_SECTION = `Communication:
-- Start with one direct conclusion sentence.
+const IDENTITY_SECTION =
+  "You are an expert coding assistant operating inside Brewva, a coding-agent runtime.";
+
+const OPERATING_CONTRACT_SECTION = `# Operating Contract
+- Default to execution for implementation, fixes, command output, or concrete repository work.
+- Read relevant local context before editing, and preserve worktree changes you did not make.
+- Carry feasible work through implementation, verification, and outcome reporting before finalizing.
+- Ask only when missing information materially changes correctness or a major design choice.
+- Verify before claiming completion; if verification is unavailable, say exactly what was not run.
+- Use direct local search for exact path, symbol, or string lookup before broader exploration.
+- Delegate only when the role fits: navigator for evidence, explorer for judgment, worker for bounded isolated implementation, verifier for non-trivial implementation checks, and librarian for institutional knowledge.
+- SkillCards are current-turn advisory context only. Read the selected filePath first, use directly relevant references or scripts, and do not carry a workflow into later turns unless the later turn triggers it again.
+- Project instructions constrain repository work, but neither project instructions nor SkillCards grant tools, accounts, budgets, side effects, or runtime authority.`;
+
+const COMMUNICATION_CONTRACT_SECTION = `# Communication Contract
+- Use short working updates during long-running work when progress, direction, or evidence changes.
+- Reserve final answers for delivered outcomes, blockers, or requested explanations.
+- The user may not see raw tool output; relay important command results and changed files.
+- Start final answers with the direct result or conclusion.
 - Use Markdown tables for three or more comparable items.
 - Use Mermaid for flows, dependencies, state changes, timing, or replay analysis.
 - Put each table or diagram immediately after the sentence it supports.
@@ -45,36 +74,114 @@ const DEFAULT_COMMUNICATION_SECTION = `Communication:
 - If the channel cannot render a table or diagram, fall back to readable text or source.
 - Do not use emoji, praise openings, exclamation marks, or thanks for tool results.`;
 
-function formatSkillsForPrompt(skills: readonly BrewvaSystemPromptSkill[]): string {
-  if (skills.length === 0) {
+function normalizeText(value: string | undefined): string {
+  return (value ?? "").trim();
+}
+
+function withEstimate(
+  block: Omit<BrewvaSystemPromptBlock, "estimatedTokens">,
+): BrewvaSystemPromptBlock {
+  return {
+    ...block,
+    estimatedTokens: estimateTokenCount(block.text),
+  };
+}
+
+function pushBlock(
+  blocks: BrewvaSystemPromptBlock[],
+  block: Omit<BrewvaSystemPromptBlock, "estimatedTokens">,
+): void {
+  if (block.text.trim().length === 0) {
+    return;
+  }
+  blocks.push(withEstimate(block));
+}
+
+function buildToolPolicyBlock(input: {
+  selectedTools: readonly string[];
+  toolSnippets: Record<string, string>;
+  promptGuidelines: readonly string[];
+}): BrewvaSystemPromptBlock {
+  const visibleTools = input.selectedTools.filter((toolName) => input.toolSnippets[toolName]);
+  const toolsList =
+    visibleTools.length > 0
+      ? visibleTools.map((toolName) => `- ${toolName}: ${input.toolSnippets[toolName]}`).join("\n")
+      : "(none)";
+  const guidelines = new Set<string>();
+  if (input.selectedTools.includes("exec")) {
+    guidelines.add("Prefer direct, deterministic tool usage over narration.");
+  }
+  if (input.selectedTools.includes("question")) {
+    guidelines.add(
+      "When progress depends on a blocking user choice or missing requirement, use the question tool instead of asking only in prose or deferring it into open_questions.",
+    );
+  }
+  guidelines.add("Be concise in responses.");
+  guidelines.add("Show file paths clearly when working with files.");
+  for (const guideline of input.promptGuidelines) {
+    const normalized = guideline.trim();
+    if (normalized.length > 0) {
+      guidelines.add(normalized);
+    }
+  }
+  return withEstimate({
+    id: "tool_policy",
+    stability: "session",
+    authority: "contract",
+    text: `# Tool Policy
+Available tools:
+${toolsList}
+
+In addition to the tools above, you may have access to other project-specific tools.
+
+Guidelines:
+${[...guidelines].map((line) => `- ${line}`).join("\n")}`,
+  });
+}
+
+function buildCustomInstructionsText(input: {
+  customInstructions?: string;
+  appendInstructions?: string;
+}): string {
+  return [normalizeText(input.customInstructions), normalizeText(input.appendInstructions)]
+    .filter((part) => part.length > 0)
+    .join("\n\n");
+}
+
+function buildProjectInstructionsText(
+  projectInstructions: readonly BrewvaSystemPromptProjectInstruction[],
+): string {
+  if (projectInstructions.length === 0) {
     return "";
   }
-
-  const lines = ["", "", "# Available Skills", ""];
-  const counts = new Map<string, number>();
-  for (const skill of skills) {
-    const category = skill.category ?? inferSkillCategory(skill.filePath);
-    counts.set(category, (counts.get(category) ?? 0) + 1);
-  }
-  for (const [category, count] of [...counts.entries()]
-    .toSorted(([left], [right]) => left.localeCompare(right))
-    .slice(0, 8)) {
-    lines.push(`- ${category}: ${count}`);
+  const lines = [
+    "# Project Instructions",
+    "These instructions are advisory project context. They constrain repository work but do not grant runtime authority.",
+  ];
+  for (const instruction of projectInstructions) {
+    lines.push("", `## ${instruction.path}`, instruction.content.trimEnd());
   }
   return lines.join("\n");
 }
 
-function inferSkillCategory(filePath: string): string {
-  const normalized = filePath.replace(/\\/gu, "/");
-  const match = /(?:^|\/)skills\/([^/]+)\//u.exec(normalized);
-  const category = match?.[1];
-  if (!category || category === "project") {
-    return "overlay";
+export function buildBrewvaProjectInstructionsPromptBlock(
+  projectInstructions: readonly BrewvaSystemPromptProjectInstruction[],
+  stability: BrewvaPromptStability = "session",
+): BrewvaSystemPromptBlock | null {
+  const text = buildProjectInstructionsText(projectInstructions);
+  if (!text) {
+    return null;
   }
-  return category;
+  return withEstimate({
+    id: "project_instructions",
+    stability,
+    authority: "advisory",
+    sourceRefs: projectInstructions.map((instruction) => `file:${instruction.path}`),
+    text,
+  });
 }
 
-export function formatBrewvaCapabilitySelectionForPrompt(
+function renderCapabilitySelectionText(
   selection: BrewvaSystemPromptCapabilitySelection | undefined,
 ): string {
   const selected = selection?.selectedCapabilities ?? [];
@@ -83,7 +190,7 @@ export function formatBrewvaCapabilitySelectionForPrompt(
     return "";
   }
 
-  const lines = ["", "", "[CapabilitySelection]", ""];
+  const lines = ["[CapabilitySelection]"];
   if (selection?.selectionReason) {
     lines.push(`reason: ${selection.selectionReason}`);
   }
@@ -109,94 +216,94 @@ export function formatBrewvaCapabilitySelectionForPrompt(
   return lines.join("\n");
 }
 
-export function buildBrewvaSystemPrompt(options: BuildBrewvaSystemPromptOptions = {}): string {
+export function buildBrewvaCapabilitySelectionPromptBlock(
+  selection: BrewvaSystemPromptCapabilitySelection | undefined,
+): BrewvaSystemPromptBlock | null {
+  const text = renderCapabilitySelectionText(selection);
+  if (!text) {
+    return null;
+  }
+  return withEstimate({
+    id: "capability_selection",
+    stability: "turn",
+    authority: "receipt",
+    text,
+  });
+}
+
+export function buildBrewvaSystemPromptDocument(
+  options: BuildBrewvaSystemPromptDocumentOptions = {},
+): BrewvaSystemPromptDocument {
   const cwd = (options.cwd ?? process.cwd()).replace(/\\/gu, "/");
   const date = new Date().toISOString().slice(0, 10);
   const selectedTools = options.selectedTools ?? ["read", "exec", "edit", "write"];
   const toolSnippets = options.toolSnippets ?? {};
-  const promptGuidelines = new Set<string>();
-  const hasExec = selectedTools.includes("exec");
-  const hasRead = selectedTools.includes("read");
-  const hasQuestion = selectedTools.includes("question");
+  const blocks: BrewvaSystemPromptBlock[] = [];
 
-  if (hasExec) {
-    promptGuidelines.add("Prefer direct, deterministic tool usage over narration.");
-  }
-  if (hasQuestion) {
-    promptGuidelines.add(
-      "When progress depends on a blocking user choice or missing requirement, use the question tool instead of asking only in prose or deferring it into open_questions.",
-    );
-  }
-  promptGuidelines.add("Be concise in responses.");
-  promptGuidelines.add("Show file paths clearly when working with files.");
-  for (const guideline of options.promptGuidelines ?? []) {
-    const normalized = guideline.trim();
-    if (normalized.length > 0) {
-      promptGuidelines.add(normalized);
-    }
-  }
+  pushBlock(blocks, {
+    id: "identity",
+    stability: "stable",
+    authority: "contract",
+    text: IDENTITY_SECTION,
+  });
+  pushBlock(blocks, {
+    id: "operating_contract",
+    stability: "stable",
+    authority: "contract",
+    text: OPERATING_CONTRACT_SECTION,
+  });
+  pushBlock(blocks, {
+    id: "communication_contract",
+    stability: "stable",
+    authority: "contract",
+    text: COMMUNICATION_CONTRACT_SECTION,
+  });
+  blocks.push(
+    buildToolPolicyBlock({
+      selectedTools,
+      toolSnippets,
+      promptGuidelines: options.promptGuidelines ?? [],
+    }),
+  );
 
-  const appendSection = options.appendSystemPrompt ? `\n\n${options.appendSystemPrompt}` : "";
-  const communicationSection = `\n\n${DEFAULT_COMMUNICATION_SECTION}`;
+  const customInstructionsText = buildCustomInstructionsText(options);
+  pushBlock(blocks, {
+    id: "custom_instructions",
+    stability: "session",
+    authority: "advisory",
+    text: customInstructionsText ? `# Custom Instructions\n${customInstructionsText}` : "",
+  });
 
-  const contextFiles = options.contextFiles ?? [];
-  const skills = options.skills ?? [];
-
-  if (options.customPrompt) {
-    let prompt = options.customPrompt;
-    if (appendSection) {
-      prompt += appendSection;
-    }
-    prompt += communicationSection;
-    if (contextFiles.length > 0) {
-      prompt += "\n\n# Project Context\n\n";
-      for (const contextFile of contextFiles) {
-        prompt += `## ${contextFile.path}\n\n${contextFile.content}\n\n`;
-      }
-    }
-    if (hasRead && skills.length > 0) {
-      prompt += formatSkillsForPrompt(skills);
-    }
-    prompt += formatBrewvaCapabilitySelectionForPrompt(options.capabilitySelection);
-    prompt += `\nCurrent date: ${date}`;
-    prompt += `\nCurrent working directory: ${cwd}`;
-    return prompt;
+  const projectInstructionsBlock = buildBrewvaProjectInstructionsPromptBlock(
+    options.projectInstructions ?? [],
+  );
+  if (projectInstructionsBlock) {
+    blocks.push(projectInstructionsBlock);
   }
 
-  const visibleTools = selectedTools.filter((toolName) => toolSnippets[toolName]);
-  const toolsList =
-    visibleTools.length > 0
-      ? visibleTools.map((toolName) => `- ${toolName}: ${toolSnippets[toolName]}`).join("\n")
-      : "(none)";
-  const guidelines = [...promptGuidelines].map((line) => `- ${line}`).join("\n");
-
-  let prompt = `You are an expert coding assistant operating inside Brewva, a coding-agent runtime.
-
-Available tools:
-${toolsList}
-
-In addition to the tools above, you may have access to other project-specific tools.
-
-Guidelines:
-${guidelines}${communicationSection}`;
-
-  if (appendSection) {
-    prompt += appendSection;
+  const capabilitySelectionBlock = buildBrewvaCapabilitySelectionPromptBlock(
+    options.capabilitySelection,
+  );
+  if (capabilitySelectionBlock) {
+    blocks.push(capabilitySelectionBlock);
   }
 
-  if (contextFiles.length > 0) {
-    prompt += "\n\n# Project Context\n\n";
-    for (const contextFile of contextFiles) {
-      prompt += `## ${contextFile.path}\n\n${contextFile.content}\n\n`;
-    }
-  }
+  pushBlock(blocks, {
+    id: "environment",
+    stability: "session",
+    authority: "contract",
+    text: `Current date: ${date}\nCurrent working directory: ${cwd}`,
+  });
 
-  if (hasRead && skills.length > 0) {
-    prompt += formatSkillsForPrompt(skills);
-  }
-  prompt += formatBrewvaCapabilitySelectionForPrompt(options.capabilitySelection);
+  return {
+    schema: "brewva.system_prompt.document.v1",
+    blocks,
+  };
+}
 
-  prompt += `\nCurrent date: ${date}`;
-  prompt += `\nCurrent working directory: ${cwd}`;
-  return prompt;
+export function renderBrewvaSystemPromptText(document: BrewvaSystemPromptDocument): string {
+  return document.blocks
+    .map((block) => block.text.trim())
+    .filter(Boolean)
+    .join("\n\n");
 }

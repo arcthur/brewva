@@ -146,7 +146,7 @@ export {
   type ToolSurfaceRuntime,
 } from "./tools/tool-surface.js";
 export {
-  buildSkillCatalogContextForPrompt,
+  buildSkillShortlistContextForPrompt,
   createSkillSelectionLifecycle,
   describeAvailableSkillForDisplay,
   explicitSkillMentionNamesFromReceipt,

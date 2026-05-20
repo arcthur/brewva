@@ -58,7 +58,10 @@ describe("substrate entrypoint surface", () => {
 
     expect(typeof prompt.buildBrewvaPromptText).toBe("function");
     expect(typeof prompt.expandBrewvaPromptTemplate).toBe("function");
-    expect(typeof prompt.buildBrewvaSystemPrompt).toBe("function");
+    expect(typeof prompt.buildBrewvaSystemPromptDocument).toBe("function");
+    expect(typeof prompt.renderBrewvaSystemPromptText).toBe("function");
+    expect(typeof prompt.buildBrewvaCapabilitySelectionPromptBlock).toBe("function");
+    expect("buildBrewvaSystemPrompt" in prompt).toBe(false);
   });
 
   test("exports resource loading only from the explicit resources subpath", async () => {

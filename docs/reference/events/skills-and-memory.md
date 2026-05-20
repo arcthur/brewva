@@ -9,11 +9,13 @@ Skills are catalog documents. Runtime events may record catalog refresh,
 inventory maintenance, and advisory prompt-context selection, but there is no
 activation, completion, repair, or active-skill lifecycle state.
 
-`skill_selection_recorded` records the prompt-visible SkillCard catalog size,
-explicit `$skill` mentions, and rendered context size. The hosted turn also
-carries a hidden, context-excluded `brewva-skill-selection` custom message with
-the explicit mention names and selection id for active-turn traceability. Both
-are evidence for model attention, not authority receipts.
+`skill_selection_recorded` records the prompt-visible SkillCard shortlist:
+available count, candidate count, rendered count, omitted count, selection
+mode, explicit `$skill` mentions, rendered reasons, and rendered context size.
+The hosted turn also carries a hidden, context-excluded
+`brewva-skill-selection` custom message with the explicit mention names,
+selection id, counts, and selection mode for active-turn traceability. Both are
+evidence for model attention, not authority receipts.
 
 ## Skill Budget
 

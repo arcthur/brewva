@@ -29,6 +29,7 @@ import {
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate/host-api";
 import {
+  buildBrewvaProjectInstructionsPromptBlock,
   buildBrewvaPromptText,
   cloneBrewvaPromptContentParts,
   expandBrewvaPromptTemplate,
@@ -39,7 +40,10 @@ import type {
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
 } from "@brewva/brewva-substrate/provider";
-import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
+import type {
+  BrewvaHostedResourceLoader,
+  BrewvaProjectInstructionFile,
+} from "@brewva/brewva-substrate/resources";
 import {
   canTransitionSessionPhase,
   type BrewvaManagedPromptSession,
@@ -100,6 +104,7 @@ import {
 } from "../../provider/cache/index.js";
 import { consumeProviderRequestReductionExpectedCacheBreak } from "../../provider/request/provider-request-reduction.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
+import { appendHostedSystemPromptSection } from "../../system-prompt-text.js";
 import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../turn-adapter/hosted-prompt-attempt.js";
 import {
   HOSTED_RUNTIME_TURN_CONTEXT,
@@ -110,6 +115,7 @@ import {
   runHostedTurnEnvelope,
   type HostedTurnEnvelopeSource,
 } from "../../turn-adapter/turn-envelope.js";
+import { extractPromptTargetPaths } from "../prompt-paths.js";
 import {
   getRuntimeCompactionGateStatus,
   getRuntimeContextEvidenceLatest,
@@ -184,6 +190,33 @@ import {
   normalizePromptSource,
   resolveChannelContext,
 } from "./turn-audit.js";
+
+function appendTargetScopedProjectInstructions(input: {
+  baseSystemPrompt: string;
+  promptText: string;
+  resourceLoader: BrewvaHostedResourceLoader;
+}): string {
+  const targetInstructions: BrewvaProjectInstructionFile[] = [];
+  const seen = new Set<string>();
+  for (const targetPath of extractPromptTargetPaths(input.promptText)) {
+    const instructionSet = input.resourceLoader.getProjectInstructionsForTarget(targetPath);
+    for (const instruction of instructionSet.files) {
+      if (instruction.source !== "target" || seen.has(instruction.path)) {
+        continue;
+      }
+      seen.add(instruction.path);
+      targetInstructions.push(instruction);
+    }
+  }
+  const block = buildBrewvaProjectInstructionsPromptBlock(targetInstructions, "turn");
+  if (!block) {
+    return input.baseSystemPrompt;
+  }
+  return appendHostedSystemPromptSection({
+    systemPrompt: input.baseSystemPrompt,
+    section: block.text,
+  });
+}
 
 function toTurnLoopCustomMessage(
   message: BrewvaHostCustomMessage,
@@ -1006,12 +1039,19 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       ...this.#deferredTurnState.consumeNextTurnMessages(),
     ];
 
+    const promptText = buildBrewvaPromptText(currentParts);
+    const systemPrompt = appendTargetScopedProjectInstructions({
+      baseSystemPrompt: this.#baseSystemPrompt,
+      promptText,
+      resourceLoader: this.#resourceLoader,
+    });
+
     const beforeStart = await this.#runner.emitBeforeAgentStart(
       {
         type: "before_agent_start",
-        prompt: buildBrewvaPromptText(currentParts),
+        prompt: promptText,
         parts: cloneBrewvaPromptContentParts(currentParts),
-        systemPrompt: this.#baseSystemPrompt,
+        systemPrompt,
       },
       this.createHostContext(),
     );
@@ -1035,11 +1075,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       });
     }
 
-    this.#liveTranscript.applyPromptOverlay(beforeStart?.systemPrompt ?? this.#baseSystemPrompt);
+    this.#liveTranscript.applyPromptOverlay(beforeStart?.systemPrompt ?? systemPrompt);
     await this.syncContextState();
     return {
       status: "ready",
-      promptText: buildBrewvaPromptText(currentParts),
+      promptText,
       promptContent: cloneBrewvaPromptContentParts(currentParts),
       messages,
       source: normalizePromptSource(options?.source),

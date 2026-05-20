@@ -51,6 +51,7 @@ Every accepted decision inherits these rules:
 - [substrate-turn-loop-internalization](./substrate-turn-loop-internalization.md)
 - [tool-protocol-package-subtraction](./tool-protocol-package-subtraction.md)
 - [managed-tool-capability-single-sourcing](./managed-tool-capability-single-sourcing.md)
+- [model-interface-attention-contract](./model-interface-attention-contract.md)
 - [tools-family-slicing-and-capability-contracts](./tools-family-slicing-and-capability-contracts.md)
 - [workflow-artifacts-and-posture-control-plane](./workflow-artifacts-and-posture-control-plane.md)
 

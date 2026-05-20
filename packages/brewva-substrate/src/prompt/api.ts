@@ -18,8 +18,15 @@ export {
   type LoadBrewvaPromptTemplatesOptions,
 } from "./templates.js";
 export {
-  buildBrewvaSystemPrompt,
-  formatBrewvaCapabilitySelectionForPrompt,
+  buildBrewvaCapabilitySelectionPromptBlock,
+  buildBrewvaProjectInstructionsPromptBlock,
+  buildBrewvaSystemPromptDocument,
+  renderBrewvaSystemPromptText,
   type BrewvaSystemPromptCapabilitySelection,
-  type BuildBrewvaSystemPromptOptions,
+  type BrewvaSystemPromptBlock,
+  type BrewvaSystemPromptDocument,
+  type BrewvaSystemPromptProjectInstruction,
+  type BrewvaPromptAuthority,
+  type BrewvaPromptStability,
+  type BuildBrewvaSystemPromptDocumentOptions,
 } from "./system-prompt.js";

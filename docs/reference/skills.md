@@ -141,13 +141,20 @@ The trace uses two separate concepts:
 - a skill-surface tool is a managed tool whose registry metadata has
   `surface="skill"`
 
-The available SkillCard catalog is reported by `skill_selection_recorded` and
-mirrored in the hidden, context-excluded `brewva-skill-selection` custom turn
-message. Explicit `$skill` mentions are mirrored as
+The available SkillCard shortlist is reported by `skill_selection_recorded`
+and mirrored in the hidden, context-excluded `brewva-skill-selection` custom
+turn message. Explicit `$skill` mentions are mirrored as
 `tool_surface_resolved.explicitSkillMentionNames`; `skillSelectionId` and
 `skillSelectionMode` remain trace correlation fields. The event also records
-`renderedSkillContext` with character and token-estimate metadata for the
-prompt block that was injected.
+`candidateSkillCount`, `renderedSkillCount`, `omittedSkillCount`,
+`renderedSkillReasons`, and `renderedSkillContext` with character and
+token-estimate metadata for the prompt block that was injected.
+
+Hosted shortlist selection is deterministic: explicit mention, path glob,
+trigger, name match, then description or `selection.when_to_use` text match.
+The default cap is 8 rendered SkillCards, except that explicit mentions over
+the cap are preserved and recorded with an over-budget reason. A turn with no
+candidate SkillCards renders discovery guidance instead of the full catalog.
 
 Skill-surface tools are counted by `skillSurfaceToolActiveCount` and
 `hiddenSkillSurfaceToolCount`. They are tool inventory counters, not selected
@@ -205,8 +212,8 @@ hard-coding workflow command IDs.
 
 - Keep `SKILL.md` advisory. Put action authority in capability manifests.
 - Put structured producer outputs in `skills/producers/<name>.yaml`.
-- Keep `selection` useful for humans and repository tooling, not runtime
-  authorization.
+- Keep `selection` useful for deterministic advisory shortlist routing, humans,
+  and repository tooling, not runtime authorization.
 - Keep operator/meta skills advisory and inspectable; do not use them to grant
   authority.
 - Put project-specific tightening in overlays or shared project guidance

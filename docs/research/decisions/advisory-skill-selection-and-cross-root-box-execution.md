@@ -33,9 +33,8 @@
 ## Decision Summary
 
 - Hosted skill selection is a real lifecycle stage before tool-surface
-  resolution and hosted context composition. It renders an
-  `Available Brewva Skills` catalog section into prompt context and records
-  durable `skill_selection_recorded` evidence.
+  resolution and hosted context composition. This decision's full catalog prompt
+  context is superseded by the deterministic SkillCard shortlist.
 - The same lifecycle emits a hidden, context-excluded `brewva-skill-selection`
   custom turn message, making explicit `$skill` mentions visible in the trace
   without replaying the marker as model context or reviving an authority gate.
@@ -77,3 +76,4 @@
 ## Superseded by
 
 - `docs/research/decisions/four-port-runtime-simplification-rfc.md`
+- `docs/research/decisions/model-interface-attention-contract.md`

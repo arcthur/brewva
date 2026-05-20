@@ -3,19 +3,21 @@
 Skill files are repository knowledge and model-readable instructions. They are
 not a hosted runtime authority gate.
 
-Hosted turns render the available SkillCard catalog before the model call. The
-model chooses which SkillCard to follow from the rendered descriptions and can
-use `discover_skills` for ranked catalog search. This does not expose tools,
+Hosted turns render a deterministic, turn-scoped SkillCard shortlist before the
+model call. The shortlist is advisory context only; the model still chooses
+which SkillCard to read and follow, and can use `discover_skills` for ranked
+catalog search when no shortlist item fits. This does not expose tools,
 accounts, budgets, side effects, or completion gates.
 
 ## Current Contract
 
 - skills live as markdown files under `skills/**`
 - skill metadata may help humans and repository tooling organize those files
-- hosted turns render prompt-visible SkillCards before tool-surface resolution
-  and context composition
-- available skills are prompt context under `Available Brewva Skills`
-- explicit `$skill-name` mentions and render metadata are recorded in
+- hosted turns render shortlisted prompt-visible SkillCards before
+  tool-surface resolution and context composition
+- shortlisted skills are prompt context under `Available Brewva SkillCards`
+- explicit `$skill-name` mentions, candidate counts, render counts, omission
+  counts, selection reasons, and render metadata are recorded in
   `skill_selection_recorded`
 - explicit mentions are mirrored into a hidden, context-excluded
   `brewva-skill-selection` turn message without replaying the trace marker as
@@ -41,28 +43,39 @@ model-operated: available SkillCards guide attention, while the model decides
 which documents to read and which tools to call, and the runtime governs
 consequences.
 
-## Advisory Catalog
+## Advisory Shortlist
 
 Skill routing is model-native and bounded by prompt context:
 
-- every prompt-visible SkillCard is rendered with `name`, `description`,
-  `selection.when_to_use`, and `filePath`
-- if the user mentions `$skill-name` or the task matches the rendered
-  description, the model follows that SkillCard for the turn
+- prompt-visible SkillCards are pre-filtered by explicit `$skill` mention,
+  `selection.path_globs`, `selection.triggers`, `name`, and
+  `description` / `selection.when_to_use` text match
+- shortlisted entries render with `name`, `category`, `filePath`,
+  `selectionReasons`, `description`, and any available `whenToUse`, `triggers`,
+  or `pathGlobs`
+- default render cap is 8 SkillCards
+- explicit mentions over the cap are all retained and recorded with an
+  over-budget reason
+- no shortlisted SkillCard means Brewva renders discovery guidance, not the
+  full catalog
 - the model reads the returned `filePath` before relying on the full skill body
-- descriptions are truncated when the catalog would exceed the token budget,
-  but all names remain visible
+- SkillCard binding is current-turn only and must be re-triggered on later
+  turns
 - `discover_skills` provides optional TF-IDF catalog search through
   `@brewva/brewva-search`
 
 The event payload records `selectionId`, `trigger`, `explicitSkillMentions`,
-`availableSkillCount`, `renderedSkillContext`, and
-`mode: "available_catalog_prompt_context"`. `renderedSkillContext` contains the
-rendered character count and token estimate for the SkillCard catalog prompt
-block so traces can explain the context-budget impact.
+`availableSkillCount`, `candidateSkillCount`, `renderedSkillCount`,
+`omittedSkillCount`, `selectionMode`, `renderedSkillReasons`, and
+`renderedSkillContext`. `selectionMode` is one of
+`shortlist_prompt_context`, `explicit_over_budget_prompt_context`, or
+`discover_guidance_prompt_context`. `renderedSkillContext` contains the
+rendered character count and token estimate for the SkillCard prompt block so
+traces can explain the context-budget impact.
 
-The hidden custom message carries explicit mention names, selection id, mode,
-and render metadata. `tool_surface_resolved` mirrors these as
+The hidden custom message carries explicit mention names, selection id,
+selection mode, rendered reasons, counts, and render metadata.
+`tool_surface_resolved` mirrors these as
 `explicitSkillMentionNames`, `skillSelectionId`, and `skillSelectionMode`.
 These fields are trace evidence, not gates.
 

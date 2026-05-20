@@ -1,6 +1,9 @@
 import type { BrewvaAgentProtocolTool } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaHostToolInfo } from "@brewva/brewva-substrate/host-api";
-import { buildBrewvaSystemPrompt } from "@brewva/brewva-substrate/prompt";
+import {
+  buildBrewvaSystemPromptDocument,
+  renderBrewvaSystemPromptText,
+} from "@brewva/brewva-substrate/prompt";
 import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
 import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { ToolSchemaSnapshot, ToolSchemaSnapshotTool } from "../../provider/cache/index.js";
@@ -180,21 +183,14 @@ export function buildManagedSessionBaseSystemPrompt(input: {
     promptGuidelines: string[];
   };
 }): string {
-  const loadedSkills = input.resourceLoader.getSkills().skills.map((skill) => ({
-    name: skill.name,
-    description: skill.description,
-    filePath: skill.filePath,
-    baseDir: skill.baseDir,
-  }));
-
-  return buildBrewvaSystemPrompt({
+  const document = buildBrewvaSystemPromptDocument({
     cwd: input.cwd,
     selectedTools: input.toolPromptInputs.selectedTools,
     toolSnippets: input.toolPromptInputs.toolSnippets,
     promptGuidelines: input.toolPromptInputs.promptGuidelines,
-    customPrompt: input.resourceLoader.getSystemPrompt(),
-    appendSystemPrompt: input.resourceLoader.getAppendSystemPrompt().join("\n\n"),
-    contextFiles: input.resourceLoader.getAgentsFiles().agentsFiles,
-    skills: loadedSkills,
+    customInstructions: input.resourceLoader.getCustomInstructions(),
+    appendInstructions: input.resourceLoader.getAppendInstructions().join("\n\n"),
+    projectInstructions: input.resourceLoader.getProjectInstructions().files,
   });
+  return renderBrewvaSystemPromptText(document);
 }

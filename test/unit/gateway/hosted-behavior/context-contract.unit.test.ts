@@ -18,4 +18,15 @@ describe("context contract", () => {
     expect(refreshed).toBe(first);
     expect(refreshed.match(/\[Brewva Context Contract\]/g)?.length).toBe(1);
   });
+
+  test("keeps the environment block last when adding the contract", () => {
+    const contract = buildContextContractBlock();
+    const result = applyContextContract(
+      "base prompt\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo",
+    );
+
+    expect(result).toBe(
+      `base prompt\n\n${contract}\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo`,
+    );
+  });
 });

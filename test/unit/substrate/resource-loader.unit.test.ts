@@ -121,4 +121,75 @@ Global review prompt.
       },
     ]);
   });
+
+  test("loads dual project instruction files in global and ancestor order", async () => {
+    const workspace = createTestWorkspace("resource-loader-project-instructions");
+    const cwd = join(workspace, "packages", "app");
+    const globalRoot = mkdtempSync(join(tmpdir(), "brewva-resource-loader-instructions-"));
+    const agentDir = join(globalRoot, "agent");
+    mkdirSync(cwd, { recursive: true });
+    mkdirSync(agentDir, { recursive: true });
+
+    writeFile(join(agentDir, "CLAUDE.md"), "Global Claude\n");
+    writeFile(join(agentDir, "AGENTS.md"), "Global Agents\n");
+    writeFile(join(workspace, "CLAUDE.md"), "Root Claude\n");
+    writeFile(join(workspace, "AGENTS.md"), "Root Agents\n");
+    writeFile(join(workspace, "packages", "AGENTS.md"), "Packages Agents\n");
+    writeFile(join(cwd, "CLAUDE.md"), "App Claude\n");
+
+    const loader = await createHostedResourceLoader({
+      cwd,
+      agentDir,
+    });
+
+    expect(
+      loader.getProjectInstructions().files.map((file) => ({
+        path: file.path,
+        source: file.source,
+      })),
+    ).toEqual([
+      { path: join(agentDir, "CLAUDE.md"), source: "global" },
+      { path: join(agentDir, "AGENTS.md"), source: "global" },
+      { path: join(workspace, "CLAUDE.md"), source: "ancestor" },
+      { path: join(workspace, "AGENTS.md"), source: "ancestor" },
+      { path: join(workspace, "packages", "AGENTS.md"), source: "ancestor" },
+      { path: join(cwd, "CLAUDE.md"), source: "ancestor" },
+    ]);
+  });
+
+  test("adds target nested project instructions without blocking outside-cwd targets", async () => {
+    const workspace = createTestWorkspace("resource-loader-target-instructions");
+    const globalRoot = mkdtempSync(join(tmpdir(), "brewva-resource-loader-target-"));
+    const agentDir = join(globalRoot, "agent");
+    mkdirSync(agentDir, { recursive: true });
+
+    writeFile(join(workspace, "AGENTS.md"), "Root Agents\n");
+    writeFile(join(workspace, "packages", "CLAUDE.md"), "Packages Claude\n");
+    writeFile(join(workspace, "packages", "app", "AGENTS.md"), "App Agents\n");
+
+    const loader = await createHostedResourceLoader({
+      cwd: workspace,
+      agentDir,
+    });
+
+    expect(
+      loader.getProjectInstructionsForTarget("packages/app/src/index.ts").files.map((file) => ({
+        path: file.path,
+        source: file.source,
+      })),
+    ).toEqual([
+      { path: join(workspace, "AGENTS.md"), source: "ancestor" },
+      { path: join(workspace, "packages", "CLAUDE.md"), source: "target" },
+      { path: join(workspace, "packages", "app", "AGENTS.md"), source: "target" },
+    ]);
+
+    const outside = loader.getProjectInstructionsForTarget(
+      join(tmpdir(), "brewva-outside-target.ts"),
+    );
+    expect(outside.files.map((file) => file.path)).toEqual([join(workspace, "AGENTS.md")]);
+    expect(outside.diagnostics).toContainEqual({
+      path: join(tmpdir(), "brewva-outside-target.ts"),
+      message: "target_path_outside_cwd",
+    });
+  });
 });

@@ -8,7 +8,7 @@ import {
 } from "@brewva/brewva-capabilities";
 import type { ProtocolRecord, ToolActionClass } from "@brewva/brewva-runtime/protocol";
 import {
-  formatBrewvaCapabilitySelectionForPrompt,
+  buildBrewvaCapabilitySelectionPromptBlock,
   type BrewvaSystemPromptCapabilitySelection,
 } from "@brewva/brewva-substrate/prompt";
 import { recordRuntimeToolCapabilitySelection } from "../runtime-ports.js";
@@ -372,5 +372,5 @@ export function formatCapabilitySelectionSection(input: {
         ? input.receipt.policy_decisions.join("; ")
         : undefined,
   };
-  return formatBrewvaCapabilitySelectionForPrompt(selection);
+  return buildBrewvaCapabilitySelectionPromptBlock(selection)?.text ?? "";
 }

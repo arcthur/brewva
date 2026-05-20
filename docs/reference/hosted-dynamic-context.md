@@ -2,6 +2,8 @@
 
 Implementation anchors:
 
+- `packages/brewva-substrate/src/prompt/system-prompt.ts`
+- `packages/brewva-substrate/src/resources/resource-loader.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 - `packages/brewva-gateway/src/context/context-bundle.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/hosted-context-blocks.ts`
@@ -37,12 +39,17 @@ It does not decide:
 
 A hosted turn has one stable request shape:
 
-- stable system prompt plus `[Brewva Context Contract]`
-- an optional `Available Brewva Skills` section appended by the hosted
-  skill-selection lifecycle when SkillCards are available
+- rendered `BrewvaSystemPromptDocument` blocks in canonical order: identity,
+  operating contract, communication contract, tool policy, custom
+  instructions, project instructions, capability selection, and environment
+- an optional turn-scoped project instruction block appended from explicit
+  prompt paths; missing or outside-cwd target instructions are advisory and do
+  not block read, edit, or write tools
+- an optional `Available Brewva SkillCards` shortlist appended by the hosted
+  skill-selection lifecycle when deterministic SkillCard candidates exist
 - a hidden, context-excluded `brewva-skill-selection` custom message carrying
-  explicit `$skill` mentions, selection id, and render metadata for active-turn
-  traceability
+  explicit `$skill` mentions, candidate/render/omission counts, selection id,
+  rendered reasons, and render metadata for active-turn traceability
 - an optional `[CapabilitySelection]` section appended by the hosted tool
   surface when deterministic capability selection produces selected,
   forbidden, or policy evidence
@@ -50,9 +57,10 @@ A hosted turn has one stable request shape:
 - one hidden dynamic tail rendered by `createHostedWorkbenchContextController`
 - ordinary conversation messages and tool results
 
-`Available Brewva Skills` and `[CapabilitySelection]` are not part of the
-dynamic-tail renderer. `Available Brewva Skills` is an advisory prompt-context
-view backed by `skill_selection_recorded` and a hidden trace-only message.
+`Available Brewva SkillCards` and `[CapabilitySelection]` are not part of the
+dynamic-tail renderer. `Available Brewva SkillCards` is an advisory
+prompt-context view backed by `skill_selection_recorded` and a hidden
+trace-only message.
 `[CapabilitySelection]` is a system-prompt authority view backed by a durable
 capability-selection receipt. The two sections are physically separate so
 SkillCards cannot grant tools, accounts, budgets, or runtime authority.

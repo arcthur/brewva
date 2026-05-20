@@ -41,6 +41,23 @@ must be compatible with the selected role. Maintainer diagnostics use
 Each role has a distinct managed-tool set. The runtime does not rely only on
 prompt posture to separate navigator, explorer, and librarian behavior.
 
+## Cognitive Routing
+
+Delegation is runtime orchestration, not the first search modality. For direct
+path, symbol, or exact-string lookup, the parent should use local read/search
+tools first. Delegate when a bounded role materially improves the work:
+
+- `navigator`: task-local evidence collection
+- `explorer`: cross-module judgment, diagnosis, design, strategy, or review
+- `librarian`: institutional knowledge, history, conventions, and prior art
+- `worker`: isolated implementation in a patch-producing workspace
+- `verifier`: non-trivial implementation checks and adversarial verification
+
+This routing guidance does not auto-spawn subagents and does not change the
+public schema. `subagent_run` and `subagent_fanout` remain explicit tool calls
+whose envelopes, result modes, receipts, and adoption boundaries are validated
+by the runtime.
+
 ## Adoption
 
 Patch-producing workers return artifacts for parent-controlled adoption. Verifier
