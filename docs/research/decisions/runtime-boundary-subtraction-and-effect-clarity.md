@@ -15,9 +15,9 @@
 - Code anchors:
   - `packages/brewva-runtime/src/runtime/runtime.ts`
   - `packages/brewva-runtime/src/runtime/runtime-api.ts`
-  - `packages/brewva-runtime/src/runtime/runtime-surfaces.ts`
+  - `packages/brewva-runtime/src/internal/runtime-ops.ts`
   - `packages/brewva-runtime/src/runtime/wiring.ts`
-  - `packages/brewva-runtime/src/domain/events/iteration-controller.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/tape/event-ops/iteration-controller.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`
   - `packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.ts`
   - `packages/brewva-substrate/src/tools/protocol.ts`
@@ -26,16 +26,26 @@
   - `test/fitness/runtime-promoted-architecture.fitness.test.ts`
   - `test/fitness/gateway/hosted-lane-layout.fitness.test.ts`
 
+## Supersession Note
+
+This decision is historical. The four-port runtime cutover removed the public
+`authority` / `inspect` root and replaced gateway-owned turn recovery with
+`runtime.turn(...)` plus canonical tape projections. Do not use this document as
+implementation guidance.
+
 ## Decision Summary
 
-- Runtime authority is commit-bearing, runtime inspection is read-only, and hosted/operator mechanisms are repo-owned ports rather than public root fields.
-- `BrewvaRuntimeRoot` exposes only `identity`, readonly `config`, `authority`, and `inspect`; `maintain`, root extension access, hidden state, and identity scalar root fields are removed.
-- Runtime domains must own replay-bearing commitments or externally consumed runtime surface vocabulary; empty or mechanism-only domains are deleted or rehomed under their real owner.
-- Runtime surface assembly is explicit. Surviving domains expose direct surface constructors and `runtime-surfaces.ts` assembles ordered `authority`, `inspect`, and `operator` objects without descriptor glue.
-- Runtime composition is a flat wiring root organized by identity, durability, eager commitment services, lazy mechanisms, ports, and operator/internal services.
-- Hosted context materialization plans ordered effect commands before committing them, and the plan order is a tested invariant.
-- Tool protocol vocabulary is owned by `@brewva/brewva-substrate/tools`; managed tool runtime capabilities are single-sourced from the registry.
-- Runtime reference inventory enforces the public surface budget, including the separate inspection-method budget.
+- Runtime authority and inspection were previously split into semantic root
+  surfaces. The four-port runtime cutover supersedes that design with canonical
+  Tape projections, Kernel tool transactions, Model attention, and
+  `runtime.turn(...)`.
+- The old `runtime-ops.ts` compatibility plane remains a quarantined internal
+  adapter while repo-owned consumers migrate, but it is not a public root or a
+  model for new implementation.
+- Hosted context and gateway transport code must call `runtime.turn(...)` and
+  consume Tape projections instead of owning turn truth or recovery policy.
+- Tool protocol vocabulary remains owned by `@brewva/brewva-substrate/tools`;
+  managed tool runtime capabilities are single-sourced from the registry.
 
 ## Supersedes
 
@@ -47,3 +57,4 @@
 
 - `docs/research/decisions/runtime-factory-ports.md`
 - `docs/research/decisions/hosted-materialization-plan.md`
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

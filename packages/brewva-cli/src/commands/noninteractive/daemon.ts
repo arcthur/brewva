@@ -1,33 +1,36 @@
 import { join } from "node:path";
-import {
-  BrewvaEffect,
-  startScopedSchedule,
-  type ScopedScheduleHandle,
-} from "@brewva/brewva-effect";
+import { startScopedSchedule, type ScopedScheduleHandle } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
   SessionSupervisor,
   executeScheduleIntentRun,
   removePidRecord,
   writePidRecord,
 } from "@brewva/brewva-gateway";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import {
+  createRecoveryWalStore,
+  createSchedulerService,
+  type SchedulerService,
+} from "@brewva/brewva-gateway/daemon";
+import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
+import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import {
   SCHEDULE_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
-import {
-  createRecoveryWalStore,
-  createSchedulerService,
-  type SchedulerService,
-} from "@brewva/brewva-runtime/recovery";
-import { parseScheduleIntentEvent } from "@brewva/brewva-runtime/schedule";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
+import { parseScheduleIntentEvent } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import { differenceInSeconds, formatISO } from "date-fns";
+import {
+  getCliRuntimeClaimState,
+  getCliRuntimeTaskState,
+  listCliRuntimeEventSessionIds,
+  listCliRuntimeEvents,
+  subscribeCliRuntimeEvents,
+} from "../../runtime/runtime-ports.js";
 
 export interface RunDaemonOptions {
   cwd?: string;
@@ -36,7 +39,7 @@ export interface RunDaemonOptions {
   agentId?: string;
   managedToolMode: ManagedToolMode;
   verbose: boolean;
-  onRuntimeReady?: (runtime: BrewvaHostedRuntimePort) => void;
+  onRuntimeReady?: (runtime: HostedRuntimeAdapterPort) => void;
 }
 
 interface DaemonLogger {
@@ -72,12 +75,11 @@ function createDaemonLogger(verbose: boolean): DaemonLogger {
 }
 
 export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
-  const runtime = createBrewvaRuntime({
+  const runtime = createHostedRuntimeAdapter({
     cwd: parsed.cwd,
     configPath: parsed.configPath,
     agentId: parsed.agentId,
-    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
-  }).hosted;
+  });
   parsed.onRuntimeReady?.(runtime);
 
   if (!runtime.config.schedule.enabled) {
@@ -158,7 +160,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     summaryWindow.childFinished = 0;
     summaryWindow.childFailed = 0;
   };
-  const unsubscribeEvents = runtime.inspect.events.records.subscribe((event) => {
+  const unsubscribeEvents = subscribeCliRuntimeEvents(runtime, (event) => {
     if (event.type === SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE) {
       summaryWindow.deferredIntents += 1;
       return;
@@ -216,12 +218,12 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
       runtime: {
         workspaceRoot: runtime.identity.workspaceRoot,
         scheduleConfig: runtime.config.schedule,
-        listSessionIds: () => runtime.inspect.events.log.listSessionIds(),
-        listEvents: (sessionId, query) => runtime.inspect.events.records.list(sessionId, query),
-        recordEvent: (input) => runtime.extensions.hosted.events.record(input),
-        subscribeEvents: (listener) => runtime.inspect.events.records.subscribe(listener),
-        getClaimState: (sessionId) => runtime.inspect.claim.state.get(sessionId),
-        getTaskState: (sessionId) => runtime.inspect.task.state.get(sessionId),
+        listSessionIds: () => listCliRuntimeEventSessionIds(runtime),
+        listEvents: (sessionId, query) => listCliRuntimeEvents(runtime, sessionId, query),
+        scheduleEvents: runtime.ops.schedule.events,
+        subscribeEvents: (listener) => subscribeCliRuntimeEvents(runtime, listener),
+        getClaimState: (sessionId) => getCliRuntimeClaimState(runtime, sessionId),
+        getTaskState: (sessionId) => getCliRuntimeTaskState(runtime, sessionId),
         recoveryWal: {
           appendPending: (envelope, source, options) =>
             schedulerIngress.appendPending(envelope, source, options),

@@ -46,7 +46,7 @@ Worker runtimes force these paths per agent:
 
 - `ledger.path -> .brewva/agents/<agentId>/state/ledger/evidence.jsonl`
 - `projection.dir -> .brewva/agents/<agentId>/state/projection`
-- `infrastructure.events.dir -> .brewva/agents/<agentId>/state/events`
+- `tape.dir -> .brewva/agents/<agentId>/state/tape`
 - `infrastructure.recoveryWal.dir -> .brewva/agents/<agentId>/state/recovery-wal` (WAL-backed recovery mechanism)
 - `schedule.projectionPath -> .brewva/agents/<agentId>/state/schedule/intents.jsonl`
 - `schedule.enabled -> false`

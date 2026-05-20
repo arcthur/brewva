@@ -1,4 +1,4 @@
-import { normalizeChannelId, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { normalizeChannelId, type TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 
 export type RoutingScopeStrategy = "chat" | "thread";
 

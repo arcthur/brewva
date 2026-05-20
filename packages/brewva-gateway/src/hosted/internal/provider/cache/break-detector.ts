@@ -5,7 +5,7 @@ import type {
   ExpectedProviderCacheBreak,
   ProviderCacheBreakObservation,
   ProviderCacheRenderState,
-} from "@brewva/brewva-runtime/context";
+} from "@brewva/brewva-runtime/protocol";
 import { redactedStableJsonSha256Hex, redactedStableJsonStringify } from "@brewva/brewva-std/hash";
 import { SourceTracker } from "./source-tracker.js";
 

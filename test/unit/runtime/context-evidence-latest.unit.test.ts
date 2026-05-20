@@ -1,17 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_BREWVA_CONFIG, createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("context evidence latest inspect surface", () => {
   test("keeps only lossy in-memory latest evidence per kind", () => {
     const workspace = createTestWorkspace("context-evidence-latest");
     const sessionId = "session-evidence";
-    const firstRuntime = createBrewvaRuntime({
+    const firstRuntime = createRuntimeInstanceFixture({
       cwd: workspace,
       config: DEFAULT_BREWVA_CONFIG,
-    }).hosted;
+    });
 
-    firstRuntime.operator.context.evidence.append(sessionId, {
+    firstRuntime.ops.context.evidence.append(sessionId, {
       kind: "prompt_stability",
       turn: 1,
       timestamp: 10,
@@ -23,7 +24,7 @@ describe("context evidence latest inspect surface", () => {
         stableTail: true,
       },
     });
-    firstRuntime.operator.context.evidence.append(sessionId, {
+    firstRuntime.ops.context.evidence.append(sessionId, {
       kind: "prompt_stability",
       turn: 2,
       timestamp: 20,
@@ -36,7 +37,7 @@ describe("context evidence latest inspect surface", () => {
       },
     });
 
-    expect(firstRuntime.inspect.context.evidence.latest(sessionId, "prompt_stability")).toEqual({
+    expect(firstRuntime.ops.context.evidence.latest(sessionId, "prompt_stability")).toEqual({
       kind: "prompt_stability",
       turn: 2,
       timestamp: 20,
@@ -49,13 +50,13 @@ describe("context evidence latest inspect surface", () => {
       },
     });
 
-    const restartedRuntime = createBrewvaRuntime({
+    const restartedRuntime = createRuntimeInstanceFixture({
       cwd: workspace,
       config: DEFAULT_BREWVA_CONFIG,
-    }).hosted;
+    });
 
     expect({
-      latest: restartedRuntime.inspect.context.evidence.latest(sessionId, "prompt_stability"),
+      latest: restartedRuntime.ops.context.evidence.latest(sessionId, "prompt_stability"),
     }).toEqual({ latest: undefined });
   });
 });

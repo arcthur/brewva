@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   DEFAULT_TELEGRAM_CHANNEL_NAME,
   SUPPORTED_CHANNELS,
@@ -7,39 +10,8 @@ import {
   collectPromptTurnOutputs,
   resolveSupportedChannel,
 } from "@brewva/brewva-gateway/channels";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
-import { createRuntimeFixture } from "../../helpers/runtime.js";
-
-type SessionLike = {
-  subscribe: (listener: (event: BrewvaPromptSessionEvent) => void) => () => void;
-  prompt: (
-    parts: readonly BrewvaPromptContentPart[],
-    options?: { streamingBehavior?: "followUp" | "queue" },
-  ) => Promise<void>;
-  waitForIdle: () => Promise<void>;
-};
-
-function createSessionMock(eventsToEmit: BrewvaPromptSessionEvent[]): SessionLike {
-  let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
-  return {
-    subscribe(next) {
-      listener = next;
-      return () => {
-        listener = undefined;
-      };
-    },
-    async prompt(_parts: readonly BrewvaPromptContentPart[]): Promise<void> {
-      for (const event of eventsToEmit) {
-        listener?.(event);
-      }
-    },
-    async waitForIdle(): Promise<void> {
-      return;
-    },
-  };
-}
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 
 describe("channel mode prompt output collector", () => {
   test("normalizes supported channels", () => {
@@ -69,162 +41,30 @@ describe("channel mode prompt output collector", () => {
     });
   });
 
-  test("aggregates assistant and tool outputs from prompt execution", async () => {
-    const runtime = createRuntimeFixture();
-    const sessionId = "channel-output-session";
-    const session = createSessionMock([
-      {
-        type: "tool_execution_start",
-        toolCallId: "tc-1",
-        toolName: "exec",
-      } as BrewvaPromptSessionEvent,
-      {
-        type: "tool_execution_end",
-        toolCallId: "tc-1",
-        toolName: "exec",
-        result: {
-          content: [{ type: "text", text: "done" }],
-        },
-        isError: false,
-      } as BrewvaPromptSessionEvent,
-      {
-        type: "message_end",
-        message: {
-          role: "assistant",
-          content: [{ type: "text", text: "final answer" }],
-        },
-      } as BrewvaPromptSessionEvent,
-    ]);
-
-    const outputs = await collectPromptTurnOutputs(
-      session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
-      "hello",
-      {
-        runtime,
-        sessionId,
-        turnId: "turn-channel-output",
-      },
-    );
-
-    expect(outputs.assistantText).toBe("final answer");
-    expect(outputs.toolOutputs).toHaveLength(1);
-  });
-
-  test("marks explicit fail verdict tool outputs as failed even when the channel succeeds", async () => {
-    const runtime = createRuntimeFixture();
-    const sessionId = "channel-fail-verdict-session";
-    const session = createSessionMock([
-      {
-        type: "tool_execution_start",
-        toolCallId: "tc-2",
-        toolName: "exec",
-      } as BrewvaPromptSessionEvent,
-      {
-        type: "tool_execution_end",
-        toolCallId: "tc-2",
-        toolName: "exec",
-        result: {
-          content: [{ type: "text", text: "FAIL src/foo.test.ts" }],
-          details: { verdict: "fail" },
-        },
-        isError: false,
-      } as BrewvaPromptSessionEvent,
-    ]);
-
-    const outputs = await collectPromptTurnOutputs(
-      session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
-      "hello",
-      {
-        runtime,
-        sessionId,
-        turnId: "turn-channel-fail-verdict",
-      },
-    );
-
-    expect(outputs.toolOutputs).toHaveLength(1);
-    expect(outputs.toolOutputs[0]?.text).toContain("Tool exec (tc-2) failed");
-  });
-
-  test("resumes channel prompt collection after compaction through the hosted thread loop", async () => {
-    const listeners = new Set<
-      (event: { id: string; sessionId: string; type: string; timestamp: number }) => void
-    >();
-    const sentMessages: string[] = [];
-    let sessionListener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
-    const session: SessionLike = {
-      subscribe(next) {
-        sessionListener = next;
-        return () => {
-          sessionListener = undefined;
-        };
-      },
-      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
-        const content = parts
-          .map((part) =>
-            part.type === "text"
-              ? part.text
-              : part.type === "file"
-                ? (part.displayText ?? part.uri)
-                : "",
-          )
-          .join("");
-        sentMessages.push(content);
-        if (sentMessages.length === 1) {
-          for (const listener of listeners) {
-            listener({
-              id: "evt-1",
-              sessionId: "agent-session",
-              type: "session_compact",
-              timestamp: Date.now(),
-            });
-          }
-          return;
-        }
-
-        sessionListener?.({
-          type: "message_end",
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: "telegram resumed" }],
-          },
-        } as BrewvaPromptSessionEvent);
-      },
-      async waitForIdle(): Promise<void> {
-        return;
+  test("fails fast when the channel session is not runtime-turn-compatible", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-channel-incompatible-")),
+    });
+    const session = {
+      sessionManager: {
+        getSessionId: () => "agent-session",
       },
     };
 
-    const runtime = createRuntimeFixture();
-    Object.assign(runtime.inspect.events.records, {
-      subscribe(
-        listener: (event: {
-          id: string;
-          sessionId: string;
-          type: string;
-          timestamp: number;
-        }) => void,
-      ) {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      },
-    });
-
-    const outputs = await collectPromptTurnOutputs(
-      session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
-      "hello",
-      {
-        runtime,
-        sessionId: "agent-session",
-        turnId: "turn-telegram-1",
-      },
-    );
-
-    expect(sentMessages).toHaveLength(2);
-    expect(sentMessages[0]).toBe("hello");
-    expect(sentMessages[1]).toContain("Context compaction completed");
-    expect(outputs.assistantText).toBe("telegram resumed");
+    try {
+      await collectPromptTurnOutputs(
+        session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
+        "hello",
+        {
+          runtime: runtime as never,
+          sessionId: "agent-session",
+          turnId: "turn-telegram-1",
+        },
+      );
+      throw new Error("expected_channel_thread_loop_failure");
+    } catch (error) {
+      expect(String(error)).toContain("channel_thread_loop_failed");
+    }
   });
 
   test("builds telegram dispatch prompt with channel policy", () => {

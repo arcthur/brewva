@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { normalizeChannelId } from "@brewva/brewva-runtime/channels";
+import { normalizeChannelId } from "@brewva/brewva-runtime/protocol";
 import { isRecord } from "@brewva/brewva-std/unknown";
 
 const BINDING_SCHEMA = "brewva.conversation-bindings.v1";

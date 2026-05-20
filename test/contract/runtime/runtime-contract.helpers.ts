@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { createTestConfig, type DeepPartial } from "../../fixtures/config.js";
@@ -16,27 +16,6 @@ export function writeRuntimeContractConfig(workspace: string, config: BrewvaConf
 
 export function createRuntimeContractConfig(overrides: DeepPartial<BrewvaConfig>): BrewvaConfig {
   return createTestConfig(overrides);
-}
-
-export function findRuntimeContractEventFilePath(
-  workspace: string,
-  eventsDir: string,
-  sessionId: string,
-): string {
-  const root = join(workspace, eventsDir);
-  const files = readdirSync(root).filter((name) => name.endsWith(".jsonl"));
-  for (const name of files) {
-    const filePath = join(root, name);
-    try {
-      const content = readFileSync(filePath, "utf8");
-      if (content.includes(`"sessionId":"${sessionId}"`)) {
-        return filePath;
-      }
-    } catch {
-      continue;
-    }
-  }
-  throw new Error(`event_file_not_found:${sessionId}`);
 }
 
 export function removeRuntimeContractPatchSnapshot(input: {

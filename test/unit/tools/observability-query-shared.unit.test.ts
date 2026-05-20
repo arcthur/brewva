@@ -5,7 +5,7 @@ describe("observability shared query", () => {
   test("single-type queries prefilter at the event store boundary", () => {
     const listCalls: Array<{ sessionId: string; query?: { type?: string } }> = [];
     const runtime = {
-      inspect: {
+      capabilities: {
         events: {
           records: {
             list(sessionId: string, query?: { type?: string }) {

@@ -11,6 +11,7 @@ function readRepoFile(relativePath: string): string {
 function listSourceFiles(relativeDir: string): string[] {
   const absoluteDir = resolve(repoRoot, relativeDir);
   const files: string[] = [];
+  if (!existsSync(absoluteDir)) return files;
 
   for (const entry of readdirSync(absoluteDir)) {
     const absolutePath = resolve(absoluteDir, entry);
@@ -29,10 +30,10 @@ function listSourceFiles(relativeDir: string): string[] {
 }
 
 describe("runtime workflow derivation ownership", () => {
-  test("runtime projection subpath exports workflow read models without widening the root", () => {
+  test("runtime contracts subpath owns workflow helpers without restoring read models", () => {
     const indexSource = readRepoFile("packages/brewva-runtime/src/index.ts");
     const publicIndexSource = readRepoFile("packages/brewva-runtime/src/public/index.ts");
-    const projectionSource = readRepoFile("packages/brewva-runtime/src/projection.ts");
+    const contractsSource = readRepoFile("packages/brewva-runtime/src/protocol/body.ts");
     const packageManifestSource = readRepoFile("packages/brewva-runtime/package.json");
 
     expect(
@@ -44,11 +45,11 @@ describe("runtime workflow derivation ownership", () => {
     expect(indexSource.trim()).toBe('export * from "./public/index.js";');
     expect(publicIndexSource).not.toContain("./workflow/derivation.js");
     expect(publicIndexSource).not.toContain("../domain/projection/workflow/");
-    expect(packageManifestSource).toContain('"./projection"');
-    expect(projectionSource).toContain("./domain/projection/workflow/types.js");
-    expect(projectionSource).toContain("./domain/projection/workflow/artifact-derivation.js");
-    expect(projectionSource).toContain("./domain/projection/workflow/status-derivation.js");
-    expect(projectionSource).toContain("./domain/projection/workflow/workspace-revision.js");
+    expect(packageManifestSource).not.toContain('"./projection"');
+    expect(contractsSource).not.toContain("./read-models/");
+    expect(contractsSource).toContain("export function deriveWorkflowArtifacts");
+    expect(contractsSource).toContain("export function deriveWorkflowStatus");
+    expect(contractsSource).toContain("export function resolveWorkspaceRevision");
     expect(publicIndexSource).not.toContain(
       'export * from "../../packages/brewva-runtime/src/domain/workflow/artifact-derivation.js"',
     );

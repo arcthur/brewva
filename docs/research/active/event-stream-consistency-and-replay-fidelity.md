@@ -39,14 +39,14 @@ This note does not reopen:
 
 - Runtime core wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Event stream hook: `packages/brewva-gateway/src/hosted/internal/context/evidence/event-stream.ts`
-- Event store and query path: `packages/brewva-runtime/src/events/store.ts`
+- Event record read model: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 
 ## Validation Signals
 
 - Replay correctness remains covered in
-  `test/contract/runtime/turn-replay-engine-core.contract.test.ts`
+  `test/contract/runtime/runtime-turn-loop.contract.test.ts`
 - Event query behavior remains covered in
-  `test/contract/runtime/tape-event-store.contract.test.ts`
+  `test/contract/runtime/canonical-tape.contract.test.ts`
 
 ## Promotion Criteria
 

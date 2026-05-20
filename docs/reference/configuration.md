@@ -107,7 +107,7 @@ that actually route through the BoxLite-backed box.
 
 Provider token-cache policy is a hosted-session setting rather than a
 top-level `BrewvaConfig` key. Hosted settings may pass normalized cache policy
-through gateway, substrate turn loop, and provider-core.
+through the gateway adapter, runtime-owned turn loop, and provider-core.
 
 Supported hosted cache policy fields are retention, write mode, scope, and
 reason. Provider-specific cache details remain in
@@ -132,14 +132,21 @@ the child process.
 Hosted tool names are generated as `mcp__{serverId}__{toolName}` and bounded to
 provider-safe tool-name syntax before they enter the hosted tool surface.
 
-## Schedule, Parallel, Channels, Infrastructure
+## Tape, Schedule, Parallel, Channels, Infrastructure
+
+- `tape.enabled` controls four-port canonical tape persistence. It defaults to
+  `true` and is independent of adapter-local telemetry.
+- `tape.dir` controls the four-port canonical tape directory. The default is
+  `.brewva/tape`.
+- `tape.checkpointIntervalEntries` controls the checkpoint cadence target for
+  tape-owned baseline construction.
 
 - `schedule` controls intent projection, leases, recovery catch-up, and the
   optional self-improve recurring policy.
 - `parallel` controls runtime parallelism ceilings.
 - `channels` controls external orchestration limits and access control.
-- `infrastructure` controls event storage, context-budget thresholds,
-  request-shaping policy, and cost/recovery infrastructure.
+- `infrastructure` controls context-budget thresholds, request-shaping policy,
+  and cost/recovery infrastructure.
 
 ## Context Budget Compaction
 

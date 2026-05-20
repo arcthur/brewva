@@ -1,4 +1,3 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { InternalHostPlugin, BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaModelCatalog,
@@ -18,6 +17,7 @@ import {
 } from "@brewva/brewva-substrate/tools";
 import type { ProviderConnectionSeams } from "../provider/connection-types.js";
 import type { HostedSessionLogger } from "../shared/logger.js";
+import type { HostedRuntimeAdapterPort } from "./runtime-ports.js";
 import {
   createHostedSessionRuntimeFactory,
   createHostedSessionRuntimeSettings,
@@ -71,7 +71,7 @@ export interface HostedSessionServices {
 export interface CreateHostedSessionRuntimeOptions {
   cwd: string;
   settings: HostedSessionSettings;
-  runtime?: BrewvaHostedRuntimePort;
+  runtime?: HostedRuntimeAdapterPort;
   extensions?: readonly InternalHostPlugin[];
   requestedModel?: BrewvaRegisteredModel;
   requestedThinkingLevel?: string;

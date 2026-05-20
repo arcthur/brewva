@@ -30,7 +30,7 @@ recovery, and bounded execution.
    parallelism remain bounded by configured policy.
 8. Config immutability:
    `runtime.config` is deep-readonly after construction; routing overrides are
-   applied before runtime assembly.
+   applied before runtime construction.
 9. Projection integrity:
    working projection is rebuildable from tape/workspace state and never
    replaces event tape as truth.
@@ -80,16 +80,16 @@ recovery, and bounded execution.
 ## Implementation Anchors
 
 - `packages/brewva-runtime/src/runtime/runtime.ts`
-- `packages/brewva-runtime/src/events/store.ts`
-- `packages/brewva-runtime/src/domain/tape/replay-engine.ts`
-- `packages/brewva-runtime/src/domain/tools/tool-gate.ts`
-- `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
-- `packages/brewva-runtime/src/domain/governance/effect-authority-manifest.ts`
-- `packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts`
+- `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- `packages/brewva-runtime/src/runtime/kernel/policy/tool-decision.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`
 - `packages/brewva-effect/src/index.ts`
 - `packages/brewva-effect/src/runtime-spine.ts`
 - `packages/brewva-effect/src/schedules.ts`
-- `packages/brewva-substrate/src/turn/effect-runtime.ts`
+- runtime turn execution: `packages/brewva-runtime/src/runtime/engine/turn.ts`
 - `packages/brewva-provider-core/src/stream/run-provider-stream.ts`
 
 ## Related Docs

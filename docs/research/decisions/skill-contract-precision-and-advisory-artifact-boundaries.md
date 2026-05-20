@@ -15,7 +15,7 @@
 - Code anchors:
   - `test/contract/tools/tools-skill-complete.contract.test.ts`
   - `test/unit/runtime/skill-validation-pipeline.unit.test.ts`
-  - `packages/brewva-runtime/src/domain/projection/workflow/artifact-derivation.ts`
+  - `packages/brewva-runtime/src/read-models/projection/workflow/artifact-derivation.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/completion-guard.ts`
 
 ## Decision Summary
@@ -28,5 +28,6 @@
 
 ## Superseded by
 
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`
 - `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
 - `docs/research/decisions/capability-selection-and-authority-isolation.md`

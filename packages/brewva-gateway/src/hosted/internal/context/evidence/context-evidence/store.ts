@@ -5,7 +5,7 @@ import type {
   PromptStabilityState,
   ProviderCacheObservationState,
   TransientReductionState,
-} from "@brewva/brewva-runtime/context";
+} from "@brewva/brewva-runtime/protocol";
 import {
   CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
   type ContextEvidenceArtifactRef,
@@ -14,14 +14,14 @@ import {
 } from "./types.js";
 
 const DEFAULT_CONTEXT_EVIDENCE_DIR = ".orchestrator/context-evidence";
-const SESSION_FILE_PREFIX = "sess_";
+const SESSION_FILE_PREFIX = "session-";
 
 const queuedSamplesByPath = new Map<string, ContextEvidenceSample[]>();
 const flushingSamplesByPath = new Map<string, ContextEvidenceSample[]>();
 const flushPromisesByPath = new Map<string, Promise<void>>();
 
 function encodeSessionId(sessionId: string): string {
-  return Buffer.from(sessionId, "utf8").toString("base64url");
+  return encodeURIComponent(sessionId);
 }
 
 export function normalizeRelativePath(value: string): string {

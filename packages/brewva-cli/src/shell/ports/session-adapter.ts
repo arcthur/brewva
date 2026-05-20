@@ -1,12 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
-import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-runtime/reasoning";
-import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-runtime/session";
-import type { SessionRewindDivergenceNote } from "@brewva/brewva-runtime/session";
+import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-runtime/protocol";
+import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-runtime/protocol";
+import type { SessionRewindDivergenceNote } from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
 } from "@brewva/brewva-substrate/session";
+import {
+  getCliRuntimeLineageTree,
+  getCliRuntimeRewindState,
+  listCliRuntimeRewindTargets,
+  recordCliRuntimeLineageSelection,
+  recordCliRuntimeRewindCheckpoint,
+  redoCliRuntimeSession,
+  rewindCliRuntimeSession,
+} from "../../runtime/runtime-ports.js";
 import type {
   CliShellSessionBundle,
   SessionLineageStatusView,
@@ -68,7 +77,7 @@ async function ensureSessionInitialPersistence(session: unknown): Promise<void> 
 function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusView {
   const sessionId = bundle.session.sessionManager.getSessionId();
   try {
-    const tree = bundle.runtime.inspect.session.lineage.getTree(sessionId);
+    const tree = getCliRuntimeLineageTree(bundle.runtime, sessionId);
     const lineageNodeId =
       readSessionManagerLineageNodeId(bundle.session.sessionManager) ??
       tree.selectedByChannel["cli"] ??
@@ -154,9 +163,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return readLineageStatus(bundle);
     },
     getLineageTree() {
-      return bundle.runtime.inspect.session.lineage.getTree(
-        bundle.session.sessionManager.getSessionId(),
-      );
+      return getCliRuntimeLineageTree(bundle.runtime, bundle.session.sessionManager.getSessionId());
     },
     resolveLineageLeafEntryId(lineageNodeId) {
       const resolveLineageLeafEntryId = readSessionManagerResolveLineageLeafEntryId(
@@ -192,7 +199,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         }
         throw error;
       }
-      bundle.runtime.authority.session.lineage.recordSelection(sessionId, {
+      recordCliRuntimeLineageSelection(bundle.runtime, sessionId, {
         selectionId: `cli:${randomUUID()}`,
         channelId: input.channelId ?? "cli",
         lineageNodeId: input.lineageNodeId,
@@ -340,7 +347,8 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     },
     async recordRewindCheckpoint(input) {
       await ensureSessionInitialPersistence(bundle.session);
-      bundle.runtime.authority.session.rewind.recordCheckpoint(
+      recordCliRuntimeRewindCheckpoint(
+        bundle.runtime,
         bundle.session.sessionManager.getSessionId(),
         {
           ...input,
@@ -355,7 +363,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       if (typeof bundle.session.replaceMessages !== "function") {
         throw new Error("Session rewind requires session.replaceMessages().");
       }
-      const result = bundle.runtime.authority.session.rewind.rewind(sessionId, {
+      const result = rewindCliRuntimeSession(bundle.runtime, sessionId, {
         ...input,
         returnLeafEntryId,
       });
@@ -399,7 +407,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       if (typeof bundle.session.replaceMessages !== "function") {
         throw new Error("Session redo requires session.replaceMessages().");
       }
-      const result = bundle.runtime.authority.session.rewind.redo(sessionId, input);
+      const result = redoCliRuntimeSession(bundle.runtime, sessionId, input);
       if (!result.ok) {
         return result;
       }
@@ -421,12 +429,11 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return result;
     },
     getRewindState() {
-      return bundle.runtime.inspect.session.rewind.getState(
-        bundle.session.sessionManager.getSessionId(),
-      );
+      return getCliRuntimeRewindState(bundle.runtime, bundle.session.sessionManager.getSessionId());
     },
     listRewindTargets() {
-      return bundle.runtime.inspect.session.rewind.listTargets(
+      return listCliRuntimeRewindTargets(
+        bundle.runtime,
         bundle.session.sessionManager.getSessionId(),
       );
     },

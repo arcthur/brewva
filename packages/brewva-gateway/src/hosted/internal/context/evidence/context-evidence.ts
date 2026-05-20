@@ -1,6 +1,12 @@
 import { writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import type { BrewvaHostedRuntimePort, BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
+import {
+  getRuntimeContextEvidenceLatest,
+  getRuntimeCostSummary,
+  listRuntimeEventSessionIds,
+  queryRuntimeEvents,
+  type HostedRuntimeAdapterPort,
+} from "../../session/runtime-ports.js";
 import {
   ensureParentDirectory,
   normalizeRelativePath,
@@ -403,7 +409,7 @@ function resolveLatestProviderCacheEvidence(
 }
 
 export function buildContextEvidenceReport(
-  runtime: Pick<BrewvaRuntimeRoot | BrewvaHostedRuntimePort, "identity" | "inspect">,
+  runtime: Pick<HostedRuntimeAdapterPort, "identity" | "ops">,
   options: ContextEvidenceReportOptions = {},
 ): ContextEvidenceReport {
   const longSessionUsefulTurnThreshold = normalizePositiveInteger(
@@ -431,7 +437,7 @@ export function buildContextEvidenceReport(
   });
   const sessionIdSet = new Set<string>(options.sessionIds ?? []);
   if (!options.sessionIds || options.sessionIds.length === 0) {
-    for (const sessionId of runtime.inspect.events.log.listSessionIds()) {
+    for (const sessionId of listRuntimeEventSessionIds(runtime)) {
       sessionIdSet.add(sessionId);
     }
     for (const sample of samples) {
@@ -456,11 +462,11 @@ export function buildContextEvidenceReport(
       );
       const latestPrompt = promptSamples.at(-1) ?? null;
       const latestReduction = reductionSamples.at(-1) ?? null;
-      const compactionEvents = runtime.inspect.events.records.query(sessionId, {
+      const compactionEvents = queryRuntimeEvents(runtime, sessionId, {
         type: "session_compact",
       });
       const compactionGeneration = sumCompactionGenerationMetrics(compactionEvents);
-      const messageEndEvents = runtime.inspect.events.records.query(sessionId, {
+      const messageEndEvents = queryRuntimeEvents(runtime, sessionId, {
         type: "message_end",
       });
       const messageUsage = sumMessageUsageMetrics(messageEndEvents);
@@ -469,7 +475,7 @@ export function buildContextEvidenceReport(
           .map((event) => (typeof event.turn === "number" ? event.turn : null))
           .filter((turn): turn is number => turn !== null)
           .toSorted((left, right) => left - right)[0] ?? null;
-      const cost = runtime.inspect.cost.summary.get(sessionId);
+      const cost = getRuntimeCostSummary(runtime, sessionId);
       const cacheReadReported = messageEndEvents.some(
         (event) => extractReportedCacheFieldFlags(event.payload).cacheReadReported,
       );
@@ -523,7 +529,7 @@ export function buildContextEvidenceReport(
       ).length;
       const latestProviderCacheEvidence = resolveLatestProviderCacheEvidence(
         providerCacheSamples,
-        runtime.inspect.context.evidence.latest(sessionId, "provider_cache_observation"),
+        getRuntimeContextEvidenceLatest(runtime, sessionId, "provider_cache_observation"),
       );
 
       return {

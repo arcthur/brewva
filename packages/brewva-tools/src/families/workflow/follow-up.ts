@@ -5,6 +5,12 @@ import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
+import {
+  cancelScheduleIntent,
+  createScheduleIntent,
+  getScheduleProjectionSnapshot,
+  listScheduleIntents,
+} from "../../runtime-port/schedule.js";
 import { failTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 import {
@@ -162,7 +168,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
               });
             }
 
-            const created = await runtime.authority.schedule.intents.create(sessionId, {
+            const created = await createScheduleIntent(runtime, sessionId, {
               reason,
               intentId: brandedFollowUpIntentId,
               continuityMode: "inherit",
@@ -214,7 +220,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             });
           }
 
-          const created = await runtime.authority.schedule.intents.create(sessionId, {
+          const created = await createScheduleIntent(runtime, sessionId, {
             reason,
             intentId: brandedFollowUpIntentId,
             continuityMode: "inherit",
@@ -254,7 +260,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             });
           }
 
-          const cancelled = await runtime.authority.schedule.intents.cancel(sessionId, {
+          const cancelled = await cancelScheduleIntent(runtime, sessionId, {
             intentId: asBrewvaIntentId(intentId),
             reason: normalizeOptionalString(params.reason),
           });
@@ -270,10 +276,10 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
           });
         }
 
-        const intents = await runtime.inspect.schedule.intents.list({
+        const intents = await listScheduleIntents(runtime, {
           parentSessionId: asBrewvaSessionId(sessionId),
         });
-        const snapshot = await runtime.inspect.schedule.intents.getProjectionSnapshot();
+        const snapshot = await getScheduleProjectionSnapshot(runtime);
         const header = [
           "[FollowUps]",
           `count: ${intents.length}`,

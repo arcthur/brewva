@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaConfig, BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import { resolveBrewvaModelSelection } from "../../../../policy/model-routing/api.js";
-import { toHostedRuntimePort } from "../runtime-ports.js";
+import { createHostedRuntimeAdapter } from "../runtime-ports.js";
+import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
+import { toHostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { HostedSessionSettingsView } from "../session-factory.js";
 import { createHostedSessionFactory, type HostedSessionFactory } from "../session-factory.js";
 import type { CreateHostedSessionOptions } from "./session-assembly.js";
@@ -49,21 +49,20 @@ export function resolveHostedEnvironment(options: CreateHostedSessionOptions): H
 export function createKernelRuntime(
   options: CreateHostedSessionOptions,
   cwd: string,
-): BrewvaHostedRuntimePort {
-  return toHostedRuntimePort(
+): HostedRuntimeAdapterPort {
+  return toHostedRuntimeAdapterPort(
     options.runtime ??
-      createBrewvaRuntime({
+      createHostedRuntimeAdapter({
         cwd,
         configPath: options.configPath,
         config: options.config,
         agentId: options.agentId,
-        governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
       }),
   );
 }
 
 export function assertRoutingScopeCompatibility(
-  _runtime: BrewvaHostedRuntimePort,
+  _runtime: HostedRuntimeAdapterPort,
   _options: CreateHostedSessionOptions,
 ): void {
   return;

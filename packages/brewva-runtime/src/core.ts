@@ -18,3 +18,4 @@ export {
   asBrewvaToolName,
   asBrewvaWalId,
 } from "./core/index.js";
+export { normalizeToolName } from "./utils/tool-name.js";

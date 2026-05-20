@@ -1,16 +1,25 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
   ContextBudgetUsage,
   SessionCompactionCacheImpact,
   SessionCompactionCacheImpactSnapshot,
   SessionCompactionGenerationMetadata,
-} from "@brewva/brewva-runtime/context";
+} from "@brewva/brewva-runtime/protocol";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { decideCompaction } from "../compaction/policy.js";
 import {
+  commitRuntimeSessionCompaction,
+  getRuntimeCompactionGateStatus,
+  getRuntimeContextCompactionInstructions,
+  getRuntimeContextEvidenceLatest,
+  getRuntimeContextUsage,
+  getRuntimeContextUsageRatio,
+  getRuntimePendingCompactionReason,
+  type HostedRuntimeAdapterPort,
+} from "../session/runtime-ports.js";
+import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
-} from "../thread-loop/lifecycle/runtime-turn-clock.js";
+} from "../turn-adapter/lifecycle/runtime-turn-clock.js";
 import {
   extractCompactionEntryId,
   extractCompactionSummary,
@@ -134,10 +143,10 @@ function readNonNegativeInteger(value: unknown): number {
 }
 
 function buildCompactionCacheImpact(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): SessionCompactionCacheImpact {
-  const sample = runtime.inspect.context.evidence.latest(sessionId, "provider_cache_observation");
+  const sample = getRuntimeContextEvidenceLatest(runtime, sessionId, "provider_cache_observation");
   const payload = sample?.payload;
   const before: SessionCompactionCacheImpactSnapshot | null = payload
     ? {
@@ -188,7 +197,7 @@ function clearAutoCompactionExecutionState(state: CompactionGateState): void {
 }
 
 export function createHostedCompactionController(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   telemetry: HostedContextTelemetry,
   turnClock: RuntimeTurnClockStore = createRuntimeTurnClockStore(),
   options: HostedCompactionControllerOptions = {},
@@ -214,18 +223,14 @@ export function createHostedCompactionController(
         input.timestamp,
       );
       state.turnIndex = runtimeTurn;
-      runtime.operator.context.lifecycle.onTurnStart(input.sessionId, runtimeTurn);
+      runtime.ops.context.lifecycle.onTurnStart(input.sessionId, runtimeTurn);
     },
     context(input) {
       const state = getSessionState(input.sessionId);
-      runtime.operator.context.usage.observe(input.sessionId, input.usage);
-      runtime.operator.context.compaction.checkAndRequest(input.sessionId, input.usage);
-      const gateStatus = runtime.inspect.context.compaction.getGateStatus(
-        input.sessionId,
-        input.usage,
-      );
-      const autoPolicy = runtime.inspect.context.compaction.getAutoPolicyState(input.sessionId);
-      const pendingReason = runtime.inspect.context.compaction.getPendingReason(input.sessionId);
+      runtime.ops.context.usage.observe(input.sessionId, input.usage);
+      runtime.ops.context.compaction.checkAndRequest(input.sessionId, input.usage);
+      const gateStatus = getRuntimeCompactionGateStatus(runtime, input.sessionId, input.usage);
+      const pendingReason = getRuntimePendingCompactionReason(runtime, input.sessionId);
       const eligibility = decideCompaction({
         caller: "auto",
         gateStatus,
@@ -234,7 +239,6 @@ export function createHostedCompactionController(
         idle: input.idle,
         recoveryPosture: "idle",
         autoCompactionInFlight: state.autoCompactionInFlight,
-        autoCompactionBreakerOpen: autoPolicy.breakerOpen,
       });
 
       if (eligibility.decision === "skip" && eligibility.reason === "no_request") {
@@ -255,10 +259,7 @@ export function createHostedCompactionController(
         eligibility.reason === "agent_active_manual_compaction_unsafe"
       ) {
         if (
-          !runtime.operator.context.compaction.rememberDeferredReason(
-            input.sessionId,
-            pendingReason,
-          )
+          !runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, pendingReason)
         ) {
           return;
         }
@@ -270,19 +271,7 @@ export function createHostedCompactionController(
         return;
       }
 
-      runtime.operator.context.compaction.rememberDeferredReason(input.sessionId, null);
-
-      if (
-        eligibility.decision === "skip" &&
-        eligibility.reason === "auto_compaction_breaker_open"
-      ) {
-        telemetry.emitCompactionSkipped({
-          sessionId: input.sessionId,
-          turn: state.turnIndex,
-          reason: "auto_compaction_breaker_open",
-        });
-        return;
-      }
+      runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
 
       if (eligibility.decision === "skip" && eligibility.reason === "auto_compaction_in_flight") {
         telemetry.emitCompactionSkipped({
@@ -310,7 +299,7 @@ export function createHostedCompactionController(
           return;
         }
         clearAutoCompactionExecutionState(state);
-        runtime.operator.context.compaction.recordAutoFailure(input.sessionId);
+        runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
         telemetry.emitAutoFailed({
           sessionId: input.sessionId,
           turn: state.turnIndex,
@@ -324,14 +313,14 @@ export function createHostedCompactionController(
         sessionId: input.sessionId,
         turn: state.turnIndex,
         reason: compactionReason,
-        usagePercent: runtime.inspect.context.usage.getRatio(input.usage),
+        usagePercent: getRuntimeContextUsageRatio(runtime, input.usage),
         tokens: input.usage?.tokens ?? null,
       });
 
       const clearInFlight = () => {
         clearAutoCompactionExecutionState(state);
       };
-      const recordAutoFailure = (error: unknown) => {
+      const recordCompactionFailure = (error: unknown) => {
         if (state.activeAutoCompactionAttemptId !== attemptId) {
           return;
         }
@@ -341,20 +330,20 @@ export function createHostedCompactionController(
           reason: compactionReason,
           error: telemetry.normalizeRuntimeError(error),
         });
-        runtime.operator.context.compaction.recordAutoFailure(input.sessionId);
+        runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
         clearInFlight();
       };
 
       try {
         const compact = input.compact as NonNullable<HostedManualCompact>;
         compact({
-          customInstructions: runtime.inspect.context.compaction.getInstructions(),
+          customInstructions: getRuntimeContextCompactionInstructions(runtime),
           onComplete: () => {
             if (state.activeAutoCompactionAttemptId !== attemptId) {
               return;
             }
             clearInFlight();
-            runtime.operator.context.compaction.recordAutoSuccess(input.sessionId);
+            runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
             telemetry.emitAutoCompleted({
               sessionId: input.sessionId,
               turn: state.turnIndex,
@@ -362,22 +351,23 @@ export function createHostedCompactionController(
             });
           },
           onError: (error) => {
-            recordAutoFailure(error);
+            recordCompactionFailure(error);
           },
         });
       } catch (error) {
-        recordAutoFailure(error);
+        recordCompactionFailure(error);
       }
     },
     async sessionCompact(input) {
       const state = getSessionState(input.sessionId);
-      const previousUsage = runtime.inspect.context.usage.get(input.sessionId);
-      const wasGated = runtime.inspect.context.compaction.getGateStatus(
+      const previousUsage = getRuntimeContextUsage(runtime, input.sessionId);
+      const wasGated = getRuntimeCompactionGateStatus(
+        runtime,
         input.sessionId,
         previousUsage,
       ).required;
       clearAutoCompactionExecutionState(state);
-      runtime.operator.context.compaction.recordAutoSuccess(input.sessionId);
+      runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
       const sanitizedSummary =
         extractCompactionSummary({
           compactionEntry: input.compactionEntry,
@@ -388,7 +378,8 @@ export function createHostedCompactionController(
         }) ?? `compact:${input.sessionId}:${state.turnIndex}`;
       const toTokens = normalizeUsageTokens(input.usage);
       const summaryGeneration = extractSummaryGeneration(input.compactionEntry);
-      const latestPromptEvidence = runtime.inspect.context.evidence.latest(
+      const latestPromptEvidence = getRuntimeContextEvidenceLatest(
+        runtime,
         input.sessionId,
         "prompt_stability",
       );
@@ -396,7 +387,7 @@ export function createHostedCompactionController(
         latestPromptEvidence?.payload.stablePrefixHash,
       );
 
-      await runtime.authority.session.compaction.commit(input.sessionId, {
+      commitRuntimeSessionCompaction(runtime, input.sessionId, {
         compactId,
         sanitizedSummary,
         summaryDigest: sha256Hex(sanitizedSummary),
@@ -411,7 +402,7 @@ export function createHostedCompactionController(
           compactionEntry: input.compactionEntry,
         }),
         referenceContextDigest,
-        fromTokens: runtime.inspect.context.usage.get(input.sessionId)?.tokens ?? null,
+        fromTokens: getRuntimeContextUsage(runtime, input.sessionId)?.tokens ?? null,
         toTokens,
         origin: input.fromExtension === true ? "extension_api" : "auto_compaction",
         ...(summaryGeneration ? { summaryGeneration } : {}),

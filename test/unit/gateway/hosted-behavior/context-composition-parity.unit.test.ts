@@ -116,12 +116,8 @@ describe("context composition parity", () => {
     const fullContent = collectMessageContent([fullAfter]);
     const hostedContent = collectMessageContent(hostedResults);
 
-    expect(fullRuntime.inspect.context.compaction.getGateStatus("parity-clear").required).toBe(
-      false,
-    );
-    expect(hostedRuntime.inspect.context.compaction.getGateStatus("parity-clear").required).toBe(
-      false,
-    );
+    expect(fullRuntime.ops.context.compaction.getGateStatus("parity-clear").required).toBe(false);
+    expect(hostedRuntime.ops.context.compaction.getGateStatus("parity-clear").required).toBe(false);
     expect(fullContent.includes("[ContextCompactionGate]")).toBe(false);
     expect(hostedContent.includes("[ContextCompactionGate]")).toBe(false);
     expect(hostedContent.includes("[OperationalDiagnostics]")).toBe(false);

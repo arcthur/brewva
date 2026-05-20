@@ -427,7 +427,7 @@ Verification already run for the implementation:
 - `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.ts`
-- `packages/brewva-runtime/src/domain/parallel/parallel.ts`
+- `packages/brewva-runtime/src/runtime/engine/turn.ts`
 
 ## Promotion Criteria
 

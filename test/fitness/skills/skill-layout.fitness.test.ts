@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseSkillDocument } from "@brewva/brewva-runtime/skills";
-import type { SkillCategory } from "@brewva/brewva-runtime/skills";
+import { parseSkillDocument } from "@brewva/brewva-runtime/protocol";
+import type { SkillCategory } from "@brewva/brewva-runtime/protocol";
 
 const LOADABLE_CATEGORIES = ["core", "domain", "operator", "meta", "internal"] as const;
 const MAX_SKILL_BODY_LINES = 150;

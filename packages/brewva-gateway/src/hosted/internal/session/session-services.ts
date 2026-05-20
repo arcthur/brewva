@@ -1,4 +1,3 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { InternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
@@ -14,6 +13,7 @@ import type {
   BrewvaManagedAgentSessionSettingsPort,
   ManagedAgentSessionStore,
 } from "./managed-agent/session.js";
+import type { HostedRuntimeAdapterPort } from "./runtime-ports.js";
 import type { HostedSessionUiOverrides } from "./session-factory.js";
 import type { HostedAuthCredential } from "./settings/hosted-auth-store.js";
 
@@ -75,7 +75,7 @@ export interface HostedSessionModelRegistry {
 export type HostedSessionServicesBundle = {
   agentDir: string;
   cwd: string;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   settingsManager: HostedSessionSettingsStore;
   resourceLoader: HostedSessionResourceLoader;
   sessionManager: HostedSessionPersistenceStore;

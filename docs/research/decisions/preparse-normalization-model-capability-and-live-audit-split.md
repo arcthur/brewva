@@ -11,7 +11,7 @@
   - `docs/reference/runtime.md`
   - `docs/architecture/control-and-data-flow.md`
 - Code anchors:
-  - `test/unit/gateway/provider-request-recovery.unit.test.ts`
+  - Removed provider request recovery unit coverage
   - `test/contract/runtime/event-pipeline-levels.contract.test.ts`
   - `test/contract/extensions/runtime-plugin-observability-guardrails.contract.test.ts`
   - `test/unit/gateway/agent-browser-validation.unit.test.ts`

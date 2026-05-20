@@ -2,9 +2,10 @@ import type {
   ChannelInspectCommandInput,
   ChannelInspectCommandResult,
 } from "@brewva/brewva-gateway";
-import type { EffectCommitmentRequestRecord } from "@brewva/brewva-runtime/proposals";
+import type { EffectCommitmentRequestRecord } from "@brewva/brewva-runtime/protocol";
 import { clampText, resolveInspectDirectory } from "../../operator/inspect-analysis.js";
 import { buildSessionInspectReport } from "../../operator/inspect.js";
+import { listCliRuntimeProposalRequests } from "../../runtime/runtime-ports.js";
 
 const MAX_FINDINGS = 3;
 const MAX_GAPS = 2;
@@ -52,7 +53,9 @@ function formatApprovalSummaryLine(requests: EffectCommitmentRequestRecord[]): s
     consumed: 0,
   };
   for (const request of requests) {
-    counts[request.state] += 1;
+    if (request.state in counts) {
+      counts[request.state as keyof typeof counts] += 1;
+    }
   }
   return [
     `Approvals: pending=${counts.pending}`,
@@ -166,7 +169,8 @@ export async function handleInspectChannelCommand(
     sessionId: input.targetSession.sessionId,
     directory,
   });
-  const approvalRequests = input.targetSession.runtime.inspect.proposals.requests.list(
+  const approvalRequests = listCliRuntimeProposalRequests(
+    input.targetSession.runtime,
     input.targetSession.sessionId,
   );
 

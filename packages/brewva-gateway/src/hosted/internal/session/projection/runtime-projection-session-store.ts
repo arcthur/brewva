@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
   SessionCompactionCacheImpact,
   SessionCompactionCacheImpactSnapshot,
   SessionCompactionGenerationMetadata,
-} from "@brewva/brewva-runtime/context";
+} from "@brewva/brewva-runtime/protocol";
 import {
   CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   MESSAGE_END_EVENT_TYPE,
@@ -16,18 +15,18 @@ import {
   readSessionRewindCompletedEventPayload,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
   type BrewvaEventRecord,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import {
   SESSION_REWIND_DIVERGENCE_SCHEMA,
   isLlmVisibleContextEntry,
   type ContextEntryRecord,
   type SessionLifecycleSnapshot,
   type SessionWireFrame,
-} from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
-import { DEFAULT_CONTEXT_STATE, type ContextState } from "@brewva/brewva-substrate/contracts";
 import {
+  DEFAULT_CONTEXT_STATE,
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
   type BrewvaCompactionEntry,
@@ -37,6 +36,7 @@ import {
   type BrewvaSessionEntry,
   type BrewvaSessionMessageEntry,
   type BrewvaThinkingLevelChangeEntry,
+  type ContextState,
 } from "@brewva/brewva-substrate/session";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
@@ -44,7 +44,29 @@ import {
   buildTranscriptMessagePayload,
   readTranscriptMessageFromPayload,
   type StoredSessionMessage,
-} from "../../thread-loop/runtime-session-transcript.js";
+} from "../../turn-adapter/runtime-session-transcript.js";
+import {
+  commitRuntimeSessionCompaction,
+  createRuntimeLineageNode,
+  getRuntimeContextPromptHistoryViewBaseline,
+  getRuntimeContextStatus,
+  getRuntimeContextUsage,
+  getRuntimeContextEvidenceLatest,
+  getRuntimeLifecycleSnapshot,
+  getRuntimeSessionLineageContextEntryPath,
+  getRuntimeSessionLineageNode,
+  getRuntimeSessionLineageTree,
+  listRuntimeEvents,
+  listRuntimeSessionLineageChildren,
+  listRuntimeWorkbenchEntries,
+  queryRuntimeSessionWire,
+  recordHostedRuntimeEvent,
+  recordRuntimeLineageContextEntry,
+  recordRuntimeLineageSummary,
+  subscribeRuntimeEvents,
+  subscribeRuntimeSessionWire,
+  type HostedRuntimeAdapterPort,
+} from "../runtime-ports.js";
 import {
   isContextSourceEvent,
   readBranchSummaryPayload,
@@ -204,12 +226,12 @@ export class HostedRuntimeTapeSessionStore {
   readonly sessionId: string;
 
   constructor(
-    private readonly runtime: BrewvaHostedRuntimePort,
+    private readonly runtime: HostedRuntimeAdapterPort,
     sessionId: string = randomUUID(),
     options: { deferInitialPersistence?: boolean } = {},
   ) {
     this.sessionId = sessionId;
-    const existingEvents = this.runtime.inspect.events.records.list(this.sessionId);
+    const existingEvents = listRuntimeEvents(this.runtime, this.sessionId);
     this.#deferInitialPersistence =
       options.deferInitialPersistence === true && existingEvents.length === 0;
     if (!this.#deferInitialPersistence) {
@@ -217,7 +239,7 @@ export class HostedRuntimeTapeSessionStore {
       this.#initialPersistenceEnsured = true;
     }
     this.#hydrateFromRuntime();
-    this.#unsubscribeEvents = this.runtime.inspect.events.records.subscribe((event) => {
+    this.#unsubscribeEvents = subscribeRuntimeEvents(this.runtime, (event) => {
       if (event.sessionId !== this.sessionId) {
         return;
       }
@@ -282,13 +304,15 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   readContextState(): ContextState {
-    const usage = this.runtime.inspect.context.usage.get(this.sessionId);
-    const contextStatus = this.runtime.inspect.context.usage.getStatus(this.sessionId, usage);
-    const promptStability = this.runtime.inspect.context.evidence.latest(
+    const usage = getRuntimeContextUsage(this.runtime, this.sessionId);
+    const contextStatus = getRuntimeContextStatus(this.runtime, this.sessionId, usage);
+    const promptStability = getRuntimeContextEvidenceLatest(
+      this.runtime,
       this.sessionId,
       "prompt_stability",
     )?.payload;
-    const transientReduction = this.runtime.inspect.context.evidence.latest(
+    const transientReduction = getRuntimeContextEvidenceLatest(
+      this.runtime,
       this.sessionId,
       "transient_reduction",
     )?.payload;
@@ -303,12 +327,12 @@ export class HostedRuntimeTapeSessionStore {
       promptStabilityFingerprint,
       transientReductionActive: transientReduction?.status === "completed",
       historyBaselineAvailable:
-        this.runtime.inspect.context.prompt.getHistoryViewBaseline(this.sessionId) !== undefined,
+        getRuntimeContextPromptHistoryViewBaseline(this.runtime, this.sessionId) !== undefined,
     };
   }
 
   readLifecycle(): SessionLifecycleSnapshot {
-    return this.runtime.inspect.lifecycle.getSnapshot(this.sessionId);
+    return getRuntimeLifecycleSnapshot(this.runtime, this.sessionId);
   }
 
   resetLeaf(): void {
@@ -333,18 +357,20 @@ export class HostedRuntimeTapeSessionStore {
       throw new Error(`Context entry ${targetEntryId} not found`);
     }
     const targetLineageNodeId = targetContextEntry.lineageNodeId;
-    const existingBranch = this.runtime.inspect.session.lineage
-      .listChildren(this.sessionId, targetLineageNodeId)
-      .find(
-        (node) =>
-          node.kind === "branch" &&
-          node.forkPoint.kind === "context_entry" &&
-          node.forkPoint.lineageNodeId === targetLineageNodeId &&
-          node.forkPoint.entryId === targetEntryId,
-      );
+    const existingBranch = listRuntimeSessionLineageChildren(
+      this.runtime,
+      this.sessionId,
+      targetLineageNodeId,
+    ).find(
+      (node) =>
+        node.kind === "branch" &&
+        node.forkPoint.kind === "context_entry" &&
+        node.forkPoint.lineageNodeId === targetLineageNodeId &&
+        node.forkPoint.entryId === targetEntryId,
+    );
     const branchNodeId = existingBranch?.lineageNodeId ?? `lineage:${randomUUID()}`;
     if (!existingBranch) {
-      this.runtime.authority.session.lineage.createNode(this.sessionId, {
+      createRuntimeLineageNode(this.runtime, this.sessionId, {
         lineageNodeId: branchNodeId,
         parentLineageNodeId: targetLineageNodeId,
         kind: "branch",
@@ -361,7 +387,7 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   checkoutLineageNode(lineageNodeId: string, leafEntryId?: string | null): void {
-    const node = this.runtime.inspect.session.lineage.getNode(this.sessionId, lineageNodeId);
+    const node = getRuntimeSessionLineageNode(this.runtime, this.sessionId, lineageNodeId);
     if (!node) {
       throw new Error(`session_lineage_node_missing:${lineageNodeId}`);
     }
@@ -380,11 +406,11 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   subscribeSessionWire(listener: (frame: SessionWireFrame) => void): () => void {
-    return this.runtime.inspect.sessionWire.subscribe(this.sessionId, listener);
+    return subscribeRuntimeSessionWire(this.runtime, this.sessionId, listener);
   }
 
   querySessionWire(): SessionWireFrame[] {
-    return this.runtime.inspect.sessionWire.query(this.sessionId);
+    return queryRuntimeSessionWire(this.runtime, this.sessionId);
   }
 
   getBranch(fromId?: string | null): BrewvaSessionEntry[] {
@@ -392,11 +418,10 @@ export class HostedRuntimeTapeSessionStore {
     if (!startId) {
       return [];
     }
-    return this.runtime.inspect.session.lineage
-      .getContextEntryPath(this.sessionId, {
-        entryId: startId,
-        includeStateOnly: true,
-      })
+    return getRuntimeSessionLineageContextEntryPath(this.runtime, this.sessionId, {
+      entryId: startId,
+      includeStateOnly: true,
+    })
       .map((entry) => this.#byId.get(entry.entryId))
       .filter((entry): entry is BrewvaSessionEntry => entry !== undefined);
   }
@@ -407,14 +432,12 @@ export class HostedRuntimeTapeSessionStore {
       return [];
     }
 
-    const contextEntries = this.runtime.inspect.session.lineage
-      .getContextEntryPath(this.sessionId, {
-        entryId: startId,
-      })
-      .filter(isLlmVisibleContextEntry);
+    const contextEntries = getRuntimeSessionLineageContextEntryPath(this.runtime, this.sessionId, {
+      entryId: startId,
+    }).filter(isLlmVisibleContextEntry);
     const entries: BrewvaSessionEntry[] = [];
     let parentEntryId: string | null = null;
-    const workbenchEntries = this.runtime.inspect.workbench.list(this.sessionId);
+    const workbenchEntries = listRuntimeWorkbenchEntries(this.runtime, this.sessionId);
     for (const [index, contextEntry] of contextEntries.entries()) {
       const entry = this.#contextEntryRecordToSessionEntry(contextEntry, parentEntryId);
       if (!entry) {
@@ -422,9 +445,9 @@ export class HostedRuntimeTapeSessionStore {
       }
       const sourceEvent =
         this.#eventsById.get(contextEntry.sourceEventId) ??
-        this.runtime.inspect.events.records
-          .list(this.sessionId)
-          .find((candidate) => candidate.id === contextEntry.sourceEventId);
+        listRuntimeEvents(this.runtime, this.sessionId).find(
+          (candidate) => candidate.id === contextEntry.sourceEventId,
+        );
       if (
         shouldExcludeSessionEntryForWorkbench({
           entry,
@@ -498,7 +521,7 @@ export class HostedRuntimeTapeSessionStore {
 
   appendMessage(message: StoredSessionMessage): string {
     this.ensureInitialPersistence();
-    const event = this.runtime.extensions.hosted.events.record({
+    const event = recordHostedRuntimeEvent(this.runtime, {
       sessionId: this.sessionId,
       type: MESSAGE_END_EVENT_TYPE,
       payload: buildTranscriptMessagePayload(message),
@@ -515,7 +538,7 @@ export class HostedRuntimeTapeSessionStore {
       this.#deferredInitialEntries.thinkingLevel = thinkingLevel;
       return `deferred:thinking:${this.sessionId}`;
     }
-    const event = this.runtime.extensions.hosted.events.record({
+    const event = recordHostedRuntimeEvent(this.runtime, {
       sessionId: this.sessionId,
       type: THINKING_LEVEL_SELECTED_EVENT_TYPE,
       payload: {
@@ -534,7 +557,7 @@ export class HostedRuntimeTapeSessionStore {
       this.#deferredInitialEntries.modelChange = { provider, modelId };
       return `deferred:model:${this.sessionId}`;
     }
-    const event = this.runtime.extensions.hosted.events.record({
+    const event = recordHostedRuntimeEvent(this.runtime, {
       sessionId: this.sessionId,
       type: MODEL_SELECT_EVENT_TYPE,
       payload: {
@@ -573,7 +596,7 @@ export class HostedRuntimeTapeSessionStore {
       };
       return `deferred:preset:${this.sessionId}`;
     }
-    const event = this.runtime.extensions.hosted.events.record({
+    const event = recordHostedRuntimeEvent(this.runtime, {
       sessionId: this.sessionId,
       type: MODEL_PRESET_SELECT_EVENT_TYPE,
       payload: {
@@ -627,7 +650,7 @@ export class HostedRuntimeTapeSessionStore {
       return revertId;
     }
 
-    const event = this.runtime.extensions.hosted.events.record({
+    const event = recordHostedRuntimeEvent(this.runtime, {
       sessionId: this.sessionId,
       type: SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
       payload: {
@@ -641,7 +664,7 @@ export class HostedRuntimeTapeSessionStore {
       throw new Error("failed to record branch summary");
     }
     this.#ingestRuntimeEvent(event);
-    this.runtime.authority.session.lineage.recordSummary(this.sessionId, {
+    recordRuntimeLineageSummary(this.runtime, this.sessionId, {
       summaryId: event.id,
       lineageNodeId: this.#lineageNodeId,
       attachToEntryId: branchFromId,
@@ -663,7 +686,7 @@ export class HostedRuntimeTapeSessionStore {
         ? (details as Record<string, unknown>)
         : undefined;
     const summaryGeneration = readCompactionGenerationMetadata(detailRecord?.summaryGeneration);
-    const event = await this.runtime.authority.session.compaction.commit(this.sessionId, {
+    const event = commitRuntimeSessionCompaction(this.runtime, this.sessionId, {
       compactId: readOptionalString(detailRecord?.compactId) ?? randomUUID(),
       sanitizedSummary: summary,
       summaryDigest: readOptionalString(detailRecord?.summaryDigest) ?? sha256Hex(summary),
@@ -708,7 +731,7 @@ export class HostedRuntimeTapeSessionStore {
         : undefined;
     const contextParentId = parentId === null ? null : this.#nearestContextEntryId(parentId);
     this.#leafId = contextParentId;
-    const event = this.runtime.extensions.hosted.events.record({
+    const event = recordHostedRuntimeEvent(this.runtime, {
       sessionId: this.sessionId,
       type: SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
       payload: {
@@ -725,7 +748,7 @@ export class HostedRuntimeTapeSessionStore {
       throw new Error("failed to record branch summary");
     }
     this.#ingestRuntimeEvent(event);
-    this.runtime.authority.session.lineage.recordSummary(this.sessionId, {
+    recordRuntimeLineageSummary(this.runtime, this.sessionId, {
       summaryId: event.id,
       lineageNodeId: this.#lineageNodeId,
       attachToEntryId: contextParentId,
@@ -743,7 +766,7 @@ export class HostedRuntimeTapeSessionStore {
     this.#rewindSummaryModeByRevertEventId.clear();
     this.#leafId = null;
 
-    const events = sortEvents(this.runtime.inspect.events.records.list(this.sessionId));
+    const events = sortEvents(listRuntimeEvents(this.runtime, this.sessionId));
     for (const event of events) {
       const rewind =
         event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE
@@ -817,10 +840,12 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   #ensureLineageRoot(): void {
-    const events = this.runtime.inspect.events.records.list(this.sessionId);
+    const events = listRuntimeEvents(this.runtime, this.sessionId);
     try {
-      const tree = this.runtime.inspect.session.lineage.getTree(this.sessionId);
-      this.#lineageNodeId = tree.rootNodeId;
+      const tree = getRuntimeSessionLineageTree(this.runtime, this.sessionId);
+      if (tree.rootNodeId) {
+        this.#lineageNodeId = tree.rootNodeId;
+      }
       return;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -832,7 +857,7 @@ export class HostedRuntimeTapeSessionStore {
       }
     }
 
-    this.runtime.authority.session.lineage.createNode(this.sessionId, {
+    createRuntimeLineageNode(this.runtime, this.sessionId, {
       lineageNodeId: HOSTED_MAIN_LINEAGE_NODE_ID,
       kind: "main",
       forkPoint: { kind: "session_root" },
@@ -853,7 +878,7 @@ export class HostedRuntimeTapeSessionStore {
     if (!input) {
       return;
     }
-    const event = this.runtime.authority.session.lineage.recordContextEntry(this.sessionId, {
+    const event = recordRuntimeLineageContextEntry(this.runtime, this.sessionId, {
       entryId: sourceEvent.id,
       lineageNodeId: this.#lineageNodeId,
       parentEntryId: input.parentEntryId,
@@ -884,7 +909,7 @@ export class HostedRuntimeTapeSessionStore {
     }
     const lineageNodeId = `lineage:recovery:${sourceEvent.id}`;
     try {
-      this.runtime.authority.session.lineage.createNode(this.sessionId, {
+      createRuntimeLineageNode(this.runtime, this.sessionId, {
         lineageNodeId,
         parentLineageNodeId: forkEntry.lineageNodeId,
         kind: "recovery",
@@ -906,7 +931,7 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   #hasContextEntryForSourceEvent(sourceEventId: string): boolean {
-    return this.runtime.inspect.events.records.list(this.sessionId).some((event) => {
+    return listRuntimeEvents(this.runtime, this.sessionId).some((event) => {
       if (event.type !== CONTEXT_ENTRY_RECORDED_EVENT_TYPE) {
         return false;
       }
@@ -932,9 +957,9 @@ export class HostedRuntimeTapeSessionStore {
   ): BrewvaSessionEntry | undefined {
     const sourceEvent =
       this.#eventsById.get(contextEntry.sourceEventId) ??
-      this.runtime.inspect.events.records
-        .list(this.sessionId)
-        .find((candidate) => candidate.id === contextEntry.sourceEventId);
+      listRuntimeEvents(this.runtime, this.sessionId).find(
+        (candidate) => candidate.id === contextEntry.sourceEventId,
+      );
     if (!sourceEvent) {
       return undefined;
     }
@@ -1005,19 +1030,17 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   #resolveContextEntry(entryId: string): ContextEntryRecord | undefined {
-    return this.runtime.inspect.session.lineage
-      .getContextEntryPath(this.sessionId, {
-        entryId,
-        includeStateOnly: true,
-      })
-      .find((entry) => entry.entryId === entryId);
+    return getRuntimeSessionLineageContextEntryPath(this.runtime, this.sessionId, {
+      entryId,
+      includeStateOnly: true,
+    }).find((entry) => entry.entryId === entryId);
   }
 
   #resolveCheckoutLeafEntryId(
     lineageNodeId: string,
     leafEntryId: string | null | undefined,
   ): string | null {
-    const node = this.runtime.inspect.session.lineage.getNode(this.sessionId, lineageNodeId);
+    const node = getRuntimeSessionLineageNode(this.runtime, this.sessionId, lineageNodeId);
     if (!node) {
       throw new Error(`session_lineage_node_missing:${lineageNodeId}`);
     }
@@ -1026,7 +1049,7 @@ export class HostedRuntimeTapeSessionStore {
       return null;
     }
     if (leafEntryId !== undefined) {
-      const path = this.runtime.inspect.session.lineage.getContextEntryPath(this.sessionId, {
+      const path = getRuntimeSessionLineageContextEntryPath(this.runtime, this.sessionId, {
         entryId: leafEntryId,
         includeStateOnly: true,
       });
@@ -1042,7 +1065,7 @@ export class HostedRuntimeTapeSessionStore {
       return leafEntryId;
     }
 
-    const nodePath = this.runtime.inspect.session.lineage.getContextEntryPath(this.sessionId, {
+    const nodePath = getRuntimeSessionLineageContextEntryPath(this.runtime, this.sessionId, {
       lineageNodeId,
       includeStateOnly: true,
     });

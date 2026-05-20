@@ -65,13 +65,13 @@ Platform-growth rule:
 
 ## Runtime Subsystems
 
-- Skills: `packages/brewva-runtime/src/domain/skills/registry.ts`
-- Verification: `packages/brewva-runtime/src/domain/verification/gate.ts`
-- Ledger: `packages/brewva-runtime/src/domain/ledger/evidence-ledger.ts`
-- Context budget: `packages/brewva-runtime/src/domain/context/budget.ts`
-- Event store: `packages/brewva-runtime/src/events/store.ts`
-- Tape replay engine: `packages/brewva-runtime/src/domain/tape/replay-engine.ts`
-- Cost tracker: `packages/brewva-runtime/src/domain/cost/tracker.ts`
+- Skills: `packages/brewva-runtime/src/runtime/model/model.ts`
+- Verification: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- Ledger projection: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Context budget: `packages/brewva-runtime/src/runtime/model/model.ts`
+- Event records: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Tape replay engine: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Cost tracker: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 
 ## Custom Delegated Specialists
 
@@ -153,8 +153,9 @@ Execution posture is intentionally split:
   evidence, missing probes, rollback posture, and operator-visible recovery
   burden
 
-`root.authority.verification.*` remains kernel authority over evidence sufficiency and
-freshness. It is not a delegated specialist.
+`HostedRuntimeAdapterPort.ops.verification.*` remains the repo-owned adapter for evidence
+sufficiency and freshness. It is not a delegated specialist, and new
+consequence-bearing runtime work should move through `runtime.kernel`.
 
 ## Inspectable Stall Adjudication
 

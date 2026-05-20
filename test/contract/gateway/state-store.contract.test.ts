@@ -66,7 +66,7 @@ describe("gateway file state store", () => {
     }
   });
 
-  test("given children registry rows, when reading registry, then agent event log path is preserved and removed config metadata is ignored", () => {
+  test("given children registry rows, when reading registry, then removed metadata is ignored", () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-state-store-"));
     try {
       const store = new FileGatewayStateStore();
@@ -80,7 +80,6 @@ describe("gateway file state store", () => {
               pid: 1001,
               startedAt: 123,
               agentSessionId: "agent-s1",
-              agentEventLogPath: "/tmp/agent-s1.jsonl",
               cwd: "/tmp/workspace",
               configPath: "/tmp/removed-config.json",
             },
@@ -97,7 +96,6 @@ describe("gateway file state store", () => {
           pid: 1001,
           startedAt: 123,
           agentSessionId: "agent-s1",
-          agentEventLogPath: "/tmp/agent-s1.jsonl",
           cwd: "/tmp/workspace",
         },
       ]);

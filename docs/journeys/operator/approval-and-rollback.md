@@ -10,9 +10,9 @@
 
 - blocked or deferred tool calls
 - approval turns in channel mode
-- `runtime.inspect.tools.access.explain(...)`
-- `runtime.inspect.proposals.requests.list(...)`
-- `runtime.inspect.proposals.requests.listPending(...)`
+- `HostedRuntimeAdapterPort.ops.tools.access.explain(...)`
+- `HostedRuntimeAdapterPort.ops.proposals.requests.list(...)`
+- `HostedRuntimeAdapterPort.ops.proposals.requests.listPending(...)`
 - `rollback_last_patch`
 
 ## Objective
@@ -39,7 +39,7 @@ effect commitment, explicit approval, exact resume, and rollback surfaces.
 
 ```mermaid
 flowchart TD
-  A["Tool invocation"] --> B["ToolGateService classifies boundary"]
+  A["Tool invocation"] --> B["KernelToolAuthorizer classifies boundary"]
   B --> C{"Boundary result"}
   C -->|Safe| D["Execute directly"]
   C -->|Effectful with workspace_patchset preparation| E["Execute directly and record mutation receipt"]
@@ -84,7 +84,7 @@ flowchart TD
   request may be resumed, including the original `toolCallId` and `argsDigest`
 - `resource_lease` expands budget only; it does not widen effect authority
 - with `infrastructure.events.enabled=false`, effectful execution fails closed;
-  the runtime does not permit a no-audit write path
+  the runtime does not permit a no-audit read-model write path
 
 ## Failure And Recovery
 
@@ -103,10 +103,10 @@ flowchart TD
 ## Observability
 
 - primary inspection and operator surfaces:
-  - `runtime.inspect.tools.access.explain(...)`
-  - `runtime.inspect.proposals.requests.list(...)`
-  - `runtime.inspect.proposals.requests.listPending(...)`
-  - `runtime.inspect.proposals.proposals.list(...)`
+  - `HostedRuntimeAdapterPort.ops.tools.access.explain(...)`
+  - `HostedRuntimeAdapterPort.ops.proposals.requests.list(...)`
+  - `HostedRuntimeAdapterPort.ops.proposals.requests.listPending(...)`
+  - `HostedRuntimeAdapterPort.ops.proposals.proposals.list(...)`
   - `brewva inspect`
 - core durable events:
   - `proposal_received`
@@ -120,11 +120,11 @@ flowchart TD
 ## Code Pointers
 
 - Proposal boundary: `docs/reference/proposal-boundary.md`
-- Tool gate: `packages/brewva-runtime/src/domain/tools/tool-gate.ts`
-- Invocation spine: `packages/brewva-runtime/src/domain/tools/tool-invocation-spine.ts`
-- Effect-commitment desk: `packages/brewva-runtime/src/domain/proposals/effect-commitment-desk.ts`
-- `PatchSet` rollback: `packages/brewva-runtime/src/domain/patching/file-change.ts`
-- Receipt-aware rollback: `packages/brewva-runtime/src/domain/governance/mutation-rollback.ts`
+- Tool authorizer: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- Tool transaction log: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- Effect-commitment desk: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- `PatchSet` rollback: `packages/brewva-runtime/src/protocol.ts`
+- Receipt-aware rollback: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
 - Rollback tool: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 
 ## Related Docs

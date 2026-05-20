@@ -60,7 +60,6 @@ export function normalizeInfrastructureConfig(
   return {
     events: {
       enabled: normalizeBoolean(infrastructureEventsInput.enabled, defaults.events.enabled),
-      dir: normalizeNonEmptyString(infrastructureEventsInput.dir, defaults.events.dir),
       level: VALID_EVENT_LEVELS.has(infrastructureEventsInput.level as string)
         ? (infrastructureEventsInput.level as BrewvaConfig["infrastructure"]["events"]["level"])
         : defaults.events.level,

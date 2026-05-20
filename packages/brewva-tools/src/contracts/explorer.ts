@@ -2,7 +2,7 @@ import type {
   DelegationConsultKind as RuntimeDelegationConsultKind,
   VerifierCheck as RuntimeVerifierCheck,
   VerifierSubagentOutcomeData as RuntimeVerifierSubagentOutcomeData,
-} from "@brewva/brewva-runtime/delegation";
+} from "@brewva/brewva-runtime/protocol";
 import type {
   DesignExecutionStep as RuntimeDesignExecutionStep,
   DesignImplementationTarget as RuntimeDesignImplementationTarget,
@@ -10,7 +10,7 @@ import type {
   ReviewLaneName as RuntimeReviewLaneName,
   ReviewPrecedentConsultStatus as RuntimeReviewPrecedentConsultStatus,
   ReviewReportArtifact as RuntimeReviewReportArtifact,
-} from "@brewva/brewva-runtime/skills";
+} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";
 import type { DelegationOutcomeFinding } from "./delegation.js";
 

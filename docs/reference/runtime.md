@@ -1,100 +1,158 @@
 # Reference: Runtime Contract
 
-Primary implementation anchor: `packages/brewva-runtime/src/runtime/runtime.ts`.
+Primary implementation anchors:
 
-Related boundary references:
-
-- `docs/architecture/design-axioms.md`
-- `docs/architecture/invariants-and-reliability.md`
+- `packages/brewva-runtime/src/runtime/runtime.ts`
+- `packages/brewva-runtime/src/runtime/runtime-api.ts`
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`
 - `docs/reference/proposal-boundary.md`
 
 ## Role
 
-Runtime construction is factory-based. `createBrewvaRuntime(...)` returns a
-frozen `BrewvaRuntimeInstance` with explicit ports for composition roots:
+`createBrewvaRuntime(...)` returns one frozen `BrewvaRuntime` object. The public
+runtime contract is the four-port constitutional shape:
 
-- `root`
-- `hosted`
-- `tool`
-- `operator`
+- `runtime.tape` owns committed truth, replay baselines, canonical events, and
+  deterministic projections.
+- `runtime.kernel` owns authorization, approval requests, tool commitments, and
+  commit or abort receipts.
+- `runtime.model` owns working-memory materialization and checkpoint candidate
+  construction.
+- `runtime.turn(...)` owns provider physics, context pressure, retry boundaries,
+  runtime suspension, and terminal turn commit.
 
-Leaf modules receive only the one port they need. Root-only code receives
-`BrewvaRuntimeRoot`; hosted session assembly receives `BrewvaHostedRuntimePort`;
-managed tools receive `BrewvaToolRuntimePort`; operator products receive
-`selectOperatorRuntimePort(instance)`.
-
-The runtime is no longer a wide top-level implementation bag, and the root
-cannot recover hosted, tool, operator, extension, or Effect-spine access.
+The root no longer exposes `root`, `hosted`, `tool`, `operator`, `authority`, or
+`inspect`. New runtime-facing code must use the four-port root directly.
 
 ## Stable Root Shape
 
 ```ts
-interface BrewvaRuntimeInstance {
-  readonly root: BrewvaRuntimeRoot;
-  readonly hosted: BrewvaHostedRuntimePort;
-  readonly tool: BrewvaToolRuntimePort;
-  readonly operator: BrewvaOperatorRuntimePort;
-}
-
-interface BrewvaRuntimeRoot {
+interface BrewvaRuntime {
   readonly identity: BrewvaRuntimeIdentity;
   readonly config: DeepReadonly<BrewvaConfig>;
-  readonly authority: BrewvaAuthorityPort;
-  readonly inspect: BrewvaInspectionPort;
+  readonly tape: TapePort;
+  readonly kernel: KernelPort;
+  readonly model: ModelPort;
+
+  start(): Promise<RuntimeStartReceipt>;
+  turn(input: TurnInput): AsyncIterable<TurnFrame>;
+  close(): Promise<void>;
 }
 ```
 
 `identity` holds `{ cwd, workspaceRoot, agentId }` as read-only runtime facts.
-`config` is a deep-readonly snapshot after normalization. The root exposes no
-symbols, `operator`, or `extensions`; only the factory-owned instance can select
-the operator port.
+`config` is a deep-readonly snapshot after normalization.
 
-## Internal Effect Runtime Spine
+Runtime provider and tool execution adapters are construction dependencies, not
+root ports. `BrewvaRuntimeOptions.provider` supplies the provider stream consumed
+by `runtime.turn(...)`; `BrewvaRuntimeOptions.toolExecutor` executes approved
+tool commitments. Both are runtime physics, so callers observe their effects
+only through streamed `TurnFrame`s and canonical tape events.
 
-Runtime internals are composed through Effect layers behind the factory-created
-runtime controller. Public `BrewvaRuntimeInstance` objects do not carry a hidden
-controller reference and cannot recover the Effect spine.
+## Canonical Tape
 
-The source-internal runtime Effect spine accepts the runtime package's internal
-controller handle, created only by the source-owned runtime assembly factory,
-and exposes implementation-only helpers for running Effect programs against the
-runtime spine:
+Runtime truth is recorded through a compact canonical event vocabulary:
 
-- `getRuntimeEffectSpine(...)`
-- `runRuntimeEffect(...)`
-- `runRuntimeEffectSync(...)`
+```ts
+type CanonicalEventType =
+  | "turn.started"
+  | "turn.ended"
+  | "msg.committed"
+  | "reason.committed"
+  | "tool.proposed"
+  | "tool.committed"
+  | "tool.aborted"
+  | "checkpoint.committed"
+  | "anchor.committed"
+  | "approval.requested"
+  | "approval.decided"
+  | "cost.observed"
+  | "runtime.suspended"
+  | "custom";
+```
 
-Those helpers expose implementation services such as runtime identity,
-readonly resolved config, security config, infrastructure config, schedule
-config, core dependencies, kernel context, service dependencies, and lazy
-factory services. They do not expose the root authority/inspection ports or the
-operator port, and they do not grant tool authority. Composition roots that only
-hold `createBrewvaRuntime(...)` output cannot opt into these helpers by
-reflecting over the instance.
+`custom` events must carry `namespace`, `kind`, `version`, `authority`, and an
+opaque `payload`. Custom events do not affect built-in projections unless an
+explicit projector admits that namespace.
 
-Capability-scoped runtime ports remain the only access path for hosted tools
-and plugins. Effect layers track implementation dependencies; capability ports
-track authority.
+The four-port runtime stores canonical tape under `runtime.config.tape.dir`
+(`.brewva/tape` by default) when `runtime.config.tape.enabled` is true. This is
+the only persistent event plane for replay. `infrastructure.events.enabled` and
+`infrastructure.events.level` control advisory read-model recording, not a
+second JSONL location. Runtime startup validates canonical tape and fails fast
+on non-canonical rows inside `tape.dir`.
 
-## Transaction Boundary
+Built-in projections are deterministic folds over canonical tape:
 
-The stable authority-bearing transaction boundary is
-`single tool-call granularity`.
+- `turn_state`
+- `tool_commitments`
+- `recovery_history`
+- `cost_summary`
+- `baseline`
 
-Runtime guarantees durable semantics for one tool call at a time:
+`checkpoint.committed` carries the compact summary plus source event ids, not a
+recursive copy of every source event. `tape.replayBaseline(sessionId)` starts
+from the latest checkpoint and includes only the compact baseline plus later
+events, so Model can reduce context pressure without creating a second truth
+store.
 
-- classify the call
-- authorize, defer, or deny it
-- resume exact approval-bearing calls by request id and digest
-- record durable linked outcomes
-- roll back the latest mutation or patch set when the effect model supports a
-  rollback receipt
+## Tool Transaction Boundary
 
-The runtime does not expose a stable public contract for cross-agent recovery.
-No saga semantics, generalized compensation graphs, or broad all-or-nothing
-control-plane transactions are provided. Hosted orchestration, scheduler
-triggers, and delegated runs remain control-plane behavior over kernel
-receipts.
+The stable transaction boundary is `single tool-call granularity`.
+
+`kernel.beginToolCall(...)` records `tool.proposed` for allowed calls, records
+`tool.aborted` for blocked calls, or records `approval.requested` for deferred
+calls. Runtime engine code executes approved commitments and completes them
+through `kernel.commitToolResult(...)`; abort paths complete through
+`kernel.abortToolCall(...)`.
+
+Kernel does not execute tools. Runtime owns tool process lifetime, abort
+signals, parallel leases, provider loops, and cost observations. Provider tool
+frames are converted into `kernel.beginToolCall(...)` decisions. Approved
+commitments execute through the runtime tool executor and complete through
+`kernel.commitToolResult(...)`; missing or failed executors abort through
+`kernel.abortToolCall(...)`.
+
+Runtime does not expose a stable public contract for cross-agent recovery. No
+cross-agent saga semantics, generalized compensation graphs, or broad
+all-or-nothing control-plane transactions are provided. Hosted orchestration,
+scheduler triggers, and delegated runs remain opt-in control-plane behavior over
+kernel receipts.
+
+Kernel also owns the only non-commitment custom event writer:
+`kernel.recordAdvisoryEvent(...)`. It always records `custom` with
+`authority: "advisory"` and cannot emit turn, tool, checkpoint, approval, cost,
+or runtime terminal facts. Gateway/channel/daemon operational telemetry uses
+this path so those facts are replayable without exposing `TapeCommitPort` or
+recreating a second event store.
+
+## Verification Semantics
+
+default verification checks are expanded per target root for multi-root tasks.
+command-backed checks only become authoritative after `brewva_verify` records
+fresh evidence for the relevant target root.
+
+ordinary verifier blockers are verification debt rather than hard runtime
+blockers. They should be projected from tape and surfaced to operators, but they
+do not widen the default runtime transaction boundary beyond one tool call.
+
+## Recovery Causes
+
+The default runtime loop recognizes only five recovery causes:
+
+```ts
+type RuntimeRecoveryCause =
+  | "approval_pending"
+  | "compaction_required"
+  | "provider_retry"
+  | "interrupt"
+  | "terminal_commit";
+```
+
+Hosted recovery decision matrices, breaker families, attempt supersession
+policies, and reasoning-revert-resume state machines must not become default
+runtime concepts again. They either become canonical tape projections, explicit
+tools, or deleted legacy code.
 
 ## Generated Surface
 
@@ -102,252 +160,26 @@ receipts.
 
 > Generated by `bun run docs:inventory`. Do not edit this block by hand.
 
-Runtime surface member count: 89. Root: 4. Authority: 30. Inspect: 42. Operator: 13.
-Budget: total <= 90; inspect <= 55.
+Runtime root member count: 8. Public semantic ports: 3. Lifecycle methods: 3.
+Budget: root <= 8; canonical event types <= 14.
 
-- `authority.claim.facts`
-- `authority.conventions.requests`
-- `authority.cost.usage`
-- `authority.events.recordGuardResult`
-- `authority.events.recordMetricObservation`
-- `authority.proposals.proposals`
-- `authority.proposals.requests`
-- `authority.reasoning.checkpoints`
-- `authority.reasoning.reverts`
-- `authority.schedule.intents`
-- `authority.session.compaction`
-- `authority.session.lineage`
-- `authority.session.rewind`
-- `authority.session.title`
-- `authority.session.workerResults`
-- `authority.tape.handoff`
-- `authority.task.acceptance`
-- `authority.task.blockers`
-- `authority.task.items`
-- `authority.task.spec`
-- `authority.tools.invocation`
-- `authority.tools.parallel`
-- `authority.tools.patches`
-- `authority.tools.resourceLeases`
-- `authority.tools.tracking`
-- `authority.verification.checks`
-- `authority.workbench.commitBaseline`
-- `authority.workbench.evict`
-- `authority.workbench.note`
-- `authority.workbench.undoEviction`
-- `inspect.claim.state`
-- `inspect.context.compaction`
-- `inspect.context.evidence`
-- `inspect.context.prompt`
-- `inspect.context.sanitizeInput`
-- `inspect.context.usage`
-- `inspect.context.visibleRead`
-- `inspect.conventions.digest`
-- `inspect.conventions.requests`
-- `inspect.conventions.state`
-- `inspect.cost.summary`
-- `inspect.events.effects`
-- `inspect.events.iteration`
-- `inspect.events.log`
-- `inspect.events.records`
-- `inspect.ledger.store`
-- `inspect.lifecycle.getSnapshot`
-- `inspect.proposals.proposals`
-- `inspect.proposals.requests`
-- `inspect.reasoning.checkpoints`
-- `inspect.reasoning.reverts`
-- `inspect.reasoning.state`
-- `inspect.recovery.getPosture`
-- `inspect.recovery.getWorkingSet`
-- `inspect.recovery.listPending`
-- `inspect.schedule.intents`
-- `inspect.session.lifecycle`
-- `inspect.session.lineage`
-- `inspect.session.rewind`
-- `inspect.session.title`
-- `inspect.session.workerResults`
-- `inspect.sessionWire.query`
-- `inspect.sessionWire.subscribe`
-- `inspect.skills.catalog`
-- `inspect.tape.search`
-- `inspect.tape.status`
-- `inspect.task.state`
-- `inspect.task.target`
-- `inspect.tools.access`
-- `inspect.tools.resourceLeases`
-- `inspect.tools.undo`
-- `inspect.workbench.list`
-- `operator.context.compaction`
-- `operator.context.evidence`
-- `operator.context.lifecycle`
-- `operator.context.usage`
-- `operator.context.visibleRead`
-- `operator.recovery.compact`
-- `operator.recovery.recover`
-- `operator.session.credentials`
-- `operator.session.stall`
-- `operator.session.state`
-- `operator.session.workerResults`
-- `operator.skills.catalog`
-- `operator.tools.actionPolicies`
-- `root.authority`
-- `root.config`
-- `root.identity`
-- `root.inspect`
+- `runtime.close`
+- `runtime.config`
+- `runtime.identity`
+- `runtime.kernel`
+- `runtime.model`
+- `runtime.start`
+- `runtime.tape`
+- `runtime.turn`
 <!-- generated:runtime-surface end -->
 
-## Surface Semantics
+## Effect Boundary
 
-The generated list is intentionally complete, but readers should choose by
-semantic group rather than method name. These groups carry the boundaries that
-were previously scattered across method-level reference prose:
+Effect remains infrastructure, not public runtime API. It may own resource
+scope, dependency layers, cancellation, retry, and concurrency adapters inside
+the assembly. Public runtime types must not expose Effect values or require
+callers to understand Effect layers.
 
-| Group                                                                                        | Boundary                                                                                                                                 |
-| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `authority.proposals` / `inspect.proposals`                                                  | Effect commitment admission, pending approval, and resume identity; see `docs/reference/proposal-boundary.md`.                           |
-| `authority.tools` / `inspect.tools` / `operator.tools`                                       | Managed-tool start/result/receipt policy, rollback identity, action-policy registration, and resource leases.                            |
-| `authority.session` / `inspect.session` / `operator.session`                                 | Runtime-owned session state, rewind/redo, worker results, hydration, integrity, and bounded clear-state maintenance.                     |
-| `inspect.sessionWire`                                                                        | Read-only session protocol projection for frontends and hosted products; not durable event authority.                                    |
-| `authority.reasoning` / `inspect.reasoning`                                                  | Checkpoint and revert authority for model-visible reasoning continuity, separate from session rewind.                                    |
-| `authority.cost` / `inspect.cost`                                                            | Usage observations and cost summaries; cost state informs products but does not authorize effects.                                       |
-| `inspect.lifecycle`                                                                          | Snapshot of runtime lifecycle posture; use for diagnostics, not admission.                                                               |
-| `inspect.recovery` / `operator.recovery`                                                     | WAL/recovery posture, pending recovery work, compact, and recover operations; recovery repairs bounded runtime state only.               |
-| `authority.schedule` / `inspect.schedule`                                                    | Durable schedule-intent mutation and projection reads; gateway scheduling stays above runtime receipts.                                  |
-| `inspect.skills` / `operator.skills`                                                         | Skill catalog reads and catalog refresh. Skill execution evidence is committed through the owning task, verification, and tool surfaces. |
-| `authority.task` / `inspect.task` / `authority.claim` / `inspect.claim`                      | Task state and operational claims that become replay-visible runtime state.                                                              |
-| `authority.events` / `inspect.events` / `authority.tape` / `inspect.tape` / `inspect.ledger` | Event, guard, metric, replay, tape handoff/search, and ledger inspection around the event tape and evidence rows.                        |
-| `inspect.context` / `operator.context`                                                       | Numeric context status, compaction, provider cache, visible-read state, and prompt-stability observations.                               |
-| `authority.verification`                                                                     | Verification evidence recording; failures remain verification debt unless promoted by a higher authority surface.                        |
-
-## Interactive Inspection Veneers
-
-Interactive slash commands are runtime veneers, not additional authority
-surfaces:
-
-- `/context` reads `inspect.context.*` and opens the context dashboard. Manual
-  compaction is a view-local or command-palette action that submits the
-  existing operator compaction request path.
-- `/authority` reads approval counts, managed-tool capability metadata, and
-  `inspect.tools.access` posture. It does not edit approval policy, provider
-  auth, gateway scope, or tool authorization.
-- `/skills` reads `inspect.skills.catalog` and keeps review workflows in the
-  skill/producer catalog instead of promoting workflow-specific shell
-  commands.
-
-Gateway, network, and channel scope must be rendered as explicit
-`not surfaced` values until a runtime or gateway inspect surface owns those
-facts.
-
-`inspect.events.effects.getTurnProjection` is the structured operator view for
-effect commitment review. It returns the replay-derived projection object:
-declared effects, attempts, decisions, recovery preparation, execution
-receipts, recovery receipts, turn transitions, and warnings. The model-facing
-view is intentionally separate:
-`inspect.events.effects.renderTurnDigest` renders the bounded
-`[TurnConsequenceDigest]` context block.
-
-### Session Lineage
-
-Session lineage authority lives under `authority.session`; there is no separate
-runtime root. Latest hosted sessions must write an explicit `session_root`
-lineage node before context-entry linkers. Tapes without that root are
-unsupported on hosted lineage paths.
-
-Context-entry visibility is entry-level state: `admission` is
-`state_only | context_eligible | context_required`, and `presentTo` is
-`llm | ui | both`. Indexing derives from the event tape, not a `presentTo`
-target. Capability state is state-only, fail-closed against declared capability
-owners, and large payloads must use artifact references instead of inline data.
-Selection events are channel-local advisory records. CLI/TUI checkout writes
-and replays them for operator continuity, but context construction and
-orchestration do not consume them as routing authority.
-
-### `authority`
-
-`authority` is the commitment-facing surface. APIs belong here when they change
-replay-visible state, effect authorization, admission state, rollback identity,
-verification sufficiency, or operator approval claims.
-
-Authority methods should produce receipts, durable events, or explicit
-denial/defer reasons. They are the methods tools and hosts call when a runtime
-fact must become part of replay-visible state.
-
-### `inspect`
-
-`inspect` is read-only. APIs belong here when they query runtime-owned state,
-ledger rows, event tape, session lifecycle, proposals, task/claim state,
-schedule projection, worker results, skill catalog inventory, or verification
-reports.
-
-Inspection can explain degraded replay or missing evidence, but it must not
-write tape, mutate session state, register policy, or advance admission.
-
-### `operator`
-
-`operator` is explicit runtime operation machinery for hosted and operator
-lanes. APIs belong here when they refresh catalogs, register/unregister
-runtime-owned providers or policies, recover WAL state, compact recovery files,
-clear session state, resolve credential bindings, or record host observations
-that are not model-visible commitments.
-
-Operator methods are not a public-root backdoor. Hosted sessions receive them
-through the `hosted` port returned by `createBrewvaRuntime(...)`; operator
-products receive them through `selectOperatorRuntimePort(instance)`; managed
-tools do not receive them.
-
-## Domain And Extension Boundaries
-
-Runtime implementation code is organized by domain ownership rather than by
-technical layer. Domain slices live under
-`packages/brewva-runtime/src/domain/<name>/` and expose explicit seams:
-
-- `api.ts` for cross-domain value and service access
-- `types.ts` for domain-owned type contracts
-- `registrar.ts` for service construction and registration
-- `runtime-surface.ts` for direct semantic surface factories
-
-Cross-domain runtime source imports must use `api.ts` or `types.ts`. Concrete
-implementation files stay inside the owning domain unless they are exposed by a
-dedicated runtime subpath.
-
-Hosted extensions are repo-owned handles exposed only on the explicit `hosted`
-port. Tool-scoped extension handles are exposed only on the explicit `tool`
-port. They expose allowlisted methods; they do not spread service instances,
-leak private state, or preserve old implementation paths. The root port does
-not expose `extensions`.
-
-The root package export is intentionally small: runtime construction, runtime
-ports, the default config, and the minimal config type. Repo-owned callers that
-need domain contracts import the owning subpath instead, for example
-`@brewva/brewva-runtime/core`, `/config`, `/events`, `/session`,
-`/governance`, `/task`, `/skills`, `/context`, `/recovery`, `/event-log`,
-`/projection`, `/security`, and `/evidence`.
-
-Dedicated runtime subpaths return curated contracts or the same controlled-port
-shape for repo-owned infrastructure use. They are not wildcard implementation
-barrels and do not replace the semantic root contract.
-
-## Verification Semantics
-
-default verification checks are expanded per target root for multi-root tasks.
-command-backed checks only become authoritative after `brewva_verify` records
-the result. ordinary verifier blockers are verification debt: they remain
-visible until resolved, but they do not become hard task blockers unless a
-higher authority surface promotes them.
-
-## Callers
-
-- Hosted sessions use the hosted runtime port: authority, inspect, operator,
-  and hosted extensions.
-- Tools use the tool runtime port: authority and inspect, plus explicitly
-  injected tool hooks when repo-owned bundled tools need them.
-- Operator products use inspect and narrow operator ports for replay-first
-  diagnostics and bounded recovery.
-
-## Event And State Reading
-
-Runtime methods should be read together with:
-
-- `docs/reference/events/README.md` for event families and durability classes
-- `docs/reference/tools.md` for managed-tool authority and receipt boundaries
-- `docs/reference/configuration.md` for normalized configuration state
+After the four-port ownership cut stabilizes, remaining Effect usage should be
+audited for whether it is serving real infrastructure needs or only preserving
+shallow seams from the old domain lattice.

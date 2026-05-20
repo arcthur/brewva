@@ -26,7 +26,7 @@
 - Iteration Fact: a durable objective observation or guard result recorded as evidence for optimization and convergence flows
 - Supplemental Context: same-turn non-authoritative context appended through the hosted session path rather than persisted as a kernel proposal
 - Effect Commitment: an approval-bearing proposal for an `effectful` tool invocation
-- Governance Port: the external authorization interface that the runtime calls for tool-gate and effect-commitment decisions
+- Governance Port: the external authorization interface that the runtime calls for tool authorization and effect-commitment decisions
 - Subagent: the model/operator-facing tool surface (`subagent_*`) for starting, inspecting, and cancelling delegated child runs
 - Delegation: the runtime/session ledger layer that stores delegated child-run state, delivery handoff, and replay-visible outcomes
 - WorkerResult: a child-produced patch/outcome artifact emitted by a patch-producing delegated run; merged and applied explicitly by the parent

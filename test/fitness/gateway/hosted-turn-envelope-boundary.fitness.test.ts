@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const repoRoot = join(import.meta.dir, "..", "..", "..");
@@ -30,33 +30,81 @@ function listProductionFiles(): string[] {
 }
 
 describe("hosted turn envelope boundary", () => {
-  test("keeps production hosted thread loop access behind the turn envelope", () => {
+  test("keeps gateway hosted adapter ownership out of loop-named paths", () => {
+    expect(
+      existsSync(join(repoRoot, "packages/brewva-gateway/src/hosted/internal/thread-loop")),
+    ).toBe(false);
+    expect(existsSync(join(repoRoot, "packages/brewva-gateway/src/hosted/thread-loop.ts"))).toBe(
+      false,
+    );
+    expect(
+      existsSync(
+        join(
+          repoRoot,
+          "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapters.ts",
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      existsSync(
+        join(
+          repoRoot,
+          "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps production runtime turn adapter access behind the turn envelope", () => {
+    expect(
+      existsSync(
+        join(
+          repoRoot,
+          "packages/brewva-gateway/src/hosted/internal/turn-adapter/hosted-turn-adapter.ts",
+        ),
+      ),
+    ).toBe(false);
+
     const allowed = new Set([
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts",
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/hosted-thread-loop.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts",
     ]);
 
     const offenders = listProductionFiles()
       .filter((file) => !allowed.has(file))
-      .filter((file) => readRepoFile(file).includes("runHostedThreadLoop"));
+      .filter((file) => readRepoFile(file).includes("runHostedRuntimeTurnAdapter"));
 
     expect(offenders).toEqual([]);
+  });
+
+  test("keeps the runtime turn adapter free of legacy collect-output fallback", () => {
+    const loop = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts",
+    );
+    const collectOutput = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/collect-output.ts",
+    );
+
+    expect(loop).not.toContain("streamAndCollectLegacyAttempt");
+    expect(loop).not.toContain("runLegacyHostedThreadLoop");
+    expect(collectOutput).not.toContain("streamAndCollectLegacyAttempt");
+    expect(collectOutput).not.toContain("dispatchHostedPromptAttempt");
   });
 
   test("keeps production profile resolution behind the turn envelope", () => {
     const allowed = new Set([
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts",
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/state.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/state.ts",
     ]);
 
     const offenders = listProductionFiles()
       .filter((file) => !allowed.has(file))
-      .filter((file) => readRepoFile(file).includes("resolveThreadLoopProfile"));
+      .filter((file) => readRepoFile(file).includes("resolveHostedTurnAdapterProfile"));
 
     expect(offenders).toEqual([]);
   });
 
-  test("keeps turn receipt writers in the canonical envelope", () => {
+  test("keeps gateway hosted free of legacy turn receipt writers", () => {
     const receiptWriterPatterns = [
       /type:\s*TURN_INPUT_RECORDED_EVENT_TYPE/u,
       /type:\s*TURN_RENDER_COMMITTED_EVENT_TYPE/u,
@@ -65,12 +113,88 @@ describe("hosted turn envelope boundary", () => {
     ];
 
     const offenders = listProductionFiles().filter((file) => {
-      if (file === "packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts") {
-        return false;
-      }
       const source = readRepoFile(file);
       return receiptWriterPatterns.some((pattern) => pattern.test(source));
     });
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("keeps the turn envelope free of lifecycle spines and transition truth", () => {
+    const source = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts",
+    );
+
+    expect(source).not.toContain("TurnLifecycleSpine");
+    expect(source).not.toContain("SESSION_TURN_TRANSITION_EVENT_TYPE");
+    expect(source).not.toContain("recordSessionTurnTransition");
+    expect(source).not.toContain(".ops.");
+  });
+
+  test("keeps hosted compaction recovery controller deleted", () => {
+    expect(
+      existsSync(
+        join(repoRoot, "packages/brewva-gateway/src/hosted/internal/compaction/recovery.ts"),
+      ),
+    ).toBe(false);
+    expect(
+      existsSync(
+        join(repoRoot, "packages/brewva-gateway/src/hosted/internal/turn-adapter/recovery"),
+      ),
+    ).toBe(false);
+  });
+
+  test("keeps hosted transition truth out of gateway production code", () => {
+    expect(
+      existsSync(
+        join(
+          repoRoot,
+          "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-transition.ts",
+        ),
+      ),
+    ).toBe(false);
+
+    const transitionTruthPatterns = [
+      "recordSessionTurnTransition",
+      "getHostedTurnTransitionCoordinator",
+      "SESSION_TURN_TRANSITION_EVENT_TYPE",
+      "readSessionTurnTransitionEventPayload",
+      "session_turn_transition",
+    ];
+    const offenders = listProductionFiles()
+      .filter((file) => file.startsWith("packages/brewva-gateway/src/hosted/"))
+      .filter((file) => {
+        const source = readRepoFile(file);
+        return transitionTruthPatterns.some((pattern) => source.includes(pattern));
+      });
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("keeps hosted turn adapter code off removed runtime authority and inspect roots", () => {
+    const offenders = listProductionFiles()
+      .filter((file) =>
+        file.startsWith("packages/brewva-gateway/src/hosted/internal/turn-adapter/"),
+      )
+      .filter((file) => {
+        const source = readRepoFile(file);
+        return /\bruntime\.(?:authority|inspect)\b/u.test(source);
+      });
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("keeps removed hosted runtime bundle access out of production hosted code", () => {
+    const offenders = listProductionFiles()
+      .filter((file) => file.startsWith("packages/brewva-gateway/src/hosted/"))
+      .filter((file) => {
+        const source = readRepoFile(file);
+        return (
+          /HostedRuntimeAdapterBundle|OperatorRuntimeAdapterPort|RuntimeOperatorPort/u.test(
+            source,
+          ) || /\bruntime\.(?:root|hosted|tool|operator|authority|inspect)\b/u.test(source)
+        );
+      });
 
     expect(offenders).toEqual([]);
   });
@@ -81,10 +205,7 @@ describe("hosted turn envelope boundary", () => {
       /HOSTED_TURN_ENVELOPE_[A-Z0-9_]*DIAGNOSTIC[A-Z0-9_]*EVENT_TYPE/u,
       /ENVELOPE_DIAGNOSTICS?_EVENT_TYPE/u,
     ];
-    const files = [
-      ...listProductionFiles(),
-      "packages/brewva-runtime/src/events/registry.ts",
-    ].toSorted();
+    const files = listProductionFiles().toSorted();
 
     const offenders = files.filter((file) => {
       const source = readRepoFile(file);
@@ -96,10 +217,10 @@ describe("hosted turn envelope boundary", () => {
 
   test("keeps worker session-wire relay suppression separate from active turn ownership", () => {
     const source = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/worker/main.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/worker/main.ts",
     );
     const subscriptionMatch = source.match(
-      /unsubscribeSessionWire = sessionResult\.runtime\.inspect\.sessionWire\.subscribe\([\s\S]*?\n    \);/u,
+      /unsubscribeSessionWire = subscribeRuntimeSessionWire\([\s\S]*?\n    \);/u,
     );
 
     expect(subscriptionMatch?.[0] ?? "").toContain("sessionWireRelayGate.isPaused()");

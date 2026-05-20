@@ -37,6 +37,8 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     checkpointEveryTurns: 20,
   },
   tape: {
+    enabled: true,
+    dir: ".brewva/tape",
     checkpointIntervalEntries: 120,
   },
   projection: {
@@ -170,7 +172,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
   infrastructure: {
     events: {
       enabled: true,
-      dir: ".orchestrator/events",
       level: "audit",
     },
     contextBudget: {

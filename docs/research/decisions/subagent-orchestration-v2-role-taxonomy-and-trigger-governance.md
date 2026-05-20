@@ -23,8 +23,8 @@
   - `packages/brewva-tools/src/contracts/subagent.ts`
   - `packages/brewva-tools/src/families/delegation/subagent-run/schemas.ts`
   - `packages/brewva-tools/src/families/delegation/subagent-knowledge-adopt.ts`
-  - `packages/brewva-runtime/src/domain/delegation/types.ts`
-  - `packages/brewva-runtime/src/domain/delegation/adoption.ts`
+  - `packages/brewva-runtime/src/delegation/types.ts`
+  - `packages/brewva-runtime/src/delegation/adoption.ts`
 
 ## Decision Summary
 

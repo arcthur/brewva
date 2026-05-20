@@ -5,13 +5,13 @@ import {
   type CapabilityManifest,
   type CapabilityRegistry,
   type CapabilitySelectionReceipt,
-} from "@brewva/brewva-runtime/capabilities";
-import { CAPABILITY_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { ToolActionClass } from "@brewva/brewva-runtime/governance";
+} from "@brewva/brewva-capabilities";
+import type { ProtocolRecord, ToolActionClass } from "@brewva/brewva-runtime/protocol";
 import {
   formatBrewvaCapabilitySelectionForPrompt,
   type BrewvaSystemPromptCapabilitySelection,
 } from "@brewva/brewva-substrate/prompt";
+import { recordRuntimeToolCapabilitySelection } from "../runtime-ports.js";
 
 export interface CapabilitySelectionRuntimeView {
   identity: {
@@ -32,20 +32,26 @@ export interface CapabilitySelectionRuntimeView {
 }
 
 export interface CapabilitySelectionEventRecorder {
-  recordEvent(input: { sessionId: string; type: string; payload?: object }): unknown;
-}
-
-export interface CapabilitySelectionEventQuery {
-  inspect: {
-    events: {
-      records: {
-        query(sessionId: string, query: { type: string }): Array<{ payload?: unknown }>;
+  ops: {
+    tools: {
+      capabilitySelection: {
+        record(sessionId: string, receipt: object): unknown;
       };
     };
   };
 }
 
-export interface CapabilityAuthorityAccessFact {
+export interface CapabilitySelectionEventQuery {
+  ops: {
+    tools: {
+      capabilitySelection: {
+        latest(sessionId: string): object | undefined;
+      };
+    };
+  };
+}
+
+export interface CapabilityAuthorityAccessFact extends ProtocolRecord {
   allowed: boolean;
   basis: string;
   reason?: string;
@@ -217,21 +223,14 @@ export function recordCapabilitySelectionReceipt(input: {
   sessionId: string;
   receipt: CapabilitySelectionReceipt;
 }): void {
-  input.runtime.recordEvent({
-    sessionId: input.sessionId,
-    type: CAPABILITY_SELECTION_RECORDED_EVENT_TYPE,
-    payload: input.receipt,
-  });
+  recordRuntimeToolCapabilitySelection(input.runtime, input.sessionId, input.receipt);
 }
 
 export function readLatestCapabilitySelectionReceipt(input: {
   runtime: CapabilitySelectionEventQuery;
   sessionId: string;
 }): CapabilitySelectionReceipt | undefined {
-  const records = input.runtime.inspect.events.records.query(input.sessionId, {
-    type: CAPABILITY_SELECTION_RECORDED_EVENT_TYPE,
-  });
-  const payload = records.at(-1)?.payload;
+  const payload = input.runtime.ops.tools.capabilitySelection.latest(input.sessionId);
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return undefined;
   }

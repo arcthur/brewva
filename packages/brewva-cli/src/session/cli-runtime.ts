@@ -1,12 +1,13 @@
 import process from "node:process";
-import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
+import { runEdgeOperation } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
   createProviderConnectionPort,
   createProviderConnectionSeams,
   runHostedPromptTurn,
 } from "@brewva/brewva-gateway/hosted";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { SessionPromptSnapshot } from "@brewva/brewva-runtime/session";
+import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import type { SessionPromptSnapshot } from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaManagedPromptSession,
   BrewvaPromptSessionEvent,
@@ -18,6 +19,7 @@ import {
   readMessageRole,
   readMessageStopReason,
 } from "../io/message-content.js";
+import { recordCliRuntimeRewindCheckpoint } from "../runtime/runtime-ports.js";
 import type { CliShellSessionBundle } from "../shell/ports/session-port.js";
 import type { BrewvaSessionResult } from "./session.js";
 
@@ -33,7 +35,7 @@ export interface CliInteractiveShellOptions {
 }
 
 export interface CliInteractiveSessionOptions extends CliInteractiveShellOptions {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   providerConnections?: BrewvaSessionResult["providerConnections"];
   initPhases: BrewvaSessionResult["initPhases"];
   phase: BrewvaSessionResult["phase"];
@@ -84,7 +86,7 @@ function createToolDefinitionMap(
 
 function toCliShellSessionBundle(input: {
   session: BrewvaManagedPromptSession;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   providerConnections?: BrewvaSessionResult["providerConnections"];
   initPhases: BrewvaSessionResult["initPhases"];
   phase: BrewvaSessionResult["phase"];
@@ -115,7 +117,7 @@ async function runCliTurn(
   prompt: string,
   options: {
     printText: boolean;
-    runtime: BrewvaHostedRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
   },
 ): Promise<string> {
   let emittedText = "";
@@ -169,7 +171,7 @@ async function runCliTurn(
       throw new Error("cli_print_session_missing_session_id");
     }
     const parts = [{ type: "text" as const, text: prompt }];
-    options.runtime.authority.session.rewind.recordCheckpoint(sessionId, {
+    recordCliRuntimeRewindCheckpoint(options.runtime, sessionId, {
       turnId: `print:${Date.now()}`,
       prompt: {
         text: prompt,
@@ -281,7 +283,7 @@ export async function runCliPrintSession(
   options: {
     mode: CliPrintMode;
     initialMessage?: string;
-    runtime: BrewvaHostedRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
   },
 ): Promise<void> {
   if (typeof options.initialMessage !== "string" || options.initialMessage.trim().length === 0) {

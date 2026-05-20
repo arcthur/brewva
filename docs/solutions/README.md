@@ -85,7 +85,7 @@ problem_kind: bugfix
 module: brewva-runtime
 boundaries:
   - runtime.operator.recovery
-  - runtime.authority.tools
+  - HostedRuntimeAdapterPort.ops.tools
 source_artifacts:
   - investigation_record
   - review_findings

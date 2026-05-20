@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { ContextStatusView, SessionWireFrame } from "@brewva/brewva-runtime/session";
+import type { ContextStatusView, SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type WebSocket from "ws";
 import { sleep, waitUntil } from "../../helpers/process.js";
 import {

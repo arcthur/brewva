@@ -1,4 +1,4 @@
-import type { DelegationRunRecord, DelegationRunStatus } from "@brewva/brewva-runtime/delegation";
+import type { DelegationRunRecord, DelegationRunStatus } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";

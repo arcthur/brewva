@@ -1,14 +1,15 @@
-import type { BrewvaHostedRuntimePort, BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
-import type { SessionCostSummary } from "@brewva/brewva-runtime/cost";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
-import type { PatchSet, WorkerResult } from "@brewva/brewva-runtime/patch-history";
-import type { ToolOutputView } from "@brewva/brewva-runtime/session";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
+import type { SessionCostSummary } from "@brewva/brewva-runtime/protocol";
+import type { ToolOutputView } from "@brewva/brewva-runtime/protocol";
+import type { PatchSet, WorkerResult } from "@brewva/brewva-runtime/protocol";
 import type {
   SubagentOutcome,
   SubagentOutcomeArtifactRef,
   SubagentOutcomeSuccess,
   SubagentRunRequest,
 } from "@brewva/brewva-tools/contracts";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import { recordRuntimeAssistantCost, recordRuntimeWorkerResult } from "../hosted/api.js";
 import {
   buildCompletedDelegationAdoption,
   resolveDelegationRecordIdentity,
@@ -16,6 +17,7 @@ import {
 } from "./delegation-records.js";
 import type { ResolvedDelegationExecutionPlan } from "./execution-plan.js";
 import { buildDelegationLifecyclePayload } from "./lifecycle-payload.js";
+import { recordDelegationRuntimeEvent } from "./runtime-events.js";
 import {
   extractStructuredOutcomeData,
   summarizeStructuredOutcomeData,
@@ -38,7 +40,7 @@ export function resolveRunSummary(text: string, fallback: string): string {
 }
 
 export function aggregateChildCost(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   parentSessionId: string,
   childSummary: SessionCostSummary,
 ): void {
@@ -46,7 +48,7 @@ export function aggregateChildCost(
     if (totals.totalTokens <= 0 && totals.totalCostUsd <= 0) {
       continue;
     }
-    runtime.authority.cost.usage.recordAssistant({
+    recordRuntimeAssistantCost(runtime, {
       sessionId: parentSessionId,
       model,
       inputTokens: totals.inputTokens,
@@ -558,7 +560,7 @@ export function buildDelegationFailureFinalizationReceipt(input: {
 }
 
 export function applyDelegationFinalizationReceipt(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   receipt: DelegationFinalizationReceipt;
   recordLineageOutcome(record: DelegationRunRecord): void;
   adoptLineageOutcome?(record: DelegationRunRecord): void;
@@ -567,19 +569,22 @@ export function applyDelegationFinalizationReceipt(input: {
     aggregateChildCost(input.runtime, input.receipt.parentSessionId, input.receipt.costRollup);
   }
   if (input.receipt.parseFailureEvent) {
-    input.runtime.extensions.hosted.events.record({
+    recordDelegationRuntimeEvent({
+      runtime: input.runtime,
       sessionId: input.receipt.parentSessionId,
       type: input.receipt.parseFailureEvent.type,
       payload: input.receipt.parseFailureEvent.payload,
     });
   }
   if (input.receipt.workerResult) {
-    input.runtime.authority.session.workerResults.record(
+    recordRuntimeWorkerResult(
+      input.runtime,
       input.receipt.parentSessionId,
       input.receipt.workerResult,
     );
   }
-  input.runtime.extensions.hosted.events.record({
+  recordDelegationRuntimeEvent({
+    runtime: input.runtime,
     sessionId: input.receipt.parentSessionId,
     type: input.receipt.lifecycleEvent.type,
     payload: input.receipt.lifecycleEvent.payload,

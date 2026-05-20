@@ -6,8 +6,8 @@ Output:
 
 ```json
 {
-  "strategy_review": "An operator timeline pane addresses real diagnosis pain, but the next-cycle bet is a read-only correlation view over `session_turn_transition`, approval receipts, and workflow posture. Full interactive recovery controls would widen scope into daemon mutation flows and should be deferred.",
-  "scope_decision": "Accepted: a read-only insights timeline that correlates `session_turn_transition`, approval receipts, and workflow posture for one session. Deferred: inline recovery actions, live daemon control mutations, and multi-session comparison. Non-goals: replacing `brewva inspect`, building a new operator shell, or adding automation authoring from the pane.",
+  "strategy_review": "An operator timeline pane addresses real diagnosis pain, but the next-cycle bet is a read-only correlation view over canonical runtime causes, approval receipts, and workflow posture. Full interactive recovery controls would widen scope into daemon mutation flows and should be deferred.",
+  "scope_decision": "Accepted: a read-only insights timeline that correlates canonical runtime causes, approval receipts, and workflow posture for one session. Deferred: inline recovery actions, live daemon control mutations, and multi-session comparison. Non-goals: replacing `brewva inspect`, building a new operator shell, or adding automation authoring from the pane.",
   "planning_posture": "moderate",
   "strategic_risks": [
     {

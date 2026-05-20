@@ -1,15 +1,24 @@
 import type {
   ContextBudgetUsage,
   ContextStatus,
+  TapeStatusState,
   TapeSearchScope,
-} from "@brewva/brewva-runtime/context";
-import type { ActiveReasoningBranchState } from "@brewva/brewva-runtime/reasoning";
+} from "@brewva/brewva-runtime/protocol";
+import type { ActiveReasoningBranchState } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
+import {
+  getActiveReasoningState,
+  getContextStatus,
+  getContextUsage,
+  getTapeStatus,
+  recordTapeHandoff,
+  searchTape,
+} from "../../runtime-port/tape.js";
 import { failTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -52,7 +61,7 @@ function resolveContextAction(status: ContextStatus): string {
 }
 
 function formatTapeInfoBlock(input: {
-  tape: ReturnType<BrewvaToolOptions["runtime"]["inspect"]["tape"]["status"]["get"]>;
+  tape: TapeStatusState;
   contextStatus: ContextStatus;
   reasoning: ActiveReasoningBranchState;
 }): string {
@@ -68,8 +77,8 @@ function formatTapeInfoBlock(input: {
     `last_anchor_name: ${input.tape.lastAnchor?.name ?? "none"}`,
     `last_anchor_id: ${input.tape.lastAnchor?.id ?? "none"}`,
     `last_checkpoint_id: ${input.tape.lastCheckpointId ?? "none"}`,
-    `context_usage: ${formatPercent(input.contextStatus.usageRatio)}`,
-    `context_hard_limit: ${formatPercent(input.contextStatus.hardLimitRatio)}`,
+    `context_usage: ${formatPercent(input.contextStatus.usageRatio ?? null)}`,
+    `context_hard_limit: ${formatPercent(input.contextStatus.hardLimitRatio ?? null)}`,
     `context_compaction_advised: ${input.contextStatus.compactionAdvised ? "yes" : "no"}`,
     `context_forced_compaction: ${input.contextStatus.forcedCompaction ? "yes" : "no"}`,
     `tokens_until_forced_compact: ${input.contextStatus.tokensUntilForcedCompact ?? "unknown"}`,
@@ -159,7 +168,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const handoff = tapeHandoffTool.runtime.authority.tape.handoff.record(sessionId, {
+        const handoff = recordTapeHandoff(tapeHandoffTool.runtime, sessionId, {
           name: params.name,
           summary: params.summary,
           nextSteps: params.next_steps,
@@ -171,8 +180,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
           );
         }
 
-        const status =
-          handoff.tapeStatus ?? tapeHandoffTool.runtime.inspect.tape.status.get(sessionId);
+        const status = handoff.tapeStatus ?? getTapeStatus(tapeHandoffTool.runtime, sessionId);
         const text = [
           "Tape handoff recorded.",
           `name: ${params.name}`,
@@ -201,11 +209,11 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const tape = tapeInfoTool.runtime.inspect.tape.status.get(sessionId);
+      const tape = getTapeStatus(tapeInfoTool.runtime, sessionId);
       const usage =
-        resolveToolContextUsage(ctx) ?? tapeInfoTool.runtime.inspect.context.usage.get(sessionId);
-      const contextStatus = tapeInfoTool.runtime.inspect.context.usage.getStatus(sessionId, usage);
-      const reasoning = tapeInfoTool.runtime.inspect.reasoning.state.getActive(sessionId);
+        resolveToolContextUsage(ctx) ?? getContextUsage(tapeInfoTool.runtime, sessionId);
+      const contextStatus = getContextStatus(tapeInfoTool.runtime, sessionId, usage);
+      const reasoning = getActiveReasoningState(tapeInfoTool.runtime, sessionId);
 
       return textResult(
         formatTapeInfoBlock({
@@ -252,7 +260,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       }
 
       const scope = toSafeScope(params.scope);
-      const result = tapeSearchTool.runtime.inspect.tape.search.search(sessionId, {
+      const result = searchTape(tapeSearchTool.runtime, sessionId, {
         query,
         scope,
         limit: params.limit,

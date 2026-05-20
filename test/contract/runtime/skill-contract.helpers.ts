@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { SkillCard } from "@brewva/brewva-runtime/skills";
+import type { SkillCard } from "@brewva/brewva-runtime/protocol";
 
 export function repoRoot(): string {
   return process.cwd();
@@ -13,7 +13,7 @@ export function createContract(
   return {
     name: input.name,
     category: input.category,
-    description: input.description,
+    description: input.description ?? input.name,
     selection: input.selection,
   };
 }

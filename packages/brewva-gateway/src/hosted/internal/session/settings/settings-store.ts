@@ -222,7 +222,7 @@ function normalizeCacheReason(value: unknown): ProviderCachePolicyReason {
     : DEFAULT_PROVIDER_CACHE_POLICY.reason;
 }
 
-const HOSTED_SETTINGS_BRIDGE = Symbol.for("brewva.hosted.settings-store");
+const HOSTED_SETTINGS_BRIDGE = Symbol("brewva.hosted.settings-store");
 
 class BrewvaHostedSettingsHandle implements HostedSessionSettings, HostedSessionSettingsStore {
   readonly view: HostedSessionSettings["view"];

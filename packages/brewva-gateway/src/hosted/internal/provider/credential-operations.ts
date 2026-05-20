@@ -1,4 +1,4 @@
-import type { CredentialVaultService } from "@brewva/brewva-runtime/credentials";
+import type { CredentialVaultService } from "@brewva/brewva-runtime/security";
 import type { ProviderCredentialOperations } from "./credential.js";
 import {
   KIMI_COVERED_PROVIDERS,

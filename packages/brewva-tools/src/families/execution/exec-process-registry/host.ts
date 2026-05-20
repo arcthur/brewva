@@ -1,11 +1,7 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import {
-  BrewvaBoundaryFailure,
-  BrewvaEffect,
-  startScopedTimeout,
-  type BrewvaScope,
-} from "@brewva/brewva-effect";
+import { BrewvaBoundaryFailure, startScopedTimeout } from "@brewva/brewva-effect";
+import { BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
 import { resolveShellConfig as getShellConfig } from "@brewva/brewva-substrate/host-api";
 import { finalizeSession } from "./internal/lifecycle.js";
 import { appendOutput, appendOutputWithBackpressure } from "./internal/output.js";

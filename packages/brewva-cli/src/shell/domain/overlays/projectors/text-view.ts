@@ -42,7 +42,7 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
       for (const [index, item] of payload.snapshot.approvals.entries()) {
         const marker = index === payload.selectedIndex ? ">" : " ";
         lines.push(
-          `${marker} [${item.requestId}] ${item.toolName} :: ${item.subject} :: ${item.effects.join(", ")}`,
+          `${marker} [${item.requestId}] ${item.toolName} :: ${item.subject} :: ${(item.effects ?? []).join(", ")}`,
         );
       }
       if (payload.snapshot.approvals.length === 0) {

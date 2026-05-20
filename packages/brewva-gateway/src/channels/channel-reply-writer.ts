@@ -1,5 +1,5 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { toErrorMessage } from "../utils/errors.js";
 
 export interface ChannelToolTurnOutput {
@@ -18,7 +18,7 @@ export interface ChannelReplyWriter {
     meta?: Record<string, unknown>,
   ): Promise<void>;
   sendAgentOutputs(input: {
-    runtime: BrewvaHostedRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
     inbound: TurnEnvelope;
     agentSessionId: string;
     agentId: string;
@@ -29,7 +29,7 @@ export interface ChannelReplyWriter {
 }
 
 function buildControllerReplyTurn(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   inbound: TurnEnvelope;
   text: string;
   sequence: number;
@@ -82,7 +82,7 @@ function buildAgentReplyTurn(input: {
 }
 
 export function createChannelReplyWriter(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sendTurn(turn: TurnEnvelope): Promise<unknown>;
 }): ChannelReplyWriter {
   const nextControllerSequenceByScope = new Map<string, number>();
@@ -112,9 +112,8 @@ export function createChannelReplyWriter(input: {
       try {
         await input.sendTurn(outbound);
       } catch (error) {
-        input.runtime.extensions.hosted.events.record({
+        input.runtime.ops.channel.turn.outboundError({
           sessionId: turn.sessionId,
-          type: "channel_turn_outbound_error",
           payload: {
             turnId: turn.turnId,
             outboundKind: "assistant",
@@ -150,9 +149,8 @@ export function createChannelReplyWriter(input: {
           await input.sendTurn(toolTurn);
           outboundTurnsSent += 1;
         } catch (error) {
-          output.runtime.extensions.hosted.events.record({
+          output.runtime.ops.channel.turn.outboundError({
             sessionId: output.inbound.sessionId,
-            type: "channel_turn_outbound_error",
             payload: {
               turnId: output.inbound.turnId,
               outboundKind: "tool",
@@ -184,9 +182,8 @@ export function createChannelReplyWriter(input: {
         await input.sendTurn(assistantTurn);
         outboundTurnsSent += 1;
       } catch (error) {
-        output.runtime.extensions.hosted.events.record({
+        output.runtime.ops.channel.turn.outboundError({
           sessionId: output.inbound.sessionId,
-          type: "channel_turn_outbound_error",
           payload: {
             turnId: output.inbound.turnId,
             outboundKind: "assistant",

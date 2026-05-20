@@ -1,8 +1,9 @@
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
-import type { DelegationForkTurns } from "@brewva/brewva-runtime/delegation";
-import { MESSAGE_END_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import type { ContextEntryRecord } from "@brewva/brewva-runtime/session";
+import type { DelegationForkTurns } from "@brewva/brewva-runtime/protocol";
+import { MESSAGE_END_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { ContextEntryRecord } from "@brewva/brewva-runtime/protocol";
 import { deterministicTokenTruncate, type ContextBundleBlockInput } from "../context/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import { getRuntimeSessionLineageContextEntryPath, listRuntimeEvents } from "../hosted/api.js";
 
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 const SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE = "branch_summary_recorded";
@@ -121,7 +122,7 @@ function selectInheritedEntries(
 }
 
 function renderInheritedSubagentContextContent(input: {
-  runtime: Pick<BrewvaRuntimeRoot, "inspect">;
+  runtime: Pick<HostedRuntimeAdapterPort, "ops">;
   sessionId: string;
   forkTurns: DelegationForkTurns;
 }): string | undefined {
@@ -131,12 +132,12 @@ function renderInheritedSubagentContextContent(input: {
 
   let contextEntries: ContextEntryRecord[];
   try {
-    contextEntries = input.runtime.inspect.session.lineage.getContextEntryPath(input.sessionId);
+    contextEntries = getRuntimeSessionLineageContextEntryPath(input.runtime, input.sessionId, {});
   } catch {
     contextEntries = [];
   }
 
-  const events = input.runtime.inspect.events.records.list(input.sessionId);
+  const events = listRuntimeEvents(input.runtime, input.sessionId);
   const renderedEntries = contextEntries
     .map((entry) => renderContextEntry({ entry, sourceEvent: findSourceEvent(events, entry) }))
     .filter((entry): entry is string => Boolean(entry));
@@ -155,7 +156,7 @@ function renderInheritedSubagentContextContent(input: {
 }
 
 export function buildInheritedSubagentContextBlock(input: {
-  runtime: Pick<BrewvaRuntimeRoot, "inspect">;
+  runtime: Pick<HostedRuntimeAdapterPort, "ops">;
   sessionId: string;
   forkTurns: DelegationForkTurns;
 }): ContextBundleBlockInput | undefined {

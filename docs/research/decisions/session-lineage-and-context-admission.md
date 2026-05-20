@@ -17,9 +17,9 @@
   - `docs/reference/artifacts-and-paths.md`
   - `docs/reference/tools/delegation.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/sessions/lineage.ts`
-  - `packages/brewva-runtime/src/domain/sessions/lineage-event-descriptors.ts`
-  - `packages/brewva-runtime/src/domain/context/builtins.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/lineage.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/lineage-event-descriptors.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/builtins.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.ts`
   - `packages/brewva-gateway/src/delegation/lineage.ts`
   - `packages/brewva-session-index/src/factory.ts`
@@ -38,4 +38,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

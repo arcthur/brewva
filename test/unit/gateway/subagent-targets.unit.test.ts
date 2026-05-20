@@ -6,16 +6,16 @@ import {
   buildHostedDelegationTargetFromAgentSpec,
   loadHostedDelegationCatalog,
 } from "@brewva/brewva-gateway";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
 import { buildDelegationContextBundle } from "../../../packages/brewva-gateway/src/delegation/build-delegation-context-bundle.js";
 import { buildDelegationPrompt } from "../../../packages/brewva-gateway/src/delegation/prompt.js";
 import { requireDefined } from "../../helpers/assertions.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 
-function createIsolatedRuntime(name: string): BrewvaHostedRuntimePort {
+function createIsolatedRuntime(name: string): HostedRuntimeAdapterPort {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-subagent-runtime-${name}-`));
-  return createBrewvaRuntime({ cwd: workspace }).hosted;
+  return createRuntimeInstanceFixture({ cwd: workspace });
 }
 
 describe("delegation prompt and catalog composition", () => {
@@ -103,7 +103,7 @@ describe("delegation prompt and catalog composition", () => {
   test("injects semantic skill markdown for consult runs without requiring skillOutputs", () => {
     const runtime = createIsolatedRuntime("review");
     const skill = requireDefined(
-      runtime.inspect.skills.catalog.get("review"),
+      runtime.ops.skills.catalog.get("review"),
       "Expected review skill in hosted runtime catalog.",
     );
 
@@ -136,7 +136,7 @@ describe("delegation prompt and catalog composition", () => {
 
     expect(prompt).toContain("## Semantic Context");
     expect(prompt).toContain("### Skill Body");
-    expect(prompt).toContain("Review Skill");
+    expect(prompt).toContain("Brewva Review Overlay");
     expect(prompt).not.toContain("skillOutputs");
     expect(prompt).toContain('"kind": "consult"');
     expect(prompt).toContain('"consultKind": "review"');
@@ -156,7 +156,7 @@ describe("delegation prompt and catalog composition", () => {
   test("injects Verifier anti-rationalization guidance into delegated prompts", () => {
     const runtime = createIsolatedRuntime("verifier");
     const skill = requireDefined(
-      runtime.inspect.skills.catalog.get("verifier"),
+      runtime.ops.skills.catalog.get("verifier"),
       "Expected Verifier skill in hosted runtime catalog.",
     );
 

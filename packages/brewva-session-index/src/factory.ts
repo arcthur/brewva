@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, renameSync, rmSync, statSync, type Stats } from "node:fs";
+import { copyFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import {
@@ -40,7 +40,6 @@ import {
 } from "./duckdb/lifecycle.js";
 import { selectOne, selectRows, type JsonRow } from "./duckdb/query.js";
 import { acquireWriteLease, type WriteLease } from "./lease/write-lease.js";
-import { readEventsFromLog } from "./log-reader/jsonl.js";
 import { listSessionBoxes as listProjectedSessionBoxes } from "./projection/box.js";
 import {
   getParallelBudgetViewRow,
@@ -376,7 +375,7 @@ class DuckDBSessionIndex implements SessionIndex {
         schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
       });
       const sessionIds = uniqueNonEmptyStrings([
-        ...this.events.log.listSessionIds(),
+        ...this.events.records.listSessionIds(),
         ...(await listIndexedSessionIds(this.connection)),
       ]);
       for (const sessionId of sessionIds) {
@@ -545,25 +544,25 @@ class DuckDBSessionIndex implements SessionIndex {
   }
 
   private async indexSession(sessionId: string): Promise<boolean> {
-    const logPath = this.events.log.getPath(sessionId);
+    const sourceUri = `canonical-tape:${sessionId}`;
+    const records = this.events.records.list(sessionId);
     const previous = await readIndexedSessionState(this.connection, sessionId);
-    let stat: Stats;
-    try {
-      stat = statSync(logPath);
-    } catch {
+    if (records.length === 0) {
       if (previous) {
         await deleteSessionRows(this.connection, sessionId);
         return true;
       }
       return false;
     }
-    const previousOffset = previous?.byteOffset ?? 0;
-    const reset = previousOffset > stat.size;
-    const offset = reset ? 0 : previousOffset;
-    const readResult = readEventsFromLog(logPath, sessionId, offset);
-    if (!reset && readResult.events.length === 0 && readResult.nextOffset === offset) {
+    if (previous?.indexedEventCount === records.length) {
       return false;
     }
+    const reset = !previous || previous.indexedEventCount > records.length;
+    const newEvents = reset ? records : records.slice(previous.indexedEventCount);
+    const parsedEvents = newEvents.map((event, index) => ({
+      event,
+      sequence: reset ? index : previous.indexedEventCount + index,
+    }));
 
     return await runSessionIndexTransaction(this.connection, async () => {
       if (reset) {
@@ -571,17 +570,16 @@ class DuckDBSessionIndex implements SessionIndex {
       }
       await upsertSessionEvents({
         connection: this.connection,
-        logPath,
-        parsedEvents: readResult.events,
+        sourceUri,
+        parsedEvents,
       });
       await rebuildSessionProjection({
         connection: this.connection,
         workspaceRoot: this.workspaceRoot,
         task: this.task,
         sessionId,
-        logPath,
-        stat,
-        byteOffset: readResult.nextOffset,
+        sourceUri,
+        sourceCursor: records.length,
       });
       return true;
     });

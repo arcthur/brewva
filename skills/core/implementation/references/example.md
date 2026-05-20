@@ -14,8 +14,8 @@ Output:
     ]
   },
   "files_changed": [
-    "packages/brewva-runtime/src/domain/skills/types.ts",
-    "packages/brewva-runtime/src/domain/skills/registry.ts",
+    "packages/brewva-runtime/src/internal/legacy-runtime/model/skills/types.ts",
+    "packages/brewva-runtime/src/internal/legacy-runtime/model/skills/registry.ts",
     "test/contract/runtime/skills-discovery.contract.test.ts",
     "test/unit/gateway/subagent-workspace.unit.test.ts"
   ],

@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function envelopeFor(input: { turnId: string; sessionId: string; channel: string }): TurnEnvelope {
@@ -48,7 +47,7 @@ describe("Recovery WAL recovery", () => {
       },
     });
 
-    const summary = await runPromiseAtBoundary(recovery.recoverEffect());
+    const summary = await recovery.recover();
     expect(summary.scanned).toBe(1);
     expect(summary.retried).toBe(1);
     expect(summary.failed).toBe(0);

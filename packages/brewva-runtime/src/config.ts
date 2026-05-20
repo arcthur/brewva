@@ -36,6 +36,13 @@ export type {
   NormalizeExplicitBrewvaConfigOptions,
 } from "./config/loader.js";
 export {
+  collectPathCandidates,
+  isIgnoredWorkspacePath,
+  normalizeWorkspaceRelativePath,
+  resolveWorkspacePath,
+  toWorkspaceRelativePath,
+} from "./config/workspace-paths.js";
+export {
   BREWVA_CONFIG_DIR_RELATIVE,
   BREWVA_CONFIG_FILE_NAME,
   normalizePathInput,

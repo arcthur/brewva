@@ -1,4 +1,4 @@
-import { runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { runBoundaryOperation } from "@brewva/brewva-effect";
 import {
   waitForManagedSessionActivityEffect,
   type ManagedExecRunningSession,
@@ -25,7 +25,8 @@ export async function waitForPollCondition(
   sessionId: string,
   timeoutMs: number,
 ): Promise<void> {
-  await runPromiseAtBoundary(
+  await runBoundaryOperation(
+    "tools.process.waitForPollCondition",
     waitForManagedSessionActivityEffect(ownerSessionId, sessionId, timeoutMs),
   );
 }

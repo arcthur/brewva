@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { writeSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
-import { BrewvaEffect, startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import { startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { connectGatewayClient, readGatewayToken } from "@brewva/brewva-gateway";
 import { queryGatewayStatus, resolveGatewayPaths } from "@brewva/brewva-gateway/admin";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 
 export type CliBackendKind = "auto" | "embedded" | "gateway";
 

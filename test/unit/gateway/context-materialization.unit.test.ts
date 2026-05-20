@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-runtime/context";
+import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-runtime/protocol";
 import { buildContextBundle } from "../../../packages/brewva-gateway/src/context/context-bundle.js";
 import type { HostedContextRenderResult } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-blocks.js";
 import {
@@ -112,7 +112,7 @@ describe("hosted context materialization", () => {
     expect(receipt.promptStability.turn).toBe(3);
     expect(receipt.contextComposed.workbenchContextRendered).toBe(true);
     expect(calls).toEqual(["hard", "composed"]);
-    expect(runtime.inspect.context.evidence.latest("session-1", "prompt_stability")).toEqual(
+    expect(runtime.ops.context.evidence.latest("session-1", "prompt_stability")).toEqual(
       expect.objectContaining({
         kind: "prompt_stability",
         turn: 3,

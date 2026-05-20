@@ -1,16 +1,25 @@
 import { randomUUID } from "node:crypto";
+import type {
+  Api,
+  Model as ProviderModel,
+  ProviderCacheRenderResult,
+  ProviderPayloadMetadata,
+} from "@brewva/brewva-provider-core/contracts";
 import { clearApiProviderSessions } from "@brewva/brewva-provider-core/registry";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
+import {
+  type BrewvaAgentProtocolController,
+  type BrewvaAgentProtocolEvent,
+  type BrewvaAgentProtocolMessage,
+} from "@brewva/brewva-substrate/agent-protocol";
 import {
   buildBrewvaDeterministicCompactionSummary,
   estimateBrewvaCompactionTokens,
 } from "@brewva/brewva-substrate/compaction";
-import type { ContextState } from "@brewva/brewva-substrate/contracts";
 import {
   createBrewvaHostPluginRunner,
   type BrewvaHostCommandContext,
@@ -48,23 +57,14 @@ import {
   type SessionPhase,
   type SessionPhaseEvent,
   type BrewvaSessionModelCatalogView,
+  type ContextState,
   type BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
 import {
   type BrewvaCompactionRequest,
   BrewvaToolContext,
   BrewvaToolDefinition,
-  BrewvaToolResult,
 } from "@brewva/brewva-substrate/tools";
-import {
-  createBrewvaTurnLoopController,
-  type BrewvaTurnLoopAfterToolCallContext,
-  type BrewvaTurnLoopBeforeToolCallContext,
-  type BrewvaTurnLoopController,
-  type BrewvaTurnLoopEvent,
-  type BrewvaTurnLoopMessage,
-  type BrewvaTurnLoopToolResultMessage,
-} from "@brewva/brewva-substrate/turn";
 import {
   ManagedSessionDeferredCompactionCoordinator,
   type DeferredCompactionSalvageMode,
@@ -99,11 +99,27 @@ import {
   type ToolSchemaSnapshot,
 } from "../../provider/cache/index.js";
 import { consumeProviderRequestReductionExpectedCacheBreak } from "../../provider/request/provider-request-reduction.js";
-import { createHostedProviderStreamFunction } from "../../provider/stream.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
-import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../thread-loop/hosted-prompt-attempt.js";
-import { clearDefaultTurnLifecycleSpine } from "../../thread-loop/turn-envelope.js";
+import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../turn-adapter/hosted-prompt-attempt.js";
 import {
+  HOSTED_RUNTIME_TURN_CONTEXT,
+  HOSTED_RUNTIME_TURN_PRELUDE,
+  type HostedRuntimeTurnPreludeResult,
+} from "../../turn-adapter/runtime-turn-prelude.js";
+import {
+  runHostedTurnEnvelope,
+  type HostedTurnEnvelopeSource,
+} from "../../turn-adapter/turn-envelope.js";
+import {
+  getRuntimeCompactionGateStatus,
+  getRuntimeContextEvidenceLatest,
+  getRuntimeContextUsage,
+  getRuntimeVisibleReadEpoch,
+  recordRuntimeAssistantCost,
+  type HostedRuntimeAdapterPort,
+} from "../runtime-ports.js";
+import {
+  deriveSessionPhaseFromLifecycleSnapshot,
   deriveCompatibilityValidationEvent,
   ManagedSessionPhaseCoordinator,
   resolveManagedSessionBootstrapPhase,
@@ -132,7 +148,6 @@ import {
   buildSkillCommandText,
   buildTextPromptParts,
   parseCommand,
-  resolvePromptFilePart,
   toAgentUserContent,
 } from "./prompt-content.js";
 import { ManagedSessionProviderAssistantObserver } from "./provider-assistant-observer.js";
@@ -144,11 +159,12 @@ import {
   resolveProviderCacheDiagnosticDumpDirectory,
 } from "./provider-cache-state.js";
 import {
-  buildProviderDynamicTailSummary,
   EMPTY_WORKBENCH_CONTEXT_FINGERPRINT,
+  buildProviderDynamicTailSummary,
   resolveWorkbenchContextFingerprint,
   type WorkbenchContextFingerprintInput,
 } from "./provider-payload-summary.js";
+import { ManagedRuntimeSessionController } from "./runtime-session-controller.js";
 import {
   REQUIRED_HOSTED_PERSISTENCE_EVENTS,
   toTurnLoopThinkingLevel,
@@ -158,7 +174,6 @@ import {
   type ManagedAgentSessionStore,
   type PreparedDeferredCompaction,
   type ProviderCacheRuntimeState,
-  type ToolResultForAgent,
 } from "./session-contracts.js";
 import {
   buildManagedSessionBaseSystemPrompt,
@@ -172,7 +187,7 @@ import {
 
 function toTurnLoopCustomMessage(
   message: BrewvaHostCustomMessage,
-): Extract<BrewvaTurnLoopMessage, { role: "custom" }> {
+): Extract<BrewvaAgentProtocolMessage, { role: "custom" }> {
   return {
     role: "custom",
     customType: message.customType,
@@ -184,6 +199,25 @@ function toTurnLoopCustomMessage(
     details: message.details,
     timestamp: Date.now(),
   };
+}
+
+function hostedTurnSourceFromPromptOptions(
+  options: BrewvaPromptOptions | undefined,
+): HostedTurnEnvelopeSource {
+  switch (options?.source) {
+    case "interactive":
+      return "interactive";
+    case "extension":
+      return "gateway";
+    default:
+      return "gateway";
+  }
+}
+
+function promptPartsFromCustomMessage(
+  message: BrewvaHostCustomMessage,
+): readonly BrewvaPromptContentPart[] {
+  return [{ type: "text", text: message.content }];
 }
 
 const DEFAULT_GOOGLE_CACHED_CONTENT_MANAGER = new GoogleCachedContentManager();
@@ -199,18 +233,41 @@ export type {
   ManagedAgentSessionStore,
 } from "./session-contracts.js";
 
+type PreparedManagedPromptDispatch =
+  | {
+      readonly status: "ready";
+      readonly promptText: string;
+      readonly promptContent: readonly BrewvaPromptContentPart[];
+      readonly messages: readonly BrewvaAgentProtocolMessage[];
+      readonly source: string | undefined;
+    }
+  | {
+      readonly status: "handled" | "queued";
+    };
+
+interface RuntimeProviderPayloadInput {
+  readonly payload: unknown;
+  readonly model: ProviderModel<Api>;
+  readonly metadata?: ProviderPayloadMetadata;
+}
+
+interface RuntimeProviderCacheRenderInput {
+  readonly render: ProviderCacheRenderResult;
+  readonly model: ProviderModel<Api>;
+}
+
 class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly sessionManager: ManagedAgentSessionStore;
   readonly settingsManager: BrewvaManagedSessionSettingsView;
   readonly modelRegistry: BrewvaSessionModelCatalogView;
 
   readonly #cwd: string;
-  readonly #runtime: BrewvaHostedRuntimePort | undefined;
+  readonly #runtime: HostedRuntimeAdapterPort;
   readonly #settings: BrewvaManagedAgentSessionSettingsPort;
   readonly #catalog: BrewvaMutableModelCatalog;
   readonly #modelSelection: ManagedSessionModelSelectionController;
   readonly #resourceLoader: BrewvaHostedResourceLoader;
-  readonly #agent: BrewvaTurnLoopController;
+  readonly #agent: BrewvaAgentProtocolController;
   readonly #runner: BrewvaHostPluginRunner;
   readonly #compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
   readonly #sessionTitleGenerator: BrewvaSessionTitleGenerator;
@@ -238,12 +295,19 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   #turnIndex = 0;
   #turnStartTimestamp = 0;
   #activePromptSource: string | undefined;
+  #runtimeTurnPreparedMessages: readonly BrewvaAgentProtocolMessage[] = [];
   #lastWorkbenchContextFingerprint: WorkbenchContextFingerprintInput = {
     ...EMPTY_WORKBENCH_CONTEXT_FINGERPRINT,
   };
   readonly #logger: HostedSessionLogger | null;
   readonly #onProviderAssistantMessage:
-    | ((message: Extract<BrewvaTurnLoopMessage, { role: "assistant" }>) => void)
+    | ((message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>) => void)
+    | undefined;
+  readonly #prepareRuntimeProviderPayload:
+    | ((input: RuntimeProviderPayloadInput) => Promise<unknown>)
+    | undefined;
+  readonly #observeRuntimeCacheRender:
+    | ((input: RuntimeProviderCacheRenderInput) => void)
     | undefined;
   readonly #onDispose: (() => void) | undefined;
   readonly #onInitialPersistence: (() => void) | undefined;
@@ -252,7 +316,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   constructor(input: {
     cwd: string;
-    runtime?: BrewvaHostedRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
     settings: BrewvaManagedAgentSessionSettingsPort;
     catalog: BrewvaMutableModelCatalog;
     resourceLoader: BrewvaHostedResourceLoader;
@@ -260,14 +324,16 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     modelPresetState?: BrewvaModelPresetState;
     customTools: readonly BrewvaToolDefinition[];
     runner: BrewvaHostPluginRunner;
-    agent: BrewvaTurnLoopController;
+    agent: BrewvaAgentProtocolController;
     compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
     sessionTitleGenerator: BrewvaSessionTitleGenerator;
     ui?: BrewvaToolUiPort;
     logger?: HostedSessionLogger;
     onProviderAssistantMessage?: (
-      message: Extract<BrewvaTurnLoopMessage, { role: "assistant" }>,
+      message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>,
     ) => void;
+    prepareRuntimeProviderPayload?: (input: RuntimeProviderPayloadInput) => Promise<unknown>;
+    observeRuntimeCacheRender?: (input: RuntimeProviderCacheRenderInput) => void;
     onInitialPersistence?: () => void;
     onDispose?: () => void;
   }) {
@@ -287,6 +353,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#sessionTitleGenerator = input.sessionTitleGenerator;
     this.#logger = input.logger ?? null;
     this.#onProviderAssistantMessage = input.onProviderAssistantMessage;
+    this.#prepareRuntimeProviderPayload = input.prepareRuntimeProviderPayload;
+    this.#observeRuntimeCacheRender = input.observeRuntimeCacheRender;
     this.#onInitialPersistence = input.onInitialPersistence;
     this.#onDispose = input.onDispose;
     this.#liveTranscript = new ManagedSessionLiveTranscript({
@@ -463,204 +531,27 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         .releaseSession(options.cwd, sessionId, providerCacheRuntime.lastGoogleCredential)
         .catch(() => undefined);
     };
-    const clearCacheState = options.runtime?.operator.session.state.onClear((clearedSessionId) => {
-      if (clearedSessionId === sessionId) {
-        cacheBreakDetector.clear();
-        providerCacheRuntime.lastProviderFingerprint = undefined;
-        providerCacheRuntime.lastCacheRender = undefined;
-        providerCacheRuntime.lastCacheRenderModelKey = undefined;
-        googleCachedContentManager.resetCapability(
-          options.cwd,
-          providerCacheRuntime.lastGoogleModelBaseUrl,
-        );
-        providerCacheRuntime.lastGoogleModelBaseUrl = undefined;
-        releaseGoogleCachedContent();
-        session?.clearProviderCacheSessionStateBestEffort();
-      }
-    });
+    const clearCacheState = options.runtime?.ops.session.state.onClear(
+      (clearedSessionId: string) => {
+        if (clearedSessionId === sessionId) {
+          cacheBreakDetector.clear();
+          providerCacheRuntime.lastProviderFingerprint = undefined;
+          providerCacheRuntime.lastCacheRender = undefined;
+          providerCacheRuntime.lastCacheRenderModelKey = undefined;
+          googleCachedContentManager.resetCapability(
+            options.cwd,
+            providerCacheRuntime.lastGoogleModelBaseUrl,
+          );
+          providerCacheRuntime.lastGoogleModelBaseUrl = undefined;
+          releaseGoogleCachedContent();
+          session?.clearProviderCacheSessionStateBestEffort();
+        }
+      },
+    );
 
-    const agent = createBrewvaTurnLoopController({
+    const agent = new ManagedRuntimeSessionController({
       initialModel: options.initialModel,
       initialThinkingLevel: toTurnLoopThinkingLevel(options.initialThinkingLevel),
-      queueMode: options.settings.getQueueMode(),
-      followUpMode: options.settings.getFollowUpMode(),
-      transport: options.settings.getTransport(),
-      cachePolicy: options.settings.getCachePolicy(),
-      thinkingBudgets: options.settings.getThinkingBudgets(),
-      maxRetryDelayMs: options.settings.getRetrySettings()?.maxDelayMs,
-      sessionId,
-      streamFn: createHostedProviderStreamFunction(),
-      resolveRequestAuth: async (model) => options.modelCatalog.getApiKeyAndHeaders(model),
-      beforeToolCall: async (input: BrewvaTurnLoopBeforeToolCallContext) => {
-        if (!session) {
-          return undefined;
-        }
-        const result = await runner.emitToolCall(
-          {
-            type: "tool_call",
-            toolCallId: input.toolCall.id,
-            toolName: input.toolCall.name,
-            input: input.args as Record<string, unknown>,
-          },
-          session.createHostContext(),
-        );
-        return result ? { block: result.block, reason: result.reason } : undefined;
-      },
-      afterToolCall: async (input: BrewvaTurnLoopAfterToolCallContext) => {
-        if (!session) {
-          return undefined;
-        }
-        const result = await runner.emitToolResult(
-          {
-            type: "tool_result",
-            toolCallId: input.toolCall.id,
-            toolName: input.toolCall.name,
-            input: input.args as Record<string, unknown>,
-            content: input.result.content as BrewvaToolResult["content"],
-            details: input.result.details,
-            isError: input.isError,
-          },
-          session.createHostContext(),
-        );
-        if (!result) {
-          return undefined;
-        }
-        return {
-          content: result.content as ToolResultForAgent["content"],
-          details: result.details,
-          isError: result.isError,
-        };
-      },
-      onPayload: async (payload, model, metadata) => {
-        if (!session) {
-          return payload;
-        }
-        let nextPayload = await runner.emitBeforeProviderRequest(
-          {
-            type: "before_provider_request",
-            payload,
-            provider: model.provider,
-            api: model.api,
-            modelId: model.id,
-          },
-          session.createHostContext(),
-        );
-        if (options.runtime) {
-          providerCacheRuntime.lastExpectedProviderCacheBreak =
-            consumeProviderRequestReductionExpectedCacheBreak(nextPayload);
-          const channelContext = session.resolveProviderCacheChannelContext();
-          const cachePolicy = options.settings.getCachePolicy();
-          let cacheRender = normalizeProviderCacheRender({
-            metadata,
-            model,
-            transport: options.settings.getTransport(),
-            sessionId,
-            cachePolicy,
-            previousRender: providerCacheRuntime.lastCacheRender,
-            previousRenderModelKey: providerCacheRuntime.lastCacheRenderModelKey,
-          });
-          if (model.api === "google-gemini-cli") {
-            const auth = await options.modelCatalog.getApiKeyAndHeaders(model);
-            providerCacheRuntime.lastGoogleCredential = auth.ok ? auth.apiKey : undefined;
-            providerCacheRuntime.lastGoogleModelBaseUrl = model.baseUrl;
-            const googleCache = await googleCachedContentManager.apply({
-              workspaceRoot: options.cwd,
-              sessionId,
-              cachePolicy,
-              credential: auth.ok ? auth.apiKey : undefined,
-              payload: nextPayload,
-              modelBaseUrl: model.baseUrl,
-            });
-            nextPayload = googleCache.payload;
-            if (googleCache.render) {
-              cacheRender = {
-                status: googleCache.render.status,
-                reason: googleCache.render.reason,
-                renderedRetention: googleCache.render.renderedRetention,
-                bucketKey: googleCache.render.bucketKey,
-                capability: googleCache.render.capability,
-                cachedContentName: googleCache.render.cachedContentName,
-                cachedContentTtlSeconds: googleCache.render.cachedContentTtlSeconds,
-              };
-            }
-          }
-          providerCacheRuntime.lastCacheRender = cacheRender;
-          providerCacheRuntime.lastCacheRenderModelKey = buildProviderCacheModelKey(model);
-          const toolSchemaSnapshot = session.resolveProviderToolSchemaSnapshot("provider_payload");
-          const stickyLatches = session.observeProviderCacheStickyLatches({
-            cachePolicy,
-            cacheRender,
-            transport: options.settings.getTransport(),
-            reasoning: metadata?.reasoning ?? agent.state.thinkingLevel,
-            channelContext,
-          });
-          const transientReduction = options.runtime.inspect.context.evidence.latest(
-            sessionId,
-            "transient_reduction",
-          )?.payload;
-          const visibleHistoryReduction = {
-            epoch: options.runtime.inspect.context.visibleRead.getEpoch(sessionId),
-            transientReductionStatus: transientReduction?.status ?? "none",
-            transientReductionClassification: transientReduction?.classification ?? null,
-            expectedCacheBreak: providerCacheRuntime.lastExpectedProviderCacheBreak !== undefined,
-          };
-          const workbenchContext = session.#lastWorkbenchContextFingerprint;
-          providerCacheRuntime.lastProviderFingerprint = createProviderRequestFingerprint({
-            provider: model.provider,
-            api: model.api,
-            model: model.id,
-            transport: options.settings.getTransport(),
-            sessionId,
-            cachePolicy,
-            toolSchemaSnapshot,
-            stablePrefixParts: [agent.state.systemPrompt],
-            dynamicTailParts: [
-              buildProviderDynamicTailSummary({
-                payload: nextPayload,
-                channelContext,
-                workbenchContext,
-                visibleHistoryReduction,
-              }),
-            ],
-            channelContext,
-            renderedCache: cacheRender,
-            stickyLatches,
-            reasoning: metadata?.reasoning ?? agent.state.thinkingLevel,
-            thinkingBudgets: metadata?.thinkingBudgets ?? options.settings.getThinkingBudgets(),
-            cacheRelevantHeaders: metadata?.headers,
-            extraBody: metadata?.extraBody,
-            visibleHistoryReduction,
-            workbenchContext,
-            providerFallback: metadata?.providerFallback ?? { active: false },
-            payload: nextPayload,
-          });
-        }
-        return nextPayload;
-      },
-      onCacheRender: (render, model) => {
-        providerCacheRuntime.lastCacheRender = {
-          status: render.status,
-          reason: render.reason,
-          renderedRetention: render.renderedRetention,
-          bucketKey: render.bucketKey,
-          capability: render.capability,
-          cachedContentName: render.cachedContentName,
-          cachedContentTtlSeconds: render.cachedContentTtlSeconds,
-        };
-        providerCacheRuntime.lastCacheRenderModelKey = buildProviderCacheModelKey(model);
-      },
-      transformContext: async (messages) => {
-        if (!session) {
-          return messages;
-        }
-        return runner.emitContext(
-          { type: "context", messages },
-          session.createHostContext(),
-        ) as Promise<BrewvaTurnLoopMessage[]>;
-      },
-      resolveFile: (part) => resolvePromptFilePart(options.cwd, part),
-      shouldStopAfterToolResults: (toolResults) =>
-        session?.consumeToolResultStop(toolResults) ?? false,
     });
 
     const providerAssistantObserver = new ManagedSessionProviderAssistantObserver({
@@ -696,6 +587,136 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       ui: options.ui,
       runtime: options.runtime,
       logger: options.logger,
+      prepareRuntimeProviderPayload: async ({ payload, model, metadata }) => {
+        if (!session) {
+          return payload;
+        }
+        let nextPayload = await runner.emitBeforeProviderRequest(
+          {
+            type: "before_provider_request",
+            payload,
+            provider: model.provider,
+            api: model.api,
+            modelId: model.id,
+          },
+          session.createHostContext(),
+        );
+        providerCacheRuntime.lastExpectedProviderCacheBreak =
+          consumeProviderRequestReductionExpectedCacheBreak(nextPayload);
+        const channelContext = session.resolveProviderCacheChannelContext();
+        const cachePolicy = options.settings.getCachePolicy();
+        let cacheRender = normalizeProviderCacheRender({
+          metadata,
+          model,
+          transport: options.settings.getTransport(),
+          sessionId,
+          cachePolicy,
+          previousRender: providerCacheRuntime.lastCacheRender,
+          previousRenderModelKey: providerCacheRuntime.lastCacheRenderModelKey,
+        });
+        if (model.api === "google-gemini-cli") {
+          const authModel = options.initialModel;
+          const auth = authModel
+            ? await options.modelCatalog.getApiKeyAndHeaders(authModel)
+            : ({ ok: false, error: "missing_model" } as const);
+          providerCacheRuntime.lastGoogleCredential = auth.ok ? auth.apiKey : undefined;
+          providerCacheRuntime.lastGoogleModelBaseUrl = model.baseUrl;
+          const googleCache = await googleCachedContentManager.apply({
+            workspaceRoot: options.cwd,
+            sessionId,
+            cachePolicy,
+            credential: auth.ok ? auth.apiKey : undefined,
+            payload: nextPayload,
+            modelBaseUrl: model.baseUrl,
+          });
+          nextPayload = googleCache.payload;
+          if (googleCache.render) {
+            cacheRender = {
+              status: googleCache.render.status,
+              reason: googleCache.render.reason,
+              renderedRetention: googleCache.render.renderedRetention,
+              bucketKey: googleCache.render.bucketKey,
+              capability: googleCache.render.capability,
+              cachedContentName: googleCache.render.cachedContentName,
+              cachedContentTtlSeconds: googleCache.render.cachedContentTtlSeconds,
+            };
+          }
+        }
+        providerCacheRuntime.lastCacheRender = cacheRender;
+        providerCacheRuntime.lastCacheRenderModelKey = buildProviderCacheModelKey(model);
+        const toolSchemaSnapshot = session.resolveProviderToolSchemaSnapshot("provider_payload");
+        const stickyLatches = session.observeProviderCacheStickyLatches({
+          cachePolicy,
+          cacheRender,
+          transport: options.settings.getTransport(),
+          reasoning: metadata?.reasoning ?? agent.state.thinkingLevel,
+          channelContext,
+        });
+        const transientReduction = getRuntimeContextEvidenceLatest(
+          options.runtime,
+          sessionId,
+          "transient_reduction",
+        )?.payload;
+        const visibleHistoryReduction = {
+          epoch: getRuntimeVisibleReadEpoch(options.runtime, sessionId),
+          transientReductionStatus:
+            transientReduction &&
+            typeof transientReduction === "object" &&
+            "status" in transientReduction
+              ? transientReduction.status
+              : "none",
+          transientReductionClassification:
+            transientReduction &&
+            typeof transientReduction === "object" &&
+            "classification" in transientReduction
+              ? transientReduction.classification
+              : null,
+          expectedCacheBreak: providerCacheRuntime.lastExpectedProviderCacheBreak !== undefined,
+        };
+        const workbenchContext = session.#lastWorkbenchContextFingerprint;
+        providerCacheRuntime.lastProviderFingerprint = createProviderRequestFingerprint({
+          provider: model.provider,
+          api: model.api,
+          model: model.id,
+          transport: options.settings.getTransport(),
+          sessionId,
+          cachePolicy,
+          toolSchemaSnapshot,
+          stablePrefixParts: [agent.state.systemPrompt],
+          dynamicTailParts: [
+            buildProviderDynamicTailSummary({
+              payload: nextPayload,
+              channelContext,
+              workbenchContext,
+              visibleHistoryReduction,
+            }),
+          ],
+          channelContext,
+          renderedCache: cacheRender,
+          stickyLatches,
+          reasoning: metadata?.reasoning ?? agent.state.thinkingLevel,
+          thinkingBudgets: metadata?.thinkingBudgets ?? options.settings.getThinkingBudgets(),
+          cacheRelevantHeaders: metadata?.headers,
+          extraBody: metadata?.extraBody,
+          visibleHistoryReduction,
+          workbenchContext,
+          providerFallback: metadata?.providerFallback ?? { active: false },
+          payload: nextPayload,
+        });
+        return nextPayload;
+      },
+      observeRuntimeCacheRender: ({ render, model }) => {
+        providerCacheRuntime.lastCacheRender = {
+          status: render.status,
+          reason: render.reason,
+          renderedRetention: render.renderedRetention,
+          bucketKey: render.bucketKey,
+          capability: render.capability,
+          cachedContentName: render.cachedContentName,
+          cachedContentTtlSeconds: render.cachedContentTtlSeconds,
+        };
+        providerCacheRuntime.lastCacheRenderModelKey = buildProviderCacheModelKey(model);
+      },
       onProviderAssistantMessage: (message) =>
         providerAssistantObserver.onCommittedAssistantMessage(message),
       onInitialPersistence: options.onInitialPersistence,
@@ -713,7 +734,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   async initialize(): Promise<void> {
     this.refreshTools();
-    const restoredMessages = this.sessionManager.buildSessionContext().messages;
+    const restoredMessages = this.sessionManager.buildSessionContext()
+      .messages as BrewvaAgentProtocolMessage[];
     if (restoredMessages.length > 0) {
       await this.replaceMessages(restoredMessages);
     }
@@ -729,7 +751,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       resolvePhaseTurn: () => this.resolvePhaseTurn(),
       reconcileSessionPhase: (phase) => this.reconcileSessionPhase(phase),
       transitionCrashAndResume: (anchor) => this.transitionCrashAndResume(anchor),
-      getSessionPhase: () => this.getSessionPhase(),
+      getSessionPhase: () => this.#phaseCoordinator.get(),
       syncContextState: () => this.syncContextState(),
     });
     if (this.#runtime) {
@@ -793,9 +815,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   removeQueuedPrompt(promptId: string): boolean {
-    const removed = this.#deferredTurnState.removeQueuedPrompt(promptId, (message, behavior) =>
-      this.#agent.removeQueuedMessage(message, behavior),
-    );
+    const removed = this.#deferredTurnState.removeQueuedPrompt(promptId, () => true);
     if (!removed) {
       return false;
     }
@@ -805,6 +825,14 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   getRegisteredTools(): readonly BrewvaToolDefinition[] {
     return this.#toolRegistry.listRegisteredTools();
+  }
+
+  getRuntimeModelCatalog(): BrewvaMutableModelCatalog {
+    return this.#catalog;
+  }
+
+  createRuntimeToolContext(): BrewvaToolContext {
+    return this.createToolContext();
   }
 
   resolveProviderCacheChannelContext(): { source: string } | "" {
@@ -822,6 +850,91 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     parts: readonly BrewvaPromptContentPart[],
     options?: BrewvaPromptOptions,
   ): Promise<void> {
+    const output = await runHostedTurnEnvelope({
+      session: this,
+      runtime: this.#runtime,
+      sessionId: this.sessionManager.getSessionId(),
+      prompt: parts,
+      source: hostedTurnSourceFromPromptOptions(options),
+    });
+    if (output.status === "failed") {
+      throw output.error instanceof Error ? output.error : new Error(String(output.error));
+    }
+    if (output.status === "cancelled" || output.status === "suspended") {
+      return;
+    }
+
+    while (!this.isStreaming) {
+      const queued = this.#deferredTurnState.consumeQueuedPrompt();
+      if (!queued) {
+        break;
+      }
+      this.emitQueuedPromptChange();
+      await this[HOSTED_PROMPT_ATTEMPT_DISPATCH](queued.parts, {
+        expandPromptTemplates: false,
+        source: options?.source,
+      });
+    }
+  }
+
+  async [HOSTED_RUNTIME_TURN_PRELUDE](
+    parts: readonly BrewvaPromptContentPart[],
+    options?: BrewvaPromptOptions,
+  ): Promise<HostedRuntimeTurnPreludeResult> {
+    const prepared = await this.preparePromptDispatch(parts, options);
+    if (prepared.status !== "ready") {
+      return { status: prepared.status };
+    }
+    const previousPromptSource = this.#activePromptSource;
+    this.#activePromptSource = prepared.source;
+    this.#runtimeTurnPreparedMessages = prepared.messages;
+    const runtimeTurn =
+      this.#agent instanceof ManagedRuntimeSessionController
+        ? this.#agent.beginRuntimeTurn()
+        : null;
+    return {
+      status: "ready",
+      promptText: prepared.promptText,
+      promptContent: prepared.promptContent,
+      ...(runtimeTurn ? { signal: runtimeTurn.signal } : {}),
+      complete: () => {
+        this.#runtimeTurnPreparedMessages = [];
+        this.#activePromptSource = previousPromptSource;
+        runtimeTurn?.complete();
+      },
+    };
+  }
+
+  [HOSTED_RUNTIME_TURN_CONTEXT](): readonly BrewvaAgentProtocolMessage[] {
+    return this.#runtimeTurnPreparedMessages;
+  }
+
+  getRuntimeProviderCachePolicy() {
+    return this.#settings.getCachePolicy();
+  }
+
+  getRuntimeProviderTransport() {
+    return this.#settings.getTransport();
+  }
+
+  async prepareRuntimeProviderPayload(input: RuntimeProviderPayloadInput): Promise<unknown> {
+    return this.#prepareRuntimeProviderPayload?.(input) ?? input.payload;
+  }
+
+  observeRuntimeCacheRender(input: RuntimeProviderCacheRenderInput): void {
+    this.#observeRuntimeCacheRender?.(input);
+  }
+
+  observeRuntimeAssistantMessage(
+    message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>,
+  ): void {
+    this.#onProviderAssistantMessage?.(message);
+  }
+
+  private async preparePromptDispatch(
+    parts: readonly BrewvaPromptContentPart[],
+    options?: BrewvaPromptOptions,
+  ): Promise<PreparedManagedPromptDispatch> {
     await this.waitForProviderCacheSessionClear();
     await this.applyQueuedModelPreset();
     const expandPromptTemplates = options?.expandPromptTemplates ?? true;
@@ -834,7 +947,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       const handled = await this.tryExecuteRegisteredCommand(command.name, command.args);
       if (handled) {
         await this.flushCommandDispatchBuffer();
-        return;
+        return { status: "handled" };
       }
     }
 
@@ -851,7 +964,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         this.createHostContext(),
       );
       if (result.action === "handled") {
-        return;
+        return { status: "handled" };
       }
       if (result.action === "transform") {
         currentParts = cloneBrewvaPromptContentParts(result.parts);
@@ -871,7 +984,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     if (this.isStreaming) {
       const behavior = options?.streamingBehavior ?? "queue";
       await this.queueUserMessage(currentParts, behavior);
-      return;
+      return { status: "queued" };
     }
 
     if (!this.model) {
@@ -881,7 +994,10 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       throw new Error(`No API key found for ${this.model.provider}/${this.model.id}.`);
     }
 
-    const messages: BrewvaTurnLoopMessage[] = [
+    const restoredMessages = this.sessionManager.buildSessionContext()
+      .messages as BrewvaAgentProtocolMessage[];
+    const messages: BrewvaAgentProtocolMessage[] = [
+      ...restoredMessages,
       {
         role: "user",
         content: toAgentUserContent(currentParts),
@@ -899,24 +1015,35 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       },
       this.createHostContext(),
     );
-    this.#lastWorkbenchContextFingerprint = resolveWorkbenchContextFingerprint(
-      beforeStart?.messages,
-    );
     if (beforeStart?.messages) {
       for (const message of beforeStart.messages) {
         messages.push(toTurnLoopCustomMessage(message));
       }
     }
+    this.#lastWorkbenchContextFingerprint = resolveWorkbenchContextFingerprint(
+      beforeStart?.messages,
+    );
+    const transformedMessages = (await this.#runner.emitContext(
+      { type: "context", messages },
+      this.createHostContext(),
+    )) as BrewvaAgentProtocolMessage[];
+    messages.length = 0;
+    messages.push(...transformedMessages);
+    for (const message of beforeStart?.messages ?? []) {
+      await this.#eventBridge.appendPassiveCustomMessage(toTurnLoopCustomMessage(message), {
+        transcript: true,
+      });
+    }
 
     this.#liveTranscript.applyPromptOverlay(beforeStart?.systemPrompt ?? this.#baseSystemPrompt);
     await this.syncContextState();
-    const previousPromptSource = this.#activePromptSource;
-    this.#activePromptSource = normalizePromptSource(options?.source);
-    try {
-      await this.#agent.prompt(messages);
-    } finally {
-      this.#activePromptSource = previousPromptSource;
-    }
+    return {
+      status: "ready",
+      promptText: buildBrewvaPromptText(currentParts),
+      promptContent: cloneBrewvaPromptContentParts(currentParts),
+      messages,
+      source: normalizePromptSource(options?.source),
+    };
   }
 
   async steer(text: string, options?: BrewvaSteerOptions): Promise<BrewvaSteerOutcome> {
@@ -1042,7 +1169,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#unsubscribeSessionTitleCoordinator?.();
     this.#unsubscribeSessionTitleCoordinator = null;
     this.#onDispose?.();
-    clearDefaultTurnLifecycleSpine(this, this.sessionManager.getSessionId());
     this.sessionManager.dispose?.();
     this.#listeners.clear();
     if (this.#sessionStartEmitted) {
@@ -1191,12 +1317,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     parts: readonly BrewvaPromptContentPart[],
     behavior: BrewvaPromptQueueBehavior,
   ): Promise<void> {
-    const entry = this.#deferredTurnState.enqueueStreamingUserPrompt(parts, behavior);
-    if (behavior === "followUp") {
-      this.#agent.followUp(entry.message);
-    } else {
-      this.#agent.queue(entry.message);
-    }
+    this.#deferredTurnState.enqueueStreamingUserPrompt(parts, behavior);
     this.emitQueuedPromptChange();
   }
 
@@ -1225,16 +1346,16 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
 
     if (this.isStreaming) {
-      if (options?.deliverAs === "followUp") {
-        this.#agent.followUp(customMessage);
-      } else {
-        this.#agent.queue(customMessage);
-      }
+      this.#deferredTurnState.pushNextTurnMessage(customMessage);
       return;
     }
 
     if (options?.triggerTurn) {
-      await this.#agent.prompt(customMessage);
+      this.#deferredTurnState.pushNextTurnMessage(customMessage);
+      await this.prompt(promptPartsFromCustomMessage(message), {
+        expandPromptTemplates: false,
+        source: "extension",
+      });
       return;
     }
 
@@ -1270,7 +1391,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       isIdle: () => !this.isStreaming,
       signal: this.#agent.signal,
       abort: () => this.#agent.abort(),
-      hasPendingMessages: () => this.#deferredTurnState.hasPending(this.#agent.hasQueuedMessages()),
+      hasPendingMessages: () => this.#deferredTurnState.hasPending(false),
       shutdown: () => this.dispose(),
       compact: (request) => {
         this.requestCompaction(request);
@@ -1300,7 +1421,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     };
   }
 
-  private async handleAgentEvent(event: BrewvaTurnLoopEvent): Promise<BrewvaTurnLoopEvent> {
+  private async handleAgentEvent(
+    event: BrewvaAgentProtocolEvent,
+  ): Promise<BrewvaAgentProtocolEvent> {
     if (event.type === "message_start" && event.message.role === "user") {
       this.deleteQueuedMessage(event.message);
     }
@@ -1346,8 +1469,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   requestCompaction(request?: BrewvaCompactionRequest): void {
     if (this.#runtime) {
       const sessionId = this.sessionManager.getSessionId();
-      const usage = this.#runtime.inspect.context.usage.get(sessionId);
-      const gateStatus = this.#runtime.inspect.context.compaction.getGateStatus(sessionId, usage);
+      const usage = getRuntimeContextUsage(this.#runtime, sessionId);
+      const gateStatus = getRuntimeCompactionGateStatus(this.#runtime, sessionId, usage);
       const decision = decideCompaction({
         caller: "manual",
         gateStatus,
@@ -1405,7 +1528,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     if (!this.#runtime || !resolution.model || !resolution.usage) {
       return;
     }
-    this.#runtime.authority.cost.usage.recordAssistant({
+    recordRuntimeAssistantCost(this.#runtime, {
       sessionId,
       model: `${resolution.model.provider}/${resolution.model.id}`,
       inputTokens: nonNegativeUsageNumber(resolution.usage.input),
@@ -1416,10 +1539,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       costUsd: nonNegativeUsageNumber(resolution.usage.cost?.total),
       stopReason: "compaction_summary",
     });
-  }
-
-  private consumeToolResultStop(_toolResults: BrewvaTurnLoopToolResultMessage[]): boolean {
-    return this.#deferredCompaction.consumeToolResultStop(_toolResults);
   }
 
   private async previewDeferredCompaction(
@@ -1588,7 +1707,18 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   private getSessionPhase(): SessionPhase {
-    return this.#phaseCoordinator.get();
+    const localPhase = this.#phaseCoordinator.get();
+    const lifecycleSnapshot = this.sessionManager.readLifecycle?.();
+    const projected = lifecycleSnapshot
+      ? deriveSessionPhaseFromLifecycleSnapshot(lifecycleSnapshot, this.resolvePhaseTurn())?.phase
+      : null;
+    if (!projected) {
+      return localPhase;
+    }
+    if (projected.kind !== "idle" || localPhase.kind === "idle") {
+      return projected;
+    }
+    return localPhase;
   }
 
   private resolvePhaseTurn(): number {
@@ -1612,18 +1742,26 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     if (!this.#runtime) {
       return;
     }
-    this.#runtime.extensions.hosted.events.record({
+    const event = {
       sessionId: this.sessionManager.getSessionId(),
-      type,
       payload,
-    });
+    };
+    if (type === STEER_QUEUED_EVENT_TYPE) {
+      this.#runtime.ops.tools.steering.queued(event);
+    } else if (type === STEER_APPLIED_EVENT_TYPE) {
+      this.#runtime.ops.tools.steering.applied(event);
+    } else if (type === STEER_DROPPED_EVENT_TYPE) {
+      this.#runtime.ops.tools.steering.dropped(event);
+    }
   }
 
   private async syncContextState(): Promise<void> {
     await this.#eventBridge.syncContextState();
   }
 
-  private deleteQueuedMessage(message: Extract<BrewvaTurnLoopMessage, { role: "user" }>): void {
+  private deleteQueuedMessage(
+    message: Extract<BrewvaAgentProtocolMessage, { role: "user" }>,
+  ): void {
     const deleted = this.#deferredTurnState.acknowledgeStartedQueuedUser(message);
     if (!deleted) {
       return;

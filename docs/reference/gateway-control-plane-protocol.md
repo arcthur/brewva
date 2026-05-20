@@ -126,7 +126,7 @@ Rule semantics:
 - `sessions.open`: `{ requestedSessionId, sessionId, created, workerPid, agentSessionId? }`.
 - `sessions.send`: immediate ack payload `{ sessionId, agentSessionId?, turnId, accepted: true }`; final turn outcome arrives through `session.wire.frame`.
 - `sessions.steer`: `{ sessionId, status: "queued" | "no_active_run" | "rejected_empty" }` plus `chars` when the status is `queued`. It targets the currently streaming turn only and is not gated by the busy rejection path used by `sessions.send`.
-- `sessions.abort`: accepts optional `reason: "user_submit"` so hosted execution can emit `user_submit_interrupt` as a `session_turn_transition` without widening kernel authority.
+- `sessions.abort`: accepts optional `reason: "user_submit"` so hosted execution can interrupt the active runtime turn without widening kernel authority.
 - `status.deep`: includes `heartbeat` plus live `scheduler` execution state. The `heartbeat` block exposes `sourcePath`, `loadedAt`, and the currently loaded rules with their live `nextRunAt` timestamps. The `scheduler` block exposes availability, config-vs-execution enablement (`configEnabled`, `executionEnabled`), pause state, current projection/timer counters, and `unavailableReason` when scheduling is unavailable.
 - `heartbeat.reload`: `{ sourcePath, loadedAt, rules, removedRules, closedSessions, removedRuleIds, closedSessionIds }`. `closedSessionIds` only covers daemon-owned default heartbeat sessions (`heartbeat:<id>`) that became orphaned after rule removal or rule retargeting; explicitly named `sessionId` targets are not force-closed by reload cleanup.
 - `scheduler.pause`: `{ paused, changed, available, pausedAt, reason, unavailableReason? }`. When scheduling is unavailable, the current implementation returns `{ paused: false, changed: false, available: false, pausedAt: null, reason: null, unavailableReason }`.
@@ -170,9 +170,9 @@ tape (`gateway_session_bound` receipts), not through worker-local memory or a
 JSON binding registry.
 
 Gateway does not need a live runtime instance to replay archived public
-sessions. Runtime instances expose `inspect.sessionWire` for runtime-scoped
-session ids; gateway uses the same runtime-owned compiler semantics after it
-locates the underlying archived agent-session tapes.
+sessions. The hosted adapter exposes `HostedRuntimeAdapterPort.ops.sessionWire`
+for runtime-scoped session ids; gateway uses the same runtime-owned compiler
+semantics after it locates the underlying archived agent-session tapes.
 
 Gateway does not treat an old terminal `session.status` cache as authority.
 Reopening the same public `sessionId` resets the live status lifecycle; later
@@ -180,17 +180,14 @@ subscribe snapshots are derived fresh from replay plus current worker state.
 
 Gateway session-status seeding is an adapter over runtime lifecycle, not a
 parallel authority source. When runtime lifecycle is available, gateway seeds
-`session.status` from `inspect.lifecycle.getSnapshot(sessionId)` and only falls
+`session.status` from `HostedRuntimeAdapterPort.ops.lifecycle.getSnapshot(sessionId)` and only falls
 back to bounded frame-history reduction for compatibility or replay bootstrap
 cases that the aggregate cannot yet represent directly.
 
-Gateway turn transitions also project the runtime-internal turn spine rather
-than defining a rival lifecycle. Recovery transitions such as
-`wal_recovery_resume`, `reasoning_revert_resume`, `compaction_retry`,
-`provider_fallback_retry`, and `max_output_recovery` carry hosted-flow
-explanation and replay provenance; the turn spine maps them to the declared
-`recovery_settled` gate, while `SessionLifecycleSnapshot.summary` remains the
-session-level posture read model.
+Gateway does not publish a rival hosted transition lattice. Runtime recovery
+posture is projected from canonical causes: `approval_pending`,
+`compaction_required`, `provider_retry`, `interrupt`, and `terminal_commit`.
+`SessionLifecycleSnapshot.summary` remains the session-level posture read model.
 
 Important protocol rules:
 
@@ -202,7 +199,7 @@ Important protocol rules:
 - live tool `attemptId` is not guessed from the current active attempt at
   emission time. Gateway binds each `toolCallId` to an authoritative attempt
   from repo-owned tool lifecycle receipts (`tool_call`, `tool_execution_start`,
-  `tool_execution_end`) and hosted thread-loop attempt state.
+  `tool_execution_end`) and hosted turn-adapter attempt state.
 - late superseded-attempt tool completions still emit live `tool.finished`
   under their original bound `attemptId`; they are not silently rewritten to
   the current attempt.
@@ -219,13 +216,12 @@ Important protocol rules:
   semantic summary.
 - only live cache emits `assistant.delta`, `session.status`, and the initial
   `attempt.started(reason=initial)`.
-- replay may still emit durable `attempt.superseded` plus
-  `attempt.started(reason=output_budget_escalation|compaction_retry|provider_fallback_retry|max_output_recovery|reasoning_revert_resume)`
-  when those retry attempts are derived from durable `session_turn_transition`
-  receipts; replay does not promise the full live attempt timeline.
-- live retry, compact-resume, reasoning-revert-resume, approval suspension, and
-  breaker decisions are owned by the gateway-internal `HostedThreadLoop`; the
-  protocol exposes their resulting frames and replayable transition receipts,
+- replay no longer emits hosted transition-derived attempt frames; retry,
+  compaction, approval suspension, and interrupt posture are derived from
+  canonical runtime frames and tape projections.
+- live retry, checkpoint-driven compaction, approval suspension, and interrupt
+  decisions are owned by the runtime turn engine; the protocol exposes their
+  resulting frames and replayable canonical receipts,
   not the loop's process-local state.
 - durable session-wire frames carry `sourceEventId` and `sourceEventType`;
   cache frames and replay control frames do not.

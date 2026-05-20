@@ -1,6 +1,6 @@
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
-import { DEFAULT_SESSION_TITLE } from "@brewva/brewva-runtime/session";
+import type { BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
+import { DEFAULT_SESSION_TITLE } from "@brewva/brewva-runtime/protocol";
 import type { OperatorSurfaceSnapshot } from "../../operator-snapshot.js";
 import { fuzzyScore, normalizeSearchQuery } from "../../search-scoring.js";
 import type { CliSessionsOverlayPayload } from "../payloads.js";
@@ -37,7 +37,7 @@ function matchesSessionsOverlayQuery(
     return true;
   }
   return (
-    fuzzyScore(query, session.title) !== null ||
+    fuzzyScore(query, session.title ?? "") !== null ||
     fuzzyScore(query, sessionsOverlayGroupLabel(session.lastEventAt, now)) !== null
   );
 }
@@ -79,7 +79,7 @@ export function orderSessionsByStableIds(
   sessions: readonly BrewvaReplaySession[],
   stableIds: readonly string[],
 ): BrewvaReplaySession[] {
-  const byId = new Map(sessions.map((s) => [String(s.sessionId), s]));
+  const byId = new Map(sessions.map((s) => [s.sessionId, s]));
   const used = new Set<string>();
   const out: BrewvaReplaySession[] = [];
   for (const id of stableIds) {
@@ -90,7 +90,7 @@ export function orderSessionsByStableIds(
     }
   }
   for (const session of sessions) {
-    const id = String(session.sessionId);
+    const id = session.sessionId;
     if (!used.has(id)) {
       out.push(session);
     }
@@ -116,18 +116,18 @@ export function reconcileSessionsOverlayStableIds(input: {
   const merged = input.mergedSessions;
   if (input.stableOrderIds === undefined) {
     return {
-      stableOrderIds: merged.map((session) => String(session.sessionId)),
+      stableOrderIds: merged.map((session) => session.sessionId),
       lastAppliedUserPromptReorderGeneration: input.lastAppliedUserPromptReorderGeneration,
     };
   }
 
-  const availableIds = new Set(merged.map((session) => String(session.sessionId)));
-  const currentRow = merged.find((session) => String(session.sessionId) === input.currentSessionId);
+  const availableIds = new Set(merged.map((session) => session.sessionId));
+  const currentRow = merged.find((session) => session.sessionId === input.currentSessionId);
   const previousCurrentCount = input.lastEventCounts.get(input.currentSessionId) ?? 0;
 
   let nextOrder = [...input.stableOrderIds].filter((sessionId) => availableIds.has(sessionId));
   for (const session of merged) {
-    const sid = String(session.sessionId);
+    const sid = session.sessionId;
     if (!nextOrder.includes(sid)) {
       nextOrder.push(sid);
     }

@@ -4,15 +4,15 @@ import {
   MESSAGE_END_EVENT_TYPE,
   readSessionRewindCompletedEventPayload,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
-import type { ContextAdmission, ContextEntryPresentTo } from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
+import type { ContextAdmission, ContextEntryPresentTo } from "@brewva/brewva-runtime/protocol";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   readTranscriptMessageFromPayload,
   type StoredSessionMessage,
-} from "../../thread-loop/runtime-session-transcript.js";
+} from "../../turn-adapter/runtime-session-transcript.js";
 
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 

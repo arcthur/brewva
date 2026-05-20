@@ -1,5 +1,5 @@
-import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/session";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
+import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/protocol";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import { Ajv, type ErrorObject } from "ajv";
 import {
@@ -375,8 +375,7 @@ export function validateSessionWireFramePayload(
           value.reason !== "output_budget_escalation" &&
           value.reason !== "compaction_retry" &&
           value.reason !== "provider_fallback_retry" &&
-          value.reason !== "max_output_recovery" &&
-          value.reason !== "reasoning_revert_resume")
+          value.reason !== "max_output_recovery")
       ) {
         return { ok: false, error: "attempt.started payload is invalid" };
       }
@@ -400,8 +399,7 @@ export function validateSessionWireFramePayload(
         (value.reason !== "output_budget_escalation" &&
           value.reason !== "compaction_retry" &&
           value.reason !== "provider_fallback_retry" &&
-          value.reason !== "max_output_recovery" &&
-          value.reason !== "reasoning_revert_resume")
+          value.reason !== "max_output_recovery")
       ) {
         return { ok: false, error: "attempt.superseded payload is invalid" };
       }

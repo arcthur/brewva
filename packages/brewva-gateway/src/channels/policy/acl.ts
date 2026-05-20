@@ -1,4 +1,4 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 
 type SenderIdentity = {
   senderId?: string;

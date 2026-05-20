@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
 import { asBrewvaWalId } from "@brewva/brewva-runtime/core";
-import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createEnvelope(
@@ -361,7 +361,7 @@ describe("Recovery WAL store", () => {
 
   test("scheduler ingress port marks failed and expired rows directly", () => {
     const workspace = createTestWorkspace("recovery-wal-runtime-facade");
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const schedulerIngress = runtime.extensions.recovery.scheduler;
     const failedRecord = schedulerIngress.appendPending(
       createEnvelope("turn-runtime-failed"),

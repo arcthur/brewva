@@ -157,8 +157,8 @@ export const SESSION_INDEX_SCHEMA_SQL = `
     type varchar not null,
     payload_json varchar not null,
     search_text varchar not null,
-    log_path varchar not null,
-    log_offset bigint not null
+    source_uri varchar not null,
+    source_sequence bigint not null
   );
 
   create table if not exists event_tokens (
@@ -177,8 +177,8 @@ export const SESSION_INDEX_SCHEMA_SQL = `
 
   create table if not exists index_state (
     session_id varchar primary key,
-    log_path varchar not null,
-    byte_offset bigint not null,
+    source_uri varchar not null,
+    source_cursor bigint not null,
     mtime_ms double not null,
     indexed_event_count integer not null,
     last_indexed_at double not null,

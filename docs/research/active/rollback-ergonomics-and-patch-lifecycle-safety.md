@@ -37,7 +37,7 @@ This note does not reopen:
 
 ## Source Anchors
 
-- Rollback tracking state: `packages/brewva-runtime/src/domain/patching/file-change-tracker.ts`
+- Rollback tracking contracts: `packages/brewva-runtime/src/protocol.ts`
 - Runtime rollback wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Rollback tool contract: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 
@@ -45,7 +45,7 @@ This note does not reopen:
 
 - Rollback behavior remains covered in `test/live/cli/undo.live.test.ts`
 - Tool flow contract remains covered in
-  `test/contract/tools/rollback.contract.test.ts`
+  `test/unit/tools/runtime-capability-scope.unit.test.ts`
 
 ## Promotion Criteria
 

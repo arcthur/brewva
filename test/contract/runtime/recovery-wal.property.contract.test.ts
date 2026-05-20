@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test";
 import { appendFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
-import type { RecoveryWalRecord, RecoveryWalSource } from "@brewva/brewva-runtime/schedule";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { RecoveryWalRecord, RecoveryWalSource } from "@brewva/brewva-runtime/protocol";
 import fc from "fast-check";
 import { propertyTest } from "../../helpers/property.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
@@ -55,7 +55,7 @@ function envelopeFor(input: { turnId: string; sessionId: string; channel: string
   };
 }
 
-function normalizeRows(rows: RecoveryWalRecord[]): Array<Record<string, unknown>> {
+function normalizeRows(rows: readonly RecoveryWalRecord[]): Array<Record<string, unknown>> {
   return rows.map((row) => ({
     walId: row.walId,
     turnId: row.turnId,

@@ -1,4 +1,8 @@
-// Curated security contract subpath. Keep root imports focused on createBrewvaRuntime and explicit port types.
+import {
+  CredentialVaultService as InternalCredentialVaultService,
+  createCredentialVaultServiceFromSecurityConfig as createInternalCredentialVaultServiceFromSecurityConfig,
+} from "./credentials/credential-vault.js";
+
 export {
   getSourceTrustTier,
   sanitizeByTrust,
@@ -46,3 +50,98 @@ export type {
 } from "./security/boundary-policy.js";
 export { checkToolAccess } from "./security/tool-policy.js";
 export type { ToolPolicyOptions } from "./security/tool-policy.js";
+export {
+  ActionPolicyRegistry,
+  TOOL_ACTION_CLASSES,
+  TOOL_ACTION_POLICY_BY_NAME,
+  TOOL_ADMISSION_BEHAVIORS,
+  compareToolAdmission,
+  createActionPolicyRegistry,
+  deriveEffectCommitmentPosture,
+  deriveToolGovernanceDescriptor,
+  getExactToolActionPolicy,
+  getToolActionClassAdmissionBounds,
+  getToolActionPolicy,
+  getToolActionPolicyForClass,
+  getToolActionPolicyResolution,
+  getToolGovernanceDescriptor,
+  getToolGovernanceResolution,
+  resolveEffectiveToolActionPolicy,
+  resolveRecoveryPreparationFromPolicy,
+  resolveToolAuthority,
+  resolveToolExecutionBoundary,
+  resolveToolExecutionBoundaryFromEffects,
+  resolveToolRecoveryPreparation,
+  sameToolActionPolicy,
+  toolActionPolicyRequiresApproval,
+  toolEffectsRequireEffectCommitment,
+  toolGovernanceRequiresEffectCommitment,
+  validateToolActionPolicy,
+} from "./runtime/kernel/policy/public-contract.js";
+export type {
+  DeriveEffectCommitmentPostureInput,
+  EffectAuthorityManifestBasis,
+  EffectCommitmentExecutionEvidence,
+  EffectCommitmentPosture,
+  EffectPostureEvidenceSource,
+  EffectPostureWarning,
+  EffectPostureWarningCode,
+  EffectProjectionWarning,
+  EffectRecoverability,
+  EffectVisibility,
+  EffectiveToolActionPolicy,
+  MutationReceipt,
+  MutationSubject,
+  PatchSetRedoFailureReason,
+  PatchSetRollbackFailureReason,
+  ResolvedToolAuthority,
+  ToolActionAdmissionOverrides,
+  ToolActionClass,
+  ToolActionPolicy,
+  ToolActionPolicyResolver,
+  ToolActionPolicyResolverInput,
+  ToolActionPolicyResolution,
+  ToolActionPolicySafetyGate,
+  ToolActionPolicySource,
+  ToolAdmissionBehavior,
+  ToolBoxPolicy,
+  ToolEffectClass,
+  ToolExecutionBoundary,
+  ToolGovernanceDescriptor,
+  ToolGovernanceDescriptorSource,
+  ToolGovernanceResolution,
+  ToolGovernanceRisk,
+  ToolMutationRollbackFailureReason,
+  ToolMutationRollbackKind,
+  ToolMutationRollbackResult,
+  ToolMutationStrategy,
+  ToolReceiptPolicy,
+  ToolRecoveryPolicy,
+  ToolRecoveryPreparation,
+  ToolRiskLevel,
+} from "./runtime/kernel/policy/public-contract.js";
+export type {
+  CredentialVaultDiscoveredEntry,
+  CredentialVaultListEntry,
+  CredentialVaultServiceOptions,
+} from "./credentials/credential-vault.js";
+
+export type CredentialVaultService = InternalCredentialVaultService & {
+  readonly name: "credentials.vault";
+};
+
+function withName(instance: InternalCredentialVaultService): CredentialVaultService {
+  return Object.assign(instance, { name: "credentials.vault" as const });
+}
+
+export function createCredentialVaultService(
+  options: ConstructorParameters<typeof InternalCredentialVaultService>[0],
+): CredentialVaultService {
+  return withName(new InternalCredentialVaultService(options));
+}
+
+export function createCredentialVaultServiceFromSecurityConfig(
+  ...args: Parameters<typeof createInternalCredentialVaultServiceFromSecurityConfig>
+): CredentialVaultService {
+  return withName(createInternalCredentialVaultServiceFromSecurityConfig(...args));
+}

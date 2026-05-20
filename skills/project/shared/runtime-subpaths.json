@@ -1,96 +1,15 @@
 {
-  "./capabilities": {
-    "owner": "runtime capability authority contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["gateway", "tools", "cli"]
-  },
-  "./channels": {
-    "owner": "runtime channel contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["gateway", "channels"]
-  },
   "./core": {
     "owner": "runtime core vocabulary",
     "stability": "stable",
     "decision": "keep",
     "allowedConsumers": ["workspace"]
   },
-  "./credentials": {
-    "owner": "runtime credential contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["gateway", "cli"]
-  },
-  "./context": {
-    "owner": "runtime context authority",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["gateway", "tools", "cli"]
-  },
-  "./event-log": {
-    "owner": "runtime event log compatibility",
-    "stability": "stable",
-    "decision": "keep-with-audit",
-    "allowedConsumers": ["gateway-daemon"],
-    "audit": {
-      "trackingId": "runtime-subpath-audit-event-log-2026-08-14",
-      "reviewBy": "2026-08-14",
-      "rationale": "Gateway daemon production consumers require an import-count migration plan before folding event-log into events or tape."
-    }
-  },
-  "./evidence": {
-    "owner": "runtime tool evidence parsing",
-    "stability": "stable",
-    "decision": "keep-with-audit",
-    "allowedConsumers": ["gateway", "tools"],
-    "audit": {
-      "trackingId": "runtime-subpath-audit-evidence-2026-08-14",
-      "reviewBy": "2026-08-14",
-      "rationale": "Evidence vocabulary overlaps runtime, recall, and session-index; ownership must be clarified before rename or fold."
-    }
-  },
-  "./events": {
-    "owner": "runtime event contracts",
-    "stability": "stable",
+  "./protocol": {
+    "owner": "runtime product wire/data protocols",
+    "stability": "experimental",
     "decision": "keep",
     "allowedConsumers": ["workspace"]
-  },
-  "./patch-history": {
-    "owner": "runtime patch history contracts",
-    "stability": "stable",
-    "decision": "keep-with-audit",
-    "allowedConsumers": ["gateway", "tools", "cli"],
-    "audit": {
-      "trackingId": "runtime-subpath-audit-patch-history-2026-08-14",
-      "reviewBy": "2026-08-14",
-      "rationale": "Patch-history has CLI, tools, and gateway production consumers; folding requires a separate ABI-impacting migration plan."
-    }
-  },
-  "./parallel": {
-    "owner": "runtime parallel governance",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["tools", "gateway"]
-  },
-  "./replay": {
-    "owner": "runtime replay contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
-  "./recovery": {
-    "owner": "runtime recovery contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["gateway", "cli"]
-  },
-  "./runtime-extensions": {
-    "owner": "runtime extension port contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["tools"]
   },
   "./schema/brewva.schema.json": {
     "owner": "runtime config schema artifact",
@@ -98,118 +17,16 @@
     "decision": "keep",
     "allowedConsumers": ["docs", "cli", "tests"]
   },
-  "./claim": {
-    "owner": "runtime claim contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
   "./config": {
     "owner": "runtime config contracts",
     "stability": "stable",
     "decision": "keep",
     "allowedConsumers": ["workspace"]
   },
-  "./conventions": {
-    "owner": "runtime convention contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
-  "./cost": {
-    "owner": "runtime cost contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["gateway", "tools", "cli"]
-  },
-  "./delegation": {
-    "owner": "runtime delegation contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["gateway", "tools"]
-  },
-  "./governance": {
-    "owner": "runtime governance contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
-  "./ledger": {
-    "owner": "runtime ledger contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
-  "./projection": {
-    "owner": "runtime projection contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["gateway", "session-index"]
-  },
-  "./proposals": {
-    "owner": "runtime proposal contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
-  "./reasoning": {
-    "owner": "runtime reasoning contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["tools", "gateway"]
-  },
-  "./schedule": {
-    "owner": "runtime schedule contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["tools", "gateway", "cli"]
-  },
   "./security": {
     "owner": "runtime security contracts",
     "stability": "stable",
     "decision": "keep",
     "allowedConsumers": ["workspace"]
-  },
-  "./session": {
-    "owner": "runtime session contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
-  "./skills": {
-    "owner": "runtime skill contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
-  "./tape": {
-    "owner": "runtime tape contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
-  "./task": {
-    "owner": "runtime task contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["tools", "gateway"]
-  },
-  "./tools": {
-    "owner": "runtime tool contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["tools", "gateway"]
-  },
-  "./verification": {
-    "owner": "runtime verification contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["tools", "gateway"]
-  },
-  "./workbench": {
-    "owner": "runtime workbench contracts",
-    "stability": "stable",
-    "decision": "keep",
-    "allowedConsumers": ["tools", "gateway"]
   }
 }

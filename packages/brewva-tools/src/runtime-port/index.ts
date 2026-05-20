@@ -1,7 +1,7 @@
 export {
   recordToolRuntimeEvent,
   registerToolRuntimeClearStateListener,
-  resolveToolRuntimeAuthorityTools,
+  resolveToolRuntimeCapabilitiesTools,
   resolveToolRuntimeContextPort,
   resolveToolRuntimeCredentialBindings,
   resolveToolRuntimeEventPort,

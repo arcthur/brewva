@@ -3,7 +3,7 @@ import type {
   SessionRewindMode,
   SessionRewindSummary,
   SessionRewindTargetView,
-} from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type { ShellCommitInput, ShellCommitOptions } from "../../domain/actions.js";
 import type { ShellEffect } from "../../domain/effects.js";

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaSessionModelDescriptor } from "@brewva/brewva-substrate/session";
 import { ManagedSessionCompactionFlowState } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/flow.js";
 import {
   requestCompactionAndWait,
   shouldCompactForModelDownshift,
 } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.js";
+import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 
 const LARGE_MODEL: BrewvaSessionModelDescriptor = {
   provider: "openai",
@@ -34,9 +34,9 @@ function createRuntimeStub(input: {
   forcedCompaction?: boolean;
   compactionAdvised?: boolean;
   predictedOverflow?: boolean;
-}): BrewvaHostedRuntimePort {
+}): HostedRuntimeAdapterPort {
   return {
-    inspect: {
+    ops: {
       context: {
         usage: {
           get() {
@@ -57,7 +57,7 @@ function createRuntimeStub(input: {
         },
       },
     },
-  } as unknown as BrewvaHostedRuntimePort;
+  } as unknown as HostedRuntimeAdapterPort;
 }
 
 describe("managed-agent-session compaction flow", () => {

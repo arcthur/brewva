@@ -1,4 +1,5 @@
 export type * from "./surface.js";
+export type { BrewvaToolRequiredCapability } from "./runtime-capabilities.js";
 export type * from "./metadata.js";
 export type * from "./delegation.js";
 export type * from "./subagent.js";

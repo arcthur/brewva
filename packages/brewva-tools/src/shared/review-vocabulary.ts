@@ -19,7 +19,7 @@ function readString(value: unknown): string | undefined {
 }
 
 export function isReviewLaneName(value: string): value is ReviewLaneName {
-  return REVIEW_LANE_NAMES.includes(value as ReviewLaneName);
+  return (REVIEW_LANE_NAMES as readonly string[]).includes(value);
 }
 
 export function normalizeReviewLaneName(value: unknown): ReviewLaneName | undefined {

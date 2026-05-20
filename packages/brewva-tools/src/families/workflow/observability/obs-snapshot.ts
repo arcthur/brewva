@@ -1,9 +1,9 @@
-import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { formatTaskVerificationLevelForSurface } from "@brewva/brewva-runtime/task";
+import { formatTaskVerificationLevelForSurface } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";
+import { readObservabilitySnapshotState } from "../../../runtime-port/observability.js";
 import { textResult } from "../../../utils/result.js";
 import { getSessionId } from "../../../utils/session.js";
 
@@ -33,16 +33,16 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const tape = obsSnapshotTool.runtime.inspect.tape.status.get(sessionId);
-      const usage = obsSnapshotTool.runtime.inspect.context.usage.get(sessionId);
-      const promptStability = obsSnapshotTool.runtime.inspect.context.evidence.latest(
-        sessionId,
-        "prompt_stability",
-      )?.payload;
-      const transientReduction = obsSnapshotTool.runtime.inspect.context.evidence.latest(
-        sessionId,
-        "transient_reduction",
-      )?.payload;
+      const {
+        tape,
+        usage,
+        promptStability,
+        transientReduction,
+        contextStatus,
+        cost,
+        task,
+        verificationEvent,
+      } = readObservabilitySnapshotState(obsSnapshotTool.runtime, sessionId);
       const promptPrefixStable = readBoolean(promptStability?.stablePrefix);
       const promptTailStable = readBoolean(promptStability?.stableTail);
       const promptScopeKey = readString(promptStability?.scopeKey);
@@ -51,16 +51,6 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
       const transientClearedToolResults = readNumber(transientReduction?.clearedToolResults) ?? 0;
       const transientEstimatedTokenSavings =
         readNumber(transientReduction?.estimatedTokenSavings) ?? 0;
-      const contextStatus = obsSnapshotTool.runtime.inspect.context.usage.getStatus(
-        sessionId,
-        usage,
-      );
-      const cost = obsSnapshotTool.runtime.inspect.cost.summary.get(sessionId);
-      const task = obsSnapshotTool.runtime.inspect.task.state.get(sessionId);
-      const verificationEvent = obsSnapshotTool.runtime.inspect.events.records.list(sessionId, {
-        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-        last: 1,
-      })[0];
       const verificationPayload =
         verificationEvent?.payload &&
         typeof verificationEvent.payload === "object" &&
@@ -72,7 +62,7 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
         "[ObsSnapshot]",
         `tape_pressure: ${tape.tapePressure}`,
         `tape_entries_total: ${tape.totalEntries}`,
-        `context_usage: ${formatPercent(contextStatus.usageRatio)}`,
+        `context_usage: ${formatPercent(contextStatus.usageRatio ?? null)}`,
         `context_compaction_advised: ${contextStatus.compactionAdvised ? "yes" : "no"}`,
         `context_forced_compaction: ${contextStatus.forcedCompaction ? "yes" : "no"}`,
         `tokens_until_forced_compact: ${contextStatus.tokensUntilForcedCompact ?? "unknown"}`,

@@ -3,10 +3,10 @@ import type {
   DelegationGateReason,
   DelegationModelCategory,
   PublicSubagentRole,
-} from "@brewva/brewva-runtime/delegation";
-import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
-import type { PatchSet } from "@brewva/brewva-runtime/patch-history";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/protocol";
+import type { PatchSet } from "@brewva/brewva-runtime/protocol";
 import type {
   DelegationContextBudget,
   DelegationContextRef,
@@ -118,11 +118,11 @@ export interface KnowledgeSubagentOutcomeData {
 }
 
 export type SubagentOutcomeData =
-  | EvidenceSubagentOutcomeData
-  | ExplorerSubagentOutcomeData
-  | VerifierSubagentOutcomeData
   | PatchSubagentOutcomeData
-  | KnowledgeSubagentOutcomeData;
+  | EvidenceSubagentOutcomeData
+  | KnowledgeSubagentOutcomeData
+  | ExplorerSubagentOutcomeData
+  | VerifierSubagentOutcomeData;
 
 export interface SubagentOutcomeBase {
   runId: string;
@@ -139,7 +139,7 @@ export interface SubagentOutcomeBase {
   kind: SubagentResultMode;
   consultKind?: ExplorerConsultKind;
   status: "ok" | "error" | "cancelled" | "timeout";
-  workerSessionId?: string;
+  workerSessionId?: string | null;
   summary: string;
   assistantText?: string;
   data?: SubagentOutcomeData;
@@ -169,7 +169,7 @@ export interface SubagentOutcomeFailure {
   label?: string;
   consultKind?: ExplorerConsultKind;
   status: "error" | "cancelled" | "timeout";
-  workerSessionId?: string;
+  workerSessionId?: string | null;
   error: string;
   metrics: SubagentOutcomeMetricSummary;
   artifactRefs?: SubagentOutcomeArtifactRef[];

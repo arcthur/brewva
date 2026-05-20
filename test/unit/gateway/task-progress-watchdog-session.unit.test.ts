@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { createHostedSession as createGatewaySession } from "../../../packages/brewva-gateway/src/hosted/api.js";
-import { TaskProgressWatchdog } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-progress-watchdog.js";
+import { TaskProgressWatchdog } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/watchdog/task-progress-watchdog.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
@@ -23,14 +23,14 @@ describe("gateway session watchdog integration", () => {
     try {
       const sessionId = asBrewvaSessionId(result.session.sessionManager.getSessionId());
 
-      const bootstrap = result.runtime.inspect.events.records.query(sessionId, {
+      const bootstrap = result.runtime.ops.events.records.query(sessionId, {
         type: "session_bootstrap",
         last: 1,
       })[0];
       expect(bootstrap?.sessionId).toBe(sessionId);
 
       now = 1_740_000_000_100;
-      result.runtime.authority.task.spec.set(sessionId, {
+      result.runtime.ops.task.spec.set(sessionId, {
         schema: "brewva.task.v1",
         goal: "Detect stalled work on a real gateway-backed session",
       });
@@ -61,8 +61,8 @@ describe("gateway session watchdog integration", () => {
         });
       triggerPoll();
 
-      const detected = result.runtime.inspect.events.records.query(sessionId, {
-        type: "task_stuck_detected",
+      const detected = result.runtime.ops.events.records.query(sessionId, {
+        type: "task.stuck.detected",
         last: 1,
       })[0];
       expect(detected?.sessionId).toBe(sessionId);

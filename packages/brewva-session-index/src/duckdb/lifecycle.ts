@@ -3,7 +3,7 @@ import type { DuckDBConnection } from "./instance.js";
 import { selectOne, selectRows } from "./query.js";
 
 interface IndexStateRow {
-  byte_offset?: bigint | number;
+  indexed_event_count?: bigint | number;
 }
 
 interface SessionIdRow {
@@ -17,7 +17,7 @@ interface StatusRow {
 }
 
 export interface IndexedSessionState {
-  byteOffset: number;
+  indexedEventCount: number;
 }
 
 export interface SessionIndexStatusCounts {
@@ -27,7 +27,7 @@ export interface SessionIndexStatusCounts {
 }
 
 const INDEXED_SESSION_STATE_SQL =
-  "select byte_offset from index_state where session_id = $sessionId";
+  "select indexed_event_count from index_state where session_id = $sessionId";
 
 const INDEXED_SESSION_IDS_SQL = "select session_id from index_state";
 
@@ -84,7 +84,7 @@ export async function readIndexedSessionState(
   const row = await selectOne<IndexStateRow>(connection, INDEXED_SESSION_STATE_SQL, {
     sessionId,
   });
-  return row ? { byteOffset: Number(row.byte_offset ?? 0) } : undefined;
+  return row ? { indexedEventCount: Number(row.indexed_event_count ?? 0) } : undefined;
 }
 
 export async function listIndexedSessionIds(connection: DuckDBConnection): Promise<string[]> {

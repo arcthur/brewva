@@ -13,150 +13,18 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./channels": {
-      "types": "./dist/channels.d.ts",
-      "bun": "./src/channels.ts",
-      "import": "./dist/channels.js",
-      "default": "./dist/channels.js"
-    },
-    "./capabilities": {
-      "types": "./dist/capabilities.d.ts",
-      "bun": "./src/capabilities.ts",
-      "import": "./dist/capabilities.js",
-      "default": "./dist/capabilities.js"
-    },
     "./core": {
       "types": "./dist/core.d.ts",
       "bun": "./src/core.ts",
       "import": "./dist/core.js",
       "default": "./dist/core.js"
     },
-    "./credentials": {
-      "types": "./dist/credentials.d.ts",
-      "bun": "./src/credentials.ts",
-      "import": "./dist/credentials.js",
-      "default": "./dist/credentials.js"
-    },
-    "./context": {
-      "types": "./dist/context.d.ts",
-      "bun": "./src/context.ts",
-      "import": "./dist/context.js",
-      "default": "./dist/context.js"
-    },
-    "./event-log": {
-      "types": "./dist/event-log.d.ts",
-      "bun": "./src/event-log.ts",
-      "import": "./dist/event-log.js",
-      "default": "./dist/event-log.js"
-    },
-    "./evidence": {
-      "types": "./dist/evidence.d.ts",
-      "bun": "./src/evidence.ts",
-      "import": "./dist/evidence.js",
-      "default": "./dist/evidence.js"
-    },
-    "./events": {
-      "types": "./dist/events.d.ts",
-      "bun": "./src/events.ts",
-      "import": "./dist/events.js",
-      "default": "./dist/events.js"
-    },
-    "./patch-history": {
-      "types": "./dist/patch-history.d.ts",
-      "bun": "./src/patch-history.ts",
-      "import": "./dist/patch-history.js",
-      "default": "./dist/patch-history.js"
-    },
-    "./parallel": {
-      "types": "./dist/parallel.d.ts",
-      "bun": "./src/parallel.ts",
-      "import": "./dist/parallel.js",
-      "default": "./dist/parallel.js"
-    },
-    "./replay": {
-      "types": "./dist/replay.d.ts",
-      "bun": "./src/replay.ts",
-      "import": "./dist/replay.js",
-      "default": "./dist/replay.js"
-    },
-    "./recovery": {
-      "types": "./dist/recovery.d.ts",
-      "bun": "./src/recovery.ts",
-      "import": "./dist/recovery.js",
-      "default": "./dist/recovery.js"
-    },
-    "./runtime-extensions": {
-      "types": "./dist/runtime/runtime-extensions.d.ts",
-      "bun": "./src/runtime/runtime-extensions.ts",
-      "import": "./dist/runtime/runtime-extensions.js",
-      "default": "./dist/runtime/runtime-extensions.js"
-    },
     "./schema/brewva.schema.json": "./schema/brewva.schema.json",
-    "./claim": {
-      "types": "./dist/claim.d.ts",
-      "bun": "./src/claim.ts",
-      "import": "./dist/claim.js",
-      "default": "./dist/claim.js"
-    },
     "./config": {
       "types": "./dist/config.d.ts",
       "bun": "./src/config.ts",
       "import": "./dist/config.js",
       "default": "./dist/config.js"
-    },
-    "./conventions": {
-      "types": "./dist/conventions.d.ts",
-      "bun": "./src/conventions.ts",
-      "import": "./dist/conventions.js",
-      "default": "./dist/conventions.js"
-    },
-    "./cost": {
-      "types": "./dist/cost.d.ts",
-      "bun": "./src/cost.ts",
-      "import": "./dist/cost.js",
-      "default": "./dist/cost.js"
-    },
-    "./delegation": {
-      "types": "./dist/delegation.d.ts",
-      "bun": "./src/delegation.ts",
-      "import": "./dist/delegation.js",
-      "default": "./dist/delegation.js"
-    },
-    "./governance": {
-      "types": "./dist/governance.d.ts",
-      "bun": "./src/governance.ts",
-      "import": "./dist/governance.js",
-      "default": "./dist/governance.js"
-    },
-    "./ledger": {
-      "types": "./dist/ledger.d.ts",
-      "bun": "./src/ledger.ts",
-      "import": "./dist/ledger.js",
-      "default": "./dist/ledger.js"
-    },
-    "./projection": {
-      "types": "./dist/projection.d.ts",
-      "bun": "./src/projection.ts",
-      "import": "./dist/projection.js",
-      "default": "./dist/projection.js"
-    },
-    "./proposals": {
-      "types": "./dist/proposals.d.ts",
-      "bun": "./src/proposals.ts",
-      "import": "./dist/proposals.js",
-      "default": "./dist/proposals.js"
-    },
-    "./reasoning": {
-      "types": "./dist/reasoning.d.ts",
-      "bun": "./src/reasoning.ts",
-      "import": "./dist/reasoning.js",
-      "default": "./dist/reasoning.js"
-    },
-    "./schedule": {
-      "types": "./dist/schedule.d.ts",
-      "bun": "./src/schedule.ts",
-      "import": "./dist/schedule.js",
-      "default": "./dist/schedule.js"
     },
     "./security": {
       "types": "./dist/security.d.ts",
@@ -164,53 +32,14 @@
       "import": "./dist/security.js",
       "default": "./dist/security.js"
     },
-    "./session": {
-      "types": "./dist/session.d.ts",
-      "bun": "./src/session.ts",
-      "import": "./dist/session.js",
-      "default": "./dist/session.js"
-    },
-    "./skills": {
-      "types": "./dist/skills.d.ts",
-      "bun": "./src/skills.ts",
-      "import": "./dist/skills.js",
-      "default": "./dist/skills.js"
-    },
-    "./tape": {
-      "types": "./dist/tape.d.ts",
-      "bun": "./src/tape.ts",
-      "import": "./dist/tape.js",
-      "default": "./dist/tape.js"
-    },
-    "./task": {
-      "types": "./dist/task.d.ts",
-      "bun": "./src/task.ts",
-      "import": "./dist/task.js",
-      "default": "./dist/task.js"
-    },
-    "./tools": {
-      "types": "./dist/tools.d.ts",
-      "bun": "./src/tools.ts",
-      "import": "./dist/tools.js",
-      "default": "./dist/tools.js"
-    },
-    "./verification": {
-      "types": "./dist/verification.d.ts",
-      "bun": "./src/verification.ts",
-      "import": "./dist/verification.js",
-      "default": "./dist/verification.js"
-    },
-    "./workbench": {
-      "types": "./dist/workbench.d.ts",
-      "bun": "./src/workbench.ts",
-      "import": "./dist/workbench.js",
-      "default": "./dist/workbench.js"
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "bun": "./src/protocol.ts",
+      "import": "./dist/protocol.js",
+      "default": "./dist/protocol.js"
     }
   },
   "dependencies": {
-    "@brewva/brewva-capabilities": "workspace:*",
-    "@brewva/brewva-effect": "workspace:*",
-    "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
     "ajv": "^8.18.0",

@@ -1,12 +1,11 @@
 import {
   BrewvaCancelled,
-  BrewvaDuration,
-  BrewvaEffect,
   BrewvaTimeout,
   fromAbortableBoundaryPromise,
   runEdgeOperation,
   type BrewvaBoundaryError,
 } from "@brewva/brewva-effect";
+import { BrewvaDuration, BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { stableJsonStringify } from "@brewva/brewva-std/json";
 import {
   createToolCatalog,

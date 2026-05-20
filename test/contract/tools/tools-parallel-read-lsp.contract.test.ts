@@ -75,7 +75,7 @@ describe("tool parallel read lsp integration", () => {
     ).toBeGreaterThan(0);
 
     const telemetry = requireRecord(
-      runtime.inspect.events.records
+      runtime.capabilities.events.records
         .query(sessionId, { type: "tool_parallel_read" })
         .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
       "Expected lsp_symbols parallel-read telemetry.",
@@ -114,7 +114,7 @@ describe("tool parallel read lsp integration", () => {
     );
 
     const telemetry = requireRecord(
-      runtime.inspect.events.records
+      runtime.capabilities.events.records
         .query(sessionId, { type: "tool_parallel_read" })
         .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
       "Expected sequential lsp_symbols telemetry.",
@@ -139,7 +139,7 @@ describe("tool parallel read lsp integration", () => {
           maxTotalPerSession: 100,
         },
       },
-      authority: {
+      capabilities: {
         tools: {
           parallel: {
             async acquireAsync(sessionId: string, runId: string) {
@@ -213,7 +213,7 @@ describe("tool parallel read lsp integration", () => {
     ).toContain("valueA");
 
     const telemetry = requireRecord(
-      runtime.inspect.events.records
+      runtime.capabilities.events.records
         .query(sessionId, { type: "tool_parallel_read" })
         .find((event) => event.payload?.toolName === "lsp_symbols")?.payload,
       "Expected low-limit lsp_symbols telemetry.",
@@ -419,7 +419,7 @@ describe("tool parallel read lsp integration", () => {
     );
 
     expect(
-      runtime.inspect.events.records.query("parallel-read-no-session", {
+      runtime.capabilities.events.records.query("parallel-read-no-session", {
         type: "tool_parallel_read",
       }),
     ).toHaveLength(0);

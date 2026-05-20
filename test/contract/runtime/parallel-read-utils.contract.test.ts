@@ -84,11 +84,16 @@ describe("parallel-read utils", () => {
   test("recordParallelReadTelemetry emits only when runtime and session id are available", () => {
     const calls: Array<Record<string, unknown>> = [];
     const runtime = {
-      extensions: {
+      capabilities: {
         tools: {
-          recordEvent(input: Record<string, unknown>) {
-            calls.push(input);
-            return undefined;
+          lifecycle: {
+            parallelRead(input: Record<string, unknown>) {
+              calls.push({
+                ...input,
+                type: "tool_parallel_read",
+              });
+              return undefined;
+            },
           },
         },
       },
@@ -212,7 +217,7 @@ describe("parallel-read utils", () => {
   test("withParallelReadSlot acquires and releases runtime slots when session context is available", async () => {
     const calls: string[] = [];
     const runtime = {
-      authority: {
+      capabilities: {
         tools: {
           parallel: {
             async acquireAsync(sessionId: string, runId: string) {
@@ -245,7 +250,7 @@ describe("parallel-read utils", () => {
   test("withParallelReadSlot falls back to local execution when runtime slot is rejected", async () => {
     let released = false;
     const runtime = {
-      authority: {
+      capabilities: {
         tools: {
           parallel: {
             async acquireAsync() {

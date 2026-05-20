@@ -692,6 +692,12 @@
           "properties": {
             "checkpointIntervalEntries": {
               "type": "number"
+            },
+            "dir": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
             }
           }
         },

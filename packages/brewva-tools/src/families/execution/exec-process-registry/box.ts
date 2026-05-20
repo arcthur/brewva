@@ -1,11 +1,9 @@
 import {
   BrewvaBoundaryFailure,
-  BrewvaDuration,
-  BrewvaEffect,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
   startScopedTimeout,
-  type BrewvaScope,
 } from "@brewva/brewva-effect";
+import { BrewvaDuration, BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
 import { finalizeBoxSession } from "./internal/lifecycle.js";
 import {
   appendOutput,
@@ -191,7 +189,10 @@ export function startManagedBoxExec(input: ManagedBoxExecStartInput): ManagedBox
     while (!session.exited && !session.removed) {
       const keepPolling = await appendObservedOutput();
       if (!keepPolling) break;
-      await runPromiseAtBoundary(BrewvaEffect.sleep(BrewvaDuration.millis(BOX_OBSERVE_POLL_MS)));
+      await runBoundaryOperation(
+        "tools.exec.box.observeSleep",
+        BrewvaEffect.sleep(BrewvaDuration.millis(BOX_OBSERVE_POLL_MS)),
+      );
     }
   })();
 

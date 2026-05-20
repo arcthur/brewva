@@ -1,11 +1,7 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import {
-  CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
-  CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import { buildBrewvaUpdatePrompt } from "../../ingress/api.js";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
+import type { HostedRuntimeAdapterPort } from "../ports.js";
 import type { ChannelUpdateLockManager } from "../session/update-lock.js";
 import type { ChannelControlCommand } from "../types.js";
 import type { ChannelCommandDispatchResult, ChannelPreparedCommand } from "./dispatch.js";
@@ -16,7 +12,7 @@ export async function prepareChannelUpdateCommand(input: {
   match: ChannelCommandMatch;
   turn: TurnEnvelope;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   updateLock: ChannelUpdateLockManager;
   targetAgentId: string;
   isTargetActive: boolean;
@@ -35,9 +31,8 @@ export async function prepareChannelUpdateCommand(input: {
   });
   if (reservation.kind === "blocked") {
     const blocked = reservation.blocked;
-    input.runtime.extensions.hosted.events.record({
+    input.runtime.ops.channel.command.updateLockBlocked({
       sessionId: input.turn.sessionId,
-      type: CHANNEL_UPDATE_LOCK_BLOCKED_EVENT_TYPE,
       payload: {
         scopeKey: input.command.scopeKey,
         turnId: input.turn.turnId,
@@ -83,7 +78,7 @@ export async function prepareChannelUpdateCommand(input: {
 export async function handleChannelUpdateCommand(input: {
   command: Extract<ChannelControlCommand, { kind: "update" }>;
   turn: TurnEnvelope;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   targetAgentId: string;
   isTargetActive: boolean;
   replyWriter: ChannelReplyWriter;
@@ -114,9 +109,8 @@ export async function handleChannelUpdateCommand(input: {
   ) {
     throw new Error("update_command_not_prepared");
   }
-  input.runtime.extensions.hosted.events.record({
+  input.runtime.ops.channel.command.updateRequested({
     sessionId: input.turn.sessionId,
-    type: CHANNEL_UPDATE_REQUESTED_EVENT_TYPE,
     payload: {
       scopeKey: input.command.scopeKey,
       agentId: input.targetAgentId,

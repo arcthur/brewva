@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import type { WorkbenchEntry } from "@brewva/brewva-runtime/workbench";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { WorkbenchEntry } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaSessionMessageEntry } from "@brewva/brewva-substrate/session";
-import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import {
   applyWorkbenchEvictionsToMessages,
   shouldExcludeSessionEntryForWorkbench,
@@ -24,7 +24,7 @@ function eviction(sourceRefs: string[]): WorkbenchEntry {
 
 describe("workbench visibility", () => {
   test("marks matching tool-result messages excluded from context", () => {
-    const messages: BrewvaTurnLoopMessage[] = [
+    const messages: BrewvaAgentProtocolMessage[] = [
       {
         role: "toolResult",
         toolCallId: "call-read-1",

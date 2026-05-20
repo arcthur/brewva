@@ -6,12 +6,12 @@ import type {
   DelegationModelRouteRecord,
   DelegationRunRecord,
   DelegationVisibility,
-} from "@brewva/brewva-runtime/delegation";
+} from "@brewva/brewva-runtime/protocol";
 import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   evaluateDelegationAdoption,
-} from "@brewva/brewva-runtime/delegation";
-import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
+} from "@brewva/brewva-runtime/protocol";
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/protocol";
 import type { HostedDelegationTarget } from "./targets.js";
 
 export interface DelegationTaskIdentity {

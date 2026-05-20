@@ -18,7 +18,7 @@
   - `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
   - `packages/brewva-substrate/src/host-api/plugin.ts`
   - `packages/brewva-substrate/src/host-api/plugin-runner.ts`
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/lifecycle/local-hook-port.ts`
+  - `packages/brewva-gateway/src/hosted/internal/turn-adapter/lifecycle/local-hook-port.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/tools/tool-surface.ts`
 

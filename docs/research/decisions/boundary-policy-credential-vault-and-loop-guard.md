@@ -19,7 +19,7 @@
 - deployment-scoped execution constraints live under `security.boundaryPolicy`
 - encrypted secret storage and opaque execution-time bindings live under `security.credentials`
 - exact-call loop protection lives under `security.loopDetection.exactCall`
-- the shared runtime gate remains `runtime.tools.start(...) -> ToolGateService.authorizeToolCall(...)`
+- the shared runtime gate remains `kernel.beginToolCall(...) -> KernelToolAuthorizer.authorizeToolCall(...)`
 - Brewva does not expose a new `runtime.security.*` public domain or a monolithic security kernel service for this work
 
 ## Superseded by

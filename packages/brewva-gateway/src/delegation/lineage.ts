@@ -1,6 +1,14 @@
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
-import type { ContextAdmission } from "@brewva/brewva-runtime/session";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
+import type { ContextAdmission } from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import {
+  adoptRuntimeLineageOutcome,
+  createRuntimeLineageNode,
+  getRuntimeSessionLineageContextEntryPath,
+  getRuntimeSessionLineageNode,
+  getRuntimeSessionLineageTree,
+  recordRuntimeLineageOutcome,
+} from "../hosted/api.js";
 
 function isLineageUnavailable(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("session_lineage_root_missing:");
@@ -19,18 +27,18 @@ function delegationAdoptionId(runId: string): string {
 }
 
 function resolveCurrentLineageNodeId(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): string | undefined {
   try {
-    const path = runtime.inspect.session.lineage.getContextEntryPath(sessionId, {
+    const path = getRuntimeSessionLineageContextEntryPath(runtime, sessionId, {
       includeStateOnly: true,
     });
     const leaf = path.at(-1);
     if (leaf) {
       return leaf.lineageNodeId;
     }
-    return runtime.inspect.session.lineage.getTree(sessionId).rootNodeId;
+    return getRuntimeSessionLineageTree(runtime, sessionId).rootNodeId ?? undefined;
   } catch (error) {
     if (isLineageUnavailable(error)) {
       return undefined;
@@ -50,34 +58,38 @@ function resolveOutcomeRef(record: DelegationRunRecord): string {
 }
 
 function hasDelegationLineageOutcome(input: {
-  runtime: BrewvaRuntimeRoot;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   lineageNodeId: string;
   outcomeId: string;
 }): boolean {
-  const node = input.runtime.inspect.session.lineage.getNode(input.sessionId, input.lineageNodeId);
-  return node?.outcomes.some((outcome) => outcome.outcomeId === input.outcomeId) ?? false;
+  const node = getRuntimeSessionLineageNode(input.runtime, input.sessionId, input.lineageNodeId);
+  return (
+    node?.outcomes.some(
+      (outcome: { outcomeId?: string }) => outcome.outcomeId === input.outcomeId,
+    ) ?? false
+  );
 }
 
 function hasDelegationLineageAdoption(input: {
-  runtime: BrewvaRuntimeRoot;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   adoptionId: string;
 }): boolean {
-  const tree = input.runtime.inspect.session.lineage.getTree(input.sessionId);
-  return tree.nodes.some((node) =>
-    node.adoptedOutcomes.some((adoption) => adoption.adoptionId === input.adoptionId),
+  const tree = getRuntimeSessionLineageTree(input.runtime, input.sessionId);
+  return tree.nodes.some((node: { adoptedOutcomes?: readonly { adoptionId?: string }[] }) =>
+    (node.adoptedOutcomes ?? []).some((adoption) => adoption.adoptionId === input.adoptionId),
   );
 }
 
 export function ensureDelegationLineageNode(input: {
-  runtime: BrewvaRuntimeRoot;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   record: DelegationRunRecord;
 }): string | undefined {
   const lineageNodeId = delegationLineageNodeId(input.record.runId);
   try {
-    if (input.runtime.inspect.session.lineage.getNode(input.sessionId, lineageNodeId)) {
+    if (getRuntimeSessionLineageNode(input.runtime, input.sessionId, lineageNodeId)) {
       return lineageNodeId;
     }
   } catch (error) {
@@ -93,7 +105,7 @@ export function ensureDelegationLineageNode(input: {
   }
 
   try {
-    input.runtime.authority.session.lineage.createNode(input.sessionId, {
+    createRuntimeLineageNode(input.runtime, input.sessionId, {
       lineageNodeId,
       parentLineageNodeId,
       kind: input.record.kind ? `subagent.${input.record.kind}` : "subagent",
@@ -117,7 +129,7 @@ export function ensureDelegationLineageNode(input: {
 }
 
 export function recordDelegationLineageOutcome(input: {
-  runtime: BrewvaRuntimeRoot;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   record: DelegationRunRecord;
 }): string | undefined {
@@ -136,7 +148,7 @@ export function recordDelegationLineageOutcome(input: {
   ) {
     return outcomeId;
   }
-  input.runtime.authority.session.lineage.recordOutcome(input.sessionId, {
+  recordRuntimeLineageOutcome(input.runtime, input.sessionId, {
     outcomeId,
     lineageNodeId,
     summary: input.record.summary ?? input.record.error ?? `Delegation ${input.record.status}.`,
@@ -148,7 +160,7 @@ export function recordDelegationLineageOutcome(input: {
 }
 
 export function adoptDelegationLineageOutcome(input: {
-  runtime: BrewvaRuntimeRoot;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   record: DelegationRunRecord;
   admission?: ContextAdmission;
@@ -182,7 +194,7 @@ export function adoptDelegationLineageOutcome(input: {
   ) {
     return;
   }
-  input.runtime.authority.session.lineage.adoptOutcome(input.sessionId, {
+  adoptRuntimeLineageOutcome(input.runtime, input.sessionId, {
     adoptionId,
     outcomeId,
     fromLineageNodeId: lineageNodeId,

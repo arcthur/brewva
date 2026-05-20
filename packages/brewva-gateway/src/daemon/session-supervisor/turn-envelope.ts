@@ -1,5 +1,5 @@
-import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import type { OperationalClaim } from "@brewva/brewva-runtime/claim";
+import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { OperationalClaim } from "@brewva/brewva-runtime/protocol";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
@@ -110,7 +110,7 @@ export function buildSessionTurnEnvelope(input: {
 export function extractPromptFromEnvelope(envelope: TurnEnvelope): string {
   const parts = envelope.parts
     .filter((part) => part.type === "text")
-    .map((part) => part.text.trim())
+    .map((part) => (part.text ?? "").trim())
     .filter((part) => part.length > 0);
   return parts.join("\n");
 }

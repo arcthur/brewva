@@ -171,7 +171,7 @@ Relevant lesson for Brewva:
   receipt family and recovery contract.
 - **Prompt-stability inspection and evidence exist.**
   Hosted prompt-stability samples are session-local inspect/evidence data; raw
-  stability hashes stay out of `context_composed` durable payloads.
+  stability hashes stay out of `context.composed` durable payloads.
 
 ## Design
 
@@ -612,18 +612,18 @@ stay separate:
 1. **Hosted composition telemetry**
 
 - `packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.ts`
-- currently emits `context_composed` through `recordRuntimeEvent(...)`
+- currently emits `context.composed` through runtime telemetry
 - appropriate for coarse composition facts such as block counts, token
   totals, and `injectionAccepted`
 
 1. **Durable iteration facts**
 
 - `packages/brewva-runtime/src/runtime/runtime.ts`
-- payload schema in `packages/brewva-runtime/src/domain/events/iteration-facts.ts`
+- payload schema in `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 - appropriate only for selected normalized numeric facts worth retaining as
   replayable evidence
 
-This split matters because `context_composed` already rides a runtime event
+This split matters because `context.composed` already rides runtime telemetry
 path. The RFC should therefore treat it as a coarse existing receipt, not as a
 dumping ground for raw prompt hashes, cache-debug strings, or provider-specific
 payload details.
@@ -641,7 +641,8 @@ Maintain a session-local prompt-stability tracker with fields such as:
 
 This tracker is used for:
 
-- `runtime.inspect.context.getPromptStability(sessionId)`
+- runtime-owned Tape projections or a named compatibility read model while the
+  compatibility plane still exists
 - `obs_snapshot` and live operator inspection
 - hosted debugging
 - sidecar promotion evidence under `.orchestrator/context-evidence`
@@ -654,12 +655,13 @@ Brewva parser.
 Recommended placement:
 
 - runtime session-local state under
-  `packages/brewva-runtime/src/domain/sessions/session-state.ts`
-- exposed through `runtime.operator.context.observePromptStability(...)` and
-  `runtime.inspect.context.getPromptStability(...)`
+  `packages/brewva-runtime/src/runtime/tape/memory-tape.ts` only
+  while a compatibility read model still needs it
+- exposed through a named Tape projection or compatibility read adapter, not a
+  public `authority` / `inspect` root
 - written from the same hosted `before_agent_start` path that already owns
   context composition
-- cleared through normal `clearState(sessionId)` / session shutdown teardown
+- cleared through normal session shutdown teardown
 - aggregated for promotion evidence by
   `buildContextEvidenceReport(...)` / `persistContextEvidenceReport(...)` and
   the repository script `bun run report:context-evidence`
@@ -682,7 +684,7 @@ Scope behavior:
 Recommended non-goal:
 
 - do **not** append raw hashes or per-provider cache strings to
-  `context_composed`
+  `context.composed`
 - do **not** add `toolSchemaHash` in v1
 
 **Change outline.**
@@ -707,8 +709,8 @@ interface PromptStabilityState {
   stableTail: boolean;
 }
 
-runtime.operator.context.observePromptStability(sessionId, input);
-runtime.inspect.context.getPromptStability(sessionId);
+runtime.tape.project(sessionId, "baseline");
+runtime.tape.project(sessionId, "cost_summary");
 ```
 
 ### Future Durable Metrics: Reuse Iteration Facts
@@ -795,9 +797,10 @@ This remains a hosted prompt-shaping concern.
 `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 already owns:
 
-- usage observation through `runtime.operator.context.observeUsage(...)`
+- usage observation through the runtime compatibility read/write adapter while
+  the compatibility plane still exists
 - scope identity resolution through `resolveInjectionScopeId(...)`
-- workbench notebook rendering through `runtime.inspect.workbench.list(...)`
+- workbench notebook rendering through the compatibility read adapter
 - system-prompt suffix application through `applyContextContract(...)`
 - hidden-tail composition through `composeContextBlocks(...)`
 - coarse telemetry emission through `telemetry.emitContextComposed(...)`
@@ -819,31 +822,29 @@ Concrete rule:
 
 ### Request-Local Reduction Ownership
 
-`packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
-already demonstrates the correct `before_provider_request` contract:
+The former provider request recovery adapter demonstrated the correct
+`before_provider_request` contract:
 
 - clone provider payload
 - patch the clone
 - return the replacement payload only for the current outbound request
 - leave durable history untouched
 
-That file is the direct implementation precedent for transient outbound
-reduction.
+That adapter was removed when runtime-owned turn recovery became the default,
+but the clone-only request-local rule remains the implementation precedent for
+transient outbound reduction.
 
 Recommended implementation shape:
 
-- add a sibling reducer module, for example
-  `provider-request-reduction.ts`, or factor a shared mutator chain used by both
-  recovery and reduction
-- keep reducer state runtime-local and lossy, similar to
-  `packages/brewva-gateway/src/hosted/internal/thread-loop/recovery/output-budget-state.ts`
-- gate reduction by hosted transition posture rather than by provider heuristics
-  alone
+- add a reducer module behind the hosted provider request hook, or factor a
+  shared mutator chain used by runtime recovery and reduction
+- keep reducer state runtime-local and lossy
+- gate reduction by canonical runtime recovery posture rather than by provider
+  heuristics alone
 
 ### Recovery Posture Source Of Truth
 
-`packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.ts` is the current durable
-source for hosted recovery posture.
+Canonical runtime tape projections are the durable source for recovery posture.
 
 The first rollout of transient outbound reduction should treat the following as
 recovery-family exclusions:
@@ -868,17 +869,18 @@ Provider cache counters already enter Brewva through the normal Pi event flow:
 - receives upstream assistant `message_end`
 - forwards the message into `recordAssistantUsageFromMessage(...)`
 
-1. `packages/brewva-runtime/src/domain/cost/assistant-usage.ts`
+1. `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 
 - copies `usage.input`, `usage.output`, `usage.cacheRead`,
   `usage.cacheWrite`, and `usage.totalTokens`
 
-1. `packages/brewva-runtime/src/domain/cost/cost.ts`
+1. `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 
 - normalizes those values
 - keeps Brewva budget semantics explicit: tracked tokens exclude
   `cacheReadTokens`
-- emits `cost_update` and updates `runtime.inspect.cost.getSummary(...)`
+- emits `cost_update` for compatibility consumers; the four-port runtime reads
+  canonical `cost_summary` from `runtime.tape.project(...)`
 
 Implication:
 
@@ -895,10 +897,10 @@ Recommended placement by artifact type:
   - hosted session-local tracker only
 - transient outbound reduction outcomes:
   - hosted session-local tracker only
-  - exposed through `runtime.operator.context.observeTransientReduction(...)`
-    and `runtime.inspect.context.getTransientReduction(...)`
+  - exposed through a named compatibility read adapter while that adapter still
+    exists
 - coarse context composition facts:
-  - `context_composed`
+  - `context.composed`
 - provider cache token counters:
   - existing cost summary / inspect surfaces
   - optional future durable iteration metrics if longitudinal analysis matters
@@ -910,12 +912,12 @@ Recommended placement by artifact type:
 
 The existing test and contract layout already suggests the right rollout points:
 
-- `test/unit/gateway/hosted-behavior/hosted-behavior-host-api.unit.test.ts`
+- `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
   - hosted `before_agent_start` wiring remains canonical
 - `test/unit/gateway/hosted-context-telemetry.unit.test.ts`
-  - keep `context_composed` payload coarse and deterministic
-- `test/unit/gateway/output-budget-recovery.unit.test.ts`
-  - existing `before_provider_request` clone-and-patch precedent
+  - keep `context.composed` payload coarse and deterministic
+- hosted provider request hook tests
+  - preserve the clone-and-patch precedent without reintroducing recovery state
 - runtime facade and iteration-fact contract tests
   - durable metric observation schema and query behavior
 
@@ -998,7 +1000,7 @@ Validation:
 
 - elevated pressure
 - below hard-gate conditions
-- no active recovery posture from `session_turn_transition`
+- no active recovery posture from canonical runtime projections
 
 1. Derive request-time pressure from the strongest available signal:
 
@@ -1078,7 +1080,7 @@ and opencode use to keep summarization input dense:
 ### Phase 3: Observability (implemented, evidence pending)
 
 1. Add hosted prompt-stability telemetry with a session-local tracker rather
-   than by extending `context_composed` with raw hashes.
+   than by extending `context.composed` with raw hashes.
 2. Surface provider cache counters through hosted inspection or ops telemetry by
    reusing upstream Pi usage/session stats.
 3. Record only selected normalized numeric facts as iteration metrics where

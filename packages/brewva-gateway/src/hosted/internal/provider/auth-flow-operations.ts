@@ -1,4 +1,4 @@
-import type { CredentialVaultService } from "@brewva/brewva-runtime/credentials";
+import type { CredentialVaultService } from "@brewva/brewva-runtime/security";
 import type { HostedAuthCredential } from "../session/settings/hosted-auth-store.js";
 import type { ProviderAuthFlowOperations } from "./auth-flow.js";
 import {

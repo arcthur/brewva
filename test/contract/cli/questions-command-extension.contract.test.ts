@@ -3,20 +3,20 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createQuestionsCommandExtension } from "@brewva/brewva-cli/extensions";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
 } from "@brewva/brewva-substrate/prompt";
 import { requireDefined } from "../../helpers/assertions.js";
 import { recordHostedDelegationOutcome } from "../../helpers/events.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
+  return createRuntimeInstanceFixture(options);
 }
 
 type RegisteredCommand = {
@@ -107,7 +107,7 @@ describe("questions interactive command extension", () => {
     });
     const questionId = `delegation:${runId}:1`;
 
-    const beforeEventCount = runtime.inspect.events.records.query(sessionId).length;
+    const beforeEventCount = runtime.ops.events.records.query(sessionId).length;
     const { api, commands } = createCommandApiMock();
     await createQuestionsCommandExtension(runtime).register(api);
 
@@ -128,7 +128,7 @@ describe("questions interactive command extension", () => {
 
     await questionsCommand.handler("", ctx);
 
-    expect(runtime.inspect.events.records.query(sessionId)).toHaveLength(beforeEventCount);
+    expect(runtime.ops.events.records.query(sessionId)).toHaveLength(beforeEventCount);
     const rendered = notifications.at(-1)?.message ?? "";
     expect(rendered).toContain("Operator inbox updated (1 pending).");
     expect(rendered).toContain("Operator inbox: 1");
@@ -207,7 +207,7 @@ describe("questions interactive command extension", () => {
     expect(buildBrewvaPromptText(sentMessages[0]?.content ?? [])).toContain(
       "Answer: Use the gateway daemon path.",
     );
-    const answerEvents = runtime.inspect.events.records
+    const answerEvents = runtime.ops.events.records
       .query(sessionId)
       .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE);
     expect(answerEvents).toHaveLength(1);

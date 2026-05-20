@@ -1,8 +1,8 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { type TurnEnvelope, type TurnPart } from "@brewva/brewva-runtime/channels";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
-import { type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import { type TurnEnvelope, type TurnPart } from "@brewva/brewva-runtime/protocol";
 import { LRUCache } from "lru-cache";
+import type { RecoveryWalStore } from "../daemon/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { toErrorMessage } from "../utils/errors.js";
 import type { ChannelReplyWriter } from "./channel-reply-writer.js";
 import type { ChannelCommandDispatchResult, ChannelPreparedCommand } from "./command/dispatch.js";
@@ -49,7 +49,7 @@ export interface ChannelTurnDispatcher {
 }
 
 export function createChannelTurnDispatcher(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   recoveryWalStore: RecoveryWalStore;
   orchestrationEnabled: boolean;
   defaultAgentId: string;
@@ -136,9 +136,8 @@ export function createChannelTurnDispatcher(input: {
           );
         } catch (error) {
           preparedCommand?.release?.();
-          input.runtime.extensions.hosted.events.record({
+          input.runtime.ops.channel.command.rejected({
             sessionId: turn.sessionId,
-            type: "channel_command_rejected",
             payload: {
               scopeKey,
               command: commandResult.kind,
@@ -182,9 +181,8 @@ export function createChannelTurnDispatcher(input: {
 
       const durableApprovalAgentId = await resolveApprovalTargetAgentIdForDispatch(turn, scopeKey);
       if (input.orchestrationEnabled && turn.kind === "approval" && !durableApprovalAgentId) {
-        input.runtime.extensions.hosted.events.record({
+        input.runtime.ops.channel.turn.approvalTargetUnresolved({
           sessionId: turn.sessionId,
-          type: "channel_approval_target_unresolved",
           payload: {
             scopeKey,
             turnId: turn.turnId,
@@ -238,9 +236,8 @@ export function createChannelTurnDispatcher(input: {
         try {
           preparedCommand = await input.prepareCommand(commandMatch, turn, scopeKey);
         } catch (error) {
-          input.runtime.extensions.hosted.events.record({
+          input.runtime.ops.channel.command.rejected({
             sessionId: turn.sessionId,
-            type: "channel_command_rejected",
             payload: {
               scopeKey,
               command: commandMatch.kind,

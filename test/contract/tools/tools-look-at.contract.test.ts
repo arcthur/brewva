@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createLookAtTool } from "@brewva/brewva-tools/navigation";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -15,11 +15,11 @@ function extractTextContent(result: { content: Array<{ type: string; text?: stri
 
 function createScopedLookAtTool(sessionId: string, filePath: string) {
   const cwd = dirname(filePath);
-  const runtime = createBrewvaRuntime({
+  const runtime = createRuntimeInstanceFixture({
     cwd,
     config: createRuntimeConfig(),
-  }).hosted;
-  runtime.authority.task.spec.set(sessionId, {
+  });
+  runtime.capabilities.task.spec.set(sessionId, {
     schema: "brewva.task.v1",
     goal: "Inspect an explicitly targeted file.",
     targets: {

@@ -58,6 +58,17 @@ export {
   type BrewvaThinkingLevelChangeEntry,
 } from "./managed-session-store.js";
 export {
+  CONTEXT_BUDGET_PRESSURE_LEVELS,
+  DEFAULT_CONTEXT_STATE,
+  type ContextBudgetPressure,
+  type ContextState,
+} from "../contracts/context-state.js";
+export {
+  BREWVA_THINKING_LEVELS,
+  type BrewvaReasoningThinkingLevel,
+  type BrewvaThinkingLevel,
+} from "../contracts/thinking.js";
+export {
   SESSION_CRASH_POINTS,
   SESSION_PHASE_KINDS,
   SESSION_TERMINATION_REASONS,

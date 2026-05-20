@@ -1,20 +1,20 @@
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort, BrewvaRuntimeInstance } from "@brewva/brewva-runtime";
-import { MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { BREWVA_THINKING_LEVELS } from "@brewva/brewva-substrate/contracts";
+import { MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { InternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaMutableModelCatalog } from "@brewva/brewva-substrate/provider";
 import { createHostedResourceLoader } from "@brewva/brewva-substrate/resources";
-import type {
-  BrewvaModelPreferenceRef,
-  BrewvaModelPreset,
-  BrewvaModelPresetState,
-  BrewvaPromptThinkingLevel,
+import {
+  BREWVA_THINKING_LEVELS,
+  type BrewvaModelPreferenceRef,
+  type BrewvaModelPreset,
+  type BrewvaModelPresetState,
+  type BrewvaPromptThinkingLevel,
 } from "@brewva/brewva-substrate/session";
 import { resolveBrewvaModelSelection } from "../../../policy/model-routing/api.js";
 import { createBrewvaManagedAgentSession } from "./managed-agent/session.js";
 import { HostedRuntimeTapeSessionStore } from "./projection/runtime-projection-session-store.js";
-import { toHostedRuntimePort } from "./runtime-ports.js";
+import { createHostedRuntimeAdapter } from "./runtime-ports.js";
+import type { HostedRuntimeAdapterPort } from "./runtime-ports.js";
+import { toHostedRuntimeAdapterPort } from "./runtime-ports.js";
 import type {
   CreateHostedManagedSessionOptions,
   HostedSessionCustomTool,
@@ -286,13 +286,15 @@ export async function createHostedSessionServicesBundle(input: {
   agentDir: string;
   cwd: string;
   settings: HostedSessionSettings;
-  runtime?: BrewvaRuntimeInstance | BrewvaHostedRuntimePort;
+  runtime?: HostedRuntimeAdapterPort;
   extensions?: readonly InternalHostPlugin[];
   sessionId?: string;
   deferPersistenceUntilPrompt?: boolean;
 }): Promise<HostedSessionServicesBundle> {
   const settingsManager = readHostedSettingsHandle(input.settings);
-  const runtime = toHostedRuntimePort(input.runtime ?? createBrewvaRuntime({ cwd: input.cwd }));
+  const runtime = toHostedRuntimeAdapterPort(
+    input.runtime ?? createHostedRuntimeAdapter({ cwd: input.cwd }),
+  );
   const extensions = input.extensions ?? [];
   const resourceLoader = await createHostedResourceLoader({
     cwd: input.cwd,

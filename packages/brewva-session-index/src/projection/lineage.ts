@@ -1,12 +1,12 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import { deriveSessionLineageState, findSessionLineageRoot } from "@brewva/brewva-runtime/session";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import { deriveSessionLineageState, findSessionLineageRoot } from "@brewva/brewva-runtime/protocol";
 import type {
   ContextEntryRecord,
   SessionLineageNodeRecord,
   SessionLineageOutcomeAdoptionRecord,
   SessionLineageOutcomeRecord,
   SessionLineageSummaryRecord,
-} from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
 import { chunkArray } from "@brewva/brewva-std/collections";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import type { SqlParams } from "../sql/params.js";

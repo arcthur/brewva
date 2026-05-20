@@ -215,9 +215,8 @@ const FILE_CLASS_RULES: ReadonlyArray<{
       /persist/,
       /event-type/,
       /\.json$/,
-      /packages\/brewva-runtime\/src\/domain\/.+\/(types|wire|ledger|events|event-descriptors)\.ts$/,
-      /packages\/brewva-runtime\/src\/domain\/sessions\/event-pipeline\.ts$/,
-      /packages\/brewva-runtime\/src\/domain\/skills\/(planning|review)\.ts$/,
+      /packages\/brewva-runtime\/src\/runtime\/.+\/(runtime-api|memory-tape|kernel|turn|model)\.ts$/,
+      /packages\/brewva-runtime\/src\/contracts\.ts$/,
     ],
   },
   {

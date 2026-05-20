@@ -5,7 +5,7 @@
 Current phase ownership still lives in code:
 
 - compose-style planning: chain planner + cascade services
-- verification: `runtime.authority.verification.*` and `VerificationService`
+- verification: `runtime.ops.verification.*`, `runtime.kernel` receipts, and `VerificationService`
 - finishing: `SessionLifecycleService`
 - recovery: continuity policy, scheduler recovery, and Recovery WAL recovery
 - automatic debug-loop control: `packages/brewva-gateway/src/hosted/internal/session/debug-loop.ts`

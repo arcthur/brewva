@@ -2,13 +2,22 @@ import {
   formatTaskStateBlock,
   TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
   TASK_AGENT_ITEM_STATUS_VALUES,
-} from "@brewva/brewva-runtime/task";
-import type { TaskItemStatus } from "@brewva/brewva-runtime/task";
+} from "@brewva/brewva-runtime/protocol";
+import type { TaskItemStatus } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
+import {
+  addTaskItem,
+  getTaskState,
+  recordTaskAcceptance,
+  recordTaskBlocker,
+  recordTaskSpec,
+  resolveTaskBlocker,
+  updateTaskItem,
+} from "../../runtime-port/task-ledger.js";
 import { failTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -125,7 +134,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
               }
             : undefined;
 
-        taskSetSpecTool.runtime.authority.task.spec.set(sessionId, {
+        recordTaskSpec(taskSetSpecTool.runtime, sessionId, {
           schema: "brewva.task.v1",
           goal: params.goal,
           targets: params.targets,
@@ -159,7 +168,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         if (params.status !== undefined && status === undefined) {
           return invalidTaskStatusResult("add", params.status);
         }
-        const result = taskAddItemTool.runtime.authority.task.items.add(sessionId, {
+        const result = addTaskItem(taskAddItemTool.runtime, sessionId, {
           id: params.id,
           text: params.text,
           status,
@@ -194,7 +203,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         if (params.status !== undefined && status === undefined) {
           return invalidTaskStatusResult("update", params.status);
         }
-        const result = taskUpdateItemTool.runtime.authority.task.items.update(sessionId, {
+        const result = updateTaskItem(taskUpdateItemTool.runtime, sessionId, {
           id: params.id,
           text: params.text,
           status,
@@ -225,7 +234,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const result = taskRecordBlockerTool.runtime.authority.task.blockers.record(sessionId, {
+        const result = recordTaskBlocker(taskRecordBlockerTool.runtime, sessionId, {
           id: params.id,
           message: params.message,
           source: params.source,
@@ -251,10 +260,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const result = taskResolveBlockerTool.runtime.authority.task.blockers.resolve(
-          sessionId,
-          params.id,
-        );
+        const result = resolveTaskBlocker(taskResolveBlockerTool.runtime, sessionId, params.id);
         if (!result.ok) {
           return failTextResult(
             `Blocker resolve rejected (${result.reason ?? "unknown_error"}).`,
@@ -292,14 +298,11 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
             error: "invalid_status",
           });
         }
-        const result = taskRecordAcceptanceTool.runtime.authority.task.acceptance.record(
-          sessionId,
-          {
-            status,
-            decidedBy: params.decidedBy,
-            notes: params.notes,
-          },
-        );
+        const result = recordTaskAcceptance(taskRecordAcceptanceTool.runtime, sessionId, {
+          status,
+          decidedBy: params.decidedBy,
+          notes: params.notes,
+        });
         if (!result.ok) {
           return failTextResult(
             `Acceptance update rejected (${result.reason ?? "unknown_error"}).`,
@@ -323,7 +326,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const state = taskViewStateTool.runtime.inspect.task.state.get(sessionId);
+      const state = getTaskState(taskViewStateTool.runtime, sessionId);
       const block = formatTaskStateBlock(state);
       return textResult(block || "[TaskLedger]\n(empty)", { ok: true });
     },

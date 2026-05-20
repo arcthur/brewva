@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Decision: Runtime construction returns explicit frozen ports instead of a public facade class or root-reflective helpers.
+- Decision: Runtime construction returns the four-port runtime root instead of a public facade class or root-reflective helpers.
 - Date: `2026-05-13`
 - Status: accepted
 - Stable docs:
@@ -17,13 +17,12 @@
 
 ## Decision Summary
 
-- `createBrewvaRuntime(...)` returns a frozen `BrewvaRuntimeInstance` with explicit `root`, `hosted`, `tool`, and `operator` ports.
-- `BrewvaRuntimeRoot` contains only `identity`, `config`, `authority`, and `inspect`.
+- `createBrewvaRuntime(...)` returns a frozen `BrewvaRuntime` with `identity`, `config`, `tape`, `kernel`, `model`, `start`, `turn`, and `close`.
 - The root has no hidden symbol and cannot recover hosted extensions, tool extensions, operator access, or the internal Effect spine.
-- Internal Effect consumers receive the controller handle explicitly from the source-owned runtime assembly factory; no module recovers a controller from a public runtime instance.
-- Operator products use `selectOperatorRuntimePort(instance)`.
-- Hosted composition roots may hold the full instance briefly, while leaf modules receive only their required port.
+- Internal Effect consumers receive the controller handle explicitly from the source-owned runtime assembly factory; no module recovers a controller from a public runtime object.
+- Gateway hosted composition may construct a temporary adapter from the internal runtime assembly, while leaf modules receive only their required port.
+- The runtime assembly no longer constructs compatibility runtime instances; adapter instance construction belongs to gateway/test boundaries.
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

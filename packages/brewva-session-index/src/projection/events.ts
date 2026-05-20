@@ -1,3 +1,4 @@
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import { chunkArray, uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import {
@@ -5,14 +6,18 @@ import {
   isSessionIndexTextIndexedEvent,
 } from "../evidence/index.js";
 import { buildEventSearchTokenRows, type IndexedEventTokenInsertRow } from "../evidence/tokens.js";
-import type { ParsedLogEvent } from "../log-reader/jsonl.js";
 import { buildInList, type SqlParams } from "../sql/params.js";
 import type { IndexedEventInsertRow } from "./rows.js";
 
+export interface ParsedSessionIndexEvent {
+  event: BrewvaEventRecord;
+  sequence: number;
+}
+
 export async function upsertSessionEvents(input: {
   connection: DuckDBConnection;
-  logPath: string;
-  parsedEvents: readonly ParsedLogEvent[];
+  sourceUri: string;
+  parsedEvents: readonly ParsedSessionIndexEvent[];
 }): Promise<void> {
   if (input.parsedEvents.length === 0) return;
 
@@ -31,8 +36,8 @@ export async function upsertSessionEvents(input: {
       type: event.type,
       payloadJson: JSON.stringify(event.payload ?? {}),
       searchText,
-      logPath: input.logPath,
-      logOffset: parsed.logOffset,
+      sourceUri: input.sourceUri,
+      sourceSequence: parsed.sequence,
     });
     eventTokenRows.push(
       ...buildEventSearchTokenRows({
@@ -67,8 +72,8 @@ async function insertEventRows(
       params[`type${index}`] = row.type;
       params[`payloadJson${index}`] = row.payloadJson;
       params[`searchText${index}`] = row.searchText;
-      params[`logPath${index}`] = row.logPath;
-      params[`logOffset${index}`] = String(row.logOffset);
+      params[`sourceUri${index}`] = row.sourceUri;
+      params[`sourceSequence${index}`] = String(row.sourceSequence);
       return `(
         $eventId${index},
         $sessionId${index},
@@ -77,14 +82,14 @@ async function insertEventRows(
         $type${index},
         $payloadJson${index},
         $searchText${index},
-        $logPath${index},
-        cast($logOffset${index} as bigint)
+        $sourceUri${index},
+        cast($sourceSequence${index} as bigint)
       )`;
     });
     await connection.run(
       `
       insert or replace into events (
-        event_id, session_id, timestamp, turn, type, payload_json, search_text, log_path, log_offset
+        event_id, session_id, timestamp, turn, type, payload_json, search_text, source_uri, source_sequence
       ) values ${values.join(", ")}
     `,
       params,

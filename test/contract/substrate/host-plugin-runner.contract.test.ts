@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaDuration, BrewvaEffect } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { BrewvaDuration } from "@brewva/brewva-effect/primitives";
 import {
   createBrewvaHostPluginRunner,
   defineEffectInternalHostPlugin,

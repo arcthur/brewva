@@ -222,9 +222,9 @@ describe("capability view", () => {
     });
 
     expect(result.details[0]?.requiredCapabilities).toEqual([
-      "authority.tools.resourceLeases.cancel",
-      "authority.tools.resourceLeases.request",
-      "inspect.tools.resourceLeases.list",
+      "capabilities.tools.resourceLeases.cancel",
+      "capabilities.tools.resourceLeases.list",
+      "capabilities.tools.resourceLeases.request",
     ]);
 
     const rendered = renderCapabilityView({
@@ -233,8 +233,8 @@ describe("capability view", () => {
       includeInventory: false,
     });
     expect(rendered[2]?.content).toContain("required_capabilities:");
-    expect(rendered[2]?.content).toContain("authority.tools.resourceLeases.request");
-    expect(rendered[2]?.content).toContain("inspect.tools.resourceLeases.list");
+    expect(rendered[2]?.content).toContain("capabilities.tools.resourceLeases.request");
+    expect(rendered[2]?.content).toContain("capabilities.tools.resourceLeases.list");
   });
 
   test("renders nested enum contract details for schedule intent predicates", () => {

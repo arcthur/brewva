@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { createBrewvaEditToolDefinition } from "@brewva/brewva-substrate/tools";
 import { createQualityGateLifecycle } from "../../../packages/brewva-gateway/src/hosted/internal/session/tools/quality-gate.js";
+import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("quality gate diff preview", () => {
@@ -14,7 +14,7 @@ describe("quality gate diff preview", () => {
 
     let capturedStartInput: Record<string, unknown> | undefined;
     const runtime = {
-      authority: {
+      ops: {
         tools: {
           invocation: {
             start(input: Record<string, unknown>) {
@@ -24,7 +24,7 @@ describe("quality gate diff preview", () => {
           },
         },
       },
-    } as unknown as BrewvaHostedRuntimePort;
+    } as unknown as HostedRuntimeAdapterPort;
 
     const lifecycle = createQualityGateLifecycle(runtime, {
       toolDefinitionsByName: new Map([["edit", createBrewvaEditToolDefinition(workspace)]]),

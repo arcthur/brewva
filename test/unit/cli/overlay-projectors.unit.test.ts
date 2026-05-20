@@ -4,8 +4,8 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import type { BrewvaReplaySession } from "@brewva/brewva-runtime/events";
-import type { SessionLineageTree } from "@brewva/brewva-runtime/session";
+import type { BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
+import type { SessionLineageTree } from "@brewva/brewva-runtime/protocol";
 import type { OperatorSurfaceSnapshot } from "../../../packages/brewva-cli/src/shell/domain/operator-snapshot.js";
 import {
   buildAuthorityOverlayPayload,
@@ -331,7 +331,7 @@ describe("interactive command overlays", () => {
       capabilitySummary: {
         managedTools: 3,
         capabilityScopedTools: 1,
-        requiredCapabilities: ["authority.tools.invocation.start"],
+        requiredCapabilities: ["ops.tools.invocation.start"],
         selectedCapabilities: ["github-read"],
         conflicts: 0,
       },
@@ -351,7 +351,7 @@ describe("interactive command overlays", () => {
     expect(view.lines.join("\n")).toContain("managedTools=3");
     expect(view.lines.join("\n")).toContain("capabilityScopedTools=1");
     expect(view.lines.join("\n")).toContain("selected=github-read");
-    expect(view.lines.join("\n")).toContain("required=authority.tools.invocation.start");
+    expect(view.lines.join("\n")).toContain("required=ops.tools.invocation.start");
     expect(view.lines.join("\n")).toContain("Tool access: checked=1 warnings=1 blocked=0");
     expect(view.lines.join("\n")).toContain("exec allowed=true warning=write requires approval");
     expect(view.lines.join("\n")).toContain("network=not surfaced");
@@ -597,7 +597,7 @@ describe("sessions overlay replay row helpers", () => {
         sessionId: asBrewvaSessionId("session-new"),
         eventCount: 0,
         lastEventAt: 0,
-        title: "New session",
+        title: "Untitled session",
       },
       existing,
     ]);

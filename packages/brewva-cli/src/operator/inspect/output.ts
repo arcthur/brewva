@@ -1,4 +1,3 @@
-import type { HostedTransitionSnapshot } from "@brewva/brewva-gateway";
 import { formatInspectAnalysisText } from "../inspect-analysis.js";
 import type { InspectReport } from "./report.js";
 
@@ -26,8 +25,7 @@ export function formatInspectText(report: InspectReport): string {
     `Task: goal=${report.task.goal ?? "n/a"}`,
     `Claim: active=${report.claim.activeClaims}/${report.claim.totalClaims} updatedAt=${report.claim.updatedAt ?? "n/a"}`,
     `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing_checks=${renderList(report.verification.missingChecks)} missing_evidence=${renderList(report.verification.missingEvidence)}`,
-    `Hosted transitions: sequence=${report.hostedTransitions.sequence} latest=${renderHostedLatest(report.hostedTransitions.latest)} pending=${report.hostedTransitions.pendingFamily ?? "none"} operatorVisible=${report.hostedTransitions.operatorVisibleFactGeneration}`,
-    `Hosted breakers: compaction_retry=${renderHostedBreaker(report.hostedTransitions, "compaction_retry")} provider_fallback_retry=${renderHostedBreaker(report.hostedTransitions, "provider_fallback_retry")} max_output_recovery=${renderHostedBreaker(report.hostedTransitions, "max_output_recovery")}`,
+    "Hosted transitions: removed source=canonical_tape",
     `Context evidence: ready=${report.contextEvidence.promotionReady ? "yes" : "no"} gaps=${renderList(report.contextEvidence.promotionGaps)} compactions=${report.contextEvidence.totalCompactionEvents} generation=${report.contextEvidence.totalCompactionGenerationEvents} llmPrimary=${report.contextEvidence.totalLlmPrimaryCompactionEvents} deterministicEmergency=${report.contextEvidence.totalDeterministicEmergencyCompactionEvents} genTokens=${report.contextEvidence.totalCompactionGenerationTokens} genCacheRead=${report.contextEvidence.totalCompactionGenerationCacheReadTokens} genCacheWrite=${report.contextEvidence.totalCompactionGenerationCacheWriteTokens} genCost=$${report.contextEvidence.totalCompactionGenerationCostUsd.toFixed(6)}`,
     `Ledger: rows=${report.ledger.rows} integrity=${report.ledger.integrityValid ? "valid" : "invalid"} path=${report.ledger.path}`,
     `Projection: enabled=${report.projection.enabled ? "yes" : "no"} working=${report.projection.workingExists ? "present" : "missing"} path=${report.projection.workingPath}`,
@@ -81,13 +79,13 @@ export function formatInspectText(report: InspectReport): string {
   }
   if (
     report.bootstrap.configPath ||
-    report.bootstrap.eventsDir ||
+    report.bootstrap.tapeDir ||
     report.bootstrap.recoveryWalDir ||
     report.bootstrap.projectionDir ||
     report.bootstrap.ledgerPath
   ) {
     lines.push(
-      `Bootstrap config: path=${report.bootstrap.configPath ?? "n/a"} events=${report.bootstrap.eventsDir ?? "n/a"} recoveryWal=${report.bootstrap.recoveryWalDir ?? "n/a"} projection=${report.bootstrap.projectionDir ?? "n/a"} ledger=${report.bootstrap.ledgerPath ?? "n/a"}`,
+      `Bootstrap config: path=${report.bootstrap.configPath ?? "n/a"} tape=${report.bootstrap.tapeDir ?? "n/a"} recoveryWal=${report.bootstrap.recoveryWalDir ?? "n/a"} projection=${report.bootstrap.projectionDir ?? "n/a"} ledger=${report.bootstrap.ledgerPath ?? "n/a"}`,
     );
   }
   if (report.verification.reason) {
@@ -129,27 +127,4 @@ function renderSelectedLineageChannels(selectedByChannel: Record<string, string>
   return entries.length > 0
     ? entries.map(([channelId, lineageNodeId]) => `${channelId}:${lineageNodeId}`).join(",")
     : "none";
-}
-
-function renderHostedLatest(latest: HostedTransitionSnapshot["latest"]): string {
-  if (!latest) {
-    return "none";
-  }
-  const parts = [`${latest.reason}:${latest.status}`];
-  if (typeof latest.attempt === "number") {
-    parts.push(`attempt=${latest.attempt}`);
-  }
-  if (latest.breakerOpen) {
-    parts.push("breaker=open");
-  }
-  return parts.join(" ");
-}
-
-function renderHostedBreaker(
-  snapshot: HostedTransitionSnapshot,
-  reason: keyof HostedTransitionSnapshot["breakerOpenByReason"],
-): string {
-  const failures = snapshot.consecutiveFailuresByReason[reason] ?? 0;
-  const breaker = snapshot.breakerOpenByReason[reason] === true ? "open" : "closed";
-  return `${failures}/${breaker}`;
 }

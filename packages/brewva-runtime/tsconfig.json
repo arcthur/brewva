@@ -6,7 +6,6 @@
   },
   "references": [
     { "path": "../brewva-capabilities" },
-    { "path": "../brewva-search" },
     { "path": "../brewva-std" },
     { "path": "../brewva-token-estimation" }
   ],

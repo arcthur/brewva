@@ -1,12 +1,12 @@
 import type { ProviderRequestFingerprint } from "@brewva/brewva-provider-core/contracts";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
   ExpectedProviderCacheBreak,
   ProviderCacheBreakObservation,
   ProviderCacheRenderState,
-} from "@brewva/brewva-runtime/context";
-import type { BrewvaTurnLoopAssistantMessage } from "@brewva/brewva-substrate/turn";
+} from "@brewva/brewva-runtime/protocol";
+import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
 import { observeHostedProviderCache } from "../../context/materialization.js";
+import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import {
   isCachedContentUnsupportedStreamError,
   providerCacheCountersAvailable,
@@ -19,7 +19,7 @@ export interface ManagedSessionProviderAssistantObserverState {
 }
 
 export interface ManagedSessionProviderAssistantObserverOptions {
-  runtime: BrewvaHostedRuntimePort | undefined;
+  runtime: HostedRuntimeAdapterPort | undefined;
   workspaceRoot: string;
   sessionId: string;
   googleCachedContentManager: {
@@ -51,7 +51,7 @@ export interface ManagedSessionProviderAssistantObserverOptions {
 }
 
 export class ManagedSessionProviderAssistantObserver {
-  readonly #runtime: BrewvaHostedRuntimePort | undefined;
+  readonly #runtime: HostedRuntimeAdapterPort | undefined;
   readonly #workspaceRoot: string;
   readonly #sessionId: string;
   readonly #googleCachedContentManager: ManagedSessionProviderAssistantObserverOptions["googleCachedContentManager"];
@@ -69,7 +69,7 @@ export class ManagedSessionProviderAssistantObserver {
     this.#state = options.state;
   }
 
-  onCommittedAssistantMessage(message: BrewvaTurnLoopAssistantMessage): void {
+  onCommittedAssistantMessage(message: BrewvaAgentProtocolAssistantMessage): void {
     const state = this.#state();
     if (!this.#runtime || !state.lastProviderFingerprint || !state.lastCacheRender) {
       return;

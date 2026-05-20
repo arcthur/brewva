@@ -1,7 +1,6 @@
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
-import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import { createRecoveryWalStore } from "../daemon/api.js";
 import { createHostedSession } from "../hosted/api.js";
+import { createHostedRuntimeAdapter } from "../hosted/api.js";
 import { resolveBrewvaUpdateExecutionScope } from "../ingress/api.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { AgentRegistry } from "./agent-registry.js";
@@ -30,6 +29,7 @@ import {
 import { resolveChannelOrchestrationConfig } from "./orchestration-config.js";
 import { resolveTelegramChannelPolicyState } from "./policy/channel-policy.js";
 import type { RunChannelModeDependencies } from "./ports.js";
+import { recordChannelRecoveryWalEvent } from "./recovery-events.js";
 import { createChannelSessionCoordinator } from "./session/coordinator.js";
 import { createChannelSessionQueries } from "./session/queries.js";
 import { createChannelUpdateLockManager } from "./session/update-lock.js";
@@ -47,12 +47,11 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
     return;
   }
 
-  const runtime = createBrewvaRuntime({
+  const runtime = createHostedRuntimeAdapter({
     cwd: options.cwd,
     configPath: options.configPath,
     agentId: options.agentId,
-    governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-  }).hosted;
+  });
   options.onRuntimeReady?.(runtime);
 
   const telegramChannelPolicyState = resolveTelegramChannelPolicyState();
@@ -82,12 +81,7 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
     config: runtime.config.infrastructure.recoveryWal,
     scope: `channel-${channel}`,
     recordEvent: (input) => {
-      runtime.extensions.hosted.events.record({
-        sessionId: input.sessionId,
-        type: input.type,
-        payload: input.payload,
-        skipTapeCheckpoint: true,
-      });
+      recordChannelRecoveryWalEvent(runtime, input);
     },
   });
   const recoveryWalScope = recoveryWalStore.getScope();
@@ -258,6 +252,12 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
             })(),
           }
         : undefined;
+    const handleAdapterError = async (error: unknown): Promise<void> => {
+      if (options.verbose) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[channel:${channel}:error] ${message}`);
+      }
+    };
     const launcherInput: ChannelModeLauncherInput & {
       recovery?: {
         initialPollingOffset?: number;
@@ -267,14 +267,11 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
       channelConfig: options.channelConfig,
       recovery,
       onInboundTurn: async (turn) => {
-        await dispatcher.enqueueInboundTurn(turn);
+        await dispatcher
+          .enqueueInboundTurn(turn, { awaitCompletion: true })
+          .catch(handleAdapterError);
       },
-      onAdapterError: async (error) => {
-        if (options.verbose) {
-          const message = error instanceof Error ? error.message : String(error);
-          console.error(`[channel:${channel}:error] ${message}`);
-        }
-      },
+      onAdapterError: handleAdapterError,
     };
     bundle = channelLaunchers[channel](launcherInput);
   } catch (error) {

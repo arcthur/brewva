@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkbenchEntry } from "@brewva/brewva-runtime/workbench";
+import type { WorkbenchEntry } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolRuntime } from "@brewva/brewva-tools/contracts";
 import {
   createWorkbenchEvictTool,
@@ -31,9 +31,16 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
       agentId: "agent-test",
     },
     config: {} as BrewvaToolRuntime["config"],
-    authority: {
+    capabilities: {
       workbench: {
-        note(_sessionId: string, input) {
+        note(
+          _sessionId: string,
+          input: {
+            readonly content: string;
+            readonly sourceRefs?: readonly string[];
+            readonly reason: string;
+          },
+        ) {
           const entry = {
             id: `note-${entries.length + 1}`,
             kind: "note",
@@ -48,7 +55,15 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
           entries.push(entry);
           return entry;
         },
-        evict(_sessionId: string, input) {
+        evict(
+          _sessionId: string,
+          input: {
+            readonly spanRefs: readonly string[];
+            readonly replacementNote?: string;
+            readonly reason: string;
+            readonly preservedQuotes?: readonly string[];
+          },
+        ) {
           const entry = {
             id: `eviction-${entries.length + 1}`,
             kind: "eviction",
@@ -85,8 +100,7 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
           };
         },
       },
-    } as BrewvaToolRuntime["authority"],
-    inspect: {} as BrewvaToolRuntime["inspect"],
+    } as unknown as BrewvaToolRuntime["capabilities"],
     extensions: {},
   };
 }
@@ -117,7 +131,9 @@ describe("workbench memory tools", () => {
       retentionHint: "session",
     });
     expect(textContent(result)).toContain("[WorkbenchNote]");
-    expect(getBrewvaToolMetadata(tool)?.requiredCapabilities).toEqual(["authority.workbench.note"]);
+    expect(getBrewvaToolMetadata(tool)?.requiredCapabilities).toEqual([
+      "capabilities.workbench.note",
+    ]);
   });
 
   test("workbench_note requires source refs at the model tool boundary", async () => {
@@ -168,7 +184,7 @@ describe("workbench memory tools", () => {
     });
     expect(textContent(result)).toContain("[WorkbenchEvict]");
     expect(getBrewvaToolMetadata(tool)?.requiredCapabilities).toEqual([
-      "authority.workbench.evict",
+      "capabilities.workbench.evict",
     ]);
   });
 
@@ -196,7 +212,7 @@ describe("workbench memory tools", () => {
 
   test("workbench_undo_evict restores reversible eviction attention", async () => {
     const runtime = createToolRuntimeFixture();
-    runtime.authority?.workbench.evict("session-workbench", {
+    runtime.capabilities?.workbench.evict("session-workbench", {
       spanRefs: ["tool:exec:turn-10"],
       replacementNote: "A temporary eviction.",
       reason: "The raw output looked stale.",
@@ -221,7 +237,7 @@ describe("workbench memory tools", () => {
     });
     expect(textContent(result)).toContain("[WorkbenchUndoEvict]");
     expect(getBrewvaToolMetadata(tool)?.requiredCapabilities).toEqual([
-      "authority.workbench.undoEviction",
+      "capabilities.workbench.undoEviction",
     ]);
   });
 });

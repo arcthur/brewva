@@ -1,4 +1,3 @@
-export * from "./aliases.js";
 export * from "./boundary.js";
 export * from "./config-service.js";
 export * from "./edge-runner.js";

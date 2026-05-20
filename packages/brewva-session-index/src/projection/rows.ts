@@ -1,8 +1,8 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import {
   buildSessionRewindProjection,
   listSessionRewindTargets,
-} from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
 import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type {
   SessionIndexBox,
@@ -26,8 +26,8 @@ export interface EventRow {
   type: string;
   payload_json: string;
   search_text: string;
-  log_path: string;
-  log_offset: bigint | number;
+  source_uri: string;
+  source_sequence: bigint | number;
 }
 
 export interface IndexedEventInsertRow {
@@ -38,8 +38,8 @@ export interface IndexedEventInsertRow {
   type: string;
   payloadJson: string;
   searchText: string;
-  logPath: string;
-  logOffset: number;
+  sourceUri: string;
+  sourceSequence: number;
 }
 
 export interface SessionRow {
@@ -114,8 +114,8 @@ export function mapEventRow(row: EventRow, tokenScore: number): SessionIndexTape
     type: row.type,
     payload: parsePayload(row.payload_json),
     searchText: row.search_text,
-    logPath: row.log_path,
-    logOffset: Number(row.log_offset),
+    sourceUri: row.source_uri,
+    sourceSequence: Number(row.source_sequence),
     tokenScore,
   };
 }

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createPrecedentSweepTool } from "@brewva/brewva-tools/memory";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 let workspace = "";
@@ -31,7 +31,7 @@ describe("precedent sweep tool", () => {
         "title: WAL recovery race during replay",
         "module: brewva-runtime",
         "boundaries:",
-        "  - selectOperatorRuntimePort(instance).operator.recovery",
+        "  - gateway-hosted-adapter.ops.recovery",
         "tags:",
         "  - wal",
         "  - recovery",
@@ -55,7 +55,7 @@ describe("precedent sweep tool", () => {
         "problem_kind: knowledge",
         "module: brewva-runtime",
         "boundaries:",
-        "  - selectOperatorRuntimePort(instance).operator.recovery",
+        "  - gateway-hosted-adapter.ops.recovery",
         "source_artifacts:",
         "  - retro_findings",
         "tags:",
@@ -116,7 +116,7 @@ describe("precedent sweep tool", () => {
       ].join("\n"),
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createPrecedentSweepTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-sweep-actionable",
@@ -171,7 +171,7 @@ describe("precedent sweep tool", () => {
   test("returns inconclusive when the repository has no solution docs yet", async () => {
     workspace = createTestWorkspace("precedent-sweep-empty");
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createPrecedentSweepTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-sweep-empty",

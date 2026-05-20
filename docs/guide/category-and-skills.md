@@ -132,4 +132,4 @@ skills.
 - `docs/guide/features.md`
 - `docs/reference/skills.md`
 - `docs/reference/skill-routing.md`
-- `packages/brewva-runtime/src/domain/skills/types.ts`
+- `packages/brewva-runtime/src/protocol.ts`

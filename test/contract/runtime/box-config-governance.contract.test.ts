@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { loadBrewvaConfig } from "@brewva/brewva-runtime/config";
 import {
-  BREWVA_REGISTERED_EVENT_TYPES,
   BOX_ACQUIRED_EVENT_TYPE,
   BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
@@ -20,10 +19,9 @@ import {
   BOX_SNAPSHOT_CREATED_EVENT_TYPE,
   EXEC_FAILED_EVENT_TYPE,
   EXEC_STARTED_EVENT_TYPE,
-  isBrewvaRegisteredEventType,
-} from "@brewva/brewva-runtime/events";
-import { getToolActionPolicy } from "@brewva/brewva-runtime/governance";
-import type { ToolActionPolicy } from "@brewva/brewva-runtime/governance";
+} from "@brewva/brewva-runtime/protocol";
+import { getToolActionPolicy } from "@brewva/brewva-runtime/protocol";
+import type { ToolActionPolicy } from "@brewva/brewva-runtime/protocol";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("box runtime contract", () => {
@@ -145,13 +143,10 @@ describe("box runtime contract", () => {
     expect(policy).not.toHaveProperty("sandboxPolicy");
   });
 
-  test("registers box lifecycle events and drops sandbox-specific event names", () => {
-    for (const eventType of [EXEC_STARTED_EVENT_TYPE, EXEC_FAILED_EVENT_TYPE]) {
-      expect(isBrewvaRegisteredEventType(eventType)).toBe(true);
-      expect(BREWVA_REGISTERED_EVENT_TYPES).toContain(eventType);
-    }
-
+  test("keeps box lifecycle event constants domain-owned and drops sandbox-specific event names", () => {
     const boxEvents = [
+      EXEC_STARTED_EVENT_TYPE,
+      EXEC_FAILED_EVENT_TYPE,
       BOX_BOOTSTRAP_STARTED_EVENT_TYPE,
       BOX_BOOTSTRAP_PROGRESS_EVENT_TYPE,
       BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
@@ -167,14 +162,10 @@ describe("box runtime contract", () => {
     ];
 
     for (const eventType of boxEvents) {
-      expect(isBrewvaRegisteredEventType(eventType)).toBe(true);
-      expect(BREWVA_REGISTERED_EVENT_TYPES).toContain(eventType);
+      expect(eventType).toMatch(/^(box[._]|exec[._])/u);
     }
 
-    expect(new Set(BREWVA_REGISTERED_EVENT_TYPES).size).toBe(BREWVA_REGISTERED_EVENT_TYPES.length);
-
     const removedEventType = ["exec", "sand", "box", "error"].join("_");
-    expect(BREWVA_REGISTERED_EVENT_TYPES).not.toContain(removedEventType);
-    expect(isBrewvaRegisteredEventType(removedEventType)).toBe(false);
+    expect(boxEvents).not.toContain(removedEventType);
   });
 });

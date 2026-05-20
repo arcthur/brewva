@@ -2,15 +2,54 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BrewvaEffect, BrewvaStream, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { BrewvaStream } from "@brewva/brewva-effect/primitives";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
   consumeManagedSessionOutputEffect,
+  ManagedExecProcessRegistryService,
   streamManagedSessionOutput,
   startManagedExec,
   waitForManagedSessionActivityEffect,
+  type ManagedExecProcessRegistry,
 } from "../../../packages/brewva-tools/src/families/execution/exec-process-registry/api.js";
+import type { ManagedExecFinishedSession } from "../../../packages/brewva-tools/src/families/execution/exec-process-registry/types.js";
 
 describe("managed exec Effect runtime integration", () => {
+  test("provides process registry state as a scoped Effect service", async () => {
+    let registry: ManagedExecProcessRegistry | undefined;
+    await runPromiseAtBoundary(
+      BrewvaEffect.scoped(
+        BrewvaEffect.gen(function* () {
+          registry = yield* ManagedExecProcessRegistryService;
+          registry.finishedSessions.set("finished", {
+            id: "finished",
+            kind: "finished",
+            ownerSessionId: "owner-registry",
+            command: "true",
+            cwd: "/tmp",
+            startedAt: 1,
+            endedAt: 2,
+            pid: null,
+            backgrounded: true,
+            exited: true,
+            exitCode: 0,
+            exitSignal: null,
+            aggregated: "",
+            tail: "",
+            truncated: false,
+            drainCursor: 0,
+            timedOut: false,
+            removed: false,
+            status: "completed",
+          } satisfies ManagedExecFinishedSession);
+        }).pipe(BrewvaEffect.provide(ManagedExecProcessRegistryService.layer())),
+      ),
+    );
+
+    expect(registry?.finishedSessions.size).toBe(0);
+  });
+
   test("streams managed host output and completes on process exit", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-managed-exec-stream-"));
     const ownerSessionId = "owner-stream";

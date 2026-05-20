@@ -1,4 +1,4 @@
-import { normalizeToolName } from "@brewva/brewva-runtime/tools";
+import { normalizeToolName } from "@brewva/brewva-runtime/core";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { TSchema } from "@sinclair/typebox";
 import type {

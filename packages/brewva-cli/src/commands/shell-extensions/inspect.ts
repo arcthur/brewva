@@ -3,7 +3,7 @@ import {
   type HostedExtensionPlugin,
   type HostedExtensionApi,
 } from "@brewva/brewva-gateway/extensions";
-import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import type { BrewvaHostContext } from "@brewva/brewva-substrate/host-api";
 import { clampText, resolveInspectDirectory } from "../../operator/inspect-analysis.js";
 import { buildSessionInspectReport, formatInspectText } from "../../operator/inspect.js";
@@ -39,7 +39,7 @@ function normalizeCommandArgs(args: string): string | undefined {
 }
 
 export function createInspectCommandExtension(
-  runtime: BrewvaOperatorRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   options: {
     maxNotificationLines?: number;
     maxLineChars?: number;

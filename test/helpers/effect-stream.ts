@@ -1,4 +1,5 @@
-import { BrewvaEffect, BrewvaStream, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { BrewvaEffect, BrewvaStream } from "@brewva/brewva-effect/primitives";
 import type {
   AssistantMessage,
   AssistantMessageEvent,
@@ -7,10 +8,10 @@ import type {
 } from "@brewva/brewva-provider-core/contracts";
 import { ProviderStreamError, providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
 import type {
-  BrewvaTurnLoopAssistantMessage,
-  BrewvaTurnLoopAssistantMessageEvent,
-  BrewvaTurnLoopAssistantMessageStream,
-} from "@brewva/brewva-substrate/turn";
+  BrewvaAgentProtocolAssistantMessage,
+  BrewvaAgentProtocolAssistantMessageEvent,
+  BrewvaAgentProtocolAssistantMessageStream,
+} from "@brewva/brewva-substrate/agent-protocol";
 
 export function createProviderEventStream(
   events: readonly AssistantMessageEvent[] = [],
@@ -65,17 +66,17 @@ export function createRecordingProviderEventStream(): RecordingProviderEventStre
 }
 
 export function createTurnEventStream(
-  events: readonly BrewvaTurnLoopAssistantMessageEvent[] = [],
-): BrewvaTurnLoopAssistantMessageStream {
+  events: readonly BrewvaAgentProtocolAssistantMessageEvent[] = [],
+): BrewvaAgentProtocolAssistantMessageStream {
   return events.length > 0
     ? BrewvaStream.make(...events)
-    : (BrewvaStream.empty as BrewvaTurnLoopAssistantMessageStream);
+    : (BrewvaStream.empty as BrewvaAgentProtocolAssistantMessageStream);
 }
 
 export function createTurnDoneStream(
-  message: BrewvaTurnLoopAssistantMessage,
-  events: readonly BrewvaTurnLoopAssistantMessageEvent[] = [],
-): BrewvaTurnLoopAssistantMessageStream {
+  message: BrewvaAgentProtocolAssistantMessage,
+  events: readonly BrewvaAgentProtocolAssistantMessageEvent[] = [],
+): BrewvaAgentProtocolAssistantMessageStream {
   const doneReason =
     message.stopReason === "stop" ||
     message.stopReason === "length" ||
@@ -87,9 +88,9 @@ export function createTurnDoneStream(
 
 export function createTurnStreamFromPromise(
   produce: () =>
-    | BrewvaTurnLoopAssistantMessageStream
-    | Promise<BrewvaTurnLoopAssistantMessageStream>,
-): BrewvaTurnLoopAssistantMessageStream {
+    | BrewvaAgentProtocolAssistantMessageStream
+    | Promise<BrewvaAgentProtocolAssistantMessageStream>,
+): BrewvaAgentProtocolAssistantMessageStream {
   return BrewvaStream.unwrap(
     BrewvaEffect.tryPromise({
       try: async () => produce(),
@@ -103,8 +104,8 @@ export function createTurnStreamFromPromise(
 }
 
 export function collectTurnEvents(
-  stream: BrewvaTurnLoopAssistantMessageStream,
-): Promise<BrewvaTurnLoopAssistantMessageEvent[]> {
+  stream: BrewvaAgentProtocolAssistantMessageStream,
+): Promise<BrewvaAgentProtocolAssistantMessageEvent[]> {
   return runPromiseAtBoundary(
     stream.pipe(BrewvaStream.runCollect, BrewvaEffect.provide(providerRuntimeLayer)),
   );

@@ -1,4 +1,4 @@
-import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
 
 export interface RuntimeFactSessionPhaseProjection {

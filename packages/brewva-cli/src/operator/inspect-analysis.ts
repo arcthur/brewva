@@ -1,7 +1,12 @@
 import { existsSync, statSync } from "node:fs";
 import { posix as pathPosix, resolve } from "node:path";
-import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import {
+  collectPathCandidates,
+  resolveWorkspacePath,
+  toWorkspaceRelativePath,
+} from "@brewva/brewva-runtime/config";
+import { type BrewvaEventRecord, type TapeLedgerRow } from "@brewva/brewva-runtime/protocol";
 import {
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
   BOX_EXEC_FAILED_EVENT_TYPE,
@@ -13,18 +18,15 @@ import {
   TOOL_CONTRACT_WARNING_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
-import type { EvidenceLedgerRow } from "@brewva/brewva-runtime/ledger";
+} from "@brewva/brewva-runtime/protocol";
 import {
-  collectPathCandidates,
   collectPersistedPatchPaths,
   listPersistedPatchSets,
-  resolveWorkspacePath,
-  toWorkspaceRelativePath,
   type PersistedPatchSet,
-} from "@brewva/brewva-runtime/patch-history";
+} from "@brewva/brewva-runtime/protocol";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { formatISO } from "date-fns";
+import { listCliRuntimeLedgerRows, queryCliRuntimeEvents } from "../runtime/runtime-ports.js";
 
 const IGNORED_WORKSPACE_PREFIXES = [".orchestrator/", ".brewva/", "node_modules/"] as const;
 const PARALLEL_SLOT_REJECTED_EVENT_TYPE = "parallel_slot_rejected";
@@ -216,7 +218,7 @@ function parseArgsSummary(argsSummary: string): Record<string, unknown> | null {
 }
 
 function collectHeuristicReadPaths(input: {
-  rows: EvidenceLedgerRow[];
+  rows: TapeLedgerRow[];
   cwd: string;
   workspaceRoot: string;
 }): Set<string> {
@@ -252,9 +254,11 @@ function collectStrongTouchedPaths(events: BrewvaEventRecord[]): Set<string> {
     if (event.type !== FILE_SNAPSHOT_CAPTURED_EVENT_TYPE) {
       continue;
     }
-    const files = Array.isArray(event.payload?.files)
-      ? event.payload.files.filter((value): value is string => typeof value === "string")
-      : [];
+    const rawFiles =
+      event.payload && typeof event.payload === "object" && Array.isArray(event.payload.files)
+        ? (event.payload.files as readonly unknown[])
+        : [];
+    const files = rawFiles.filter((value): value is string => typeof value === "string");
     for (const path of files) {
       const normalized = normalizePathForDisplay(path);
       if (!isWorkspacePathIgnored(normalized)) {
@@ -464,7 +468,9 @@ function buildShellCompositionFinding(events: BrewvaEventRecord[]): InspectFindi
     (entry) => entry.payload.failureClass === "script_composition",
   ).length;
   const tools = uniqueStrings(
-    matches.map((entry) => entry.payload.toolName).filter((value) => value.length > 0),
+    matches
+      .map((entry) => entry.payload.toolName)
+      .filter((value): value is string => typeof value === "string" && value.length > 0),
   );
 
   return {
@@ -474,7 +480,9 @@ function buildShellCompositionFinding(events: BrewvaEventRecord[]): InspectFindi
     summary: `Command construction problems detected: shell_syntax=${shellSyntax}, script_composition=${scriptComposition}. Tools involved: ${tools.length > 0 ? tools.join(", ") : "unknown"}.`,
     evidenceRefs: topEvidenceRefs({
       eventIds: matches.map(({ event }) => event.id),
-      ledgerIds: matches.map(({ payload }) => payload.ledgerId).filter((value) => value.length > 0),
+      ledgerIds: matches
+        .map(({ payload }) => payload.ledgerId)
+        .filter((value): value is string => typeof value === "string" && value.length > 0),
     }),
   };
 }
@@ -688,7 +696,7 @@ export function clampText(value: string, maxChars: number): string {
 }
 
 export function resolveInspectDirectory(
-  runtime: Pick<BrewvaOperatorRuntimePort, "identity">,
+  runtime: Pick<HostedRuntimeAdapterPort, "identity">,
   positionalDir: string | undefined,
   optionDir: string | undefined,
 ): InspectDirectory {
@@ -736,17 +744,17 @@ export function resolveInspectDirectory(
 }
 
 export function buildInspectAnalysis(input: {
-  runtime: BrewvaOperatorRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   directory: InspectDirectory;
   base: InspectBaseReportForAnalysis;
 }): InspectAnalysisReport {
-  const snapshotEvents = input.runtime.inspect.events.records.query(input.sessionId);
+  const snapshotEvents = queryCliRuntimeEvents(input.runtime, input.sessionId);
   const cutoffEvent = snapshotEvents[snapshotEvents.length - 1] ?? null;
   const cutoffTimestamp = cutoffEvent?.timestamp ?? null;
-  const ledgerRows = input.runtime.inspect.ledger.store
-    .listRows(input.sessionId)
-    .filter((row) => cutoffTimestamp === null || row.timestamp <= cutoffTimestamp);
+  const ledgerRows = listCliRuntimeLedgerRows(input.runtime, input.sessionId).filter(
+    (row: { timestamp: number }) => cutoffTimestamp === null || row.timestamp <= cutoffTimestamp,
+  );
   const patchSets = listPersistedPatchSets({
     path: input.base.snapshots.patchHistoryPath,
     sessionId: input.sessionId,

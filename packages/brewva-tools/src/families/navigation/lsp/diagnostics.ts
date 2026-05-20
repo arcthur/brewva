@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, resolve as resolvePath } from "node:path";
-import { parseTscDiagnostics, type TscDiagnostic } from "@brewva/brewva-runtime/evidence";
+import { parseTscDiagnostics, type TscDiagnostic } from "@brewva/brewva-runtime/protocol";
 import { runCommand } from "../internal/command.js";
 
 export const LSP_DIAGNOSTIC_SEVERITIES = [

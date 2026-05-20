@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { assertCliSuccess, runCli } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { countEventType, parseEventFile, requireLatestEventFile } from "../../helpers/events.js";
+import { parseEventFile, requireLatestCanonicalTapeFile } from "../../helpers/events.js";
 import {
   GATEWAY_BACKED_CLI_CONTRACT_TIMEOUT_MS,
   startGatewayDaemonHarness,
@@ -39,12 +39,14 @@ describe("cli contract: gateway-backed print mode", () => {
         assertCliSuccess(result, "system-print");
         expect(result.stdout).toContain("SYSTEM_PRINT_OK");
 
-        const eventFile = requireLatestEventFile(workspace, "gateway-backed print mode");
-        const events = parseEventFile(eventFile, { strict: true });
-        expect(countEventType(events, "session_start")).toBeGreaterThanOrEqual(1);
-        expect(countEventType(events, "turn_start")).toBeGreaterThanOrEqual(1);
-        expect(countEventType(events, "turn_end")).toBeGreaterThanOrEqual(1);
-        expect(countEventType(events, "agent_end")).toBeGreaterThanOrEqual(1);
+        const tapeFile = requireLatestCanonicalTapeFile(workspace, "gateway-backed print mode");
+        const events = parseEventFile(tapeFile, { strict: true });
+        expect(events.map((event) => event.type)).toEqual(
+          expect.arrayContaining(["turn.started", "msg.committed", "turn.ended"]),
+        );
+        expect(events.find((event) => event.type === "msg.committed")?.payload).toEqual({
+          text: "SYSTEM_PRINT_OK",
+        });
       } finally {
         await harness.dispose();
         cleanupTestWorkspace(workspace);

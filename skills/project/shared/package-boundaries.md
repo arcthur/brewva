@@ -10,42 +10,39 @@ owner: runtime-maintainers
 
 ## Workspace Topology
 
-| Package                            | Responsibility                                                                                                                                                                   | Must Not Own                                  |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `@brewva/brewva-runtime`           | governance kernel, contracts, gates, verification state, context status, workbench authority, and compaction receipts                                                            | CLI wiring or transport-specific behavior     |
-| `@brewva/brewva-capabilities`      | capability manifest parsing, registry versioning, deterministic selection, and authority receipt primitives                                                                      | tool execution or hosted policy wiring        |
-| `@brewva/brewva-provider-core`     | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                                                                                          | replay authority or credential ownership      |
-| `@brewva/brewva-substrate`         | contract root plus explicit session, turn, prompt/resource, provenance, execution, compaction, tools/tool-protocol, host-api, persistence, provider, and sdk subpaths            | replay authority, credentials, hosted policy  |
-| `@brewva/brewva-effect`            | leaf Effect runtime, edge runners, platform integration, cancellation, timeout, and testing helpers                                                                              | product policy or domain ownership            |
-| `@brewva/brewva-search`            | shared normalization, mandatory CJK segmentation, and semantic query/content token policy                                                                                        | recall ranking or event evidence projection   |
-| `@brewva/brewva-token-estimation`  | leaf model token estimation primitives                                                                                                                                           | model routing or provider policy              |
-| `@brewva/brewva-recall`            | curated root plus explicit broker, knowledge, and evidence subpaths for on-demand recall search, curation semantics, trust labels, and result rendering                          | event tape authority or database ownership    |
-| `@brewva/brewva-session-index`     | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                                                      | replay authority, tokenization policy, SQL UI |
-| `@brewva/brewva-std`               | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                                                | product policy, runtime authority, or domains |
-| `@brewva/brewva-tools`             | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry/capability spine, runtime-port helpers, internal BoxLite execution, and default bundle assembly | orchestration policy or model routing         |
-| `@brewva/brewva-mcp-adapter`       | MCP protocol translation into substrate tool descriptors and guarded MCP client calls                                                                                            | managed-tool capability policy or hosted UX   |
-| `@brewva/brewva-channels-telegram` | Telegram channel protocol translation, update projection, callback handling, and Telegram transports                                                                             | gateway hosted policy or generic ingress      |
-| `@brewva/brewva-ingress-telegram`  | Telegram-specific webhook ingress server, auth/dedupe processing, and edge worker forwarding                                                                                     | generic multi-channel ingress contracts       |
-| `@brewva/brewva-cli`               | user entrypoints, frontend command surface, and CLI-internal terminal UI runtime                                                                                                 | channel/control-plane ownership               |
-| `@brewva/brewva-gateway`           | domain-sliced control-plane/admin seams, session supervision, channel host, hosted extension composition, and gateway-owned shared utilities                                     | kernel semantics                              |
+| Package                            | Responsibility                                                                                                                                                                   | Must Not Own                                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `@brewva/brewva-runtime`           | four-port runtime root, canonical tape, kernel authority policy, model attention planning, config/security contracts, and small product vocabulary helpers                       | CLI wiring, transport-specific behavior, or read-model truth   |
+| `@brewva/brewva-capabilities`      | capability manifest parsing, registry versioning, deterministic selection, and authority receipt primitives                                                                      | tool execution or hosted policy wiring                         |
+| `@brewva/brewva-provider-core`     | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                                                                                          | replay authority or credential ownership                       |
+| `@brewva/brewva-substrate`         | contract root plus explicit session, turn, prompt/resource, provenance, execution, compaction, tools/tool-protocol, host-api, persistence, provider, and sdk subpaths            | replay authority, credentials, hosted policy                   |
+| `@brewva/brewva-effect`            | leaf Effect runtime, explicit primitives subpath, edge runners, platform integration, cancellation, timeout, and testing helpers                                                 | product policy, domain ownership, or root Effect alias barrels |
+| `@brewva/brewva-search`            | shared normalization, mandatory CJK segmentation, and semantic query/content token policy                                                                                        | recall ranking or event evidence projection                    |
+| `@brewva/brewva-token-estimation`  | leaf model token estimation primitives                                                                                                                                           | model routing or provider policy                               |
+| `@brewva/brewva-recall`            | curated root plus explicit broker, knowledge, and evidence subpaths for on-demand recall search, curation semantics, trust labels, and result rendering                          | event tape authority or database ownership                     |
+| `@brewva/brewva-session-index`     | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                                                      | replay authority, tokenization policy, SQL UI                  |
+| `@brewva/brewva-std`               | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                                                | product policy, runtime authority, or domains                  |
+| `@brewva/brewva-tools`             | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry/capability spine, runtime-port helpers, internal BoxLite execution, and default bundle assembly | orchestration policy or model routing                          |
+| `@brewva/brewva-mcp-adapter`       | MCP protocol translation into substrate tool descriptors and guarded MCP client calls                                                                                            | managed-tool capability policy or hosted UX                    |
+| `@brewva/brewva-channels-telegram` | Telegram channel protocol translation, update projection, callback handling, and Telegram transports                                                                             | gateway hosted policy or generic ingress                       |
+| `@brewva/brewva-ingress-telegram`  | Telegram-specific webhook ingress server, auth/dedupe processing, and edge worker forwarding                                                                                     | generic multi-channel ingress contracts                        |
+| `@brewva/brewva-cli`               | user entrypoints, frontend command surface, and CLI-internal terminal UI runtime                                                                                                 | channel/control-plane ownership                                |
+| `@brewva/brewva-gateway`           | domain-sliced control-plane/admin seams, session supervision, channel host, hosted extension composition, and gateway-owned shared utilities                                     | kernel semantics                                               |
 
 ## Invariants
 
 - tool and budget enforcement are correctness rules, not advisory metadata
-- runtime root exports stay narrow: `createBrewvaRuntime`,
-  `selectOperatorRuntimePort`, explicit runtime port types,
-  `DEFAULT_BREWVA_CONFIG`, and the minimal config/deep-readonly types. Do not
-  reintroduce the `BrewvaRuntime` class or root-reflective runtime port
-  factories. Domain contracts are imported through explicit owner subpaths such
-  as
+- runtime root exports stay narrow: `createBrewvaRuntime`, the four-port runtime
+  contract types, `DEFAULT_BREWVA_CONFIG`, and the minimal config/deep-readonly
+  types. Do not reintroduce the `BrewvaRuntime` class, root-reflective runtime
+  port factories, or operator-selection helpers. Domain contracts are imported
+  through explicit owner subpaths such as
   `@brewva/brewva-runtime/core`, `/config`, `/events`, `/session`,
-  `/governance`, `/task`, `/skills`, `/context`, `/projection`, and
-  `/security`
+  `/governance`, `/task`, `/skills`, `/context`, and `/security`
 - runtime subpath ownership is registered in
   `skills/project/shared/runtime-subpaths.json`; new runtime package exports must
   add an owner, stability, decision, and allowed-consumer entry before they can
-  pass fitness. `keep-with-audit` entries must include a tracking id and review
-  deadline
+  pass fitness
 - skill outputs and runtime artifacts must stay explicit and auditable
 - DuckDB session indexes are rebuildable query state; event tape remains replay
   authority
@@ -110,11 +107,9 @@ owner: runtime-maintainers
   facades and must fail closed when an undeclared capability is accessed. The
   static capability inventory is generated from the runtime capability type
   union by `bun run tools:capability-inventory`
-- runtime projection admission is explicit: new files under
-  `packages/brewva-runtime/src/domain/projection/` require updating the
-  admission quality test, and their relative TypeScript dependency closure must
-  not import gateway hosted internals, provider packages, tool families, or
-  runtime root/operator port contracts
+- runtime projection admission is explicit: canonical projection code belongs in
+  `packages/brewva-runtime/src/runtime/tape/` and must not import gateway hosted
+  internals, provider packages, tool families, or removed runtime port contracts
 - gateway public/domain entrypoints stay explicit by domain (`/admin`, `/ingress`,
   `/host`, `/session`, `/channels`, `/daemon`, `/delegation`,
   `/extensions`, `/protocol`); control-plane CLI routing lives under

@@ -19,7 +19,7 @@
   - `packages/brewva-gateway/src/delegation/model-routing.ts`
   - `packages/brewva-gateway/src/delegation/catalog/registry.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.ts`
-  - `packages/brewva-runtime/src/domain/delegation/types.ts`
+  - `packages/brewva-runtime/src/delegation/types.ts`
 
 ## Decision Summary
 

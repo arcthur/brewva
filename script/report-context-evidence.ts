@@ -1,9 +1,9 @@
 import { resolve } from "node:path";
 import {
   buildContextEvidenceReport,
+  createHostedRuntimeAdapter,
   persistContextEvidenceReport,
 } from "@brewva/brewva-gateway/hosted";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 
 interface CliOptions {
   workspaceRoot: string;
@@ -144,9 +144,9 @@ function main(): void {
     process.exit(1);
   }
 
-  const runtime = createBrewvaRuntime({
+  const runtime = createHostedRuntimeAdapter({
     cwd: options.workspaceRoot,
-  }).hosted;
+  });
   const report = buildContextEvidenceReport(runtime, {
     sessionIds: options.sessionIds.length > 0 ? options.sessionIds : undefined,
     longSessionUsefulTurnThreshold: options.longSessionUsefulTurnThreshold,

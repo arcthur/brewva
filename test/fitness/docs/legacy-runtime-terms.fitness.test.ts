@@ -30,6 +30,20 @@ const BANNED_PATTERNS: RegExp[] = [
   /\bbrewva\.memory_recall\b/u,
 ];
 
+const STABLE_DOC_BANNED_PATTERNS: RegExp[] = [
+  /\bruntime\.ops\./u,
+  /\broot\.authority\./u,
+  /\broot\.inspect\./u,
+  /\bruntime\.authority\./u,
+  /\bruntime\.inspect\./u,
+  /\bBrewvaRuntimeRoot\b/u,
+  /@brewva\/brewva-runtime\/legacy-runtime/u,
+];
+
+function isResearchArchive(filePath: string): boolean {
+  return filePath.includes("/docs/research/");
+}
+
 describe("docs legacy runtime term guard", () => {
   it("does not reference removed runtime naming patterns", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
@@ -40,6 +54,13 @@ describe("docs legacy runtime term guard", () => {
     for (const filePath of markdownFiles) {
       const content = readFileSync(filePath, "utf-8");
       for (const pattern of BANNED_PATTERNS) {
+        if (!pattern.test(content)) continue;
+        violations.push(`${filePath}: matched ${pattern.toString()}`);
+      }
+      if (isResearchArchive(filePath)) {
+        continue;
+      }
+      for (const pattern of STABLE_DOC_BANNED_PATTERNS) {
         if (!pattern.test(content)) continue;
         violations.push(`${filePath}: matched ${pattern.toString()}`);
       }

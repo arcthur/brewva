@@ -13,10 +13,10 @@
   - `docs/reference/configuration.md`
 - Code anchors:
   - `packages/brewva-runtime/src/config/paths.ts`
-  - `packages/brewva-runtime/src/domain/skills/types.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/types.ts`
   - `packages/brewva-runtime/src/runtime/runtime.ts`
-  - `packages/brewva-runtime/src/domain/skills/registry.ts`
-  - `packages/brewva-runtime/src/domain/skills/system-install.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/registry.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/system-install.ts`
   - `distribution/brewva/postinstall.mjs`
   - `script/build-binaries.ts`
   - `script/verify-dist.ts`
@@ -31,4 +31,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

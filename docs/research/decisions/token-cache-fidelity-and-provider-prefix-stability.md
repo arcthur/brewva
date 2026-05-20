@@ -17,8 +17,8 @@
   - `packages/brewva-provider-core/src/cache/capability.ts`
   - `packages/brewva-provider-core/src/cache/render/`
   - `packages/brewva-provider-core/src/providers/_shared/payload-metadata.ts`
-  - `packages/brewva-substrate/src/turn/types.ts`
-  - `packages/brewva-substrate/src/turn/provider-stream.ts`
+  - `packages/brewva-substrate/src/agent-protocol/types.ts`
+  - `packages/brewva-gateway/src/hosted/internal/provider/stream.ts`
   - `packages/brewva-gateway/src/hosted/internal/provider/cache/`
   - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`

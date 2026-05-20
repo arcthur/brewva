@@ -60,11 +60,6 @@ export type {
   RunChannelModeDependencies,
 } from "./channels/api.js";
 export {
-  projectHostedTransitionSnapshot,
-  recordSessionTurnTransition,
-  type HostedTransitionSnapshot,
-} from "./hosted/api.js";
-export {
   DEFAULT_TELEGRAM_CHANNEL_NAME,
   SUPPORTED_CHANNELS,
   buildAgentScopedConversationKey,

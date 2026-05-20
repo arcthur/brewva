@@ -31,15 +31,15 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  CR["createBrewvaRuntime(...)"] --> INST["BrewvaRuntimeInstance"]
-  INST --> ROOT["root: identity + config + authority + inspect"]
-  INST --> HOSTED["hosted: root + operator + hosted extensions"]
-  INST --> TOOL["tool: root + tool extensions"]
-  INST --> OP["operator: identity + config + inspect + operator"]
-  ROOT --> LEAF["root-only helpers"]
-  HOSTED --> GW["gateway hosted assembly"]
-  TOOL --> MT["managed tools"]
-  OP --> CLI["operator products"]
+  CR["createBrewvaRuntime(...)"] --> RT["BrewvaRuntime"]
+  RT --> TAPE["tape: committed truth + projections"]
+  RT --> KERNEL["kernel: tool decisions + commitments"]
+  RT --> MODEL["model: materialized attention"]
+  RT --> TURN["turn: provider/tool physics"]
+  RT --> GWA["gateway hosted adapter bundle"]
+  GWA --> GW["gateway hosted assembly"]
+  KERNEL --> MT["managed tools through scoped capabilities"]
+  TAPE --> CLI["operator inspection through projections"]
 ```
 
 ## Persistence Roles

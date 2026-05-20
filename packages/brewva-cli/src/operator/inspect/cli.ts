@@ -1,7 +1,6 @@
 import { parseArgs as parseNodeArgs } from "node:util";
-import { createBrewvaRuntime, selectOperatorRuntimePort } from "@brewva/brewva-runtime";
+import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import { resolveInspectDirectory, type InspectDirectory } from "../inspect-analysis.js";
 import { printInspectText, formatInspectText } from "./output.js";
 import {
@@ -73,12 +72,11 @@ export async function runInspectCli(argv: string[]): Promise<number> {
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
     configPath,
   });
-  const runtime = createBrewvaRuntime({
+  const runtime = createHostedRuntimeAdapter({
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
     config: configLoad.config,
-    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
   });
-  const operatorRuntime = selectOperatorRuntimePort(runtime);
+  const operatorRuntime = runtime;
   const targetSessionId = resolveTargetSession(
     operatorRuntime,
     typeof parsed.values.session === "string" ? parsed.values.session : undefined,

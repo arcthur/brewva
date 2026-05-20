@@ -44,7 +44,7 @@ export function resolveDelegationTarget(input: {
   if (
     input.request.skillName &&
     (!isKnownDelegationSkillName(input.request.skillName) ||
-      !roleSkillMatrix[input.request.agent].includes(input.request.skillName))
+      !(roleSkillMatrix[input.request.agent] ?? []).includes(input.request.skillName))
   ) {
     throw new Error(`incompatible_agent_skill:${input.request.agent}:${input.request.skillName}`);
   }

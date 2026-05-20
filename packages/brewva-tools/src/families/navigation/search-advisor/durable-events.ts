@@ -2,7 +2,7 @@ import {
   PATCH_RECORDED_EVENT_TYPE,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 import type { BrewvaToolRuntime } from "../../../contracts/index.js";
 import {

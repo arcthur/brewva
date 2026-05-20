@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import {
   BREWVA_EMERGENCY_COMPACTION_SUMMARY_HEADER,
   buildBrewvaDeterministicCompactionSummary,
@@ -9,7 +10,6 @@ import {
   shouldCompactBrewvaContext,
   summarizeBrewvaCompactionMessage,
 } from "@brewva/brewva-substrate/compaction";
-import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 
 describe("substrate compaction mechanisms", () => {
   test("serializes heterogeneous messages without gateway policy", () => {
@@ -57,7 +57,7 @@ describe("substrate compaction mechanisms", () => {
   });
 
   test("projects a summary message in front of the kept tail", () => {
-    const messages: BrewvaTurnLoopMessage[] = [
+    const messages: BrewvaAgentProtocolMessage[] = [
       {
         role: "user",
         content: [{ type: "text", text: "old" }],

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_CONTEXT_STATE, type ContextState } from "@brewva/brewva-substrate/contracts";
+import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaHostPluginRunner } from "@brewva/brewva-substrate/host-api";
-import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
+import { DEFAULT_CONTEXT_STATE, type ContextState } from "@brewva/brewva-substrate/session";
 import { ManagedSessionEventBridge } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/event-bridge.js";
 
 function createRunnerStub(input?: {
@@ -57,7 +57,7 @@ describe("managed-agent-session event bridge", () => {
   });
 
   test("uses single local fallback append for passive custom messages without message_end handlers", async () => {
-    const appended: BrewvaTurnLoopMessage[] = [];
+    const appended: BrewvaAgentProtocolMessage[] = [];
     const persisted: Array<{ customType: string; content: unknown }> = [];
     const listenerEvents: string[] = [];
     const { runner } = createRunnerStub();
@@ -86,7 +86,7 @@ describe("managed-agent-session event bridge", () => {
   });
 
   test("forces transcript custom messages to stay excluded from context", async () => {
-    const appended: BrewvaTurnLoopMessage[] = [];
+    const appended: BrewvaAgentProtocolMessage[] = [];
     const { runner } = createRunnerStub();
     const bridge = new ManagedSessionEventBridge({
       runner,

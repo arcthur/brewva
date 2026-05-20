@@ -12,13 +12,13 @@
   - `docs/reference/extensions.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `<deleted: packages/brewva-runtime/src/domain/context/provider.ts>`
-  - `packages/brewva-runtime/src/domain/context/builtins.ts`
-  - `packages/brewva-runtime/src/domain/context/dependency-views.ts`
-  - `<deleted: packages/brewva-runtime/src/domain/context/arena.ts>`
-  - `<deleted: packages/brewva-runtime/src/domain/context/injection.ts>`
+  - `<deleted: packages/brewva-runtime/src/internal/legacy-runtime/model/context/provider.ts>`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/builtins.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/dependency-views.ts`
+  - `<deleted: packages/brewva-runtime/src/internal/legacy-runtime/model/context/arena.ts>`
+  - `<deleted: packages/brewva-runtime/src/internal/legacy-runtime/model/context/injection.ts>`
   - `packages/brewva-runtime/src/runtime/runtime.ts`
-  - `packages/brewva-runtime/src/domain/context/context.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/context.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/hosted-workbench-context-pipeline.ts`
 
 ## Decision Summary
@@ -31,5 +31,6 @@
 
 ## Superseded by
 
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`
 - `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
 - `docs/research/decisions/hosted-context-materialization-ownership.md`

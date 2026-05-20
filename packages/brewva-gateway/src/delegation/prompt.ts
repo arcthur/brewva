@@ -2,12 +2,12 @@ import {
   getProducerSemanticBindings,
   getProducerOutputContracts,
   listProducerOutputs,
-} from "@brewva/brewva-runtime/skills";
+} from "@brewva/brewva-runtime/protocol";
 import type {
   ProducerContract,
   SkillDocument,
   SkillOutputContract,
-} from "@brewva/brewva-runtime/skills";
+} from "@brewva/brewva-runtime/protocol";
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
 import type { ContextBundle } from "../context/api.js";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";

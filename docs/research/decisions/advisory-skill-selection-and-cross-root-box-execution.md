@@ -2,9 +2,7 @@
 
 ## Metadata
 
-- Decision: Hosted turns render bounded advisory SkillCard catalog context
-  before the model call, while box execution maps declared and prompt-mentioned target roots
-  explicitly and fails closed on unmapped host paths.
+- Decision: Advisory SkillCard context and box target-root mapping fail closed.
 - Date: `2026-05-17`
 - Status: accepted
 - Stable docs:
@@ -19,9 +17,7 @@
   - `packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/tools/tool-surface.ts`
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/lifecycle/turn-lifecycle-port.ts`
-  - `packages/brewva-runtime/src/domain/skills/events.ts`
-  - `packages/brewva-runtime/src/domain/skills/event-descriptors.ts`
+  - `packages/brewva-gateway/src/hosted/internal/turn-adapter/lifecycle/turn-lifecycle-port.ts`
   - `packages/brewva-tools/src/runtime-port/target-scope.ts`
   - `packages/brewva-tools/src/registry/managed-metadata.ts`
   - `packages/brewva-tools/src/families/execution/exec.ts`
@@ -77,3 +73,7 @@
 - `2>/dev/null` and `2>&1` are classified as diagnostics instead of workspace
   write redirection. Audit metadata preserves diagnostic suppression so empty
   output can be explained by trace evidence.
+
+## Superseded by
+
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const repoRoot = resolve(import.meta.dir, "../../..");
 
 describe("substrate entrypoint surface", () => {
   test("exports only contract-first substrate vocabulary from the root entrypoint", async () => {
@@ -25,22 +29,19 @@ describe("substrate entrypoint surface", () => {
     expect("createBrewvaHostPluginRunner" in substrate).toBe(false);
     expect("readSessionBundleArtifact" in substrate).toBe(false);
     expect("createInMemoryModelCatalog" in substrate).toBe(false);
-    expect("createBrewvaTurnLoopController" in substrate).toBe(false);
+    expect("createBrewvaAgentProtocolController" in substrate).toBe(false);
     expect("createBrewvaInMemoryAgentSession" in substrate).toBe(false);
     expect("createBrewvaSyntheticSourceInfo" in substrate).toBe(false);
     expect("createBrewvaEventBus" in substrate).toBe(false);
     expect("buildBrewvaDeterministicCompactionSummary" in substrate).toBe(false);
   });
 
-  test("exports contract-first vocabulary from the explicit contracts subpath", async () => {
-    const contracts = await import("@brewva/brewva-substrate/contracts");
+  test("does not expose a broad contracts subpath", () => {
+    const packageJson = JSON.parse(
+      readFileSync(resolve(repoRoot, "packages/brewva-substrate/package.json"), "utf8"),
+    ) as { readonly exports?: Record<string, unknown> };
 
-    expect(contracts.SESSION_TERMINATION_REASONS).toContain("host_closed");
-    expect(typeof contracts.canResumeSessionPhase).toBe("function");
-    expect(contracts.DEFAULT_CONTEXT_STATE.budgetPressure).toBe("none");
-    expect(contracts.BREWVA_THINKING_LEVELS).toContain("xhigh");
-    expect("defineBrewvaTool" in contracts).toBe(false);
-    expect("advanceToolExecutionPhase" in contracts).toBe(false);
+    expect(Object.hasOwn(packageJson.exports ?? {}, "./contracts")).toBe(false);
   });
 
   test("exports session mechanisms only from the explicit session subpath", async () => {
@@ -126,19 +127,24 @@ describe("substrate entrypoint surface", () => {
     expect("createFetchProviderCompletionDriver" in provider).toBe(false);
   });
 
-  test("exports the turn loop only from the explicit turn subpath", async () => {
-    const turn = await import("@brewva/brewva-substrate/turn");
+  test("exports agent protocol vocabulary without a public turn owner", async () => {
+    const agentProtocol = await import("@brewva/brewva-substrate/agent-protocol");
 
-    expect(typeof turn.createBrewvaTurnLoopController).toBe("function");
-    expect(typeof turn.runBrewvaTurnLoop).toBe("function");
-    expect("createBrewvaTurnProviderStreamFunction" in turn).toBe(false);
+    expect(typeof agentProtocol.convertToLlm).toBe("function");
+    expect("createBrewvaAgentProtocolController" in agentProtocol).toBe(false);
+    expect("runBrewvaAgentProtocol" in agentProtocol).toBe(false);
+    expect("createBrewvaTurnProviderStreamFunction" in agentProtocol).toBe(false);
   });
 
-  test("exports substrate session composition only from the explicit sdk subpath", async () => {
-    const sdk = await import("@brewva/brewva-substrate/sdk");
+  test("does not export substrate session composition as a public turn-loop bypass", () => {
+    const packageJson = JSON.parse(
+      readFileSync(resolve(repoRoot, "packages/brewva-substrate/package.json"), "utf8"),
+    ) as {
+      exports?: Record<string, unknown>;
+    };
 
-    expect(typeof sdk.createBrewvaSessionServices).toBe("function");
-    expect(typeof sdk.createBrewvaSessionFromServices).toBe("function");
-    expect(typeof sdk.createBrewvaInMemoryAgentSession).toBe("function");
+    expect(Object.keys(packageJson.exports ?? {})).not.toContain("./sdk");
+    expect(Object.keys(packageJson.exports ?? {})).not.toContain("./turn");
+    expect(Object.keys(packageJson.exports ?? {})).toContain("./agent-protocol");
   });
 });

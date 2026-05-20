@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type {
-  BrewvaTurnLoopController,
-  BrewvaTurnLoopMessage,
-  BrewvaTurnLoopTool,
-} from "@brewva/brewva-substrate/turn";
+  BrewvaAgentProtocolController,
+  BrewvaAgentProtocolMessage,
+  BrewvaAgentProtocolTool,
+} from "@brewva/brewva-substrate/agent-protocol";
 import { ManagedSessionLiveTranscript } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/live-transcript.js";
 
 function createAgentStub() {
   const calls: string[] = [];
-  const replaced: BrewvaTurnLoopMessage[][] = [];
-  const appended: BrewvaTurnLoopMessage[] = [];
+  const replaced: BrewvaAgentProtocolMessage[][] = [];
+  const appended: BrewvaAgentProtocolMessage[] = [];
   const prompts: string[] = [];
-  const tools: BrewvaTurnLoopTool[][] = [];
+  const tools: BrewvaAgentProtocolTool[][] = [];
   const agent = {
     state: {
       model: undefined,
@@ -26,12 +26,12 @@ function createAgentStub() {
     waitForIdle: async () => undefined,
     setModel: () => undefined,
     setThinkingLevel: () => undefined,
-    replaceMessages(messages: BrewvaTurnLoopMessage[]) {
+    replaceMessages(messages: BrewvaAgentProtocolMessage[]) {
       calls.push("replaceMessages");
       replaced.push(messages);
     },
     abort: () => undefined,
-    setTools(nextTools: BrewvaTurnLoopTool[]) {
+    setTools(nextTools: BrewvaAgentProtocolTool[]) {
       calls.push("setTools");
       tools.push(nextTools);
     },
@@ -44,12 +44,12 @@ function createAgentStub() {
     removeQueuedMessage: () => false,
     steer: () => false,
     hasPendingSteer: () => false,
-    appendMessage(message: BrewvaTurnLoopMessage) {
+    appendMessage(message: BrewvaAgentProtocolMessage) {
       calls.push("appendMessage");
       appended.push(message);
     },
     hasQueuedMessages: () => false,
-  } as unknown as BrewvaTurnLoopController;
+  } as unknown as BrewvaAgentProtocolController;
   return { agent, calls, replaced, appended, prompts, tools };
 }
 
@@ -99,7 +99,7 @@ describe("managed-agent-session live transcript", () => {
 
     transcript.applyBaseContext({
       systemPrompt: "base",
-      tools: [{ name: "read" } as BrewvaTurnLoopTool],
+      tools: [{ name: "read" } as BrewvaAgentProtocolTool],
     });
     transcript.applyBaseSystemPrompt("rebuilt");
     transcript.applyPromptOverlay("overlay");

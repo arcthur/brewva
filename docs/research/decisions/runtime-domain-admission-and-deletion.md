@@ -10,12 +10,11 @@
   - `docs/reference/runtime.md`
   - `skills/project/shared/package-boundaries.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/`
-  - `packages/brewva-runtime/src/domain/events/iteration-facts.ts`
-  - `packages/brewva-runtime/src/domain/projection/workflow/`
-  - `packages/brewva-runtime/src/internal/evidence/`
-  - `packages/brewva-runtime/src/evidence.ts`
-  - `packages/brewva-runtime/src/runtime/runtime-surfaces.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/tape/event-ops/iteration-facts.ts`
+  - `packages/brewva-runtime/src/read-models/projection/workflow/`
+  - `packages/brewva-runtime/src/protocol/evidence/`
+  - `packages/brewva-runtime/src/protocol/evidence/api.ts`
+  - `packages/brewva-runtime/src/internal/runtime-ops.ts`
   - `test/fitness/runtime-domain-migration.fitness.test.ts`
   - `test/fitness/runtime-promoted-architecture.fitness.test.ts`
   - `test/fitness/runtime-workflow-ownership.fitness.test.ts`
@@ -25,8 +24,8 @@
 - A directory under `packages/brewva-runtime/src/domain/<name>/` must own either replay-bearing commitments or externally consumed runtime surface vocabulary.
 - Empty domain shells are deleted instead of preserved for future possibility.
 - `iteration` is not a runtime domain. Metric and guard fact vocabulary is owned by `events`, which records and queries those facts through the event plane.
-- `workflow` is not a runtime domain. Workflow artifact and status derivation is a projection/read-model helper under `domain/projection/workflow/`.
-- `evidence` is not a broad runtime domain. Evidence parsing and references live under internal evidence ownership plus the dedicated `@brewva/brewva-runtime/evidence` subpath where needed.
+- `workflow` is not a runtime domain. Workflow artifact and status derivation is a projection/read-model helper under `tape-views/projection/workflow/`.
+- `evidence` is not a broad runtime domain. Evidence parsing and references live under evidence ownership and are exposed only through the canonical event vocabulary where callers need payload helpers.
 - Domains with no semantic runtime surface must not keep empty `runtime-surface.ts` or `registrar.ts` shells.
 - Compatibility with removed domain directories and imports is intentionally not preserved.
 
@@ -36,4 +35,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

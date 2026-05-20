@@ -14,11 +14,11 @@
   - `docs/reference/session-lifecycle.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/reasoning/types.ts`
-  - `packages/brewva-runtime/src/domain/reasoning/events.ts`
-  - `packages/brewva-runtime/src/domain/tape/reasoning-replay.ts`
-  - `packages/brewva-runtime/src/domain/reasoning/reasoning.ts`
-  - `packages/brewva-runtime/src/events/registry.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/reasoning/types.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/reasoning/events.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/tape/reasoning-replay.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/reasoning/reasoning.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/reasoning/event-types.ts`
   - `packages/brewva-tools/src/families/workflow/reasoning-checkpoint.ts`
   - `packages/brewva-tools/src/families/workflow/reasoning-revert.ts`
   - `packages/brewva-tools/src/families/workflow/tape.ts`
@@ -33,4 +33,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

@@ -1,9 +1,9 @@
 import {
-  BrewvaEffect,
   fromAbortableBoundaryPromise,
   retryWithBrewvaPolicy,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
 } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { asPartialObject } from "@brewva/brewva-std/unknown";
 import type { Context, Model, SimpleStreamOptions, StreamFunction } from "../../contracts/index.js";
 import { runProviderStream } from "../../stream/run-provider-stream.js";
@@ -254,7 +254,8 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli", GoogleGe
         });
       });
 
-      await runPromiseAtBoundary(
+      await runBoundaryOperation(
+        "provider.googleGeminiCli.stream",
         retryWithBrewvaPolicy(attempt, {
           maxRetries: MAX_RETRIES,
           baseDelayMs: BASE_DELAY_MS,
@@ -262,6 +263,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli", GoogleGe
             error instanceof GoogleGeminiCliRetryableRequestError ? error.retryDelayMs : undefined,
           while: (error) => error instanceof GoogleGeminiCliRetryableRequestError,
         }).pipe(BrewvaEffect.mapError(unwrapGoogleGeminiCliRequestError)),
+        { signal },
       );
     },
     {

@@ -1,17 +1,19 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterPort } from "../../../hosted/api.js";
 import type { ChannelCoordinator } from "../../coordinator.js";
 import type { ChannelA2AAdapter } from "./extension.js";
 
 export function createInstrumentedChannelA2AAdapter(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   coordinator: Pick<ChannelCoordinator, "a2aSend" | "a2aBroadcast" | "listAgents">;
 }): ChannelA2AAdapter {
   return {
     send: async (request) => {
       const result = await input.coordinator.a2aSend(request);
-      input.runtime.extensions.hosted.events.record({
+      const recordA2A = result.ok
+        ? input.runtime.ops.channel.a2a.invoked
+        : input.runtime.ops.channel.a2a.blocked;
+      recordA2A({
         sessionId: request.fromSessionId,
-        type: result.ok ? "channel_a2a_invoked" : "channel_a2a_blocked",
         payload: {
           fromAgentId: request.fromAgentId,
           toAgentId: request.toAgentId,
@@ -25,9 +27,11 @@ export function createInstrumentedChannelA2AAdapter(input: {
     },
     broadcast: async (request) => {
       const result = await input.coordinator.a2aBroadcast(request);
-      input.runtime.extensions.hosted.events.record({
+      const recordA2A = result.ok
+        ? input.runtime.ops.channel.a2a.invoked
+        : input.runtime.ops.channel.a2a.blocked;
+      recordA2A({
         sessionId: request.fromSessionId,
-        type: result.ok ? "channel_a2a_invoked" : "channel_a2a_blocked",
         payload: {
           fromAgentId: request.fromAgentId,
           toAgentIds: request.toAgentIds,

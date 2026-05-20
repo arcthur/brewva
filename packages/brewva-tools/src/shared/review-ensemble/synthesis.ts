@@ -157,9 +157,7 @@ function dedupeFindings(findings: readonly DelegationOutcomeFinding[]): Delegati
 function readReviewOutcomeData(
   outcome: SubagentOutcome,
 ): ExplorerReviewSubagentOutcomeData | undefined {
-  return outcome.ok && outcome.data?.kind === "consult" && outcome.data.consultKind === "review"
-    ? outcome.data
-    : undefined;
+  return outcome.ok ? coerceStoredReviewOutcomeData(outcome.data) : undefined;
 }
 
 function inferLaneFromOutcome(outcome: SubagentOutcome): ReviewLaneName | undefined {
@@ -226,9 +224,9 @@ export function materializeReviewLaneOutcomes(
     .filter((run) => run.kind === "consult" && run.consultKind === "review")
     .map((run) => {
       const artifactRefs = run.artifactRefs?.map((ref) => ({
-        kind: ref.kind,
+        kind: ref.kind ?? "artifact",
         path: ref.path,
-        summary: ref.summary,
+        summary: ref.summary ?? undefined,
       }));
       const metrics = {
         durationMs: Math.max(0, run.updatedAt - run.createdAt),
@@ -243,7 +241,7 @@ export function materializeReviewLaneOutcomes(
           agent: run.agent,
           taskName: run.taskName,
           taskPath: run.taskPath,
-          nickname: run.nickname,
+          nickname: run.nickname ?? run.label ?? run.runId,
           delegate: run.delegate,
           agentSpec: run.agentSpec,
           envelope: run.envelope,
@@ -268,7 +266,7 @@ export function materializeReviewLaneOutcomes(
         agent: run.agent,
         taskName: run.taskName,
         taskPath: run.taskPath,
-        nickname: run.nickname,
+        nickname: run.nickname ?? run.label ?? run.runId,
         delegate: run.delegate,
         agentSpec: run.agentSpec,
         envelope: run.envelope,

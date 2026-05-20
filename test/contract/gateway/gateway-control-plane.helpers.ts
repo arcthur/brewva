@@ -12,7 +12,7 @@ import {
   type SessionBackend,
   type SessionWorkerInfo,
 } from "@brewva/brewva-gateway";
-import type { ContextStatusView } from "@brewva/brewva-runtime/session";
+import type { ContextStatusView } from "@brewva/brewva-runtime/protocol";
 export { sleep } from "../../helpers/process.js";
 
 export interface PolicyRule {

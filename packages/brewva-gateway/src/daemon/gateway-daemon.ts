@@ -4,37 +4,31 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { resolve } from "node:path";
 import process from "node:process";
 import {
-  BrewvaEffect,
   BrewvaGatewayScope,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
   startScopedSchedule,
   withBrewvaObservability,
   type BrewvaObservationFields,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { BrewvaScheduleSelfImproveConfig } from "@brewva/brewva-runtime/config";
 import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
-import {
-  createRecoveryWalStore,
-  createSchedulerService,
-  type RecoveryWalStore,
-  type SchedulerService,
-} from "@brewva/brewva-runtime/recovery";
+import type { TaskSpec } from "@brewva/brewva-runtime/protocol";
+import { normalizeTaskSpec } from "@brewva/brewva-runtime/protocol";
 import type {
   ContextStatusView,
   SessionWireFrame,
   SessionWireStatusState,
   ManagedToolMode,
-} from "@brewva/brewva-runtime/session";
-import type { TaskSpec } from "@brewva/brewva-runtime/task";
-import { normalizeTaskSpec } from "@brewva/brewva-runtime/task";
+} from "@brewva/brewva-runtime/protocol";
 import { createDeferred } from "@brewva/brewva-std/async";
 import { safeParseJson } from "@brewva/brewva-std/json";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
+import { createHostedRuntimeAdapter } from "../hosted/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import { getRuntimeTaskState, setRuntimeTaskSpec } from "../hosted/api.js";
 import { loadOrCreateGatewayToken, rotateGatewayToken } from "../ingress/api.js";
 import { assertLoopbackHost, normalizeGatewayHost } from "../ingress/api.js";
 import { FileGatewayStateStore, type GatewayStateStore } from "../ingress/api.js";
@@ -78,6 +72,12 @@ import {
 } from "./internal/session-wire-status.js";
 import { StructuredLogger } from "./logger.js";
 import { readPidRecord, removePidRecord, writePidRecord, type GatewayPidRecord } from "./pid.js";
+import {
+  createRecoveryWalStore,
+  createSchedulerService,
+  type RecoveryWalStore,
+  type SchedulerService,
+} from "./recovery.js";
 import { executeScheduleIntentRun } from "./schedule-runner.js";
 import {
   isSessionBackendCapacityError,
@@ -332,7 +332,7 @@ export class GatewayDaemon {
   private readonly supervisor: SessionBackend;
   private readonly schedulerConfigEnabled: boolean;
   private readonly schedulerEventsEnabled: boolean;
-  private readonly schedulerRuntime: BrewvaHostedRuntimePort | null;
+  private readonly schedulerRuntime: HostedRuntimeAdapterPort | null;
   private readonly scheduler: SchedulerService | null;
   private readonly schedulerUnavailableReason?: "schedule_disabled" | "events_disabled";
   private readonly recoveryWalStore?: RecoveryWalStore;
@@ -498,11 +498,10 @@ export class GatewayDaemon {
       );
     }
     this.schedulerRuntime = !this.schedulerUnavailableReason
-      ? createBrewvaRuntime({
+      ? createHostedRuntimeAdapter({
           cwd: resolvedCwd,
           config: runtimeConfig,
-          governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-        }).hosted
+        })
       : null;
     if (this.schedulerRuntime && !this.schedulerUnavailableReason) {
       const schedulerRuntime = this.schedulerRuntime;
@@ -511,14 +510,13 @@ export class GatewayDaemon {
         runtime: {
           workspaceRoot: schedulerRuntime.identity.workspaceRoot,
           scheduleConfig: schedulerRuntime.config.schedule,
-          listSessionIds: () => schedulerRuntime.inspect.events.log.listSessionIds(),
+          listSessionIds: () => schedulerRuntime.ops.events.records.listSessionIds(),
           listEvents: (sessionId, query) =>
-            schedulerRuntime.inspect.events.records.list(sessionId, query),
-          recordEvent: (input) => schedulerRuntime.extensions.hosted.events.record(input),
-          subscribeEvents: (listener) =>
-            schedulerRuntime.inspect.events.records.subscribe(listener),
-          getClaimState: (sessionId) => schedulerRuntime.inspect.claim.state.get(sessionId),
-          getTaskState: (sessionId) => schedulerRuntime.inspect.task.state.get(sessionId),
+            schedulerRuntime.ops.events.records.list(sessionId, query),
+          scheduleEvents: schedulerRuntime.ops.schedule.events,
+          subscribeEvents: (listener) => schedulerRuntime.ops.events.records.subscribe(listener),
+          getClaimState: (sessionId) => schedulerRuntime.ops.claim.state.get(sessionId),
+          getTaskState: (sessionId) => schedulerRuntime.ops.task.state.get(sessionId),
           recoveryWal: {
             appendPending: (envelope, source, walOptions) =>
               schedulerIngress.appendPending(envelope, source, walOptions),
@@ -605,7 +603,9 @@ export class GatewayDaemon {
         this.onConnection(socket);
       });
       wss.on("error", (error: Error) => {
-        this.logger.error("gateway websocket server error", { error: error.message });
+        this.logger.error("gateway websocket server error", {
+          error: error.message,
+        });
       });
       this.wss = wss;
 
@@ -664,17 +664,16 @@ export class GatewayDaemon {
   }
 
   private buildAutonomousSelfImproveTaskSpec(policy: BrewvaScheduleSelfImproveConfig): TaskSpec {
-    const spec: TaskSpec = {
+    return {
       schema: "brewva.task.v1",
       goal: policy.taskSpec.goal,
+      ...(typeof policy.taskSpec.expectedBehavior === "string"
+        ? { expectedBehavior: policy.taskSpec.expectedBehavior }
+        : {}),
+      ...(Array.isArray(policy.taskSpec.constraints) && policy.taskSpec.constraints.length > 0
+        ? { constraints: [...policy.taskSpec.constraints] }
+        : {}),
     };
-    if (typeof policy.taskSpec.expectedBehavior === "string") {
-      spec.expectedBehavior = policy.taskSpec.expectedBehavior;
-    }
-    if (Array.isArray(policy.taskSpec.constraints) && policy.taskSpec.constraints.length > 0) {
-      spec.constraints = [...policy.taskSpec.constraints];
-    }
-    return spec;
   }
 
   private isAutonomousSelfImproveIntentCurrent(input: {
@@ -693,14 +692,14 @@ export class GatewayDaemon {
   }
 
   private seedAutonomousSelfImproveParentSession(
-    runtime: BrewvaHostedRuntimePort,
+    runtime: HostedRuntimeAdapterPort,
     policy: BrewvaScheduleSelfImproveConfig,
   ): void {
     const expectedTaskSpec = normalizeTaskSpec(this.buildAutonomousSelfImproveTaskSpec(policy));
-    const currentTaskSpecRaw = runtime.inspect.task.state.get(policy.parentSessionId).spec;
+    const currentTaskSpecRaw = getRuntimeTaskState(runtime, policy.parentSessionId).spec;
     const currentTaskSpec = currentTaskSpecRaw ? normalizeTaskSpec(currentTaskSpecRaw) : null;
     if (JSON.stringify(currentTaskSpec) !== JSON.stringify(expectedTaskSpec)) {
-      runtime.authority.task.spec.set(policy.parentSessionId, expectedTaskSpec);
+      setRuntimeTaskSpec(runtime, policy.parentSessionId, expectedTaskSpec);
     }
   }
 
@@ -997,7 +996,9 @@ export class GatewayDaemon {
           }),
         ),
       onError: (error) => {
-        this.logger.warn("gateway tick failed", { error: toErrorMessage(error) });
+        this.logger.warn("gateway tick failed", {
+          error: toErrorMessage(error),
+        });
       },
     });
   }
@@ -1187,7 +1188,10 @@ export class GatewayDaemon {
     const request = parsedRaw as RequestFrame;
     const methodRaw = request.method;
     if (!GatewayMethods.includes(methodRaw as GatewayMethod)) {
-      this.logger.debug("unknown method", { connId: state.connId, method: methodRaw });
+      this.logger.debug("unknown method", {
+        connId: state.connId,
+        method: methodRaw,
+      });
       this.sendResponse(state, {
         id: request.id,
         ok: false,
@@ -1200,7 +1204,10 @@ export class GatewayDaemon {
     const traceId = normalizeTraceId(request.traceId);
 
     if (state.phase === "closing") {
-      this.logger.debug("request on closing connection", { connId: state.connId, method });
+      this.logger.debug("request on closing connection", {
+        connId: state.connId,
+        method,
+      });
       this.sendResponse(state, {
         id: request.id,
         ok: false,
@@ -1211,7 +1218,10 @@ export class GatewayDaemon {
     }
 
     if (method !== "connect" && !isConnectionAuthenticated(state)) {
-      this.logger.debug("unauthenticated request", { connId: state.connId, method });
+      this.logger.debug("unauthenticated request", {
+        connId: state.connId,
+        method,
+      });
       this.sendResponse(state, {
         id: request.id,
         ok: false,
@@ -1793,7 +1803,9 @@ export class GatewayDaemon {
     }
     const sessionId = this.extractSessionIdFromPayload(payload);
     if (!sessionId) {
-      this.logger.warn("dropping session-scoped event without sessionId", { event });
+      this.logger.warn("dropping session-scoped event without sessionId", {
+        event,
+      });
       return;
     }
     this.broadcastSessionEvent(event, payload, sessionId);
@@ -2232,7 +2244,9 @@ export class GatewayDaemon {
       if (sessionId) {
         this.broadcastSessionEvent(event, payload, sessionId);
       } else {
-        this.logger.warn("skipping scoped event broadcast without sessionId", { event });
+        this.logger.warn("skipping scoped event broadcast without sessionId", {
+          event,
+        });
       }
       return;
     }
@@ -2326,7 +2340,8 @@ export async function runGatewayDaemon(options: GatewayDaemonOptions): Promise<v
     gatewayId: stateDir,
     stateDir,
   };
-  await runPromiseAtBoundary(
+  await runBoundaryOperation(
+    "gateway.daemon.run",
     BrewvaEffect.scoped(
       BrewvaEffect.acquireRelease(
         BrewvaEffect.promise(async () => {

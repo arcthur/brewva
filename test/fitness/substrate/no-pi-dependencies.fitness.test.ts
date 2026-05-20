@@ -43,7 +43,7 @@ describe("substrate dependency boundary", () => {
     const roots = [
       resolve(repoRoot, "packages", "brewva-provider-core"),
       resolve(repoRoot, "packages", "brewva-substrate"),
-      resolve(repoRoot, "packages", "brewva-substrate", "src", "turn"),
+      resolve(repoRoot, "packages", "brewva-substrate", "src", "agent-protocol"),
       resolve(repoRoot, "packages", "brewva-tools"),
       resolve(repoRoot, "packages", "brewva-gateway", "src", "extensions"),
       resolve(

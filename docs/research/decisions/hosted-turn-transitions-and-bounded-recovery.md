@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Decision: `session_turn_transition` is the rebuildable hosted-flow contract for continuation, interruption, delegation wait states, approval wait states, and bounded recovery posture
+- Decision: hosted transition receipts were the rebuildable hosted-flow contract for continuation, interruption, delegation wait states, approval wait states, and bounded recovery posture
 - Date: `2026-04-03`
 - Status: accepted
 - Stable docs:
@@ -13,18 +13,18 @@
   - `docs/reference/events/README.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.ts`
+  - Removed by the four-port runtime cutover.
 
 ## Decision Summary
 
-- `session_turn_transition` is the rebuildable hosted-flow contract for continuation, interruption, delegation wait states, approval wait states, and bounded recovery posture
+- Hosted transition receipts were the rebuildable hosted-flow contract for continuation, interruption, delegation wait states, approval wait states, and bounded recovery posture
 - hosted recovery remains an experience-ring control-plane concern; it does not authorize effects, approvals, rollback, or replay truth
 - hosted execution uses an explicit bounded recovery ladder for compaction, provider fallback, output-budget escalation, interruption, WAL resume, and reasoning-revert resume
 - The accepted decision is:
-- `session_turn_transition` is the rebuildable hosted-flow contract for continuation, interruption, delegation wait states, approval wait states, and bounded recovery posture.
+- Hosted transition receipts were the rebuildable hosted-flow contract for continuation, interruption, delegation wait states, approval wait states, and bounded recovery posture.
 - Hosted recovery remains an experience-ring control-plane concern; it does not authorize effects, approvals, rollback, or replay truth.
 - Hosted execution uses an explicit bounded recovery ladder for compaction, provider fallback, output-budget escalation, interruption, WAL resume, and reasoning-revert resume.
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

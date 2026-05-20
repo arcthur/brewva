@@ -34,4 +34,4 @@ export type {
   LocalHookPreEffectResult,
   LocalHookRecommendation,
   LocalHookResult,
-} from "../hosted/internal/thread-loop/lifecycle/local-hook-port.js";
+} from "../hosted/internal/turn-adapter/lifecycle/local-hook-port.js";

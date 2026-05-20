@@ -15,9 +15,9 @@
   - `docs/reference/gateway-control-plane-protocol.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/lifecycle/turn-lifecycle-spine.ts`
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts`
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/turn-transition.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/lifecycle/turn-lifecycle-spine.ts`
+  - `packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`
+  - Removed hosted turn transition coordinator
   - `test/unit/runtime/turn-lifecycle-spine.unit.test.ts`
   - `test/unit/gateway/turn-envelope.unit.test.ts`
 
@@ -31,4 +31,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

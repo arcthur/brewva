@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import process from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
 import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
-import { createCredentialVaultServiceFromSecurityConfig } from "@brewva/brewva-runtime/credentials";
+import { createCredentialVaultServiceFromSecurityConfig } from "@brewva/brewva-runtime/security";
 
 function printCredentialsHelp(): void {
   console.log(`Brewva Credentials - encrypted credential vault management

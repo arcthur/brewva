@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgentRuntimeManager } from "@brewva/brewva-gateway/channels";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
+  return createRuntimeInstanceFixture(options);
 }
 
 describe("channel runtime manager", () => {
@@ -23,7 +23,7 @@ describe("channel runtime manager", () => {
     const runtime = await manager.getOrCreateRuntime("jack");
     expect(runtime.config.ledger.path).toBe(".brewva/agents/jack/state/ledger/evidence.jsonl");
     expect(runtime.config.projection.dir).toBe(".brewva/agents/jack/state/projection");
-    expect(runtime.config.infrastructure.events.dir).toBe(".brewva/agents/jack/state/events");
+    expect(runtime.config.tape.dir).toBe(".brewva/agents/jack/state/tape");
     expect(runtime.config.infrastructure.recoveryWal.dir).toBe(
       ".brewva/agents/jack/state/recovery-wal",
     );

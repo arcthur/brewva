@@ -1,22 +1,15 @@
-import type {
-  BrewvaEventQuery,
-  BrewvaEventRecord,
-  BrewvaStructuredEvent,
-} from "@brewva/brewva-runtime/events";
+import type { BrewvaEventQuery, BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import type { SESSION_INDEX_UNAVAILABLE } from "./unavailable.js";
 
-export const SESSION_INDEX_SCHEMA_VERSION = 4;
+export const SESSION_INDEX_SCHEMA_VERSION = 5;
 
 export type SessionIndexScope = "session_local" | "user_repository_root" | "workspace_wide";
 
 export interface SessionIndexEventSource {
-  readonly log: {
-    listSessionIds(): string[];
-    getPath(sessionId: string): string;
-  };
   readonly records: {
+    listSessionIds(): string[];
     list(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
-    subscribe(listener: (event: BrewvaStructuredEvent) => void): () => void;
+    subscribe(listener: (event: BrewvaEventRecord) => void): () => void;
   };
 }
 
@@ -49,8 +42,8 @@ export interface SessionIndexTapeEvidence {
   type: string;
   payload: Record<string, unknown>;
   searchText: string;
-  logPath: string;
-  logOffset: number;
+  sourceUri: string;
+  sourceSequence: number;
   tokenScore: number;
 }
 

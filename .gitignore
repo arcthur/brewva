@@ -1,5 +1,6 @@
 node_modules
 bun.lockb
+.repos/effect
 *.tsbuildinfo
 packages/**/.tmp/
 *.pyc

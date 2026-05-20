@@ -1,7 +1,7 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
-import type { ToolOutputView } from "@brewva/brewva-runtime/session";
+import type { TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/protocol";
+import type { ToolOutputView } from "@brewva/brewva-runtime/protocol";
 import { runHostedTurnEnvelope } from "../hosted/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { toErrorMessage } from "../utils/errors.js";
 import { clampText } from "../utils/runtime.js";
 import type { AgentRegistry } from "./agent-registry.js";
@@ -42,8 +42,8 @@ function formatChannelToolTurnOutput(input: ToolOutputView): ChannelToolTurnOutp
         ? "inconclusive"
         : "completed";
   const detail = clampText(input.text, 1200);
-  const toolCallId = String(input.toolCallId);
-  const toolName = String(input.toolName);
+  const toolCallId = input.toolCallId;
+  const toolName = input.toolName;
   return {
     toolCallId,
     toolName,
@@ -57,7 +57,7 @@ function formatChannelToolTurnOutput(input: ToolOutputView): ChannelToolTurnOutp
 
 function summarizeTurnPart(part: TurnPart): string {
   if (part.type === "text") {
-    return part.text;
+    return part.text ?? "";
   }
   if (part.type === "image") {
     return `[image] ${part.uri}`;
@@ -162,7 +162,7 @@ export async function collectPromptTurnOutputs(
   session: PromptTurnOutputSession,
   prompt: string,
   options: {
-    runtime: BrewvaHostedRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
     sessionId: string;
     turnId?: string;
   },
@@ -195,7 +195,7 @@ export function createChannelAgentDispatch(input: {
     session: PromptTurnOutputSession,
     prompt: string,
     options: {
-      runtime: BrewvaHostedRuntimePort;
+      runtime: HostedRuntimeAdapterPort;
       sessionId: string;
       turnId?: string;
     },
@@ -261,9 +261,8 @@ export function createChannelAgentDispatch(input: {
     if (!prompt) {
       return;
     }
-    state.runtime.extensions.hosted.events.record({
+    state.runtime.ops.channel.turn.dispatchStart({
       sessionId: canonicalTurn.sessionId,
-      type: "channel_turn_dispatch_start",
       payload: {
         turnId: canonicalTurn.turnId,
         kind: canonicalTurn.kind,
@@ -282,9 +281,8 @@ export function createChannelAgentDispatch(input: {
     });
     await input.registry.touchAgent(state.agentId, Date.now(), true);
 
-    state.runtime.extensions.hosted.events.record({
+    state.runtime.ops.channel.turn.dispatchEnd({
       sessionId: canonicalTurn.sessionId,
-      type: "channel_turn_dispatch_end",
       payload: {
         turnId: canonicalTurn.turnId,
         kind: canonicalTurn.kind,
@@ -304,9 +302,8 @@ export function createChannelAgentDispatch(input: {
       nextSequence: () => input.sessionCoordinator.nextOutboundSequence(state),
     });
 
-    state.runtime.extensions.hosted.events.record({
+    state.runtime.ops.channel.turn.outboundComplete({
       sessionId: canonicalTurn.sessionId,
-      type: "channel_turn_outbound_complete",
       payload: {
         turnId: canonicalTurn.turnId,
         agentSessionId: state.agentSessionId,

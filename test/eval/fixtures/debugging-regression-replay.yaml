@@ -13,6 +13,6 @@ investigation_record:
       evidence: Event epoch=3 vs current=5 in trace
   failed_attempts: []
   disconfirming_evidence: No crash or error — pure silent skip
-  root_cause_boundary: packages/brewva-runtime/src/domain/tape/replay-engine.ts
+  root_cause_boundary: packages/brewva-runtime/src/runtime/tape/memory-tape.ts
   verification_linkage: "Add test: replay -> reconcile -> assert epoch matches"
 planning_posture: moderate

@@ -73,7 +73,7 @@ describe("tool catalog", () => {
         {
           surface: "base",
           actionClass: "workspace_read",
-          requiredCapabilities: ["authority.events.recordMetricObservation"],
+          requiredCapabilities: ["capabilities.events.recordMetricObservation"],
         },
       ),
     ).toThrow("Required capabilities must live in MANAGED_BREWVA_TOOL_METADATA_BY_NAME.");

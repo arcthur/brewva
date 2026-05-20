@@ -1,4 +1,11 @@
 export {
+  CONTEXT_BUDGET_PRESSURE_LEVELS,
+  DEFAULT_CONTEXT_STATE,
+  type ContextBudgetPressure,
+  type ContextState,
+  BREWVA_THINKING_LEVELS,
+  type BrewvaReasoningThinkingLevel,
+  type BrewvaThinkingLevel,
   advanceSessionPhaseResult,
   canTransitionSessionPhase,
   type SessionPhaseEvent,

@@ -1,20 +1,20 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
-import { BrewvaEffect, startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import { startScopedTimeout, type ScopedTimeoutHandle } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
   recordAbnormalSessionShutdown,
   recordSessionShutdownIfMissing,
-  recordSessionTurnTransition,
 } from "@brewva/brewva-gateway";
 import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
 import { runChannelMode } from "@brewva/brewva-gateway/channels";
-import { createBrewvaRuntime, selectOperatorRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
+import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
+import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
-import { parseTaskSpec } from "@brewva/brewva-runtime/task";
-import type { TaskSpec } from "@brewva/brewva-runtime/task";
+import { parseTaskSpec } from "@brewva/brewva-runtime/protocol";
+import type { TaskSpec } from "@brewva/brewva-runtime/protocol";
 import { formatISO } from "date-fns";
 import { handleInsightsChannelCommand } from "../commands/channel-handlers/insights.js";
 import { handleInspectChannelCommand } from "../commands/channel-handlers/inspect.js";
@@ -36,6 +36,14 @@ import {
 import { writeJsonLine } from "../io/json-lines.js";
 import { runSkillsMigrateCli } from "../io/skills-migrate.js";
 import { resolveTargetSession, runInspectCli } from "../operator/inspect.js";
+import {
+  getCliRuntimeCostSummary,
+  getCliRuntimeRewindState,
+  listCliRuntimeEvents,
+  listCliRuntimeEventSessionIds,
+  queryCliStructuredRuntimeEvents,
+  setCliRuntimeTaskSpec,
+} from "../runtime/runtime-ports.js";
 import type { CliInteractiveSessionOptions } from "../session/cli-runtime.js";
 import { runCliPrintSession } from "../session/cli-runtime.js";
 import { createBrewvaSession } from "../session/session.js";
@@ -73,20 +81,20 @@ function cliValueError(error: string): CliValueResult<never> {
 }
 
 function resolveSessionRewindSession(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   operation: "undo" | "redo",
   preferredSessionId?: string,
 ): string | undefined {
   if (preferredSessionId) {
-    const state = runtime.inspect.session.rewind.getState(preferredSessionId);
+    const state = getCliRuntimeRewindState(runtime, preferredSessionId);
     if (state.checkpoints.length > 0 || state.rewindAvailable || state.redoAvailable) {
       return preferredSessionId;
     }
     return undefined;
   }
   let selected: { sessionId: string; timestamp: number } | undefined;
-  for (const sessionId of runtime.inspect.events.log.listSessionIds()) {
-    const state = runtime.inspect.session.rewind.getState(sessionId);
+  for (const sessionId of listCliRuntimeEventSessionIds(runtime)) {
+    const state = getCliRuntimeRewindState(runtime, sessionId);
     const candidate = operation === "redo" ? state.nextRedoable : state.latestRewindable;
     if (!candidate) {
       continue;
@@ -99,8 +107,6 @@ function resolveSessionRewindSession(
   }
   return selected?.sessionId;
 }
-
-const CLI_TRUSTED_LOCAL_GOVERNANCE = { profile: "personal" } as const;
 
 const loadCliInteractiveRuntime: () => Promise<CliInteractiveShellRuntimeModule> =
   process.env.BREWVA_OPENTUI_SUPPORTED === "0"
@@ -167,12 +173,12 @@ async function readPipedStdin(): Promise<string | undefined> {
 }
 
 function printReplayText(
-  events: Array<{
+  events: readonly {
     timestamp: number;
     turn?: number;
     type: string;
-    payload?: Record<string, unknown>;
-  }>,
+    payload?: unknown;
+  }[],
 ): void {
   for (const event of events) {
     const iso = formatISO(event.timestamp);
@@ -182,8 +188,14 @@ function printReplayText(
   }
 }
 
-function printCostSummary(sessionId: string, runtime: BrewvaRuntimeRoot): void {
-  const summary = runtime.inspect.cost.summary.get(sessionId);
+function printCostSummary(sessionId: string, runtime: HostedRuntimeAdapterPort): void {
+  const summary = getCliRuntimeCostSummary(runtime, sessionId) as {
+    totalTokens: number;
+    totalCostUsd: number;
+    budget: { blocked: boolean };
+    skills: Record<string, { totalCostUsd: number }>;
+    tools: Record<string, { allocatedCostUsd: number }>;
+  };
   if (summary.totalTokens <= 0 && summary.totalCostUsd <= 0) return;
 
   const topSkill = Object.entries(summary.skills).toSorted(
@@ -217,17 +229,19 @@ function printGatewayCostSummary(input: {
     typeof input.agentSessionId === "string" && input.agentSessionId.trim()
       ? input.agentSessionId
       : input.requestedSessionId;
-  const runtime = createBrewvaRuntime({
+  const runtime = createHostedRuntimeAdapter({
     cwd: resolveBackendWorkingCwd(input.cwd),
     configPath: input.configPath,
-    governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
   });
-  selectOperatorRuntimePort(runtime).operator.context.lifecycle.onTurnStart(replaySessionId, 0);
-  printCostSummary(replaySessionId, runtime.root);
+  runtime.ops.context.lifecycle.onTurnStart(replaySessionId, 0);
+  printCostSummary(replaySessionId, runtime);
 }
 
-function resolveCliSessionCompleteReason(runtime: BrewvaRuntimeRoot, sessionId: string): string {
-  const events = runtime.inspect.events.records.queryStructured(sessionId);
+function resolveCliSessionCompleteReason(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): string {
+  const events = queryCliStructuredRuntimeEvents(runtime, sessionId);
   const hasInput = events.some((event) => event.type === "input");
   const hasAgentStart = events.some((event) => event.type === "agent_start");
   if (!hasInput && !hasAgentStart) {
@@ -382,21 +396,26 @@ export async function runCliRootOperation(): Promise<void> {
 
   if (parsed.replay) {
     const replayMode: CliMode = parsed.mode === "print-json" ? "print-json" : "print-text";
-    const runtime = createBrewvaRuntime({
+    const runtime = createHostedRuntimeAdapter({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
-      governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
-    const targetSessionId = resolveTargetSession(
-      selectOperatorRuntimePort(runtime),
-      parsed.sessionId,
-    );
+    const targetSessionId = parsed.sessionId ?? resolveTargetSession(runtime, undefined);
     if (!targetSessionId) {
       console.error("Error: no replayable session found.");
       process.exitCode = 1;
       return;
     }
-    const events = runtime.root.inspect.events.records.queryStructured(targetSessionId);
+    const canonicalRuntime = createBrewvaRuntime({
+      cwd: parsed.cwd,
+      configPath: parsed.configPath,
+    });
+    await canonicalRuntime.start();
+    const canonicalEvents = canonicalRuntime.tape.list(targetSessionId);
+    const events =
+      canonicalEvents.length > 0
+        ? canonicalEvents
+        : queryCliStructuredRuntimeEvents(runtime, targetSessionId);
     if (replayMode === "print-json") {
       for (const event of events) {
         await writeJsonLine(event);
@@ -408,13 +427,12 @@ export async function runCliRootOperation(): Promise<void> {
   }
 
   if (parsed.undo || parsed.redo) {
-    const runtime = createBrewvaRuntime({
+    const runtime = createHostedRuntimeAdapter({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
-      governancePort: createTrustedLocalGovernancePort(CLI_TRUSTED_LOCAL_GOVERNANCE),
     });
     const targetSessionId = resolveSessionRewindSession(
-      runtime.root,
+      runtime,
       parsed.redo ? "redo" : "undo",
       parsed.sessionId,
     );
@@ -423,8 +441,8 @@ export async function runCliRootOperation(): Promise<void> {
       return;
     }
     const result = parsed.redo
-      ? runtime.root.authority.session.rewind.redo(targetSessionId)
-      : runtime.root.authority.session.rewind.rewind(targetSessionId, {
+      ? runtime.ops.session.rewind.redo(targetSessionId)
+      : runtime.ops.session.rewind.rewind(targetSessionId, {
           mode: "both",
           summary: "carry",
         });
@@ -561,14 +579,13 @@ export async function runCliRootOperation(): Promise<void> {
     }
   }
 
-  const runtimeInstance = createBrewvaRuntime({
+  const runtimeInstance = createHostedRuntimeAdapter({
     cwd: parsed.cwd,
     configPath: parsed.configPath,
     agentId: parsed.agentId,
-    governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
   });
-  const runtime = runtimeInstance.hosted;
-  const operatorRuntime = selectOperatorRuntimePort(runtimeInstance);
+  const runtime = runtimeInstance;
+  const operatorRuntime = runtimeInstance;
   const createExtensions = () => [
     createInspectCommandExtension(operatorRuntime),
     createInsightsCommandExtension(operatorRuntime),
@@ -599,11 +616,11 @@ export async function runCliRootOperation(): Promise<void> {
     if (sessionEventBaselineById.has(sessionId)) {
       return;
     }
-    sessionEventBaselineById.set(sessionId, runtime.inspect.events.records.list(sessionId).length);
+    sessionEventBaselineById.set(sessionId, listCliRuntimeEvents(runtime, sessionId).length);
   };
   const hasSessionPersistedActivity = (sessionId: string): boolean => {
     const baseline = sessionEventBaselineById.get(sessionId) ?? 0;
-    return runtime.inspect.events.records.list(sessionId).length > baseline;
+    return listCliRuntimeEvents(runtime, sessionId).length > baseline;
   };
   const ensureSessionInitialPersistence = async (): Promise<void> => {
     const ensureInitialPersistence = (session as { ensureInitialPersistence?: unknown })
@@ -617,7 +634,7 @@ export async function runCliRootOperation(): Promise<void> {
   rememberSessionEventBaseline(initialSessionId);
   if (taskSpec) {
     await ensureSessionInitialPersistence();
-    runtime.authority.task.spec.set(initialSessionId, taskSpec);
+    setCliRuntimeTaskSpec(runtime, initialSessionId, taskSpec);
   }
   const gracefulTimeoutMs = runtime.config.infrastructure.interruptRecovery.gracefulTimeoutMs;
   let terminatedBySignal = false;
@@ -651,47 +668,14 @@ export async function runCliRootOperation(): Promise<void> {
       source: "cli_signal",
     };
 
-    const sessionId = getSessionId();
-    const shouldRecordSignalTransition = hasSessionPersistedActivity(sessionId);
-    let signalTransitionFinalized = false;
-    const finalizeSignalTransition = (status: "completed" | "failed", error?: string): void => {
-      if (!shouldRecordSignalTransition) {
-        return;
-      }
-      if (signalTransitionFinalized) {
-        return;
-      }
-      signalTransitionFinalized = true;
-      recordSessionTurnTransition(runtime, {
-        sessionId,
-        reason: "signal_interrupt",
-        status,
-        family: "interrupt",
-        error: error?.trim().length ? error : undefined,
-      });
-    };
-    if (shouldRecordSignalTransition) {
-      recordSessionTurnTransition(runtime, {
-        sessionId,
-        reason: "signal_interrupt",
-        status: "entered",
-        family: "interrupt",
-        error: signal,
-      });
-    }
-
     const timeout: ScopedTimeoutHandle = startScopedTimeout({
       delayMs: gracefulTimeoutMs,
       run: () =>
         BrewvaEffect.promise(async () => {
           try {
             await session.abort();
-            finalizeSignalTransition("completed");
-          } catch (error) {
-            finalizeSignalTransition(
-              "failed",
-              error instanceof Error ? error.message : String(error),
-            );
+          } catch {
+            // The shutdown receipt is the durable interruption fact for this edge.
           } finally {
             finalizeAndExit(130);
           }
@@ -703,7 +687,6 @@ export async function runCliRootOperation(): Promise<void> {
       .catch(() => undefined)
       .finally(() => {
         void timeout.close();
-        finalizeSignalTransition("completed");
         finalizeAndExit(130);
       });
   };
@@ -775,13 +758,13 @@ export async function runCliRootOperation(): Promise<void> {
         });
       }
       if (emitJsonBundle) {
-        const replayEvents = runtime.inspect.events.records.queryStructured(sessionId);
+        const replayEvents = queryCliStructuredRuntimeEvents(runtime, sessionId);
         await writeJsonLine({
           schema: "brewva.stream.v1",
           type: "brewva_event_bundle",
           sessionId,
           events: replayEvents,
-          costSummary: runtime.inspect.cost.summary.get(sessionId),
+          costSummary: getCliRuntimeCostSummary(runtime, sessionId),
         });
       }
       session.dispose();

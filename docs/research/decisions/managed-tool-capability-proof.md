@@ -19,8 +19,8 @@
 
 - `BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS` is the static proof inventory for managed tool runtime capabilities.
 - The inventory is generated from the finite `BrewvaToolRequiredCapability` type union by `bun run tools:capability-inventory`; `bun run check` verifies the generated file is current.
-- The inventory contains only leaf paths under `authority.*`, `inspect.*`, and `extensions.tools.*`.
-- `operator.*` is not a managed-tool capability namespace.
+- The inventory contains only leaf paths under `ops.*` and `extensions.tools.*`.
+- `authority.*`, `inspect.*`, and `operator.*` are not managed-tool capability namespaces.
 - Registry-declared capabilities are validated before scoped runtime proxy construction.
 - Unknown paths fail closed without walking live runtime services.
 

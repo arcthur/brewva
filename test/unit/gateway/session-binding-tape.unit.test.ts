@@ -5,69 +5,59 @@ import { join } from "node:path";
 import {
   appendGatewaySessionBindingReceipt,
   listGatewaySessionBindings,
-  resolveGatewaySessionBindingLogPath,
-} from "../../../packages/brewva-gateway/src/daemon/session-supervisor/session-binding-tape.js";
+  resolveGatewaySessionBindingStorePath,
+} from "../../../packages/brewva-gateway/src/daemon/session-supervisor/session-binding-store.js";
 
-describe("gateway session binding tape", () => {
+describe("gateway session binding store", () => {
   test("records replay bindings durably and deduplicates identical segment receipts", () => {
-    const stateDir = mkdtempSync(join(tmpdir(), "brewva-session-binding-tape-"));
+    const stateDir = mkdtempSync(join(tmpdir(), "brewva-session-binding-store-"));
     try {
-      const bindingLogPath = resolveGatewaySessionBindingLogPath(stateDir);
-      appendGatewaySessionBindingReceipt(bindingLogPath, {
+      const bindingStorePath = resolveGatewaySessionBindingStorePath(stateDir);
+      appendGatewaySessionBindingReceipt(bindingStorePath, {
         gatewaySessionId: "session-a",
         agentSessionId: "agent-1",
-        agentEventLogPath: "/tmp/agent-1.jsonl",
         cwd: "/tmp/workspace-a",
         timestamp: 100,
       });
-      appendGatewaySessionBindingReceipt(bindingLogPath, {
+      appendGatewaySessionBindingReceipt(bindingStorePath, {
         gatewaySessionId: "session-a",
         agentSessionId: "agent-1",
-        agentEventLogPath: "/tmp/agent-1.jsonl",
         cwd: "/tmp/workspace-a",
         timestamp: 101,
       });
-      appendGatewaySessionBindingReceipt(bindingLogPath, {
+      appendGatewaySessionBindingReceipt(bindingStorePath, {
         gatewaySessionId: "session-a",
         agentSessionId: "agent-2",
-        agentEventLogPath: "/tmp/agent-2.jsonl",
         cwd: "/tmp/workspace-a",
         timestamp: 200,
       });
-      appendGatewaySessionBindingReceipt(bindingLogPath, {
+      appendGatewaySessionBindingReceipt(bindingStorePath, {
         gatewaySessionId: "session-b",
         agentSessionId: "agent-3",
-        agentEventLogPath: "/tmp/agent-3.jsonl",
         cwd: "/tmp/workspace-b",
         timestamp: 300,
       });
 
-      expect(listGatewaySessionBindings(bindingLogPath, "session-a")).toEqual([
+      expect(listGatewaySessionBindings(bindingStorePath, "session-a")).toEqual([
         {
           gatewaySessionId: "session-a",
           agentSessionId: "agent-1",
-          agentEventLogPath: "/tmp/agent-1.jsonl",
           cwd: "/tmp/workspace-a",
           openedAt: 100,
-          eventId: expect.any(String),
         },
         {
           gatewaySessionId: "session-a",
           agentSessionId: "agent-2",
-          agentEventLogPath: "/tmp/agent-2.jsonl",
           cwd: "/tmp/workspace-a",
           openedAt: 200,
-          eventId: expect.any(String),
         },
       ]);
-      expect(listGatewaySessionBindings(bindingLogPath, "session-b")).toEqual([
+      expect(listGatewaySessionBindings(bindingStorePath, "session-b")).toEqual([
         {
           gatewaySessionId: "session-b",
           agentSessionId: "agent-3",
-          agentEventLogPath: "/tmp/agent-3.jsonl",
           cwd: "/tmp/workspace-b",
           openedAt: 300,
-          eventId: expect.any(String),
         },
       ]);
     } finally {
@@ -76,41 +66,35 @@ describe("gateway session binding tape", () => {
   });
 
   test("updates the in-process binding index after a list call has already hydrated it", () => {
-    const stateDir = mkdtempSync(join(tmpdir(), "brewva-session-binding-tape-cache-"));
+    const stateDir = mkdtempSync(join(tmpdir(), "brewva-session-binding-store-cache-"));
     try {
-      const bindingLogPath = resolveGatewaySessionBindingLogPath(stateDir);
-      appendGatewaySessionBindingReceipt(bindingLogPath, {
+      const bindingStorePath = resolveGatewaySessionBindingStorePath(stateDir);
+      appendGatewaySessionBindingReceipt(bindingStorePath, {
         gatewaySessionId: "session-c",
         agentSessionId: "agent-1",
-        agentEventLogPath: "/tmp/agent-c-1.jsonl",
         timestamp: 100,
       });
 
-      expect(listGatewaySessionBindings(bindingLogPath, "session-c")).toHaveLength(1);
+      expect(listGatewaySessionBindings(bindingStorePath, "session-c")).toHaveLength(1);
 
-      appendGatewaySessionBindingReceipt(bindingLogPath, {
+      appendGatewaySessionBindingReceipt(bindingStorePath, {
         gatewaySessionId: "session-c",
         agentSessionId: "agent-2",
-        agentEventLogPath: "/tmp/agent-c-2.jsonl",
         timestamp: 200,
       });
 
-      expect(listGatewaySessionBindings(bindingLogPath, "session-c")).toEqual([
+      expect(listGatewaySessionBindings(bindingStorePath, "session-c")).toEqual([
         {
           gatewaySessionId: "session-c",
           agentSessionId: "agent-1",
-          agentEventLogPath: "/tmp/agent-c-1.jsonl",
           cwd: undefined,
           openedAt: 100,
-          eventId: expect.any(String),
         },
         {
           gatewaySessionId: "session-c",
           agentSessionId: "agent-2",
-          agentEventLogPath: "/tmp/agent-c-2.jsonl",
           cwd: undefined,
           openedAt: 200,
-          eventId: expect.any(String),
         },
       ]);
     } finally {

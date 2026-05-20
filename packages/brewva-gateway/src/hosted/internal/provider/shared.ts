@@ -1,4 +1,4 @@
-import type { CredentialVaultService } from "@brewva/brewva-runtime/credentials";
+import type { CredentialVaultService } from "@brewva/brewva-runtime/security";
 import type { BrewvaModelCatalog, BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { BrewvaSessionModelCatalogView } from "@brewva/brewva-substrate/session";
 import type { HostedAuthCredential } from "../session/settings/hosted-auth-store.js";

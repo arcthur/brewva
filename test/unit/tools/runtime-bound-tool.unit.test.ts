@@ -17,11 +17,14 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
       agentId: "agent-test",
     },
     config: {} as BrewvaToolRuntime["config"],
-    authority: {
+    capabilities: {
       tools: {
         resourceLeases: {
           request(sessionId: string) {
             return { ok: true, sessionId };
+          },
+          list(sessionId: string) {
+            return [{ id: "lease-1", sessionId }];
           },
         },
         patches: {
@@ -35,16 +38,7 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
           },
         },
       },
-    } as unknown as BrewvaToolRuntime["authority"],
-    inspect: {
-      tools: {
-        resourceLeases: {
-          list(sessionId: string) {
-            return [{ id: "lease-1", sessionId }];
-          },
-        },
-      },
-    } as unknown as BrewvaToolRuntime["inspect"],
+    } as unknown as BrewvaToolRuntime["capabilities"],
   };
 }
 
@@ -94,16 +88,19 @@ describe("runtime-bound managed Brewva tool factory", () => {
       description: "test",
       parameters: Type.Object({}, { additionalProperties: false }),
       async execute() {
-        const leases = factory.runtime.inspect.tools.resourceLeases.list("session-1", {} as never);
+        const leases = factory.runtime.capabilities.tools.resourceLeases.list(
+          "session-1",
+          {} as never,
+        );
         expect(leases).toHaveLength(1);
         expect(() =>
-          (factory.runtime as BrewvaToolRuntime).authority.tools.patches.rollbackLastPatchSet(
+          (factory.runtime as BrewvaToolRuntime).capabilities.tools.patches.rollbackLastPatchSet(
             "session-1",
           ),
         ).toThrow(
-          "managed Brewva tool 'resource_lease' attempted to access protected runtime capability 'authority.tools.patches.rollbackLastPatchSet' without declaring it.",
+          "managed Brewva tool 'resource_lease' attempted to access protected runtime capability 'capabilities.tools.patches.rollbackLastPatchSet' without declaring it.",
         );
-        const result = factory.runtime.authority.tools.resourceLeases.request(
+        const result = factory.runtime.capabilities.tools.resourceLeases.request(
           "session-1",
           {} as never,
         );
@@ -121,9 +118,9 @@ describe("runtime-bound managed Brewva tool factory", () => {
     );
 
     expect(getBrewvaToolMetadata(tool)?.requiredCapabilities).toEqual([
-      "authority.tools.resourceLeases.cancel",
-      "authority.tools.resourceLeases.request",
-      "inspect.tools.resourceLeases.list",
+      "capabilities.tools.resourceLeases.cancel",
+      "capabilities.tools.resourceLeases.list",
+      "capabilities.tools.resourceLeases.request",
     ]);
     expect(result.details).toMatchObject({ ok: true });
   });

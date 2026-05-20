@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { BrewvaContext, BrewvaEffect, BrewvaLayer } from "@brewva/brewva-effect/primitives";
 import { differenceInMilliseconds } from "date-fns";
 import {
   FINISHED_TTL_MS,
@@ -11,10 +12,79 @@ import {
   type ManagedSession,
 } from "../types.js";
 
-export const runningSessions = new Map<string, ManagedExecRunningSession>();
-export const finishedSessions = new Map<string, ManagedExecFinishedSession>();
-export const runningBoxSessions = new Map<string, ManagedBoxExecRunningSession>();
-export const finishedBoxSessions = new Map<string, ManagedBoxExecFinishedSession>();
+export interface ManagedExecProcessRegistry {
+  readonly runningSessions: Map<string, ManagedExecRunningSession>;
+  readonly finishedSessions: Map<string, ManagedExecFinishedSession>;
+  readonly runningBoxSessions: Map<string, ManagedBoxExecRunningSession>;
+  readonly finishedBoxSessions: Map<string, ManagedBoxExecFinishedSession>;
+}
+
+export function createManagedExecProcessRegistry(): ManagedExecProcessRegistry {
+  return {
+    runningSessions: new Map<string, ManagedExecRunningSession>(),
+    finishedSessions: new Map<string, ManagedExecFinishedSession>(),
+    runningBoxSessions: new Map<string, ManagedBoxExecRunningSession>(),
+    finishedBoxSessions: new Map<string, ManagedBoxExecFinishedSession>(),
+  };
+}
+
+export async function disposeManagedExecProcessRegistry(
+  registry: ManagedExecProcessRegistry,
+): Promise<void> {
+  const terminateHost = [...registry.runningSessions.values()].map(async (session) => {
+    session.removed = true;
+    const timeoutHandle = session.timeoutHandle;
+    session.timeoutHandle = undefined;
+    await timeoutHandle?.close();
+    if (!session.exited) {
+      try {
+        session.child.kill("SIGKILL");
+      } catch {}
+    }
+  });
+  const terminateBox = [...registry.runningBoxSessions.values()].map(async (session) => {
+    session.removed = true;
+    const timeoutHandle = session.timeoutHandle;
+    session.timeoutHandle = undefined;
+    await timeoutHandle?.close();
+    if (!session.exited) {
+      try {
+        await session.execution.kill("SIGKILL");
+      } catch {}
+    }
+  });
+
+  await Promise.allSettled([...terminateHost, ...terminateBox]);
+  registry.runningSessions.clear();
+  registry.finishedSessions.clear();
+  registry.runningBoxSessions.clear();
+  registry.finishedBoxSessions.clear();
+}
+
+const makeManagedExecProcessRegistry = BrewvaEffect.fn("tools.exec.processRegistry.make")(
+  function* () {
+    const registry = createManagedExecProcessRegistry();
+    yield* BrewvaEffect.addFinalizer(() =>
+      BrewvaEffect.promise(() => disposeManagedExecProcessRegistry(registry)),
+    );
+    return registry;
+  },
+);
+
+export class ManagedExecProcessRegistryService extends BrewvaContext.Service<
+  ManagedExecProcessRegistryService,
+  ManagedExecProcessRegistry
+>()("@brewva/Tools/ManagedExecProcessRegistry") {
+  static layer() {
+    return BrewvaLayer.effect(this, makeManagedExecProcessRegistry());
+  }
+}
+
+export const defaultManagedExecProcessRegistry = createManagedExecProcessRegistry();
+export const runningSessions = defaultManagedExecProcessRegistry.runningSessions;
+export const finishedSessions = defaultManagedExecProcessRegistry.finishedSessions;
+export const runningBoxSessions = defaultManagedExecProcessRegistry.runningBoxSessions;
+export const finishedBoxSessions = defaultManagedExecProcessRegistry.finishedBoxSessions;
 
 export function cleanupExpiredFinishedSessions(now = Date.now()): void {
   for (const [sessionId, session] of finishedSessions.entries()) {

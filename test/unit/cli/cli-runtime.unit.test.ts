@@ -3,28 +3,18 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
-import { buildBrewvaPromptText } from "@brewva/brewva-substrate/prompt";
-import type {
-  BrewvaManagedPromptSession,
-  BrewvaPromptSessionEvent,
-} from "@brewva/brewva-substrate/session";
+import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
 import {
   runCliInteractiveSession,
   runCliPrintSession,
 } from "../../../packages/brewva-cli/src/session/cli-runtime.js";
 import type { ProviderConnectionSeams } from "../../../packages/brewva-gateway/src/hosted/api.js";
 import type { HostedSessionPhase } from "../../../packages/brewva-gateway/src/hosted/internal/session/session-phase/api.js";
-import {
-  createPromptMessageEndEvent,
-  createPromptMessageUpdateEvent,
-  createTextDeltaAssistantEvent,
-} from "../../helpers/prompt-session-events.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
+  return createRuntimeInstanceFixture(options);
 }
 
 describe("cli runtime print mode", () => {
@@ -45,43 +35,43 @@ describe("cli runtime print mode", () => {
     const runtime = createHostedTestRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-runtime-error-")),
     });
-    const listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
     const session = {
+      model: {
+        provider: "openai-codex",
+        id: "gpt-5.4-mini",
+        name: "GPT 5.4 Mini",
+        api: "openai-responses",
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128_000,
+        maxTokens: 16_000,
+      },
       sessionManager: {
         getSessionId: () => "cli-print-error-session",
       },
-      subscribe(next: (event: BrewvaPromptSessionEvent) => void) {
-        listeners.add(next);
-        return () => {
-          listeners.delete(next);
+      subscribe() {
+        return () => undefined;
+      },
+      getRegisteredTools() {
+        return [];
+      },
+      getRuntimeModelCatalog() {
+        return {
+          async getApiKeyAndHeaders() {
+            return { ok: false as const, error: "No API key for provider: openai-codex" };
+          },
         };
       },
-      async prompt(parts: readonly BrewvaPromptContentPart[]) {
-        const prompt = buildBrewvaPromptText(parts);
-        for (const listener of listeners) {
-          listener({
-            type: "message_end",
-            message: {
-              role: "user",
-              content: [{ type: "text", text: prompt }],
-            },
-          });
-          listener({
-            type: "message_end",
-            message: {
-              role: "assistant",
-              stopReason: "error",
-              errorMessage: "No API key for provider: openai-codex",
-              content: [],
-            },
-          });
-        }
+      createRuntimeToolContext() {
+        return {
+          getSystemPrompt: () => "CLI print test system prompt.",
+        };
       },
       async waitForIdle() {},
-    } as Pick<BrewvaManagedPromptSession, "subscribe" | "prompt" | "waitForIdle">;
+    };
 
     try {
-      await runCliPrintSession(session as BrewvaManagedPromptSession, {
+      await runCliPrintSession(session as unknown as BrewvaManagedPromptSession, {
         mode: "text",
         initialMessage: "Reply with exactly: pong",
         runtime,
@@ -92,80 +82,6 @@ describe("cli runtime print mode", () => {
       expect((error as Error).message).toContain("No API key for provider: openai-codex");
     }
     expect(stdoutWrites.join("")).not.toContain("Reply with exactly: pong");
-  });
-
-  test("print mode resumes active compaction through the hosted thread loop", async () => {
-    process.stdout.write = mock((chunk: string | Uint8Array) => {
-      stdoutWrites.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
-      return true;
-    }) as typeof process.stdout.write;
-
-    const runtime = createHostedTestRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-cli-runtime-")),
-    });
-    const sentMessages: string[] = [];
-    let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
-    const session = {
-      sessionManager: {
-        getSessionId() {
-          return "cli-print-session";
-        },
-      },
-      subscribe(next: (event: BrewvaPromptSessionEvent) => void) {
-        listener = next;
-        return () => {
-          if (listener === next) {
-            listener = undefined;
-          }
-        };
-      },
-      async prompt(parts: readonly BrewvaPromptContentPart[]) {
-        const prompt = buildBrewvaPromptText(parts);
-        sentMessages.push(prompt);
-        if (sentMessages.length === 1) {
-          runtime.extensions.hosted.events.record({
-            sessionId: "cli-print-session",
-            type: "session_compact",
-            payload: {
-              entryId: "compact-cli-print",
-            },
-          });
-          return;
-        }
-        listener?.(
-          createPromptMessageUpdateEvent({
-            assistantMessageEvent: createTextDeltaAssistantEvent({
-              delta: "resumed print answer",
-              partial: {
-                role: "assistant",
-                content: [{ type: "text", text: "resumed print answer" }],
-              },
-            }),
-          }),
-        );
-        listener?.(
-          createPromptMessageEndEvent({
-            role: "assistant",
-            content: [{ type: "text", text: "resumed print answer" }],
-          }),
-        );
-      },
-      async waitForIdle() {},
-    } as Pick<
-      BrewvaManagedPromptSession,
-      "sessionManager" | "subscribe" | "prompt" | "waitForIdle"
-    >;
-
-    await runCliPrintSession(session as BrewvaManagedPromptSession, {
-      mode: "text",
-      initialMessage: "hello",
-      runtime,
-    });
-
-    expect(sentMessages).toHaveLength(2);
-    expect(sentMessages[0]).toBe("hello");
-    expect(sentMessages[1]).toContain("Context compaction completed");
-    expect(stdoutWrites.join("")).toContain("resumed print answer");
   });
 });
 

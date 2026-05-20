@@ -10,7 +10,8 @@ import {
   buildTelegramInboundDedupeKey,
   type TelegramUpdate,
 } from "@brewva/brewva-channels-telegram";
-import { BrewvaEffect, fromBoundaryPromise, runEdgeOperation } from "@brewva/brewva-effect";
+import { fromBoundaryPromise, runEdgeOperation } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 
 const DEFAULT_INGRESS_PATH = "/ingest/telegram";
 const DEFAULT_MAX_BODY_BYTES = 1_048_576;

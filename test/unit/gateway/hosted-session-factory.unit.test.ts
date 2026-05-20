@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { createHostedBehaviorHostAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
@@ -13,12 +12,13 @@ import {
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/session-factory.js";
 import { HostedModelRegistry } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-model-registry.js";
 import { readHostedSettingsHandle } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/settings-store.js";
-import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/runtime-session-transcript.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-session-transcript.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
+  return createRuntimeInstanceFixture(options);
 }
 
 function writeHostedSettings(agentDir: string, settings: Record<string, unknown>): void {

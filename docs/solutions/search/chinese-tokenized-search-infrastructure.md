@@ -8,7 +8,7 @@ boundaries:
   - tools.recall
   - tools.output_search
   - tools.knowledge_search
-  - runtime.inspect.events
+  - HostedRuntimeAdapterPort.ops.events
   - workbench.memory
 source_artifacts:
   - implementation_plan
@@ -89,7 +89,7 @@ surfaces together.
 
 - `packages/brewva-search/src/index.ts`
 - `packages/brewva-search/src/tokenization/tokenizer.ts`
-- `packages/brewva-runtime/src/domain/tape/service.ts`
+- `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 - `packages/brewva-recall/src/knowledge/search.ts`
 - `packages/brewva-tools/src/families/navigation/internal/query.ts`
 - `script/build-binaries.ts`

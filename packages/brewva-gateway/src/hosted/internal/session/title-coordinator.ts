@@ -1,9 +1,8 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   TURN_INPUT_RECORDED_EVENT_TYPE,
   readTurnInputRecordedEventPayload,
   type BrewvaStructuredEvent,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
@@ -14,10 +13,17 @@ import type {
 } from "@brewva/brewva-substrate/session";
 import { resolveBrewvaModelSelection } from "../../../policy/model-routing/api.js";
 import type { HostedSessionLogger } from "../shared/logger.js";
+import {
+  getRuntimeSessionTitle,
+  queryRuntimeEvents,
+  recordRuntimeGeneratedTitle,
+  subscribeRuntimeEvents,
+  type HostedRuntimeAdapterPort,
+} from "./runtime-ports.js";
 import type { BrewvaSessionTitleGenerator } from "./title-generator.js";
 
 export interface SessionTitleCoordinatorOptions {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   catalog: BrewvaMutableModelCatalog;
   generator: BrewvaSessionTitleGenerator;
@@ -38,7 +44,7 @@ type TitleModelCandidate =
     };
 
 export class SessionTitleCoordinator {
-  readonly #runtime: BrewvaHostedRuntimePort;
+  readonly #runtime: HostedRuntimeAdapterPort;
   readonly #sessionId: string;
   readonly #catalog: BrewvaMutableModelCatalog;
   readonly #generator: BrewvaSessionTitleGenerator;
@@ -58,7 +64,7 @@ export class SessionTitleCoordinator {
   }
 
   start(): () => void {
-    return this.#runtime.inspect.events.records.subscribe((event) => {
+    return subscribeRuntimeEvents(this.#runtime, (event) => {
       this.#onEvent(event);
     });
   }
@@ -71,7 +77,7 @@ export class SessionTitleCoordinator {
     if (payload?.trigger !== "user" || this.#inFlight) {
       return;
     }
-    if (this.#runtime.inspect.session.title.get(this.#sessionId)) {
+    if (getRuntimeSessionTitle(this.#runtime, this.#sessionId)) {
       return;
     }
     if (!this.#isFirstUserPromptEvent(event.id)) {
@@ -89,9 +95,9 @@ export class SessionTitleCoordinator {
 
   #isFirstUserPromptEvent(eventId: string): boolean {
     const turnInputEventType = TURN_INPUT_RECORDED_EVENT_TYPE;
-    const userPromptEvents = this.#runtime.inspect.events.records
-      .query(this.#sessionId, { type: turnInputEventType })
-      .filter((candidate) => readTurnInputRecordedEventPayload(candidate)?.trigger === "user");
+    const userPromptEvents = queryRuntimeEvents(this.#runtime, this.#sessionId, {
+      type: turnInputEventType,
+    }).filter((candidate) => readTurnInputRecordedEventPayload(candidate)?.trigger === "user");
     return userPromptEvents.length === 1 && userPromptEvents[0]?.id === eventId;
   }
 
@@ -172,10 +178,10 @@ export class SessionTitleCoordinator {
         promptEventId: event.id,
         model,
       });
-      if (this.#runtime.inspect.session.title.get(this.#sessionId)) {
+      if (getRuntimeSessionTitle(this.#runtime, this.#sessionId)) {
         return;
       }
-      this.#runtime.authority.session.title.recordGenerated(this.#sessionId, {
+      recordRuntimeGeneratedTitle(this.#runtime, this.#sessionId, {
         title: result.title,
         turnId,
         promptEventId: event.id,

@@ -1,7 +1,7 @@
 {
   "name": "@brewva/brewva-substrate",
   "version": "0.1.0",
-  "description": "Reusable Brewva session, turn, prompt, resource, provider, and tool mechanisms.",
+  "description": "Reusable Brewva session, prompt, resource, provider, tool, and agent protocol mechanisms.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,12 +12,6 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./contracts": {
-      "types": "./dist/contracts/index.d.ts",
-      "bun": "./src/contracts/index.ts",
-      "import": "./dist/contracts/index.js",
-      "default": "./dist/contracts/index.js"
     },
     "./session": {
       "types": "./dist/session/index.d.ts",
@@ -79,17 +73,11 @@
       "import": "./dist/provider/index.js",
       "default": "./dist/provider/index.js"
     },
-    "./sdk": {
-      "types": "./dist/sdk/index.d.ts",
-      "bun": "./src/sdk/index.ts",
-      "import": "./dist/sdk/index.js",
-      "default": "./dist/sdk/index.js"
-    },
-    "./turn": {
-      "types": "./dist/turn/index.d.ts",
-      "bun": "./src/turn/index.ts",
-      "import": "./dist/turn/index.js",
-      "default": "./dist/turn/index.js"
+    "./agent-protocol": {
+      "types": "./dist/agent-protocol/index.d.ts",
+      "bun": "./src/agent-protocol/index.ts",
+      "import": "./dist/agent-protocol/index.js",
+      "default": "./dist/agent-protocol/index.js"
     }
   },
   "dependencies": {

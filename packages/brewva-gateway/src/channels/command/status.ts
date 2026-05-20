@@ -1,8 +1,8 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import { formatCostViewText } from "@brewva/brewva-tools/workflow";
 import { toErrorMessage } from "../../utils/errors.js";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
+import type { HostedRuntimeAdapterPort } from "../ports.js";
 import type { ChannelRuntimeSessionPort } from "../session/coordinator.js";
 import type { ChannelQuestionSurface } from "../session/queries.js";
 import type { ChannelControlCommand } from "../types.js";
@@ -67,7 +67,7 @@ function buildStatusSectionFailure(
 export async function handleChannelStatusCommand(input: {
   command: Extract<ChannelControlCommand, { kind: "status" }>;
   turn: TurnEnvelope;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   replyWriter: ChannelReplyWriter;
   focusedAgentId: string;
   targetAgentId: string;
@@ -141,12 +141,7 @@ export async function handleChannelStatusCommand(input: {
   const targetSessionPort = targetSession
     ? {
         agentId: targetSession.agentId,
-        runtime: {
-          identity: targetSession.runtime.identity,
-          config: targetSession.runtime.config,
-          inspect: targetSession.runtime.inspect,
-          operator: targetSession.runtime.operator,
-        },
+        runtime: targetSession.operatorRuntime,
         sessionId: targetSession.agentSessionId,
       }
     : undefined;
@@ -193,10 +188,7 @@ export async function handleChannelStatusCommand(input: {
         }
     : undefined;
   const costText = targetSession
-    ? formatCostViewText(
-        targetSession.runtime.inspect.cost.summary.get(targetSession.agentSessionId),
-        top,
-      )
+    ? formatCostViewText(targetSession.getCostSummary(), top)
     : `Cost view unavailable: agent @${input.targetAgentId} does not have a live session.`;
   const statusMeta = {
     command: "status",

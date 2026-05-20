@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isOwnerAuthorized } from "@brewva/brewva-gateway";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 
 function createTurn(meta: Record<string, unknown> = {}): TurnEnvelope {
   return {

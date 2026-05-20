@@ -37,7 +37,7 @@ This note does not reopen:
 
 ## Source Anchors
 
-- Cost tracker: `packages/brewva-runtime/src/domain/cost/tracker.ts`
+- Cost tracker: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 - Runtime cost surface wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Session bootstrap and reporting path:
   `packages/brewva-gateway/src/hosted/api.ts`

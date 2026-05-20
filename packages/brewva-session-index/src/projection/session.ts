@@ -1,5 +1,4 @@
-import type { Stats } from "node:fs";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import { chunkArray, uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import { SESSION_INDEX_SCHEMA_VERSION, type SessionIndexTaskSource } from "../api.js";
 import type { DuckDBConnection } from "../duckdb/instance.js";
@@ -22,17 +21,16 @@ export async function rebuildSessionProjection(input: {
   workspaceRoot: string;
   task: SessionIndexTaskSource;
   sessionId: string;
-  logPath: string;
-  stat: Stats;
-  byteOffset: number;
+  sourceUri: string;
+  sourceCursor: number;
 }): Promise<void> {
   const rows = await selectRows<EventRow>(
     input.connection,
     `
-      select event_id, session_id, timestamp, turn, type, payload_json, search_text, log_path, log_offset
+      select event_id, session_id, timestamp, turn, type, payload_json, search_text, source_uri, source_sequence
       from events
       where session_id = $sessionId
-      order by log_offset asc
+      order by source_sequence asc
     `,
     { sessionId: input.sessionId },
   );
@@ -138,8 +136,8 @@ export async function rebuildSessionProjection(input: {
     `
       insert or replace into index_state (
         session_id,
-        log_path,
-        byte_offset,
+        source_uri,
+        source_cursor,
         mtime_ms,
         indexed_event_count,
         last_indexed_at,
@@ -147,8 +145,8 @@ export async function rebuildSessionProjection(input: {
         schema_version
       ) values (
         $sessionId,
-        $logPath,
-        cast($byteOffset as bigint),
+        $sourceUri,
+        cast($sourceCursor as bigint),
         cast($mtimeMs as double),
         $indexedEventCount,
         cast($lastIndexedAt as double),
@@ -158,9 +156,9 @@ export async function rebuildSessionProjection(input: {
     `,
     {
       sessionId: input.sessionId,
-      logPath: input.logPath,
-      byteOffset: String(input.byteOffset),
-      mtimeMs: String(input.stat.mtimeMs),
+      sourceUri: input.sourceUri,
+      sourceCursor: String(input.sourceCursor),
+      mtimeMs: String(records.at(-1)?.timestamp ?? 0),
       indexedEventCount: records.length,
       lastIndexedAt: String(Date.now()),
       schemaVersion: SESSION_INDEX_SCHEMA_VERSION,

@@ -18,8 +18,8 @@
 - Code anchors:
   - `packages/brewva-capabilities/src/index.ts`
   - `packages/brewva-runtime/src/domain/capabilities/**`
-  - `packages/brewva-runtime/src/domain/skills/contract.ts`
-  - `packages/brewva-runtime/src/domain/skills/producers.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/contract.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/producers.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/tools/capability-selection.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/tools/tool-surface.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/tools/quality-gate.ts`
@@ -47,4 +47,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

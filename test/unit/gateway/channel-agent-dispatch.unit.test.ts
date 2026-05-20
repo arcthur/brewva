@@ -2,14 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import {
-  buildBrewvaPromptText,
-  type BrewvaPromptContentPart,
-} from "@brewva/brewva-substrate/prompt";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
+import { createBrewvaRuntime, type BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaToolUpdateHandler } from "@brewva/brewva-substrate/tools";
+import { Type } from "@sinclair/typebox";
 import {
   createChannelAgentDispatch,
   buildChannelDispatchPrompt,
@@ -17,11 +13,25 @@ import {
 } from "../../../packages/brewva-gateway/src/channels/channel-agent-dispatch.js";
 import { resolveTelegramChannelPolicyState } from "../../../packages/brewva-gateway/src/channels/policy/channel-policy.js";
 import type { ChannelSessionHandle } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
+import { NOOP_UI } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/noop-ui.js";
+import {
+  fauxAssistantMessage,
+  fauxToolCall,
+  registerFauxProvider,
+} from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
-function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
-}
+type RuntimeTurnSession = {
+  model: ReturnType<ReturnType<typeof registerFauxProvider>["getModel"]>;
+  sessionManager: {
+    getSessionId(): string;
+  };
+  getRegisteredTools(): readonly unknown[];
+  getRuntimeModelCatalog(): {
+    getApiKeyAndHeaders(): Promise<{ ok: true }>;
+  };
+  createRuntimeToolContext(): unknown;
+};
 
 function createInboundTurn(): TurnEnvelope {
   return {
@@ -38,6 +48,99 @@ function createInboundTurn(): TurnEnvelope {
       title: "Approve deploy",
       detail: "Ship the current patch",
       actions: [{ id: "approve", label: "Approve" }],
+    },
+  };
+}
+
+function createRuntimeTurnFixture(input: {
+  providerName: string;
+  sessionId: string;
+  toolResult?: {
+    content: string;
+    isError?: boolean;
+  };
+}): {
+  runtime: BrewvaRuntime;
+  provider: ReturnType<typeof registerFauxProvider>;
+  session: RuntimeTurnSession;
+  unregister(): void;
+} {
+  const runtime = createBrewvaRuntime({
+    cwd: mkdtempSync(join(tmpdir(), `${input.providerName}-`)),
+  });
+  const provider = registerFauxProvider({
+    provider: input.providerName,
+    api: "faux",
+    tokenSize: { min: 1, max: 1 },
+  });
+  const model = provider.getModel();
+  const toolResult = input.toolResult;
+  const tools =
+    toolResult === undefined
+      ? []
+      : [
+          {
+            name: "exec",
+            label: "Exec",
+            description: "Runs a channel-mode test command.",
+            parameters: Type.Object({}),
+            async execute(
+              _toolCallId: string,
+              _params: Record<string, never>,
+              _signal: AbortSignal | undefined,
+              onUpdate: BrewvaToolUpdateHandler<{ stage: string }> | undefined,
+            ) {
+              await onUpdate?.({
+                content: [{ type: "text" as const, text: "exec:running" }],
+                details: { stage: "running" },
+                display: { summaryText: "running" },
+              });
+              return {
+                content: [{ type: "text" as const, text: toolResult.content }],
+                isError: toolResult.isError === true,
+              };
+            },
+          },
+        ];
+
+  return {
+    runtime,
+    provider,
+    session: {
+      model,
+      sessionManager: {
+        getSessionId: () => input.sessionId,
+      },
+      getRegisteredTools: () => tools,
+      getRuntimeModelCatalog: () => ({
+        async getApiKeyAndHeaders() {
+          return { ok: true as const };
+        },
+      }),
+      createRuntimeToolContext: () => ({
+        ui: NOOP_UI,
+        hasUI: false,
+        cwd: runtime.identity.cwd,
+        sessionManager: {
+          getSessionId: () => input.sessionId,
+          getLeafId: () => null,
+        },
+        modelRegistry: {
+          getAll: () => [model],
+        },
+        model,
+        isIdle: () => true,
+        signal: undefined,
+        abort: () => undefined,
+        hasPendingMessages: () => false,
+        shutdown: () => undefined,
+        compact: () => undefined,
+        getContextUsage: () => undefined,
+        getSystemPrompt: () => "Channel mode test system prompt.",
+      }),
+    },
+    unregister() {
+      provider.unregister();
     },
   };
 }
@@ -227,135 +330,67 @@ describe("channel agent dispatch", () => {
     ]);
   });
 
-  test("collectPromptTurnOutputs resumes a pending reasoning revert inline and clears superseded channel outputs", async () => {
-    const runtime = createHostedTestRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-channel-reasoning-resume-")),
-    });
-    const sessionId = "agent-session:channel-reasoning";
-    runtime.operator.context.lifecycle.onTurnStart(sessionId, 1);
-    const checkpointA = runtime.authority.reasoning.checkpoints.record(sessionId, {
-      boundary: "operator_marker",
-      leafEntryId: "leaf-channel-a",
-    });
-    runtime.authority.reasoning.checkpoints.record(sessionId, {
-      boundary: "verification_boundary",
-      leafEntryId: "leaf-channel-b",
-    });
-
-    const sentMessages: string[] = [];
-    const branchWithSummaryCalls: Array<{
-      targetLeafEntryId: string | null;
-      summaryText: string;
-      summaryDetails: Record<string, unknown>;
-      replaceCurrent: boolean;
-    }> = [];
-    const rebuiltMessages = [
-      {
-        role: "user",
-        content: [{ type: "text", text: "restored channel branch summary" }],
-      },
-    ];
-    const replacedMessages: unknown[] = [];
-    let listener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
-    const session = {
-      subscribe(next: (event: BrewvaPromptSessionEvent) => void) {
-        listener = next;
-        return () => {
-          listener = undefined;
-        };
-      },
-      sessionManager: {
-        getSessionId: () => sessionId,
-        branchWithSummary: (
-          targetLeafEntryId: string | null,
-          summaryText: string,
-          summaryDetails: Record<string, unknown>,
-          replaceCurrent: boolean,
-        ) => {
-          branchWithSummaryCalls.push({
-            targetLeafEntryId,
-            summaryText,
-            summaryDetails,
-            replaceCurrent,
-          });
-        },
-        buildSessionContext: () => ({
-          messages: rebuiltMessages,
-        }),
-      },
-      async prompt(parts: readonly BrewvaPromptContentPart[]): Promise<void> {
-        const content = buildBrewvaPromptText(parts);
-        sentMessages.push(content);
-        if (sentMessages.length === 1) {
-          listener?.({
-            type: "tool_execution_end",
-            toolCallId: "tool-stale-1",
-            toolName: "read",
-            result: "stale branch output",
-            isError: false,
-          } as BrewvaPromptSessionEvent);
-          runtime.authority.reasoning.reverts.revert(sessionId, {
-            toCheckpointId: checkpointA.checkpointId,
-            trigger: "operator_request",
-            continuity: "Resume only from the restored channel branch.",
-          });
-          throw new Error("turn aborted for reasoning revert");
-        }
-        listener?.({
-          type: "tool_execution_start",
-          toolCallId: "tool-current-2",
-          toolName: "read",
-          args: { path: "current.txt" },
-        } as BrewvaPromptSessionEvent);
-        listener?.({
-          type: "tool_execution_end",
-          toolCallId: "tool-current-2",
-          toolName: "read",
-          result: "current branch output",
-          isError: false,
-        } as BrewvaPromptSessionEvent);
-        listener?.({
-          type: "message_end",
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: "channel resumed answer" }],
-          },
-        } as BrewvaPromptSessionEvent);
-      },
-      async waitForIdle(): Promise<void> {
-        return;
-      },
-      replaceMessages(messages: unknown): void {
-        replacedMessages.push(messages);
-      },
-    };
-
-    const outputs = await collectPromptTurnOutputs(session as any, "initial channel prompt", {
-      runtime,
+  test("collectPromptTurnOutputs aggregates assistant and tool outputs from runtime.turn", async () => {
+    const sessionId = "channel-output-session";
+    const fixture = createRuntimeTurnFixture({
+      providerName: "faux-channel-output",
       sessionId,
-      turnId: "turn-channel-reasoning",
+      toolResult: { content: "done" },
     });
+    fixture.provider.setResponses([
+      fauxAssistantMessage([
+        { type: "text", text: "final answer" },
+        fauxToolCall("exec", { command: "pwd" }, { id: "tc-1" }),
+      ]),
+      fauxAssistantMessage("after tool"),
+    ]);
 
-    expect(sentMessages).toHaveLength(2);
-    expect(sentMessages[0]).toBe("initial channel prompt");
-    expect(sentMessages[1]).toContain("Reasoning branch revert completed");
-    expect(outputs.assistantText).toBe("channel resumed answer");
-    expect(outputs.toolOutputs).toEqual([
-      expect.objectContaining({
-        toolCallId: "tool-current-2",
-        toolName: "read",
-      }),
+    try {
+      const outputs = await collectPromptTurnOutputs(
+        fixture.session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
+        "hello",
+        {
+          runtime: fixture.runtime as never,
+          sessionId,
+          turnId: "turn-channel-output",
+        },
+      );
+
+      expect(outputs.assistantText).toBe("final answer");
+      expect(outputs.toolOutputs).toHaveLength(1);
+      expect(outputs.toolOutputs[0]?.text).toContain("Tool exec (tc-1) completed");
+    } finally {
+      fixture.unregister();
+    }
+  });
+
+  test("collectPromptTurnOutputs marks runtime tool errors as failed", async () => {
+    const sessionId = "channel-fail-verdict-session";
+    const fixture = createRuntimeTurnFixture({
+      providerName: "faux-channel-fail-verdict",
+      sessionId,
+      toolResult: { content: "FAIL src/foo.test.ts", isError: true },
+    });
+    fixture.provider.setResponses([
+      fauxAssistantMessage([fauxToolCall("exec", { command: "pwd" }, { id: "tc-2" })]),
+      fauxAssistantMessage("after failed tool"),
     ]);
-    expect(branchWithSummaryCalls).toEqual([
-      expect.objectContaining({
-        targetLeafEntryId: "leaf-channel-a",
-        summaryText: "Resume only from the restored channel branch.",
-        replaceCurrent: true,
-        summaryDetails: expect.objectContaining({
-          toCheckpointId: checkpointA.checkpointId,
-        }),
-      }),
-    ]);
-    expect(replacedMessages).toEqual([rebuiltMessages]);
+
+    try {
+      const outputs = await collectPromptTurnOutputs(
+        fixture.session as unknown as Parameters<typeof collectPromptTurnOutputs>[0],
+        "hello",
+        {
+          runtime: fixture.runtime as never,
+          sessionId,
+          turnId: "turn-channel-fail-verdict",
+        },
+      );
+
+      expect(outputs.toolOutputs).toHaveLength(1);
+      expect(outputs.toolOutputs[0]?.text).toContain("Tool exec (tc-2) failed");
+    } finally {
+      fixture.unregister();
+    }
   });
 });

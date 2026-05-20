@@ -23,6 +23,7 @@ const EXPECTED_CONTRACT_FILES = [
   "explorer.ts",
   "index.ts",
   "metadata.ts",
+  "runtime-capabilities.ts",
   "runtime.ts",
   "subagent.ts",
   "surface.ts",
@@ -263,6 +264,15 @@ describe("brewva-tools domain slicing", () => {
         }
       }
     }
+
+    expect(violations).toEqual([]);
+  });
+
+  test("keeps runtime authority and inspect access isolated behind runtime-port adapters", () => {
+    const violations = listFiles("packages/brewva-tools/src/families").filter((file) => {
+      const source = readRepoFile(file);
+      return source.includes("runtime.ops") || source.includes("runtime.ops");
+    });
 
     expect(violations).toEqual([]);
   });

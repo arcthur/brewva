@@ -62,10 +62,11 @@ create authority.
 
 ## Kernel Product
 
-The kernel product is intentionally boring: effect gates, receipts, replay,
-verification, rollback, Recovery WAL, and durable event families. If a feature
-needs durable authority, it should enter through `root.authority` rather
-than through model-facing prompt shape.
+The kernel product is intentionally boring: effect gates, tool commitments,
+approval requests, commit receipts, abort receipts, verification, rollback
+receipts, Recovery WAL, and durable event families. If a feature needs durable
+authority, it should enter through `runtime.kernel` or a capability-scoped
+`ops.*` adapter, rather than through model-facing prompt shape.
 
 ## Explicit Non-Goals
 

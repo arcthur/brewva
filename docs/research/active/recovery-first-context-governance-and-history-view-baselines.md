@@ -549,19 +549,19 @@ pipeline keeps its existing kernel entry point.
 - Active prefix and cache validation:
   `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
 - Recovery working set implementation:
-  `packages/brewva-runtime/src/domain/recovery/read-model.ts`
+  `packages/brewva-gateway/src/daemon/recovery.ts`
 - Session lifecycle hydration:
-  `packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts`
+  `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 - Hydration-time tool lifecycle diagnosis:
-  `packages/brewva-runtime/src/domain/sessions/hydration/fold-tool-lifecycle.ts`
+  `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 - Compaction bookkeeping and sanitization:
-  `packages/brewva-runtime/src/domain/context/context-compaction.ts`
+  `packages/brewva-runtime/src/runtime/model/model.ts`
   `packages/brewva-gateway/src/hosted/internal/context/context-shared.ts`
 - Hosted compaction event handling and branch checkpoints:
   `packages/brewva-gateway/src/hosted/internal/context/evidence/event-stream.ts`
-  `packages/brewva-runtime/src/domain/reasoning/events.ts`
+  `packages/brewva-runtime/src/runtime/model/model.ts`
 - History-view baseline and dynamic-tail rendering:
-  `packages/brewva-runtime/src/domain/context/history-view-baseline.ts`
+  `packages/brewva-runtime/src/runtime/model/model.ts`
   `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 
 ## Validation Signals
@@ -570,8 +570,8 @@ Existing validation must not regress:
 
 - `test/live/cli/replay-and-persistence.live.test.ts`
 - `test/live/cli/signal-handling.live.test.ts`
-- `test/contract/runtime/context-budget.contract.test.ts`
-- `test/contract/runtime/model-operated-workbench-reset.contract.test.ts`
+- `test/contract/runtime/model-materialization.contract.test.ts`
+- `test/unit/gateway/context-materialization.unit.test.ts`
 
 Additional validation coverage for this contract includes:
 

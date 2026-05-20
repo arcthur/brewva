@@ -2,11 +2,11 @@ import {
   BrewvaBoxScope,
   type BrewvaBoundaryError,
   BrewvaBoundaryFailure,
-  BrewvaEffect,
   fromAbortableBoundaryPromise,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
   withBrewvaObservability,
 } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
 import {
   type BoxCapabilitySet,
@@ -217,15 +217,17 @@ function resolveBoxCompletionReleaseReason(
   return releaseReason === "detach" ? undefined : releaseReason;
 }
 
-export function executeBoxCommandEffect(
+export const executeBoxCommandEffect: (
   input: ExecuteBoxCommandInput,
-): BrewvaEffect.Effect<ExecuteBoxCommandResult, BoxCommandExecutionError> {
+) => BrewvaEffect.Effect<ExecuteBoxCommandResult, BoxCommandExecutionError> = BrewvaEffect.fn(
+  "tools.exec.box",
+)(function* (input: ExecuteBoxCommandInput) {
   const observability = {
     sessionId: input.ownerSessionId,
     backend: "box",
   };
 
-  return BrewvaEffect.scoped(
+  return yield* BrewvaEffect.scoped(
     BrewvaEffect.gen(function* () {
       if (input.signal?.aborted) {
         return yield* BrewvaEffect.fail(new ExecAbortedError());
@@ -404,12 +406,12 @@ export function executeBoxCommandEffect(
     BrewvaEffect.provide(BrewvaBoxScope.layer({ ownerSessionId: input.ownerSessionId })),
     withBrewvaObservability("brewva.tools.box.exec", observability),
   );
-}
+});
 
 export async function executeBoxCommand(
   input: ExecuteBoxCommandInput,
 ): Promise<ExecuteBoxCommandResult> {
-  return await runPromiseAtBoundary(executeBoxCommandEffect(input));
+  return await runBoundaryOperation("tools.exec.box", executeBoxCommandEffect(input));
 }
 
 function killBoxExecutionBestEffort(execution: BoxExec): Promise<void> {

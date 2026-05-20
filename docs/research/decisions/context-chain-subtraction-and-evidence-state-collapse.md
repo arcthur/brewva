@@ -16,20 +16,20 @@
   - `skills/project/shared/critical-rules.md`
   - `skills/project/shared/anti-patterns.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/context/eligibility.ts`
-  - `packages/brewva-runtime/src/domain/context/context.ts`
-  - `packages/brewva-runtime/src/domain/context/context-compaction.ts`
-  - `packages/brewva-runtime/src/domain/context/context-compaction-gate.ts`
-  - `packages/brewva-runtime/src/domain/context/history-view-baseline.ts`
-  - `packages/brewva-runtime/src/domain/context/runtime-surface.ts`
-  - `packages/brewva-runtime/src/domain/sessions/session-state.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/eligibility.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/context.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/context-compaction.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/context-compaction-gate.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/history-view-baseline.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/runtime-surface.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/session-state.ts`
   - `packages/brewva-runtime/src/config/normalize-infrastructure.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.ts`
   - `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
   - `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction-walker.ts`
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/recovery/projection.ts`
+  - Removed hosted recovery projection
 
 ## Decision Summary
 
@@ -45,4 +45,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

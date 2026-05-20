@@ -1,5 +1,5 @@
 import type { ProviderConnectionSeams } from "@brewva/brewva-gateway/hosted";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import type {
   RecordSessionRewindCheckpointInput,
   SessionLineageTree,
@@ -9,7 +9,7 @@ import type {
   SessionRewindResult,
   SessionRewindState,
   SessionRewindTargetView,
-} from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaDiffPreferences,
@@ -29,7 +29,7 @@ import type { BrewvaSessionResult } from "../../session/session.js";
 
 export interface CliShellSessionBundle {
   session: BrewvaManagedPromptSession;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   toolDefinitions: ReadonlyMap<string, BrewvaToolDefinition>;
   providerConnections?: ProviderConnectionSeams;
   initPhases: BrewvaSessionResult["initPhases"];

@@ -6,18 +6,60 @@ export {
 } from "./session.js";
 export type {
   HostedPromptTurnResult,
-  HostedTransitionSnapshot,
   HostedTurnEnvelopeResult,
   SubscribablePromptSession,
-} from "./thread-loop.js";
+} from "./turn-adapter.js";
 export {
-  projectHostedTransitionSnapshot,
-  recordSessionTurnTransition,
   resolveSubagentSessionShutdownReason,
   resolveWorkerSessionShutdownReceipt,
   runHostedPromptTurn,
   runHostedTurnEnvelope,
-} from "./thread-loop.js";
+} from "./turn-adapter.js";
+export { createHostedRuntimeAdapter } from "./internal/session/runtime-ports.js";
+export {
+  acquireRuntimeParallelSlot,
+  adoptRuntimeLineageOutcome,
+  createRuntimeLineageNode,
+  getRuntimeClaimState,
+  getRuntimeCostSummary,
+  getRuntimeOpsPort,
+  getRuntimeSessionLineageContextEntryPath,
+  getRuntimeSessionLineageNode,
+  getRuntimeSessionLineageTree,
+  getRuntimeSkillCatalogEntry,
+  getRuntimeTapeStatus,
+  getRuntimeTaskState,
+  getRuntimeToolActionPolicy,
+  listRuntimeEventSessionIds,
+  listRuntimeEvents,
+  listRuntimePendingProposalRequests,
+  listRuntimeProposalRequests,
+  listRuntimeWorkerResults,
+  queryRuntimeEvents,
+  queryStructuredRuntimeEvents,
+  recordRuntimeAssistantCost,
+  recordRuntimeLineageOutcome,
+  recordRuntimeScheduleChildFailed,
+  recordRuntimeScheduleChildFinished,
+  recordRuntimeScheduleChildStarted,
+  recordRuntimeScheduleWakeup,
+  recordRuntimeSkillSelection,
+  recordRuntimeToolCapabilitySelection,
+  recordRuntimeToolSurfaceResolved,
+  recordRuntimeWorkbenchNote,
+  recordRuntimeWorkerResult,
+  releaseRuntimeParallelSlot,
+  setRuntimeTaskSpec,
+  subscribeRuntimeEvents,
+  toStructuredRuntimeEvent,
+} from "./internal/session/runtime-ports.js";
+export type {
+  HostedRuntimeAdapterPort,
+  BrewvaRuntimeOptions,
+  RuntimeAdapterCapabilitiesPort,
+  RuntimeAdapterOpsPort,
+  ToolRuntimeAdapterPort,
+} from "./internal/session/runtime-ports.js";
 export type {
   ProviderApiKeyAuthMethod,
   ProviderAuthHandler,

@@ -185,7 +185,7 @@ function formatLaneList(lanes: readonly ReviewLaneName[]): string {
 }
 
 export function isReviewLaneName(value: string): value is ReviewLaneName {
-  return REVIEW_LANE_NAMES.includes(value as ReviewLaneName);
+  return (REVIEW_LANE_NAMES as readonly string[]).includes(value);
 }
 
 function collectEvidenceGaps(
@@ -215,7 +215,7 @@ function pickConditionalLanesFromCategories(
 ): ReviewLaneName[] {
   const categorySet = new Set(categories);
   return CONDITIONAL_REVIEW_LANES.filter((lane) =>
-    LANE_CHANGE_CATEGORY_MAP[lane].some((category) => categorySet.has(category)),
+    (LANE_CHANGE_CATEGORY_MAP[lane] ?? []).some((category) => categorySet.has(category)),
   );
 }
 
@@ -224,7 +224,7 @@ function pickConditionalLanesFromFileClasses(
 ): ReviewLaneName[] {
   const fileClassSet = new Set(fileClasses);
   return CONDITIONAL_REVIEW_LANES.filter((lane) =>
-    LANE_FILE_CLASS_MAP[lane].some((fileClass) => fileClassSet.has(fileClass)),
+    (LANE_FILE_CLASS_MAP[lane] ?? []).some((fileClass) => fileClassSet.has(fileClass)),
   );
 }
 

@@ -13,7 +13,7 @@
   - `docs/reference/artifacts-and-paths.md`
   - `docs/guide/features.md`
 - Code anchors:
-  - `test/unit/gateway/provider-request-recovery.unit.test.ts`
+  - Removed provider request recovery unit coverage
   - `test/contract/runtime/identity-context.contract.test.ts`
   - `test/unit/gateway/subagent-catalog.unit.test.ts`
   - `test/contract/tools/subagent-run.contract.test.ts`

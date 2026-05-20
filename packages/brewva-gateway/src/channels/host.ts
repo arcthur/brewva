@@ -1,9 +1,9 @@
 import {
-  BrewvaEffect,
   fromAbortableBoundaryPromise,
   runEdgeOperation,
   type BrewvaBoundaryError,
 } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { RunChannelModeOptions } from "./types.js";
 import { runChannelModeOperation } from "./wiring.js";
 

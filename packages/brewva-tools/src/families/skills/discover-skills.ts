@@ -3,6 +3,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
+import { listRuntimeSkills } from "../../runtime-port/skills.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
 
 interface SkillSearchMetadata {
@@ -80,8 +81,7 @@ export function createDiscoverSkillsTool(options: BrewvaToolOptions): ToolDefini
         });
       }
 
-      const documents = runtime.inspect.skills.catalog
-        .list()
+      const documents = listRuntimeSkills(runtime)
         .filter((skill) => skill.category !== "internal")
         .map((skill) => {
           const metadata: SkillSearchMetadata = {

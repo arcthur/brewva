@@ -1,9 +1,11 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import { parseWorkbenchEvictionSpanRef } from "@brewva/brewva-runtime/workbench";
-import type { WorkbenchEntry } from "@brewva/brewva-runtime/workbench";
+import {
+  type BrewvaEventRecord,
+  parseWorkbenchEvictionSpanRef,
+  type WorkbenchEntry,
+} from "@brewva/brewva-runtime/protocol";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaSessionEntry } from "@brewva/brewva-substrate/session";
-import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 
 interface WorkbenchEvictionIndex {
   refs: Set<string>;
@@ -80,7 +82,7 @@ function collectDetailsRefs(details: unknown): string[] {
   return refs;
 }
 
-function collectMessageRefs(message: BrewvaTurnLoopMessage, index: number): string[] {
+function collectMessageRefs(message: BrewvaAgentProtocolMessage, index: number): string[] {
   const refs = [`message:${index + 1}`, ...collectDetailsRefs(message.details)];
   if (message.role === "toolResult") {
     refs.push(`tool:${message.toolCallId}`, `tool:${message.toolName}`);
@@ -102,7 +104,9 @@ function collectSessionEntryRefs(input: {
     }
   }
   if (input.entry.type === "message") {
-    refs.push(...collectMessageRefs(input.entry.message as BrewvaTurnLoopMessage, input.index));
+    refs.push(
+      ...collectMessageRefs(input.entry.message as BrewvaAgentProtocolMessage, input.index),
+    );
   }
   return refs;
 }
@@ -153,10 +157,10 @@ function mergeVisibilityDetails(
 }
 
 export function applyWorkbenchEvictionsToMessages(input: {
-  messages: readonly BrewvaTurnLoopMessage[];
+  messages: readonly BrewvaAgentProtocolMessage[];
   workbenchEntries: readonly WorkbenchEntry[];
 }): {
-  messages: BrewvaTurnLoopMessage[];
+  messages: BrewvaAgentProtocolMessage[];
   excludedCount: number;
   appliedSpanRefs: string[];
 } {

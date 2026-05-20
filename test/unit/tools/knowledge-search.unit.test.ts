@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { findKnowledgeDocByRelativePath } from "@brewva/brewva-recall/knowledge";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createKnowledgeSearchTool } from "@brewva/brewva-tools/memory";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -30,7 +30,7 @@ status: active
 problem_kind: bugfix
 module: brewva-runtime
 boundaries:
-  - selectOperatorRuntimePort(instance).operator.recovery
+  - gateway-hosted-adapter.ops.recovery
 source_artifacts:
   - investigation_record
 metadata:
@@ -48,7 +48,7 @@ updated_at: 2026-04-19
 `,
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createKnowledgeSearchTool({ runtime });
 
     const result = await tool.execute(
@@ -122,8 +122,8 @@ status: active
 problem_kind: bugfix
 module: brewva-runtime
 boundaries:
-  - selectOperatorRuntimePort(instance).operator.recovery
-  - runtime.authority.tools
+  - gateway-hosted-adapter.ops.recovery
+  - runtime.capabilities.tools
 source_artifacts:
   - investigation_record
 metadata:
@@ -167,7 +167,7 @@ This note mentions replay experiments but is not the canonical precedent.
 `,
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createKnowledgeSearchTool({ runtime });
 
     const result = await tool.execute(
@@ -175,7 +175,7 @@ This note mentions replay experiments but is not the canonical precedent.
       {
         query: "wal recovery replay",
         module: "brewva-runtime",
-        boundary: "selectOperatorRuntimePort(instance).operator.recovery",
+        boundary: "gateway-hosted-adapter.ops.recovery",
         tags: ["wal"],
       } as never,
       undefined,
@@ -247,7 +247,7 @@ Always-on reviewer lanes should stay active even when metadata is incomplete.
 `,
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createKnowledgeSearchTool({ runtime });
 
     const noMatch = await tool.execute(
@@ -342,7 +342,7 @@ Architecture guidance for replay ordering.
 `,
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createKnowledgeSearchTool({ runtime });
 
     const result = await tool.execute(
@@ -383,7 +383,7 @@ status: active
 problem_kind: bugfix
 module: brewva-runtime
 boundaries:
-  - selectOperatorRuntimePort(instance).operator.recovery
+  - gateway-hosted-adapter.ops.recovery
 tags:
   - replay
   - cursor
@@ -413,14 +413,14 @@ The runtime contract covers broader system behavior but not this specific replay
 `,
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createKnowledgeSearchTool({ runtime });
     const result = await tool.execute(
       "tc-knowledge-search-fuzzy",
       {
         query: "replai curser pining",
         module: "brewva-runtime",
-        boundary: "selectOperatorRuntimePort(instance).operator.recovery",
+        boundary: "gateway-hosted-adapter.ops.recovery",
         tags: ["cursor"],
       } as never,
       undefined,
@@ -485,7 +485,7 @@ Replay ordering and cursor movement are normative runtime contracts.
 `,
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createKnowledgeSearchTool({ runtime });
     const result = await tool.execute(
       "tc-knowledge-search-normative",
@@ -523,7 +523,7 @@ Replay ordering and cursor movement are normative runtime contracts.
       ["---", "title: Broken precedent", "tags: [wal", "---", "", "# Broken precedent"].join("\n"),
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createKnowledgeSearchTool({ runtime });
 
     expect(

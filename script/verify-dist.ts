@@ -186,10 +186,11 @@ function main(): void {
 
   const resolveScript = String.raw`
     import { createRequire } from "node:module";
-    import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+    import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
     import { tmpdir } from "node:os";
-    import { dirname, join } from "node:path";
+    import { dirname, join, resolve } from "node:path";
     const require = createRequire(import.meta.url);
+    const repoRoot = process.cwd();
     const packages = [
       "@brewva/brewva-runtime",
       "@brewva/brewva-search",
@@ -210,29 +211,10 @@ function main(): void {
       "@brewva/brewva-tools/memory",
       "@brewva/brewva-tools/delegation",
       "@brewva/brewva-tools/workflow",
-      "@brewva/brewva-runtime/channels",
-      "@brewva/brewva-runtime/claim",
       "@brewva/brewva-runtime/config",
-      "@brewva/brewva-runtime/conventions",
       "@brewva/brewva-runtime/core",
-      "@brewva/brewva-runtime/cost",
-      "@brewva/brewva-runtime/delegation",
-      "@brewva/brewva-runtime/events",
-      "@brewva/brewva-runtime/governance",
-      "@brewva/brewva-runtime/ledger",
-      "@brewva/brewva-runtime/projection",
-      "@brewva/brewva-runtime/proposals",
-      "@brewva/brewva-runtime/reasoning",
-      "@brewva/brewva-runtime/recovery",
-      "@brewva/brewva-runtime/schedule",
+      "@brewva/brewva-runtime/protocol",
       "@brewva/brewva-runtime/security",
-      "@brewva/brewva-runtime/session",
-      "@brewva/brewva-runtime/skills",
-      "@brewva/brewva-runtime/tape",
-      "@brewva/brewva-runtime/task",
-      "@brewva/brewva-runtime/tools",
-      "@brewva/brewva-runtime/verification",
-      "@brewva/brewva-runtime/workbench",
       "@brewva/brewva-gateway/channels",
       "@brewva/brewva-gateway/hosted",
       "@brewva/brewva-gateway/policy/model-routing",
@@ -251,6 +233,20 @@ function main(): void {
         throw new Error("expected dist entrypoint, got " + entry.path);
       }
     }
+    const runtimePackageJson = JSON.parse(
+      readFileSync(resolve(repoRoot, "packages/brewva-runtime/package.json"), "utf8"),
+    );
+    const runtimeExportKeys = Object.keys(runtimePackageJson.exports ?? {});
+    const removedRuntimeExport = runtimeExportKeys.find(
+      (key) =>
+        key.startsWith("./internal") ||
+        key === "./runtime-assembly" ||
+        key === "./governance" ||
+        key.includes("legacy"),
+    );
+    if (removedRuntimeExport) {
+      throw new Error("runtime removed subpath unexpectedly exported: " + removedRuntimeExport);
+    }
     const [
       cliModule,
       cliEntryModule,
@@ -262,8 +258,6 @@ function main(): void {
       hostModule,
       extensionsModule,
       gatewayModule,
-      runtimeChannelsModule,
-      runtimeRecoveryModule,
     ] = await Promise.all([
       import("@brewva/brewva-cli"),
       import("@brewva/brewva-cli/entry"),
@@ -275,8 +269,6 @@ function main(): void {
       import("@brewva/brewva-gateway/hosted"),
       import("@brewva/brewva-gateway/extensions"),
       import("@brewva/brewva-gateway"),
-      import("@brewva/brewva-runtime/channels"),
-      import("@brewva/brewva-runtime/recovery"),
       ...packages
         .filter(
           (name) =>
@@ -289,9 +281,7 @@ function main(): void {
             name !== "@brewva/brewva-gateway/channels" &&
             name !== "@brewva/brewva-gateway/hosted" &&
             name !== "@brewva/brewva-gateway/extensions" &&
-            name !== "@brewva/brewva-gateway" &&
-            name !== "@brewva/brewva-runtime/channels" &&
-            name !== "@brewva/brewva-runtime/recovery",
+            name !== "@brewva/brewva-gateway",
         )
         .map((name) => import(name)),
     ]);
@@ -321,12 +311,6 @@ function main(): void {
     }
     if (typeof cliJsonLinesModule.writeJsonLine !== "function") {
       throw new Error("cli json-lines subpath missing writeJsonLine export");
-    }
-    if (typeof runtimeChannelsModule.normalizeChannelId !== "function") {
-      throw new Error("runtime channels subpath missing normalizeChannelId export");
-    }
-    if (typeof runtimeRecoveryModule.createRecoveryWalStore !== "function") {
-      throw new Error("runtime recovery subpath missing createRecoveryWalStore export");
     }
     if (
       "createBrewvaSession" in cliModule ||
@@ -395,28 +379,56 @@ function main(): void {
     }
     const runtimeRootModule = await import("@brewva/brewva-runtime");
     const { createBrewvaRuntime } = runtimeRootModule;
+    const { createHostedRuntimeAdapter } = hostModule;
     const runtimeConfigModule = await import("@brewva/brewva-runtime/config");
-    const runtimeSessionModule = await import("@brewva/brewva-runtime/session");
-    const runtimeTapeModule = await import("@brewva/brewva-runtime/tape");
+    const runtimeProtocolModule = await import("@brewva/brewva-runtime/protocol");
     const { createOutputSearchTool } = await import("@brewva/brewva-tools/navigation");
     const runtime = createBrewvaRuntime({ cwd: isolatedWorkspace });
+    const hostedRuntime = createHostedRuntimeAdapter({ cwd: isolatedWorkspace });
     if (typeof createBrewvaRuntime !== "function") {
       throw new Error("runtime root dist entry missing createBrewvaRuntime export");
+    }
+    if (typeof createHostedRuntimeAdapter !== "function") {
+      throw new Error("gateway hosted subpath missing createHostedRuntimeAdapter export");
     }
     if (
       "BrewvaRuntime" in runtimeRootModule ||
       "createHostedRuntimePort" in runtimeRootModule ||
       "createToolRuntimePort" in runtimeRootModule ||
-      "createOperatorRuntimePort" in runtimeRootModule
+      "createOperatorRuntimePort" in runtimeRootModule ||
+      "selectOperatorRuntimePort" in runtimeRootModule
     ) {
       throw new Error("runtime root dist entry unexpectedly exported legacy runtime constructors");
     }
+    const runtimeRootKeys = Object.keys(runtime).toSorted();
+    const expectedRuntimeRootKeys = [
+      "close",
+      "config",
+      "identity",
+      "kernel",
+      "model",
+      "start",
+      "tape",
+      "turn",
+    ];
+    if (JSON.stringify(runtimeRootKeys) !== JSON.stringify(expectedRuntimeRootKeys)) {
+      throw new Error("runtime factory smoke failed: unexpected root keys " + runtimeRootKeys.join(","));
+    }
     if (
-      !Object.isFrozen(runtime.root) ||
-      !Object.isFrozen(runtime.hosted) ||
-      !Object.isFrozen(runtime.tool)
+      "root" in runtime ||
+      "hosted" in runtime ||
+      "tool" in runtime ||
+      "operator" in runtime ||
+      "authority" in runtime ||
+      "inspect" in runtime
     ) {
-      throw new Error("runtime factory smoke failed: runtime ports are not frozen");
+      throw new Error("runtime factory smoke failed: legacy surfaces leaked onto the root runtime");
+    }
+    if (!Object.isFrozen(runtime) || !Object.isFrozen(runtime.tape) || !Object.isFrozen(runtime.kernel)) {
+      throw new Error("runtime factory smoke failed: four-port runtime ports are not frozen");
+    }
+    if (!Object.isFrozen(hostedRuntime)) {
+      throw new Error("gateway hosted runtime adapter smoke failed: adapter is not frozen");
     }
     if ("getSemanticArtifactOutputContract" in runtimeRootModule || "buildTapeCheckpointPayload" in runtimeRootModule) {
       throw new Error("runtime root dist entry unexpectedly re-exported semantic artifact catalog helpers");
@@ -424,17 +436,8 @@ function main(): void {
     if (typeof runtimeConfigModule.loadBrewvaConfig !== "function") {
       throw new Error("runtime config subpath missing loadBrewvaConfig export");
     }
-    if (typeof runtimeSessionModule.deriveSessionLineageState !== "function") {
-      throw new Error("runtime session subpath missing deriveSessionLineageState export");
-    }
-    if (typeof runtimeTapeModule.buildTapeCheckpointPayload !== "function") {
-      throw new Error("runtime tape subpath missing buildTapeCheckpointPayload export");
-    }
-    if (!existsSync(join(isolatedHome, "skills", ".system"))) {
-      throw new Error("runtime construction smoke failed: system skill root was not installed");
-    }
-    if (!existsSync(join(isolatedHome, "skills", ".system.marker.json"))) {
-      throw new Error("runtime construction smoke failed: system skill marker was not written");
+    if (typeof runtimeProtocolModule.deriveSessionLineageState !== "function") {
+      throw new Error("runtime protocol subpath missing deriveSessionLineageState export");
     }
     const sessionId = "dist-output-search-cjk";
     const artifactRef = ".orchestrator/tool-output-artifacts/dist-cjk/100-exec-call.txt";
@@ -442,10 +445,9 @@ function main(): void {
     const artifactText = "服务启动中\n数据库连接被拒绝，连接失败需要重试\n";
     mkdirSync(dirname(artifactPath), { recursive: true });
     writeFileSync(artifactPath, artifactText, "utf8");
-    const toolRuntime = runtime.tool;
-    toolRuntime.extensions.tools.recordEvent({
+    const toolRuntime = hostedRuntime;
+    toolRuntime.ops.tools.outputs.artifactPersisted({
       sessionId,
-      type: "tool_output_artifact_persisted",
       payload: {
         toolName: "exec",
         artifactRef,
@@ -476,8 +478,8 @@ function main(): void {
     const { createSessionIndex } = await import("@brewva/brewva-session-index");
     const sessionIndex = await createSessionIndex({
       workspaceRoot: isolatedWorkspace,
-      events: runtime.root.inspect.events,
-      task: runtime.root.inspect.task,
+      events: hostedRuntime.ops.events,
+      task: hostedRuntime.ops.task,
       dbPath: join(isolatedWorkspace, ".brewva", "session-index", "dist-smoke.duckdb"),
     });
     const sessionIndexStatus = await sessionIndex.catchUp();

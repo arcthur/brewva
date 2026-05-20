@@ -1,17 +1,20 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { OperationalClaim } from "@brewva/brewva-runtime/claim";
-import {
-  SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
-  SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
-  SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
-  SCHEDULE_WAKEUP_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+import { type OperationalClaim } from "@brewva/brewva-runtime/protocol";
+import type { TaskSpec } from "@brewva/brewva-runtime/protocol";
 import type {
   ScheduleContinuityMode,
   ScheduleIntentProjectionRecord,
-} from "@brewva/brewva-runtime/schedule";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
-import type { TaskSpec } from "@brewva/brewva-runtime/task";
+} from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import {
+  getRuntimeClaimState,
+  getRuntimeTapeStatus,
+  getRuntimeTaskState,
+  recordRuntimeScheduleChildFailed,
+  recordRuntimeScheduleChildFinished,
+  recordRuntimeScheduleChildStarted,
+  recordRuntimeScheduleWakeup,
+} from "../hosted/api.js";
 import type {
   SchedulePromptAnchor,
   SchedulePromptTrigger,
@@ -40,7 +43,7 @@ export function buildScheduleWorkerSessionId(input: {
 }
 
 export function collectScheduleContinuationSnapshot(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   input: { parentSessionId: string; continuityMode: ScheduleContinuityMode },
 ): ScheduleContinuationSnapshot {
   if (input.continuityMode !== "inherit") {
@@ -51,12 +54,12 @@ export function collectScheduleContinuationSnapshot(
     };
   }
 
-  const parentAnchor = runtime.inspect.tape.status.get(input.parentSessionId).lastAnchor;
-  const parentTask = runtime.inspect.task.state.get(input.parentSessionId);
-  const parentClaim = runtime.inspect.claim.state.get(input.parentSessionId);
+  const parentAnchor = getRuntimeTapeStatus(runtime, input.parentSessionId).lastAnchor;
+  const parentTask = getRuntimeTaskState(runtime, input.parentSessionId);
+  const parentClaim = getRuntimeClaimState(runtime, input.parentSessionId);
   return {
     taskSpec: parentTask.spec ?? null,
-    claims: parentClaim.claims.map((fact) => structuredClone(fact)),
+    claims: parentClaim.claims.map((fact: OperationalClaim) => structuredClone(fact)),
     parentAnchor: parentAnchor ?? null,
   };
 }
@@ -107,7 +110,7 @@ export function buildScheduleWakeupMessage(input: {
 }
 
 export async function executeScheduleIntentRun(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   backend: SessionBackend;
   intent: ScheduleIntentProjectionRecord;
   cwd?: string;
@@ -141,31 +144,23 @@ export async function executeScheduleIntentRun(input: {
     snapshot,
   });
 
-  input.runtime.extensions.hosted.events.record({
-    sessionId: agentSessionId,
-    type: SCHEDULE_WAKEUP_EVENT_TYPE,
-    payload: {
-      schema: "brewva.schedule-wakeup.v1",
-      intentId: input.intent.intentId,
-      parentSessionId: input.intent.parentSessionId,
-      runIndex,
-      reason: input.intent.reason,
-      continuityMode: input.intent.continuityMode,
-      timeZone: input.intent.timeZone ?? null,
-      goalRef: input.intent.goalRef ?? null,
-      inheritedTaskSpec: snapshot.taskSpec !== null,
-      inheritedOperationalClaims: snapshot.claims.length,
-      parentAnchorId: snapshot.parentAnchor?.id ?? null,
-    },
+  recordRuntimeScheduleWakeup(input.runtime, agentSessionId, {
+    schema: "brewva.schedule-wakeup.v1",
+    intentId: input.intent.intentId,
+    parentSessionId: input.intent.parentSessionId,
+    runIndex,
+    reason: input.intent.reason,
+    continuityMode: input.intent.continuityMode,
+    timeZone: input.intent.timeZone ?? null,
+    goalRef: input.intent.goalRef ?? null,
+    inheritedTaskSpec: snapshot.taskSpec !== null,
+    inheritedOperationalClaims: snapshot.claims.length,
+    parentAnchorId: snapshot.parentAnchor?.id ?? null,
   });
-  input.runtime.extensions.hosted.events.record({
-    sessionId: input.intent.parentSessionId,
-    type: SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
-    payload: {
-      intentId: input.intent.intentId,
-      childSessionId: agentSessionId,
-      runIndex,
-    },
+  recordRuntimeScheduleChildStarted(input.runtime, input.intent.parentSessionId, {
+    intentId: input.intent.intentId,
+    childSessionId: agentSessionId,
+    runIndex,
   });
 
   try {
@@ -175,29 +170,21 @@ export async function executeScheduleIntentRun(input: {
       trigger,
     });
     const evaluationSessionId = result.agentSessionId?.trim() || agentSessionId;
-    input.runtime.extensions.hosted.events.record({
-      sessionId: input.intent.parentSessionId,
-      type: SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
-      payload: {
-        intentId: input.intent.intentId,
-        childSessionId: evaluationSessionId,
-        runIndex,
-      },
+    recordRuntimeScheduleChildFinished(input.runtime, input.intent.parentSessionId, {
+      intentId: input.intent.intentId,
+      childSessionId: evaluationSessionId,
+      runIndex,
     });
     return {
       evaluationSessionId,
       workerSessionId,
     };
   } catch (error) {
-    input.runtime.extensions.hosted.events.record({
-      sessionId: input.intent.parentSessionId,
-      type: SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
-      payload: {
-        intentId: input.intent.intentId,
-        childSessionId: agentSessionId,
-        runIndex,
-        error: error instanceof Error ? error.message : String(error),
-      },
+    recordRuntimeScheduleChildFailed(input.runtime, input.intent.parentSessionId, {
+      intentId: input.intent.intentId,
+      childSessionId: agentSessionId,
+      runIndex,
+      error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   } finally {

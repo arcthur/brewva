@@ -1,9 +1,8 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
   ContextBudgetUsage,
   ExpectedProviderCacheBreak,
   TransientReductionObservationInput,
-} from "@brewva/brewva-runtime/context";
+} from "@brewva/brewva-runtime/protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
   estimateProviderPayloadTextTokens,
@@ -12,7 +11,15 @@ import {
   resolveContextUsageTokens,
 } from "@brewva/brewva-token-estimation";
 import { recordTransientReductionEvidence } from "../../context/evidence/context-evidence.js";
-import { getHostedTurnTransitionCoordinator } from "../../thread-loop/turn-transition.js";
+import {
+  getRuntimeCompactionGateStatus,
+  getRuntimeContextUsage,
+  getRuntimeLifecycleSnapshot,
+  getRuntimePendingCompactionReason,
+  queryStructuredRuntimeEvents,
+  resolveRuntimeContextCompactionEligibility,
+  type HostedRuntimeAdapterPort,
+} from "../../session/runtime-ports.js";
 import {
   CLEARED_TOOL_RESULT_PLACEHOLDER,
   MIN_CLEARABLE_TOOL_RESULT_CHARS,
@@ -121,17 +128,17 @@ function buildEffectiveReductionUsage(
   return buildEstimatedPayloadUsage(payload, runtimeUsage, metadata);
 }
 
-function getProviderCacheStalenessMs(runtime: BrewvaHostedRuntimePort): number {
+function getProviderCacheStalenessMs(runtime: HostedRuntimeAdapterPort): number {
   const configured = runtime.config.infrastructure.contextBudget.providerCacheStalenessMs;
   return typeof configured === "number" && Number.isFinite(configured) && configured > 0
     ? Math.trunc(configured)
     : DEFAULT_PROVIDER_CACHE_STALENESS_MS;
 }
 
-function isProviderCacheLikelyCold(runtime: BrewvaHostedRuntimePort, sessionId: string): boolean {
-  const latestMessageEnd = runtime.inspect.events.records
-    .queryStructured(sessionId, { type: "message_end" })
-    .at(-1);
+function isProviderCacheLikelyCold(runtime: HostedRuntimeAdapterPort, sessionId: string): boolean {
+  const latestMessageEnd = queryStructuredRuntimeEvents(runtime, sessionId, {
+    type: "message_end",
+  }).at(-1);
   if (!latestMessageEnd) {
     return false;
   }
@@ -141,21 +148,10 @@ function isProviderCacheLikelyCold(runtime: BrewvaHostedRuntimePort, sessionId: 
 }
 
 function resolveReductionPostureBlockReason(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): string | null {
-  const transitionSnapshot = getHostedTurnTransitionCoordinator(runtime).getSnapshot(sessionId);
-  if (transitionSnapshot.pendingFamily === "approval") {
-    return "approval wait is active";
-  }
-  if (
-    transitionSnapshot.pendingFamily !== null ||
-    transitionSnapshot.latest?.status === "entered"
-  ) {
-    return "recovery posture is active";
-  }
-
-  const lifecycle = runtime.inspect.lifecycle.getSnapshot(sessionId);
+  const lifecycle = getRuntimeLifecycleSnapshot(runtime, sessionId);
   if (lifecycle.summary.kind === "degraded" || lifecycle.summary.kind === "recovering") {
     return "recovery posture is active";
   }
@@ -173,7 +169,7 @@ function resolveReductionPostureBlockReason(
 }
 
 export function resolveTransientOutboundReductionEligibility(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   payload?: unknown,
   metadata?: {
@@ -205,7 +201,7 @@ export function resolveTransientOutboundReductionEligibility(
 
   const usage = buildEffectiveReductionUsage(
     payload,
-    runtime.inspect.context.usage.get(sessionId),
+    getRuntimeContextUsage(runtime, sessionId),
     metadata,
   );
   if (!usage) {
@@ -218,10 +214,10 @@ export function resolveTransientOutboundReductionEligibility(
     };
   }
 
-  const gateStatus = runtime.inspect.context.compaction.getGateStatus(sessionId, usage);
+  const gateStatus = getRuntimeCompactionGateStatus(runtime, sessionId, usage);
   const cacheCold = isProviderCacheLikelyCold(runtime, sessionId);
-  const pendingReason = runtime.inspect.context.compaction.getPendingReason(sessionId);
-  const eligibility = runtime.inspect.context.compaction.resolveEligibility({
+  const pendingReason = getRuntimePendingCompactionReason(runtime, sessionId);
+  const eligibility = resolveRuntimeContextCompactionEligibility(runtime, {
     status: gateStatus.status,
     pendingReason,
     recentCompaction: gateStatus.recentCompaction,
@@ -229,7 +225,6 @@ export function resolveTransientOutboundReductionEligibility(
     idle: true,
     recoveryPosture: "idle",
     autoCompactionInFlight: false,
-    autoCompactionBreakerOpen: false,
     gateMode: "transient_reduction",
   });
 
@@ -296,7 +291,7 @@ export function resolveTransientOutboundReductionEligibility(
 }
 
 function observeAndRecordTransientReduction(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   input: TransientReductionObservationInput,
 ): void {
@@ -314,7 +309,7 @@ function observeAndRecordTransientReduction(
     classification: input.classification ?? null,
     expectedCacheBreak: input.expectedCacheBreak ?? false,
   };
-  runtime.operator.context.evidence.append(sessionId, {
+  runtime.ops.context.evidence.append(sessionId, {
     kind: "transient_reduction",
     turn: observed.turn,
     timestamp: observed.updatedAt,
@@ -340,7 +335,7 @@ function observeAndRecordTransientReduction(
 
 export function registerProviderRequestReduction(
   extensionApi: InternalHostPluginApi,
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
 ): void {
   extensionApi.on("before_provider_request", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId().trim();

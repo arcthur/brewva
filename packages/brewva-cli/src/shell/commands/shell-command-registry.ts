@@ -216,7 +216,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     keybinding: { key: "a", ctrl: true, meta: false, shift: false },
   },
   {
-    id: "runtime.authority",
+    id: "operator.authority",
     title: "Authority",
     description: "Open the read-only runtime authority posture view.",
     category: "Operator",
@@ -359,9 +359,9 @@ const reservedShellSlashNames: readonly ShellSlashReservation[] = [
   },
   {
     name: "permissions",
-    owner: "runtime.authority",
+    owner: "operator.authority",
     message: "Use /authority for posture and /approvals for pending commitments.",
-    redirectCommandId: "runtime.authority",
+    redirectCommandId: "operator.authority",
   },
   {
     name: "review",

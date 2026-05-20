@@ -1,5 +1,4 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import { createSessionIndex } from "@brewva/brewva-session-index";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import type { BrewvaModelPreset } from "@brewva/brewva-substrate/session";
@@ -13,13 +12,18 @@ import {
 } from "../../../../delegation/api.js";
 import type { HostedExtensionPlugin } from "../../../../extensions/api.js";
 import { createHostedBehaviorHostAdapter } from "../host-api-installation.js";
-import { toToolRuntimePort } from "../runtime-ports.js";
+import {
+  getRuntimeEventsOpsPort,
+  getRuntimeTaskOpsPort,
+  toToolRuntimeAdapterPort,
+  type HostedRuntimeAdapterPort,
+} from "../runtime-ports.js";
 import type { HostedSessionCustomTool } from "../session-factory.js";
 import type { HostedToolExecutionCoordinator } from "../tools/execution-traits.js";
 import type { CreateHostedSessionOptions, HostedSessionResult } from "./session-assembly.js";
 
 export function createDelegationStore(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   enabled: boolean,
 ): HostedDelegationStore | undefined {
   if (!enabled) {
@@ -28,12 +32,12 @@ export function createDelegationStore(
   const delegationStore = new HostedDelegationStore(runtime, {
     sessionIndex: createSessionIndex({
       workspaceRoot: runtime.identity.workspaceRoot,
-      events: runtime.inspect.events,
-      task: runtime.inspect.task,
+      events: getRuntimeEventsOpsPort(runtime),
+      task: getRuntimeTaskOpsPort(runtime),
     }),
   });
   delegationStore.installWorkerResultAdoptionSubscription();
-  runtime.operator.session.state.onClear((sessionId) => {
+  runtime.ops.session.state.onClear((sessionId: string) => {
     delegationStore.clearSession(sessionId);
   });
   return delegationStore;
@@ -54,7 +58,7 @@ function createDelegationQuery(delegationStore: HostedDelegationStore | undefine
 
 export function createHostedOrchestration(input: {
   options: CreateHostedSessionOptions;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   delegationStore: HostedDelegationStore | undefined;
   cwd: string;
   modelCatalog: Pick<BrewvaModelCatalog, "getAll">;
@@ -103,7 +107,7 @@ export function createHostedOrchestration(input: {
 
 export function createExtensions(input: {
   options: CreateHostedSessionOptions;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
   toolExecutionCoordinator: HostedToolExecutionCoordinator;
@@ -131,7 +135,7 @@ export function createExtensions(input: {
 
 export function createDirectManagedTools(input: {
   options: CreateHostedSessionOptions;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   orchestration: BrewvaToolOrchestration | undefined;
   delegationStore: HostedDelegationStore | undefined;
   managedToolMode: ManagedToolMode;
@@ -141,7 +145,7 @@ export function createDirectManagedTools(input: {
   }
   return buildBrewvaTools({
     runtime: {
-      ...toToolRuntimePort(input.runtime),
+      ...toToolRuntimeAdapterPort(input.runtime),
     },
     orchestration: input.orchestration,
     delegation: createDelegationQuery(input.delegationStore),

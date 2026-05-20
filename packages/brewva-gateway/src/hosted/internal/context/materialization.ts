@@ -1,11 +1,15 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
   ProviderCacheObservationInput,
-} from "@brewva/brewva-runtime/context";
+} from "@brewva/brewva-runtime/protocol";
 import type { ContextBundle } from "../../../context/api.js";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
+import {
+  getRuntimeContextEvidenceLatest,
+  getRuntimeContextStatus,
+  type HostedRuntimeAdapterPort,
+} from "../session/runtime-ports.js";
 import {
   recordPromptStabilityEvidence,
   recordProviderCacheObservationEvidence,
@@ -15,7 +19,7 @@ import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
 import { buildPromptStabilityObservation } from "./prompt-stability.js";
 
 type VisibleReadState = Parameters<
-  BrewvaHostedRuntimePort["operator"]["context"]["visibleRead"]["rememberState"]
+  HostedRuntimeAdapterPort["ops"]["context"]["visibleRead"]["rememberState"]
 >[1];
 
 export interface HostedContextMaterializationInput {
@@ -66,7 +70,7 @@ function readString(value: unknown): string | undefined {
 }
 
 function recordPromptStability(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   contextScopeId?: string;
   observation: ReturnType<typeof buildPromptStabilityObservation>;
@@ -75,7 +79,8 @@ function recordPromptStability(input: {
   gateRequired: boolean;
 }): void {
   const scopeKey = buildContextScopeKey(input.sessionId, input.contextScopeId);
-  const previous = input.runtime.inspect.context.evidence.latest(
+  const previous = getRuntimeContextEvidenceLatest(
+    input.runtime,
     input.sessionId,
     "prompt_stability",
   )?.payload;
@@ -98,7 +103,7 @@ function recordPromptStability(input: {
       (previousDynamicTailHash === input.observation.dynamicTailHash &&
         previousScopeKey === scopeKey),
   };
-  input.runtime.operator.context.evidence.append(input.sessionId, {
+  input.runtime.ops.context.evidence.append(input.sessionId, {
     kind: "prompt_stability",
     turn: observed.turn,
     timestamp: observed.updatedAt,
@@ -110,7 +115,7 @@ function recordPromptStability(input: {
       stableTail: observed.stableTail,
     },
   });
-  const contextStatus = input.runtime.inspect.context.usage.getStatus(input.sessionId, input.usage);
+  const contextStatus = getRuntimeContextStatus(input.runtime, input.sessionId, input.usage);
   recordPromptStabilityEvidence({
     workspaceRoot: input.runtime.identity.workspaceRoot,
     sessionId: input.sessionId,
@@ -153,13 +158,13 @@ export function buildContextMaterializationReceipt(
       turn: input.turn,
     }),
     pendingCompactionReason: input.pendingCompactionReason,
-    gateRequired: input.gateStatus.required,
+    gateRequired: input.gateStatus.required ?? false,
     surfacedDelegationRunIds: [...input.surfacedDelegationRunIds],
   };
 }
 
 export function applyContextMaterializationReceipt(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   telemetry: HostedContextTelemetry;
   delegationStore?: HostedDelegationStore;
   receipt: ContextMaterializationReceipt;
@@ -167,7 +172,7 @@ export function applyContextMaterializationReceipt(input: {
 }): void {
   const { receipt } = input;
   if (receipt.usageObserved) {
-    input.runtime.operator.context.usage.observe(receipt.sessionId, input.usage);
+    input.runtime.ops.context.usage.observe(receipt.sessionId, input.usage);
   }
 
   if (receipt.telemetry?.kind === "hard_gate_required") {
@@ -213,7 +218,7 @@ export function applyContextMaterializationReceipt(input: {
 }
 
 export function observeHostedProviderCache(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   observation: ProviderCacheObservationInput;
 }): void {
@@ -225,7 +230,7 @@ export function observeHostedProviderCache(input: {
     render: structuredClone(input.observation.render),
     breakObservation: structuredClone(input.observation.breakObservation),
   };
-  input.runtime.operator.context.evidence.append(input.sessionId, {
+  input.runtime.ops.context.evidence.append(input.sessionId, {
     kind: "provider_cache_observation",
     turn: observed.turn,
     timestamp: observed.updatedAt,
@@ -254,9 +259,9 @@ export function observeHostedProviderCache(input: {
 }
 
 export function rememberHostedVisibleReadState(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   state: VisibleReadState;
 }): void {
-  input.runtime.operator.context.visibleRead.rememberState(input.sessionId, input.state);
+  input.runtime.ops.context.visibleRead.rememberState(input.sessionId, input.state);
 }

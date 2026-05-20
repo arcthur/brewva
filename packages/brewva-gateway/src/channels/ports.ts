@@ -1,10 +1,12 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 import type { HostedExtensionPlugin } from "../extensions/api.js";
 import type { SubscribablePromptSession } from "../hosted/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import type { ChannelToolTurnOutput } from "./channel-reply-writer.js";
 import type { ChannelModeLauncher, SupportedChannel } from "./launcher.js";
+
+export type { HostedRuntimeAdapterPort };
 export type {
   ChannelInspectCommandInput,
   ChannelInspectCommandResult,
@@ -40,7 +42,7 @@ export interface ChannelHostedPromptSession extends SubscribablePromptSession {
 
 export interface ChannelHostedSessionResult {
   session: ChannelHostedPromptSession;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
 }
 
 export interface ChannelCreateSessionOptions {
@@ -48,7 +50,7 @@ export interface ChannelCreateSessionOptions {
   configPath?: string;
   model?: string;
   managedToolMode: ManagedToolMode;
-  runtime?: BrewvaHostedRuntimePort;
+  runtime?: HostedRuntimeAdapterPort;
   scopeId?: string;
   extensions?: HostedExtensionPlugin[];
 }
@@ -59,7 +61,7 @@ export interface ChannelSessionPromptPort {
     session: ChannelPromptTurnOutputSession,
     prompt: string,
     options?: {
-      runtime?: BrewvaHostedRuntimePort;
+      runtime?: HostedRuntimeAdapterPort;
       sessionId?: string;
       turnId?: string;
     },

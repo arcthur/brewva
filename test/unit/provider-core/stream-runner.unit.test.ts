@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  BrewvaEffect,
-  BrewvaFiber,
-  BrewvaLayer,
-  BrewvaStream,
-  runPromiseAtBoundary,
-} from "@brewva/brewva-effect";
+import { runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { BrewvaFiber, BrewvaLayer, BrewvaStream } from "@brewva/brewva-effect/primitives";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { Model } from "@brewva/brewva-provider-core/contracts";
 import type { ProviderAssistantMessageStream } from "@brewva/brewva-provider-core/contracts";
 import { ProviderRuntime, providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";

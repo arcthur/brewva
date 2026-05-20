@@ -1,7 +1,7 @@
 import type {
-  BrewvaTurnLoopCompactionSummaryMessage,
-  BrewvaTurnLoopMessage,
-} from "../turn/types.js";
+  BrewvaAgentProtocolCompactionSummaryMessage,
+  BrewvaAgentProtocolMessage,
+} from "../agent-protocol/types.js";
 import {
   estimateBrewvaCompactionMessageTokens,
   estimateBrewvaCompactionTokens,
@@ -79,7 +79,7 @@ export function findBrewvaCompactionCutPoint(
 
 export function createBrewvaCompactionSummaryMessage(
   input: CreateBrewvaCompactionSummaryMessageInput,
-): BrewvaTurnLoopCompactionSummaryMessage {
+): BrewvaAgentProtocolCompactionSummaryMessage {
   return {
     role: "compactionSummary",
     summary: input.summary,
@@ -94,9 +94,9 @@ export function createBrewvaCompactionSummaryMessage(
 }
 
 export function projectBrewvaCompactionMessages(
-  messages: readonly BrewvaTurnLoopMessage[],
+  messages: readonly BrewvaAgentProtocolMessage[],
   input: ProjectBrewvaCompactionMessagesInput,
-): BrewvaTurnLoopMessage[] {
+): BrewvaAgentProtocolMessage[] {
   const firstKeptIndex = Math.min(messages.length, Math.max(0, Math.trunc(input.firstKeptIndex)));
   return [createBrewvaCompactionSummaryMessage(input), ...messages.slice(firstKeptIndex)];
 }

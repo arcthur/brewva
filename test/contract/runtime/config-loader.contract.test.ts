@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { loadBrewvaConfig, resolveGlobalBrewvaConfigPath } from "@brewva/brewva-runtime/config";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("Brewva config loader normalization", () => {
@@ -64,12 +64,11 @@ describe("Brewva config loader normalization", () => {
         },
       };
 
-      expect(
-        () =>
-          createBrewvaRuntime({
-            cwd: workspace,
-            config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-          }).hosted,
+      expect(() =>
+        createRuntimeInstanceFixture({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
       ).toThrow(
         new RegExp(
           `infrastructure\\.contextBudget\\.${legacyCase.key} ${
@@ -90,12 +89,11 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(
-      () =>
-        createBrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }).hosted,
+    expect(() =>
+      createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      }),
     ).toThrow(/unknown property "toolOutputDistillationInjection"/);
   });
 
@@ -180,12 +178,11 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(
-      () =>
-        createBrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }).hosted,
+    expect(() =>
+      createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      }),
     ).toThrow(/unknown property "unexpectedInfrastructureField"/);
   });
 
@@ -213,6 +210,31 @@ describe("Brewva config loader normalization", () => {
     expect(loaded.projection.dir).toBe(".orchestrator/projection-custom");
     expect(loaded.projection.workingFile).toBe("working-custom.md");
     expect(loaded.projection.maxWorkingChars).toBe(2400);
+  });
+
+  test("normalizes canonical tape directory separately from legacy event logs", () => {
+    const workspace = createTestWorkspace("canonical-tape-dir-config");
+    writeFileSync(
+      join(workspace, ".brewva/brewva.json"),
+      JSON.stringify(
+        {
+          tape: {
+            enabled: false,
+            dir: "  .brewva/canonical-tape  ",
+            checkpointIntervalEntries: 42.9,
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const loaded = loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" });
+
+    expect(loaded.tape.enabled).toBe(false);
+    expect(loaded.tape.dir).toBe(".brewva/canonical-tape");
+    expect(loaded.tape.checkpointIntervalEntries).toBe(42);
   });
 
   test("normalizes contracted context budget tuning", () => {
@@ -378,7 +400,7 @@ describe("Brewva config loader normalization", () => {
       },
     ];
 
-    expect(() => createBrewvaRuntime({ cwd: workspace, config }).hosted).toThrow(
+    expect(() => createRuntimeInstanceFixture({ cwd: workspace, config })).toThrow(
       /duplicate server id "repo"/,
     );
   });
@@ -432,7 +454,7 @@ describe("Brewva config loader normalization", () => {
       credential_access: "allow",
     };
 
-    expect(() => createBrewvaRuntime({ cwd: workspace, config }).hosted).toThrow(
+    expect(() => createRuntimeInstanceFixture({ cwd: workspace, config })).toThrow(
       /security\.actionAdmissionOverrides\.credential_access cannot relax beyond max admission 'ask'/,
     );
   });
@@ -658,12 +680,11 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(
-      () =>
-        createBrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }).hosted,
+    expect(() =>
+      createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      }),
     ).toThrow(/security\.execution\.commandDenyList must not appear in active config/);
   });
 
@@ -678,12 +699,11 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(
-      () =>
-        createBrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }).hosted,
+    expect(() =>
+      createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      }),
     ).toThrow(/security\.execution\.sandbox has been removed/);
   });
 
@@ -697,12 +717,11 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(
-      () =>
-        createBrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }).hosted,
+    expect(() =>
+      createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      }),
     ).toThrow(/skills\.selector has been removed/);
   });
 
@@ -716,12 +735,11 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(
-      () =>
-        createBrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }).hosted,
+    expect(() =>
+      createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      }),
     ).toThrow(/skills\.routing has been removed/);
   });
 
@@ -735,12 +753,11 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(
-      () =>
-        createBrewvaRuntime({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }).hosted,
+    expect(() =>
+      createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      }),
     ).toThrow(/skills\.cascade has been removed/);
   });
 });

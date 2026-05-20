@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   resolveSubagentSessionShutdownReason,
   resolveWorkerSessionShutdownReceipt,
-} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/shutdown-receipts.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/shutdown-receipts.js";
 
 describe("session shutdown receipt policies", () => {
   test("worker shutdown receipts map abnormal exits to a canonical terminal reason with semantic sources", () => {

@@ -1,4 +1,4 @@
-import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { CliTasksOverlayPayload } from "./overlays/payloads.js";
 
 export type CliTaskRunRecord = CliTasksOverlayPayload["snapshot"]["taskRuns"][number];

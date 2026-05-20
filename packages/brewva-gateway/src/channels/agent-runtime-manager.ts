@@ -1,15 +1,15 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort, BrewvaConfig } from "@brewva/brewva-runtime";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { parseJsonc } from "@brewva/brewva-runtime/config";
-import { normalizeAgentId } from "@brewva/brewva-runtime/context";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import { normalizeAgentId } from "@brewva/brewva-runtime/protocol";
+import { createHostedRuntimeAdapter } from "../hosted/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 
 export interface AgentRuntimeHandle {
   agentId: string;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   createdAt: number;
   lastUsedAt: number;
   sessionRefs: number;
@@ -23,7 +23,7 @@ export interface AgentRuntimeSummary {
 }
 
 export interface AgentRuntimeManagerOptions {
-  controllerRuntime: BrewvaHostedRuntimePort;
+  controllerRuntime: HostedRuntimeAdapterPort;
   maxLiveRuntimes: number;
   idleRuntimeTtlMs: number;
 }
@@ -60,6 +60,10 @@ function forceNamespaceConfig(baseConfig: BrewvaConfig, agentId: string): Brewva
       ...baseConfig.projection,
       dir: `${stateRoot}/projection`,
     },
+    tape: {
+      ...baseConfig.tape,
+      dir: `${stateRoot}/tape`,
+    },
     schedule: {
       ...baseConfig.schedule,
       enabled: false,
@@ -67,10 +71,6 @@ function forceNamespaceConfig(baseConfig: BrewvaConfig, agentId: string): Brewva
     },
     infrastructure: {
       ...baseConfig.infrastructure,
-      events: {
-        ...baseConfig.infrastructure.events,
-        dir: `${stateRoot}/events`,
-      },
       recoveryWal: {
         ...baseConfig.infrastructure.recoveryWal,
         dir: `${stateRoot}/recovery-wal`,
@@ -103,7 +103,7 @@ export class AgentRuntimeManager {
   readonly maxLiveRuntimes: number;
   readonly idleRuntimeTtlMs: number;
 
-  private readonly controllerRuntime: BrewvaHostedRuntimePort;
+  private readonly controllerRuntime: HostedRuntimeAdapterPort;
   private readonly handles = new Map<string, AgentRuntimeHandle>();
   private readonly creating = new Map<string, Promise<AgentRuntimeHandle>>();
 
@@ -125,7 +125,7 @@ export class AgentRuntimeManager {
       .toSorted((a, b) => b.lastUsedAt - a.lastUsedAt || a.agentId.localeCompare(b.agentId));
   }
 
-  async createInspectionRuntime(requestedAgentId: string): Promise<BrewvaHostedRuntimePort> {
+  async createInspectionRuntime(requestedAgentId: string): Promise<HostedRuntimeAdapterPort> {
     const agentId = normalizeAgentId(requestedAgentId);
     const existing = this.handles.get(agentId);
     if (existing) {
@@ -135,7 +135,7 @@ export class AgentRuntimeManager {
     return this.buildRuntime(agentId);
   }
 
-  async getOrCreateRuntime(requestedAgentId: string): Promise<BrewvaHostedRuntimePort> {
+  async getOrCreateRuntime(requestedAgentId: string): Promise<HostedRuntimeAdapterPort> {
     const agentId = normalizeAgentId(requestedAgentId);
     const existing = this.handles.get(agentId);
     if (existing) {
@@ -223,17 +223,16 @@ export class AgentRuntimeManager {
     };
   }
 
-  private async buildRuntime(agentId: string): Promise<BrewvaHostedRuntimePort> {
+  private async buildRuntime(agentId: string): Promise<HostedRuntimeAdapterPort> {
     const baseConfig = structuredClone(this.controllerRuntime.config);
     const overlay = await loadAgentConfigOverlay(this.workspaceRoot, agentId);
     const merged = deepMerge(baseConfig, overlay) as BrewvaConfig;
     const config = forceNamespaceConfig(merged, agentId);
-    return createBrewvaRuntime({
+    return createHostedRuntimeAdapter({
       cwd: this.controllerRuntime.identity.cwd,
       agentId,
       config,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
-    }).hosted;
+    });
   }
 
   private enforceCapacity(): void {

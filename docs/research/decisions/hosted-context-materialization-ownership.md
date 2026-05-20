@@ -15,7 +15,6 @@
   - `packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
   - `packages/brewva-gateway/src/hosted/internal/compaction/flow.ts`
-  - `packages/brewva-gateway/src/hosted/internal/compaction/recovery.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
   - `test/unit/gateway/managed-agent-session.unit.test.ts`
   - `test/unit/gateway/provider-request-reduction.unit.test.ts`

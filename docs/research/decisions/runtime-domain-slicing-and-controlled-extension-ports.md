@@ -12,26 +12,29 @@
   - `docs/reference/events/README.md`
   - `docs/guide/understanding-runtime-system.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/`
-  - `packages/brewva-runtime/src/runtime/runtime-composition.ts`
-  - `packages/brewva-runtime/src/runtime/runtime-surfaces.ts`
-  - `packages/brewva-runtime/src/runtime/runtime-extensions.ts`
-  - `packages/brewva-runtime/src/public/index.ts`
-  - `packages/brewva-runtime/package.json`
+  - Removed by the four-port runtime cutover.
+
+## Supersession Note
+
+This decision is historical. The four-port runtime cutover removed the public
+`authority` / `inspect` root and deleted the runtime `domain/<name>/` lattice.
+Do not use this document as implementation guidance.
 
 ## Decision Summary
 
-- runtime package implementation ownership follows domain slices under `domain/<name>/`, with explicit `api.ts`, `types.ts`, `registrar.ts`, and `runtime-surface.ts` seams
-- `BrewvaRuntimeRoot` keeps the semantic public root contract: `authority` and `inspect`; bounded operations move through repo-owned operator ports.
-- method groups, broad assembler layers, the root `internal` entrypoint, and production implementation barrels are removed as integration surfaces
-- runtime assembly is owned by a typed composition root, domain registrars, and domain-owned runtime surface descriptors
-- repo-owned code that needs implementation-adjacent machinery uses typed controlled extension ports or dedicated explicit subpaths, not a catch-all internal barrel
-- controlled ports expose allowlisted method slots without branded runtime capability tokens or reflective capability arrays
-- registered typed event descriptors are the shared append/read/replay schema boundary; malformed registered typed payloads are rejected before entering the tape
-- compatibility with former source paths, method-group names, or `/internal` imports is intentionally not preserved
+- Runtime package implementation ownership previously followed domain slices under
+  `domain/<name>/`, with explicit `api.ts`, `types.ts`, `registrar.ts`, and
+  `runtime-surface.ts` seams.
+- The former semantic public root exposed authority and inspection surfaces.
+  The four-port runtime cutover supersedes that shape with
+  `identity/config/tape/kernel/model/start/turn/close`.
+- The former descriptor registry and domain surface assembly are no longer
+  implementation guidance. Current implementation guidance is the four-port
+  runtime RFC and the promoted architecture fitness tests.
 
 ## Superseded by
 
 - `docs/research/decisions/runtime-public-root-compression.md`
 - `docs/research/decisions/runtime-domain-admission-and-deletion.md`
 - `docs/research/decisions/runtime-factory-ports.md`
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

@@ -2,6 +2,21 @@ import { randomUUID } from "node:crypto";
 import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
 import type { OverlayPriority } from "../../internal/tui/index.js";
 import { buildSessionInspectReport, resolveInspectDirectory } from "../../operator/inspect.js";
+import {
+  explainCliRuntimeToolAccess,
+  getCliRuntimeCompactionGateStatus,
+  getCliRuntimeContextEvidenceLatest,
+  getCliRuntimeContextStatus,
+  getCliRuntimeContextUsage,
+  getCliRuntimeHistoryViewBaseline,
+  getCliRuntimePendingCompactionReason,
+  getCliRuntimeSessionWire,
+  getCliRuntimeVisibleReadEpoch,
+  getCliRuntimeSkillCatalogLoadReport,
+  listCliRuntimeSkillProducers,
+  listCliRuntimeSkills,
+  toCliOperatorRuntime,
+} from "../../runtime/runtime-ports.js";
 import { buildCommandPalettePayload, buildHelpHubPayload } from "../commands/command-palette.js";
 import type { ShellCommandProvider } from "../commands/command-provider.js";
 import type { ShellAction } from "../domain/actions.js";
@@ -76,8 +91,7 @@ function buildAuthorityToolAccessRows(input: {
   sessionId: string;
 }): AuthorityToolAccessRow[] {
   const runtime = input.bundle.runtime;
-  const explain = runtime.inspect.tools.access.explain;
-  const usage = runtime.inspect.context.usage.get(input.sessionId);
+  const usage = getCliRuntimeContextUsage(runtime, input.sessionId);
   const rows: AuthorityToolAccessRow[] = [];
   for (const definition of input.bundle.toolDefinitions.values()) {
     const toolName = typeof definition.name === "string" ? definition.name : "";
@@ -85,7 +99,7 @@ function buildAuthorityToolAccessRows(input: {
       continue;
     }
     try {
-      const result = explain({
+      const result = explainCliRuntimeToolAccess(runtime, {
         sessionId: input.sessionId,
         toolName,
         cwd: runtime.identity.cwd,
@@ -623,12 +637,7 @@ export class ShellOverlayLifecycleHandler {
 
   async openInspectOverlay(): Promise<void> {
     const hostedRuntime = this.context.getBundle().runtime;
-    const operatorRuntime = {
-      identity: hostedRuntime.identity,
-      config: hostedRuntime.config,
-      inspect: hostedRuntime.inspect,
-      operator: hostedRuntime.operator,
-    };
+    const operatorRuntime = toCliOperatorRuntime(hostedRuntime);
     const report = buildSessionInspectReport({
       runtime: operatorRuntime,
       sessionId: this.context.getSessionPort().getSessionId(),
@@ -640,28 +649,31 @@ export class ShellOverlayLifecycleHandler {
   openContextOverlay(): void {
     const runtime = this.context.getBundle().runtime;
     const sessionId = this.context.getSessionPort().getSessionId();
-    const usage = runtime.inspect.context.usage.get(sessionId);
+    const usage = getCliRuntimeContextUsage(runtime, sessionId);
     this.openOverlay(
       buildContextOverlayPayload({
         sessionId,
         usage,
-        status: runtime.inspect.context.usage.getStatus(sessionId, usage),
-        pendingCompactionReason: runtime.inspect.context.compaction.getPendingReason(sessionId),
-        gateStatus: runtime.inspect.context.compaction.getGateStatus(sessionId, usage),
-        promptStabilityEvidence: runtime.inspect.context.evidence.latest(
+        status: getCliRuntimeContextStatus(runtime, sessionId, usage),
+        pendingCompactionReason: getCliRuntimePendingCompactionReason(runtime, sessionId),
+        gateStatus: getCliRuntimeCompactionGateStatus(runtime, sessionId, usage),
+        promptStabilityEvidence: getCliRuntimeContextEvidenceLatest(
+          runtime,
           sessionId,
           "prompt_stability",
         ),
-        transientReductionEvidence: runtime.inspect.context.evidence.latest(
+        transientReductionEvidence: getCliRuntimeContextEvidenceLatest(
+          runtime,
           sessionId,
           "transient_reduction",
         ),
-        providerCacheEvidence: runtime.inspect.context.evidence.latest(
+        providerCacheEvidence: getCliRuntimeContextEvidenceLatest(
+          runtime,
           sessionId,
           "provider_cache_observation",
         ),
-        visibleReadEpoch: runtime.inspect.context.visibleRead.getEpoch(sessionId),
-        historyViewBaseline: runtime.inspect.context.prompt.getHistoryViewBaseline(sessionId),
+        visibleReadEpoch: getCliRuntimeVisibleReadEpoch(runtime, sessionId),
+        historyViewBaseline: getCliRuntimeHistoryViewBaseline(runtime, sessionId),
       }),
     );
   }
@@ -679,12 +691,12 @@ export class ShellOverlayLifecycleHandler {
   }
 
   openSkillsOverlay(): void {
-    const catalog = this.context.getBundle().runtime.inspect.skills.catalog;
+    const runtime = this.context.getBundle().runtime;
     this.openOverlay(
       buildSkillsOverlayPayload({
-        loadReport: catalog.getLoadReport(),
-        skills: catalog.list(),
-        producers: catalog.listProducers(),
+        loadReport: getCliRuntimeSkillCatalogLoadReport(runtime),
+        skills: listCliRuntimeSkills(runtime),
+        producers: listCliRuntimeSkillProducers(runtime),
       }),
     );
   }
@@ -852,7 +864,7 @@ export class ShellOverlayLifecycleHandler {
         return undefined;
       }
       const sessionWireFrames = run.workerSessionId
-        ? this.context.getBundle().runtime.inspect.sessionWire?.query?.(run.workerSessionId)
+        ? getCliRuntimeSessionWire(this.context.getBundle().runtime, run.workerSessionId)
         : undefined;
       return {
         title: `Task ${run.runId} output`,

@@ -83,7 +83,7 @@ describe("brewva session ui settings wiring", () => {
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.records.query(sessionId, {
+      const bootstrap = result.runtime.ops.events.records.query(sessionId, {
         type: "session_bootstrap",
         last: 1,
       })[0];
@@ -92,7 +92,7 @@ describe("brewva session ui settings wiring", () => {
           | {
               runtimeConfig?: {
                 artifactRoots?: {
-                  eventsDir?: string;
+                  tapeDir?: string;
                   recoveryWalDir?: string;
                 };
               };
@@ -101,7 +101,7 @@ describe("brewva session ui settings wiring", () => {
           | undefined) ?? {};
 
       expect(Object.hasOwn(payload, "skillLoad")).toBe(false);
-      expect(payload.runtimeConfig?.artifactRoots?.eventsDir).toBe(".orchestrator/events");
+      expect(payload.runtimeConfig?.artifactRoots?.tapeDir).toBe(".brewva/tape");
       expect(payload.runtimeConfig?.artifactRoots?.recoveryWalDir).toBe(
         ".orchestrator/recovery-wal",
       );
@@ -118,7 +118,7 @@ describe("brewva session ui settings wiring", () => {
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.records.query(sessionId, {
+      const bootstrap = result.runtime.ops.events.records.query(sessionId, {
         type: "session_bootstrap",
         last: 1,
       })[0];
@@ -145,7 +145,7 @@ describe("brewva session ui settings wiring", () => {
     });
     try {
       const sessionId = result.session.sessionManager.getSessionId();
-      const bootstrap = result.runtime.inspect.events.records.query(sessionId, {
+      const bootstrap = result.runtime.ops.events.records.query(sessionId, {
         type: "session_bootstrap",
         last: 1,
       })[0];

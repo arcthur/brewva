@@ -1,6 +1,4 @@
-import type { BrewvaToolRuntimePort as RuntimeToolRuntimePort } from "@brewva/brewva-runtime";
-import type { ToolActionClass } from "@brewva/brewva-runtime/governance";
-import type { BrewvaToolRuntimeExtensionMethods } from "@brewva/brewva-runtime/runtime-extensions";
+import type { ToolActionClass } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type {
   ToolDescriptor as CanonicalToolDescriptor,
@@ -8,17 +6,15 @@ import type {
   ToolExecutionTraits as CanonicalToolExecutionTraits,
 } from "@brewva/brewva-substrate/tools";
 import type { TSchema } from "@sinclair/typebox";
+import type { BrewvaToolRequiredCapability } from "./runtime-capabilities.js";
 import type { BrewvaToolSurface } from "./surface.js";
 
 export type BrewvaToolInterruptBehavior = "cancel" | "block" | "allow_completion";
 
-type RuntimeMethodCapabilityPath<TPort extends object, TPrefix extends string> = {
-  [TMemberName in keyof TPort & string]: TPort[TMemberName] extends (...args: never[]) => unknown
-    ? `${TPrefix}.${TMemberName}`
-    : TPort[TMemberName] extends object
-      ? RuntimeMethodCapabilityPath<TPort[TMemberName], `${TPrefix}.${TMemberName}`>
-      : never;
-}[keyof TPort & string];
+export interface BrewvaToolRuntimeExtensionMethods {
+  onClearState(listener: (sessionId: string) => void): void;
+  resolveCredentialBindings(sessionId: string, toolName: string): Record<string, string>;
+}
 
 type StringKeyOf<T> = Extract<keyof T, string>;
 
@@ -30,10 +26,16 @@ type ToolExtensionCapabilityPath = {
     : never;
 }[StringKeyOf<BrewvaToolRuntimeExtensionMethods>];
 
-export type BrewvaToolRequiredCapability =
-  | RuntimeMethodCapabilityPath<RuntimeToolRuntimePort["authority"], "authority">
-  | RuntimeMethodCapabilityPath<RuntimeToolRuntimePort["inspect"], "inspect">
-  | ToolExtensionCapabilityPath;
+type MissingExtensionCapabilityPath = Exclude<
+  ToolExtensionCapabilityPath,
+  BrewvaToolRequiredCapability
+>;
+
+type AssertNoMissingCapability<T extends never> = T;
+type _ToolExtensionCapabilityInventoryCheck =
+  AssertNoMissingCapability<MissingExtensionCapabilityPath>;
+
+export type { BrewvaToolRequiredCapability };
 
 export interface BrewvaToolExecutionTraits extends CanonicalToolExecutionTraits {
   concurrencySafe: boolean;

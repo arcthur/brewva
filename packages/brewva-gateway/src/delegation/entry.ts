@@ -1,6 +1,6 @@
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
 import type { ContextBundle } from "../context/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { buildDelegationPrompt } from "./prompt.js";
 import type { HostedDelegationTarget } from "./targets.js";
 
@@ -11,8 +11,8 @@ export interface PreparedSubagentEntry {
 }
 
 export function prepareSubagentEntry(input: {
-  readonly parentRuntime: BrewvaRuntimeRoot;
-  readonly childRuntime: BrewvaRuntimeRoot;
+  readonly parentRuntime: HostedRuntimeAdapterPort;
+  readonly childRuntime: HostedRuntimeAdapterPort;
   readonly childSessionId: string;
   readonly target: HostedDelegationTarget;
   readonly packet: DelegationPacket;
@@ -23,10 +23,10 @@ export function prepareSubagentEntry(input: {
   const delegatedSkill = input.target.skillName;
   const childOwnsSkill = Boolean(delegatedSkill && input.target.resultMode !== "consult");
   const skillDocument = delegatedSkill
-    ? input.parentRuntime.inspect.skills.catalog.get(delegatedSkill)
+    ? input.parentRuntime.ops.skills.catalog.get(delegatedSkill)
     : undefined;
   const producerContract = delegatedSkill
-    ? input.parentRuntime.inspect.skills.catalog.getProducer(delegatedSkill)
+    ? input.parentRuntime.ops.skills.catalog.getProducer(delegatedSkill)
     : undefined;
   if (delegatedSkill && !skillDocument) {
     throw new Error(`unknown_skill:${delegatedSkill}`);

@@ -1,6 +1,6 @@
-import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-runtime/context";
+import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaAgentProtocolToolResultMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaCompactionRequest } from "@brewva/brewva-substrate/tools";
-import type { BrewvaTurnLoopToolResultMessage } from "@brewva/brewva-substrate/turn";
 import type {
   BrewvaCompactionSummaryGenerationResult,
   BrewvaCompactionSummaryStrategy,
@@ -94,7 +94,7 @@ export class ManagedSessionCompactionFlowState {
     return !isStreaming;
   }
 
-  consumeToolResultStop(_toolResults: BrewvaTurnLoopToolResultMessage[]): boolean {
+  consumeToolResultStop(_toolResults: BrewvaAgentProtocolToolResultMessage[]): boolean {
     if (!this.#stopAfterCurrentToolResults) {
       return false;
     }

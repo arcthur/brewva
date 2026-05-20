@@ -9,12 +9,14 @@ only collects caveats and intentionally narrow behavior.
 
 ## Runtime Surface
 
-- `root.inspect.events.records.subscribe(...)` is in-process and ephemeral.
+- `HostedRuntimeAdapterPort.ops.events.records.subscribe(...)` is in-process and
+  ephemeral.
 
 ## Event Pipeline
 
-- Event level filtering (`infrastructure.events.level`) happens at write time.
-  Events filtered out by level are not persisted and cannot be replayed later.
+- Event level filtering (`infrastructure.events.level`) gates advisory
+  read-model rows at write time. Filtered rows are not mirrored into canonical
+  tape as `custom` records and cannot be replayed later.
 
 ## Configuration Boundary
 
@@ -36,6 +38,7 @@ only collects caveats and intentionally narrow behavior.
 ## Schedule Runtime
 
 - Daemon mode requires both `schedule.enabled=true` and
-  `infrastructure.events.enabled=true`.
+  `infrastructure.events.enabled=true` so schedule read-model observations are
+  mirrored into canonical tape.
 - Startup catch-up is bounded by `schedule.maxRecoveryCatchUps`; overflow runs are
   deferred instead of executed immediately.

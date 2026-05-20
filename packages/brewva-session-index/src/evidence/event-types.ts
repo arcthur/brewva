@@ -21,7 +21,7 @@ import {
   TURN_RENDER_COMMITTED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   type BrewvaEventRecord,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 
 export const SESSION_INDEX_TEXT_INDEXED_EVENT_TYPES = [
   TASK_EVENT_TYPE,

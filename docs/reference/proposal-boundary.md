@@ -2,11 +2,11 @@
 
 Boundary contract sources:
 
-- Runtime contracts: `packages/brewva-runtime/src/domain/proposals/types.ts`
+- Runtime contracts: `packages/brewva-runtime/src/runtime/kernel/policy/public-contract.ts`
 - Runtime facade: `packages/brewva-runtime/src/runtime/runtime.ts`
-- Proposal admission: `packages/brewva-runtime/src/domain/proposals/proposal-admission.ts`
-- Effect-commitment admission: `packages/brewva-runtime/src/domain/proposals/proposal-admission-effect-commitment.ts`
-- Operator desk: `packages/brewva-runtime/src/domain/proposals/effect-commitment-desk.ts`
+- Proposal admission: `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`
+- Effect-commitment admission: `packages/brewva-runtime/src/runtime/kernel/policy/effect-posture.ts`
+- Operator desk: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
 
 The public proposal boundary is now intentionally small.
 
@@ -116,8 +116,9 @@ Current flow:
 - initial admission normally returns `defer` and creates a replayable pending
   approval request
 - operator approval is recorded through the effect-commitment desk
-- the caller must then resume the exact request with
-  `root.authority.tools.invocation.start({ ..., effectCommitmentRequestId })`
+- the caller must then resume the exact request through the capability-scoped
+  hosted adapter tool invocation path:
+  `HostedRuntimeAdapterPort.ops.tools.invocation.start({ ..., effectCommitmentRequestId })`
 - exact resume binds to the approved `requestId`, original `toolCallId`, and
   canonical `argsDigest`
 - exact resume reuses the original manifest authority basis; it does not
@@ -181,24 +182,24 @@ Approval state is layered on top through:
 - `effect_commitment_approval_decided`
 - `effect_commitment_approval_consumed`
 
-`root.inspect.proposals.proposals.list(sessionId, query?)` returns newest-first
+`HostedRuntimeAdapterPort.ops.proposals.proposals.list(sessionId, query?)` returns newest-first
 `EffectCommitmentRecord` values by receipt timestamp. The read model rebuilds
 those records from `decision_receipt_recorded.payload = { proposal, receipt }`
 rather than rejoining `proposal_received` and `proposal_decided`.
 
 Request-state views are intentionally separate:
 
-- `root.inspect.proposals.requests.list(sessionId, query?)` is the
+- `HostedRuntimeAdapterPort.ops.proposals.requests.list(sessionId, query?)` is the
   normalized request-lifecycle view ordered by `updatedAt` descending
-- `root.inspect.proposals.requests.listPending(sessionId)` is the
+- `HostedRuntimeAdapterPort.ops.proposals.requests.listPending(sessionId)` is the
   pending-only queue ordered by request `createdAt` descending
 
 The operator desk surface lives in the same domain:
 
-- `root.inspect.proposals.requests.list(sessionId, query?)`
-- `root.inspect.proposals.requests.listPending(sessionId)`
-- `root.authority.proposals.requests.decide(sessionId, requestId, input)`
-- `root.authority.tools.invocation.start({ ..., effectCommitmentRequestId })`
+- `HostedRuntimeAdapterPort.ops.proposals.requests.list(sessionId, query?)`
+- `HostedRuntimeAdapterPort.ops.proposals.requests.listPending(sessionId)`
+- `HostedRuntimeAdapterPort.ops.proposals.requests.decide(sessionId, requestId, input)`
+- `HostedRuntimeAdapterPort.ops.tools.invocation.start({ ..., effectCommitmentRequestId })`
 
 This keeps approval state and proposal history in one replay-first namespace.
 

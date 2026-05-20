@@ -12,14 +12,14 @@
   - `docs/reference/runtime.md`
   - `docs/reference/session-lifecycle.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/proposals/types.ts`
-  - `packages/brewva-runtime/src/domain/governance/types.ts`
-  - `packages/brewva-runtime/src/domain/ledger/evidence-ledger.ts`
-  - `packages/brewva-runtime/src/domain/projection/engine.ts`
-  - `packages/brewva-runtime/src/domain/proposals/effect-commitment-desk.ts`
-  - `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
-  - `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
-  - `packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/kernel/proposals/types.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/kernel/governance/types.ts`
+  - `packages/brewva-runtime/src/read-models/ledger/tape-ledger-store.ts`
+  - `packages/brewva-runtime/src/read-models/projection/engine.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/kernel/proposals/effect-commitment-desk.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/event-pipeline.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/kernel/governance/reversible-mutation.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/session-lifecycle.ts`
 
 ## Decision Summary
 
@@ -31,4 +31,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

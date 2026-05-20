@@ -3,16 +3,16 @@ import { readdir, readFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
 import {
-  BrewvaEffect,
   startScopedSchedule,
   startScopedTimeout,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
   listPersistedPatchSets,
   resolveSessionPatchHistoryPath,
-} from "@brewva/brewva-runtime/patch-history";
-import type { PersistedPatchSet } from "@brewva/brewva-runtime/patch-history";
+} from "@brewva/brewva-runtime/protocol";
+import type { PersistedPatchSet } from "@brewva/brewva-runtime/protocol";
 import { safeParseJson, type JsonObject } from "@brewva/brewva-std/json";
 import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate/host-api";
 import type {
@@ -29,6 +29,13 @@ import {
   formatInspectText,
   resolveInspectDirectory,
 } from "../../operator/inspect.js";
+import {
+  getCliRuntimeCompactionGateStatus,
+  getCliRuntimeContextUsage,
+  getCliRuntimePendingCompactionReason,
+  getCliRuntimeTurnProjection,
+  renderCliRuntimeTurnDigest,
+} from "../../runtime/runtime-ports.js";
 import { buildCommandPalettePayload, parseShellSlashPrompt } from "../commands/command-palette.js";
 import { ShellCommandProvider } from "../commands/command-provider.js";
 import { registerShellCommands } from "../commands/shell-command-registry.js";
@@ -910,7 +917,10 @@ export class CliShellRuntime {
   }
 
   private buildRewindStatusText(): string | undefined {
-    const state = this.#sessionPort.getRewindState();
+    const state = this.#sessionPort.getRewindState() ?? {
+      rewindAvailable: false,
+      redoAvailable: false,
+    };
     if (state.rewindAvailable && state.redoAvailable) {
       return "undo: /undo · rewind: /rewind · redo: /redo";
     }
@@ -1388,14 +1398,13 @@ export class CliShellRuntime {
 
   private requestContextCompaction(): void {
     const sessionId = this.#sessionPort.getSessionId();
-    const usage = this.#bundle.runtime.inspect.context.usage.get(sessionId);
-    const gateStatus = this.#bundle.runtime.inspect.context.compaction.getGateStatus(
+    const usage = getCliRuntimeContextUsage(this.#bundle.runtime, sessionId);
+    const gateStatus = getCliRuntimeCompactionGateStatus(this.#bundle.runtime, sessionId, usage);
+    const previousPendingReason = getCliRuntimePendingCompactionReason(
+      this.#bundle.runtime,
       sessionId,
-      usage,
     );
-    const previousPendingReason =
-      this.#bundle.runtime.inspect.context.compaction.getPendingReason(sessionId);
-    this.#bundle.runtime.operator.context.compaction.request(sessionId, "manual");
+    this.#bundle.runtime.ops.context.compaction.request(sessionId, "manual");
     if (gateStatus.required) {
       this.ui.notify(
         `Context compaction requested; gate is already required (${gateStatus.reason ?? "unknown"}).`,
@@ -1499,14 +1508,14 @@ export class CliShellRuntime {
 
   private appendPatchAttributionSection(lines: string[]): void {
     const sessionId = this.#sessionPort.getSessionId();
-    const projection = this.#bundle.runtime.inspect.events.effects.getTurnProjection(sessionId);
+    const projection = getCliRuntimeTurnProjection(this.#bundle.runtime, sessionId);
     const patchSets = this.listSessionPatchSets().slice(-8).toReversed();
     lines.push(
       "",
       "## Brewva turn attribution",
       `runtimeTurn=${projection.runtimeTurn} declared=${projection.declared.length} attempted=${projection.attempted.length} decisions=${projection.decisions.length} executed=${projection.executed.length} recovery=${projection.recovery.length} warnings=${projection.warnings.length}`,
     );
-    const digest = this.#bundle.runtime.inspect.events.effects.renderTurnDigest(sessionId, {
+    const digest = renderCliRuntimeTurnDigest(this.#bundle.runtime, sessionId, {
       maxChars: 1_800,
     });
     lines.push("", digest);
@@ -1516,14 +1525,14 @@ export class CliShellRuntime {
       return;
     }
     for (const patchSet of patchSets) {
-      const paths = patchSet.changes.map((change) => change.path);
+      const paths = patchSet.changes.map((change: { readonly path?: string }) => change.path);
       lines.push(
         [
           `- patchSet=${patchSet.id}`,
           `status=${patchSet.status}`,
           `tool=${patchSet.toolName}`,
           `changes=${patchSet.changes.length}`,
-          `appliedAt=${new Date(patchSet.appliedAt).toISOString()}`,
+          `appliedAt=${patchSet.appliedAt != null ? new Date(patchSet.appliedAt).toISOString() : "n/a"}`,
           patchSet.summary ? `summary=${patchSet.summary}` : undefined,
           `paths=${paths.slice(0, 5).join(",") || "none"}${paths.length > 5 ? `,+${paths.length - 5}` : ""}`,
         ]

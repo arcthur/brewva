@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
-import { MESSAGE_END_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import type { ContextEntryRecord } from "@brewva/brewva-runtime/session";
+import { MESSAGE_END_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { ContextEntryRecord } from "@brewva/brewva-runtime/protocol";
 import { buildInheritedSubagentContextBlock } from "../../../packages/brewva-gateway/src/delegation/fork-context.js";
+import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 
 const SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE = "branch_summary_recorded";
 
@@ -18,7 +18,7 @@ function event(input: {
   return {
     id: input.id,
     sessionId: "session-fork-context" as BrewvaEventRecord["sessionId"],
-    type: input.type as BrewvaEventRecord["type"],
+    type: input.type,
     timestamp: 1,
     payload: input.payload as BrewvaEventRecord["payload"],
   };
@@ -48,9 +48,9 @@ function contextEntry(input: {
 function runtimeWithContext(
   entries: ContextEntryRecord[],
   events: BrewvaEventRecord[],
-): Pick<BrewvaRuntimeRoot, "inspect"> {
+): Pick<HostedRuntimeAdapterPort, "ops"> {
   return {
-    inspect: {
+    ops: {
       session: {
         lineage: {
           getContextEntryPath: () => entries,
@@ -62,7 +62,7 @@ function runtimeWithContext(
         },
       },
     },
-  } as unknown as Pick<BrewvaRuntimeRoot, "inspect">;
+  } as unknown as Pick<HostedRuntimeAdapterPort, "ops">;
 }
 
 describe("subagent fork context", () => {

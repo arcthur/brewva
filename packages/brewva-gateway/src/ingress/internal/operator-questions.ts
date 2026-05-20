@@ -1,12 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import {
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
   readDelegationLifecycleEventPayload,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import { safeParseJson } from "@brewva/brewva-std/json";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { hasOwn, isRecord } from "@brewva/brewva-std/unknown";
@@ -15,6 +14,8 @@ import {
   type BrewvaQuestionAnswerSpec,
 } from "@brewva/brewva-substrate/host-api";
 import type { SubagentOutcome } from "@brewva/brewva-tools/contracts";
+import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
+import { queryRuntimeEvents } from "../../hosted/api.js";
 
 const OPERATOR_QUESTION_ANSWERED_SCHEMA = "brewva.operator-question-answered.v1";
 
@@ -307,7 +308,7 @@ function extractStructuredQuestionRequests(input: {
 
 async function extractDelegationQuestions(
   event: BrewvaEventRecord,
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
 ): Promise<{ questions: SessionOpenQuestion[]; warning?: string }> {
   const payload = readDelegationLifecycleEventPayload(event);
   const runId = payload?.runId;
@@ -627,10 +628,10 @@ export function coerceOperatorQuestionAnsweredPayload(
 }
 
 export async function collectOpenSessionQuestions(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): Promise<SessionQuestionCollection> {
-  const events = runtime.inspect.events.records.query(sessionId);
+  const events = queryRuntimeEvents(runtime, sessionId);
   const questions: SessionOpenQuestion[] = [];
   const answeredQuestionIds = new Set<string>();
   const warnings: string[] = [];
@@ -660,7 +661,7 @@ export async function collectOpenSessionQuestions(
 }
 
 export async function collectOpenQuestionsForSessions(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   sessionIds: readonly string[],
 ): Promise<SessionQuestionCollection> {
   const normalizedSessionIds = Array.from(
@@ -698,7 +699,7 @@ export async function collectOpenQuestionsForSessions(
 }
 
 export async function resolveOpenSessionQuestion(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   questionId: string,
 ): Promise<SessionOpenQuestion | null> {
@@ -713,7 +714,7 @@ export async function resolveOpenSessionQuestion(
 }
 
 export async function resolveOpenQuestionInSessions(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   sessionIds: readonly string[],
   questionId: string,
 ): Promise<SessionOpenQuestion | null> {
@@ -728,7 +729,7 @@ export async function resolveOpenQuestionInSessions(
 }
 
 export async function resolveOpenSessionQuestionRequest(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   requestId: string,
 ): Promise<SessionQuestionRequest | null> {
@@ -745,7 +746,7 @@ export async function resolveOpenSessionQuestionRequest(
 }
 
 export async function resolveOpenQuestionRequestInSessions(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   sessionIds: readonly string[],
   requestId: string,
 ): Promise<SessionQuestionRequest | null> {

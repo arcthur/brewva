@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  BrewvaContext,
-  BrewvaEffect,
-  BrewvaFiber,
-  BrewvaConfig,
   BrewvaConfigService,
-  BrewvaLayer,
   BrewvaBoxScope,
   BrewvaProviderRequestScope,
   BrewvaSessionScope,
@@ -30,6 +25,13 @@ import {
   withAbortSignal,
 } from "@brewva/brewva-effect";
 import { nodeFileSystemLayer } from "@brewva/brewva-effect/platform-node";
+import {
+  BrewvaEffect,
+  BrewvaFiber,
+  BrewvaConfig,
+  BrewvaLayer,
+} from "@brewva/brewva-effect/primitives";
+import { BrewvaContext } from "@brewva/brewva-effect/primitives";
 import { createBrewvaRuntimeSpine } from "@brewva/brewva-effect/runtime";
 import { BrewvaTestClock, createTestRuntime } from "@brewva/brewva-effect/testing";
 import { sleep } from "../../helpers/process.js";

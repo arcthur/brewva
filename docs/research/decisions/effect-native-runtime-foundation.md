@@ -17,6 +17,7 @@
   - `docs/reference/extensions.md`
 - Code anchors:
   - `packages/brewva-effect/src/index.ts`
+  - `packages/brewva-effect/src/primitives.ts`
   - `packages/brewva-effect/src/edge.ts`
   - `packages/brewva-effect/src/boundary.ts`
   - `packages/brewva-effect/src/platform-node.ts`
@@ -25,8 +26,8 @@
   - `packages/brewva-effect/src/scopes.ts`
   - `packages/brewva-runtime/src/runtime/effect-runtime-layer.ts`
   - `packages/brewva-runtime/src/runtime-effect.ts`
-  - `packages/brewva-substrate/src/turn/effect-runtime.ts`
-  - `packages/brewva-substrate/src/turn/loop.ts`
+  - `packages/brewva-runtime/src/runtime/effect-runtime-layer.ts`
+  - `packages/brewva-runtime/src/runtime/engine/turn.ts`
   - `packages/brewva-provider-core/src/stream/run-provider-stream.ts`
   - `packages/brewva-tools/src/families/execution/exec-process-registry/api.ts`
   - `packages/brewva-gateway/src/channels/channel-host-lifecycle.ts`
@@ -37,17 +38,18 @@
 ## Decision Summary
 
 - Brewva adopts `effect@4.0.0-beta.60` as the internal programming model for runtime mechanics: services, layers, scopes, fibers, streams, schedules, typed runtime failures, boundary bridges, and structural observability.
-- `@brewva/brewva-effect` is the only package that may own direct Effect platform and observability dependencies. Its root is a thin re-export spine over purpose-specific modules (`boundary`, `observability`, `scopes`, `schedules`, `runtime-spine`, `platform-node`, and `testing`), and selected modules are exposed as explicit package subpaths for long-term import hygiene. Other packages import Effect primitives through Brewva-owned aliases and helpers.
+- `@brewva/brewva-effect` is the only package that may own direct Effect platform and observability dependencies. Its root is limited to Brewva boundary helpers: Promise/Effect boundary runners, cancellation bridges, scoped resources, schedules, scopes, retry policy, config-service helpers, and observability. It does not re-export the full Effect alias set.
+- Effect primitive aliases live only behind `@brewva/brewva-effect/primitives`. That subpath is explicit infrastructure, not a domain API. Callers that need Effect primitives must name that dependency directly instead of receiving them accidentally from the root helper package.
 - Effect coordinates in-memory execution only. Durable authority, receipts, event tape, WAL recovery, ledger evidence, DuckDB rebuildability, rollback semantics, and capability-scoped runtime ports remain Brewva-owned.
 - Provider streams are Effect streams with typed provider errors, scoped provider request ownership, interruptible SDK boundaries, and queue-backed backpressure. The Promise-first `AssistantMessageEventStream` compatibility class is removed.
 - Turn execution, tool invocation, process execution, box execution, gateway supervision, worker IPC, channel lifecycle, ingress, MCP operations, and runtime-plugin callback guards run through Effect-native core paths with Promise-friendly adapters only at external boundaries.
 - Public edges run one Effect program per logical command, request, message, fetch, plugin callback, or worker lifecycle operation. Platform-neutral Worker code uses `@brewva/brewva-effect/edge` so it does not pull Node platform adapters into edge bundles.
 - Structural observability is owned by `@brewva/brewva-effect`: spans and log annotations are applied in common helpers, while the Node runtime path can opt into `@effect/opentelemetry` `NodeSdk` processors through the foundation layer.
-- Runtime internals are composed through Effect layers behind the runtime factory controller. The internal runtime-effect subpath accepts the internal controller handle produced by the source-owned runtime assembly factory; public `BrewvaRuntimeInstance` values cannot recover that handle. Runtime-effect exposes implementation services and runners, not root authority, root inspection, or operator ports.
+- Runtime internals are composed through Effect layers behind the runtime factory controller. The internal runtime-effect subpath accepts the internal controller handle produced by the source-owned runtime assembly factory; public `BrewvaRuntime` objects cannot recover that handle. Runtime-effect exposes implementation services and runners, not root authority, root inspection, or operator ports.
 - Capability-scoped ports remain the only path for tools and plugins to gain runtime access. Effect layer availability never grants authority.
 - Provider-specific retry classification remains local to each protocol, but retry budgets, schedules, interruption, and service-directed delay handling use the shared Effect retry policy when a provider owns a retryable request loop.
 - Pure domain logic remains plain TypeScript unless it needs effectful dependencies.
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

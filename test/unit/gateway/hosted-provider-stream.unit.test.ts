@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaEffect, BrewvaStream, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { BrewvaStream } from "@brewva/brewva-effect/primitives";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { AssistantMessage } from "@brewva/brewva-provider-core/contracts";
 import { providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
 import {

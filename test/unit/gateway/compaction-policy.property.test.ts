@@ -1,5 +1,5 @@
 import { expect } from "bun:test";
-import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-runtime/context";
+import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-runtime/protocol";
 import fc from "fast-check";
 import { decideCompaction } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/policy.js";
 import { propertyTest } from "../../helpers/property.js";

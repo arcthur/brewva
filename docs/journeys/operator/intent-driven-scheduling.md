@@ -111,16 +111,16 @@ flowchart TD
   - `schedule_child_session_finished`
   - `schedule_child_session_failed`
 - inspection surfaces:
-  - `runtime.inspect.schedule.getProjectionSnapshot()`
+  - `HostedRuntimeAdapterPort.ops.schedule.intents.getProjectionSnapshot()`
 
 ## Code Pointers
 
 - Tool contracts: `packages/brewva-tools/src/families/workflow/follow-up.ts`,
   `packages/brewva-tools/src/families/workflow/schedule-intent.ts`
-- Scheduler service: `packages/brewva-runtime/src/domain/schedule/service.ts`
-- Schedule events: `packages/brewva-runtime/src/domain/schedule/events.ts`
-- Schedule projection: `packages/brewva-runtime/src/domain/schedule/projection.ts`
-- Cron / timezone: `packages/brewva-runtime/src/domain/schedule/cron.ts`
+- Scheduler service: `packages/brewva-gateway/src/daemon/schedule-runner.ts`
+- Schedule events: `packages/brewva-runtime/src/protocol.ts`
+- Schedule projection: `packages/brewva-tools/src/runtime-port/schedule.ts`
+- Cron / timezone: `packages/brewva-gateway/src/daemon/schedule-runner.ts`
 - Scheduler daemon dispatch: `packages/brewva-cli/src/index.ts`
 - Scheduler daemon implementation: `packages/brewva-cli/src/commands/noninteractive/daemon.ts`
 - Live scheduler controls: `packages/brewva-gateway/src/admin/internal/cli.ts`

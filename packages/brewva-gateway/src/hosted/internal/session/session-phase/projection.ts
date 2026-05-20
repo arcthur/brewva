@@ -1,6 +1,6 @@
-import type { SessionLifecycleSnapshot } from "@brewva/brewva-runtime/session";
+import type { SessionLifecycleSnapshot } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { SessionPhase, SessionPhaseEvent } from "@brewva/brewva-substrate/session";
-import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import type { RuntimeFactSessionPhaseProjection } from "./runtime-facts.js";
 
 export function inferRecoveryCrashPoint(
@@ -30,6 +30,9 @@ export function deriveSessionPhaseFromLifecycleSnapshot(
     case "tool_executing": {
       const toolCallId = snapshot.execution.toolCallId;
       const toolName = snapshot.execution.toolName;
+      if (!toolCallId || !toolName) {
+        return null;
+      }
       const toolExecutionTurn =
         snapshot.tooling.openToolCalls.find((record) => record.toolCallId === toolCallId)?.turn ??
         resolvedTurn;
@@ -202,7 +205,7 @@ export function deriveCompatibilityValidationEvent(
 }
 
 export function resolveModelCallId(
-  message: Extract<BrewvaTurnLoopMessage, { role: "assistant" }>,
+  message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>,
   turn: number,
 ): string {
   return typeof message.responseId === "string" && message.responseId.trim().length > 0

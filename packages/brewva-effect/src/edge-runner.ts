@@ -33,6 +33,17 @@ export function runEdgeOperation<A, E>(
   );
 }
 
+export function runBoundaryOperation<A, E>(
+  name: string,
+  effect: Effect.Effect<A, E>,
+  options: BrewvaEdgeOperationOptions = {},
+): Promise<A> {
+  return runPromiseAtBoundary(
+    effect.pipe(withBrewvaObservability(name, options.fields)),
+    mergeEdgeRunOptions(options),
+  );
+}
+
 export function runEdgeOperationSync<A, E>(
   name: string,
   effect: Effect.Effect<A, E, Scope.Scope>,

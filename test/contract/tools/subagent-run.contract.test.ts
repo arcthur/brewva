@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/protocol";
 import type { SubagentForkRequest, SubagentRunRequest } from "@brewva/brewva-tools/contracts";
 import {
   createSubagentFanoutTool,

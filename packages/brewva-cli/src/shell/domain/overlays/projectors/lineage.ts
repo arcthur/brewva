@@ -1,4 +1,4 @@
-import type { ForkPoint, SessionLineageTree } from "@brewva/brewva-runtime/session";
+import type { ForkPoint, SessionLineageTree } from "@brewva/brewva-runtime/protocol";
 import type { CliLineageOverlayPayload } from "../payloads.js";
 
 export function buildLineageOverlayPayload(input: {
@@ -33,7 +33,9 @@ export function buildLineageOverlayPayload(input: {
       visit(childId, depth + 1);
     }
   };
-  visit(input.tree.rootNodeId, 0);
+  if (input.tree.rootNodeId) {
+    visit(input.tree.rootNodeId, 0);
+  }
   for (const node of input.tree.nodes) {
     visit(node.lineageNodeId, 0);
   }
@@ -53,9 +55,9 @@ export function buildLineageOverlayPayload(input: {
         depth,
         current: node.lineageNodeId === input.currentLineageNodeId,
         childCount: childrenByParent.get(node.lineageNodeId)?.length ?? 0,
-        summaryCount: node.summaries.length,
-        outcomeCount: node.outcomes.length,
-        adoptedOutcomeCount: node.adoptedOutcomes.length,
+        summaryCount: node.summaries?.length ?? 0,
+        outcomeCount: node.outcomes?.length ?? 0,
+        adoptedOutcomeCount: node.adoptedOutcomes?.length ?? 0,
         forkPoint: formatForkPoint(node.forkPoint),
       },
     ];
@@ -73,7 +75,7 @@ export function buildLineageOverlayPayload(input: {
   return {
     kind: "lineage",
     sessionId: input.tree.sessionId,
-    rootNodeId: input.tree.rootNodeId,
+    rootNodeId: input.tree.rootNodeId ?? "",
     currentLineageNodeId: input.currentLineageNodeId,
     nodes,
     selectedIndex:

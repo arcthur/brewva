@@ -1,4 +1,4 @@
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import { isRecord } from "../json.js";
 import { compactText } from "../text.js";
 

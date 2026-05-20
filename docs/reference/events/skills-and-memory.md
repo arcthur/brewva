@@ -47,6 +47,6 @@ task/claim state or verification reports.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/domain/skills/registry.ts`
-- `packages/brewva-runtime/src/domain/events/iteration-facts.ts`
+- `packages/brewva-runtime/src/runtime/model/model.ts`
+- `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
 - `packages/brewva-recall/src/broker/broker.ts`

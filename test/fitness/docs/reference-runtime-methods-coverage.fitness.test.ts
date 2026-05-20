@@ -3,24 +3,26 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { collectInlineCodeValues, extractGeneratedSegment } from "./generated-segments.shared.js";
 
-function collectRuntimeRootProperties(source: string): string[] {
+function collectRuntimeProperties(source: string): string[] {
   const lines = source.split("\n");
   const properties: string[] = [];
-  let insideRootInterface = false;
+  let insideRuntimeInterface = false;
 
   for (const line of lines) {
-    if (!insideRootInterface) {
-      if (!line.startsWith("export interface BrewvaRuntimeRoot ")) {
+    if (!insideRuntimeInterface) {
+      if (!line.startsWith("export interface BrewvaRuntime ")) {
         continue;
       }
-      insideRootInterface = true;
+      insideRuntimeInterface = true;
       continue;
     }
     if (line.startsWith("}")) {
       break;
     }
 
-    const match = /^  readonly ([a-zA-Z][a-zA-Z0-9_]*):/.exec(line);
+    const match =
+      /^  readonly ([a-zA-Z][a-zA-Z0-9_]*):/.exec(line) ??
+      /^  ([a-zA-Z][a-zA-Z0-9_]*)\(/.exec(line);
     if (!match) continue;
 
     const property = match[1];
@@ -42,13 +44,13 @@ describe("docs/reference runtime coverage", () => {
     const segment = extractGeneratedSegment(markdown, "runtime-surface");
     const documented = collectInlineCodeValues(segment);
 
-    const properties = collectRuntimeRootProperties(runtimeApiSource);
-    const missing = properties.filter((name) => !documented.has(`root.${name}`));
+    const properties = collectRuntimeProperties(runtimeApiSource);
+    const missing = properties.filter((name) => !documented.has(`runtime.${name}`));
 
     expect(
       missing,
       `Missing runtime methods in generated runtime inventory: ${missing.join(", ")}`,
     ).toEqual([]);
-    expect(segment).toContain("Budget: total <= 90; inspect <= 55.");
+    expect(segment).toContain("Budget: root <= 8; canonical event types <= 14.");
   });
 });

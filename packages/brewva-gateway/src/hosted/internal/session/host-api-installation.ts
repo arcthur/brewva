@@ -1,11 +1,3 @@
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type {
-  BrewvaHostedRuntimePort,
-  BrewvaRuntimeInstance,
-  BrewvaRuntimeOptions,
-} from "@brewva/brewva-runtime";
-import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
 import type { InternalHostPlugin, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { defineInternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
@@ -17,18 +9,23 @@ import { createContextTransformLifecycle } from "../context/context-transform.js
 import { registerEventStream } from "../context/evidence/event-stream.js";
 import { registerLedgerWriter } from "../context/evidence/ledger-writer.js";
 import { createReadPathRecoveryLifecycle } from "../context/read-path-recovery.js";
-import { registerProviderRequestRecovery } from "../provider/request/provider-request-recovery.js";
-import { registerProviderRequestReduction } from "../provider/request/provider-request-reduction.js";
 import {
   createLocalHookManager,
   type LocalHookPort,
-} from "../thread-loop/lifecycle/local-hook-port.js";
-import { createRuntimeTurnClockStore } from "../thread-loop/lifecycle/runtime-turn-clock.js";
+} from "../turn-adapter/lifecycle/local-hook-port.js";
+import { createRuntimeTurnClockStore } from "../turn-adapter/lifecycle/runtime-turn-clock.js";
 import {
   registerTurnLifecyclePorts,
   type TurnLifecyclePort,
-} from "../thread-loop/lifecycle/turn-lifecycle-port.js";
-import { toHostedRuntimePort, toToolRuntimePort } from "./runtime-ports.js";
+} from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
+import {
+  createHostedRuntimeAdapter,
+  getRuntimeOpsPort,
+  toHostedRuntimeAdapterPort,
+  toToolRuntimeAdapterPort,
+  type BrewvaRuntimeOptions,
+  type HostedRuntimeAdapterPort,
+} from "./runtime-ports.js";
 import { createSkillSelectionLifecycle } from "./skills/skill-selection.js";
 import {
   createHostedToolExecutionCoordinator,
@@ -117,7 +114,7 @@ export { registerLedgerWriter } from "../context/evidence/ledger-writer.js";
 export {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
-} from "../thread-loop/lifecycle/runtime-turn-clock.js";
+} from "../turn-adapter/lifecycle/runtime-turn-clock.js";
 export {
   createLocalHookManager,
   type LocalHookManager,
@@ -136,13 +133,11 @@ export {
   type LocalHookPreEffectResult,
   type LocalHookRecommendation,
   type LocalHookResult,
-} from "../thread-loop/lifecycle/local-hook-port.js";
+} from "../turn-adapter/lifecycle/local-hook-port.js";
 export {
   registerTurnLifecyclePorts,
   type TurnLifecyclePort,
-} from "../thread-loop/lifecycle/turn-lifecycle-port.js";
-export { registerProviderRequestRecovery } from "../provider/request/provider-request-recovery.js";
-export { registerProviderRequestReduction } from "../provider/request/provider-request-reduction.js";
+} from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
 export { createQualityGateLifecycle, registerQualityGate } from "./tools/quality-gate.js";
 export { registerToolResultDistiller } from "./tools/tool-result-distiller.js";
 export {
@@ -162,7 +157,6 @@ export {
   type ExplicitSkillMention,
   type SkillSelectionLifecycle,
   type SkillSelectionReceipt,
-  type SkillSelectionReceiptWriter,
   type SkillSelectionResult,
   type SkillSelectionRuntime,
 } from "./skills/skill-selection.js";
@@ -182,7 +176,7 @@ export {
 } from "./tools/tool-output-display.js";
 
 export interface CreateHostedBehaviorHostAdapterOptions extends BrewvaRuntimeOptions {
-  runtime?: BrewvaRuntimeInstance | BrewvaHostedRuntimePort;
+  runtime?: HostedRuntimeAdapterPort;
   registerTools?: boolean;
   orchestration?: BrewvaToolOrchestration;
   delegationStore?: HostedDelegationStore;
@@ -193,12 +187,12 @@ export interface CreateHostedBehaviorHostAdapterOptions extends BrewvaRuntimeOpt
   hostedToolDefinitionsByName?: ReadonlyMap<string, BrewvaToolDefinition>;
 }
 
-function assertHostedBehaviorHostAdapterRuntimeCompatibility(
+function assertHostedBehaviorHostAdapterRuntimeShape(
   _options: CreateHostedBehaviorHostAdapterOptions,
 ): void {}
 
 function buildManagedTools(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   options: Pick<
     CreateHostedBehaviorHostAdapterOptions,
     "managedToolNames" | "orchestration" | "delegationStore"
@@ -217,7 +211,7 @@ function buildManagedTools(
     : undefined;
   return buildBrewvaTools({
     runtime: {
-      ...toToolRuntimePort(runtime),
+      ...toToolRuntimeAdapterPort(runtime),
     },
     orchestration: options.orchestration,
     delegation,
@@ -226,7 +220,7 @@ function buildManagedTools(
 }
 
 function installHostedBehavior(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   hostApi: InternalHostPluginApi,
   tools: ReturnType<typeof buildBrewvaTools>,
   extraToolDefinitionsByName: ReadonlyMap<string, BrewvaToolDefinition>,
@@ -252,9 +246,7 @@ function installHostedBehavior(
       workspaceRoot: runtime.identity.workspaceRoot,
     },
     config: runtime.config,
-    inspect: runtime.inspect,
-    recordEvent: (input: { sessionId: string; type: string; payload?: object }) =>
-      runtime.extensions.hosted.events.record(input),
+    ops: getRuntimeOpsPort(runtime),
   };
   const localHookManager = createLocalHookManager({
     extensionApi: hostApi,
@@ -268,19 +260,7 @@ function installHostedBehavior(
   const qualityGate = createQualityGateLifecycle(runtime, {
     toolDefinitionsByName,
   });
-  const skillSelection = createSkillSelectionLifecycle(
-    {
-      inspect: runtime.inspect,
-    },
-    {
-      record: (input) =>
-        runtime.extensions.hosted.events.record({
-          sessionId: input.sessionId,
-          type: SKILL_SELECTION_RECORDED_EVENT_TYPE,
-          payload: input.receipt,
-        }),
-    },
-  );
+  const skillSelection = createSkillSelectionLifecycle(runtime);
   const toolSurface = createToolSurfaceLifecycle(hostApi, toolSurfaceRuntime, {
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
   });
@@ -288,8 +268,6 @@ function installHostedBehavior(
 
   hostApi.on("tool_call", qualityGate.toolCall);
   hostApi.on("context", contextTransform.context);
-  registerProviderRequestReduction(hostApi, runtime);
-  registerProviderRequestRecovery(hostApi, runtime);
   registerEventStream(hostApi, runtime, turnClock, {
     toolDefinitionsByName,
   });
@@ -341,14 +319,9 @@ export function createHostedBehaviorHostAdapter(
       "assistant_message.enqueue",
     ],
     register(hostApi) {
-      assertHostedBehaviorHostAdapterRuntimeCompatibility(options);
-      const runtime = toHostedRuntimePort(
-        options.runtime ??
-          createBrewvaRuntime({
-            ...options,
-            governancePort:
-              options.governancePort ?? createTrustedLocalGovernancePort({ profile: "team" }),
-          }),
+      assertHostedBehaviorHostAdapterRuntimeShape(options);
+      const runtime = toHostedRuntimeAdapterPort(
+        options.runtime ?? createHostedRuntimeAdapter(options),
       );
       const executionCoordinator =
         options.toolExecutionCoordinator ?? createHostedToolExecutionCoordinator();

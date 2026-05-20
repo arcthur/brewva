@@ -12,7 +12,7 @@ artifacts and reference comparison.
 
 ## Runtime-Owned Lifecycle Contract
 
-`root.inspect.lifecycle.getSnapshot(sessionId)` is the canonical
+`HostedRuntimeAdapterPort.ops.lifecycle.getSnapshot(sessionId)` is the hosted-adapter
 session-posture read model.
 
 It exists to answer a runtime-wide question that domain reducers do not answer
@@ -20,7 +20,7 @@ by themselves: "what state is this session in right now?" The runtime keeps the
 underlying domain reducers independent, then composes them into one aggregate
 lifecycle snapshot.
 
-The stable contract is exported as `SessionLifecycleSnapshot` and is shaped
+The hosted-adapter contract is exported as `SessionLifecycleSnapshot` and is shaped
 around orthogonal axes rather than one flat phase enum:
 
 - `hydration`
@@ -42,7 +42,7 @@ This snapshot is:
 Durable authority remains on tape, receipts, and Recovery WAL. The lifecycle
 snapshot is the unique runtime interpretation of that authority plus approved
 rebuildable helpers such as hydration state, approval state, open tool calls,
-recovery posture, hosted transition state, and session-wire facts.
+recovery posture, canonical runtime causes, and session-wire facts.
 
 ## Summary Precedence
 
@@ -100,36 +100,37 @@ The CLI's pending strip and queue overlay intentionally surface only
 continuation lane even though both travel through the hosted loop's pending
 message machinery.
 
-Compatibility fallbacks may still exist during migration, but the stable rule
-is that runtime lifecycle owns aggregate posture semantics.
+The stable rule is that `runtime.turn` owns aggregate posture semantics and
+gateway adapters only project transport/session views from canonical tape.
 
-## Turn Lifecycle Spine
+## Runtime Turn Projection
 
-`TurnLifecycleSpine` is the runtime-internal ordering model for one accepted
-hosted turn. It is not a public status surface and it is not a replacement for
+The runtime turn projection is the tape-derived ordering model for one accepted
+turn. It is not a process-local status surface and it is not a replacement for
 the session lifecycle aggregate.
 
-One spine instance covers the path from accepted ingress to terminal receipt.
+One turn projection covers the path from accepted ingress to terminal receipt.
 Multiple model-to-tool iterations inside that accepted turn stay inside the same
-spine; each tool call still has its own single-tool-call effect transaction.
+runtime turn; each tool call still has its own single-tool-call Kernel
+transaction.
 
-| Concept                            | Granularity                | Durability                                         | Primary reader                    |
-| ---------------------------------- | -------------------------- | -------------------------------------------------- | --------------------------------- |
-| `TurnLifecycleSpine` gate          | per hosted turn            | internal ordering plus existing receipts           | runtime and gateway maintainers   |
-| `SessionLifecycleSnapshot.summary` | per session                | rebuildable runtime read model                     | host and gateway adapters         |
-| host `SessionPhase`                | per UI/controller session  | process-local controller state                     | host UI and interaction controls  |
-| `session_turn_transition`          | per hosted turn transition | durable/rebuildable hosted-flow receipt projection | gateway adapters and replay tools |
+| Concept                            | Granularity               | Durability                     | Primary reader                   |
+| ---------------------------------- | ------------------------- | ------------------------------ | -------------------------------- |
+| runtime turn projection            | per runtime turn          | canonical tape projection      | runtime and gateway adapters     |
+| `SessionLifecycleSnapshot.summary` | per session               | rebuildable runtime projection | host and gateway adapters        |
+| host `SessionPhase`                | per UI/controller session | process-local controller state | host UI and interaction controls |
+| canonical recovery cause           | per runtime turn          | canonical tape projection      | runtime engine and replay tools  |
 
 Stable turn gates:
 
-| Gate                 | Meaning                                                     | Receipt or driver                                      |
-| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
-| `ingress_received`   | accepted hosted turn identity exists                        | `turn_input_recorded`                                  |
-| `admission_resolved` | turn-level admission, schedule prelude, and posture settled | hosted turn envelope pre-loop admission                |
-| `effect_authorized`  | effect authority was resolved for this turn's tool path     | `effect_authority_decided`                             |
-| `execution_recorded` | tool execution outcome was durably observed                 | `tool_result_recorded`                                 |
-| `recovery_settled`   | bounded recovery, rollback, or supersession posture settled | `session_turn_transition` or rollback/recovery receipt |
-| `terminal_recorded`  | accepted turn has terminal committed output                 | `turn_render_committed` or terminal shutdown receipt   |
+| Gate                 | Meaning                                                     | Receipt or driver                                    |
+| -------------------- | ----------------------------------------------------------- | ---------------------------------------------------- |
+| `ingress_received`   | accepted hosted turn identity exists                        | `turn_input_recorded`                                |
+| `admission_resolved` | turn-level admission, schedule prelude, and posture settled | hosted turn envelope pre-loop admission              |
+| `effect_authorized`  | effect authority was resolved for this turn's tool path     | `effect_authority_decided`                           |
+| `execution_recorded` | tool execution outcome was durably observed                 | `tool_result_recorded`                               |
+| `recovery_settled`   | bounded recovery, rollback, or supersession posture settled | canonical recovery, checkpoint, or rollback receipt  |
+| `terminal_recorded`  | accepted turn has terminal committed output                 | `turn_render_committed` or terminal shutdown receipt |
 
 Gate movement is monotonic. Repeating the current gate is a no-op; moving to an
 earlier gate is an assertion failure. Recovery supersession may mark a turn as
@@ -152,20 +153,20 @@ so maintainers can see which hard gate a fold observes:
 | `session_integrity`                | `ingress_received`, `recovery_settled`, `terminal_recorded`                         |
 | `task_watchdog`                    | `ingress_received`, `terminal_recorded`                                             |
 
-Recovery placement is also declared, not inferred from each coordinator:
+Recovery placement is now declared by the runtime cause vocabulary, not inferred
+from hosted coordinators:
 
-| Recovery reason           | Trusted gate         | Resume/supersede gate | Receipts that explain the move                                             |
-| ------------------------- | -------------------- | --------------------- | -------------------------------------------------------------------------- |
-| `wal_recovery_resume`     | `ingress_received`   | `recovery_settled`    | `session_turn_transition`, `recovery_wal_recovery_completed`               |
-| `reasoning_revert_resume` | `execution_recorded` | `recovery_settled`    | `session_turn_transition`, `reasoning_revert`, `reasoning_revert_recorded` |
-| `compaction_retry`        | `admission_resolved` | `recovery_settled`    | `session_turn_transition`, `session_compact`                               |
-| `provider_fallback_retry` | `admission_resolved` | `recovery_settled`    | `session_turn_transition`                                                  |
-| `max_output_recovery`     | `admission_resolved` | `recovery_settled`    | `session_turn_transition`                                                  |
-| `rollback_receipt`        | `execution_recorded` | `recovery_settled`    | `rollback`, `reversible_mutation_rolled_back`, `brewva.session.rewind.v1`  |
-| `session_shutdown`        | `ingress_received`   | `terminal_recorded`   | `session_shutdown`                                                         |
+| Recovery cause          | Trusted gate         | Resume/terminal gate | Receipts that explain the move            |
+| ----------------------- | -------------------- | -------------------- | ----------------------------------------- |
+| `approval_pending`      | `effect_authorized`  | `recovery_settled`   | `approval.requested`, `runtime.suspended` |
+| `compaction_required`   | `admission_resolved` | `recovery_settled`   | `checkpoint.committed`                    |
+| `provider_retry`        | `admission_resolved` | `recovery_settled`   | `runtime.suspended` with zero-frame retry |
+| `interrupt`             | `ingress_received`   | `terminal_recorded`  | `runtime.suspended`                       |
+| `terminal_commit`       | `execution_recorded` | `terminal_recorded`  | `turn.ended`                              |
+| explicit rollback tools | `execution_recorded` | `recovery_settled`   | rollback or reversible mutation receipts  |
 
-Gateway hosted transitions project the spine. They remain useful for replay and
-operator explanation, but they are not a rival lifecycle state machine.
+Gateway hosted transitions were removed. Replay and operator explanation now use
+canonical runtime events and tape projections directly.
 
 ## Lifecycle Stages
 
@@ -181,17 +182,15 @@ operator explanation, but they are not a rival lifecycle state machine.
    `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`)
    - runtime config is loaded/normalized first
    - startup UI setting (`ui.quietStartup`) is applied from `runtime.config.ui` into session settings overrides
-   - CLI and hosted routes share the same substrate-owned session bootstrap
-   - non-hosted direct consumers may use
-     `@brewva/brewva-substrate/sdk` to assemble an in-memory substrate session
-     from substrate services, a session host, a host plugin runner, and the
-     turn loop; that SDK route is a mechanism entrypoint and does not create a
-     hosted envelope, runtime, recovery policy, or terminal render receipt
+   - CLI and hosted routes share the same session bootstrap, then enter the
+     runtime-owned turn loop through the hosted adapter
+   - non-hosted direct consumers must construct `BrewvaRuntime` directly; the
+     substrate SDK bypass was removed so there is no second public turn owner
 3. Register lifecycle handlers through the canonical hosted behavior (`packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`)
    - `managedToolMode=hosted`: register managed Brewva tools through the hosted behavior API
    - `managedToolMode=direct`: provide managed Brewva tools directly from the host
 4. Enter the canonical hosted turn envelope
-   (`packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.ts`)
+   (`packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`)
    - entrypoints construct a session and semantic turn request; they do not
      reimplement profile resolution, turn-id/runtime-turn binding,
      schedule-trigger prelude, WAL resume transitions, or terminal render
@@ -202,20 +201,22 @@ operator explanation, but they are not a rival lifecycle state machine.
      `completed | failed | cancelled` outcomes; approval `suspended` turns
      remain represented by the input receipt plus approval/session-wire frames
    - envelope diagnostics stay process-local; replay and operator forensics use
-     turn receipts, approval receipts, schedule warning receipts, and
-     `session_turn_transition` rather than a separate durable diagnostics event
-5. The envelope runs the gateway-internal `HostedThreadLoop`
+     turn receipts, approval receipts, schedule warning receipts, and canonical
+     runtime projections rather than a separate durable diagnostics event
+5. The envelope delegates the prompt to the runtime-owned turn loop
    - `interactive` and `print` keep schedule trigger and Recovery WAL replay out
      of the ordinary human fast path
    - `scheduled`, `heartbeat`, `wal_recovery`, `channel`, and `subagent`
      profiles opt into the control-plane features their entrypoint needs
-   - the substrate turn loop owns model streaming, tool calls, queued prompts,
-     in-flight steer application, follow-up messages, request authorization,
-     context transformation, and event reporting
+   - `runtime.turn(...)` owns model materialization, provider streaming, tool
+     transaction frames, context pressure, retry discipline, and terminal
+     canonical tape commits
+   - gateway adapters forward runtime frames into session-wire preview frames;
+     they do not maintain turn truth or recovery policy
    - `@brewva/brewva-substrate/compaction` owns pure compaction helpers for
      summary projection, token estimation, and cut-point selection
-   - hosted compaction, reasoning recovery, envelope policy, profile selection,
-     and process-local loop diagnostics remain gateway-owned
+   - profile selection, terminal render receipts, and transport diagnostics
+     remain gateway-owned adapter behavior
 6. Expose derived session wire replay through the runtime-owned session-wire
    compiler surface and dispose session resources
 
@@ -308,16 +309,15 @@ durable reconciliation record.
 
 Recovery posture remains tape-derived after hydration as well. The runtime keeps
 the `unclean_shutdown_reconciled` receipt for explainability and operator
-inspection, but later recovery transition receipts supersede that degraded
+inspection, but later canonical recovery receipts supersede that degraded
 posture instead of letting a process-local diagnostic pin the session in
 permanent degradation.
 
-- On `SIGINT`/`SIGTERM`, CLI records `session_turn_transition` with
-  `reason=signal_interrupt`, waits for agent idle (bounded by graceful
-  timeout), then exits.
+- On `SIGINT`/`SIGTERM`, CLI interrupts the active runtime turn, waits for agent
+  idle (bounded by graceful timeout), then exits.
 - Next startup reconstructs replay-owned hydration state from event tape
   (`checkpoint + delta` replay), including skill catalog, tool-lifecycle,
-  verification, resource-lease, cost, evidence-ledger, reversible-mutation,
+  verification, resource-lease, cost, tape-ledger projection, reversible-mutation,
   and parallel-budget state.
 - Projection rebuild remains a separate on-demand projection-engine path. It is
   not part of `SessionLifecycleService` hydration and it does not gate replay
@@ -335,7 +335,7 @@ permanent degradation.
 - durable session teardown is separate from replay truth: on hosted
   `session_shutdown`, runtime records or reconciles the terminal receipt first,
   then clears session-local hydrated state, caches, turn clocks, and other
-  rebuildable helpers through `operator.session.clearState(sessionId)`. Later
+  rebuildable helpers through `HostedRuntimeAdapterPort.ops.session.state.clear(sessionId)`. Later
   inspection or replay rehydrates from tape again instead of depending on
   process-local leftovers.
 - Recovery posture is derived from two bounded read models:
@@ -343,23 +343,24 @@ permanent degradation.
     current reference-context digest
   - the recovery working set, which carries operational continuation state such
     as pending recovery family, open tool calls, and resume contract hints
-- Gateway and frontend session replay do not consume raw `inspect.events`.
-  Runtime-scoped replay uses `root.inspect.sessionWire`; gateway public
+- Gateway and frontend session replay do not consume raw event streams.
+  Runtime-scoped replay uses `HostedRuntimeAdapterPort.ops.sessionWire`; gateway public
   replay uses the same runtime-owned compiler semantics against archived
   agent-session event logs. In both cases replay is compiled from durable
   receipts including `turn_input_recorded`, `turn_render_committed`, approval
-  events, delegation receipts, transition receipts, and `session_shutdown`.
+  events, delegation receipts, canonical runtime events, and `session_shutdown`.
 - `brewva inspect` is adjacent to that replay pipeline but not identical to it:
-  the command builds an operator report from `inspect.events`,
-  `inspect.session`, `inspect.recovery`, and nearby artifact checks instead of
-  subscribing to `inspect.sessionWire`.
+  the command builds an operator report from `HostedRuntimeAdapterPort.ops.events`,
+  `HostedRuntimeAdapterPort.ops.session`, `HostedRuntimeAdapterPort.ops.recovery`,
+  and nearby artifact checks instead of subscribing to
+  `HostedRuntimeAdapterPort.ops.sessionWire`.
 - Live gateway preview traffic remains cache-class and transport-owned. In the
   current wire, live tool frames are explicitly attempt-scoped through
   authoritative tool lifecycle binding, while replay remains committed-state
   only.
-- runtime lifecycle aggregate sits between domain-local rebuildable state and
+- runtime lifecycle aggregate sits between projection-local rebuildable state and
   presentation adapters. Hydration folds, approval hydration, recovery posture,
-  hosted transition state, and open tool-call state remain domain-local; the
+  canonical runtime causes, and open tool-call state remain projection-local; the
   aggregate snapshot composes them into one posture contract for gateway
   status, host bootstrap, and policy adapters.
 - Gateway public-session lookup is also durable: the gateway records
@@ -377,26 +378,15 @@ permanent degradation.
   history-view baseline still comes from durable `session_compact` receipts or
   a completed reasoning branch reset, plus reference-context compatibility
   checks. If no compatible receipt-backed baseline exists,
-  `inspect.context.prompt.getHistoryViewBaseline(...)` can still expose a bounded
+  `HostedRuntimeAdapterPort.ops.context.prompt.getHistoryViewBaseline(...)` can still expose a bounded
   `exact_history` continuity snapshot rebuilt from the surviving branch's
   `turn_input_recorded` / `turn_render_committed` history, but that fallback is
   not a replacement for receipt-backed history rewrite authority.
-- Before a recovered prompt runs, `HostedThreadLoop` checks whether the latest
-  durable reasoning revert has already completed `reasoning_revert_resume`.
-  If not, the loop resolves `revert_then_stream`, rebuilds the active branch
-  from the revert target, replaces model-visible messages from that surviving
-  branch, and resumes with bounded hosted continuity instead of replaying
-  superseded history.
-- `completed` is the only terminal hosted-resume status for replay purposes.
-  Any latest reasoning revert without a completed
-  `reasoning_revert_resume` receipt remains pending for the next serialized
-  recovery pass.
-- That reasoning resume remains owned by the hosted thread loop that was already
-  handling the prompt. Hosted recovery prepares the branch reset, but it does
-  not start a second out-of-band prompt behind the scheduler.
-- `reasoning_revert_resume` is therefore crash-safe over the existing gateway
-  prompt WAL: the WAL replays the pending turn envelope, while tape determines
-  whether branch reset must be re-applied first.
+- Reasoning rewind is no longer a gateway-owned recovery branch. It is
+  expressed as explicit model/kernel state and projected from tape-visible
+  receipts. The default turn engine recognizes only approval suspension,
+  compaction pressure, zero-frame provider retry, interrupt, and terminal
+  commit.
 - Channel approval helper state is not part of recovery correctness.
   Approval claims and request resolution remain replay-derived from durable
   runtime events, with optional process-local UI cache only.
@@ -428,6 +418,6 @@ permanent degradation.
   integrity failures now fail closed for recovery until the corrupted rows are
   repaired; Recovery WAL compaction preserves the latest ingress watermark through a
   metadata-only marker needed for polling recovery.
-- `root.inspect.session.getIntegrity(sessionId)` is the canonical operator-facing
+- `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(sessionId)` is the canonical operator-facing
   health read model. It aggregates `event_tape`, `recovery_wal`, and `artifact`
   durability issues into one status surface.

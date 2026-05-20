@@ -15,17 +15,17 @@
   - `docs/reference/tools/memory-and-recall.md`
   - `docs/journeys/internal/context-and-compaction.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/workbench/service.ts`
-  - `packages/brewva-runtime/src/domain/context/context-pressure.ts`
-  - `packages/brewva-runtime/src/domain/context/context-compaction-gate.ts`
-  - `packages/brewva-runtime/src/domain/context/history-view-baseline.ts`
+  - `packages/brewva-runtime/src/model/workbench/service.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/context-pressure.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/context-compaction-gate.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/history-view-baseline.ts`
   - `packages/brewva-gateway/src/hosted/internal/compaction/summary-generator.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/hosted-workbench-context-pipeline.ts`
   - `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
   - `packages/brewva-tools/src/families/memory/workbench.ts`
   - `packages/brewva-tools/src/families/memory/recall.ts`
-  - `<deleted: packages/brewva-runtime/src/domain/context/provider.ts>`
-  - `<deleted: packages/brewva-runtime/src/domain/context/injection-orchestrator.ts>`
+  - `<deleted: packages/brewva-runtime/src/internal/legacy-runtime/model/context/provider.ts>`
+  - `<deleted: packages/brewva-runtime/src/internal/legacy-runtime/model/context/injection-orchestrator.ts>`
   - `<deleted: packages/brewva-recall/src/context/provider.ts>`
 
 ## Decision Summary
@@ -41,4 +41,4 @@
 
 ## Superseded by
 
-- None
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

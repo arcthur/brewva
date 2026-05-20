@@ -17,8 +17,10 @@
 ## Hard Invariants
 
 - Preserve the user-facing `brewva` command, help surface, launcher metadata, and distribution smoke checks.
-- Keep `BrewvaRuntimeRoot` semantic-surface based: `root.authority` and `root.inspect`; repo-owned operators must use `selectOperatorRuntimePort(instance).operator`.
-- Do not reintroduce a mixed top-level implementation surface.
+- Keep the public runtime root four-port based: `identity`, `config`, `tape`, `kernel`, `model`, `start`, `turn`, and `close`.
+- Do not reintroduce `root`, `hosted`, `tool`, `operator`, `authority`, or `inspect` on `createBrewvaRuntime(...)`.
+- Do not add private runtime construction, Tape commit, or Effect semantic service seams; new code must target the four-port runtime or a package-owned control-plane adapter.
+- Runtime tests that still need historical hosted/operator fixtures must import them from `../../helpers/runtime.js`, not from a runtime package subpath.
 - Keep workspace imports on package entrypoints; do not reintroduce local alias schemes or cross-package relative imports.
 - Keep public root exports narrow. Repo-owned implementation seams stay under documented internal entrypoints.
 - Keep managed tools capability-scoped and fail-closed when a runtime capability is undeclared.
@@ -50,8 +52,8 @@
 ## Where To Look
 
 - Runtime API and public entry surface: `packages/brewva-runtime/src/runtime/runtime.ts`, `packages/brewva-runtime/src/public/index.ts`.
-- Runtime skills: `packages/brewva-runtime/src/domain/skills/contract.ts`, `packages/brewva-runtime/src/domain/skills/registry.ts`.
+- Runtime model attention: `packages/brewva-runtime/src/runtime/model/model.ts`.
 - Session query plane: `packages/brewva-session-index/src/index.ts`, consumed by `packages/brewva-recall/src/broker.ts` and `packages/brewva-cli/src/insights.ts`.
-- Gateway hosted context and plugins: `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`, `packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.ts`, `packages/brewva-gateway/src/extensions/api.ts`, `packages/brewva-gateway/src/hosted/internal/thread-loop/lifecycle/local-hook-port.ts`.
+- Gateway hosted context and plugins: `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`, `packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.ts`, `packages/brewva-gateway/src/extensions/api.ts`, `packages/brewva-gateway/src/hosted/internal/turn-adapter/lifecycle/local-hook-port.ts`.
 - Managed tool capabilities: `packages/brewva-tools/src/registry/managed-metadata.ts`, `packages/brewva-tools/src/registry/runtime-bound-tool.ts`.
 - Expanded lookup map: `skills/project/shared/source-map.md`.

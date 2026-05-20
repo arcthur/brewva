@@ -1,10 +1,6 @@
-import type {
-  CapabilityManifest,
-  CapabilitySelectionReceipt,
-} from "@brewva/brewva-runtime/capabilities";
-import { carryCapabilitySelection } from "@brewva/brewva-runtime/capabilities";
-import { TOOL_SURFACE_RESOLVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { ToolActionClass } from "@brewva/brewva-runtime/governance";
+import type { CapabilityManifest, CapabilitySelectionReceipt } from "@brewva/brewva-capabilities";
+import { carryCapabilitySelection } from "@brewva/brewva-capabilities";
+import type { ToolActionClass } from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaHostBeforeAgentStartResult,
   InternalHostPluginApi as ExtensionAPI,
@@ -19,6 +15,7 @@ import {
   MANAGED_BREWVA_TOOL_NAMES,
   OPERATOR_BREWVA_TOOL_NAMES,
 } from "@brewva/brewva-tools/registry";
+import { recordRuntimeToolSurfaceResolved } from "../runtime-ports.js";
 import {
   readLatestSkillSelectionReceipt,
   skillSelectionSummaryForTrace,
@@ -50,14 +47,22 @@ export interface ToolSurfaceRuntime {
       };
     };
   };
-  inspect: {
-    events: {
-      records: {
-        query(sessionId: string, query: { type: string }): Array<{ payload?: unknown }>;
+  ops: {
+    skills: {
+      selection: {
+        latest(sessionId: string): object | undefined;
+      };
+    };
+    tools: {
+      capabilitySelection: {
+        latest(sessionId: string): object | undefined;
+        record(sessionId: string, receipt: object): unknown;
+      };
+      surface: {
+        recordResolved(sessionId: string, payload: object): unknown;
       };
     };
   };
-  recordEvent(input: { sessionId: string; type: string; payload?: object }): unknown;
 }
 
 export interface RegisterToolSurfaceOptions {
@@ -361,43 +366,39 @@ function resolveAndActivateToolSurface(input: {
     }),
   );
 
-  input.runtime.recordEvent({
-    sessionId: input.sessionId,
-    type: TOOL_SURFACE_RESOLVED_EVENT_TYPE,
-    payload: {
-      availableCount: allToolNames.length,
-      activeCount: activeToolNames.length,
-      activeToolNames,
-      managedCount: MANAGED_BREWVA_TOOL_NAMES.length,
-      managedActiveCount: counts.managedActiveCount,
-      requestedToolNames: requestedToolNames.filter((toolName) => allToolNameSet.has(toolName)),
-      requestedActivatedToolNames,
-      ignoredRequestedToolNames,
-      operatorProfile,
-      baseActiveCount: counts.baseActiveCount,
-      skillSurfaceToolActiveCount: counts.skillSurfaceToolActiveCount,
-      controlPlaneActiveCount: counts.controlPlaneActiveCount,
-      operatorActiveCount: counts.operatorActiveCount,
-      externalActiveCount: counts.externalActiveCount,
-      hiddenSkillSurfaceToolCount: counts.hiddenSkillSurfaceToolCount,
-      hiddenControlPlaneCount: counts.hiddenControlPlaneCount,
-      hiddenOperatorCount: counts.hiddenOperatorCount,
-      modelOperated: true,
-      removedGates: ["task_spec", "repair_posture"],
-      operatorRequested: requestedToolNames.filter((toolName) =>
-        OPERATOR_BREWVA_TOOL_NAMES.includes(toolName),
-      ),
-      ...skillSelection,
-      selectedCapabilityNames:
-        input.selectedCapabilityReceipt?.selected_capabilities.map((entry) => entry.name) ?? [],
-      capabilitySelectionId: input.selectedCapabilityReceipt?.selection_id ?? null,
-      requestedUnknownToolNames: requestedToolNames.filter(
-        (toolName) => !allToolNameSet.has(toolName),
-      ),
-      requestedVisibleToolNames: [...requestedToolNameSet].filter((toolName) =>
-        activeToolNames.includes(toolName),
-      ),
-    },
+  recordRuntimeToolSurfaceResolved(input.runtime, input.sessionId, {
+    availableCount: allToolNames.length,
+    activeCount: activeToolNames.length,
+    activeToolNames,
+    managedCount: MANAGED_BREWVA_TOOL_NAMES.length,
+    managedActiveCount: counts.managedActiveCount,
+    requestedToolNames: requestedToolNames.filter((toolName) => allToolNameSet.has(toolName)),
+    requestedActivatedToolNames,
+    ignoredRequestedToolNames,
+    operatorProfile,
+    baseActiveCount: counts.baseActiveCount,
+    skillSurfaceToolActiveCount: counts.skillSurfaceToolActiveCount,
+    controlPlaneActiveCount: counts.controlPlaneActiveCount,
+    operatorActiveCount: counts.operatorActiveCount,
+    externalActiveCount: counts.externalActiveCount,
+    hiddenSkillSurfaceToolCount: counts.hiddenSkillSurfaceToolCount,
+    hiddenControlPlaneCount: counts.hiddenControlPlaneCount,
+    hiddenOperatorCount: counts.hiddenOperatorCount,
+    modelOperated: true,
+    removedGates: ["task_spec", "repair_posture"],
+    operatorRequested: requestedToolNames.filter((toolName) =>
+      OPERATOR_BREWVA_TOOL_NAMES.includes(toolName),
+    ),
+    ...skillSelection,
+    selectedCapabilityNames:
+      input.selectedCapabilityReceipt?.selected_capabilities.map((entry) => entry.name) ?? [],
+    capabilitySelectionId: input.selectedCapabilityReceipt?.selection_id ?? null,
+    requestedUnknownToolNames: requestedToolNames.filter(
+      (toolName) => !allToolNameSet.has(toolName),
+    ),
+    requestedVisibleToolNames: [...requestedToolNameSet].filter((toolName) =>
+      activeToolNames.includes(toolName),
+    ),
   });
 }
 

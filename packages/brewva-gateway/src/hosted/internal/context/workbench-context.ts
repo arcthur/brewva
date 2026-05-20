@@ -1,12 +1,11 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
-} from "@brewva/brewva-runtime/context";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
+} from "@brewva/brewva-runtime/protocol";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
+import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
-import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import {
   buildContextBundle,
   renderContextBundle,
@@ -14,6 +13,12 @@ import {
 } from "../../../context/api.js";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
 import { applyWorkbenchEvictionsToMessages } from "../session/projection/workbench-visibility.js";
+import {
+  getRuntimeContextStatus,
+  listRuntimeWorkbenchEntries,
+  renderRuntimeTurnDigest,
+  type HostedRuntimeAdapterPort,
+} from "../session/runtime-ports.js";
 import { renderCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import { applyContextContract } from "./context-contract.js";
 import { resolveContextScopeId } from "./context-shared.js";
@@ -94,8 +99,8 @@ export interface HostedWorkbenchContextController {
   beforeAgentStart: (input: HostedWorkbenchContextInput) => Promise<HostedWorkbenchContextResult>;
   transformContext: (input: {
     sessionId: string;
-    messages: readonly BrewvaTurnLoopMessage[];
-  }) => BrewvaTurnLoopMessage[];
+    messages: readonly BrewvaAgentProtocolMessage[];
+  }) => BrewvaAgentProtocolMessage[];
 }
 
 export interface HostedWorkbenchContextOptions {
@@ -197,7 +202,7 @@ function buildMessageDetails(input: {
   gateRequired: boolean;
   rendered: HostedContextRenderResult;
   capabilityView: BuildCapabilityViewResult;
-  workbenchEntries: ReturnType<BrewvaHostedRuntimePort["inspect"]["workbench"]["list"]>;
+  workbenchEntries: ReturnType<HostedRuntimeAdapterPort["ops"]["workbench"]["list"]>;
 }): HostedWorkbenchContextMessageDetails {
   const notes = input.workbenchEntries.filter((entry) => entry.kind === "note").length;
   const evictions = input.workbenchEntries.filter((entry) => entry.kind === "eviction").length;
@@ -332,10 +337,10 @@ function buildCompactionAdvisoryBlock(input: {
 }
 
 function buildWorkbenchBlock(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): HostedContextBlock | null {
-  const entries = runtime.inspect.workbench.list(sessionId);
+  const entries = listRuntimeWorkbenchEntries(runtime, sessionId);
   if (entries.length === 0) {
     return null;
   }
@@ -354,10 +359,10 @@ function buildWorkbenchBlock(
     if (entry.sourceRefs.length > 0) {
       lines.push(`  source_refs: ${entry.sourceRefs.join(", ")}`);
     }
-    if (entry.content.length > 0) {
+    if ((entry.content?.length ?? 0) > 0) {
       lines.push(`  note: ${entry.content}`);
     }
-    if (entry.preservedQuotes && entry.preservedQuotes.length > 0) {
+    if (Array.isArray(entry.preservedQuotes) && entry.preservedQuotes.length > 0) {
       lines.push(`  preserved_quotes: ${entry.preservedQuotes.join(" | ")}`);
     }
   }
@@ -365,13 +370,13 @@ function buildWorkbenchBlock(
 }
 
 function buildContextStatusBlock(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
     usage?: ContextBudgetUsage;
   },
 ): HostedContextBlock {
-  const status = runtime.inspect.context.usage.getStatus(input.sessionId, input.usage);
+  const status = getRuntimeContextStatus(runtime, input.sessionId, input.usage);
   const lines = [
     "[Context Status]",
     `tokens_used: ${status.tokensUsed ?? "unknown"}`,
@@ -411,14 +416,14 @@ function buildCapabilityBlocks(capabilityView: BuildCapabilityViewResult): Hoste
 }
 
 function buildConsequenceDigestBlock(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   turn: number;
 }): HostedContextBlock | null {
   if (input.turn <= 0) {
     return null;
   }
-  const digest = input.runtime.inspect.events.effects.renderTurnDigest(input.sessionId, {
+  const digest = renderRuntimeTurnDigest(input.runtime, input.sessionId, {
     runtimeTurn: input.turn - 1,
     turnId: `turn-${input.turn - 1}`,
     maxChars: input.runtime.config.infrastructure.contextBudget.consequenceDigestMaxChars,
@@ -439,7 +444,7 @@ interface HostedDynamicTail {
 }
 
 async function buildHostedDynamicTail(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   turn: number;
   usage?: ContextBudgetUsage;
@@ -455,7 +460,7 @@ async function buildHostedDynamicTail(input: {
   const compactionNudgeMode = resolveCompactionNudgeMode({
     sessionId: input.sessionId,
     turn: input.turn,
-    gateRequired: input.gateStatus.required,
+    gateRequired: input.gateStatus.required ?? false,
     pendingCompactionReason: input.pendingCompactionReason,
   });
   const pendingDelegationsBlock = await buildPendingDelegationsBlock(
@@ -524,7 +529,7 @@ async function buildHostedDynamicTail(input: {
 
 export function createHostedWorkbenchContextController(
   extensionApi: InternalHostPluginApi,
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   telemetry: HostedContextTelemetry,
   statePort: HostedContextGateStatePort,
   options: HostedWorkbenchContextOptions = {},
@@ -533,7 +538,7 @@ export function createHostedWorkbenchContextController(
     transformContext(input) {
       return applyWorkbenchEvictionsToMessages({
         messages: input.messages,
-        workbenchEntries: runtime.inspect.workbench.list(input.sessionId),
+        workbenchEntries: listRuntimeWorkbenchEntries(runtime, input.sessionId),
       }).messages;
     },
 
@@ -590,10 +595,10 @@ export function createHostedWorkbenchContextController(
           originalTokens: 0,
           finalTokens: 0,
           truncated: false,
-          gateRequired: gateStatus.required,
+          gateRequired: gateStatus.required === true,
           rendered,
           capabilityView,
-          workbenchEntries: runtime.inspect.workbench.list(input.sessionId),
+          workbenchEntries: listRuntimeWorkbenchEntries(runtime, input.sessionId),
         }),
       });
     },

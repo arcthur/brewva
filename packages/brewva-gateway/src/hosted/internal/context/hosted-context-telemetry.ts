@@ -1,5 +1,4 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { ContextCompactionGateStatus } from "@brewva/brewva-runtime/context";
+import type { ContextCompactionGateStatus } from "@brewva/brewva-runtime/protocol";
 import {
   CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE,
   CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
@@ -11,7 +10,8 @@ import {
   CONTEXT_COMPOSED_EVENT_TYPE,
   CRITICAL_WITHOUT_COMPACT_EVENT_TYPE,
   SESSION_COMPACT_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import {
   buildContextComposedEventPayload,
   type HostedContextRenderResult,
@@ -75,7 +75,7 @@ function normalizeRuntimeError(error: unknown): string {
 }
 
 export function createHostedContextTelemetry(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
 ): HostedContextTelemetry {
   const emitRuntimeEvent = (input: {
     sessionId: string;
@@ -83,12 +83,28 @@ export function createHostedContextTelemetry(
     type: string;
     payload: Record<string, unknown>;
   }): void => {
-    runtime.extensions.hosted.events.record({
-      sessionId: input.sessionId,
-      turn: input.turn,
-      type: input.type,
-      payload: input.payload,
-    });
+    const event = { sessionId: input.sessionId, turn: input.turn, payload: input.payload };
+    if (input.type === CONTEXT_COMPACTION_SKIPPED_EVENT_TYPE) {
+      runtime.ops.context.telemetry.compactionSkipped(event);
+    } else if (input.type === CONTEXT_COMPACTION_AUTO_REQUESTED_EVENT_TYPE) {
+      runtime.ops.context.telemetry.autoRequested(event);
+    } else if (input.type === CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE) {
+      runtime.ops.context.telemetry.autoCompleted(event);
+    } else if (input.type === CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE) {
+      runtime.ops.context.telemetry.autoFailed(event);
+    } else if (input.type === CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE) {
+      runtime.ops.context.telemetry.hardGateRequired(event);
+    } else if (input.type === CRITICAL_WITHOUT_COMPACT_EVENT_TYPE) {
+      runtime.ops.context.telemetry.criticalWithoutCompact(event);
+    } else if (input.type === CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE) {
+      runtime.ops.context.telemetry.compactionAdvisory(event);
+    } else if (input.type === SESSION_COMPACT_EVENT_TYPE) {
+      runtime.ops.context.telemetry.sessionCompact(event);
+    } else if (input.type === CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE) {
+      runtime.ops.context.telemetry.gateCleared(event);
+    } else if (input.type === CONTEXT_COMPOSED_EVENT_TYPE) {
+      runtime.ops.context.telemetry.contextComposed(event);
+    }
   };
 
   return {

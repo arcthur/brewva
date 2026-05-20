@@ -1,5 +1,5 @@
-import { EXEC_FAILED_EVENT_TYPE, EXEC_STARTED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { getToolActionPolicy } from "@brewva/brewva-runtime/governance";
+import { EXEC_FAILED_EVENT_TYPE, EXEC_STARTED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import { getToolActionPolicy } from "@brewva/brewva-runtime/protocol";
 import {
   analyzeVirtualReadonlyEligibility,
   classifyToolBoundaryRequest,

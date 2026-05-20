@@ -5,7 +5,6 @@ import {
   type SessionBackend,
   type SendPromptOptions,
 } from "@brewva/brewva-gateway";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
@@ -13,12 +12,13 @@ import {
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
-import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-runtime/schedule";
+} from "@brewva/brewva-runtime/protocol";
+import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-runtime/protocol";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
+  return createRuntimeInstanceFixture(options);
 }
 
 function createScheduleIntent(
@@ -47,17 +47,17 @@ describe("gateway contract: schedule runner", () => {
     const workspace = createTestWorkspace("schedule-runner-success");
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const parentSessionId = "parent-session";
-    runtime.authority.task.spec.set(parentSessionId, {
+    runtime.ops.task.spec.set(parentSessionId, {
       schema: "brewva.task.v1",
       goal: "Finish the release checklist",
     });
-    runtime.authority.claim.facts.upsert(parentSessionId, {
+    runtime.ops.claim.facts.upsert(parentSessionId, {
       id: "fact-1",
       kind: "status",
       severity: "warn",
       summary: "Release notes are still missing reviewer approval.",
     });
-    runtime.authority.tape.handoff.record(parentSessionId, {
+    runtime.ops.tape.handoff.record(parentSessionId, {
       name: "release-checkpoint",
       summary: "The release prep is partially complete.",
       nextSteps: "Resolve the last reviewer comment.",
@@ -167,17 +167,17 @@ describe("gateway contract: schedule runner", () => {
       expect(sentPrompt?.prompt).not.toContain("parent_anchor_id:");
       expect(sentPrompt?.prompt).not.toContain("parent_anchor_name:");
 
-      const wakeups = runtime.inspect.events.records.query("agent-schedule-1", {
+      const wakeups = runtime.ops.events.records.query("agent-schedule-1", {
         type: SCHEDULE_WAKEUP_EVENT_TYPE,
       });
       expect(wakeups).toHaveLength(1);
       expect(wakeups[0]?.payload?.intentId).toBe("intent-1");
       expect(wakeups[0]?.payload?.inheritedOperationalClaims).toBe(1);
 
-      const started = runtime.inspect.events.records.query(parentSessionId, {
+      const started = runtime.ops.events.records.query(parentSessionId, {
         type: SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
       });
-      const finished = runtime.inspect.events.records.query(parentSessionId, {
+      const finished = runtime.ops.events.records.query(parentSessionId, {
         type: SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
       });
       expect(started).toHaveLength(1);
@@ -223,17 +223,17 @@ describe("gateway contract: schedule runner", () => {
     const workspace = createTestWorkspace("schedule-runner-fresh");
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const parentSessionId = "parent-session";
-    runtime.authority.task.spec.set(parentSessionId, {
+    runtime.ops.task.spec.set(parentSessionId, {
       schema: "brewva.task.v1",
       goal: "Finish the release checklist",
     });
-    runtime.authority.claim.facts.upsert(parentSessionId, {
+    runtime.ops.claim.facts.upsert(parentSessionId, {
       id: "fact-1",
       kind: "status",
       severity: "warn",
       summary: "Release notes are still missing reviewer approval.",
     });
-    runtime.authority.tape.handoff.record(parentSessionId, {
+    runtime.ops.tape.handoff.record(parentSessionId, {
       name: "release-checkpoint",
       summary: "The release prep is partially complete.",
       nextSteps: "Resolve the last reviewer comment.",
@@ -302,7 +302,7 @@ describe("gateway contract: schedule runner", () => {
       expect(sentPrompt?.prompt).not.toContain("parent_anchor_summary:");
       expect(sentPrompt?.prompt).not.toContain("parent_anchor_next_steps:");
 
-      const wakeups = runtime.inspect.events.records.query("agent-schedule-fresh", {
+      const wakeups = runtime.ops.events.records.query("agent-schedule-fresh", {
         type: SCHEDULE_WAKEUP_EVENT_TYPE,
       });
       expect(wakeups).toHaveLength(1);
@@ -361,7 +361,7 @@ describe("gateway contract: schedule runner", () => {
       expect(thrown).toBeInstanceOf(Error);
       expect((thrown as Error).message).toBe("worker failed");
 
-      const failed = runtime.inspect.events.records.query(parentSessionId, {
+      const failed = runtime.ops.events.records.query(parentSessionId, {
         type: SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
       });
       expect(failed).toHaveLength(1);

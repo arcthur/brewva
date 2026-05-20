@@ -1,33 +1,46 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  BrewvaDeferred,
-  BrewvaDuration,
-  BrewvaEffect,
-  BrewvaExit,
-  BrewvaScope,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
   runSyncAtBoundary,
   startScopedSchedule,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import type { BrewvaConfig } from "@brewva/brewva-runtime";
-import { asBrewvaWalId } from "@brewva/brewva-runtime/core";
+import {
+  BrewvaDuration,
+  BrewvaEffect,
+  BrewvaExit,
+  BrewvaScope,
+} from "@brewva/brewva-effect/primitives";
+import { BrewvaDeferred } from "@brewva/brewva-effect/primitives";
+import {
+  DEFAULT_BREWVA_CONFIG,
+  type BrewvaConfig,
+  type CanonicalEvent,
+} from "@brewva/brewva-runtime";
+import {
+  asBrewvaSessionId,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
+  asBrewvaWalId,
+} from "@brewva/brewva-runtime/core";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
-import { querySessionWireFramesFromEventLog } from "@brewva/brewva-runtime/event-log";
-import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
-import type { RecoveryWalRecord } from "@brewva/brewva-runtime/schedule";
+import type { RecoveryWalRecord } from "@brewva/brewva-runtime/protocol";
 import type {
+  BrewvaStructuredEvent,
   ContextStatusView,
   ManagedToolMode,
   SessionLifecycleSnapshot,
   SessionWireFrame,
-} from "@brewva/brewva-runtime/session";
+  SessionWireTurnTrigger,
+  ToolOutputView,
+} from "@brewva/brewva-runtime/protocol";
+import { compileSessionWireFrames } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
-import type { WorkerToParentMessage } from "../../hosted/internal/thread-loop/worker/api.js";
+import type { WorkerToParentMessage } from "../../hosted/internal/turn-adapter/worker/api.js";
 import {
   FileGatewayStateStore,
   type ChildRegistryEntry,
@@ -35,9 +48,9 @@ import {
 } from "../../ingress/api.js";
 import { sleep } from "../../utils/async.js";
 import { toErrorMessage } from "../../utils/errors.js";
-import { recordSessionShutdownReceiptToEventLogIfMissing } from "../../utils/runtime.js";
 import type { StructuredLogger } from "../logger.js";
 import { isProcessAlive } from "../pid.js";
+import { createRecoveryWalRecovery, type RecoveryWalStore } from "../recovery.js";
 import {
   type OpenSessionInput,
   type OpenSessionResult,
@@ -56,8 +69,8 @@ import { SessionOpenAdmissionController } from "./admission.js";
 import {
   appendGatewaySessionBindingReceipt,
   listGatewaySessionBindings,
-  resolveGatewaySessionBindingLogPath,
-} from "./session-binding-tape.js";
+  resolveGatewaySessionBindingStorePath,
+} from "./session-binding-store.js";
 import {
   buildSessionTurnEnvelope,
   extractPromptFromEnvelope,
@@ -89,6 +102,10 @@ const DEFAULT_RECOVERY_WAL_COMPACT_INTERVAL_MS = 120_000;
 
 type LoggerLike = Pick<StructuredLogger, "debug" | "info" | "warn" | "error" | "log">;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -112,6 +129,248 @@ function isContextStatusView(value: unknown): value is ContextStatusView {
     typeof candidate.compactionAdvised === "boolean" &&
     typeof candidate.forcedCompaction === "boolean"
   );
+}
+
+function canonicalTapePath(input: { cwd: string; sessionId: string }): string {
+  return resolve(
+    input.cwd,
+    DEFAULT_BREWVA_CONFIG.tape.dir,
+    `${encodeURIComponent(input.sessionId)}.jsonl`,
+  );
+}
+
+function isCanonicalEvent(value: unknown): value is CanonicalEvent {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.sessionId === "string" &&
+    typeof value.type === "string" &&
+    typeof value.timestamp === "number"
+  );
+}
+
+function readCanonicalTapeEvents(input: { cwd: string; sessionId: string }): CanonicalEvent[] {
+  const path = canonicalTapePath(input);
+  if (!existsSync(path)) {
+    return [];
+  }
+  return readFileSync(path, "utf8")
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        return isCanonicalEvent(parsed) ? [parsed] : [];
+      } catch {
+        return [];
+      }
+    });
+}
+
+function promptTextFromCanonicalTurnStarted(payload: unknown): string {
+  if (!isRecord(payload)) {
+    return "";
+  }
+  if (typeof payload.prompt === "string") {
+    return payload.prompt;
+  }
+  if (!Array.isArray(payload.content)) {
+    return "";
+  }
+  return payload.content
+    .map((part) => {
+      if (!isRecord(part)) {
+        return "";
+      }
+      if (part.type === "text" && typeof part.text === "string") {
+        return part.text;
+      }
+      if (part.type === "file") {
+        if (typeof part.displayText === "string") return part.displayText;
+        if (typeof part.name === "string") return part.name;
+        if (typeof part.uri === "string") return part.uri;
+      }
+      return "";
+    })
+    .join("");
+}
+
+function canonicalTriggerFromMode(payload: unknown): SessionWireTurnTrigger {
+  const mode = isRecord(payload) && typeof payload.mode === "string" ? payload.mode : "";
+  switch (mode) {
+    case "scheduled":
+      return "schedule";
+    case "heartbeat":
+      return "heartbeat";
+    case "channel":
+      return "channel";
+    case "wal_recovery":
+      return "recovery";
+    case "subagent":
+      return "subagent";
+    default:
+      return "user";
+  }
+}
+
+function canonicalAssistantText(payload: unknown): string | null {
+  return isRecord(payload) && typeof payload.text === "string" ? payload.text : null;
+}
+
+function canonicalContentText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (content === undefined) {
+    return "";
+  }
+  try {
+    return JSON.stringify(content);
+  } catch {
+    return "[unserializable content]";
+  }
+}
+
+function canonicalToolOutput(event: CanonicalEvent): ToolOutputView | null {
+  if (event.type !== "tool.committed" || !isRecord(event.payload)) {
+    return null;
+  }
+  const call = isRecord(event.payload.call) ? event.payload.call : null;
+  const result = isRecord(event.payload.result) ? event.payload.result : null;
+  if (!call || typeof call.toolCallId !== "string" || typeof call.toolName !== "string") {
+    return null;
+  }
+  return {
+    toolCallId: asBrewvaToolCallId(call.toolCallId),
+    toolName: asBrewvaToolName(call.toolName),
+    verdict: result?.ok === false ? "fail" : "pass",
+    isError: result?.ok === false,
+    text: canonicalContentText(result?.content),
+  };
+}
+
+function readCanonicalEventRecord(event: CanonicalEvent): BrewvaStructuredEvent | null {
+  if (event.type !== "custom" || !isRecord(event.payload)) {
+    return null;
+  }
+  if (typeof event.payload.kind !== "string" || event.payload.version !== 1) {
+    return null;
+  }
+  if (event.payload.namespace === "gateway.ops") {
+    const payload = isRecord(event.payload.payload)
+      ? (event.payload.payload as Record<string, never>)
+      : undefined;
+    return {
+      schema: "brewva.event.v1",
+      id: event.id,
+      sessionId: asBrewvaSessionId(event.sessionId),
+      type: event.payload.kind.trim(),
+      category: "other",
+      timestamp: event.timestamp,
+      isoTime: new Date(event.timestamp).toISOString(),
+      ...(typeof event.turnId === "string" && event.turnId.trim().length > 0
+        ? { turn: Number(event.turnId) }
+        : {}),
+      ...(payload ? { payload } : {}),
+    };
+  }
+  return null;
+}
+
+function querySessionWireFramesFromCanonicalTape(input: {
+  cwd: string;
+  sessionId: string;
+}): SessionWireFrame[] {
+  const events = readCanonicalTapeEvents(input);
+  const frames: SessionWireFrame[] = [];
+  const operationalEvents = events.flatMap((event) => {
+    const record = readCanonicalEventRecord(event);
+    return record ? [record] : [];
+  });
+  const readModelFrames = compileSessionWireFrames(operationalEvents, "replay");
+  frames.push(...readModelFrames);
+  for (const event of operationalEvents) {
+    if (event.type !== "session_shutdown") {
+      continue;
+    }
+    const payload =
+      event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+        ? (event.payload as Record<string, unknown>)
+        : {};
+    frames.push({
+      schema: "brewva.session-wire.v2",
+      sessionId: asBrewvaSessionId(event.sessionId),
+      frameId: `canonical:${event.id}:session.closed`,
+      ts: event.timestamp,
+      source: "replay",
+      durability: "durable",
+      sourceEventId: event.id,
+      sourceEventType: event.type,
+      type: "session.closed",
+      reason: typeof payload.reason === "string" ? payload.reason : undefined,
+    });
+  }
+  const assistantTextByTurnId = new Map<string, string>();
+  const toolOutputsByTurnId = new Map<string, ToolOutputView[]>();
+  for (const event of events) {
+    const turnId = event.turnId?.trim();
+    if (!turnId) {
+      continue;
+    }
+    if (event.type === "turn.started") {
+      frames.push({
+        schema: "brewva.session-wire.v2",
+        sessionId: asBrewvaSessionId(event.sessionId),
+        frameId: `canonical:${event.id}:turn.input`,
+        ts: event.timestamp,
+        source: "replay",
+        durability: "durable",
+        sourceEventId: event.id,
+        sourceEventType: event.type,
+        type: "turn.input",
+        turnId,
+        trigger: canonicalTriggerFromMode(event.payload),
+        promptText: promptTextFromCanonicalTurnStarted(event.payload),
+      });
+      continue;
+    }
+    if (event.type === "msg.committed") {
+      const text = canonicalAssistantText(event.payload);
+      if (text !== null) {
+        assistantTextByTurnId.set(turnId, `${assistantTextByTurnId.get(turnId) ?? ""}${text}`);
+      }
+      continue;
+    }
+    const toolOutput = canonicalToolOutput(event);
+    if (toolOutput) {
+      const outputs = toolOutputsByTurnId.get(turnId) ?? [];
+      outputs.push(toolOutput);
+      toolOutputsByTurnId.set(turnId, outputs);
+      continue;
+    }
+    if (event.type === "turn.ended") {
+      frames.push({
+        schema: "brewva.session-wire.v2",
+        sessionId: asBrewvaSessionId(event.sessionId),
+        frameId: `canonical:${event.id}:turn.committed`,
+        ts: event.timestamp,
+        source: "replay",
+        durability: "durable",
+        sourceEventId: event.id,
+        sourceEventType: event.type,
+        type: "turn.committed",
+        turnId,
+        attemptId: "runtime-turn",
+        status: "completed",
+        assistantText: assistantTextByTurnId.get(turnId) ?? "",
+        toolOutputs: toolOutputsByTurnId.get(turnId) ?? [],
+      });
+    }
+  }
+  return frames;
 }
 
 async function terminatePid(pid: number): Promise<void> {
@@ -173,7 +432,6 @@ export interface SessionSupervisorTestWorkerInput {
   lastActivityAt?: number;
   cwd?: string;
   agentSessionId?: string;
-  agentEventLogPath?: string;
   pendingRequests?: SessionSupervisorTestPendingRequest[];
   pendingCount?: number;
   readyRequestId?: string;
@@ -205,7 +463,7 @@ export class SessionSupervisor implements SessionBackend {
   private readonly workers = new Map<string, WorkerHandle>();
   private readonly stateDir: string;
   private readonly childrenRegistryPath: string;
-  private readonly sessionBindingLogPath: string;
+  private readonly sessionBindingStorePath: string;
   private readonly sessionIdleTtlMs: number;
   private readonly sessionIdleSweepIntervalMs: number;
   private readonly maxWorkers: number;
@@ -250,7 +508,7 @@ export class SessionSupervisor implements SessionBackend {
     this.supervisorScope = runSyncAtBoundary(BrewvaScope.make());
     this.stateDir = resolve(options.stateDir);
     this.childrenRegistryPath = resolve(this.stateDir, "children.json");
-    this.sessionBindingLogPath = resolveGatewaySessionBindingLogPath(this.stateDir);
+    this.sessionBindingStorePath = resolveGatewaySessionBindingStorePath(this.stateDir);
     this.stateStore = options.stateStore ?? new FileGatewayStateStore();
     this.recoveryWalStore = options.recoveryWalStore;
     this.recoveryWalCompactIntervalMs = Math.max(
@@ -293,10 +551,9 @@ export class SessionSupervisor implements SessionBackend {
       },
     });
     this.turnQueue = new SessionTurnQueueCoordinator({
-      requestEffect: (handle, message, timeoutMs) =>
-        this.workerRpc.requestEffect(handle, message, timeoutMs),
-      registerPendingTurnEffect: (handle, turnId, timeoutMs) =>
-        this.workerRpc.registerPendingTurnEffect(handle, turnId, timeoutMs),
+      request: (handle, message, timeoutMs) => this.workerRpc.request(handle, message, timeoutMs),
+      registerPendingTurn: (handle, turnId, timeoutMs) =>
+        this.workerRpc.registerPendingTurn(handle, turnId, timeoutMs),
       rejectPendingTurn: (handle, turnId, error) =>
         this.workerRpc.rejectPendingTurn(handle, turnId, error),
       rekeyPendingTurn: (handle, fromTurnId, toTurnId) =>
@@ -340,7 +597,8 @@ export class SessionSupervisor implements SessionBackend {
     );
 
     this.persistRegistry();
-    await runPromiseAtBoundary(
+    await runBoundaryOperation(
+      "gateway.sessionSupervisor.closeScope",
       BrewvaScope.close(this.supervisorScope, BrewvaExit.succeed(undefined)),
     );
   }
@@ -452,7 +710,8 @@ export class SessionSupervisor implements SessionBackend {
       });
 
       try {
-        const readyPayload = await runPromiseAtBoundary(
+        const readyPayload = await runBoundaryOperation(
+          "gateway.sessionSupervisor.workerReady",
           BrewvaEffect.race(
             BrewvaDeferred.await(readyDeferred),
             BrewvaEffect.sleep(BrewvaDuration.millis(WORKER_READY_TIMEOUT_MS)).pipe(
@@ -470,15 +729,13 @@ export class SessionSupervisor implements SessionBackend {
           ),
         );
         handle.requestedAgentSessionId = readyPayload.agentSessionId;
-        handle.agentEventLogPath = readyPayload.agentEventLogPath;
         handle.lifecycleState = createWorkerReadyState(
           String(child.pid ?? input.sessionId),
           input.sessionId,
         );
-        appendGatewaySessionBindingReceipt(this.sessionBindingLogPath, {
+        appendGatewaySessionBindingReceipt(this.sessionBindingStorePath, {
           gatewaySessionId: input.sessionId,
           agentSessionId: readyPayload.agentSessionId,
-          agentEventLogPath: readyPayload.agentEventLogPath,
           cwd: handle.cwd,
           timestamp: handle.startedAt,
         });
@@ -657,11 +914,11 @@ export class SessionSupervisor implements SessionBackend {
     const frames: SessionWireFrame[] = [];
     const durableFrameIds = new Set<string>();
     for (const segment of segments) {
-      const segmentFrames = querySessionWireFramesFromEventLog({
-        eventLogPath: segment.agentEventLogPath,
+      const canonicalFrames = querySessionWireFramesFromCanonicalTape({
+        cwd: segment.cwd ?? this.options.defaultCwd,
         sessionId: segment.agentSessionId,
       });
-      for (const frame of segmentFrames) {
+      for (const frame of canonicalFrames) {
         if (frame.durability === "durable") {
           if (durableFrameIds.has(frame.frameId)) {
             continue;
@@ -715,7 +972,10 @@ export class SessionSupervisor implements SessionBackend {
         BrewvaDeferred.make<Record<string, unknown> | undefined, Error>(),
       );
       if (request.resolve || request.reject) {
-        void runPromiseAtBoundary(BrewvaDeferred.await(deferred)).then(
+        void runBoundaryOperation(
+          "gateway.sessionSupervisor.testPendingRequest",
+          BrewvaDeferred.await(deferred),
+        ).then(
           (payload) => request.resolve?.(payload),
           (error: unknown) =>
             request.reject?.(error instanceof Error ? error : new Error(String(error))),
@@ -749,7 +1009,6 @@ export class SessionSupervisor implements SessionBackend {
       lastActivityAt: input.lastActivityAt ?? now,
       cwd: input.cwd,
       requestedAgentSessionId: input.agentSessionId,
-      agentEventLogPath: input.agentEventLogPath,
       pending,
       pendingTurns: new Map<string, PendingTurn>(),
       turnQueue: [],
@@ -805,7 +1064,7 @@ export class SessionSupervisor implements SessionBackend {
 
   private spawnWorker(): ChildProcess {
     const workerModulePath = fileURLToPath(
-      new URL("../../hosted/internal/thread-loop/worker/main.js", import.meta.url),
+      new URL("../../hosted/internal/turn-adapter/worker/main.js", import.meta.url),
     );
     return fork(workerModulePath, {
       cwd: this.options.defaultCwd,
@@ -844,7 +1103,10 @@ export class SessionSupervisor implements SessionBackend {
 
   private async closeWorkerScope(handle: WorkerHandle): Promise<void> {
     try {
-      await runPromiseAtBoundary(BrewvaScope.close(handle.scope, BrewvaExit.succeed(undefined)));
+      await runBoundaryOperation(
+        "gateway.sessionSupervisor.worker.closeScope",
+        BrewvaScope.close(handle.scope, BrewvaExit.succeed(undefined)),
+      );
     } catch (error) {
       this.options.logger.warn("failed to close worker scope", {
         sessionId: handle.sessionId,
@@ -868,37 +1130,7 @@ export class SessionSupervisor implements SessionBackend {
     if (!agentSessionId) {
       return;
     }
-    const eventLogPath = normalizeOptionalString(entry.agentEventLogPath);
-    if (!eventLogPath) {
-      this.options.logger.warn(
-        "cannot synthesize session terminal receipt without agent event log path",
-        {
-          sessionId: entry.sessionId,
-          agentSessionId,
-          source: input.source,
-        },
-      );
-      return;
-    }
-    try {
-      recordSessionShutdownReceiptToEventLogIfMissing({
-        eventLogPath,
-        sessionId: agentSessionId,
-        reason: input.reason,
-        source: input.source,
-        exitCode: input.exitCode ?? null,
-        signal: input.signal ?? null,
-        workerSessionId: entry.sessionId,
-        recoveredFromRegistry: input.recoveredFromRegistry,
-      });
-    } catch (error) {
-      this.options.logger.warn("failed to synthesize session terminal receipt", {
-        sessionId: entry.sessionId,
-        agentSessionId,
-        source: input.source,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    void input;
   }
 
   private ensureTerminalReceiptForHandle(handle: WorkerHandle, exit: WorkerExitInfo): void {
@@ -908,7 +1140,6 @@ export class SessionSupervisor implements SessionBackend {
         pid: handle.child.pid ?? 0,
         startedAt: handle.startedAt,
         agentSessionId: handle.requestedAgentSessionId,
-        agentEventLogPath: handle.agentEventLogPath,
         cwd: handle.cwd,
       },
       {
@@ -1110,7 +1341,6 @@ export class SessionSupervisor implements SessionBackend {
   private listSessionBindingsForReplay(sessionId: string): Array<{
     sessionId: string;
     agentSessionId: string;
-    agentEventLogPath: string;
     openedAt: number;
     cwd?: string;
   }> {
@@ -1120,9 +1350,9 @@ export class SessionSupervisor implements SessionBackend {
     }
 
     const seen = new Set<string>();
-    return listGatewaySessionBindings(this.sessionBindingLogPath, normalizedSessionId).flatMap(
+    return listGatewaySessionBindings(this.sessionBindingStorePath, normalizedSessionId).flatMap(
       (entry) => {
-        const key = `${entry.gatewaySessionId}::${entry.agentSessionId}::${entry.agentEventLogPath}`;
+        const key = `${entry.gatewaySessionId}::${entry.agentSessionId}::${entry.cwd ?? ""}`;
         if (seen.has(key)) {
           return [];
         }
@@ -1131,7 +1361,6 @@ export class SessionSupervisor implements SessionBackend {
           {
             sessionId: entry.gatewaySessionId,
             agentSessionId: entry.agentSessionId,
-            agentEventLogPath: entry.agentEventLogPath,
             openedAt: entry.openedAt,
             cwd: entry.cwd,
           },

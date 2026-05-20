@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { normalizeAgentId } from "@brewva/brewva-runtime/context";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
+import { normalizeAgentId } from "@brewva/brewva-runtime/protocol";
 
 const REGISTRY_SCHEMA = "brewva.channel-agent-registry.v1";
 const DEFAULT_AGENT_ID = "default";

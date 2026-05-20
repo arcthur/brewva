@@ -62,14 +62,14 @@ flowchart TD
    rebuildable artifacts.
 2. On first hydration, the runtime performs checkpoint-plus-delta replay and
    restores task, truth, cost, verification, and related fold slices.
-3. `runtime.inspect.session.getIntegrity(...)` aggregates tape, Recovery WAL, and artifact
+3. `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` aggregates tape, Recovery WAL, and artifact
    persistence issues into one health surface.
 4. `--replay` prints a replay-visible timeline from the durable tape rather
    than from the live hosted stream.
 5. `--undo` resolves the target session, rewinds the latest active checkpoint,
    carries branch summary by default, resets verification state, and restores
    the original prompt.
-6. `/rewind` or `runtime.authority.session.rewind(...)` can target any active
+6. `/rewind` or `HostedRuntimeAdapterPort.ops.session.rewind.rewind(...)` can target any active
    checkpoint with `conversation`, `code`, or `both` semantics. Runtime
    governance is mode-aware, and the runtime records divergence notes when only
    one side rewinds.
@@ -78,7 +78,7 @@ flowchart TD
    conversation state.
 8. Delegated inspect surfaces now reflect the canonical specialist cutover:
    public delegated outcomes are `consult`, `verifier`, or `patch`, while kernel
-   `runtime.authority.verification.*` remains a separate replayed authority.
+   `HostedRuntimeAdapterPort.ops.verification.*` remains a separate replayed authority.
 
 ## Execution Semantics
 
@@ -117,7 +117,7 @@ flowchart TD
   - `brewva inspect`
   - `brewva --replay`
   - `brewva --undo`
-  - `runtime.inspect.session.getIntegrity(...)`
+  - `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)`
 - key report sections:
   - hydration status
   - integrity issues
@@ -129,10 +129,10 @@ flowchart TD
 
 - Inspect / replay / undo CLI dispatch: `packages/brewva-cli/src/index.ts`
 - Inspect report implementation: `packages/brewva-cli/src/operator/inspect/report.ts`
-- Session lifecycle: `packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts`
-- Replay engine: `packages/brewva-runtime/src/domain/tape/replay-engine.ts`
-- Patch-set rollback: `packages/brewva-runtime/src/domain/patching/file-change.ts`
-- Receipt-aware rollback: `packages/brewva-runtime/src/domain/governance/mutation-rollback.ts`
+- Session lifecycle: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Replay engine: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Patch-set rollback: `packages/brewva-runtime/src/protocol.ts`
+- Receipt-aware rollback: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
 - Rollback tool: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 
 ## Related Docs

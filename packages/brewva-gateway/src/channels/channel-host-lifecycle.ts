@@ -1,25 +1,25 @@
 import {
-  BrewvaEffect,
   addScopedFinalizer,
   fromAbortableBoundaryPromise,
   runEdgeOperation,
   startScopedSchedule,
   type BrewvaBoundaryError,
-  type BrewvaScope,
   type ScopedScheduleHandle,
 } from "@brewva/brewva-effect";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { createRecoveryWalRecovery, type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import { BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
 import { createNonOverlappingTaskRunner } from "@brewva/brewva-std/async";
+import { createRecoveryWalRecovery, type RecoveryWalStore } from "../daemon/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { waitForAllSettledWithTimeout } from "../utils/async.js";
 import { toErrorMessage } from "../utils/errors.js";
 import type { AgentRuntimeManager } from "./agent-runtime-manager.js";
 import type { ChannelTurnDispatcher } from "./channel-turn-dispatcher.js";
 import type { ChannelModeLaunchBundle } from "./launcher.js";
+import { recordChannelRecoveryWalEvent } from "./recovery-events.js";
 import type { ChannelSessionCoordinator } from "./session/coordinator.js";
 
 export interface RunChannelHostLifecycleInput {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   channel: string;
   verbose: boolean;
   bundle: ChannelModeLaunchBundle;
@@ -70,7 +70,9 @@ function waitForChannelShutdownSignal(
 
         if (input.shutdownSignal) {
           const onExternalAbort = () => shutdown("SIGTERM");
-          input.shutdownSignal.addEventListener("abort", onExternalAbort, { once: true });
+          input.shutdownSignal.addEventListener("abort", onExternalAbort, {
+            once: true,
+          });
           removeExternalAbortListener = () => {
             input.shutdownSignal?.removeEventListener("abort", onExternalAbort);
           };
@@ -93,9 +95,8 @@ export function runChannelHostLifecycleEffect(
       await input.sessionCoordinator.evictIdleAgentRuntimesByTtl(Date.now());
       const evicted = input.runtimeManager.evictIdleRuntimes(Date.now());
       if (evicted.length > 0) {
-        input.runtime.extensions.hosted.events.record({
+        input.runtime.ops.channel.runtime.evicted({
           sessionId: recoveryWalScope,
-          type: "channel_runtime_evicted",
           payload: {
             agentIds: evicted,
             source: "runtime_idle_reclaim",
@@ -134,16 +135,13 @@ export function runChannelHostLifecycleEffect(
     config: input.runtime.config.infrastructure.recoveryWal,
     scopeFilter: (scope) => scope === recoveryWalScope,
     recordEvent: (event) => {
-      input.runtime.extensions.hosted.events.record({
-        sessionId: event.sessionId,
-        type: event.type,
-        payload: event.payload,
-        skipTapeCheckpoint: true,
-      });
+      recordChannelRecoveryWalEvent(input.runtime, event);
     },
     handlers: {
       channel: async ({ record }) => {
-        await input.dispatcher.enqueueInboundTurn(record.envelope, { walId: record.walId });
+        await input.dispatcher.enqueueInboundTurn(record.envelope, {
+          walId: record.walId,
+        });
       },
     },
   });

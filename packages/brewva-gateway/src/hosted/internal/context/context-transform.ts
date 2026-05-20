@@ -1,13 +1,12 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/context";
+import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
-import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
+import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
-} from "../thread-loop/lifecycle/runtime-turn-clock.js";
-import { getHostedTurnTransitionCoordinator } from "../thread-loop/turn-transition.js";
+} from "../turn-adapter/lifecycle/runtime-turn-clock.js";
 import {
   createHostedCompactionController,
   type HostedManualCompact,
@@ -26,7 +25,7 @@ export interface ContextTransformOptions {
 
 export interface ContextTransformLifecycle {
   turnStart: (event: unknown, ctx: unknown) => undefined;
-  context: (event: unknown, ctx: unknown) => { messages: BrewvaTurnLoopMessage[] } | undefined;
+  context: (event: unknown, ctx: unknown) => { messages: BrewvaAgentProtocolMessage[] } | undefined;
   sessionCompact: (event: unknown, ctx: unknown) => Promise<undefined>;
   sessionShutdown: (event: unknown, ctx: unknown) => undefined;
   beforeAgentStart: (event: unknown, ctx: unknown) => Promise<HostedWorkbenchContextResult>;
@@ -82,10 +81,9 @@ function resolveUsage(ctx: HostedContextLifecycleContext) {
 
 export function createContextTransformLifecycle(
   extensionApi: InternalHostPluginApi,
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   options: ContextTransformOptions = {},
 ): ContextTransformLifecycle {
-  getHostedTurnTransitionCoordinator(runtime);
   const turnClock = options.turnClock ?? createRuntimeTurnClockStore();
   const telemetry = createHostedContextTelemetry(runtime);
   const compactionController = createHostedCompactionController(runtime, telemetry, turnClock, {
@@ -128,7 +126,7 @@ export function createContextTransformLifecycle(
       return {
         messages: workbenchContextController.transformContext({
           sessionId: lifecycleContext.sessionManager.getSessionId(),
-          messages: messages as BrewvaTurnLoopMessage[],
+          messages: messages as BrewvaAgentProtocolMessage[],
         }),
       };
     },
@@ -167,7 +165,7 @@ export function createContextTransformLifecycle(
 
 export function registerContextTransform(
   extensionApi: InternalHostPluginApi,
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   options: ContextTransformOptions = {},
 ): void {
   const hooks = extensionApi as unknown as {

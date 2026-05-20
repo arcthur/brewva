@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   ensureSessionShutdownRecorded,
   recordAbnormalSessionShutdown,
-  recordSessionShutdownReceiptToEventLogIfMissing,
   recordSessionShutdownIfMissing,
 } from "../../../packages/brewva-gateway/src/utils/runtime.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
@@ -19,7 +18,7 @@ describe("gateway runtime utils", () => {
     });
     ensureSessionShutdownRecorded(runtime, sessionId);
 
-    const shutdownEvents = runtime.inspect.events.records.query(sessionId, {
+    const shutdownEvents = runtime.ops.events.records.query(sessionId, {
       type: "session_shutdown",
     });
     expect(shutdownEvents).toHaveLength(1);
@@ -49,7 +48,7 @@ describe("gateway runtime utils", () => {
     });
     ensureSessionShutdownRecorded(runtime, sessionId);
 
-    const shutdownEvents = runtime.inspect.events.records.query(sessionId, {
+    const shutdownEvents = runtime.ops.events.records.query(sessionId, {
       type: "session_shutdown",
     });
     expect(shutdownEvents).toHaveLength(1);
@@ -60,42 +59,6 @@ describe("gateway runtime utils", () => {
       signal: "SIGKILL",
       workerSessionId: "worker-session-1",
       recoveredFromRegistry: true,
-    });
-  });
-
-  test("records shutdown receipt directly to an event log path once", () => {
-    const runtime = createRuntimeFixture();
-    const sessionId = "runtime-utils-event-log";
-    const eventLogPath = runtime.extensions.hosted.events.resolveLogPath(sessionId);
-
-    expect(
-      recordSessionShutdownReceiptToEventLogIfMissing({
-        eventLogPath,
-        sessionId,
-        reason: "abnormal_process_exit",
-        source: "session_supervisor_registry_recovery",
-        workerSessionId: "worker-session-2",
-      }),
-    ).toBe(true);
-    expect(
-      recordSessionShutdownReceiptToEventLogIfMissing({
-        eventLogPath,
-        sessionId,
-        reason: "abnormal_process_exit",
-        source: "session_supervisor_registry_recovery",
-        workerSessionId: "worker-session-2",
-      }),
-    ).toBe(false);
-
-    const shutdownEvents = runtime.inspect.events.records.query(sessionId, {
-      type: "session_shutdown",
-    });
-    expect(shutdownEvents).toHaveLength(1);
-    expect(shutdownEvents[0]?.payload).toMatchObject({
-      reason: "abnormal_process_exit",
-      source: "session_supervisor_registry_recovery",
-      workerSessionId: "worker-session-2",
-      recoveredFromRegistry: false,
     });
   });
 });

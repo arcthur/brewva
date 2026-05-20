@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { ChannelCommandMatch } from "../../../packages/brewva-gateway/src/channels/command/parser.js";
 import { createChannelControlRouter } from "../../../packages/brewva-gateway/src/channels/command/router.js";
 import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/session/update-lock.js";
@@ -713,7 +713,7 @@ describe("channel control router ownership", () => {
     expect(result.routeTask).toContain("Use the daemon path.");
     expect(result.afterRouteSuccess).toBeFunction();
     expect(
-      runtime.inspect.events.records.query(sessionId, {
+      runtime.ops.events.records.query(sessionId, {
         type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
       }),
     ).toHaveLength(0);
@@ -721,7 +721,7 @@ describe("channel control router ownership", () => {
     await result.afterRouteSuccess?.();
 
     expect(
-      runtime.inspect.events.records.query(sessionId, {
+      runtime.ops.events.records.query(sessionId, {
         type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
       }),
     ).toHaveLength(1);

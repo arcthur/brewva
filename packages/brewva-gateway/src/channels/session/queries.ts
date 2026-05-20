@@ -1,7 +1,12 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { CHANNEL_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { CHANNEL_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
+import {
+  listRuntimeEventSessionIds,
+  listRuntimeProposalRequests,
+  queryRuntimeEvents,
+} from "../../hosted/api.js";
 import { AgentRegistry } from "../agent-registry.js";
 import { AgentRuntimeManager } from "../agent-runtime-manager.js";
 import type {
@@ -11,7 +16,7 @@ import type {
 } from "./coordinator.js";
 
 export interface ChannelQuestionSurface {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionIds: string[];
   liveSessionId?: string;
 }
@@ -30,26 +35,26 @@ export interface ChannelSessionQueries {
 }
 
 export function createChannelSessionQueries(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   registry: AgentRegistry;
   runtimeManager: AgentRuntimeManager;
   recoveryWalScope: string;
   listLiveSessions(): ChannelLiveSessionView[];
   openLiveSession(scopeKey: string, agentId: string): ChannelRuntimeSessionPort | undefined;
-  loadInspectionRuntime(agentId: string): Promise<BrewvaHostedRuntimePort>;
+  loadInspectionRuntime(agentId: string): Promise<HostedRuntimeAdapterPort>;
   getSessionCostSummary(sessionId: string): ChannelSessionCostSummary;
   hasReplayableEffectCommitmentRequest(sessionId: string, requestId: string): boolean;
 }): ChannelSessionQueries {
   const REPLAYABLE_EFFECT_COMMITMENT_REQUEST_STATES = ["pending", "accepted"] as const;
 
   const listChannelBoundSessionIds = (options: {
-    runtime: BrewvaHostedRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
     scopeKey: string;
     agentId: string;
   }): string[] => {
     const matches: Array<{ sessionId: string; boundAt: number }> = [];
-    for (const sessionId of options.runtime.inspect.events.log.listSessionIds()) {
-      const binding = options.runtime.inspect.events.records.query(sessionId, {
+    for (const sessionId of listRuntimeEventSessionIds(options.runtime)) {
+      const binding = queryRuntimeEvents(options.runtime, sessionId, {
         type: CHANNEL_SESSION_BOUND_EVENT_TYPE,
         last: 1,
       })[0];
@@ -76,16 +81,14 @@ export function createChannelSessionQueries(input: {
   };
 
   const hasReplayableRequestInRuntime = (
-    runtime: BrewvaHostedRuntimePort,
+    runtime: HostedRuntimeAdapterPort,
     sessionId: string,
     requestId: string,
   ): boolean =>
     REPLAYABLE_EFFECT_COMMITMENT_REQUEST_STATES.some((requestState) =>
-      runtime.inspect.proposals.requests
-        .list(sessionId, {
-          state: requestState,
-        })
-        .some((request) => request.requestId === requestId),
+      listRuntimeProposalRequests(runtime, sessionId, {
+        state: requestState,
+      }).some((request: { requestId?: string }) => request.requestId === requestId),
     );
 
   const listActiveAgentIdsForScope = (scopeKey: string): string[] => {
@@ -131,7 +134,10 @@ export function createChannelSessionQueries(input: {
       let workspaceCostUsd = 0;
 
       for (const agent of snapshot.agents) {
-        const cost = aggregateByAgent.get(agent.agentId) ?? { totalTokens: 0, totalCostUsd: 0 };
+        const cost = aggregateByAgent.get(agent.agentId) ?? {
+          totalTokens: 0,
+          totalCostUsd: 0,
+        };
         workspaceTokens += cost.totalTokens;
         workspaceCostUsd += cost.totalCostUsd;
         const focused = agent.isFocused ? " [focused]" : "";
@@ -155,9 +161,8 @@ export function createChannelSessionQueries(input: {
         )} active_sessions=${input.listLiveSessions().length}`,
       );
 
-      input.runtime.extensions.hosted.events.record({
+      input.runtime.ops.channel.session.workspaceCostSummary({
         sessionId: input.recoveryWalScope,
-        type: "channel_workspace_cost_summary",
         payload: {
           scopeKey,
           activeSessions: input.listLiveSessions().length,

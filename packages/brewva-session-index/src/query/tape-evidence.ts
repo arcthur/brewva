@@ -41,8 +41,8 @@ export async function queryTapeEvidenceRows(input: {
         events.type,
         events.payload_json,
         events.search_text,
-        events.log_path,
-        events.log_offset,
+        events.source_uri,
+        events.source_sequence,
         count(distinct event_tokens.token) as token_matches
       from event_tokens
       inner join events on events.event_id = event_tokens.event_id
@@ -56,8 +56,8 @@ export async function queryTapeEvidenceRows(input: {
         events.type,
         events.payload_json,
         events.search_text,
-        events.log_path,
-        events.log_offset
+        events.source_uri,
+        events.source_sequence
       order by token_matches desc, events.timestamp desc
       limit $limit
     `,
@@ -76,7 +76,7 @@ export async function getTapeEventRow(input: {
 
   const row = await input.port.selectOne<EventRow>(
     `
-      select event_id, session_id, timestamp, turn, type, payload_json, search_text, log_path, log_offset
+      select event_id, session_id, timestamp, turn, type, payload_json, search_text, source_uri, source_sequence
       from events
       where session_id = $sessionId and event_id = $eventId
       limit 1

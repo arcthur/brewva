@@ -471,8 +471,9 @@ function SessionsList(input: {
                 : input.theme.textMuted,
           );
           const label = createMemo(() => {
-            const draft = input.payload.draftStateBySessionId[String(item.sessionId)];
-            const body = draft ? `${item.title} · draft ${draft.characters} chars` : item.title;
+            const draft = input.payload.draftStateBySessionId[item.sessionId];
+            const title = item.title ?? "Untitled session";
+            const body = draft ? `${title} · draft ${draft.characters} chars` : title;
             return truncateDialogText(body, labelMaxWidth());
           });
           return (

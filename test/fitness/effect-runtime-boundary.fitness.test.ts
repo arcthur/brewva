@@ -8,6 +8,26 @@ const effectPackageRoot = resolve(packagesRoot, "brewva-effect");
 const effectPackageName = "@brewva/brewva-effect";
 const effectVersion = "4.0.0-beta.60";
 const ownedEffectPackages = ["effect", "@effect/opentelemetry", "@effect/platform-node"] as const;
+const effectPrimitiveAliases = [
+  "BrewvaCause",
+  "BrewvaConfig",
+  "BrewvaContext",
+  "BrewvaDeferred",
+  "BrewvaDuration",
+  "BrewvaEffect",
+  "BrewvaExit",
+  "BrewvaFiber",
+  "BrewvaLayer",
+  "BrewvaManagedRuntime",
+  "BrewvaOption",
+  "BrewvaPubSub",
+  "BrewvaQueue",
+  "BrewvaRef",
+  "BrewvaSchedule",
+  "BrewvaSchema",
+  "BrewvaScope",
+  "BrewvaStream",
+] as const;
 
 function readJson(path: string): Record<string, unknown> {
   return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
@@ -57,7 +77,35 @@ function packageNameForReport(manifest: Record<string, unknown>, packageJsonPath
   return typeof name === "string" ? name : repoPath(packageJsonPath);
 }
 
+function splitImportSpecifiers(importBody: string): string[] {
+  return importBody
+    .split(",")
+    .map((specifier) => specifier.trim())
+    .filter(Boolean);
+}
+
+function importedSpecifierName(specifier: string): string {
+  return (
+    specifier
+      .replace(/^type\s+/u, "")
+      .split(/\s+as\s+/u)[0]
+      ?.trim() ?? ""
+  );
+}
+
 describe("Effect runtime boundary fitness", () => {
+  test("runtime package no longer ships a semantic Effect assembly layer", () => {
+    const removedRuntimeEffectFiles = [
+      "packages/brewva-runtime/src/runtime/effect-runtime-layer.ts",
+      "packages/brewva-runtime/src/runtime/runtime-composition.ts",
+      "packages/brewva-runtime/src/runtime-effect.ts",
+    ];
+
+    for (const file of removedRuntimeEffectFiles) {
+      expect(existsSync(resolve(repoRoot, file)), file).toBe(false);
+    }
+  });
+
   test("brewva-effect owns exact Effect dependencies", () => {
     const manifest = readJson(resolve(effectPackageRoot, "package.json"));
     const dependencies = dependencyVersions(manifest);
@@ -83,6 +131,56 @@ describe("Effect runtime boundary fitness", () => {
     }
 
     expect(offenders).toEqual([]);
+  });
+
+  test("brewva-effect root is Brewva boundary helpers, not a full Effect alias barrel", () => {
+    const manifest = readJson(resolve(effectPackageRoot, "package.json"));
+    const exportsMap = manifest["exports"] as Record<string, unknown>;
+    const rootSource = readFileSync(resolve(effectPackageRoot, "src/index.ts"), "utf8");
+
+    expect(existsSync(resolve(effectPackageRoot, "src/aliases.ts"))).toBe(false);
+    expect(rootSource).not.toContain("./aliases.js");
+    expect(rootSource).not.toContain("./primitives.js");
+    expect(exportsMap["./primitives"]).toEqual({
+      types: "./src/primitives.ts",
+      bun: "./src/primitives.ts",
+      import: "./dist/primitives.js",
+      default: "./dist/primitives.js",
+    });
+  });
+
+  test("Effect primitive aliases are imported only from the explicit primitives subpath", () => {
+    const offenders: string[] = [];
+    const primitiveSet = new Set<string>(effectPrimitiveAliases);
+    const rootImportPattern =
+      /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+["']@brewva\/brewva-effect["'];/gu;
+
+    for (const sourceFile of [
+      ...collectSourceFiles("packages"),
+      ...collectSourceFiles("test"),
+      ...collectSourceFiles("script"),
+    ]) {
+      const source = readFileSync(sourceFile, "utf8");
+      for (const match of source.matchAll(rootImportPattern)) {
+        for (const specifier of splitImportSpecifiers(match[1] ?? "")) {
+          const importedName = importedSpecifierName(specifier);
+          if (primitiveSet.has(importedName)) {
+            offenders.push(`${repoPath(sourceFile)} -> ${specifier}`);
+          }
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("runtime service composition is ordinary TypeScript, not an Effect service bag", () => {
+    expect(
+      existsSync(resolve(repoRoot, "packages/brewva-runtime/src/internal/runtime-state.ts")),
+    ).toBe(false);
+    expect(
+      existsSync(resolve(repoRoot, "packages/brewva-runtime/src/runtime/effect-runtime-layer.ts")),
+    ).toBe(false);
   });
 
   test("raw Effect imports stay isolated inside brewva-effect", () => {
@@ -118,5 +216,72 @@ describe("Effect runtime boundary fitness", () => {
     }
 
     expect(offenders).toEqual([]);
+  });
+
+  test("direct runPromiseAtBoundary usage stays at declared runtime edges", () => {
+    const allowed = new Set([
+      "packages/brewva-effect/src/boundary.ts",
+      "packages/brewva-effect/src/edge-runner.ts",
+      "packages/brewva-effect/src/schedules.ts",
+      "packages/brewva-effect/src/testing.ts",
+    ]);
+    const offenders: string[] = [];
+
+    for (const sourceFile of collectSourceFiles("packages")) {
+      const path = repoPath(sourceFile);
+      const source = readFileSync(sourceFile, "utf8");
+      if (!source.includes("runPromiseAtBoundary")) continue;
+      if (!allowed.has(path)) {
+        offenders.push(path);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("reusable effectful runtime operations keep Effect.fn identity", () => {
+    const expectedOperations = [
+      {
+        file: "packages/brewva-tools/src/families/execution/exec/host-lane.ts",
+        operation: 'BrewvaEffect.fn("tools.exec.host")',
+      },
+      {
+        file: "packages/brewva-tools/src/families/execution/exec/box-lane.ts",
+        operation: 'BrewvaEffect.fn(\n  "tools.exec.box"',
+      },
+    ];
+
+    for (const { file, operation } of expectedOperations) {
+      expect(readFileSync(resolve(repoRoot, file), "utf8")).toContain(operation);
+    }
+  });
+
+  test("gateway serial queues are available as scoped Effect services", () => {
+    const source = readFileSync(
+      resolve(repoRoot, "packages/brewva-gateway/src/channels/effect-serial-queue.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("class ChannelEffectSerialQueueService extends BrewvaContext.Service");
+    expect(source).toContain('BrewvaEffect.fn("gateway.channel.serialQueue.make")');
+    expect(source).toContain("BrewvaLayer.effect(this, makeChannelEffectSerialQueue(options))");
+    expect(source).toContain("BrewvaEffect.addFinalizer");
+  });
+
+  test("managed exec process registry has a scoped Effect service boundary", () => {
+    const source = readFileSync(
+      resolve(
+        repoRoot,
+        "packages/brewva-tools/src/families/execution/exec-process-registry/internal/state.ts",
+      ),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "class ManagedExecProcessRegistryService extends BrewvaContext.Service",
+    );
+    expect(source).toContain('BrewvaEffect.fn("tools.exec.processRegistry.make")');
+    expect(source).toContain("disposeManagedExecProcessRegistry");
+    expect(source).toContain("BrewvaLayer.effect(this, makeManagedExecProcessRegistry())");
   });
 });

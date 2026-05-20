@@ -54,7 +54,7 @@ producer output shape, not `SKILL.md` frontmatter.
   ],
   "implementation_targets": [
     {
-      "target": "packages/brewva-runtime/src/domain/skills/producers.ts",
+      "target": "packages/brewva-runtime/src/internal/legacy-runtime/model/skills/producers.ts",
       "kind": "runtime-service",
       "owner_boundary": "runtime producer contracts",
       "reason": "Own producer validation and canonical output enforcement."

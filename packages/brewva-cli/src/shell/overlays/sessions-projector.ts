@@ -44,7 +44,7 @@ export class ShellSessionsOverlayProjector {
     const stableAlready = this.#stableOrderIds !== undefined;
     if (!stableAlready) {
       for (const session of mergedSessions) {
-        this.#lastEventCounts.set(String(session.sessionId), session.eventCount);
+        this.#lastEventCounts.set(session.sessionId, session.eventCount);
       }
     }
 
@@ -63,7 +63,7 @@ export class ShellSessionsOverlayProjector {
     const orderedReplay = orderSessionsByStableIds(mergedSessions, nextStable.stableOrderIds);
 
     for (const session of mergedSessions) {
-      this.#lastEventCounts.set(String(session.sessionId), session.eventCount);
+      this.#lastEventCounts.set(session.sessionId, session.eventCount);
     }
 
     return buildSessionsOverlayPayload({

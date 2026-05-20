@@ -42,9 +42,11 @@ authority, durable control state, or default-path prescriptions.
   budget accounting, provider request constraints, durability classes, and
   cache safety. It nudges or fails closed at physical limits; it does not choose
   attention for the model.
-- `Gateway Model Boundary`: the only boundary that executes model calls. Main
-  turns, LLM-driven compaction, model routing, provider cache policy, and usage
-  accounting pass through gateway-owned provider execution.
+- `Runtime Physics Boundary`: the owner of default turn execution. Main turns,
+  provider calls, context-window pressure, retry boundaries, cache posture, cost
+  observation, interruption, and terminal commits pass through `runtime.turn`.
+  Gateway may adapt transport and session multiplexing, but it does not own
+  turn truth or recovery policy.
 - `Substrate Ring`: session lifecycle, turn orchestration, tool execution
   phases, request materialization primitives, checkpoint/resume mechanics, and
   session persistence bridges. Substrate may prepare requests; it does not call
@@ -112,32 +114,33 @@ different summary with a newer model.
 
 ## Runtime Surface
 
-Runtime construction uses `createBrewvaRuntime(...)`, which returns a frozen
-explicit-port instance. Its `root` port has two semantic surfaces:
+Runtime construction uses `createBrewvaRuntime(...)`, which returns one frozen
+four-port object:
 
-- `root.authority`: commits replay-visible changes or explicit decisions.
-- `root.inspect`: reads runtime state without mutating it.
+- `runtime.tape`: committed truth, replay baselines, canonical events, and
+  deterministic projections.
+- `runtime.kernel`: tool authorization, approval requests, commitments, commit
+  receipts, and abort receipts.
+- `runtime.model`: prompt materialization, skill selection, and checkpoint
+  candidates.
+- `runtime.turn(...)`: provider streaming, context pressure, retry discipline,
+  resource scheduling, interruption, cost observation, and terminal turn commit.
 
-Repo-owned hosted and operator ports additionally expose `operator` for
-bounded refresh, rebuild, registration, recovery, credential-binding, and
-host-observation operations. Managed tools receive the separate tool port and
-never receive the operator port. Holding `BrewvaRuntimeRoot` is not sufficient
-to recover hosted, tool, operator, or Effect-spine access.
+The public root also exposes `identity`, readonly `config`, `start()`, and
+`close()`. It does not expose `root`, `hosted`, `tool`, `operator`,
+`authority`, `inspect`, or Effect values.
 
-The root runtime object is not a mixed implementation bag. Composition roots may
-hold the full instance; leaf modules receive narrowed ports.
+Repo-owned hosted code that still needs implementation-adjacent helpers uses
+the quarantined gateway hosted adapter. That adapter exposes one `ops` view and
+explicit tool extensions; it is not a second public runtime API and must not
+own turn truth, transition truth, or recovery policy. Managed tools receive a
+capability-scoped runtime facade derived from declared `ops.*` and
+`extensions.tools.*` paths.
 
-Runtime implementation ownership is sliced under
-`packages/brewva-runtime/src/domain/<name>/`. Each domain owns its public seam,
-type seam, registrar, event declarations, and runtime surface contribution
-through explicit `api.ts`, `types.ts`, `registrar.ts`, and direct
-`runtime-surface.ts` files. Cross-domain source imports go through those seams
-instead of reaching into another domain's implementation files.
-
-Repo-owned implementation-adjacent callers use typed controlled extension ports
-or explicit runtime subpaths. Those ports do not carry runtime capability
-tokens. The removed `internal` barrel, method-group layer, and legacy assembler
-files are not compatibility surfaces.
+Runtime implementation ownership now lives under four semantic roots:
+`runtime/tape`, `runtime/kernel`, `runtime/model`, and `runtime/engine`, with
+read-only projections under `tape-views`. The former `domain/<name>/` seven-file
+lattice is not a valid pattern for new runtime work.
 
 ## Effect Runtime Spine
 
@@ -186,9 +189,10 @@ compatibility story.
 
 ## Package Map
 
-- `@brewva/brewva-runtime`: kernel contracts, event tape, projection,
-  verification, governance, cost, rollback, workbench operation records,
-  numeric context status, and WAL durability.
+- `@brewva/brewva-runtime`: the four-port runtime root, canonical tape, kernel
+  tool transactions, model materialization, runtime turn engine, deterministic
+  tape projections, and internal infrastructure needed to preserve old hosted
+  adapter behavior during cutover.
 - `@brewva/brewva-effect`: internal Effect foundation package. It owns Effect
   platform dependencies, boundary runners, scope/schedule helpers, typed
   runtime errors, runtime spine helpers, config service helpers, and

@@ -3,12 +3,16 @@ import {
   buildChannelDedupeKey,
   buildChannelSessionId,
   buildRawConversationKey,
-} from "@brewva/brewva-runtime/channels";
+} from "@brewva/brewva-runtime/protocol";
 
 describe("channel session mapping", () => {
   test("given raw channel and conversation id, when building raw conversation key, then channel is normalized and conversation id is preserved", () => {
-    expect(buildRawConversationKey(" Telegram ", " 12345 ")).toBe("telegram:12345");
-    expect(buildRawConversationKey("telegram", "group:42")).toBe("telegram:group:42");
+    expect(buildRawConversationKey({ channelId: " Telegram ", conversationId: " 12345 " })).toBe(
+      "telegram:12345",
+    );
+    expect(buildRawConversationKey({ channelId: "telegram", conversationId: "group:42" })).toBe(
+      "telegram:group:42",
+    );
   });
 
   test("given same conversation and normalized channel, when building channel session id, then id is deterministic and channel-scoped", () => {
@@ -18,8 +22,7 @@ describe("channel session mapping", () => {
 
     expect(first).toBe(second);
     expect(first).not.toBe(otherChannel);
-    expect(first.startsWith("channel:")).toBe(true);
-    expect(first.length).toBe(48);
+    expect(first).toBe("channel:telegram:12345");
   });
 
   test("given channel conversation and message id, when building dedupe key, then key contains all tokens", () => {

@@ -18,7 +18,7 @@
 Describe how a standard interactive task moves from CLI input into a hosted
 session, through model-operated context management, tool execution,
 verification, and durable inspection surfaces backed by event tape and
-evidence-ledger records.
+tape-ledger projection records.
 
 Interactive shell command ownership follows the narrowed slash contract:
 high-frequency entrypoints such as `/model`, `/inbox`, `/inspect`,
@@ -106,7 +106,7 @@ flowchart TD
 - workbench entries are model-authored notebook entries with source references,
   not typed runtime slots
 - recall is an on-demand tool, not a per-turn hidden provider
-- delegated `verifier` remains separate from `runtime.authority.verification.*`: Verifier
+- delegated `verifier` remains separate from `HostedRuntimeAdapterPort.ops.verification.*`: Verifier
   provides executable break-it evidence, while the runtime verification gate
   decides whether the session has sufficient fresh evidence
 - canonical Verifier outcome data preserves `pass`, `fail`, and `inconclusive`
@@ -153,5 +153,5 @@ flowchart TD
 - Hosted behavior installation:
   `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
 - Workbench runtime surface:
-  `packages/brewva-runtime/src/domain/workbench/runtime-surface.ts`
+  `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 - Workbench tools: `packages/brewva-tools/src/families/memory/workbench.ts`

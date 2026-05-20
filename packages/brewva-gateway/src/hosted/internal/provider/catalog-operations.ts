@@ -1,4 +1,4 @@
-import type { CredentialVaultService } from "@brewva/brewva-runtime/credentials";
+import type { CredentialVaultService } from "@brewva/brewva-runtime/security";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { ProviderCatalogOperations } from "./catalog.js";
 import {

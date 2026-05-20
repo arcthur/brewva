@@ -8,10 +8,10 @@ import { writeMinimalConfig } from "../../helpers/config.js";
 import {
   countEventType,
   firstIndexOf,
-  parseEventFile,
+  parseCanonicalTapeOperationalEvents,
   parseJsonLines,
   requireFinalBundle,
-  requireLatestEventFile,
+  requireLatestCanonicalTapeFile,
 } from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { cleanupWorkspace, createWorkspace } from "../../helpers/workspace.js";
@@ -33,8 +33,8 @@ describe("live: print and json modes", () => {
       assertCliSuccess(result, "print-mode");
       expect(result.stdout).toContain("E2E-PRINT-OK");
 
-      const eventFile = requireLatestEventFile(workspace, "print mode");
-      const events = parseEventFile(eventFile, { strict: true });
+      const tapeFile = requireLatestCanonicalTapeFile(workspace, "print mode");
+      const events = parseCanonicalTapeOperationalEvents(tapeFile, { strict: true });
 
       expect(countEventType(events, "session_start")).toBeGreaterThanOrEqual(1);
       expect(countEventType(events, "turn_start")).toBeGreaterThanOrEqual(1);
@@ -104,7 +104,7 @@ describe("live: print and json modes", () => {
       }
       assertCliSuccess(result, "piped-stdin");
       expect(result.stdout.trim().length).toBeGreaterThan(0);
-      requireLatestEventFile(workspace, "piped stdin fallback");
+      requireLatestCanonicalTapeFile(workspace, "piped stdin fallback");
     } finally {
       cleanupWorkspace(workspace);
     }

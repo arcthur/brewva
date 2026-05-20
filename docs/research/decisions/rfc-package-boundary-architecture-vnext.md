@@ -37,7 +37,7 @@
 - `@brewva/brewva-mcp-adapter` remains a protocol translation package. Managed-tool capability policy and hosted action classes stay in tools/gateway composition.
 - Gateway may consume concrete Telegram packages only from Telegram bridge modules. Gateway admin/ingress re-export cleanup is deliberately separate and tracked as `gateway-ingress-admin-reexport-audit-2026-07-15`.
 - Provider-core consumption is explicit: substrate consumes provider-core contracts only; gateway consumes documented hosted surfaces, with provider-core stream access centralized behind `hosted/internal/provider/execution-port.ts`.
-- Runtime package exports are governed by `skills/project/shared/runtime-subpaths.json`. `semantic-artifacts` and `runtime-effect` are internalized; `event-log`, `evidence`, and `patch-history` remain `keep-with-audit` entries with dated review triggers.
+- Runtime package exports are governed by `skills/project/shared/runtime-subpaths.json`. `semantic-artifacts`, `runtime-effect`, and `event-log` are internalized; `evidence` and `patch-history` remain `keep-with-audit` entries with dated review triggers.
 - Package descriptions, package-boundary rows, declared-versus-used workspace dependencies, removed package identities, runtime subpath ownership, and provider-core consumption are locked by fitness tests.
 
 ## Superseded by

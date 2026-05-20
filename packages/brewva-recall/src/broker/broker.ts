@@ -78,6 +78,21 @@ function sameDigests(
   });
 }
 
+function resolveTargetRoots(input: {
+  readonly workspaceRoot: string;
+  readonly target: {
+    readonly primaryRoot?: string;
+    readonly roots?: readonly string[];
+  };
+}): readonly string[] {
+  const roots = input.target.roots?.filter((root) => root.trim().length > 0) ?? [];
+  if (roots.length > 0) {
+    return roots;
+  }
+  const primaryRoot = input.target.primaryRoot?.trim();
+  return [primaryRoot && primaryRoot.length > 0 ? primaryRoot : input.workspaceRoot];
+}
+
 export interface RecallBrokerSearchInput {
   sessionId: string;
   query: string;
@@ -100,10 +115,10 @@ export class RecallBroker {
   constructor(private readonly runtime: RecallBrokerRuntime) {
     this.indexPromise = createSessionIndex({
       workspaceRoot: runtime.identity.workspaceRoot,
-      events: runtime.inspect.events,
-      task: runtime.inspect.task,
+      events: runtime.events,
+      task: runtime.task,
     });
-    runtime.inspect.events.records.subscribe((event) => {
+    runtime.events.records.subscribe((event) => {
       if (
         isSessionIndexTextIndexedEvent(event) ||
         RECALL_STATE_INVALIDATING_EVENT_TYPES.has(event.type)
@@ -159,9 +174,11 @@ export class RecallBroker {
     const state = await this.sync();
     const queryTokens = tokenizeSearchQuery(query);
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
-    const currentTarget = this.runtime.inspect.task.target.getDescriptor(input.sessionId);
-    const targetRoots =
-      currentTarget.roots.length > 0 ? currentTarget.roots : [currentTarget.primaryRoot];
+    const currentTarget = this.runtime.task.target.getDescriptor(input.sessionId);
+    const targetRoots = resolveTargetRoots({
+      workspaceRoot: this.runtime.identity.workspaceRoot,
+      target: currentTarget,
+    });
     const sessionIndex = await this.indexPromise;
     const tapeCandidateDigests = (
       await sessionIndex.querySessionDigests({
@@ -214,9 +231,11 @@ export class RecallBroker {
     const rankingContext = createRankingContext(input.sessionId, undefined);
     const state = await this.sync();
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
-    const currentTarget = this.runtime.inspect.task.target.getDescriptor(input.sessionId);
-    const targetRoots =
-      currentTarget.roots.length > 0 ? currentTarget.roots : [currentTarget.primaryRoot];
+    const currentTarget = this.runtime.task.target.getDescriptor(input.sessionId);
+    const targetRoots = resolveTargetRoots({
+      workspaceRoot: this.runtime.identity.workspaceRoot,
+      target: currentTarget,
+    });
     const sessionIndex = await this.indexPromise;
     const requestedStableIds = uniqueStrings(
       input.stableIds.map((stableId) => stableId.trim()).filter((stableId) => stableId.length > 0),
@@ -446,7 +465,7 @@ export class RecallBroker {
 }
 
 export function getOrCreateRecallBroker(runtime: RecallBrokerRuntime): RecallBroker {
-  const key = resolveRuntimeSourceIdentity(runtime as unknown as object);
+  const key = resolveRuntimeSourceIdentity(runtime.cacheKey ?? (runtime as unknown as object));
   const existing = brokerByRuntime.get(key);
   if (existing) {
     return existing;

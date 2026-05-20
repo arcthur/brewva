@@ -8,8 +8,8 @@ import type {
   ProviderCachePolicy,
   ProviderPayloadMetadata,
 } from "@brewva/brewva-provider-core/contracts";
-import type { ProviderCacheRenderState } from "@brewva/brewva-runtime/context";
-import type { BrewvaTurnLoopTransport } from "@brewva/brewva-substrate/turn";
+import type { ProviderCacheRenderState } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaAgentProtocolTransport } from "@brewva/brewva-substrate/agent-protocol";
 import { ProviderCacheStickyLatches } from "../../provider/cache/index.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
 
@@ -97,7 +97,7 @@ export function buildProviderCacheModelKey(model: ProviderCacheModelIdentity): s
 
 export function buildUnsupportedProviderCacheRender(input: {
   model: ProviderCacheModelIdentity;
-  transport: BrewvaTurnLoopTransport;
+  transport: BrewvaAgentProtocolTransport;
   sessionId: string;
   cachePolicy: ProviderCachePolicy;
 }): ProviderCacheRenderState {
@@ -137,7 +137,7 @@ export function buildUnsupportedProviderCacheRender(input: {
 export function normalizeProviderCacheRender(input: {
   metadata?: ProviderPayloadMetadata;
   model: ProviderCacheModelIdentity;
-  transport: BrewvaTurnLoopTransport;
+  transport: BrewvaAgentProtocolTransport;
   sessionId: string;
   cachePolicy: ProviderCachePolicy;
   previousRender?: ProviderCacheRenderState;

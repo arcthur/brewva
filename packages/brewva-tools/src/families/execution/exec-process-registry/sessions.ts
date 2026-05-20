@@ -1,3 +1,4 @@
+import { addScopedFinalizer, runBoundaryOperation } from "@brewva/brewva-effect";
 import {
   BrewvaCause,
   BrewvaDeferred,
@@ -5,9 +6,7 @@ import {
   BrewvaEffect,
   BrewvaQueue,
   BrewvaStream,
-  addScopedFinalizer,
-  runPromiseAtBoundary,
-} from "@brewva/brewva-effect";
+} from "@brewva/brewva-effect/primitives";
 import { subscribeManagedSessionOutput } from "./internal/output.js";
 import {
   cleanupExpiredFinishedSessions,
@@ -142,7 +141,10 @@ export function streamManagedSessionOutput(
           if (event.ownerSessionId !== ownerSessionId) {
             return true;
           }
-          const offered = await runPromiseAtBoundary(BrewvaQueue.offer(queue, event));
+          const offered = await runBoundaryOperation(
+            "tools.exec.sessionOutput.offer",
+            BrewvaQueue.offer(queue, event),
+          );
           if (event.type === "exit") {
             BrewvaQueue.endUnsafe(queue);
           }

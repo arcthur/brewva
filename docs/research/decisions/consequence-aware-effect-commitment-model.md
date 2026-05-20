@@ -13,11 +13,11 @@
   - `docs/reference/skills.md`
   - `docs/reference/tools.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/governance/commitment-posture.ts`
-  - `packages/brewva-runtime/src/domain/governance/effect-authority-manifest.ts`
-  - `packages/brewva-runtime/src/domain/projection/effects/`
-  - `packages/brewva-runtime/src/domain/events/runtime-surface.ts`
-  - `packages/brewva-runtime/src/domain/skills/tier-policy.ts`
+  - `packages/brewva-runtime/src/runtime/kernel/policy/effect-posture.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/kernel/governance/effect-authority-manifest.ts`
+  - `packages/brewva-runtime/src/read-models/projection/effects/`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/tape/event-ops/runtime-surface.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/tier-policy.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/capability-view.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`
@@ -37,4 +37,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

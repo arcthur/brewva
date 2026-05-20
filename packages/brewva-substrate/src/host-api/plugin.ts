@@ -1,8 +1,5 @@
-import {
-  BrewvaEffect,
-  runPromiseAtBoundary,
-  type BrewvaBoundaryError,
-} from "@brewva/brewva-effect";
+import { runBoundaryOperation, type BrewvaBoundaryError } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { ContextState } from "../contracts/context-state.js";
 import type { SessionPhase } from "../contracts/session-phase.js";
 import type {
@@ -465,7 +462,8 @@ export function defineEffectInternalHostPlugin(
         ...api,
         onEffect(event, handler) {
           api.on(event, (payload, ctx) =>
-            runPromiseAtBoundary(
+            runBoundaryOperation(
+              `substrate.hostPlugin.effect.${event}`,
               handler(payload, ctx),
               ctx.signal ? { signal: ctx.signal } : undefined,
             ),

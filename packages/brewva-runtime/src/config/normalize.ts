@@ -1,5 +1,6 @@
 import {
   isRecord,
+  normalizeBoolean,
   normalizeNonEmptyString,
   normalizeNonNegativeInteger,
 } from "./normalization-shared.js";
@@ -44,6 +45,8 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
       ),
     },
     tape: {
+      enabled: normalizeBoolean(tapeInput.enabled, defaults.tape.enabled),
+      dir: normalizeNonEmptyString(tapeInput.dir, defaults.tape.dir),
       checkpointIntervalEntries: normalizeNonNegativeInteger(
         tapeInput.checkpointIntervalEntries,
         defaults.tape.checkpointIntervalEntries,

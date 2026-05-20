@@ -4,13 +4,7 @@ import { resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "../..");
 
-const allowedBrewvaRuntimeInstanceOwners = [
-  /^packages\/brewva-runtime\/src\/(?:public|runtime)\//u,
-  /^packages\/brewva-gateway\/src\/hosted\/internal\/session\//u,
-  /^packages\/brewva-gateway\/src\/delegation\/background\/controller\.ts$/u,
-  /^test\/helpers\/runtime-internals\.ts$/u,
-  /^test\/fitness\/runtime-instance-imports\.fitness\.test\.ts$/u,
-] as const;
+const removedRuntimeInstanceSymbol = ["Brewva", "RuntimeInstance"].join("");
 
 const allowedCreateBrewvaRuntimeOwners = [
   /^packages\/brewva-cli\/src\/entry\/main\.ts$/u,
@@ -52,17 +46,22 @@ function listTypeScriptFiles(relativeDir: string): string[] {
 }
 
 describe("runtime instance import boundary", () => {
-  test("keeps BrewvaRuntimeInstance in composition and test-internal owners only", () => {
+  test("keeps the removed runtime instance symbol out of package and test surfaces", () => {
     const offenders = [
       ...listTypeScriptFiles("packages"),
       ...listTypeScriptFiles("test"),
       ...listTypeScriptFiles("script"),
     ]
-      .filter((file) => !isAllowed(file, allowedBrewvaRuntimeInstanceOwners))
+      .filter(
+        (file) =>
+          ![
+            "test/fitness/runtime-instance-imports.fitness.test.ts",
+            "test/fitness/runtime-promoted-architecture.fitness.test.ts",
+            "test/fitness/runtime-projection-admission.fitness.test.ts",
+          ].includes(file),
+      )
       .filter((file) =>
-        /import\s+(?:type\s+)?\{[^}]*\bBrewvaRuntimeInstance\b[^}]*\}\s+from\s+"@brewva\/brewva-runtime";/su.test(
-          readFileSync(resolve(repoRoot, file), "utf-8"),
-        ),
+        readFileSync(resolve(repoRoot, file), "utf-8").includes(removedRuntimeInstanceSymbol),
       )
       .toSorted();
 

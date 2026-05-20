@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("provider event contract authority", () => {
-  test("keeps provider-core as the single event contract authority across substrate turn and session surfaces", () => {
+  test("keeps provider-core as the single event contract authority across substrate agent protocol and session surfaces", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const providerEventPath = resolve(
       repoRoot,
@@ -21,12 +21,12 @@ describe("provider event contract authority", () => {
       "parse",
       "types.ts",
     );
-    const turnTypesPath = resolve(
+    const agentProtocolTypesPath = resolve(
       repoRoot,
       "packages",
       "brewva-substrate",
       "src",
-      "turn",
+      "agent-protocol",
       "types.ts",
     );
     const promptSessionPath = resolve(
@@ -49,7 +49,7 @@ describe("provider event contract authority", () => {
 
     const providerEventSource = readFileSync(providerEventPath, "utf8");
     const parseTypesSource = readFileSync(parseTypesPath, "utf8");
-    const turnTypesSource = readFileSync(turnTypesPath, "utf8");
+    const agentProtocolTypesSource = readFileSync(agentProtocolTypesPath, "utf8");
     const promptSessionSource = readFileSync(promptSessionPath, "utf8");
     const sessionApiSource = readFileSync(sessionApiPath, "utf8");
     const substrateIndexSource = readFileSync(substrateIndexPath, "utf8");
@@ -61,15 +61,15 @@ describe("provider event contract authority", () => {
     expect(parseTypesSource).toContain('from "../contracts/event.js"');
     expect(parseTypesSource).not.toContain("export type StreamingParseStatus =");
 
-    expect(turnTypesSource).toContain("AssistantMessageEventOf");
-    expect(turnTypesSource).toContain(
-      "export type BrewvaTurnLoopAssistantMessageEvent = AssistantMessageEventOf<",
+    expect(agentProtocolTypesSource).toContain("AssistantMessageEventOf");
+    expect(agentProtocolTypesSource).toContain(
+      "export type BrewvaAgentProtocolAssistantMessageEvent = AssistantMessageEventOf<",
     );
-    expect(turnTypesSource).toContain("ProviderCachePolicy");
-    expect(turnTypesSource).toContain("ProviderCacheRenderResult");
-    expect(turnTypesSource).toContain("ProviderPayloadMetadata");
-    expect(turnTypesSource).not.toContain("BrewvaTurnLoopCachePolicy");
-    expect(turnTypesSource).not.toContain("BrewvaAgentEngine");
+    expect(agentProtocolTypesSource).toContain("ProviderCachePolicy");
+    expect(agentProtocolTypesSource).toContain("ProviderCacheRenderResult");
+    expect(agentProtocolTypesSource).toContain("ProviderPayloadMetadata");
+    expect(agentProtocolTypesSource).not.toContain("BrewvaAgentProtocolCachePolicy");
+    expect(agentProtocolTypesSource).not.toContain("BrewvaAgentEngine");
 
     expect(promptSessionSource).toContain("AssistantMessageEventOf");
     expect(promptSessionSource).toContain(

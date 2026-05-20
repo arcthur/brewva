@@ -1,5 +1,4 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import {
   buildOperatorQuestionAnswerPrompt,
   buildOperatorQuestionAnsweredPayload,
@@ -115,9 +114,8 @@ export async function handleChannelAnswerCommand(input: {
       answerText: validatedAnswer.answerText,
     }),
     afterRouteSuccess: () => {
-      questionSurface.runtime.extensions.hosted.events.record({
+      questionSurface.runtime.ops.channel.command.operatorQuestionAnswered({
         sessionId: question.sessionId,
-        type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
         payload: buildOperatorQuestionAnsweredPayload({
           question,
           answerText: validatedAnswer.answerText,

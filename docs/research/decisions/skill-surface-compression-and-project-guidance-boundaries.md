@@ -13,7 +13,7 @@
   - `docs/architecture/system-architecture.md`
 - Code anchors:
   - `script/**`
-  - `packages/brewva-runtime/src/domain/skills/registry.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/registry.ts`
   - `test/contract/runtime/skills-discovery.contract.test.ts`
   - `test/contract/runtime/skill-creator-quick-validate.contract.test.ts`
 
@@ -27,5 +27,6 @@
 
 ## Superseded by
 
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`
 - `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
 - `docs/research/decisions/capability-selection-and-authority-isolation.md`

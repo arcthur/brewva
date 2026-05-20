@@ -84,4 +84,14 @@ describe("retrieval spine package boundaries", () => {
     expect(sessionIndexRoot).not.toContain("export *");
     expect(sessionIndexPublic).not.toMatch(/type\s+\{[\s\S]*from\s+["']\.\.\/factory\.js["']/u);
   });
+
+  test("keeps recall broker off removed runtime authority and inspect roots", () => {
+    const recallFiles = listFiles("packages/brewva-recall/src");
+    const offenders = recallFiles.filter((file) => {
+      const source = readRepoFile(file);
+      return source.includes("runtime.ops") || source.includes("runtime.ops");
+    });
+
+    expect(offenders).toEqual([]);
+  });
 });

@@ -20,8 +20,8 @@
   - `packages/brewva-cli/src/shell/controller/shell-runtime.ts`
   - `packages/brewva-cli/src/shell/overlays/lifecycle.ts`
   - `packages/brewva-cli/src/shell/domain/overlays/projectors/interactive-command-surfaces.ts`
-  - `packages/brewva-runtime/src/domain/context/runtime-surface.ts`
-  - `packages/brewva-runtime/src/domain/skills/registry.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/context/runtime-surface.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/registry.ts`
 
 ## Decision Summary
 
@@ -36,4 +36,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

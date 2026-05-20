@@ -13,13 +13,13 @@
   - `docs/reference/runtime.md`
   - `docs/reference/skills.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/claim/api.ts`
-  - `packages/brewva-runtime/src/evidence/refs.ts`
+  - `packages/brewva-runtime/src/read-models/claim/api.ts`
+  - `packages/brewva-runtime/src/protocol/evidence/refs.ts`
   - `packages/brewva-runtime/src/domain/conventions/service.ts`
   - `packages/brewva-runtime/src/domain/conventions/runtime-surface.ts`
   - `packages/brewva-runtime/src/domain/conventions/target-writers.ts`
-  - `packages/brewva-runtime/src/domain/governance/reversible-mutation.ts`
-  - `packages/brewva-runtime/src/domain/skills/types.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/kernel/governance/reversible-mutation.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/model/skills/types.ts`
   - `packages/brewva-runtime/src/runtime/runtime.ts`
 
 ## Decision Summary
@@ -34,4 +34,4 @@
 
 ## Superseded by
 
-- None
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

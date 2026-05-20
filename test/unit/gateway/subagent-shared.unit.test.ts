@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import { loadHostedDelegationCatalog } from "../../../packages/brewva-gateway/src/delegation/catalog/registry.js";
 import {
@@ -11,6 +10,7 @@ import {
 } from "../../../packages/brewva-gateway/src/delegation/execution-plan.js";
 import { resolveDelegationTarget } from "../../../packages/brewva-gateway/src/delegation/target-resolution.js";
 import type { HostedDelegationTarget } from "../../../packages/brewva-gateway/src/delegation/targets.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDelegationTarget {
   return {
@@ -86,9 +86,9 @@ describe("subagent shared execution resolution", () => {
   });
 
   test("resolveDelegationExecutionPlan shares execution hint assembly between caller paths", () => {
-    const runtime = createBrewvaRuntime({
+    const runtime = createRuntimeInstanceFixture({
       cwd: mkdtempSync(join(tmpdir(), "brewva-subagent-shared-plan-")),
-    }).hosted;
+    });
     const target = makeTarget({
       boundary: "effectful",
       builtinToolNames: ["read"],
@@ -147,9 +147,9 @@ describe("subagent shared execution resolution", () => {
   });
 
   test("resolveDelegationExecutionPlan rejects consult runs without consultBrief", () => {
-    const runtime = createBrewvaRuntime({
+    const runtime = createRuntimeInstanceFixture({
       cwd: mkdtempSync(join(tmpdir(), "brewva-subagent-shared-missing-brief-")),
-    }).hosted;
+    });
 
     expect(() =>
       resolveDelegationExecutionPlan({

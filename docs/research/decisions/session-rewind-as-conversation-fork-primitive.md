@@ -14,12 +14,12 @@
   - `docs/journeys/operator/inspect-replay-and-recovery.md`
   - `docs/guide/cli.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/sessions/session-rewind.ts`
-  - `packages/brewva-runtime/src/domain/projection/session-rewind.ts`
-  - `packages/brewva-runtime/src/runtime/runtime-surfaces.ts`
-  - `packages/brewva-runtime/src/domain/governance/action-policy.ts`
-  - `packages/brewva-runtime/src/events/registry.ts`
-  - `packages/brewva-runtime/src/domain/sessions/types.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/session-rewind.ts`
+  - `packages/brewva-runtime/src/read-models/projection/session-rewind.ts`
+  - `packages/brewva-runtime/src/internal/runtime-ops.ts`
+  - `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/event-types.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/types.ts`
   - `packages/brewva-session-index/src/factory.ts`
   - `packages/brewva-cli/src/shell/controller/handlers/session-handler.ts`
 
@@ -33,4 +33,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

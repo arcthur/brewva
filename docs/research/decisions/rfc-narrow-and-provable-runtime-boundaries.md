@@ -23,9 +23,9 @@
 
 ## Decision Summary
 
-- Runtime construction uses `createBrewvaRuntime(...)` to return a frozen `BrewvaRuntimeInstance` with explicit `root`, `hosted`, `tool`, and `operator` ports.
-- `BrewvaRuntimeRoot` has no hidden state, no symbol-based recovery path, no hosted extensions, and no operator port.
-- Internal Effect consumers receive the controller handle explicitly from source-owned runtime assembly; public runtime instances cannot recover it.
+- Runtime construction uses `createBrewvaRuntime(...)` to return a frozen four-port `BrewvaRuntime` with `tape`, `kernel`, `model`, and `turn`.
+- `BrewvaRuntime` has no hidden state, no symbol-based recovery path, no hosted extensions, and no operator port.
+- Internal Effect consumers receive the controller handle explicitly from source-owned runtime assembly; public runtime objects cannot recover it.
 - Hosted context policy materializes deterministic plans containing model context, ordered effect commands, and audit data before commit interprets side effects.
 - Managed tool runtime capabilities are type-derived and checked against a generated static inventory before scoped runtime proxy construction.
 - Runtime projection and internal evidence are curated owners with direct and transitive admission tests.
@@ -39,4 +39,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

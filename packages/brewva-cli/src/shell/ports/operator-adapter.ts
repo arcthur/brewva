@@ -10,7 +10,11 @@ import {
   validateSingleQuestionAnswer,
 } from "@brewva/brewva-gateway";
 import { runHostedPromptTurn } from "@brewva/brewva-gateway/hosted";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import {
+  decideCliRuntimeProposalRequest,
+  listCliRuntimePendingProposalRequests,
+  listCliRuntimeReplaySessions,
+} from "../../runtime/runtime-ports.js";
 import type { OperatorSurfacePort } from "./operator-port.js";
 import type { CliShellSessionBundle } from "./session-port.js";
 
@@ -47,7 +51,7 @@ export function createOperatorSurfacePort(input: {
     async getSnapshot() {
       const bundle = input.getSessionBundle();
       const sessionId = bundle.session.sessionManager.getSessionId();
-      const approvals = bundle.runtime.inspect.proposals.requests.listPending(sessionId);
+      const approvals = listCliRuntimePendingProposalRequests(bundle.runtime, sessionId);
       const questions = (await collectOpenSessionQuestions(bundle.runtime, sessionId)).questions;
       const taskStatus = await bundle.orchestration?.subagents?.status?.({
         fromSessionId: sessionId,
@@ -57,13 +61,13 @@ export function createOperatorSurfacePort(input: {
         },
       });
       const taskRuns = taskStatus?.ok ? taskStatus.runs : [];
-      const sessions = bundle.runtime.inspect.events.log.listReplaySessions(20);
+      const sessions = listCliRuntimeReplaySessions(bundle.runtime, 20);
       return { approvals, questions, taskRuns, sessions };
     },
     async decideApproval(requestId, inputDecision) {
       const bundle = input.getSessionBundle();
       const sessionId = bundle.session.sessionManager.getSessionId();
-      bundle.runtime.authority.proposals.requests.decide(sessionId, requestId, inputDecision);
+      decideCliRuntimeProposalRequest(bundle.runtime, sessionId, requestId, inputDecision);
     },
     async answerQuestion(questionId, answerText) {
       const bundle = input.getSessionBundle();
@@ -81,9 +85,8 @@ export function createOperatorSurfacePort(input: {
         answerText: validatedAnswer.answerText,
       });
       await deliverOperatorPrompt({ bundle, sessionId, prompt });
-      bundle.runtime.extensions.hosted.events.record({
+      bundle.runtime.ops.tools.operatorQuestions.answerRecorded({
         sessionId,
-        type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
         payload: buildOperatorQuestionAnsweredPayload({
           question,
           answerText: validatedAnswer.answerText,
@@ -113,9 +116,8 @@ export function createOperatorSurfacePort(input: {
         if (!answerText) {
           continue;
         }
-        bundle.runtime.extensions.hosted.events.record({
+        bundle.runtime.ops.tools.operatorQuestions.answerRecorded({
           sessionId,
-          type: OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
           payload: buildOperatorQuestionAnsweredPayload({
             question,
             answerText,

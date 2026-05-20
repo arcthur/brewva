@@ -1,14 +1,13 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/protocol";
 import type {
   DelegationAdoptionRecord,
   DelegationLifecycleEventPayload,
   DelegationRunQuery,
   DelegationRunRecord,
   PendingDelegationOutcomeQuery,
-} from "@brewva/brewva-runtime/delegation";
-import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/delegation";
+} from "@brewva/brewva-runtime/protocol";
+import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/protocol";
 import {
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
@@ -19,15 +18,17 @@ import {
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   readDelegationLifecycleEventPayload,
   readWorkerResultsAppliedEventPayload,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import {
   projectSessionDelegationState,
   type SessionIndex,
   type SessionIndexDelegationRun,
 } from "@brewva/brewva-session-index";
-import { recordSessionTurnTransition } from "../hosted/api.js";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import { queryStructuredRuntimeEvents, subscribeRuntimeEvents } from "../hosted/api.js";
 import { buildDelegationLifecyclePayload } from "./lifecycle-payload.js";
 import { adoptDelegationLineageOutcome } from "./lineage.js";
+import { recordDelegationRuntimeEvent } from "./runtime-events.js";
 type IndexedDelegationStatus = DelegationRunRecord["status"];
 
 const INDEXED_DELEGATION_STATUSES = new Set<IndexedDelegationStatus>([
@@ -195,7 +196,7 @@ export function cloneDelegationRunRecord(record: DelegationRunRecord): Delegatio
 export { buildDelegationLifecyclePayload };
 
 function adoptAppliedWorkerResultOutcomes(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   runs: Map<string, DelegationRunRecord>;
   event: { type: string; payload?: Record<string, unknown> };
@@ -277,7 +278,7 @@ export class HostedDelegationStore {
   private unsubscribeWorkerResultAdoption: (() => void) | undefined;
 
   constructor(
-    private readonly runtime: BrewvaHostedRuntimePort,
+    private readonly runtime: HostedRuntimeAdapterPort,
     options: {
       sessionIndex?: Promise<SessionIndex>;
     } = {},
@@ -298,19 +299,17 @@ export class HostedDelegationStore {
     if (this.unsubscribeWorkerResultAdoption) {
       return;
     }
-    this.unsubscribeWorkerResultAdoption = this.runtime.inspect.events.records.subscribe(
-      (event) => {
-        if (event.type !== WORKER_RESULTS_APPLIED_EVENT_TYPE) {
-          return;
-        }
-        adoptAppliedWorkerResultOutcomes({
-          runtime: this.runtime,
-          sessionId: event.sessionId,
-          runs: this.rebuildRunsFromTape(event.sessionId),
-          event,
-        });
-      },
-    );
+    this.unsubscribeWorkerResultAdoption = subscribeRuntimeEvents(this.runtime, (event) => {
+      if (event.type !== WORKER_RESULTS_APPLIED_EVENT_TYPE) {
+        return;
+      }
+      adoptAppliedWorkerResultOutcomes({
+        runtime: this.runtime,
+        sessionId: event.sessionId,
+        runs: this.rebuildRunsFromTape(event.sessionId),
+        event,
+      });
+    });
   }
 
   getRun(sessionId: string, runId: string): DelegationRunRecord | undefined {
@@ -384,18 +383,12 @@ export class HostedDelegationStore {
           updatedAt: surfacedAt,
         },
       };
-      this.runtime.extensions.hosted.events.record({
+      recordDelegationRuntimeEvent({
+        runtime: this.runtime,
         sessionId: input.sessionId,
         turn: input.turn,
         type: SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
         payload: buildDelegationLifecyclePayload(updated),
-      });
-      recordSessionTurnTransition(this.runtime, {
-        sessionId: input.sessionId,
-        turn: input.turn,
-        reason: "subagent_delivery_pending",
-        status: "completed",
-        family: "delegation",
       });
     }
   }
@@ -404,7 +397,7 @@ export class HostedDelegationStore {
     const runs = new Map<string, DelegationRunRecord>();
     const projection = projectSessionDelegationState({
       sessionId,
-      records: this.runtime.inspect.events.records.queryStructured(sessionId),
+      records: queryStructuredRuntimeEvents(this.runtime, sessionId),
     });
     for (const row of projection.runs) {
       const record = delegationRunRecordFromIndexRow(row);

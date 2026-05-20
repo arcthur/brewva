@@ -71,30 +71,22 @@ describe("model-operated Phase A architecture guard", () => {
   });
 
   test("context status is numeric plus forced compaction, not exported pressure levels", () => {
-    const contextTypes = readRepoFile("packages/brewva-runtime/src/domain/context/types.ts");
-    const contextSurface = readRepoFile(
-      "packages/brewva-runtime/src/domain/context/runtime-surface.ts",
-    );
-    const contextApi = readRepoFile("packages/brewva-runtime/src/domain/context/api.ts");
+    const contextTypes = readRepoFile("packages/brewva-runtime/src/protocol.ts");
     const publicRuntime = readRepoFile("packages/brewva-runtime/src/public/index.ts");
 
-    for (const source of [contextTypes, contextSurface, contextApi, publicRuntime]) {
+    for (const source of [contextTypes, publicRuntime]) {
       expect(source).not.toContain("ContextPressureLevel");
       expect(source).not.toContain("ContextPressureStatus");
       expect(source).not.toContain("getPressureStatus");
       expect(source).not.toContain("getPressureLevel");
     }
-    expect(contextTypes).toContain("tokensUntilForcedCompact");
-    expect(contextTypes).toContain("forcedCompaction");
-    expect(contextTypes).not.toMatch(/level:\s/u);
-
-    const sessionWire = readRepoFile("packages/brewva-runtime/src/domain/sessions/wire.ts");
     const gatewayProtocol = readRepoFile("packages/brewva-gateway/src/protocol/validate.ts");
-    for (const source of [sessionWire, gatewayProtocol]) {
+    for (const source of [gatewayProtocol]) {
       expect(source).not.toContain("ContextPressureView");
       expect(source).not.toContain("contextPressure");
     }
-    expect(sessionWire).toContain("contextStatus?: ContextStatusView");
+    expect(gatewayProtocol).toContain("tokensUntilForcedCompact");
+    expect(gatewayProtocol).toContain("forcedCompaction");
   });
 
   test("context budget config exposes contracted threshold and dynamic-tail naming", () => {
@@ -103,9 +95,8 @@ describe("model-operated Phase A architecture guard", () => {
     const configNormalizer = readRepoFile(
       "packages/brewva-runtime/src/config/normalize-infrastructure.ts",
     );
-    const contextBudget = readRepoFile("packages/brewva-runtime/src/domain/context/budget.ts");
 
-    for (const source of [configTypes, configDefaults, configNormalizer, contextBudget]) {
+    for (const source of [configTypes, configDefaults, configNormalizer]) {
       expect(source).toContain("dynamicTailTokens");
       expect(source).toContain("predictedTurnGrowthTokens");
       expect(source).toContain("headroomTokens");
@@ -130,9 +121,7 @@ describe("model-operated Phase A architecture guard", () => {
   test("replay paths consume stored compaction summaries without model regeneration", () => {
     const replaySources = [
       "packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.ts",
-      "packages/brewva-gateway/src/hosted/internal/compaction/recovery.ts",
-      "packages/brewva-runtime/src/domain/sessions/session-lifecycle.ts",
-      "packages/brewva-runtime/src/domain/sessions/session-hydration-coordinator.ts",
+      "packages/brewva-runtime/src/runtime/model/model.ts",
     ]
       .map(readRepoFile)
       .join("\n");

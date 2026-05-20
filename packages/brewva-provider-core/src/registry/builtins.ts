@@ -1,4 +1,4 @@
-import { BrewvaEffect, BrewvaStream } from "@brewva/brewva-effect";
+import { BrewvaEffect, BrewvaStream } from "@brewva/brewva-effect/primitives";
 import type {
   Api,
   AssistantMessage,

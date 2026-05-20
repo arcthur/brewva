@@ -1,18 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import type { HostedSessionResult } from "@brewva/brewva-gateway/hosted";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import {
+  CHANNEL_SESSION_CONVERSATION_BOUND_EVENT_TYPE,
+  type TurnEnvelope,
+} from "@brewva/brewva-runtime/protocol";
 import { createDeferred } from "@brewva/brewva-std/async";
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
 import { createChannelSessionCoordinator } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import type { HostedRuntimeAdapterPort, BrewvaRuntimeOptions } from "../../helpers/runtime.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
+  return createRuntimeInstanceFixture(options);
 }
 
 function createUserTurn(scopeKey: string): TurnEnvelope {
@@ -29,7 +31,7 @@ function createUserTurn(scopeKey: string): TurnEnvelope {
 }
 
 function createHostedSessionResult(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   hooks: {
     abort?: () => Promise<void>;
@@ -67,10 +69,9 @@ async function createCoordinatorFixture(options: {
   const runtime = createHostedTestRuntime({
     cwd: workspace,
     config,
-    governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
   });
   if (options.captureEvents) {
-    runtime.inspect.events.records.subscribe((event) => {
+    runtime.ops.events.records.subscribe((event) => {
       eventRecords.push({
         sessionId: event.sessionId,
         type: event.type,
@@ -131,7 +132,7 @@ describe("channel session coordinator ownership", () => {
       );
 
       const requestId = "req-accepted-1";
-      Object.assign(handle.runtime.inspect.proposals.requests, {
+      Object.assign(handle.runtime.ops.proposals.requests, {
         listPending: () => [],
         list: (sessionId: string, query?: { state?: string }) =>
           sessionId === handle.agentSessionId && query?.state === "accepted"
@@ -295,7 +296,7 @@ describe("channel session coordinator ownership", () => {
 
       await fixture.coordinator.cleanupAgentSessions("worker");
 
-      const shutdownEvents = handle.runtime.inspect.events.records.query(handle.agentSessionId, {
+      const shutdownEvents = handle.runtime.ops.events.records.query(handle.agentSessionId, {
         type: "session_shutdown",
       });
       expect(shutdownEvents).toHaveLength(1);
@@ -333,7 +334,9 @@ describe("channel session coordinator ownership", () => {
       expect(firstScopeKey).toBe("telegram:scope-c");
       expect(secondScopeKey).toBe(firstScopeKey);
       expect(
-        fixture.eventRecords.filter((event) => event.type === "channel_conversation_bound"),
+        fixture.eventRecords.filter(
+          (event) => event.type === CHANNEL_SESSION_CONVERSATION_BOUND_EVENT_TYPE,
+        ),
       ).toHaveLength(1);
     } finally {
       await fixture.coordinator.disposeAllSessions();

@@ -1,8 +1,9 @@
-import type { ReasoningRevertTrigger } from "@brewva/brewva-runtime/reasoning";
+import type { ReasoningRevertTrigger } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
+import { revertReasoning } from "../../runtime-port/reasoning.js";
 import { failTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -17,9 +18,7 @@ function normalizeTrigger(value: unknown): ReasoningRevertTrigger {
   if (typeof value !== "string") {
     return "operator_request";
   }
-  return REVERT_TRIGGERS.includes(value as never)
-    ? (value as ReasoningRevertTrigger)
-    : "operator_request";
+  return REVERT_TRIGGERS.includes(value as never) ? value : "operator_request";
 }
 
 function normalizeReceiptIds(value: unknown): string[] {
@@ -61,21 +60,19 @@ export function createReasoningRevertTool(options: BrewvaBundledToolOptions): To
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const reasoningPort = runtime.authority.reasoning?.reverts;
-        if (!reasoningPort) {
-          return failTextResult("Reasoning revert surface is unavailable in this runtime.", {
-            ok: false,
-            error: "reasoning_revert_unavailable",
-          });
-        }
-
         try {
-          const revert = reasoningPort.revert(sessionId, {
+          const revert = revertReasoning(runtime, sessionId, {
             toCheckpointId: params.checkpoint_id,
             trigger: normalizeTrigger(params.trigger),
             continuity: params.continuity,
             linkedRollbackReceiptIds: normalizeReceiptIds(params.linked_rollback_receipt_ids),
           });
+          if (!revert) {
+            return failTextResult("Reasoning revert surface is unavailable in this runtime.", {
+              ok: false,
+              error: "reasoning_revert_unavailable",
+            });
+          }
           ctx.abort();
           return textResult(
             `Reasoning revert scheduled to ${revert.toCheckpointId}; hosted resume will continue from branch ${revert.newBranchId}.`,

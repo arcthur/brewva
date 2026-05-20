@@ -1,13 +1,13 @@
 import { parseArgs as parseNodeArgs } from "node:util";
-import { createBrewvaRuntime, selectOperatorRuntimePort } from "@brewva/brewva-runtime";
-import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
+import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import {
   createSessionIndex,
   type SessionIndexRecentSession,
   type SessionIndexStatus,
 } from "@brewva/brewva-session-index";
 import { formatISO } from "date-fns";
+import { createCliSessionIndexSources } from "../runtime/runtime-ports.js";
 import { clampText, resolveInspectDirectory, type InspectFinding } from "./inspect-analysis.js";
 import { buildSessionInspectReport, type SessionInspectReport } from "./inspect.js";
 
@@ -219,13 +219,11 @@ function extractSessionFacet(report: SessionInspectReport): SessionInspectFacet 
 }
 
 async function listAvailableSessions(
-  runtime: BrewvaOperatorRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   limit: number,
 ): Promise<{ sessions: SessionIndexRecentSession[]; status: SessionIndexStatus }> {
   const index = await createSessionIndex({
-    workspaceRoot: runtime.identity.workspaceRoot,
-    events: runtime.inspect.events,
-    task: runtime.inspect.task,
+    ...createCliSessionIndexSources(runtime),
   });
   try {
     const status = await index.catchUp();
@@ -551,12 +549,12 @@ function buildNotableSessions(
 }
 
 async function buildProjectInsightsReport(input: {
-  runtime: BrewvaOperatorRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   directory: { absolutePath: string; workspaceRelativePath: string };
   sessionIds?: string[];
   limit?: number;
   analyzeSession?: (input: {
-    runtime: BrewvaOperatorRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
     sessionId: string;
     directory: { absolutePath: string; workspaceRelativePath: string };
   }) => SessionInspectReport;
@@ -583,7 +581,7 @@ async function buildProjectInsightsReport(input: {
   const analyzeSession =
     input.analyzeSession ??
     ((analysisInput: {
-      runtime: BrewvaOperatorRuntimePort;
+      runtime: HostedRuntimeAdapterPort;
       sessionId: string;
       directory: { absolutePath: string; workspaceRelativePath: string };
     }) => buildSessionInspectReport(analysisInput));
@@ -800,12 +798,11 @@ async function runInsightsCli(argv: string[]): Promise<number> {
     return 1;
   }
 
-  const runtime = createBrewvaRuntime({
+  const runtime = createHostedRuntimeAdapter({
     cwd: typeof parsed.values.cwd === "string" ? parsed.values.cwd : undefined,
     configPath: typeof parsed.values.config === "string" ? parsed.values.config : undefined,
-    governancePort: createTrustedLocalGovernancePort({ profile: "personal" }),
   });
-  const operatorRuntime = selectOperatorRuntimePort(runtime);
+  const operatorRuntime = runtime;
 
   let directory: ReturnType<typeof resolveInspectDirectory>;
   try {

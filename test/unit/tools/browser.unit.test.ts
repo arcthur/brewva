@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createBrowserTools } from "@brewva/brewva-tools/navigation";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
 
 function fakeContext(sessionId: string, cwd: string): any {
@@ -113,7 +113,7 @@ describe("browser tools", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-tool-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -155,7 +155,7 @@ describe("browser tools", () => {
     const outside = mkdtempSync(join(tmpdir(), "brewva-browser-screenshot-outside-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -182,7 +182,7 @@ describe("browser tools", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-state-load-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -210,7 +210,7 @@ describe("browser tools", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-wait-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -239,7 +239,7 @@ describe("browser tools", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-browser-get-"));
     const logPath = join(workspace, "browser-args.log");
     const fakeBrowser = writeFakeAgentBrowser(workspace, logPath);
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -281,7 +281,7 @@ describe("browser tools", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.security.boundaryPolicy.network.mode = "allowlist";
     config.security.boundaryPolicy.network.outbound = [{ host: "allowed.example", ports: [443] }];
-    const runtime = createBrewvaRuntime({ cwd: workspace, config }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace, config });
     const tools = createBrowserTools(
       { runtime: createBundledToolRuntime(runtime) },
       { command: fakeBrowser },
@@ -299,10 +299,12 @@ describe("browser tools", () => {
     );
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
-    expect(text).toContain("outside security.boundaryPolicy.network.allowlist");
+    expect(text).toContain("Tool call blocked by runtime policy");
     expect(
-      runtime.inspect.events.records.query("browser-boundary-1", { type: "tool_call_blocked" }),
-    ).toHaveLength(1);
+      runtime.capabilities.events.records.query("browser-boundary-1", {
+        type: "tool_call_blocked",
+      }),
+    ).toHaveLength(0);
     expect(existsSync(logPath)).toBe(false);
   });
 });

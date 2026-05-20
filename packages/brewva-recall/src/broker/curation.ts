@@ -1,7 +1,7 @@
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_UTILITY_OBSERVED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import {
   RECALL_CURATION_HALFLIFE_DAYS,
   type RecallCurationAggregate,
@@ -88,8 +88,8 @@ function readCurationSignal(payload: Record<string, unknown>): RecallCurationAgg
 
 export function buildCurationAggregates(runtime: RecallBrokerRuntime): RecallCurationAggregate[] {
   const byStableId = new Map<string, RecallCurationAggregate>();
-  for (const sessionId of runtime.inspect.events.log.listSessionIds()) {
-    for (const event of runtime.inspect.events.records.list(sessionId)) {
+  for (const sessionId of runtime.events.records.listSessionIds()) {
+    for (const event of runtime.events.records.list(sessionId)) {
       if (!RECALL_STATE_INVALIDATING_EVENT_TYPES.has(event.type)) {
         continue;
       }

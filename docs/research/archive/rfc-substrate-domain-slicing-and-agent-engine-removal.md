@@ -12,7 +12,7 @@
 ## Archive Summary
 
 This RFC proposed deleting `@brewva/brewva-agent-engine`, moving the low-level
-model/tool loop into `@brewva/brewva-substrate/turn`, slicing substrate into
+model/tool loop into `@brewva/brewva-substrate/agent-protocol`, slicing substrate into
 explicit domain subpaths, and compressing the substrate root to cross-domain
 contract vocabulary.
 

@@ -1,5 +1,5 @@
-import type { BrewvaOperatorRuntimePort, BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "../ports.js";
 
 export interface ChannelInspectCommandInput {
   directory?: string;
@@ -9,7 +9,7 @@ export interface ChannelInspectCommandInput {
   targetAgentId: string;
   targetSession?: {
     agentId: string;
-    runtime: BrewvaOperatorRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
     sessionId: string;
   };
 }
@@ -27,7 +27,7 @@ export interface ChannelInsightsCommandInput {
   targetAgentId: string;
   targetSession?: {
     agentId: string;
-    runtime: BrewvaOperatorRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
     sessionId: string;
   };
 }
@@ -43,7 +43,7 @@ export interface ChannelQuestionsCommandInput {
   focusedAgentId: string;
   targetAgentId: string;
   questionSurface?: {
-    runtime: BrewvaHostedRuntimePort;
+    runtime: HostedRuntimeAdapterPort;
     sessionIds: string[];
     liveSessionId?: string;
   };

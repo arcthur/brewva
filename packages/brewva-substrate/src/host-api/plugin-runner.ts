@@ -1,12 +1,11 @@
 import {
   BrewvaCancelled,
-  BrewvaEffect,
-  BrewvaSchema,
   fromAbortableBoundaryPromise,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
   withBrewvaObservability,
   type BrewvaBoundaryError,
 } from "@brewva/brewva-effect";
+import { BrewvaEffect, BrewvaSchema } from "@brewva/brewva-effect/primitives";
 import type { BrewvaToolContentPart, BrewvaToolDefinition } from "../contracts/tool.js";
 import {
   buildBrewvaPromptText,
@@ -298,7 +297,8 @@ async function runHostPluginHandler<TKey extends keyof BrewvaHostPluginEventMap>
   payload: BrewvaHostPluginEventMap[TKey],
   ctx: BrewvaHostContext,
 ): Promise<unknown> {
-  return await runPromiseAtBoundary(
+  return await runBoundaryOperation(
+    `substrate.hostPlugin.${event}`,
     runHostPluginHandlerEffect(record, event, payload, ctx),
     ctx.signal ? { signal: ctx.signal } : undefined,
   );

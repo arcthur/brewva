@@ -1,7 +1,11 @@
-import { BrewvaDuration, BrewvaEffect, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { runBoundaryOperation } from "@brewva/brewva-effect";
+import { BrewvaDuration, BrewvaEffect } from "@brewva/brewva-effect/primitives";
 
 export function sleep(ms: number): Promise<void> {
-  return runPromiseAtBoundary(BrewvaEffect.sleep(BrewvaDuration.millis(Math.max(0, ms))));
+  return runBoundaryOperation(
+    "gateway.async.sleep",
+    BrewvaEffect.sleep(BrewvaDuration.millis(Math.max(0, ms))),
+  );
 }
 
 export async function waitForAllSettledWithTimeout(
@@ -12,7 +16,8 @@ export async function waitForAllSettledWithTimeout(
     return;
   }
 
-  await runPromiseAtBoundary(
+  await runBoundaryOperation(
+    "gateway.async.waitForAllSettledWithTimeout",
     BrewvaEffect.race(
       BrewvaEffect.promise(() => Promise.allSettled(promises)).pipe(BrewvaEffect.asVoid),
       BrewvaEffect.sleep(BrewvaDuration.millis(Math.max(0, timeoutMs))),

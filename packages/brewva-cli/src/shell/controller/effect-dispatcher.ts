@@ -1,4 +1,4 @@
-import type { DecideEffectCommitmentInput } from "@brewva/brewva-runtime/proposals";
+import type { DecideEffectCommitmentInput } from "@brewva/brewva-runtime/protocol";
 import type { ShellEffect } from "../domain/effects.js";
 import type { CliShellInput } from "../domain/input.js";
 import { buildTextTranscriptMessage } from "../domain/transcript.js";

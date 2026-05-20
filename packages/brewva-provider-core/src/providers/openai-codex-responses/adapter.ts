@@ -1,10 +1,10 @@
 import type * as NodeOs from "node:os";
 import {
-  BrewvaEffect,
   fromAbortableBoundaryPromise,
   retryWithBrewvaPolicy,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
 } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { supportsXhigh } from "../../catalog/index.js";
 import type {
   Context,
@@ -361,7 +361,8 @@ export const streamOpenAICodexResponses: StreamFunction<
         }
       }
 
-      const response = await runPromiseAtBoundary(
+      const response = await runBoundaryOperation(
+        "provider.openaiCodexResponses.fetchSse",
         fetchCodexSseResponseEffect({
           url: resolveCodexUrl(model.baseUrl),
           headers: sseHeaders,

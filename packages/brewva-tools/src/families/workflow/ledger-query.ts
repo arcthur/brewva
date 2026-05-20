@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
+import { queryLedger } from "../../runtime-port/ledger.js";
 import { textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -48,7 +49,7 @@ export function createLedgerQueryTool(options: BrewvaToolOptions): ToolDefinitio
         tool: params.tool,
         last: params.last,
       };
-      const text = ledgerQueryTool.runtime.inspect.ledger.store.query(sessionId, query);
+      const text = queryLedger(ledgerQueryTool.runtime, sessionId, query);
       return textResult(text, { sessionId, query });
     },
   });

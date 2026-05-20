@@ -4,9 +4,9 @@ import type {
   DelegationModelCategory,
   PublicSubagentRole,
   DelegationVisibility,
-} from "@brewva/brewva-runtime/delegation";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
-import { normalizeReviewLaneName } from "@brewva/brewva-runtime/skills";
+} from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import { normalizeReviewLaneName } from "@brewva/brewva-runtime/protocol";
 import type {
   ExplorerConsultKind,
   ReviewLaneName,
@@ -187,8 +187,8 @@ export function assertHostedExecutionEnvelopeTightening(
     throw new Error(`${context}:producesPatches cannot widen beyond the base envelope`);
   }
   if (
-    ISOLATION_STRATEGY_RANK[candidate.isolationStrategy] <
-    ISOLATION_STRATEGY_RANK[base.isolationStrategy]
+    (ISOLATION_STRATEGY_RANK[candidate.isolationStrategy] ?? 0) <
+    (ISOLATION_STRATEGY_RANK[base.isolationStrategy] ?? 0)
   ) {
     throw new Error(`${context}:isolationStrategy cannot widen beyond the base envelope`);
   }

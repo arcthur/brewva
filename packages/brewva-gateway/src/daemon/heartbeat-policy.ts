@@ -1,10 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  BrewvaEffect,
-  startScopedSchedule,
-  type ScopedScheduleHandle,
-} from "@brewva/brewva-effect";
+import { startScopedSchedule, type ScopedScheduleHandle } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { parseJsonc } from "@brewva/brewva-runtime/config";
 import { toErrorMessage } from "../utils/errors.js";
 import type { StructuredLogger } from "./logger.js";

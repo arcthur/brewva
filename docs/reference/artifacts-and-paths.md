@@ -19,12 +19,13 @@ This document uses Brewva's stable four-class durability taxonomy:
 
 ## Root Ownership
 
-- `.orchestrator/`: kernel durability, replay, rollback, and rebuildable derived caches
-- `.brewva/`: operator config, control-plane state, addons, channel metadata, and optional non-kernel helper material
+- `.brewva/tape/`: canonical runtime truth and replay authority
+- `.orchestrator/`: rollback material, recovery WAL, and rebuildable derived caches
+- `.brewva/`: operator config, control-plane state, addons, channel metadata, and optional helper material
 
-The split is intentional: kernel replay/state stays isolated from operator and
-gateway control-plane material, even though both roots live under the same
-workspace.
+The split is intentional: canonical tape is the only replay source. Other roots
+may persist durable transients or rebuildable read models, but they do not own
+turn truth.
 
 Unless noted otherwise, the projection paths below describe the default config
 shape (`projection.dir=.orchestrator/projection`,
@@ -34,18 +35,20 @@ shape (`projection.dir=.orchestrator/projection`,
   - validates row shape, local ordering, checkpoint metadata, and output hashes
   - does not provide an immutable cryptographic chain and does not replace tape
     replay as the recovery authority
-- Event stream (event tape, `durable source of truth`): `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`
-  - file name uses a reversible base64url encoding of the UTF-8 `sessionId` to avoid filesystem collisions and preserve the original identifier
-  - only `sess_*.jsonl` files are treated as event tape shards; non-prefixed JSONL files in the directory are ignored by the runtime
-  - includes audit-retained receipts by default, plus optional ops/debug
-    telemetry when `infrastructure.events.level` is raised
-  - for example, `tool_parallel_read` appears only at `debug` level
+- Four-port canonical tape (`durable source of truth`):
+  `.brewva/tape/<encodeURIComponent(sessionId)>.jsonl`
+  - configured by `tape.enabled` and `tape.dir`
+  - stores only compact canonical event types such as `turn.started`,
+    `tool.proposed`, `tool.committed`, and `checkpoint.committed`
+  - canonical `custom` records may carry advisory `gateway.ops` rows, but they
+    cannot carry commitment authority
+  - startup validates this directory and fails fast on non-canonical rows
 - Projection units cache (`rebuildable state`): `.orchestrator/projection/units.jsonl`
 - Working projection export (`rebuildable state`): `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/<projection.workingFile>`
 - Projection cache state (`rebuildable state`): `.orchestrator/projection/state.json`
 - These projection files are rebuildable execution helpers. They are not the
   history-view baseline and they are not receipt authority.
-- Tape checkpoints (`durable source of truth`): `checkpoint` events embedded in the per-session event tape (`.orchestrator/events/sess_<base64url(sessionId)>.jsonl`)
+- Tape checkpoints (`durable source of truth`): `checkpoint.committed` events embedded in the per-session canonical tape (`.brewva/tape/<encodeURIComponent(sessionId)>.jsonl`)
 - Runtime recovery source (`durable source of truth`): event tape replay (`checkpoint + delta`); no standalone runtime session-state snapshot file
 - History-view baseline (`runtime_contract`, receipt-derived view): operator-visible
   baseline state is rebuilt from `session_compact` receipts on the per-session
@@ -167,7 +170,7 @@ runtime path.
 
 - Runtime: `packages/brewva-runtime/src`
 - Tools: `packages/brewva-tools/src`
-- Hosted lane internals: `packages/brewva-gateway/src/hosted/internal/{session,thread-loop}`
+- Hosted lane internals: `packages/brewva-gateway/src/hosted/internal/{session,turn-adapter}`
 - Hosted extension facade: `packages/brewva-gateway/src/extensions`
 - Gateway delegation: `packages/brewva-gateway/src/delegation`
 - CLI: `packages/brewva-cli/src`

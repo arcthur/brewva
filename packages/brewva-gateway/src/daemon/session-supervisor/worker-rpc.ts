@@ -1,17 +1,19 @@
 import {
+  BrewvaWorkerScope,
+  runBoundaryOperation,
+  withBrewvaObservability,
+} from "@brewva/brewva-effect";
+import {
   BrewvaDeferred,
   BrewvaDuration,
   BrewvaEffect,
   BrewvaScope,
-  BrewvaWorkerScope,
-  runPromiseAtBoundary,
-  withBrewvaObservability,
-} from "@brewva/brewva-effect";
+} from "@brewva/brewva-effect/primitives";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
 import type {
   ParentToWorkerMessage,
   WorkerToParentMessage,
-} from "../../hosted/internal/thread-loop/worker/api.js";
+} from "../../hosted/internal/turn-adapter/worker/api.js";
 import { validateSessionWireFramePayload } from "../../protocol/api.js";
 import { SessionBackendStateError } from "../session-backend.js";
 import type { SendPromptOutput } from "../session-backend.js";
@@ -124,9 +126,10 @@ export class SessionWorkerRpcController {
     message: Exclude<ParentToWorkerMessage, { kind: "bridge.ping" | "init" }>,
     timeoutMs = WORKER_RPC_TIMEOUT_MS,
   ): Promise<Record<string, unknown> | undefined> {
-    return runPromiseAtBoundary(this.requestEffect(handle, message, timeoutMs)).catch((error) =>
-      Promise.reject(toError(error)),
-    );
+    return runBoundaryOperation(
+      "brewva.gateway.worker.request.boundary",
+      this.requestEffect(handle, message, timeoutMs),
+    ).catch((error) => Promise.reject(toError(error)));
   }
 
   requestEffect(
@@ -149,7 +152,10 @@ export class SessionWorkerRpcController {
     turnId: string,
     timeoutMs: number,
   ): Promise<SendPromptOutput> {
-    return runPromiseAtBoundary(this.registerPendingTurnEffect(handle, turnId, timeoutMs));
+    return runBoundaryOperation(
+      "brewva.gateway.worker.turn.boundary",
+      this.registerPendingTurnEffect(handle, turnId, timeoutMs),
+    );
   }
 
   registerPendingTurnEffect(

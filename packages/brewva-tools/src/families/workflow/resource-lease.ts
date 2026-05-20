@@ -1,9 +1,14 @@
-import type { ResourceLeaseRecord } from "@brewva/brewva-runtime/context";
+import type { ResourceLeaseRecord } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
+import {
+  cancelResourceLease,
+  listResourceLeases,
+  requestResourceLease,
+} from "../../runtime-port/resource-lease.js";
 import { failTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -66,7 +71,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
           if (typeof params.reason !== "string" || params.reason.trim().length === 0) {
             return failTextResult("Error: reason is required for action=request.", { ok: false });
           }
-          const result = runtime.authority.tools.resourceLeases.request(sessionId, {
+          const result = requestResourceLease(runtime, sessionId, {
             reason: params.reason,
             budget: {
               maxToolCalls: params.maxToolCalls,
@@ -87,7 +92,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
         }
 
         if (params.action === "list") {
-          const leases = runtime.inspect.tools.resourceLeases.list(sessionId, {
+          const leases = listResourceLeases(runtime, sessionId, {
             includeInactive: params.includeInactive,
             skillName: params.skillName,
           });
@@ -107,11 +112,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
         if (typeof params.leaseId !== "string" || params.leaseId.trim().length === 0) {
           return failTextResult("Error: leaseId is required for action=cancel.", { ok: false });
         }
-        const result = runtime.authority.tools.resourceLeases.cancel(
-          sessionId,
-          params.leaseId,
-          params.reason,
-        );
+        const result = cancelResourceLease(runtime, sessionId, params.leaseId, params.reason);
         if (!result.ok) {
           return failTextResult(`Error: ${result.reason}`, { ok: false });
         }

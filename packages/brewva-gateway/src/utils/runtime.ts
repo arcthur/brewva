@@ -1,5 +1,5 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { appendBrewvaEventRecordToLogIfMissing } from "@brewva/brewva-runtime/event-log";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import { queryRuntimeEvents } from "../hosted/api.js";
 
 export function clampText(value: string, maxChars: number): string;
 export function clampText(value: string | undefined, maxChars: number): string | undefined;
@@ -25,18 +25,14 @@ function renderUnknownError(value: unknown): string | undefined {
 }
 
 export function ensureSessionShutdownRecorded(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   payload?: Record<string, unknown>,
 ): void {
-  if (
-    runtime.inspect.events.records.query(sessionId, { type: "session_shutdown", last: 1 }).length >
-    0
-  )
+  if (queryRuntimeEvents(runtime, sessionId, { type: "session_shutdown", last: 1 }).length > 0)
     return;
-  runtime.extensions.hosted.events.record({
+  runtime.ops.session.lifecycle.shutdown({
     sessionId,
-    type: "session_shutdown",
     payload,
   });
 }
@@ -63,7 +59,7 @@ function buildSessionShutdownPayload(input: {
 }
 
 export function recordSessionShutdownIfMissing(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
     reason: string;
@@ -79,7 +75,7 @@ export function recordSessionShutdownIfMissing(
 }
 
 export function recordAbnormalSessionShutdown(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
     source: string;
@@ -92,24 +88,4 @@ export function recordAbnormalSessionShutdown(
     source: input.source,
     error: input.error,
   });
-}
-
-export function recordSessionShutdownReceiptToEventLogIfMissing(input: {
-  eventLogPath: string;
-  sessionId: string;
-  reason: string;
-  source: string;
-  error?: unknown;
-  exitCode?: number | null;
-  signal?: string | null;
-  workerSessionId?: string;
-  recoveredFromRegistry?: boolean;
-}): boolean {
-  return Boolean(
-    appendBrewvaEventRecordToLogIfMissing(input.eventLogPath, {
-      sessionId: input.sessionId,
-      type: "session_shutdown",
-      payload: buildSessionShutdownPayload(input),
-    }),
-  );
 }

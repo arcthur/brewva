@@ -3,14 +3,13 @@ import { dirname, resolve } from "node:path";
 import {
   createCredentialVaultService,
   type CredentialVaultService,
-} from "@brewva/brewva-runtime/credentials";
+} from "@brewva/brewva-runtime/security";
 
 export interface ChildRegistryEntry {
   sessionId: string;
   pid: number;
   startedAt: number;
   agentSessionId?: string;
-  agentEventLogPath?: string;
   cwd?: string;
 }
 
@@ -124,11 +123,6 @@ function parseChildRegistryEntries(raw: unknown): ChildRegistryEntry[] {
       agentSessionId:
         typeof candidate.agentSessionId === "string" && candidate.agentSessionId.trim().length > 0
           ? candidate.agentSessionId.trim()
-          : undefined,
-      agentEventLogPath:
-        typeof candidate.agentEventLogPath === "string" &&
-        candidate.agentEventLogPath.trim().length > 0
-          ? candidate.agentEventLogPath.trim()
           : undefined,
       cwd:
         typeof candidate.cwd === "string" && candidate.cwd.trim().length > 0

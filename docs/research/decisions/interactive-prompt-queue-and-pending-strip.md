@@ -11,8 +11,8 @@
   - `docs/reference/commands.md`
   - `docs/guide/cli.md`
 - Code anchors:
-  - `packages/brewva-substrate/src/turn/controller.ts`
-  - `packages/brewva-substrate/src/turn/loop.ts`
+  - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/runtime-session-controller.ts`
+  - `packages/brewva-runtime/src/runtime/engine/turn.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
   - `packages/brewva-substrate/src/session/prompt-session.ts`
   - `packages/brewva-substrate/src/session/session-host.ts`

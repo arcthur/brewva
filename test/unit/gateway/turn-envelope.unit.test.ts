@@ -3,66 +3,39 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { asBrewvaToolCallId, asBrewvaToolName } from "@brewva/brewva-runtime/core";
-import {
-  EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
-  TOOL_RESULT_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
-import type { SessionWireFrame, ToolOutputView } from "@brewva/brewva-runtime/session";
-import { TurnLifecycleSpine } from "@brewva/brewva-runtime/session";
-import type {
-  TurnLifecycleAdvanceInput,
-  TurnLifecycleSnapshot,
-} from "@brewva/brewva-runtime/session";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+import type { BrewvaRuntime, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaToolUpdateHandler } from "@brewva/brewva-substrate/tools";
+import { Type } from "@sinclair/typebox";
+import { NOOP_UI } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/noop-ui.js";
 import {
   runHostedTurnEnvelope,
-  type HostedTurnEnvelopeLoopResult,
-} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/turn-envelope.js";
+  type HostedTurnEnvelopeAdapterResult,
+} from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.js";
+import {
+  fauxAssistantMessage,
+  fauxToolCall,
+  registerFauxProvider,
+} from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 
-function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
-}
-
-function createRuntime(prefix: string): BrewvaHostedRuntimePort {
-  return createHostedTestRuntime({
-    cwd: mkdtempSync(join(tmpdir(), prefix)),
+function createRuntime(prefix: string, options: BrewvaRuntimeOptions = {}): BrewvaRuntime {
+  return createBrewvaRuntime({
+    ...options,
+    cwd: options.cwd ?? mkdtempSync(join(tmpdir(), prefix)),
   });
 }
 
-function eventTypes(runtime: BrewvaHostedRuntimePort, sessionId: string): string[] {
-  return runtime.inspect.events.records.list(sessionId).map((event) => event.type);
-}
-
-function eventPayloads(
-  runtime: BrewvaHostedRuntimePort,
-  sessionId: string,
-  type: string,
-): unknown[] {
-  return runtime.inspect.events.records.list(sessionId, { type }).map((event) => event.payload);
-}
-
-function createLoopResult(
-  input?: Partial<Extract<HostedTurnEnvelopeLoopResult, { status: "completed" }>>,
-): HostedTurnEnvelopeLoopResult {
+function createAdapterResult(
+  input?: Partial<Extract<HostedTurnEnvelopeAdapterResult, { status: "completed" }>>,
+): HostedTurnEnvelopeAdapterResult {
   return {
     status: "completed",
-    attemptId: input?.attemptId ?? "attempt-1",
+    attemptId: input?.attemptId ?? "runtime-turn",
     assistantText: input?.assistantText ?? "done",
     toolOutputs: input?.toolOutputs ?? [],
     diagnostic: {
       sessionId: "unused",
       profile: "interactive",
-      attemptSequence: 1,
-      compactAttempts: 0,
-      recoveryHistory: [],
-      compaction: {
-        requestedGeneration: 0,
-        completedGeneration: 0,
-        foregroundOwner: false,
-      },
     },
   };
 }
@@ -73,515 +46,196 @@ const emptySession = {
   },
 };
 
-class RecordingTurnLifecycleSpine extends TurnLifecycleSpine {
-  readonly gates: string[] = [];
-
-  override advance(input: TurnLifecycleAdvanceInput): TurnLifecycleSnapshot {
-    this.gates.push(input.gate);
-    return super.advance(input);
-  }
-}
-
 describe("hosted turn envelope", () => {
-  test("records accepted input and terminal render around a completed gateway turn", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-gateway-");
-    const sessionId = "session-envelope-gateway";
-    const observedFrames: SessionWireFrame[] = [];
+  test("wraps a custom adapter without writing gateway-owned turn truth", async () => {
+    const runtime = createRuntime("brewva-turn-envelope-custom-");
 
     const result = await runHostedTurnEnvelope({
       session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
       runtime,
-      sessionId,
+      sessionId: "session-envelope-custom",
       prompt: "hello",
       source: "gateway",
-      turnId: "turn-gateway-1",
-      onFrame: (frame) => observedFrames.push(frame),
-      runLoop: async (_input) => createLoopResult({ assistantText: "gateway done" }),
+      turnId: "turn-custom-1",
+      runAdapter: async () => createAdapterResult({ assistantText: "custom done" }),
     });
 
-    expect(result.status).toBe("completed");
-    expect(result.turnId).toBe("turn-gateway-1");
-    expect(result.runtimeTurn).toBe(0);
-    expect(eventTypes(runtime, sessionId)).toContain("turn_input_recorded");
-    expect(eventPayloads(runtime, sessionId, "turn_input_recorded")[0]).toMatchObject({
-      turnId: "turn-gateway-1",
-      trigger: "user",
-      promptText: "hello",
-    });
-    expect(eventPayloads(runtime, sessionId, "turn_render_committed")[0]).toMatchObject({
-      turnId: "turn-gateway-1",
-      attemptId: "attempt-1",
+    expect(result).toMatchObject({
       status: "completed",
-      assistantText: "gateway done",
-      toolOutputs: [],
-    });
-    expect(observedFrames.map((frame) => frame.type)).toEqual(["turn.input", "turn.committed"]);
-  });
-
-  test("flushes deferred initial persistence before recording turn input", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-initial-persistence-");
-    const sessionId = "session-envelope-initial-persistence";
-    const session = {
-      sessionManager: {
-        getSessionId: () => sessionId,
-      },
-      async ensureInitialPersistence() {
-        runtime.extensions.hosted.events.record({
-          sessionId,
-          type: "session_start",
-          payload: { cwd: "/tmp/brewva" },
-        });
-      },
-    };
-
-    await runHostedTurnEnvelope({
-      session: session as unknown as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "hello",
-      source: "interactive",
-      turnId: "turn-initial-persistence-1",
-      runLoop: async () => createLoopResult({ assistantText: "done" }),
-    });
-
-    expect(eventTypes(runtime, sessionId).slice(0, 2)).toEqual([
-      "session_start",
-      "turn_input_recorded",
-    ]);
-  });
-
-  test("advances the internal turn lifecycle spine without writing extra receipts", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-spine-");
-    const sessionId = "session-envelope-spine";
-    const turnLifecycleSpine = new TurnLifecycleSpine();
-
-    await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "hello",
-      source: "gateway",
-      turnId: "turn-spine-1",
-      turnLifecycleSpine,
-      runLoop: async () => createLoopResult({ assistantText: "spine done" }),
-    });
-
-    expect(turnLifecycleSpine.get({ sessionId, turnId: "turn-spine-1" })).toMatchObject({
-      gate: "terminal_recorded",
-      superseded: false,
-    });
-    expect(eventTypes(runtime, sessionId)).toEqual([
-      "turn_input_recorded",
-      "turn_render_committed",
-    ]);
-  });
-
-  test("maps manifest and result receipts onto internal turn lifecycle gates", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-effect-spine-");
-    const sessionId = "session-envelope-effect-spine";
-    const turnLifecycleSpine = new RecordingTurnLifecycleSpine();
-
-    await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "hello",
-      source: "gateway",
-      turnId: "turn-effect-spine-1",
-      turnLifecycleSpine,
-      runLoop: async () => {
-        runtime.extensions.hosted.events.record({
-          sessionId,
-          turn: 0,
-          type: EFFECT_AUTHORITY_DECIDED_EVENT_TYPE,
-          payload: {
-            toolCallId: "tc-effect-spine",
-            toolName: "exec",
-            boundary: "effectful",
-            effects: ["local_exec"],
-            defaultRisk: "high",
-            decision: "allow",
-            reason: null,
-            requiresApproval: false,
-            recoveryPreparation: "manual",
-            commitmentPosture: {
-              recoverability: "manual_recovery",
-              visibility: "local_only",
-              evidenceSources: ["action_policy"],
-              warnings: [],
-            },
-            actionClass: "local_exec_effectful",
-            riskLevel: "high",
-            defaultAdmission: "allow",
-            maxAdmission: "ask",
-            effectiveAdmission: "allow",
-            receiptPolicy: null,
-            recoveryPolicy: null,
-            commandPolicy: null,
-            virtualReadonly: null,
-            manifestBasis: {
-              schema: "brewva.effect_authority_basis.v2",
-              toolName: "exec",
-              boundary: "effectful",
-              authoritySource: "exact",
-              actionClass: "local_exec_effectful",
-              riskLevel: "high",
-              effectiveAdmission: "allow",
-              effects: ["local_exec"],
-              requiresApproval: false,
-              recoveryPreparation: "manual",
-              commitmentPosture: {
-                recoverability: "manual_recovery",
-                visibility: "local_only",
-                evidenceSources: ["action_policy"],
-                warnings: [],
-              },
-              receiptRequired: false,
-              invariantBasis: ["exact_action_policy_required"],
-              overlayBasis: ["action_policy:local_exec_effectful", "admission:allow"],
-              runtimeBasis: [],
-              receiptBasis: ["recovery:manual"],
-            },
-          },
-        });
-        runtime.extensions.hosted.events.record({
-          sessionId,
-          turn: 0,
-          type: TOOL_RESULT_RECORDED_EVENT_TYPE,
-          payload: {
-            toolName: "exec",
-            toolCallId: "tc-effect-spine",
-            verdict: "pass",
-            channelSuccess: true,
-            ledgerId: "ledger-effect-spine",
-          },
-        });
-        return createLoopResult({ assistantText: "effect spine done" });
+      turnId: "turn-custom-1",
+      runtimeTurn: 0,
+      assistantText: "custom done",
+      actions: {
+        scheduleTriggerApplied: false,
       },
     });
-
-    expect(turnLifecycleSpine.gates).toEqual([
-      "admission_resolved",
-      "effect_authorized",
-      "execution_recorded",
-      "terminal_recorded",
-    ]);
-    expect(turnLifecycleSpine.get({ sessionId, turnId: "turn-effect-spine-1" })).toMatchObject({
-      gate: "terminal_recorded",
-      superseded: false,
-    });
+    expect(runtime.tape.list("session-envelope-custom")).toEqual([]);
   });
 
-  test("generates a stable turn id from the runtime turn when omitted", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-generated-");
-    const sessionId = "session-envelope-generated";
-
-    const result = await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: [{ type: "text", text: "first generated" }],
-      source: "print",
-      runLoop: async () => createLoopResult(),
+  test("creates a runtime turn adapter from the hosted session when no custom adapter is supplied", async () => {
+    const runtime = createRuntime("brewva-turn-envelope-runtime-adapter-");
+    const sessionId = "session-envelope-runtime-adapter";
+    const fauxProvider = registerFauxProvider({
+      provider: "faux-turn-envelope",
+      api: "faux",
+      tokenSize: { min: 1, max: 1 },
     });
-
-    expect(result.turnId).toBe("turn-0");
-    expect(eventPayloads(runtime, sessionId, "turn_input_recorded")[0]).toMatchObject({
-      turnId: "turn-0",
-      trigger: "user",
-      promptText: "first generated",
-    });
-  });
-
-  test("keeps the default turn lifecycle spine available across a stable session object", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-default-spine-");
-    const sessionId = "session-envelope-default-spine";
-
-    await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "first",
-      source: "interactive",
-      runLoop: async () => createLoopResult({ assistantText: "first done" }),
-    });
-    const second = await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "second",
-      source: "interactive",
-      runLoop: async () => createLoopResult({ assistantText: "second done" }),
-    });
-
-    expect(second.status).toBe("completed");
-    expect(eventPayloads(runtime, sessionId, "turn_render_committed")).toHaveLength(2);
-  });
-
-  test("applies trusted recovery transitions even when their receipt points at another runtime turn", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-cross-turn-recovery-");
-    const sessionId = "session-envelope-cross-turn-recovery";
-    const turnLifecycleSpine = new TurnLifecycleSpine();
-
-    await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "recover old turn",
-      source: "gateway",
-      turnId: "turn-cross-recovery-1",
-      turnLifecycleSpine,
-      runLoop: async () => {
-        runtime.extensions.hosted.events.record({
-          sessionId,
-          turn: 42,
-          type: "session_turn_transition",
-          payload: {
-            reason: "wal_recovery_resume",
-            status: "entered",
-            sequence: 1,
-            family: "recovery",
-            attempt: null,
-            sourceEventId: null,
-            sourceEventType: null,
-            error: null,
-            breakerOpen: false,
-            model: null,
-          },
-        });
-        return createLoopResult({ assistantText: "recovered" });
-      },
-    });
-
-    expect(turnLifecycleSpine.get({ sessionId, turnId: "turn-cross-recovery-1" })).toMatchObject({
-      gate: "terminal_recorded",
-      superseded: true,
-      supersedeReason: "wal_recovery_resume",
-    });
-  });
-
-  test("applies schedule trigger continuity before running the loop", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-schedule-");
-    const sessionId = "session-envelope-schedule";
-    const observedGoal: string[] = [];
-
-    await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "scheduled work",
-      source: "schedule",
-      turnId: "turn-schedule-1",
-      trigger: {
-        kind: "schedule",
-        continuityMode: "inherit",
-        taskSpec: {
-          schema: "brewva.task.v1",
-          goal: "Inherited schedule goal",
-        },
-        claims: [
+    const observedFrames: SessionWireFrame[] = [];
+    fauxProvider.setResponses([
+      fauxAssistantMessage([
+        { type: "thinking", thinking: "thinking..." },
+        { type: "text", text: "runtime says hi" },
+        fauxToolCall("echo", { value: "runtime-path" }, { id: "tool-runtime-path-1" }),
+      ]),
+      (context) =>
+        fauxAssistantMessage([
           {
-            id: "fact-1",
-            kind: "constraint",
-            severity: "info",
-            summary: "Inherited fact",
-            status: "active",
-            evidenceIds: [],
-            firstSeenAt: 1,
-            lastSeenAt: 1,
+            type: "text",
+            text: context.messages.map((message) => message.role).join(">"),
+          },
+        ]),
+    ]);
+
+    try {
+      const model = fauxProvider.getModel();
+      const session = {
+        model,
+        sessionManager: {
+          getSessionId: () => sessionId,
+        },
+        getRegisteredTools: () => [
+          {
+            name: "echo",
+            label: "Echo",
+            description: "Echoes the provided value.",
+            parameters: Type.Object({
+              value: Type.String(),
+            }),
+            brewva: {
+              surface: "base",
+              actionClass: "runtime_observe",
+            },
+            async execute(
+              _toolCallId: string,
+              params: { value: string },
+              _signal: AbortSignal | undefined,
+              onUpdate: BrewvaToolUpdateHandler<{ stage: string }> | undefined,
+            ) {
+              await onUpdate?.({
+                content: [{ type: "text" as const, text: "echo:preparing" }],
+                details: { stage: "preparing" },
+                display: { summaryText: "preparing" },
+              });
+              await onUpdate?.({
+                content: [{ type: "text" as const, text: `echo:progress:${params.value}` }],
+                details: { stage: "running" },
+                display: { summaryText: `running ${params.value}` },
+              });
+              return {
+                content: [{ type: "text" as const, text: `echo:${params.value}` }],
+                details: { echoed: params.value },
+              };
+            },
           },
         ],
-      },
-      runLoop: async () => {
-        observedGoal.push(runtime.inspect.task.state.get(sessionId).spec?.goal ?? "");
-        return createLoopResult();
-      },
-    });
-
-    expect(observedGoal).toEqual(["Inherited schedule goal"]);
-    expect(runtime.inspect.claim.state.get(sessionId).claims.map((fact) => fact.id)).toContain(
-      "fact-1",
-    );
-    expect(eventPayloads(runtime, sessionId, "turn_input_recorded")[0]).toMatchObject({
-      trigger: "schedule",
-    });
-  });
-
-  test("records WAL recovery transitions around recovered turns", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-wal-");
-    const sessionId = "session-envelope-wal";
-    const turnLifecycleSpine = new TurnLifecycleSpine();
-
-    await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "recover",
-      source: "gateway",
-      turnId: "turn-recovery-1",
-      walReplayId: "wal-1",
-      turnLifecycleSpine,
-      runLoop: async () => createLoopResult(),
-    });
-
-    expect(eventPayloads(runtime, sessionId, "turn_input_recorded")[0]).toMatchObject({
-      trigger: "recovery",
-    });
-    expect(eventPayloads(runtime, sessionId, "session_turn_transition")).toEqual([
-      expect.objectContaining({
-        reason: "wal_recovery_resume",
-        status: "entered",
-        sourceEventId: "wal-1",
-      }),
-      expect.objectContaining({
-        reason: "wal_recovery_resume",
-        status: "completed",
-        sourceEventId: "wal-1",
-      }),
-    ]);
-    expect(turnLifecycleSpine.get({ sessionId, turnId: "turn-recovery-1" })).toMatchObject({
-      gate: "terminal_recorded",
-      superseded: true,
-      supersedeReason: "wal_recovery_resume",
-    });
-  });
-
-  test("records failed WAL transition and failed render when loop throws", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-wal-fail-");
-    const sessionId = "session-envelope-wal-fail";
-    const turnLifecycleSpine = new TurnLifecycleSpine();
-
-    const result = await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "recover fail",
-      source: "gateway",
-      turnId: "turn-recovery-fail-1",
-      walReplayId: "wal-fail-1",
-      turnLifecycleSpine,
-      runLoop: async () => {
-        throw new Error("loop failed");
-      },
-    });
-
-    expect(result.status).toBe("failed");
-    expect(eventPayloads(runtime, sessionId, "session_turn_transition")).toEqual([
-      expect.objectContaining({
-        reason: "wal_recovery_resume",
-        status: "entered",
-      }),
-      expect.objectContaining({
-        reason: "wal_recovery_resume",
-        status: "failed",
-        error: "loop failed",
-      }),
-    ]);
-    expect(eventPayloads(runtime, sessionId, "turn_render_committed")[0]).toMatchObject({
-      status: "failed",
-      assistantText: "",
-      toolOutputs: [],
-    });
-    expect(turnLifecycleSpine.get({ sessionId, turnId: "turn-recovery-fail-1" })).toMatchObject({
-      gate: "terminal_recorded",
-      superseded: true,
-      supersedeReason: "wal_recovery_resume",
-    });
-  });
-
-  test("does not commit a terminal render for approval suspension", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-suspended-");
-    const sessionId = "session-envelope-suspended";
-
-    const result = await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: "approval",
-      source: "interactive",
-      turnId: "turn-suspended-1",
-      runLoop: async () => ({
-        status: "suspended",
-        reason: "approval",
-        sourceEventId: "approval-event-1",
-        diagnostic: {
-          sessionId,
-          profile: "interactive",
-          attemptSequence: 1,
-          compactAttempts: 0,
-          recoveryHistory: [],
-          compaction: {
-            requestedGeneration: 0,
-            completedGeneration: 0,
-            foregroundOwner: false,
+        getRuntimeModelCatalog: () => ({
+          async getApiKeyAndHeaders() {
+            return { ok: true as const };
           },
-        },
-      }),
-    });
+        }),
+        createRuntimeToolContext: () => ({
+          ui: NOOP_UI,
+          hasUI: false,
+          cwd: runtime.identity.cwd,
+          sessionManager: {
+            getSessionId: () => sessionId,
+            getLeafId: () => null,
+          },
+          modelRegistry: {
+            getAll: () => [model],
+          },
+          model,
+          isIdle: () => true,
+          signal: undefined,
+          abort: () => undefined,
+          hasPendingMessages: () => false,
+          shutdown: () => undefined,
+          compact: () => undefined,
+          getContextUsage: () => undefined,
+          getSystemPrompt: () => "Test hosted system prompt.",
+        }),
+      };
 
-    expect(result.status).toBe("suspended");
-    expect(eventTypes(runtime, sessionId)).toContain("turn_input_recorded");
-    expect(eventPayloads(runtime, sessionId, "turn_render_committed")).toEqual([]);
+      const result = await runHostedTurnEnvelope({
+        session: session as unknown as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+        runtime,
+        sessionId,
+        prompt: "use the echo tool",
+        source: "interactive",
+        turnId: "turn-runtime-adapter-1",
+        onFrame: (frame) => observedFrames.push(frame),
+      });
+
+      expect(result).toMatchObject({
+        status: "completed",
+        assistantText: "runtime says hi",
+        toolOutputs: [
+          {
+            toolCallId: "tool-runtime-path-1",
+            toolName: "echo",
+            verdict: "pass",
+            isError: false,
+            text: "echo:runtime-path",
+          },
+        ],
+      });
+      expect(observedFrames.map((frame) => frame.type)).toEqual(
+        expect.arrayContaining([
+          "attempt.started",
+          "assistant.delta",
+          "tool.started",
+          "tool.progress",
+          "tool.finished",
+        ]),
+      );
+      expect(
+        observedFrames
+          .filter((frame) => frame.type === "tool.progress")
+          .map((frame) => (frame.type === "tool.progress" ? frame.text : "")),
+      ).toEqual(["echo:preparing", "echo:progress:runtime-path"]);
+      const events = result.status === "completed" ? runtime.tape.list(sessionId) : [];
+      expect(events.map((event) => event.type)).toEqual(
+        expect.arrayContaining([
+          "turn.started",
+          "reason.committed",
+          "msg.committed",
+          "tool.proposed",
+          "tool.committed",
+          "turn.ended",
+        ]),
+      );
+    } finally {
+      fauxProvider.unregister();
+    }
   });
 
-  test("records cancelled terminal render when classifier marks thrown error as cancelled", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-cancelled-");
-    const sessionId = "session-envelope-cancelled";
+  test("fails fast when no custom adapter or runtime-turn-compatible session is available", async () => {
+    const runtime = createRuntime("brewva-turn-envelope-fail-fast-");
 
     const result = await runHostedTurnEnvelope({
       session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
       runtime,
-      sessionId,
-      prompt: "cancel me",
-      source: "gateway",
-      turnId: "turn-cancelled-1",
-      classifyThrownError: () => "cancelled",
-      runLoop: async () => {
-        throw new Error("cancelled by user");
-      },
+      sessionId: "session-envelope-fail-fast",
+      prompt: "hello",
+      source: "interactive",
     });
 
-    expect(result.status).toBe("cancelled");
-    expect(eventPayloads(runtime, sessionId, "turn_render_committed")[0]).toMatchObject({
-      status: "cancelled",
-      assistantText: "",
-      toolOutputs: [],
+    expect(result).toMatchObject({
+      status: "failed",
+      attemptId: "runtime-turn",
     });
-  });
-
-  test("records subagent trigger for subagent source turns", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-subagent-");
-    const sessionId = "session-envelope-subagent";
-    const toolOutput: ToolOutputView = {
-      toolCallId: asBrewvaToolCallId("tool-1"),
-      toolName: asBrewvaToolName("read_file"),
-      verdict: "pass",
-      isError: false,
-      text: "ok",
-    };
-
-    await runHostedTurnEnvelope({
-      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
-      runtime,
-      sessionId,
-      prompt: [{ type: "text", text: "child work" }] satisfies readonly BrewvaPromptContentPart[],
-      source: "subagent",
-      turnId: "turn-subagent-1",
-      runLoop: async () =>
-        createLoopResult({
-          assistantText: "child done",
-          toolOutputs: [toolOutput],
-        }),
-    });
-
-    expect(eventPayloads(runtime, sessionId, "turn_input_recorded")[0]).toMatchObject({
-      trigger: "subagent",
-      promptText: "child work",
-    });
-    expect(eventPayloads(runtime, sessionId, "turn_render_committed")[0]).toMatchObject({
-      status: "completed",
-      assistantText: "child done",
-      toolOutputs: [toolOutput],
-    });
+    expect(result.status === "failed" ? String(result.error) : "").toContain(
+      "hosted_runtime_turn_required",
+    );
   });
 });

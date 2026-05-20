@@ -15,13 +15,14 @@ import {
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
+import { resolveRecallBrokerRuntime } from "../../runtime-port/recall.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { failTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
@@ -177,9 +178,10 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
       }
 
       const scope = resolveToolTargetScope(runtime, ctx);
+      const brokerRuntime = resolveRecallBrokerRuntime(runtime);
       if (query) {
         const intent = normalizeIntent(params.intent) ?? "prior_work";
-        const search = await getOrCreateRecallBroker(runtime)
+        const search = await getOrCreateRecallBroker(brokerRuntime)
           .search({
             sessionId,
             query,
@@ -254,7 +256,7 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
         );
       }
 
-      const inspection = await getOrCreateRecallBroker(runtime)
+      const inspection = await getOrCreateRecallBroker(brokerRuntime)
         .inspectStableIds({
           sessionId,
           stableIds,

@@ -1,4 +1,4 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
 import type { ChannelRuntimeSessionPort } from "../session/coordinator.js";
 import type { ChannelControlCommand } from "../types.js";

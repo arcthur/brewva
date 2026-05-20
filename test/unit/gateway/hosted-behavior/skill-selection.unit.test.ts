@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SkillDocument } from "@brewva/brewva-runtime/skills";
+import type { SkillDocument } from "@brewva/brewva-runtime/protocol";
 import {
   buildSkillCatalogContextForPrompt,
   createSkillSelectionLifecycle,
@@ -45,22 +45,32 @@ function createRuntime(skills: SkillDocument[]): {
   events: Array<{ sessionId: string; type: string; payload?: object }>;
 } {
   const events: Array<{ sessionId: string; type: string; payload?: object }> = [];
+  const latestEventPayload = (sessionId: string, type: string): object | undefined => {
+    const payload = events
+      .toReversed()
+      .find((event) => event.sessionId === sessionId && event.type === type)?.payload;
+    return typeof payload === "object" && payload !== null && !Array.isArray(payload)
+      ? payload
+      : undefined;
+  };
   return {
     events,
     runtime: {
-      inspect: {
+      ops: {
         skills: {
           catalog: {
             list: () => skills,
             get: (name) => skills.find((entry) => entry.name === name),
           },
-        },
-        events: {
-          records: {
-            query: (sessionId, query) =>
-              events
-                .filter((event) => event.sessionId === sessionId && event.type === query.type)
-                .map((event) => ({ payload: event.payload })),
+          selection: {
+            latest: (sessionId) => latestEventPayload(sessionId, "skill_selection_recorded"),
+            record: (sessionId, receipt) => {
+              events.push({
+                sessionId,
+                type: "skill_selection_recorded",
+                payload: receipt,
+              });
+            },
           },
         },
       },
@@ -181,15 +191,7 @@ describe("hosted advisory skill catalog context", () => {
 
   test("records catalog evidence without changing tool authority", () => {
     const { runtime, events } = createRuntime(createSkillCatalog());
-    const lifecycle = createSkillSelectionLifecycle(runtime, {
-      record: (input) => {
-        events.push({
-          sessionId: input.sessionId,
-          type: "skill_selection_recorded",
-          payload: input.receipt,
-        });
-      },
-    });
+    const lifecycle = createSkillSelectionLifecycle(runtime);
 
     const result = lifecycle.beforeAgentStart(
       { prompt: "Use $architecture", systemPrompt: "base" },

@@ -1,15 +1,15 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
+import type { SchedulerRuntimePort } from "@brewva/brewva-gateway/daemon";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
-import { type SchedulerRuntimePort } from "@brewva/brewva-runtime/recovery";
 import {
   getNextCronRunAt,
   normalizeTimeZone,
   parseCronExpression,
-} from "@brewva/brewva-runtime/schedule";
+} from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 
 export function createWorkspace(name: string): string {
   const workspace = mkdtempSync(join(tmpdir(), `brewva-scheduler-${name}-`));
@@ -37,17 +37,16 @@ export function createSchedulerConfig(mutate?: (config: BrewvaConfig) => void): 
   return config;
 }
 
-export function schedulerRuntimePort(runtime: BrewvaHostedRuntimePort): SchedulerRuntimePort {
+export function schedulerRuntimePort(runtime: HostedRuntimeAdapterPort): SchedulerRuntimePort {
   return {
     workspaceRoot: runtime.identity.workspaceRoot,
     scheduleConfig: runtime.config.schedule,
-    listSessionIds: () => runtime.inspect.events.log.listSessionIds(),
-    listEvents: (targetSessionId, query) =>
-      runtime.inspect.events.records.list(targetSessionId, query),
-    recordEvent: (input) => runtime.extensions.hosted.events.record(input),
-    subscribeEvents: (listener) => runtime.inspect.events.records.subscribe(listener),
-    getClaimState: (targetSessionId) => runtime.inspect.claim.state.get(targetSessionId),
-    getTaskState: (targetSessionId) => runtime.inspect.task.state.get(targetSessionId),
+    listSessionIds: () => runtime.ops.events.records.listSessionIds(),
+    listEvents: (targetSessionId, query) => runtime.ops.events.records.list(targetSessionId, query),
+    scheduleEvents: runtime.ops.schedule.events,
+    subscribeEvents: (listener) => runtime.ops.events.records.subscribe(listener),
+    getClaimState: (targetSessionId) => runtime.ops.claim.state.get(targetSessionId),
+    getTaskState: (targetSessionId) => runtime.ops.task.state.get(targetSessionId),
   };
 }
 
@@ -72,9 +71,11 @@ function getExactCronNextRunAt(
   if (!parsed.ok) return undefined;
   const normalizedTimeZone = timeZone ? normalizeTimeZone(timeZone) : undefined;
   if (!normalizedTimeZone) {
-    return getNextCronRunAt(parsed.expression, afterMs);
+    return getNextCronRunAt(parsed.expression, afterMs).getTime();
   }
-  return getNextCronRunAt(parsed.expression, afterMs, { timeZone: normalizedTimeZone });
+  return getNextCronRunAt(parsed.expression, afterMs, {
+    timeZone: normalizedTimeZone,
+  }).getTime();
 }
 
 export function computeExpectedRecurringJitteredNextRunAt(input: {

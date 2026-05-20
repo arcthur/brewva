@@ -1,14 +1,15 @@
 import { readFile } from "node:fs/promises";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
-import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
+import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import {
   createHostedSession,
   resolveSubagentSessionShutdownReason,
   runHostedTurnEnvelope,
 } from "../../hosted/api.js";
+import { createHostedRuntimeAdapter } from "../../hosted/api.js";
+import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
+import { getRuntimeCostSummary } from "../../hosted/api.js";
 import { recordSessionShutdownIfMissing } from "../../utils/runtime.js";
 import { readDelegationContextBundleManifest } from "../context-manifest.js";
 import { buildDelegationRunRecordSeed } from "../delegation-records.js";
@@ -26,6 +27,7 @@ import {
   type DelegationFinalizationReceipt,
 } from "../run-finalization.js";
 import { buildDelegationRunPlan } from "../run-plan.js";
+import { recordDelegationRuntimeEvent } from "../runtime-events.js";
 import { buildSubagentAgentId } from "../shared.js";
 import {
   mergeDelegationPacketWithTargetDefaults,
@@ -66,7 +68,7 @@ const hostedSessionLogger = {
 };
 
 function applyDetachedFinalization(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   spec: DetachedSubagentRunSpec;
   receipt: DelegationFinalizationReceipt;
 }): void {
@@ -110,11 +112,11 @@ async function main(): Promise<void> {
 
   const spec = await loadSpec(specPath);
   const specParentSessionId = asBrewvaSessionId(spec.parentSessionId);
-  const parentRuntime = createBrewvaRuntime({
+  const parentRuntime = createHostedRuntimeAdapter({
     cwd: spec.workspaceRoot,
     config: spec.config,
     configPath: spec.configPath,
-  }).hosted;
+  });
   const delegationStore = new HostedDelegationStore(parentRuntime);
   const existing = delegationStore.getRun(spec.parentSessionId, spec.runId);
   const target = spec.target;
@@ -256,7 +258,8 @@ async function main(): Promise<void> {
       boundary: executionPlan.boundary,
       modelRoute: executionPlan.modelRoute,
     };
-    parentRuntime.extensions.hosted.events.record({
+    recordDelegationRuntimeEvent({
+      runtime: parentRuntime,
       sessionId: spec.parentSessionId,
       type: SUBAGENT_RUNNING_EVENT_TYPE,
       payload: buildDelegationLifecyclePayload(runningRecord),
@@ -330,7 +333,7 @@ async function main(): Promise<void> {
     if (output.status !== "completed") {
       throw new Error(`subagent_thread_loop_${output.status}`);
     }
-    const childCostSummary = childSession.runtime.inspect.cost.summary.get(childSessionId);
+    const childCostSummary = getRuntimeCostSummary(childSession.runtime, childSessionId);
     const completionSummary = buildDelegationCompletionSummary({
       target: targetRecord,
       delegatedSkillName: delegatedSkill,
@@ -403,7 +406,7 @@ async function main(): Promise<void> {
     > = timeoutTriggered ? "timeout" : cancellationReason ? "cancelled" : "failed";
     const terminalCostSummary =
       childSession && childSessionId
-        ? childSession.runtime.inspect.cost.summary.get(childSessionId)
+        ? getRuntimeCostSummary(childSession.runtime, childSessionId)
         : undefined;
     const finishedAt = Date.now();
     const failedPlan = runPlan;

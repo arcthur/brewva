@@ -23,6 +23,7 @@ import { keepTestWorkspace, repoRoot } from "../../helpers/workspace.js";
 type RuntimeEvent = {
   type?: unknown;
   timestamp?: unknown;
+  payload?: unknown;
 };
 
 type RegressionRunResult = {
@@ -30,7 +31,7 @@ type RegressionRunResult = {
   stdout: string;
   stderr: string;
   driverExit: number | null;
-  eventFile: string;
+  tapeFile: string;
   events: RuntimeEvent[];
 };
 
@@ -106,7 +107,7 @@ if {[llength $argv] != 3} {
 set workspace [lindex $argv 0]
 set rounds [lindex $argv 1]
 set promptsFile [lindex $argv 2]
-set eventsDir [file join $workspace .orchestrator events]
+set tapeDir [file join $workspace .brewva tape]
 set childExited 0
 
 proc read_prompts {path rounds} {
@@ -125,8 +126,8 @@ proc read_prompts {path rounds} {
   return $items
 }
 
-proc count_event_type {eventsDir eventType} {
-  set cmd "f=\\$(ls -t \\"$eventsDir\\"/*.jsonl 2>/dev/null | head -n 1); if test -n \\"\\$f\\"; then rg -c --no-filename '\\"type\\":\\"$eventType\\"' \\"\\$f\\" 2>/dev/null || echo 0; else echo 0; fi"
+proc count_event_type {tapeDir eventType} {
+  set cmd "f=\\$(ls -t \\"$tapeDir\\"/*.jsonl 2>/dev/null | head -n 1); if test -n \\"\\$f\\"; then rg -c --no-filename '\\"kind\\":\\"$eventType\\"' \\"\\$f\\" 2>/dev/null || echo 0; else echo 0; fi"
   set out [exec /bin/sh -c $cmd]
   set cleaned [string trim $out]
   if {![string is integer -strict $cleaned]} {
@@ -135,7 +136,7 @@ proc count_event_type {eventsDir eventType} {
   return $cleaned
 }
 
-proc wait_for_event_count {eventsDir eventType target timeoutSec} {
+proc wait_for_event_count {tapeDir eventType target timeoutSec} {
   global childExited
   set deadline [expr {[clock seconds] + $timeoutSec}]
   while {1} {
@@ -143,7 +144,7 @@ proc wait_for_event_count {eventsDir eventType target timeoutSec} {
     if {$childExited} {
       return 0
     }
-    set c [count_event_type $eventsDir $eventType]
+    set c [count_event_type $tapeDir $eventType]
     if {$c >= $target} {
       return 1
     }
@@ -167,14 +168,14 @@ proc pump_output {} {
   }
 }
 
-proc wait_for_agent_end_count {eventsDir target timeoutSec} {
-  if {![wait_for_event_count $eventsDir "agent_end" $target $timeoutSec]} {
+proc wait_for_agent_end_count {tapeDir target timeoutSec} {
+  if {![wait_for_event_count $tapeDir "agent_end" $target $timeoutSec]} {
     puts stderr "timeout waiting for agent_end >= $target"
     exit 3
   }
 }
 
-proc send_prompt_with_retry {eventsDir prompt targetInputCount targetTurnStartCount maxAttempts timeoutSec} {
+proc send_prompt_with_retry {tapeDir prompt targetInputCount targetTurnStartCount maxAttempts timeoutSec} {
   global childExited
   for {set attempt 1} {$attempt <= $maxAttempts} {incr attempt} {
     pump_output
@@ -183,11 +184,11 @@ proc send_prompt_with_retry {eventsDir prompt targetInputCount targetTurnStartCo
       exit 3
     }
     send -- "$prompt\\r"
-    if {![wait_for_event_count $eventsDir "input" $targetInputCount $timeoutSec]} {
+    if {![wait_for_event_count $tapeDir "input" $targetInputCount $timeoutSec]} {
       after 400
       continue
     }
-    if {[wait_for_event_count $eventsDir "turn_start" $targetTurnStartCount $timeoutSec]} {
+    if {[wait_for_event_count $tapeDir "turn_start" $targetTurnStartCount $timeoutSec]} {
       return
     }
     after 400
@@ -206,15 +207,15 @@ after 1200
 
 for {set i 0} {$i < $rounds} {incr i} {
   if {$i > 0} {
-    wait_for_agent_end_count $eventsDir $i 120
+    wait_for_agent_end_count $tapeDir $i 120
     after 300
   }
   set targetInputCount [expr {$i + 1}]
   set targetTurnStartCount [expr {$i + 1}]
-  send_prompt_with_retry $eventsDir [lindex $prompts $i] $targetInputCount $targetTurnStartCount 3 30
+  send_prompt_with_retry $tapeDir [lindex $prompts $i] $targetInputCount $targetTurnStartCount 3 30
 }
 
-wait_for_agent_end_count $eventsDir $rounds 240
+wait_for_agent_end_count $tapeDir $rounds 240
 after 600
 send -- "/quit\\r"
 after 800
@@ -229,17 +230,17 @@ if {[catch {wait}]} {
   return expectPath;
 }
 
-function latestEventFile(eventsDir: string): string {
-  const candidates = readdirSync(eventsDir)
+function latestTapeFile(tapeDir: string): string {
+  const candidates = readdirSync(tapeDir)
     .filter((name) => name.endsWith(".jsonl"))
     .map((name) => {
-      const file = join(eventsDir, name);
+      const file = join(tapeDir, name);
       return { file, mtimeMs: statSync(file).mtimeMs };
     })
     .toSorted((a, b) => b.mtimeMs - a.mtimeMs);
 
   if (candidates.length === 0) {
-    throw new Error(`No event files under ${eventsDir}`);
+    throw new Error(`No canonical tape files under ${tapeDir}`);
   }
   return candidates[0]!.file;
 }
@@ -251,11 +252,30 @@ function parseEvents(eventFile: string): RuntimeEvent[] {
     .filter((line) => line.length > 0)
     .map((line) => {
       try {
-        return JSON.parse(line) as RuntimeEvent;
+        const event = JSON.parse(line) as RuntimeEvent;
+        if (event.type !== "custom" || !isRecord(event.payload)) {
+          return event;
+        }
+        const custom = event.payload;
+        if (
+          custom.namespace !== "gateway.ops" ||
+          typeof custom.kind !== "string" ||
+          custom.version !== 1
+        ) {
+          return event;
+        }
+        return Object.assign(event, {
+          type: custom.kind,
+          payload: isRecord(custom.payload) ? custom.payload : event.payload,
+        });
       } catch {
         return {};
       }
     });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function countEvents(events: RuntimeEvent[], eventType: string): number {
@@ -302,7 +322,7 @@ function formatFailureOutput(result: RegressionRunResult): string {
 
   return [
     `[interactive-multi-turn.live] workspace: ${result.workspace}`,
-    `[interactive-multi-turn.live] event file: ${result.eventFile}`,
+    `[interactive-multi-turn.live] tape file: ${result.tapeFile}`,
     `[interactive-multi-turn.live] driverExit: ${String(result.driverExit)}`,
     `[interactive-multi-turn.live] counts: ${summarizeCounts(result.events)}`,
     "",
@@ -333,15 +353,15 @@ function runRegression(rounds: number): RegressionRunResult {
     },
   );
 
-  const eventsDir = join(workspace, ".orchestrator", "events");
-  let eventFile = `<missing events under ${eventsDir}>`;
+  const tapeDir = join(workspace, ".brewva", "tape");
+  let tapeFile = `<missing canonical tape under ${tapeDir}>`;
   let events: RuntimeEvent[] = [];
-  if (existsSync(eventsDir)) {
+  if (existsSync(tapeDir)) {
     try {
-      eventFile = latestEventFile(eventsDir);
-      events = parseEvents(eventFile);
+      tapeFile = latestTapeFile(tapeDir);
+      events = parseEvents(tapeFile);
     } catch {
-      eventFile = `<unreadable event file under ${eventsDir}>`;
+      tapeFile = `<unreadable canonical tape under ${tapeDir}>`;
       events = [];
     }
   }
@@ -354,7 +374,7 @@ function runRegression(rounds: number): RegressionRunResult {
     stdout: child.stdout ?? "",
     stderr: child.stderr ?? "",
     driverExit: child.status,
-    eventFile,
+    tapeFile,
     events,
   };
 }
@@ -398,7 +418,7 @@ describe("live: interactive multi-turn regression", () => {
       stdout: "",
       stderr: "",
       driverExit: 0,
-      eventFile: "/tmp/events.jsonl",
+      tapeFile: "/tmp/tape.jsonl",
       events: [
         { type: "context_compaction_auto_completed", timestamp: 1_000 },
         { type: "message_end", timestamp: 1_800 },
@@ -415,7 +435,7 @@ describe("live: interactive multi-turn regression", () => {
       stdout: "",
       stderr: "",
       driverExit: 0,
-      eventFile: "/tmp/events.jsonl",
+      tapeFile: "/tmp/tape.jsonl",
       events: [
         { type: "context_compaction_auto_completed", timestamp: 1_000 },
         { type: "turn_start", timestamp: 2_000 },
@@ -439,7 +459,7 @@ describe("live: interactive multi-turn regression", () => {
       stdout: "",
       stderr: "",
       driverExit: 0,
-      eventFile: "/tmp/events.jsonl",
+      tapeFile: "/tmp/tape.jsonl",
       events: [
         { type: "context_compaction_auto_completed", timestamp: 1_000 },
         { type: "message_end", timestamp: 1_000 + MAX_POST_AUTO_COMPACTION_GAP_MS + 1 },

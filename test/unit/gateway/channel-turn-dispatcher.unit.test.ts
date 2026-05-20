@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { type RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import type { RecoveryWalStore } from "@brewva/brewva-gateway/daemon";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import { createChannelTurnDispatcher } from "../../../packages/brewva-gateway/src/channels/channel-turn-dispatcher.js";
 import { CommandRouter } from "../../../packages/brewva-gateway/src/channels/command/parser.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
@@ -50,8 +50,10 @@ describe("channel turn dispatcher ingress routing", () => {
       resolveFocusedAgentId: () => "default",
       resolveApprovalTargetAgentIdDurably: async () => undefined,
       processUserTurnOnAgent: async (turn, _walId, _scopeKey, targetAgentId) => {
-        const text = turn.parts[0]?.type === "text" ? turn.parts[0].text : "";
-        routed.push({ agentId: targetAgentId, text });
+        const firstPart = turn.parts[0];
+        const text =
+          firstPart?.type === "text" && typeof firstPart.text === "string" ? firstPart.text : "";
+        routed.push({ agentId: targetAgentId ?? "default", text });
       },
       handleCommand: async (match) =>
         match.kind === "route-agent"

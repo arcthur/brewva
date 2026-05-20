@@ -9,7 +9,7 @@ import {
   BOX_EXEC_STARTED_EVENT_TYPE,
   BOX_RELEASED_EVENT_TYPE,
   BOX_SNAPSHOT_CREATED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import {
   summarizeShellCommandAnalysis,
   summarizeVirtualReadonlyEligibility,

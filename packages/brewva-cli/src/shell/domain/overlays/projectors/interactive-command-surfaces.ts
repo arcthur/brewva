@@ -5,12 +5,12 @@ import type {
   ContextEvidenceSample,
   ContextStatus,
   HistoryViewBaselineSnapshot,
-} from "@brewva/brewva-runtime/context";
+} from "@brewva/brewva-runtime/protocol";
 import type {
   ProducerContract,
   SkillDocument,
   SkillRegistryLoadReport,
-} from "@brewva/brewva-runtime/skills";
+} from "@brewva/brewva-runtime/protocol";
 import type { OperatorSurfaceSnapshot } from "../../operator-snapshot.js";
 import type {
   CliAuthorityOverlayPayload,
@@ -149,9 +149,9 @@ export function buildContextOverlayPayload(input: {
       `Pressure: used=${formatOptionalNumber(status.tokensUsed)} remaining=${formatOptionalNumber(status.tokensRemaining)} total=${status.tokensTotal} effectiveTotal=${status.effectiveTokensTotal} ratio=${formatRatio(status.usageRatio)}`,
       `Limits: threshold=${formatRatio(status.compactionThresholdRatio)} hard=${formatRatio(status.hardLimitRatio)} autoCompactLimit=${status.autoCompactLimitTokens} forcedRemaining=${formatOptionalNumber(status.tokensUntilForcedCompact)}`,
       `Controllable: baseline=${status.controllableBaselineTokens} used=${formatOptionalNumber(status.controllableTokensUsed)} remaining=${formatOptionalNumber(status.controllableTokensRemaining)} total=${status.controllableTokensTotal} remainingRatio=${formatRatio(status.controllableContextRemainingRatio)}`,
-      `Prediction: growth=${status.predictedTurnGrowthTokens} overflow=${formatBoolean(status.predictedOverflow)} untilOverflow=${formatOptionalNumber(status.tokensUntilPredictedOverflow)}`,
-      `Compaction: advised=${formatBoolean(status.compactionAdvised)} forced=${formatBoolean(status.forcedCompaction)} pending=${formatOptionalString(input.pendingCompactionReason)}`,
-      `Gate: required=${formatBoolean(gate.required)} reason=${formatOptionalString(gate.reason)} recent=${formatBoolean(gate.recentCompaction)} windowTurns=${gate.windowTurns} lastTurn=${formatOptionalNumber(gate.lastCompactionTurn)} turnsSince=${formatOptionalNumber(gate.turnsSinceCompaction)}`,
+      `Prediction: growth=${status.predictedTurnGrowthTokens} overflow=${formatBoolean(status.predictedOverflow ?? false)} untilOverflow=${formatOptionalNumber(status.tokensUntilPredictedOverflow)}`,
+      `Compaction: advised=${formatBoolean(status.compactionAdvised ?? false)} forced=${formatBoolean(status.forcedCompaction ?? false)} pending=${formatOptionalString(input.pendingCompactionReason)}`,
+      `Gate: required=${formatBoolean(gate.required ?? false)} reason=${formatOptionalString(gate.reason)} recent=${formatBoolean(gate.recentCompaction ?? false)} windowTurns=${gate.windowTurns} lastTurn=${formatOptionalNumber(gate.lastCompactionTurn)} turnsSince=${formatOptionalNumber(gate.turnsSinceCompaction)}`,
       `Prompt: ${formatPromptStabilityEvidence(input.promptStabilityEvidence)}`,
       `Reduction: ${formatTransientReductionEvidence(input.transientReductionEvidence)}`,
       `Provider cache: ${formatProviderCacheEvidence(input.providerCacheEvidence)}`,
@@ -260,8 +260,8 @@ export function buildSkillsOverlayPayload(input: {
       [
         `- producer=${producer.producer}`,
         `source=${producer.source}`,
-        `outputs=${formatList(producer.outputs, 5)}`,
-        `semanticBindings=${Object.keys(producer.semanticBindings).length}`,
+        `outputs=${formatList(producer.outputs ?? [], 5)}`,
+        `semanticBindings=${Object.keys(producer.semanticBindings ?? {}).length}`,
         `file=${producer.filePath}`,
       ].join(" "),
     );

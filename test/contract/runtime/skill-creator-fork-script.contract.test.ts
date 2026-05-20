@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 function writeSkill(filePath: string, input: { name: string; description: string }): void {
   mkdirSync(dirname(filePath), { recursive: true });
@@ -90,8 +90,8 @@ describe("skill-authoring fork script", () => {
         name: "chaincraft",
         description: "workspace chaincraft",
       });
-      const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
-      expect(runtime.inspect.skills.catalog.get("chaincraft")?.overlayFiles).toContain(
+      const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+      expect(runtime.ops.skills.catalog.get("chaincraft")?.overlayFiles).toContain(
         resolve(destination),
       );
     } finally {
@@ -134,8 +134,8 @@ describe("skill-authoring fork script", () => {
         name: "nestedcraft",
         description: "workspace nestedcraft",
       });
-      const runtime = createBrewvaRuntime({ cwd: nested }).hosted;
-      expect(runtime.inspect.skills.catalog.get("nestedcraft")?.overlayFiles).toContain(
+      const runtime = createRuntimeInstanceFixture({ cwd: nested });
+      expect(runtime.ops.skills.catalog.get("nestedcraft")?.overlayFiles).toContain(
         resolve(destination),
       );
     } finally {

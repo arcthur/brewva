@@ -10,7 +10,7 @@
 ## Entry Points
 
 - hosted lifecycle `beforeAgentStart`
-- `runtime.inspect.workbench.list(...)`
+- `HostedRuntimeAdapterPort.ops.workbench.list(...)`
 - pure `decideCompaction(...)`
 - model-facing `workbench_compact`
 - durable `session_compact` receipts
@@ -171,15 +171,11 @@ flowchart TD
   - `context_compaction_auto_completed`
   - `context_compaction_auto_failed`
   - `context_compaction_skipped`
-- hosted transition events:
-  - `session_turn_transition`
-    - `reason=compaction_gate_blocked`
-    - `reason=compaction_retry`
-    - `reason=output_budget_escalation`
-    - `reason=provider_fallback_retry`
-    - `reason=max_output_recovery`
-    - `reason=reasoning_revert_resume`
-    - `reason=wal_recovery_resume`
+- runtime recovery observations:
+  - canonical runtime suspension frames
+  - checkpoint and compaction receipts
+  - provider retry observations
+  - approval request and decision receipts
 - hosted auto-compaction state:
   - the hosted controller owns only turn/watchdog/attempt/in-flight state
   - shared eligibility owns disabled/no-usage/cooldown/advisory/hard/predicted
@@ -187,8 +183,8 @@ flowchart TD
   - summary quality is owned by the hosted compaction summary path; deterministic
     summary projection is an emergency fallback, not the primary order
 - prompt failure recovery:
-  - `HostedThreadLoop` owns recovery decision ordering from a turn-local state
-    projection instead of letting policy helpers recursively dispatch prompts
+  - `runtime.turn(...)` owns recovery cause ordering from canonical tape state
+    instead of letting hosted policy helpers recursively dispatch prompts
   - deterministic context reduction maps to
     `wait_for_compaction_settlement` and does not dispatch an extra resume
     prompt
@@ -202,7 +198,7 @@ flowchart TD
     reduction
   - request-copy edits remain invisible to replay and tape truth
   - live reduction state is exposed through
-    `runtime.inspect.context.evidence.latest(sessionId, "transient_reduction")`
+    `HostedRuntimeAdapterPort.ops.context.evidence.latest(sessionId, "transient_reduction")`
 - promotion evidence:
   - hosted prompt-stability, provider-cache, and transient-reduction samples are
     written to the runtime latest evidence ring and the sidecar directory
@@ -221,11 +217,11 @@ flowchart TD
 
 ## Code Pointers
 
-- Runtime context service: `packages/brewva-runtime/src/domain/context/context.ts`
-- Status / gate logic: `packages/brewva-runtime/src/domain/context/context-pressure.ts`
+- Runtime context service: `packages/brewva-runtime/src/runtime/model/model.ts`
+- Status / gate logic: `packages/brewva-runtime/src/runtime/model/model.ts`
 - Context-critical allowlist: `packages/brewva-runtime/src/security/control-plane-tools.ts`
-- Context budget policy: `packages/brewva-runtime/src/domain/context/budget.ts`
-- Compaction integrity: `packages/brewva-runtime/src/domain/context/context-compaction.ts`
+- Context budget policy: `packages/brewva-runtime/src/runtime/model/model.ts`
+- Compaction integrity: `packages/brewva-runtime/src/runtime/model/model.ts`
 - Pure compaction policy: `packages/brewva-gateway/src/hosted/internal/compaction/policy.ts`
 - Hosted compaction controller: `packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.ts`
 - Hosted context shell: `packages/brewva-gateway/src/hosted/internal/context/context-transform.ts`
@@ -233,7 +229,7 @@ flowchart TD
 - Provider request reduction: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
 - Provider request recovery: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
 - Compaction telemetry: `packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.ts`
-- Turn resume path: `packages/brewva-gateway/src/hosted/internal/compaction/recovery.ts`
+- Turn resume path: owned by `packages/brewva-runtime/src/runtime/engine/turn.ts`
 
 ## Related Docs
 

@@ -1,5 +1,6 @@
-import { getToolActionPolicy } from "@brewva/brewva-runtime/governance";
+import { getToolActionPolicy } from "@brewva/brewva-runtime/protocol";
 import type {
+  PendingEffectCommitmentRequest,
   ToolActionClass,
   ToolActionPolicy,
   ToolAdmissionBehavior,
@@ -7,8 +8,7 @@ import type {
   ToolReceiptPolicy,
   ToolRecoveryPolicy,
   ToolRiskLevel,
-} from "@brewva/brewva-runtime/governance";
-import type { PendingEffectCommitmentRequest } from "@brewva/brewva-runtime/proposals";
+} from "@brewva/brewva-runtime/protocol";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import { TOOL_EXECUTION_PHASES, type ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 
@@ -389,8 +389,13 @@ export function buildTrustLoopApprovalProjection(
 ): TrustLoopApprovalProjection {
   const request = input.request;
   const policy = resolveToolPolicy({ toolName: request.toolName });
-  const effectValue = formatEffectsValue(policy?.effectClasses ?? request.effects);
-  const riskValue = formatRiskValue(policy, request.defaultRisk);
+  const effectValue = formatEffectsValue(
+    (policy?.effectClasses ?? request.effects) as Parameters<typeof formatEffectsValue>[0],
+  );
+  const riskValue = formatRiskValue(
+    policy,
+    request.defaultRisk as Parameters<typeof formatRiskValue>[1],
+  );
   const receiptValue = formatReceiptPolicyValue(policy?.receiptPolicy);
   const recoveryValue = formatRecoveryPolicyValue(policy?.recoveryPolicy);
   const admissionValue = formatAdmissionValue(policy?.defaultAdmission);

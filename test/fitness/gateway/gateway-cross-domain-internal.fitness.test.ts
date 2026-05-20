@@ -27,9 +27,9 @@ function isAllowedPolicyImport(importPath: string): boolean {
 function isAllowedHostedInternalImport(importPath: string, sourceDomain: string): boolean {
   return (
     (sourceDomain === "daemon" &&
-      importPath.includes("/hosted/internal/thread-loop/worker/api.js")) ||
+      importPath.includes("/hosted/internal/turn-adapter/worker/api.js")) ||
     (sourceDomain === "extensions" &&
-      importPath.includes("/hosted/internal/thread-loop/lifecycle/local-hook-port.js"))
+      importPath.includes("/hosted/internal/turn-adapter/lifecycle/local-hook-port.js"))
   );
 }
 

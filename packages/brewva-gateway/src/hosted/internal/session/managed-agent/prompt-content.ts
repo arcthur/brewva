@@ -1,11 +1,11 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
+import type {
+  BrewvaAgentProtocolFileContent,
+  BrewvaAgentProtocolMessage,
+} from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
-import type {
-  BrewvaTurnLoopFileContent,
-  BrewvaTurnLoopMessage,
-} from "@brewva/brewva-substrate/turn";
 
 const PROMPT_FILE_MAX_BYTES = 50 * 1024;
 const PROMPT_BINARY_INLINE_MAX_BYTES = 5 * 1024 * 1024;
@@ -41,7 +41,7 @@ export function buildTextPromptParts(text: string): BrewvaPromptContentPart[] {
 
 export function toAgentUserContent(
   parts: readonly BrewvaPromptContentPart[],
-): Extract<BrewvaTurnLoopMessage, { role: "user" }>["content"] {
+): Extract<BrewvaAgentProtocolMessage, { role: "user" }>["content"] {
   return parts.map((part) => {
     if (part.type === "text") {
       return { type: "text", text: part.text };
@@ -65,7 +65,7 @@ export function toAgentUserContent(
 
 export function resolvePromptFilePart(
   cwd: string,
-  part: BrewvaTurnLoopFileContent,
+  part: BrewvaAgentProtocolFileContent,
 ):
   | {
       kind: "text";

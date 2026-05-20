@@ -1,13 +1,15 @@
 import {
-  BrewvaCause,
-  BrewvaEffect,
   BrewvaProviderRequestScope,
-  BrewvaQueue,
-  BrewvaStream,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
   runWithLinkedAbortSignal,
   withBrewvaObservability,
 } from "@brewva/brewva-effect";
+import {
+  BrewvaCause,
+  BrewvaEffect,
+  BrewvaQueue,
+  BrewvaStream,
+} from "@brewva/brewva-effect/primitives";
 import type {
   Api,
   AssistantMessage,
@@ -78,9 +80,11 @@ export function runProviderStream<TApi extends Api>(
             event: Parameters<ProviderEventSink["push"]>[0],
             signal: AbortSignal,
           ): Promise<void> => {
-            const offered = await runPromiseAtBoundary(BrewvaQueue.offer(queue, event), {
-              signal,
-            });
+            const offered = await runBoundaryOperation(
+              "provider.stream.offerEvent",
+              BrewvaQueue.offer(queue, event),
+              { signal },
+            );
             if (offered) {
               return;
             }
@@ -95,9 +99,11 @@ export function runProviderStream<TApi extends Api>(
             error: ProviderStreamError,
             signal: AbortSignal | undefined,
           ): Promise<void> => {
-            const offered = await runPromiseAtBoundary(BrewvaQueue.offer(queue, event), {
-              signal,
-            });
+            const offered = await runBoundaryOperation(
+              "provider.stream.offerTerminal",
+              BrewvaQueue.offer(queue, event),
+              { signal },
+            );
             if (offered) {
               BrewvaQueue.endUnsafe(queue);
               return;

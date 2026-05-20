@@ -1,38 +1,50 @@
 import { describe, expect, test } from "bun:test";
-import { readRepoFile } from "./shared.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { readRepoFile, repoRoot } from "./shared.js";
 
-const expectedKinds = ["continue", "compact", "reasoning-revert", "fork", "abort"] as const;
+describe("hosted runtime recovery boundary", () => {
+  test("hosted turn adapter delegates recovery ownership to the four-port runtime", () => {
+    const loop = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts",
+    );
 
-describe("recovery decision union", () => {
-  test("defines the required recovery branch kinds", () => {
-    const source = readRepoFile("packages/brewva-gateway/src/hosted/internal/thread-loop/state.ts");
-    for (const kind of expectedKinds) {
-      expect(source).toContain(`kind: "${kind}"`);
-    }
+    expect(loop).toContain("input.runtime.turn");
+    expect(loop).not.toContain("runLegacyHostedThreadLoop");
+    expect(loop).not.toContain("RecoveryDecision");
+    expect(loop).not.toContain("ThreadLoopRecoveryPolicyName");
+    expect(loop).not.toContain("resolveNextThreadLoopDecision");
+    expect(loop).not.toContain("streamAndCollectLegacyAttempt");
+    expect(loop).not.toContain("reasoning_revert_resume");
+    expect(loop).not.toContain("breaker_open");
+    expect(loop).not.toContain("recordSessionTurnTransition");
   });
 
-  test("routes recovery classification and loop handling through RecoveryDecision", () => {
-    const classification = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/error-classification.ts",
-    );
-    const resolver = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/decision.ts",
-    );
-    const loop = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/hosted-thread-loop.ts",
-    );
+  test("hosted recovery helpers do not reintroduce turn-adapter recovery policy ownership", () => {
+    const state = readRepoFile("packages/brewva-gateway/src/hosted/internal/turn-adapter/state.ts");
 
-    expect(classification).toContain("classifyRecoveryError");
-    expect(classification).toContain("ClassifiedError");
-    expect(resolver).toContain("RecoveryDecision as SessionRecoveryDecision");
-    expect(resolver).toContain("resolveFailureRecoveryDecision");
-    expect(resolver).toContain('kind: "reasoning-revert"');
-    expect(resolver).toContain('kind: "abort"');
-    expect(resolver).toContain("recovery: recoverySelection.decision");
-    expect(resolver).toContain("recovery,");
-    expect(loop).toContain('RecoveryDecision } from "./state.js"');
-    expect(loop).toContain('failureDecision.recovery.kind === "compact"');
-    expect(loop).toContain('failureDecision.recovery.kind === "reasoning-revert"');
-    expect(loop).toContain("const recoveryDecision: RecoveryDecision = failureDecision.recovery");
+    expect(state).not.toContain("ThreadLoopRecoveryPolicyName");
+    expect(state).not.toContain("PromptRecoveryPolicyName");
+    expect(
+      existsSync(
+        join(repoRoot, "packages/brewva-gateway/src/hosted/internal/compaction/recovery.ts"),
+      ),
+    ).toBe(false);
+  });
+
+  test("runtime recovery causes stay compressed to the canonical five", () => {
+    const runtimeApi = readRepoFile("packages/brewva-runtime/src/runtime/runtime-api.ts");
+    const recoveryCauseItems =
+      runtimeApi
+        .match(/export const RUNTIME_RECOVERY_CAUSES = \[([\s\S]*?)\] as const;/u)?.[1]
+        ?.match(/"[^"]+"/gu) ?? [];
+
+    expect(recoveryCauseItems).toEqual([
+      '"approval_pending"',
+      '"compaction_required"',
+      '"provider_retry"',
+      '"interrupt"',
+      '"terminal_commit"',
+    ]);
   });
 });

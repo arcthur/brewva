@@ -1,12 +1,12 @@
 import { basename } from "node:path";
-import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import type { LoadableSkillCategory, SkillDocument } from "@brewva/brewva-runtime/skills";
+import type { LoadableSkillCategory, SkillDocument } from "@brewva/brewva-runtime/protocol";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type {
   BrewvaHostBeforeAgentStartResult,
   BrewvaHostCustomMessage,
 } from "@brewva/brewva-substrate/host-api";
 import { estimateModelTokens } from "@brewva/brewva-token-estimation";
+import { recordRuntimeSkillSelection } from "../runtime-ports.js";
 
 const DEFAULT_SKILL_CATALOG_TOKEN_BUDGET = 2_000;
 const HIDDEN_CATEGORIES = new Set<LoadableSkillCategory>(["internal"]);
@@ -15,29 +15,32 @@ export type SkillSelectionTrigger = "user_message";
 export type SkillSelectionMode = "available_catalog_prompt_context";
 
 export interface SkillSelectionRuntime {
-  inspect: {
+  ops: {
     skills: {
       catalog: {
         list(): SkillDocument[];
         get(name: string): SkillDocument | undefined;
       };
-    };
-    events: {
-      records: {
-        query(sessionId: string, query: { type: string }): Array<{ payload?: unknown }>;
+      selection: {
+        record(sessionId: string, receipt: object): unknown;
+        latest(sessionId: string): object | undefined;
       };
     };
   };
 }
 
 export interface SkillSelectionEventQueryRuntime {
-  inspect: {
-    events: {
-      records: {
-        query(sessionId: string, query: { type: string }): Array<{ payload?: unknown }>;
+  ops: {
+    skills: {
+      selection: {
+        latest(sessionId: string): object | undefined;
       };
     };
   };
+}
+
+function listSkillCatalog(port: Pick<SkillSelectionRuntime, "ops">): SkillDocument[] {
+  return port.ops.skills.catalog.list();
 }
 
 export interface AvailableSkillPromptContext {
@@ -81,10 +84,6 @@ export interface SkillSelectionResult {
 
 export interface SkillSelectionLifecycle {
   beforeAgentStart: (event: unknown, ctx: unknown) => BrewvaHostBeforeAgentStartResult | undefined;
-}
-
-export interface SkillSelectionReceiptWriter {
-  record(input: { sessionId: string; receipt: SkillSelectionReceipt }): void;
 }
 
 interface RenderedSkillCatalog {
@@ -296,10 +295,7 @@ export function readLatestSkillSelectionReceipt(input: {
   runtime: SkillSelectionEventQueryRuntime;
   sessionId: string;
 }): SkillSelectionReceipt | undefined {
-  const records = input.runtime.inspect.events.records.query(input.sessionId, {
-    type: SKILL_SELECTION_RECORDED_EVENT_TYPE,
-  });
-  const payload = records.at(-1)?.payload;
+  const payload = input.runtime.ops.skills.selection.latest(input.sessionId);
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return undefined;
   }
@@ -312,12 +308,12 @@ export function readLatestSkillSelectionReceipt(input: {
 }
 
 export function buildSkillCatalogContextForPrompt(input: {
-  runtime: Pick<SkillSelectionRuntime, "inspect">;
+  runtime: Pick<SkillSelectionRuntime, "ops">;
   prompt: string;
   tokenBudget?: number;
 }): SkillSelectionResult {
   const trigger: SkillSelectionTrigger = "user_message";
-  const skills = listPromptVisibleSkills(input.runtime.inspect.skills.catalog.list());
+  const skills = listPromptVisibleSkills(listSkillCatalog(input.runtime));
   const availableSkills = skills.map(toPromptContext);
   const explicitSkillMentions = skills
     .filter((skill) => hasExplicitMention(input.prompt, skill.name))
@@ -381,7 +377,6 @@ function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): Brewv
 
 export function createSkillSelectionLifecycle(
   runtime: SkillSelectionRuntime,
-  receiptWriter?: SkillSelectionReceiptWriter,
 ): SkillSelectionLifecycle {
   return {
     beforeAgentStart(event, ctx) {
@@ -392,7 +387,7 @@ export function createSkillSelectionLifecycle(
       }
       const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
       const selection = buildSkillCatalogContextForPrompt({ runtime, prompt });
-      receiptWriter?.record({ sessionId, receipt: selection.receipt });
+      recordRuntimeSkillSelection(runtime, sessionId, selection.receipt);
       const section = formatSkillSelectionSection(selection);
       if (!section) {
         return undefined;

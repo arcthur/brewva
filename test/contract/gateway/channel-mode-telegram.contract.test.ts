@@ -12,14 +12,14 @@ import {
   type ChannelModeLauncher,
   type RunChannelModeDependencies,
 } from "@brewva/brewva-gateway";
+import { createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
 import { createHostedSession } from "@brewva/brewva-gateway/hosted";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { type ChannelTurnBridge, type TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { createRecoveryWalStore } from "@brewva/brewva-runtime/recovery";
+import { type ChannelTurnBridge, type TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { waitUntil } from "../../helpers/process.js";
+import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function writeChannelConfig(
@@ -56,7 +56,7 @@ function writeChannelConfig(
 }
 
 function recordDelegatedOpenQuestion(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   runId: string;
   question: string;
@@ -107,7 +107,7 @@ function createInboundTurn(input: { turnId: string; text: string }): TurnEnvelop
 
 function readTurnText(turn: TurnEnvelope | undefined): string {
   const part = turn?.parts[0];
-  return part && "text" in part ? part.text : "";
+  return part?.type === "text" && typeof part.text === "string" ? part.text : "";
 }
 
 describe("gateway contract: telegram channel dispatch", () => {
@@ -765,7 +765,7 @@ describe("gateway contract: telegram channel dispatch", () => {
           await waitUntil(
             () =>
               capturedPrompts.length >= 2 &&
-              (hostedSession?.runtime.inspect.events.records
+              (hostedSession?.runtime.ops.events.records
                 .query(hostedSession.sessionId)
                 .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ??
                 0) >= 1,
@@ -773,7 +773,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             "timed out waiting for answer routing prompt and event",
           );
           observedAnswerEventCount =
-            hostedSession?.runtime.inspect.events.records
+            hostedSession?.runtime.ops.events.records
               .query(hostedSession.sessionId)
               .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
           abortController.abort();
@@ -932,7 +932,7 @@ describe("gateway contract: telegram channel dispatch", () => {
               capturedPrompts.some((prompt) =>
                 prompt.includes(`Question ID: ${defaultSession!.questionId}`),
               ) &&
-              (defaultSession?.runtime.inspect.events.records
+              (defaultSession?.runtime.ops.events.records
                 .query(defaultSession.sessionId)
                 .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ??
                 0) >= 1,
@@ -940,7 +940,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             "timed out waiting for durable answer routing after eviction",
           );
           observedAnswerEventCount =
-            defaultSession?.runtime.inspect.events.records
+            defaultSession?.runtime.ops.events.records
               .query(defaultSession.sessionId)
               .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
           abortController.abort();
@@ -1074,7 +1074,7 @@ describe("gateway contract: telegram channel dispatch", () => {
             "timed out waiting for routed answer failure",
           );
           observedAnswerEventCount =
-            defaultSession?.runtime.inspect.events.records
+            defaultSession?.runtime.ops.events.records
               .query(defaultSession.sessionId)
               .filter((event) => event.type === OPERATOR_QUESTION_ANSWERED_EVENT_TYPE).length ?? 0;
           abortController.abort();
@@ -1360,7 +1360,11 @@ describe("gateway contract: telegram channel dispatch", () => {
             () =>
               outboundTurns.some((turn) => {
                 const part = turn.parts[0];
-                return part?.type === "text" && part.text.includes("Update already in progress");
+                return (
+                  part?.type === "text" &&
+                  typeof part.text === "string" &&
+                  part.text.includes("Update already in progress")
+                );
               }),
             5_000,
             "timed out waiting for the duplicate update rejection",

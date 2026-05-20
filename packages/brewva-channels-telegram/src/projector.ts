@@ -2,8 +2,8 @@ import {
   buildChannelDedupeKey,
   buildChannelSessionId,
   coerceTurnEnvelope,
-} from "@brewva/brewva-runtime/channels";
-import type { ApprovalPayload, TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/channels";
+} from "@brewva/brewva-runtime/protocol";
+import type { ApprovalPayload, TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/protocol";
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import {
   decodeTelegramApprovalCallback,

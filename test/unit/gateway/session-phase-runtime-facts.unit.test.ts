@@ -4,7 +4,7 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import {
   deriveSessionPhaseFromRuntimeFactFrame,
   deriveSessionPhaseFromRuntimeFactHistory,

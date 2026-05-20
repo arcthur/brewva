@@ -1,9 +1,10 @@
-import type { SessionCostSummary } from "@brewva/brewva-runtime/cost";
+import type { SessionCostSummary } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
+import { getSessionCostSummary } from "../../runtime-port/cost.js";
 import { textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -74,7 +75,7 @@ export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const top = typeof params.top === "number" ? Math.max(1, Math.trunc(params.top)) : 5;
-      const summary = costViewTool.runtime.inspect.cost.summary.get(sessionId);
+      const summary = getSessionCostSummary(costViewTool.runtime, sessionId);
 
       return textResult(formatCostViewText(summary, top), {
         sessionId,

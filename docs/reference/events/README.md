@@ -1,15 +1,16 @@
 # Reference: Runtime Events
 
-Runtime events are the replay and inspection record for hosted execution,
-tool effects, skill catalog refresh, session recovery, and operator-facing runtime
-state. This entry page owns the shared envelope, query semantics, durability
-classes, and generated event type inventory.
+Canonical tape events are the four-port runtime truth record. They cover turn
+boundaries, assistant and reasoning commits, tool transactions, checkpoints,
+anchors, approvals, cost observations, runtime suspension, and versioned custom
+payloads. There is no second runtime event plane; operational adapter evidence
+is either a canonical event payload or rebuildable local state.
 
 Implementation anchors:
 
-- `packages/brewva-runtime/src/events/registry.ts`
-- `packages/brewva-runtime/src/events/store.ts`
-- `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
+- `packages/brewva-runtime/src/runtime/runtime-api.ts`
+- `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- `packages/brewva-runtime/src/runtime/engine/turn.ts`
 
 ## Reading Path
 
@@ -40,9 +41,13 @@ semantics are uniform across the event store.
 
 ## Query Contract
 
-`root.inspect.events.records.query(...)`,
-`root.inspect.events.records.queryStructured(...)`, and
-`root.inspect.events.records.list(...)` share the same query fields:
+New runtime-facing code reads canonical truth through `runtime.tape.list(...)`,
+`runtime.tape.project(...)`, and `runtime.tape.replayBaseline(...)`. Repo-owned
+hosted adapter code that consumes derived operational evidence uses
+`HostedRuntimeAdapterPort.ops.events.records.query(...)`,
+`HostedRuntimeAdapterPort.ops.events.records.queryStructured(...)`, and
+`HostedRuntimeAdapterPort.ops.events.records.list(...)` with the same query
+fields:
 
 - `type`
 - `after`
@@ -51,24 +56,22 @@ semantics are uniform across the event store.
 - `offset`
 - `limit`
 
-Result order is tape order from oldest to newest. Query results are inspection
-views; they do not create authority or mutate recovery truth.
+Result order is tape order from oldest to newest. Query results are read views;
+they do not create authority or mutate recovery truth.
 
-## Durability Classes
+## Authority Classes
 
-The registry groups event types by how the runtime may interpret them:
+Canonical event authority is expressed by the canonical type and, for `custom`,
+by the custom envelope:
 
-- `source_of_truth`: retained on tape and used for replay, receipts, task/claim
-  folding, approval receipts, and recovery truth.
-- `durable_evidence`: retained audit/control evidence that can explain behavior
-  but does not decide replay truth on its own.
-- `rebuildable_signal`: persisted derived-state telemetry that can be rebuilt
-  from stronger inputs.
-- `session_local`: live stream or UX-only surfaces that are not durable replay
-  inputs.
+- Commitment-bearing facts must use one of the canonical event types.
+- `custom` may carry `authority: "none" | "advisory"` only; it cannot create a
+  commitment or replay authority.
+- Projections may opt into a specific custom `namespace/kind/version`, but only
+  for advisory or rebuildable views.
 
 The broader artifact taxonomy still uses durable transient, rebuildable state,
-and cache. Runtime event type strings use the exported classes above.
+and cache, but those terms no longer imply a global registered event catalog.
 
 ## Effect Runtime Boundary
 
@@ -80,22 +83,23 @@ same event, receipt, WAL record, ledger row, or projection update that the
 runtime contract requires. Scope finalizers may clean up resources, but they do
 not substitute for replay-visible cancellation, rollback, or recovery evidence.
 
-## Registry Surface
+## Canonical Surface
 
-The exported constant registry lives in
-`packages/brewva-runtime/src/events/registry.ts`. The runtime also keeps
-accepted-family checks in `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
-for admission-time and pipeline-owned flows.
+The canonical event vocabulary lives in
+`packages/brewva-runtime/src/runtime/runtime-api.ts`. There is no global event
+registry. Package-owned adapter events live in their owning package and must
+enter runtime truth only through canonical tape events or rebuildable adapter
+views.
 
-Typed event descriptors are the shared schema seam for registered typed event
-families. The same descriptor entry owns payload reading and append-time
-validation, so a malformed registered typed payload is rejected before it can
-enter the tape. Payload shape changes require a new event version or an
-explicit replay migration fold.
+Typed event descriptors remain the schema seam for domain-owned typed event
+families. The descriptor entry owns payload reading and append-time validation,
+so a malformed typed payload is rejected before it can enter the derived record
+view. Payload shape changes require a new event version or an explicit replay
+migration fold.
 
-Use the generated index below for exact event names. Use the family pages for
-semantics, payload interpretation, and where a family affects replay or
-inspection.
+Use the generated index below for exact canonical event names. Use the family
+pages for advisory event semantics, payload interpretation, and where a family
+affects replay or inspection.
 
 ## Convention Event Producer Maturity
 
@@ -120,186 +124,22 @@ The reserved projector work is tracked in
 
 > Generated by `bun run docs:inventory`. Do not edit this block by hand.
 
-Registered event type count: 178.
+Canonical event type count: 14.
 
-- `turn_input_recorded`
-- `turn_render_committed`
-- `session_title_recorded`
-- `session_turn_transition`
-- `brewva.session.rewind.v1`
-- `unclean_shutdown_reconciled`
-- `decision_receipt_recorded`
-- `effect_commitment_approval_requested`
-- `effect_commitment_approval_decided`
-- `effect_commitment_approval_consumed`
-- `tool_call`
-- `tool_execution_start`
-- `tool_execution_end`
-- `tool_result_recorded`
-- `tool_output_distilled`
-- `tool_call_blocked`
-- `verification_write_marked`
-- `verification_outcome_recorded`
-- `workbench_note_recorded`
-- `workbench_eviction_recorded`
-- `workbench_eviction_undone`
-- `workbench_baseline_committed`
-- `task_stuck_detected`
-- `task_stall_adjudicated`
-- `reasoning_revert`
-- `subagent_spawned`
-- `subagent_running`
-- `subagent_completed`
-- `subagent_failed`
-- `subagent_cancelled`
-- `subagent_outcome_parse_failed`
-- `subagent_delivery_surfaced`
-- `worker_results_applied`
-- `brewva.session.lineage.node_created.v1`
-- `brewva.session.lineage.summary_recorded.v1`
-- `brewva.session.lineage.outcome_recorded.v1`
-- `brewva.session.lineage.outcome_adopted.v1`
-- `brewva.session.lineage.selection_recorded.v1`
-- `brewva.context.entry.recorded.v1`
-- `brewva.capability.state.recorded.v1`
-- `channel_command_received`
-- `channel_session_bound`
-- `channel_update_lock_blocked`
-- `channel_update_requested`
-- `gateway_session_bound`
-- `capability_selection_recorded`
-- `compaction_integrity_violation`
-- `context_compaction_advisory`
-- `context_compaction_auto_completed`
-- `context_compaction_auto_failed`
-- `context_compaction_auto_requested`
-- `context_compaction_gate_armed`
-- `context_compaction_gate_blocked_tool`
-- `context_compaction_gate_cleared`
-- `context_compaction_requested`
-- `context_compaction_skipped`
-- `context_composed`
-- `context_usage`
-- `identity_parse_warning`
-- `convention_candidate_observed`
-- `convention_change_requested`
-- `convention_change_decided`
-- `convention_decision_receipt_recorded`
-- `convention_change_applied`
-- `convention_conflict_detected`
-- `convention_health_degraded`
-- `convention_contested`
-- `convention_emergency_applied`
-- `budget_alert`
-- `cost_update`
-- `subagent_knowledge_adoption_recorded`
-- `worker_results_apply_failed`
-- `effect_authority_decided`
-- `governance_compaction_integrity_checked`
-- `governance_compaction_integrity_error`
-- `governance_compaction_integrity_failed`
-- `governance_cost_anomaly_detected`
-- `governance_cost_anomaly_error`
-- `governance_metadata_missing`
-- `governance_verify_spec_error`
-- `governance_verify_spec_failed`
-- `governance_verify_spec_passed`
-- `operator_question_answered`
-- `steer_applied`
-- `steer_dropped`
-- `steer_queued`
-- `tool_effect_gate_selected`
-- `ledger_compacted`
-- `agent_end`
-- `message_end`
-- `model_preset_select`
-- `model_select`
-- `session_before_compact`
-- `session_bootstrap`
-- `session_compact`
-- `session_compact_failed`
-- `session_compact_requested`
-- `session_compact_request_failed`
-- `brewva.session.rewind.checkpoint.v1`
-- `brewva.session.rewind.redo.v1`
-- `brewva.session.rewind.superseded.v1`
-- `session_shutdown`
-- `session_start`
-- `turn_end`
-- `turn_start`
-- `parallel_slot_rejected`
-- `resource_lease_cancelled`
-- `resource_lease_expired`
-- `resource_lease_granted`
-- `file_snapshot_captured`
-- `patch_recorded`
-- `redo`
-- `reversible_mutation_prepared`
-- `reversible_mutation_recorded`
-- `reversible_mutation_redone`
-- `reversible_mutation_rolled_back`
-- `rollback`
-- `proposal_decided`
-- `proposal_received`
-- `turn_governance_decision`
-- `critical_without_compact`
-- `recovery_wal_appended`
-- `recovery_wal_compacted`
-- `recovery_wal_recovery_completed`
-- `recovery_wal_status_changed`
-- `reasoning_checkpoint`
-- `schedule_child_session_failed`
-- `schedule_child_session_finished`
-- `schedule_child_session_started`
-- `schedule_intent`
-- `schedule_recovery_deferred`
-- `schedule_recovery_summary`
-- `schedule_trigger_apply_warning`
-- `schedule_wakeup`
-- `skill_refresh_recorded`
-- `skill_selection_recorded`
-- `anchor`
-- `checkpoint`
-- `task_stall_adjudication_error`
-- `task_stuck_cleared`
-- `task_event`
-- `box.acquired`
-- `box.bootstrap.completed`
-- `box.bootstrap.failed`
-- `box.bootstrap.progress`
-- `box.bootstrap.started`
-- `box.exec.completed`
-- `box.exec.failed`
-- `box.exec.started`
-- `box.fork.created`
-- `box.maintenance.completed`
-- `box.released`
-- `box.snapshot.created`
-- `tool_attempt_binding_missing`
-- `tool_call_marked`
-- `tool_contract_warning`
-- `tool_output_artifact_persisted`
-- `tool_output_artifact_persist_failed`
-- `tool_output_observed`
-- `tool_output_search`
-- `tool_parallel_read`
-- `tool_read_path_discovery_observed`
-- `tool_read_path_gate_armed`
-- `tool_surface_resolved`
-- `claim_event`
-- `verification_state_reset`
-- `iteration_guard_recorded`
-- `iteration_metric_observed`
-- `projection_ingested`
-- `projection_refreshed`
-- `event_listener_error`
-- `exec.failed`
-- `exec.started`
-- `recall_curation_recorded`
-- `recall_results_surfaced`
-- `recall_utility_observed`
-- `observability_assertion_recorded`
-- `observability_query_executed`
+- `turn.started`
+- `turn.ended`
+- `msg.committed`
+- `reason.committed`
+- `tool.proposed`
+- `tool.committed`
+- `tool.aborted`
+- `checkpoint.committed`
+- `anchor.committed`
+- `approval.requested`
+- `approval.decided`
+- `cost.observed`
+- `runtime.suspended`
+- `custom`
 <!-- generated:event-catalog end -->
 
 ## Non-Event Runtime State

@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";

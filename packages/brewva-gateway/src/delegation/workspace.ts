@@ -4,17 +4,18 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import type { PatchFileAction, PatchSet } from "@brewva/brewva-runtime/patch-history";
+import type { PatchFileAction, PatchSet } from "@brewva/brewva-runtime/protocol";
 import {
   PATCH_HISTORY_FILE,
   collectPersistedPatchPaths,
   listPersistedPatchSets,
-} from "@brewva/brewva-runtime/patch-history";
+} from "@brewva/brewva-runtime/protocol";
 import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
 import { resolveDelegationContextBundleManifestPath } from "./context-manifest.js";
 
 const IGNORED_ROOT_SEGMENTS = new Set([".git", "node_modules", ".orchestrator"]);
 const IGNORED_RELATIVE_PATHS = new Set([".brewva/skills_index.json"]);
+const IGNORED_RELATIVE_PREFIXES = [".brewva/tape/"] as const;
 const PATCH_ARTIFACT_ROOT = ".orchestrator/subagent-patch-artifacts";
 const PATCH_MANIFEST_FILE_NAME = "patchset.json";
 const ISOLATED_WORKSPACE_BASELINE_FILE = ".orchestrator/isolated-workspace-baseline.json";
@@ -40,6 +41,9 @@ function shouldIgnorePath(relativePath: string): boolean {
     return false;
   }
   if (IGNORED_RELATIVE_PATHS.has(normalized)) {
+    return true;
+  }
+  if (IGNORED_RELATIVE_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
     return true;
   }
   const [firstSegment] = normalized.split("/");

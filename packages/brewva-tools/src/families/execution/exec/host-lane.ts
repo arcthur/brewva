@@ -1,12 +1,11 @@
 import {
   type BrewvaBoundaryFailure,
-  BrewvaDuration,
-  BrewvaEffect,
   BrewvaSessionScope,
   addScopedFinalizer,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
   withBrewvaObservability,
 } from "@brewva/brewva-effect";
+import { BrewvaDuration, BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { textResult, withVerdict } from "../../../utils/result.js";
 import {
   deleteManagedSession,
@@ -86,105 +85,106 @@ export interface ExecuteHostCommandInput {
   signal?: AbortSignal;
 }
 
-export function executeHostCommandEffect(
+export const executeHostCommandEffect: (
   input: ExecuteHostCommandInput,
-): BrewvaEffect.Effect<HostCommandResult, BrewvaBoundaryFailure | ExecCommandFailedError> {
-  const observability = {
-    sessionId: input.ownerSessionId,
-    backend: "host",
-  };
-  let startedForAbort: { session: ManagedExecRunningSession } | undefined;
-  const onAbort = () => {
-    const started = startedForAbort;
-    if (!started || input.background || started.session.backgrounded) return;
-    terminateRunningSession(started.session, true);
-  };
+) => BrewvaEffect.Effect<HostCommandResult, BrewvaBoundaryFailure | ExecCommandFailedError> =
+  BrewvaEffect.fn("tools.exec.host")(function* (input: ExecuteHostCommandInput) {
+    const observability = {
+      sessionId: input.ownerSessionId,
+      backend: "host",
+    };
+    let startedForAbort: { session: ManagedExecRunningSession } | undefined;
+    const onAbort = () => {
+      const started = startedForAbort;
+      if (!started || input.background || started.session.backgrounded) return;
+      terminateRunningSession(started.session, true);
+    };
 
-  const program = BrewvaEffect.scoped(
-    BrewvaEffect.gen(function* () {
-      const startedResult = yield* scopedManagedExec({
-        ownerSessionId: input.ownerSessionId,
-        command: input.command,
-        cwd: input.cwd,
-        env: input.env,
-        timeoutSec: input.timeoutSec,
-      }).pipe(
-        BrewvaEffect.map((started) => ({ ok: true as const, started })),
-        BrewvaEffect.catch((error) => BrewvaEffect.succeed({ ok: false as const, error })),
-      );
-      if (!startedResult.ok) {
-        const message =
-          startedResult.error instanceof Error
-            ? startedResult.error.message
-            : String(startedResult.error);
-        return textResult(
-          `Exec failed to start: ${message}`,
-          withVerdict(
-            {
-              status: "failed",
-              command: input.command,
-              cwd: input.cwd,
-              backend: "host",
-            },
-            "fail",
+    const program = BrewvaEffect.scoped(
+      BrewvaEffect.gen(function* () {
+        const startedResult = yield* scopedManagedExec({
+          ownerSessionId: input.ownerSessionId,
+          command: input.command,
+          cwd: input.cwd,
+          env: input.env,
+          timeoutSec: input.timeoutSec,
+        }).pipe(
+          BrewvaEffect.map((started) => ({ ok: true as const, started })),
+          BrewvaEffect.catch((error) => BrewvaEffect.succeed({ ok: false as const, error })),
+        );
+        if (!startedResult.ok) {
+          const message =
+            startedResult.error instanceof Error
+              ? startedResult.error.message
+              : String(startedResult.error);
+          return textResult(
+            `Exec failed to start: ${message}`,
+            withVerdict(
+              {
+                status: "failed",
+                command: input.command,
+                cwd: input.cwd,
+                backend: "host",
+              },
+              "fail",
+            ),
+          );
+        }
+
+        const started = startedResult.started;
+        startedForAbort = started;
+        if (input.signal) {
+          input.signal.addEventListener("abort", onAbort, { once: true });
+          yield* addScopedFinalizer(() => input.signal?.removeEventListener("abort", onAbort));
+        }
+        if (input.signal?.aborted) {
+          onAbort();
+        }
+
+        if (input.background || input.yieldMs === 0) {
+          markSessionBackgrounded(input.ownerSessionId, started.session.id);
+          return runningResult(started.session);
+        }
+
+        const finished = yield* waitForCompletionOrYieldEffect(started.completion, input.yieldMs);
+        if (!finished) {
+          markSessionBackgrounded(input.ownerSessionId, started.session.id);
+          return runningResult(started.session);
+        }
+
+        if (!finished.backgrounded) {
+          deleteManagedSession(input.ownerSessionId, finished.id);
+        }
+
+        const output = finished.aggregated.trimEnd() || "(no output)";
+        if (finished.status === "completed") {
+          return execDisplayResult(output, {
+            status: "completed",
+            exitCode: finished.exitCode ?? 0,
+            durationMs: finished.endedAt - finished.startedAt,
+            cwd: finished.cwd,
+            command: finished.command,
+            backend: "host",
+          });
+        }
+
+        return yield* BrewvaEffect.fail(
+          new ExecCommandFailedError(
+            `${output}\n\nProcess exited with ${formatExit(finished)}.`,
+            finished.exitCode ?? 1,
           ),
         );
-      }
+      }),
+    ).pipe(
+      BrewvaEffect.provide(BrewvaSessionScope.layer({ sessionId: input.ownerSessionId })),
+      withBrewvaObservability("brewva.tools.host.exec", observability),
+    );
 
-      const started = startedResult.started;
-      startedForAbort = started;
-      if (input.signal) {
-        input.signal.addEventListener("abort", onAbort, { once: true });
-        yield* addScopedFinalizer(() => input.signal?.removeEventListener("abort", onAbort));
-      }
-      if (input.signal?.aborted) {
-        onAbort();
-      }
-
-      if (input.background || input.yieldMs === 0) {
-        markSessionBackgrounded(input.ownerSessionId, started.session.id);
-        return runningResult(started.session);
-      }
-
-      const finished = yield* waitForCompletionOrYieldEffect(started.completion, input.yieldMs);
-      if (!finished) {
-        markSessionBackgrounded(input.ownerSessionId, started.session.id);
-        return runningResult(started.session);
-      }
-
-      if (!finished.backgrounded) {
-        deleteManagedSession(input.ownerSessionId, finished.id);
-      }
-
-      const output = finished.aggregated.trimEnd() || "(no output)";
-      if (finished.status === "completed") {
-        return execDisplayResult(output, {
-          status: "completed",
-          exitCode: finished.exitCode ?? 0,
-          durationMs: finished.endedAt - finished.startedAt,
-          cwd: finished.cwd,
-          command: finished.command,
-          backend: "host",
-        });
-      }
-
-      return yield* BrewvaEffect.fail(
-        new ExecCommandFailedError(
-          `${output}\n\nProcess exited with ${formatExit(finished)}.`,
-          finished.exitCode ?? 1,
-        ),
-      );
-    }),
-  ).pipe(
-    BrewvaEffect.provide(BrewvaSessionScope.layer({ sessionId: input.ownerSessionId })),
-    withBrewvaObservability("brewva.tools.host.exec", observability),
-  );
-
-  return program;
-}
+    return yield* program;
+  });
 
 export async function executeHostCommand(
   input: ExecuteHostCommandInput,
 ): Promise<HostCommandResult> {
-  return await runPromiseAtBoundary(executeHostCommandEffect(input));
+  return await runBoundaryOperation("tools.exec.host", executeHostCommandEffect(input));
 }

@@ -179,7 +179,7 @@ function updateCommandIntent(
           },
         ],
       });
-    case "runtime.authority":
+    case "operator.authority":
       return handled({ effects: [{ type: "overlay.openAuthority" }] });
     case "operator.inbox":
       return handled({ effects: [{ type: "overlay.openInbox" }] });

@@ -1,4 +1,4 @@
-import { OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../contracts/index.js";

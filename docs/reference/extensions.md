@@ -33,7 +33,7 @@ facade symbols listed above for opt-in behavior.
 
 Runtime extension handles are exposed only through narrowed repo-owned ports:
 the `hosted` port from `createBrewvaRuntime(...)` for hosted control-plane code
-and the `tool` port for bundled tools. `BrewvaRuntimeRoot` does not expose
+and the `tool` port for bundled tools. `HostedRuntimeBaseAdapterPort` does not expose
 `extensions`, and no root-reflective helper can recover them.
 
 Runtime extension ports are typed method ports only. They do not carry branded
@@ -50,4 +50,4 @@ remain inside hosted owner modules.
 
 Default hosted behavior belongs to `@brewva/brewva-gateway/hosted`. External
 callers should not import hosted internals or expect extension plugins to replace
-the hosted session, thread-loop, provider, or compaction policies.
+the hosted session, turn-adapter, provider, or compaction policies.

@@ -2,14 +2,17 @@ import type {
   ProviderCachePolicy,
   ProviderRequestFingerprint,
 } from "@brewva/brewva-provider-core/contracts";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type {
   ExpectedProviderCacheBreak,
   ProviderCacheRenderState,
   SessionCompactionGenerationMetadata,
-} from "@brewva/brewva-runtime/context";
-import type { SessionLifecycleSnapshot, SessionWireFrame } from "@brewva/brewva-runtime/session";
-import type { ContextState } from "@brewva/brewva-substrate/contracts";
+} from "@brewva/brewva-runtime/protocol";
+import type { SessionLifecycleSnapshot, SessionWireFrame } from "@brewva/brewva-runtime/protocol";
+import type {
+  BrewvaAgentProtocolThinkingBudgets,
+  BrewvaAgentProtocolThinkingLevel,
+  BrewvaAgentProtocolTransport,
+} from "@brewva/brewva-substrate/agent-protocol";
 import type {
   CreateBrewvaHostPluginRunnerOptions,
   BrewvaToolUiPort,
@@ -28,23 +31,20 @@ import type {
   BrewvaPromptThinkingLevel,
   BrewvaSessionContext,
   BrewvaShellViewPreferences,
+  ContextState,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaCompactionRequest, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import type {
-  BrewvaTurnLoopThinkingBudgets,
-  BrewvaTurnLoopThinkingLevel,
-  BrewvaTurnLoopTransport,
-} from "@brewva/brewva-substrate/turn";
 import type { BrewvaCompactionSummaryGenerator } from "../../compaction/summary-generator.js";
 import type { GoogleCachedContentManager } from "../../provider/cache/index.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
+import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { BrewvaSessionTitleGenerator } from "../title-generator.js";
 
 export const REQUIRED_HOSTED_PERSISTENCE_EVENTS = ["message_end", "session_compact"] as const;
 
 export function toTurnLoopThinkingLevel(
   level: BrewvaPromptThinkingLevel | undefined,
-): BrewvaTurnLoopThinkingLevel {
+): BrewvaAgentProtocolThinkingLevel {
   switch (level) {
     case "minimal":
       return "minimal";
@@ -66,9 +66,9 @@ export interface BrewvaManagedAgentSessionSettingsPort {
   getQuietStartup(): boolean;
   getQueueMode(): "all" | "one-at-a-time" | undefined;
   getFollowUpMode(): "all" | "one-at-a-time" | undefined;
-  getTransport(): BrewvaTurnLoopTransport;
+  getTransport(): BrewvaAgentProtocolTransport;
   getCachePolicy(): ProviderCachePolicy;
-  getThinkingBudgets(): BrewvaTurnLoopThinkingBudgets | undefined;
+  getThinkingBudgets(): BrewvaAgentProtocolThinkingBudgets | undefined;
   getRetrySettings(): { maxDelayMs: number } | undefined;
   getModelPresetState?(): BrewvaModelPresetState;
   setDefaultThinkingLevel(thinkingLevel: string): void;
@@ -87,7 +87,7 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   agentDir: string;
   sessionStore: ManagedAgentSessionStore;
   settings: BrewvaManagedAgentSessionSettingsPort;
-  runtime?: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   modelCatalog: BrewvaMutableModelCatalog;
   resourceLoader: BrewvaHostedResourceLoader;
   extensions?: CreateBrewvaHostPluginRunnerOptions["plugins"];

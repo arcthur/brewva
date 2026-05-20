@@ -5,14 +5,14 @@ import type {
   SimpleStreamOptions as ProviderStreamOptions,
 } from "@brewva/brewva-provider-core/contracts";
 import type {
-  BrewvaTurnLoopStreamContext,
-  BrewvaTurnLoopStreamFunction,
-  BrewvaTurnLoopStreamOptions,
-} from "@brewva/brewva-substrate/turn";
+  BrewvaAgentProtocolStreamContext,
+  BrewvaAgentProtocolStreamFunction,
+  BrewvaAgentProtocolStreamOptions,
+} from "@brewva/brewva-substrate/agent-protocol";
 import { streamProviderMessage } from "./execution-port.js";
 
 function toProviderModel(
-  model: Parameters<BrewvaTurnLoopStreamFunction>[0],
+  model: Parameters<BrewvaAgentProtocolStreamFunction>[0],
 ): ProviderStreamModel<Api> {
   return {
     id: model.id,
@@ -33,7 +33,7 @@ function toProviderModel(
   };
 }
 
-function toProviderContext(context: BrewvaTurnLoopStreamContext): ProviderStreamContext {
+function toProviderContext(context: BrewvaAgentProtocolStreamContext): ProviderStreamContext {
   return {
     systemPrompt: context.systemPrompt,
     messages: context.messages.map((message) => ({ ...message })),
@@ -46,8 +46,8 @@ function toProviderContext(context: BrewvaTurnLoopStreamContext): ProviderStream
 }
 
 function toProviderOptions(
-  options: BrewvaTurnLoopStreamOptions,
-  model: Parameters<BrewvaTurnLoopStreamFunction>[0],
+  options: BrewvaAgentProtocolStreamOptions,
+  model: Parameters<BrewvaAgentProtocolStreamFunction>[0],
 ): ProviderStreamOptions {
   return {
     reasoning: options.reasoning === "off" ? undefined : options.reasoning,
@@ -67,7 +67,7 @@ function toProviderOptions(
   };
 }
 
-export const createHostedProviderStreamFunction = (): BrewvaTurnLoopStreamFunction => {
+export const createHostedProviderStreamFunction = (): BrewvaAgentProtocolStreamFunction => {
   return (model, context, options) => {
     return streamProviderMessage(
       toProviderModel(model),

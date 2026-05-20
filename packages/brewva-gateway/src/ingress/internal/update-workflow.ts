@@ -1,15 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import {
   resolveBrewvaAgentDir,
   resolveGlobalBrewvaConfigPath,
   resolveGlobalBrewvaRootDir,
   resolveProjectBrewvaConfigPath,
 } from "@brewva/brewva-runtime/config";
+import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
 
 export interface BrewvaUpdatePromptInput {
-  runtime: Pick<BrewvaRuntimeRoot, "identity">;
+  runtime: Pick<HostedRuntimeAdapterPort, "identity">;
   rawArgs?: string;
 }
 
@@ -105,7 +105,7 @@ function formatHintLines(rawArgs: string | undefined): string[] {
 }
 
 export function resolveBrewvaUpdateExecutionScope(
-  runtime: Pick<BrewvaRuntimeRoot, "identity">,
+  runtime: Pick<HostedRuntimeAdapterPort, "identity">,
 ): BrewvaUpdateExecutionScope {
   const globalRoot = resolveGlobalBrewvaRootDir();
   const globalConfigPath = resolveGlobalBrewvaConfigPath();

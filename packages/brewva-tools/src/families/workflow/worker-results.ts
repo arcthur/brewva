@@ -1,8 +1,9 @@
-import type { WorkerApplyReport, WorkerMergeReport } from "@brewva/brewva-runtime/patch-history";
+import type { WorkerApplyReport, WorkerMergeReport } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
+import { applyMergedWorkerResults, mergeWorkerResults } from "../../runtime-port/worker-results.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -19,7 +20,7 @@ function formatMergeReport(report: WorkerMergeReport): string {
       "Merge status: conflicts",
       `Workers: ${report.workerIds.join(", ")}`,
     ];
-    for (const conflict of report.conflicts) {
+    for (const conflict of report.conflicts ?? []) {
       lines.push(
         `- ${conflict.path} workers=${conflict.workerIds.join(", ")} patch_sets=${conflict.patchSetIds.join(", ")}`,
       );
@@ -94,7 +95,7 @@ export function createWorkerResultsMergeTool(options: BrewvaToolOptions): ToolDe
     parameters: Type.Object({}, { additionalProperties: false }),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const report = runtime.inspect.session.workerResults.merge(sessionId);
+      const report = mergeWorkerResults(runtime, sessionId);
       if (report.status === "conflicts") {
         return failTextResult(formatMergeReport(report), {
           ok: false,
@@ -143,7 +144,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
       parameters: Type.Object({}, { additionalProperties: false }),
       async execute(toolCallId, _params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const report = runtime.authority.session.workerResults.applyMerged(sessionId, {
+        const report = applyMergedWorkerResults(runtime, sessionId, {
           toolName: "worker_results_apply",
           toolCallId,
         });

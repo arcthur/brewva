@@ -2,15 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
-import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/protocol";
+import { type BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import {
   buildBrewvaPromptText,
@@ -36,6 +35,7 @@ import {
   createPromptMessageUpdateEvent,
   createToolcallEndAssistantEvent,
 } from "../../helpers/prompt-session-events.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 function modelKey(model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">): string {
   return `${model.provider}/${model.id}`;
@@ -95,28 +95,28 @@ function createFakeBundle(
       title: "New session",
     },
   ];
-  const rawRuntime = createBrewvaRuntime({
+  const rawRuntime = createRuntimeInstanceFixture({
     cwd: mkdtempSync(join(tmpdir(), "brewva-shell-runtime-")),
-  }).hosted;
+  });
   const runtime = rawRuntime;
-  Object.assign(runtime.authority.proposals.requests, {
+  Object.assign(runtime.ops.proposals.requests, {
     decide(_sessionId: string, requestId: string, input: unknown) {
       approvalDecisions.push({ requestId, input });
     },
   });
-  Object.assign(runtime.inspect.proposals.requests, {
+  Object.assign(runtime.ops.proposals.requests, {
     listPending() {
       return [];
     },
   });
-  Object.assign(runtime.inspect.events.log, {
-    listReplaySessions() {
+  Object.assign(runtime.ops.events.replay, {
+    listSessions() {
       return replaySessions;
     },
   });
-  const querySessionWire = runtime.inspect.sessionWire.query.bind(runtime.inspect.sessionWire);
+  const querySessionWire = runtime.ops.sessionWire.query.bind(runtime.ops.sessionWire);
   const providerConnects: Array<{ provider: string; key: string }> = [];
-  Object.assign(runtime.inspect.sessionWire, {
+  Object.assign(runtime.ops.sessionWire, {
     query(targetSessionId: string) {
       return options.sessionWireBySessionId?.[targetSessionId] ?? querySessionWire(targetSessionId);
     },

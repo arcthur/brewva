@@ -2,23 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessionSupervisor } from "@brewva/brewva-gateway";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { TASK_STUCK_DETECTED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import {
-  readBrewvaEventRecordsFromLogPath,
-  resolveBrewvaEventLogPath,
-} from "@brewva/brewva-runtime/event-log";
-import { GATEWAY_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import {
-  GATEWAY_SESSION_BINDING_CONTROL_SESSION_ID,
-  resolveGatewaySessionBindingLogPath,
-} from "../../../packages/brewva-gateway/src/daemon/session-supervisor/session-binding-tape.js";
+  listGatewaySessionBindings,
+  resolveGatewaySessionBindingStorePath,
+} from "../../../packages/brewva-gateway/src/daemon/session-supervisor/session-binding-store.js";
 import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
-} from "../../../packages/brewva-gateway/src/hosted/internal/thread-loop/worker/test-harness.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/worker/test-harness.js";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { sleep } from "../../helpers/process.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createOpsRuntimeConfig } from "../../helpers/runtime.js";
 import { createTestWorkspace, writeTestConfig } from "../../helpers/workspace.js";
 
@@ -101,15 +97,15 @@ describe("session supervisor watchdog bridge", () => {
         }
         expect(agentSessionId.length).toBeGreaterThan(0);
         const resolvedAgentSessionId = agentSessionId;
-        const observer = createBrewvaRuntime({
+        const observer = createRuntimeInstanceFixture({
           cwd: workspace,
           configPath: TEST_CONFIG_PATH,
-        }).hosted;
+        });
 
         const detected = await waitForCondition(
           () =>
-            observer.inspect.events.records.query(resolvedAgentSessionId, {
-              type: "task_stuck_detected",
+            observer.ops.events.records.query(resolvedAgentSessionId, {
+              type: TASK_STUCK_DETECTED_EVENT_TYPE,
               last: 1,
             })[0],
           {
@@ -125,7 +121,7 @@ describe("session supervisor watchdog bridge", () => {
           idleMs: expect.any(Number),
         });
 
-        const taskState = observer.inspect.task.state.get(resolvedAgentSessionId);
+        const taskState = observer.ops.task.state.get(resolvedAgentSessionId);
         expect(taskState.blockers).toEqual([]);
       } finally {
         await supervisor.stop();
@@ -170,17 +166,17 @@ describe("session supervisor watchdog bridge", () => {
         }
         expect(agentSessionId.length).toBeGreaterThan(0);
         const resolvedAgentSessionId = agentSessionId;
-        const observer = createBrewvaRuntime({
+        const observer = createRuntimeInstanceFixture({
           cwd: workspace,
           configPath: TEST_CONFIG_PATH,
-        }).hosted;
+        });
 
         const stopped = await supervisor.stopSession("watchdog-worker-stop", "test_shutdown");
         expect(stopped).toBe(true);
 
         const shutdown = await waitForCondition(
           () =>
-            observer.inspect.events.records.query(resolvedAgentSessionId, {
+            observer.ops.events.records.query(resolvedAgentSessionId, {
               type: "session_shutdown",
               last: 1,
             })[0],
@@ -199,12 +195,12 @@ describe("session supervisor watchdog bridge", () => {
         await sleepMs(3_000);
 
         expect(
-          observer.inspect.events.records.query(resolvedAgentSessionId, {
+          observer.ops.events.records.query(resolvedAgentSessionId, {
             type: "task_stuck_detected",
           }),
         ).toHaveLength(0);
 
-        const taskState = observer.inspect.task.state.get(resolvedAgentSessionId);
+        const taskState = observer.ops.task.state.get(resolvedAgentSessionId);
         expect(taskState.blockers).toEqual([]);
       } finally {
         await supervisor.stop();
@@ -322,21 +318,17 @@ describe("session supervisor watchdog bridge", () => {
           frames.filter((frame) => frame.type === "session.closed").length,
         ).toBeGreaterThanOrEqual(2);
 
-        const bindingEvents = readBrewvaEventRecordsFromLogPath(
-          resolveGatewaySessionBindingLogPath(stateDir),
+        const bindingReceipts = listGatewaySessionBindings(
+          resolveGatewaySessionBindingStorePath(stateDir),
+          "archived-session",
+        );
+        expect(bindingReceipts).toHaveLength(2);
+        expect(bindingReceipts).toMatchObject([
           {
-            sessionId: GATEWAY_SESSION_BINDING_CONTROL_SESSION_ID,
-          },
-        ).filter((event) => event.type === GATEWAY_SESSION_BOUND_EVENT_TYPE);
-        expect(bindingEvents).toHaveLength(2);
-        expect(bindingEvents.map((event) => event.payload)).toMatchObject([
-          {
-            schema: "brewva.gateway-session-binding.v1",
             gatewaySessionId: "archived-session",
             agentSessionId: firstOpen.agentSessionId,
           },
           {
-            schema: "brewva.gateway-session-binding.v1",
             gatewaySessionId: "archived-session",
             agentSessionId: secondOpen.agentSessionId,
           },
@@ -351,7 +343,7 @@ describe("session supervisor watchdog bridge", () => {
   );
 
   test(
-    "supervisor synthesizes a terminal receipt after worker hard exit",
+    "supervisor does not synthesize child tape truth after worker hard exit",
     async () => {
       const workspace = createTestWorkspace("supervisor-worker-hard-exit");
       writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
@@ -393,31 +385,15 @@ describe("session supervisor watchdog bridge", () => {
           },
         );
 
-        const shutdown = await waitForCondition(
-          () => {
-            const observer = createBrewvaRuntime({
-              cwd: workspace,
-              configPath: TEST_CONFIG_PATH,
-            }).hosted;
-            return observer.inspect.events.records.query(agentSessionId, {
-              type: "session_shutdown",
-              last: 1,
-            })[0];
-          },
-          {
-            timeoutMs: 8_000,
-            intervalMs: 100,
-            message: "expected synthesized session_shutdown after hard exit",
-          },
-        );
-
-        expect(shutdown.payload).toMatchObject({
-          reason: "abnormal_process_exit",
-          source: "session_supervisor_worker_exit",
-          signal: "SIGKILL",
-          workerSessionId: "worker-hard-exit",
-          recoveredFromRegistry: false,
+        const observer = createRuntimeInstanceFixture({
+          cwd: workspace,
+          configPath: TEST_CONFIG_PATH,
         });
+        expect(
+          observer.ops.events.records.query(agentSessionId, {
+            type: "session_shutdown",
+          }),
+        ).toHaveLength(0);
       } finally {
         await supervisor.stop();
         rmSync(workspace, { recursive: true, force: true });
@@ -427,17 +403,13 @@ describe("session supervisor watchdog bridge", () => {
   );
 
   test(
-    "startup orphan sweep synthesizes a terminal receipt from the persisted event log path",
+    "startup orphan sweep drops stale registry rows without writing child tape truth",
     async () => {
       const workspace = createTestWorkspace("supervisor-registry-recovery");
       const runtimeConfig = createOpsRuntimeConfig();
       writeTestConfig(workspace, runtimeConfig, TEST_CONFIG_PATH);
       const stateDir = join(workspace, "state");
       const agentSessionId = "agent-registry-stale";
-      const agentEventLogPath = resolveBrewvaEventLogPath(
-        join(workspace, runtimeConfig.infrastructure.events.dir),
-        agentSessionId,
-      );
       mkdirSync(stateDir, { recursive: true });
       writeFileSync(
         join(stateDir, "children.json"),
@@ -448,7 +420,6 @@ describe("session supervisor watchdog bridge", () => {
               pid: 999999,
               startedAt: Date.now() - 10_000,
               agentSessionId,
-              agentEventLogPath,
               cwd: workspace,
             },
           ],
@@ -475,30 +446,15 @@ describe("session supervisor watchdog bridge", () => {
       try {
         await supervisor.start();
 
-        const shutdown = await waitForCondition(
-          () => {
-            const observer = createBrewvaRuntime({
-              cwd: workspace,
-              configPath: TEST_CONFIG_PATH,
-            }).hosted;
-            return observer.inspect.events.records.query(agentSessionId, {
-              type: "session_shutdown",
-              last: 1,
-            })[0];
-          },
-          {
-            timeoutMs: 5_000,
-            intervalMs: 100,
-            message: "expected synthesized session_shutdown from registry recovery",
-          },
-        );
-
-        expect(shutdown.payload).toMatchObject({
-          reason: "abnormal_process_exit",
-          source: "session_supervisor_registry_recovery",
-          workerSessionId: "worker-registry-stale",
-          recoveredFromRegistry: true,
+        const observer = createRuntimeInstanceFixture({
+          cwd: workspace,
+          configPath: TEST_CONFIG_PATH,
         });
+        expect(
+          observer.ops.events.records.query(agentSessionId, {
+            type: "session_shutdown",
+          }),
+        ).toHaveLength(0);
       } finally {
         await supervisor.stop();
         rmSync(workspace, { recursive: true, force: true });
@@ -508,13 +464,12 @@ describe("session supervisor watchdog bridge", () => {
   );
 
   test(
-    "startup orphan sweep does not synthesize a terminal receipt without a persisted event log path",
+    "startup orphan sweep ignores stale registry rows without an agent runtime writer",
     async () => {
       const workspace = createTestWorkspace("supervisor-registry-missing-event-log");
       writeTestConfig(workspace, createOpsRuntimeConfig(), TEST_CONFIG_PATH);
       const stateDir = join(workspace, "state");
       const agentSessionId = "agent-registry-missing-event-log";
-      const warns: Array<{ message: string; meta: unknown }> = [];
       mkdirSync(stateDir, { recursive: true });
       writeFileSync(
         join(stateDir, "children.json"),
@@ -542,7 +497,7 @@ describe("session supervisor watchdog bridge", () => {
         logger: {
           debug: () => {},
           info: () => {},
-          warn: (message, meta) => warns.push({ message, meta }),
+          warn: () => {},
           error: () => {},
           log: () => {},
         },
@@ -552,23 +507,15 @@ describe("session supervisor watchdog bridge", () => {
         await supervisor.start();
         await sleepMs(200);
 
-        const observer = createBrewvaRuntime({
+        const observer = createRuntimeInstanceFixture({
           cwd: workspace,
           configPath: TEST_CONFIG_PATH,
-        }).hosted;
+        });
         expect(
-          observer.inspect.events.records.query(agentSessionId, {
+          observer.ops.events.records.query(agentSessionId, {
             type: "session_shutdown",
           }),
         ).toHaveLength(0);
-        expect(warns).toContainEqual({
-          message: "cannot synthesize session terminal receipt without agent event log path",
-          meta: {
-            sessionId: "worker-registry-missing-event-log",
-            agentSessionId,
-            source: "session_supervisor_registry_recovery",
-          },
-        });
       } finally {
         await supervisor.stop();
         rmSync(workspace, { recursive: true, force: true });
@@ -621,14 +568,14 @@ describe("session supervisor watchdog bridge", () => {
 
         await sleepMs(1_500);
 
-        const observer = createBrewvaRuntime({
+        const observer = createRuntimeInstanceFixture({
           cwd: workspace,
           configPath: TEST_CONFIG_PATH,
-        }).hosted;
+        });
         expect(
-          observer.inspect.events.records.query(agentSessionId, { type: "task_stuck_detected" }),
+          observer.ops.events.records.query(agentSessionId, { type: "task_stuck_detected" }),
         ).toHaveLength(0);
-        expect(observer.inspect.task.state.get(agentSessionId).spec).toBe(undefined);
+        expect(observer.ops.task.state.get(agentSessionId).spec).toBe(undefined);
       } finally {
         await supervisor.stop();
         restoreEnv();

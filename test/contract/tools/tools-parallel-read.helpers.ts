@@ -2,11 +2,11 @@ import { expect } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 import { createBundledToolRuntime as createBundledToolRuntimeFromRuntime } from "../../helpers/runtime.js";
 
 export function extractTextContent(result: {
@@ -46,24 +46,24 @@ export function workspaceWithSampleFiles(prefix: string): string {
   return workspace;
 }
 
-export function createRuntime(workspace: string, config?: BrewvaConfig): BrewvaHostedRuntimePort {
+export function createRuntime(workspace: string, config?: BrewvaConfig): HostedRuntimeAdapterPort {
   const runtimeConfig = structuredClone(config ?? DEFAULT_BREWVA_CONFIG);
   runtimeConfig.infrastructure.events.level = "debug";
-  return createBrewvaRuntime({ cwd: workspace, config: runtimeConfig }).hosted;
+  return createRuntimeInstanceFixture({ cwd: workspace, config: runtimeConfig });
 }
 
 export function createBundledToolRuntime(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
 ): BrewvaBundledToolRuntime {
   return createBundledToolRuntimeFromRuntime(runtime);
 }
 
 export function getParallelReadPayloads(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): Array<Record<string, unknown>> {
   const payloads: Array<Record<string, unknown>> = [];
-  for (const event of runtime.inspect.events.records.query(sessionId, {
+  for (const event of runtime.capabilities.events.records.query(sessionId, {
     type: "tool_parallel_read",
   })) {
     if (!event.payload) continue;

@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 import { TelegramWebhookTransport } from "@brewva/brewva-channels-telegram";
-import { BrewvaBoundaryFailure, BrewvaEffect, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { BrewvaBoundaryFailure, runBoundaryOperation } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { createTelegramIngressServer } from "@brewva/brewva-ingress-telegram";
 import type {
   ChannelModeLaunchBundle,
@@ -180,13 +181,13 @@ export const telegramChannelLauncher: ChannelModeLauncher = (
     ...bridgeBundle,
     onStart: async () => {
       if (ingressStarted) return;
-      await runPromiseAtBoundary(
+      await runBoundaryOperation(
+        "gateway.telegram.webhook.listen",
         listenServerEffect(ingressServer, webhookIngress.host, webhookIngress.port),
       );
       ingressStarted = true;
-      input.runtime.extensions.hosted.events.record({
+      input.runtime.ops.channel.ingress.started({
         sessionId: "channel:system",
-        type: "channel_ingress_started",
         payload: {
           channel: "telegram",
           host: webhookIngress.host,
@@ -199,11 +200,13 @@ export const telegramChannelLauncher: ChannelModeLauncher = (
     },
     onStop: async () => {
       if (!ingressStarted) return;
-      await runPromiseAtBoundary(closeServerEffect(ingressServer));
+      await runBoundaryOperation(
+        "gateway.telegram.webhook.close",
+        closeServerEffect(ingressServer),
+      );
       ingressStarted = false;
-      input.runtime.extensions.hosted.events.record({
+      input.runtime.ops.channel.ingress.stopped({
         sessionId: "channel:system",
-        type: "channel_ingress_stopped",
         payload: {
           channel: "telegram",
         },

@@ -1,4 +1,4 @@
-import type { ToolOutputDisplayView } from "@brewva/brewva-runtime/session";
+import type { ToolOutputDisplayView } from "@brewva/brewva-runtime/protocol";
 import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import {
   extractMessageError,

@@ -1,7 +1,7 @@
 import { parseArgs as parseNodeArgs } from "node:util";
-import { normalizeAgentId } from "@brewva/brewva-runtime/context";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import { normalizeAgentId } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import { printHelp, printVersion } from "./help.js";
 
 type CliValueResult<T> = RuntimeResult<{ value: T }>;

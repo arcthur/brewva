@@ -15,6 +15,7 @@ function toRepoPath(absolutePath: string): string {
 function listTypeScriptFiles(relativeDir: string): string[] {
   const absoluteDir = resolve(repoRoot, relativeDir);
   const files: string[] = [];
+  if (!existsSync(absoluteDir)) return files;
 
   for (const entry of readdirSync(absoluteDir)) {
     const absolutePath = resolve(absoluteDir, entry);
@@ -113,7 +114,9 @@ function findForbiddenTransitiveDependencies(entryFiles: readonly string[]): str
 
 describe("runtime projection admission", () => {
   test("keeps projection independent from gateway, provider, tool, and runtime ports", () => {
-    const projectionFiles = listTypeScriptFiles("packages/brewva-runtime/src/domain/projection");
+    const projectionFiles = listTypeScriptFiles(
+      "packages/brewva-runtime/src/read-models/projection",
+    );
     const forbiddenImports = [
       /@brewva\/brewva-gateway/u,
       /@brewva\/brewva-provider/u,
@@ -133,7 +136,7 @@ describe("runtime projection admission", () => {
       /\\.\\.\/\\.\\.\/\\.\\.\/runtime/u,
     ];
 
-    expect(projectionFiles).toContain("packages/brewva-runtime/src/domain/projection/api.ts");
+    expect(projectionFiles).toEqual([]);
     for (const file of projectionFiles) {
       const source = readRepoFile(file);
       for (const forbidden of forbiddenImports) {
@@ -145,15 +148,15 @@ describe("runtime projection admission", () => {
   test("keeps projection transitive dependencies out of hosted, provider, tool, and runtime machinery", () => {
     expect(
       findForbiddenTransitiveDependencies(
-        listTypeScriptFiles("packages/brewva-runtime/src/domain/projection"),
+        listTypeScriptFiles("packages/brewva-runtime/src/read-models/projection"),
       ),
     ).toEqual([]);
   });
 });
 
 describe("runtime evidence admission", () => {
-  test("keeps internal evidence independent from hosted, provider, tool, and runtime machinery", () => {
-    const evidenceFiles = listTypeScriptFiles("packages/brewva-runtime/src/internal/evidence");
+  test("keeps protocol evidence independent from hosted, provider, tool, and runtime machinery", () => {
+    const evidenceFiles = listTypeScriptFiles("packages/brewva-runtime/src/protocol/evidence");
     const forbiddenImports = [
       /@brewva\/brewva-gateway/u,
       /@brewva\/brewva-provider/u,
@@ -171,7 +174,8 @@ describe("runtime evidence admission", () => {
       /\\.\\.\/\\.\\.\/\\.\\.\/runtime/u,
     ];
 
-    expect(evidenceFiles).toContain("packages/brewva-runtime/src/internal/evidence/api.ts");
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/evidence"))).toBe(false);
+    expect(evidenceFiles).toContain("packages/brewva-runtime/src/protocol/evidence/api.ts");
     for (const file of evidenceFiles) {
       const source = readRepoFile(file);
       for (const forbidden of forbiddenImports) {
@@ -180,10 +184,10 @@ describe("runtime evidence admission", () => {
     }
   });
 
-  test("keeps internal evidence transitive dependencies out of hosted, provider, tool, and runtime machinery", () => {
+  test("keeps evidence transitive dependencies out of hosted, provider, tool, and runtime machinery", () => {
     expect(
       findForbiddenTransitiveDependencies(
-        listTypeScriptFiles("packages/brewva-runtime/src/internal/evidence"),
+        listTypeScriptFiles("packages/brewva-runtime/src/protocol/evidence"),
       ),
     ).toEqual([]);
   });

@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/delegation";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "./runtime.js";
 
 export type RuntimeEventLike = {
   type?: string;
@@ -23,25 +23,25 @@ export type BrewvaEventBundle = {
   [key: string]: unknown;
 };
 
-export function latestEventFile(workspace: string): string | undefined {
-  const eventsDir = join(workspace, ".orchestrator", "events");
-  if (!existsSync(eventsDir)) return undefined;
-  const candidates = readdirSync(eventsDir)
+export function latestCanonicalTapeFile(workspace: string): string | undefined {
+  const tapeDir = join(workspace, ".brewva", "tape");
+  if (!existsSync(tapeDir)) return undefined;
+  const candidates = readdirSync(tapeDir)
     .filter((name) => name.endsWith(".jsonl"))
     .map((name) => {
-      const file = join(eventsDir, name);
+      const file = join(tapeDir, name);
       return { file, mtimeMs: statSync(file).mtimeMs };
     })
     .toSorted((a, b) => b.mtimeMs - a.mtimeMs);
   return candidates[0]?.file;
 }
 
-export function requireLatestEventFile(workspace: string, context = "workspace"): string {
-  const eventFile = latestEventFile(workspace);
-  if (!eventFile) {
-    throw new Error(`Expected persisted event file for ${context}.`);
+export function requireLatestCanonicalTapeFile(workspace: string, context = "workspace"): string {
+  const tapeFile = latestCanonicalTapeFile(workspace);
+  if (!tapeFile) {
+    throw new Error(`Expected canonical tape file for ${context}.`);
   }
-  return eventFile;
+  return tapeFile;
 }
 
 export function parseEventFile(
@@ -80,6 +80,36 @@ export function parseEventFile(
   }
 
   return parsed;
+}
+
+export function parseCanonicalTapeOperationalEvents(
+  filePath: string,
+  options?: { strict?: boolean },
+): RuntimeEventLike[] {
+  return parseEventFile(filePath, options)
+    .map(toOperationalEvent)
+    .filter((event): event is RuntimeEventLike => event !== null);
+}
+
+function toOperationalEvent(event: RuntimeEventLike): RuntimeEventLike | null {
+  if (event.type !== "custom" || !isRecord(event.payload)) {
+    return event;
+  }
+  const custom = event.payload;
+  if (
+    custom.namespace !== "gateway.ops" ||
+    typeof custom.kind !== "string" ||
+    custom.version !== 1 ||
+    !("payload" in custom)
+  ) {
+    return event;
+  }
+  const payload = isRecord(custom.payload) ? custom.payload : undefined;
+  return {
+    ...event,
+    type: custom.kind,
+    ...(payload ? { payload } : {}),
+  };
 }
 
 export function parseJsonLines(stdout: string, options?: { strict?: boolean }): unknown[] {
@@ -217,7 +247,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function recordHostedDelegationOutcome(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   runId: string;
   outcome: Record<string, unknown>;
@@ -243,9 +273,8 @@ export function recordHostedDelegationOutcome(input: {
     : "explorer";
   return {
     artifactPath: relativeArtifactPath,
-    event: input.runtime.extensions.hosted.events.record({
+    event: input.runtime.ops.delegation.lifecycle.completed({
       sessionId: input.sessionId,
-      type: "subagent_completed",
       ...(input.timestamp !== undefined ? { timestamp: input.timestamp } : {}),
       payload: {
         runId: input.runId,

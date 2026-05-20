@@ -1,11 +1,11 @@
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import type { TaskPhase } from "@brewva/brewva-runtime/protocol";
 import type {
   ConvergencePredicate,
   ScheduleContinuityMode,
   ScheduleIntentStatus,
   ScheduleIntentUpdateInput,
-} from "@brewva/brewva-runtime/schedule";
-import type { TaskPhase } from "@brewva/brewva-runtime/task";
+} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
@@ -15,6 +15,13 @@ import {
   attachStringEnumContractPaths,
   buildStringEnumSchema,
 } from "../../registry/string-enum-contract.js";
+import {
+  cancelScheduleIntent,
+  createScheduleIntent,
+  getScheduleProjectionSnapshot,
+  listScheduleIntents,
+  updateScheduleIntent,
+} from "../../runtime-port/schedule.js";
 import { failTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 import {
@@ -229,7 +236,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           }
 
           const rawIntentId = normalizeOptionalString(params.intentId);
-          const created = await runtime.authority.schedule.intents.create(sessionId, {
+          const created = await createScheduleIntent(runtime, sessionId, {
             reason,
             intentId: rawIntentId !== undefined ? asBrewvaIntentId(rawIntentId) : undefined,
             goalRef: normalizeOptionalString(params.goalRef),
@@ -329,7 +336,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
             if (schedulePatch.timeZone !== undefined) updateInput.timeZone = schedulePatch.timeZone;
           }
 
-          const updated = await runtime.authority.schedule.intents.update(sessionId, updateInput);
+          const updated = await updateScheduleIntent(runtime, sessionId, updateInput);
           if (!updated.ok) {
             return failTextResult(`Schedule intent update rejected (${updated.reason}).`, {
               ok: false,
@@ -363,7 +370,7 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
             });
           }
 
-          const cancelled = await runtime.authority.schedule.intents.cancel(sessionId, {
+          const cancelled = await cancelScheduleIntent(runtime, sessionId, {
             intentId: asBrewvaIntentId(intentId),
             reason: normalizeOptionalString(params.reason),
           });
@@ -388,8 +395,8 @@ export function createScheduleIntentTool(options: BrewvaToolOptions): ToolDefini
           parentSessionId: params.includeAllSessions ? undefined : asBrewvaSessionId(sessionId),
           status: statusFilter,
         };
-        const intents = await runtime.inspect.schedule.intents.list(listQuery);
-        const snapshot = await runtime.inspect.schedule.intents.getProjectionSnapshot();
+        const intents = await listScheduleIntents(runtime, listQuery);
+        const snapshot = await getScheduleProjectionSnapshot(runtime);
 
         const header = [
           "[ScheduleIntents]",

@@ -15,7 +15,7 @@ import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import type {
   DelegationModelRouteRecord,
   DelegationRunRecord,
-} from "@brewva/brewva-runtime/delegation";
+} from "@brewva/brewva-runtime/protocol";
 import type {
   DelegationPacket,
   SubagentExecutionShape,

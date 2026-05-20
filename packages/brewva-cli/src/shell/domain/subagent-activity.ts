@@ -1,4 +1,4 @@
-import type { DelegationRunRecord, DelegationRunStatus } from "@brewva/brewva-runtime/delegation";
+import type { DelegationRunRecord, DelegationRunStatus } from "@brewva/brewva-runtime/protocol";
 
 export type SubagentActivityTone = "running" | "success" | "warning" | "error" | "muted";
 

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test";
+import { normalizeChannelId } from "@brewva/brewva-runtime/protocol";
 import fc from "fast-check";
-import { normalizeChannelId } from "../../../packages/brewva-runtime/src/domain/channels/channel-id.js";
 import { propertyTest } from "../../helpers/property.js";
 
 describe("channel id properties", () => {

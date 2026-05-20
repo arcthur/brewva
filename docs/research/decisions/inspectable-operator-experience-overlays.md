@@ -18,8 +18,8 @@
   - `packages/brewva-gateway/src/delegation/model-routing.ts`
   - `packages/brewva-gateway/src/delegation/catalog/registry.ts`
   - `packages/brewva-gateway/src/delegation/config-files.ts`
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-stall-adjudication.ts`
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/watchdog/task-progress-watchdog.ts`
+  - `packages/brewva-gateway/src/hosted/internal/turn-adapter/watchdog/task-stall-adjudication.ts`
+  - `packages/brewva-gateway/src/hosted/internal/turn-adapter/watchdog/task-progress-watchdog.ts`
   - `packages/brewva-gateway/src/operator-questions.ts`
   - `packages/brewva-gateway/src/agent-overlay-inspection.ts`
   - `packages/brewva-gateway/src/channels/command-router.ts`

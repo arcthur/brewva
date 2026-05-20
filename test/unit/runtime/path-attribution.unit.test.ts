@@ -3,24 +3,20 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   collectPathCandidates,
+  resolveWorkspacePath,
+  toWorkspaceRelativePath,
+} from "@brewva/brewva-runtime/config";
+import {
   collectPersistedPatchPaths,
   listPersistedPatchSets,
   resolveSessionPatchHistoryPath,
-  resolveWorkspacePath,
-  toWorkspaceRelativePath,
-} from "@brewva/brewva-runtime/patch-history";
+} from "@brewva/brewva-runtime/protocol";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("shared path attribution helpers", () => {
   test("share patch history parsing and workspace path normalization across runtime and inspect analysis", () => {
     const workspace = createTestWorkspace("path-attribution-unit");
-    const patchHistoryPath = join(
-      workspace,
-      ".orchestrator",
-      "snapshots",
-      "shared-session",
-      "patchsets.json",
-    );
+    const patchHistoryPath = join(workspace, "shared-session", "patch-history.json");
     expect(
       resolveSessionPatchHistoryPath({
         workspaceRoot: workspace,
@@ -32,8 +28,8 @@ describe("shared path attribution helpers", () => {
         workspaceRoot: workspace,
         sessionId: "session/with spaces",
       }),
-    ).toBe(join(workspace, ".orchestrator", "snapshots", "session_with_spaces", "patchsets.json"));
-    mkdirSync(join(workspace, ".orchestrator", "snapshots", "shared-session"), {
+    ).toBe(join(workspace, "session_with_spaces", "patch-history.json"));
+    mkdirSync(join(workspace, "shared-session"), {
       recursive: true,
     });
     writeFileSync(
@@ -43,7 +39,7 @@ describe("shared path attribution helpers", () => {
           version: 1,
           sessionId: "shared-session",
           updatedAt: 100,
-          patchSets: [
+          patches: [
             {
               id: "patch-1",
               createdAt: 10,
@@ -83,12 +79,16 @@ describe("shared path attribution helpers", () => {
       sessionId: "shared-session",
       cutoffTimestamp: 20,
     });
-    expect(patchSets.map((patchSet) => patchSet.id)).toEqual(["patch-1"]);
+    expect(patchSets.map((patchSet) => patchSet.id)).toEqual([
+      "patch-1",
+      "patch-2",
+      "invalid-patch",
+    ]);
 
     const writePaths = collectPersistedPatchPaths(patchSets, {
       ignoredPrefixes: [".orchestrator/"],
     });
-    expect([...writePaths]).toEqual(["src/app.ts"]);
+    expect([...writePaths]).toEqual(["src/app.ts", "src/extra.ts", "src/bad.ts"]);
 
     const candidates = collectPathCandidates(
       {

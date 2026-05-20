@@ -1,15 +1,15 @@
 import type { ChildProcess } from "node:child_process";
-import type { BrewvaDeferred, BrewvaEffect, BrewvaScope } from "@brewva/brewva-effect";
+import type { BrewvaDeferred, BrewvaScope } from "@brewva/brewva-effect/primitives";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
-import type { RecoveryWalStore } from "@brewva/brewva-runtime/recovery";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import type {
   ParentToWorkerMessage,
   WorkerResultErrorCode,
   WorkerToParentMessage,
-} from "../../hosted/internal/thread-loop/worker/api.js";
+} from "../../hosted/internal/turn-adapter/worker/api.js";
 import type { ChildRegistryEntry } from "../../ingress/api.js";
 import type { StructuredLogger } from "../logger.js";
+import type { RecoveryWalStore } from "../recovery.js";
 import type {
   SendPromptOutput,
   SendPromptResult,
@@ -49,7 +49,6 @@ export interface WorkerHandle {
   agentId?: string;
   managedToolMode?: ManagedToolMode;
   requestedAgentSessionId?: string;
-  agentEventLogPath?: string;
   pending: Map<string, PendingRequest>;
   pendingTurns: Map<string, PendingTurn>;
   turnQueue: QueuedTurn[];
@@ -64,7 +63,6 @@ export interface WorkerHandle {
 export interface WorkerReadyPayload {
   requestedSessionId: string;
   agentSessionId: string;
-  agentEventLogPath: string;
 }
 
 export interface WorkerExitInfo {
@@ -84,16 +82,16 @@ export interface WorkerRpcControllerDeps {
 }
 
 export interface TurnQueueControllerDeps {
-  requestEffect(
+  request(
     handle: WorkerHandle,
     message: Exclude<ParentToWorkerMessage, { kind: "bridge.ping" | "init" }>,
     timeoutMs?: number,
-  ): BrewvaEffect.Effect<Record<string, unknown> | undefined, Error>;
-  registerPendingTurnEffect(
+  ): Promise<Record<string, unknown> | undefined>;
+  registerPendingTurn(
     handle: WorkerHandle,
     turnId: string,
     timeoutMs: number,
-  ): BrewvaEffect.Effect<SendPromptOutput, Error>;
+  ): Promise<SendPromptOutput>;
   rejectPendingTurn(handle: WorkerHandle, turnId: string, error: unknown): void;
   rekeyPendingTurn(handle: WorkerHandle, fromTurnId: string, toTurnId: string): void;
   trackRecoveryWalId(handle: WorkerHandle, turnId: string, walId: BrewvaWalId): void;
@@ -138,7 +136,6 @@ export function toRegistryEntries(handles: Iterable<WorkerHandle>): ChildRegistr
       pid: handle.child.pid ?? 0,
       startedAt: handle.startedAt,
       agentSessionId: handle.requestedAgentSessionId,
-      agentEventLogPath: handle.agentEventLogPath,
       cwd: handle.cwd,
     }))
     .filter((row) => row.pid > 0);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { assertTurnEnvelope, coerceTurnEnvelope } from "@brewva/brewva-runtime/channels";
+import { assertTurnEnvelope, coerceTurnEnvelope } from "@brewva/brewva-runtime/protocol";
 
 describe("turn envelope coercion", () => {
   test("coerces a valid envelope payload into an explicit success result", () => {

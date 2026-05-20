@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { relative, resolve } from "node:path";
 import type { BrewvaConfig } from "../config/types.js";
+import type { DeepReadonly } from "../core/deep-readonly.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 import {
   analyzeShellCommand,
@@ -20,11 +21,11 @@ export interface ToolBoundaryClassification {
 
 export interface ResolvedBoundaryPolicy {
   commandDenyList: Set<string>;
-  filesystem: BrewvaConfig["security"]["boundaryPolicy"]["filesystem"];
+  filesystem: DeepReadonly<BrewvaConfig["security"]["boundaryPolicy"]["filesystem"]>;
   network: {
     mode: "off" | "deny" | "allowlist";
     allowLoopback: boolean;
-    outbound: BrewvaConfig["security"]["boundaryPolicy"]["network"]["outbound"];
+    outbound: DeepReadonly<BrewvaConfig["security"]["boundaryPolicy"]["network"]["outbound"]>;
   };
 }
 
@@ -162,7 +163,9 @@ export function classifyToolBoundaryRequest(input: {
   };
 }
 
-export function resolveBoundaryPolicy(security: BrewvaConfig["security"]): ResolvedBoundaryPolicy {
+export function resolveBoundaryPolicy(
+  security: DeepReadonly<BrewvaConfig["security"]>,
+): ResolvedBoundaryPolicy {
   const configuredNetwork = security.boundaryPolicy.network;
   if (configuredNetwork.mode === "allowlist") {
     return {

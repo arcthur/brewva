@@ -1,9 +1,9 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import type { AgentRegistry } from "../agent-registry.js";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
 import type { ChannelCoordinator } from "../coordinator.js";
 import { isOwnerAuthorized } from "../policy/acl.js";
+import type { HostedRuntimeAdapterPort } from "../ports.js";
 import type { ChannelControlCommand } from "../types.js";
 import type { ChannelCommandDispatchResult } from "./dispatch.js";
 
@@ -26,7 +26,7 @@ export async function handleChannelAgentCreateCommand(input: {
   turn: TurnEnvelope;
   registry: AgentRegistry;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
 }): Promise<ChannelCommandDispatchResult> {
   const created = await input.registry.createAgent({
     requestedAgentId: input.command.agentId,
@@ -39,9 +39,8 @@ export async function handleChannelAgentCreateCommand(input: {
       `Failed to create agent: ${created.reason}`,
     );
   } else {
-    input.runtime.extensions.hosted.events.record({
+    input.runtime.ops.channel.agent.created({
       sessionId: input.turn.sessionId,
-      type: "channel_agent_created",
       payload: {
         scopeKey: input.command.scopeKey,
         agentId: created.agent.agentId,
@@ -62,7 +61,7 @@ export async function handleChannelAgentDeleteCommand(input: {
   turn: TurnEnvelope;
   registry: AgentRegistry;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   cleanupAgentSessions(agentId: string): Promise<void>;
   disposeAgentRuntime(agentId: string): boolean;
 }): Promise<ChannelCommandDispatchResult> {
@@ -76,9 +75,8 @@ export async function handleChannelAgentDeleteCommand(input: {
   } else {
     await input.cleanupAgentSessions(input.command.agentId);
     input.disposeAgentRuntime(input.command.agentId);
-    input.runtime.extensions.hosted.events.record({
+    input.runtime.ops.channel.agent.deleted({
       sessionId: input.turn.sessionId,
-      type: "channel_agent_deleted",
       payload: {
         scopeKey: input.command.scopeKey,
         agentId: input.command.agentId,
@@ -98,7 +96,7 @@ export async function handleChannelFocusCommand(input: {
   turn: TurnEnvelope;
   registry: AgentRegistry;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
 }): Promise<ChannelCommandDispatchResult> {
   const focused = await input.registry.setFocus(input.command.scopeKey, input.command.agentId);
   if (!focused.ok) {
@@ -108,9 +106,8 @@ export async function handleChannelFocusCommand(input: {
       `Failed to set focus: ${focused.reason}`,
     );
   } else {
-    input.runtime.extensions.hosted.events.record({
+    input.runtime.ops.channel.agent.focusChanged({
       sessionId: input.turn.sessionId,
-      type: "channel_focus_changed",
       payload: {
         scopeKey: input.command.scopeKey,
         agentId: focused.agentId,
@@ -131,11 +128,10 @@ export async function handleChannelRunCommand(input: {
   turn: TurnEnvelope;
   coordinator: Pick<ChannelCoordinator, "fanOut">;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
 }): Promise<ChannelCommandDispatchResult> {
-  input.runtime.extensions.hosted.events.record({
+  input.runtime.ops.channel.fanout.started({
     sessionId: input.turn.sessionId,
-    type: "channel_fanout_started",
     payload: {
       scopeKey: input.command.scopeKey,
       targets: input.command.agentIds,
@@ -154,9 +150,8 @@ export async function handleChannelRunCommand(input: {
         : `- @${entry.agentId}: ERROR ${entry.error}`,
     ),
   ];
-  input.runtime.extensions.hosted.events.record({
+  input.runtime.ops.channel.fanout.finished({
     sessionId: input.turn.sessionId,
-    type: "channel_fanout_finished",
     payload: {
       scopeKey: input.command.scopeKey,
       targets: input.command.agentIds,
@@ -173,7 +168,7 @@ export async function handleChannelDiscussCommand(input: {
   turn: TurnEnvelope;
   coordinator: Pick<ChannelCoordinator, "discuss">;
   replyWriter: ChannelReplyWriter;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
 }): Promise<ChannelCommandDispatchResult> {
   const discussion = await input.coordinator.discuss({
     agentIds: input.command.agentIds,
@@ -187,9 +182,8 @@ export async function handleChannelDiscussCommand(input: {
       : `Discussion failed: ${discussion.reason}`,
   ];
   for (const round of discussion.rounds) {
-    input.runtime.extensions.hosted.events.record({
+    input.runtime.ops.channel.discussion.round({
       sessionId: input.turn.sessionId,
-      type: "channel_discussion_round",
       payload: {
         scopeKey: input.command.scopeKey,
         round: round.round,
@@ -206,7 +200,7 @@ export async function handleChannelRouteAgentCommand(input: {
   command: Extract<ChannelControlCommand, { kind: "route-agent" }>;
   turn: TurnEnvelope;
   registry: AgentRegistry;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   replyWriter: ChannelReplyWriter;
   orchestrationOwners: string[];
   aclModeWhenOwnersEmpty: "open" | "closed";
@@ -227,9 +221,8 @@ export async function handleChannelRouteAgentCommand(input: {
   if (authorized) {
     const focused = await input.registry.setFocus(input.command.scopeKey, input.command.agentId);
     if (focused.ok) {
-      input.runtime.extensions.hosted.events.record({
+      input.runtime.ops.channel.agent.focusChanged({
         sessionId: input.turn.sessionId,
-        type: "channel_focus_changed",
         payload: {
           scopeKey: input.command.scopeKey,
           agentId: focused.agentId,

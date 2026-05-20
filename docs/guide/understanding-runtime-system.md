@@ -10,60 +10,60 @@ method-level contract and caller-specific ports, use:
 ## Runtime Shape
 
 `createBrewvaRuntime(...)` (`packages/brewva-runtime/src/runtime/runtime.ts`) is
-the stable runtime construction boundary. It returns a frozen explicit runtime
-instance with `root`, `hosted`, `tool`, and `operator` ports.
+the stable runtime construction boundary. It returns one frozen four-port
+runtime with `identity`, `config`, `tape`, `kernel`, `model`, `start`, `turn`,
+and `close`.
 
-The `root` port shape is semantic, not implementation-organized:
+The public root shape is constitutional, not implementation-organized:
 
-- `root.authority`
-- `root.inspect`
+- `tape` owns truth
+- `kernel` owns consequence
+- `model` owns attention
+- `turn` owns runtime physics
 
-This is the default semantic runtime vocabulary that product surfaces read
-against. Caller-specific ports narrow it by role: hosted sessions receive the
-`hosted` port, tools receive the `tool` port, and operator products use
-`selectOperatorRuntimePort(instance)`.
-
-The point is not to hide internal machinery. The point is to make the default
-public surface line up with authority boundaries instead of exposing a wide bag
-of mixed runtime mechanisms.
+Gateway hosted code builds `HostedRuntimeAdapterPort` around the public
+four-port runtime. That adapter is package-owned transport/control-plane
+plumbing; it does not recover a private runtime controller, and it must not leak
+back into `@brewva/brewva-runtime`.
 
 ## Surface Semantics
 
-The root surfaces and repo-owned operator port have different jobs:
+The four ports have different jobs:
 
-- `authority` changes commitments, replay truth, admission state, verification
-  sufficiency, or rollback identity
-- `inspect` is read-only and exists for explanation, inspection, and operator
-  products
-- `operator` owns explicit rebuild, hydration, registration, credential binding
-  resolution, hosted observations, and bounded recovery machinery
+- `tape` is the replayable source for committed facts and projections
+- `kernel` is the only authorization and tool-transaction boundary
+- `model` materializes attention from tape-derived state
+- `turn` coordinates provider streaming, budget pressure, retry, interruption,
+  and terminal commit frames
 
-This is a semantic split, not a namespace taxonomy. A concern such as context
-or scheduling may contribute methods to more than one surface.
+This split is an ownership boundary, not a namespace taxonomy. A concern such
+as cost, recovery, or scheduling should be expressed as canonical tape events,
+kernel decisions, model attention, or runtime physics instead of becoming a new
+public root domain.
 
 ## What Stays Internal
 
 Some machinery is still real, but it is not the public runtime contract:
 
-- raw event append outside typed descriptor validation
+- raw canonical tape commit outside runtime/kernel/model internals
 - raw turn-WAL mutation outside recovery scheduler ports
 - service classes, stores, trackers, and replay engines
 
-Repo-owned code may still use those mechanisms through dedicated runtime
-subpaths such as `@brewva/brewva-runtime/recovery`,
-`@brewva/brewva-runtime/event-log`, and controlled typed extension ports, but
-they are not the default integration surface for products or external
-consumers.
+Repo-owned code may still use semantic helpers in
+`@brewva/brewva-runtime/protocol`, policy helpers in
+`@brewva/brewva-runtime/security`, and package-owned infrastructure ports
+such as `@brewva/brewva-gateway/recovery`.
+These subpaths are not alternate runtime roots.
 
 Those subpaths and extension ports are controlled, allowlisted TypeScript ports.
 They do not preserve the removed `@brewva/brewva-runtime/internal` barrel, do
 not expose runtime capability tokens, and do not expose arbitrary service
 instance state.
 
-Inside `packages/brewva-runtime`, implementation ownership follows
-`domain/<name>/` slices. Domains own their `api.ts`, `types.ts`, registrar,
-events, and direct runtime surface factories; cross-domain implementation
-imports go through the API or type seam.
+Inside `packages/brewva-runtime`, new implementation ownership follows the
+four-port folders under `runtime/tape`, `runtime/kernel`, `runtime/model`, and
+`runtime/engine`. Existing `domain/<name>/` slices were deleted and must not be
+used as a pattern to extend.
 
 ## Replay And Durability
 
@@ -105,8 +105,9 @@ runtime contract.
 ## Shared Contract Surface
 
 Shared contracts are defined explicitly in
-`packages/brewva-runtime/src/public/index.ts` and the domain-owned `types.ts`
-modules under `packages/brewva-runtime/src/domain/`, including:
+`packages/brewva-runtime/src/public/index.ts` and the owner-scoped `types.ts`
+modules under `packages/brewva-runtime/src/runtime/` and
+`packages/brewva-runtime/src/runtime/tape/`, including:
 
 - task, truth, schedule, and evidence contracts
 - event, replay, receipt, and WAL contracts

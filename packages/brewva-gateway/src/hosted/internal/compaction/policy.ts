@@ -2,7 +2,7 @@ import type {
   ContextCompactionGateStatus,
   ContextCompactionReason,
   ContextStatus,
-} from "@brewva/brewva-runtime/context";
+} from "@brewva/brewva-runtime/protocol";
 
 export type CompactionPolicyCaller = "manual" | "auto" | "model_downshift";
 
@@ -11,7 +11,6 @@ export type CompactionPolicySkipReason =
   | "recent_compaction"
   | "non_interactive_mode"
   | "agent_active_manual_compaction_unsafe"
-  | "auto_compaction_breaker_open"
   | "auto_compaction_in_flight"
   | "recovery_active"
   | "target_context_not_smaller"
@@ -25,14 +24,9 @@ export interface CompactionPolicyInputs {
   idle?: boolean;
   recoveryPosture?: "idle" | "active";
   autoCompactionInFlight?: boolean;
-  autoCompactionBreakerOpen?: boolean;
   currentContextWindow?: number;
   targetContextWindow?: number;
   usageKnown?: boolean;
-}
-
-export interface CompactionPolicyBreakerState {
-  breakerOpen?: boolean;
 }
 
 export type CompactionPolicyDecision =
@@ -58,10 +52,7 @@ function pressureReason(
   return null;
 }
 
-export function decideCompaction(
-  input: CompactionPolicyInputs,
-  breakerState: CompactionPolicyBreakerState = {},
-): CompactionPolicyDecision {
+export function decideCompaction(input: CompactionPolicyInputs): CompactionPolicyDecision {
   if (input.caller === "manual") {
     return { decision: "execute", caller: input.caller, reason: "manual" };
   }
@@ -108,9 +99,6 @@ export function decideCompaction(
       caller: input.caller,
       reason: "agent_active_manual_compaction_unsafe",
     };
-  }
-  if (input.autoCompactionBreakerOpen === true || breakerState.breakerOpen === true) {
-    return { decision: "skip", caller: input.caller, reason: "auto_compaction_breaker_open" };
   }
   if (input.autoCompactionInFlight === true) {
     return { decision: "skip", caller: input.caller, reason: "auto_compaction_in_flight" };

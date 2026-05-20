@@ -392,7 +392,7 @@ describe("shell command provider", () => {
       kind: "reserved",
       reservation: {
         message: expect.stringContaining("/authority"),
-        redirectCommandId: "runtime.authority",
+        redirectCommandId: "operator.authority",
       },
     });
     expect(provider.lookupSlashName("review")).toMatchObject({

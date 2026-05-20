@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { CredentialVaultService } from "../../../packages/brewva-runtime/src/domain/credentials/credential-vault.js";
+import { CredentialVaultService } from "../../../packages/brewva-runtime/src/credentials/credential-vault.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("credential vault", () => {

@@ -4,7 +4,7 @@ import {
   resolveTurnDeliveryPlan,
   type ChannelCapabilities,
   type TurnEnvelope,
-} from "@brewva/brewva-runtime/channels";
+} from "@brewva/brewva-runtime/protocol";
 
 const BASE_TURN: TurnEnvelope = {
   schema: "brewva.turn.v1",

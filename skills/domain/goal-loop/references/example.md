@@ -6,7 +6,7 @@ Input: "Keep improving coverage. Stop when 85% or after 3 flat runs."
 {
   "loop_contract": {
     "goal": "Raise test coverage to 85%",
-    "scope": ["packages/brewva-runtime/src/domain/"],
+    "scope": ["packages/brewva-runtime/src/runtime/"],
     "cadence": { "type": "delay", "value": 900000 },
     "continuity_mode": "inherit",
     "loop_key": "coverage-raise-2026-04-06",

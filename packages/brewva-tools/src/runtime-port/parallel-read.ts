@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { mapConcurrent } from "@brewva/brewva-std/async";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
-import { recordToolRuntimeEvent, resolveToolRuntimeAuthorityTools } from "./extensions.js";
+import { recordToolRuntimeEvent, resolveToolRuntimeCapabilitiesTools } from "./extensions.js";
 
 const DEFAULT_PARALLEL_READ_BATCH_SIZE = 16;
 const MAX_PARALLEL_READ_BATCH_SIZE = 64;
@@ -195,7 +195,7 @@ export async function withParallelReadSlot<T>(
   work: () => Promise<T>,
   options: ParallelReadSlotOptions = {},
 ): Promise<T> {
-  const tools = resolveToolRuntimeAuthorityTools(runtime);
+  const tools = resolveToolRuntimeCapabilitiesTools(runtime);
   if (!sessionId || !tools?.parallel?.acquireAsync || !tools.parallel.release) {
     return work();
   }

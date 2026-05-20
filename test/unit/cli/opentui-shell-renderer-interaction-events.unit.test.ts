@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
+import { type BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptSessionEvent,
@@ -326,7 +326,7 @@ function createFakeBundle(
         workspaceRoot: process.cwd(),
         agentId: "test-agent",
       },
-      authority: {
+      ops: {
         session: {
           rewind: {
             recordCheckpoint() {},
@@ -336,17 +336,6 @@ function createFakeBundle(
             redo() {
               return { ok: false, reason: "no_redo" };
             },
-          },
-        },
-        proposals: {
-          requests: {
-            decide() {},
-          },
-        },
-      },
-      inspect: {
-        session: {
-          rewind: {
             getState() {
               return {
                 checkpoints: [],
@@ -362,6 +351,7 @@ function createFakeBundle(
         },
         proposals: {
           requests: {
+            decide() {},
             listPending() {
               return approvals;
             },
@@ -373,8 +363,8 @@ function createFakeBundle(
               return [];
             },
           },
-          log: {
-            listReplaySessions() {
+          replay: {
+            listSessions() {
               return replaySessions;
             },
           },

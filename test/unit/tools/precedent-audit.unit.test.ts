@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createPrecedentAuditTool } from "@brewva/brewva-tools/memory";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 let workspace = "";
@@ -31,7 +31,7 @@ describe("precedent audit tool", () => {
         "title: WAL recovery race during replay",
         "module: brewva-runtime",
         "boundaries:",
-        "  - selectOperatorRuntimePort(instance).operator.recovery",
+        "  - gateway-hosted-adapter.ops.recovery",
         "tags:",
         "  - wal",
         "  - recovery",
@@ -45,7 +45,7 @@ describe("precedent audit tool", () => {
       ].join("\n"),
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createPrecedentAuditTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-audit-drift",
@@ -54,7 +54,7 @@ describe("precedent audit tool", () => {
           title: "WAL recovery race during replay",
           problem_kind: "knowledge",
           module: "brewva-runtime",
-          boundaries: ["selectOperatorRuntimePort(instance).operator.recovery"],
+          boundaries: ["gateway-hosted-adapter.ops.recovery"],
           source_artifacts: ["retro_findings"],
           tags: ["wal", "recovery"],
           sections: [
@@ -93,7 +93,7 @@ describe("precedent audit tool", () => {
   test("fails when an active solution record claims it was already superseded", async () => {
     workspace = createTestWorkspace("precedent-audit-status-conflict");
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createPrecedentAuditTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-audit-status-conflict",
@@ -145,7 +145,7 @@ describe("precedent audit tool", () => {
         "problem_kind: bugfix",
         "module: brewva-runtime",
         "boundaries:",
-        "  - selectOperatorRuntimePort(instance).operator.recovery",
+        "  - gateway-hosted-adapter.ops.recovery",
         "tags:",
         "  - wal",
         "  - recovery",
@@ -160,7 +160,7 @@ describe("precedent audit tool", () => {
       ].join("\n"),
     );
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createPrecedentAuditTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-audit-same-rank-conflict",
@@ -169,7 +169,7 @@ describe("precedent audit tool", () => {
           title: "WAL recovery race during replay",
           problem_kind: "bugfix",
           module: "brewva-runtime",
-          boundaries: ["selectOperatorRuntimePort(instance).operator.recovery"],
+          boundaries: ["gateway-hosted-adapter.ops.recovery"],
           source_artifacts: ["investigation_record"],
           tags: ["wal", "recovery"],
           sections: [
@@ -203,7 +203,7 @@ describe("precedent audit tool", () => {
   test("fails malformed promotion-candidate derivative links", async () => {
     workspace = createTestWorkspace("precedent-audit-promotion-link");
 
-    const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
     const tool = createPrecedentAuditTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-audit-promotion-link",

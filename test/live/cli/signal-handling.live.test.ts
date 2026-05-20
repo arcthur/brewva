@@ -2,7 +2,10 @@ import { describe, expect } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { hasProviderRateLimitText, skipLiveForProviderRateLimit } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
-import { parseEventFile, requireLatestEventFile } from "../../helpers/events.js";
+import {
+  parseCanonicalTapeOperationalEvents,
+  requireLatestCanonicalTapeFile,
+} from "../../helpers/events.js";
 import { runLive } from "../../helpers/live.js";
 import { sleep, withTimeout } from "../../helpers/process.js";
 import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
@@ -15,10 +18,10 @@ async function waitForEventType(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const eventFile = requireLatestEventFile(workspace, `wait for ${eventType}`);
-      const events = parseEventFile(eventFile);
+      const tapeFile = requireLatestCanonicalTapeFile(workspace, `wait for ${eventType}`);
+      const events = parseCanonicalTapeOperationalEvents(tapeFile);
       if (events.some((event) => event.type === eventType)) {
-        return eventFile;
+        return tapeFile;
       }
     } catch {
       // Event file persistence is asynchronous; keep polling until timeout.
@@ -54,7 +57,7 @@ async function waitForExit(
 }
 
 describe("live: signal handling", () => {
-  runLive("SIGINT emits session_turn_transition and exits with code 130", async () => {
+  runLive("SIGINT exits without legacy hosted transition truth", async () => {
     const workspace = createWorkspace("signal");
     writeMinimalConfig(workspace);
 
@@ -101,14 +104,9 @@ describe("live: signal handling", () => {
       const exit = await waitForExit(child, 60_000);
       assertInterruptedExit(exit);
 
-      const eventFile = requireLatestEventFile(workspace, "signal live session");
-      const events = parseEventFile(eventFile, { strict: true });
-      const signalTransition = events.findLast(
-        (event) =>
-          event.type === "session_turn_transition" && event.payload?.reason === "signal_interrupt",
-      );
-      expect(signalTransition?.type).toBe("session_turn_transition");
-      expect(signalTransition?.payload?.status).toBe("completed");
+      const tapeFile = requireLatestCanonicalTapeFile(workspace, "signal live session");
+      const events = parseCanonicalTapeOperationalEvents(tapeFile, { strict: true });
+      expect(events.some((event) => event.type === "session_turn_transition")).toBe(false);
     } catch (error) {
       if (skipLiveForProviderRateLimit("signal.live", stdout, stderr)) {
         return;
@@ -180,14 +178,9 @@ describe("live: signal handling", () => {
       expect(stdout).not.toContain('"type":"brewva_event_bundle"');
       expect(stdout).not.toContain('"schema":"brewva.stream.v1"');
 
-      const eventFile = requireLatestEventFile(workspace, "signal json session");
-      const events = parseEventFile(eventFile, { strict: true });
-      const signalTransition = events.findLast(
-        (event) =>
-          event.type === "session_turn_transition" && event.payload?.reason === "signal_interrupt",
-      );
-      expect(signalTransition?.type).toBe("session_turn_transition");
-      expect(signalTransition?.payload?.status).toBe("completed");
+      const tapeFile = requireLatestCanonicalTapeFile(workspace, "signal json session");
+      const events = parseCanonicalTapeOperationalEvents(tapeFile, { strict: true });
+      expect(events.some((event) => event.type === "session_turn_transition")).toBe(false);
     } catch (error) {
       if (skipLiveForProviderRateLimit("signal-json.live", stdout, stderr)) {
         return;

@@ -1,13 +1,17 @@
 import {
-  BrewvaDeferred,
-  BrewvaEffect,
-  BrewvaExit,
-  BrewvaQueue,
-  BrewvaScope,
-  runPromiseAtBoundary,
+  runBoundaryOperation,
   runSyncAtBoundary,
   type BrewvaBoundaryError,
 } from "@brewva/brewva-effect";
+import {
+  BrewvaDeferred,
+  BrewvaContext,
+  BrewvaEffect,
+  BrewvaExit,
+  BrewvaLayer,
+  BrewvaQueue,
+  BrewvaScope,
+} from "@brewva/brewva-effect/primitives";
 
 export class ChannelSerialQueueClosedError extends Error {
   constructor(name: string) {
@@ -40,6 +44,23 @@ export interface ChannelEffectSerialQueue {
   whenIdle(): Promise<void>;
   isIdle(): boolean;
   close(): Promise<void>;
+}
+
+const makeChannelEffectSerialQueue = BrewvaEffect.fn("gateway.channel.serialQueue.make")(function* (
+  options: ChannelEffectSerialQueueOptions,
+) {
+  const queue = createChannelEffectSerialQueue(options);
+  yield* BrewvaEffect.addFinalizer(() => BrewvaEffect.promise(() => queue.close()));
+  return queue;
+});
+
+export class ChannelEffectSerialQueueService extends BrewvaContext.Service<
+  ChannelEffectSerialQueueService,
+  ChannelEffectSerialQueue
+>()("@brewva/Gateway/ChannelEffectSerialQueue") {
+  static layer(options: ChannelEffectSerialQueueOptions) {
+    return BrewvaLayer.effect(this, makeChannelEffectSerialQueue(options));
+  }
 }
 
 export function createChannelEffectSerialQueue(
@@ -82,7 +103,8 @@ export function createChannelEffectSerialQueue(
     ),
   );
 
-  const drainLaunch = runPromiseAtBoundary(
+  const drainLaunch = runBoundaryOperation(
+    "gateway.channel.serialQueue.drain",
     BrewvaScope.provide(scope)(
       drain.pipe(
         BrewvaEffect.forkScoped({
@@ -93,7 +115,10 @@ export function createChannelEffectSerialQueue(
   ).catch(() => undefined);
 
   const offerRequest = async (request: ChannelSerialQueueRequest<unknown>): Promise<boolean> => {
-    return await runPromiseAtBoundary(BrewvaQueue.offer(queue, request));
+    return await runBoundaryOperation(
+      "gateway.channel.serialQueue.offer",
+      BrewvaQueue.offer(queue, request),
+    );
   };
 
   return {
@@ -117,7 +142,10 @@ export function createChannelEffectSerialQueue(
         throw closeError();
       }
 
-      const result = runPromiseAtBoundary(BrewvaDeferred.await(deferred)).finally(() => {
+      const result = runBoundaryOperation(
+        "gateway.channel.serialQueue.await",
+        BrewvaDeferred.await(deferred),
+      ).finally(() => {
         pending.delete(deferred);
         pendingPromises.delete(result);
       });
@@ -140,11 +168,17 @@ export function createChannelEffectSerialQueue(
         return;
       }
       closed = true;
-      await runPromiseAtBoundary(BrewvaQueue.interrupt(queue));
+      await runBoundaryOperation(
+        "gateway.channel.serialQueue.interrupt",
+        BrewvaQueue.interrupt(queue),
+      );
       await this.whenIdle();
       failPending(closeError());
       await drainLaunch;
-      await runPromiseAtBoundary(BrewvaScope.close(scope, BrewvaExit.succeed(undefined)));
+      await runBoundaryOperation(
+        "gateway.channel.serialQueue.closeScope",
+        BrewvaScope.close(scope, BrewvaExit.succeed(undefined)),
+      );
     },
   };
 }

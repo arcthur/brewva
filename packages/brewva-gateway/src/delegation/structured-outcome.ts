@@ -1,4 +1,4 @@
-import { normalizeReviewLaneName } from "@brewva/brewva-runtime/skills";
+import { normalizeReviewLaneName } from "@brewva/brewva-runtime/protocol";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import type { BrewvaQuestionOption, BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";
@@ -188,7 +188,7 @@ function readVerifierCheck(value: unknown): VerifierCheck | undefined {
   };
 }
 
-function appendUnique(values: string[] | undefined, message: string): string[] {
+function appendUnique(values: readonly string[] | undefined, message: string): string[] {
   const next = values ? [...values] : [];
   if (!next.includes(message)) {
     next.push(message);
@@ -378,6 +378,12 @@ function parseConsultOutcomeData(
   consultKind: ExplorerConsultKind | undefined,
   payload: Record<string, unknown>,
 ): SubagentOutcomeData | undefined {
+  if (
+    ("openQuestions" in payload || "open_questions" in payload) &&
+    !Array.isArray(payload.followUpQuestions)
+  ) {
+    return undefined;
+  }
   const payloadConsultKind = readConsultKind(payload.consultKind);
   const resolvedConsultKind = consultKind ?? payloadConsultKind;
   if (!resolvedConsultKind || (payloadConsultKind && payloadConsultKind !== resolvedConsultKind)) {
@@ -615,7 +621,10 @@ export function summarizeStructuredOutcomeData(data: SubagentOutcomeData): strin
   if (data.kind === "evidence" || data.kind === "knowledge") {
     return data.summary;
   }
-  return data.patchSummary ?? data.changes?.[0]?.summary ?? data.changes?.[0]?.path;
+  if (data.kind === "patch") {
+    return data.patchSummary ?? data.changes?.[0]?.summary ?? data.changes?.[0]?.path;
+  }
+  return undefined;
 }
 
 export function extractStructuredOutcomeData(input: {

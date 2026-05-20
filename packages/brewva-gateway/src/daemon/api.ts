@@ -11,6 +11,17 @@ export {
 } from "./pid.js";
 export { buildScheduleWakeupMessage, executeScheduleIntentRun } from "./schedule-runner.js";
 export {
+  createSchedulerService,
+  createRecoveryWalRecovery,
+  createRecoveryWalStore,
+  type RecoveryWalRecovery,
+  type RecoveryWalRecoverHandler,
+  type RecoveryWalStore,
+  type RecoveryWalStoredRecord,
+  type SchedulerService,
+  type SchedulerRuntimePort,
+} from "./recovery.js";
+export {
   type OpenSessionInput,
   type OpenSessionResult,
   type SendPromptOptions,

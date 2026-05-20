@@ -4,7 +4,7 @@ import {
   DEFAULT_CHANNEL_CAPABILITIES,
   type ChannelAdapter,
   type TurnEnvelope,
-} from "@brewva/brewva-runtime/channels";
+} from "@brewva/brewva-runtime/protocol";
 import { assertRejectsWithMessage } from "../../../helpers.js";
 import { createRuntimeFixture } from "../../../helpers/runtime.js";
 

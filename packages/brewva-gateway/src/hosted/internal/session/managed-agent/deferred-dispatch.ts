@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaHostCustomMessage } from "@brewva/brewva-substrate/host-api";
 import {
   buildBrewvaPromptText,
@@ -9,13 +10,13 @@ import type {
   BrewvaPromptQueueBehavior,
   BrewvaQueuedPromptView,
 } from "@brewva/brewva-substrate/session";
-import type { BrewvaTurnLoopMessage } from "@brewva/brewva-substrate/turn";
 
-export type QueuedUserMessage = Extract<BrewvaTurnLoopMessage, { role: "user" }>;
+export type QueuedUserMessage = Extract<BrewvaAgentProtocolMessage, { role: "user" }>;
 
 export interface QueuedPromptEntry {
   view: BrewvaQueuedPromptView;
   message: QueuedUserMessage;
+  parts: BrewvaPromptContentPart[];
 }
 
 export type PendingQueuedItem =
@@ -27,7 +28,7 @@ export type PendingQueuedItem =
 
 function toAgentUserContent(
   parts: readonly BrewvaPromptContentPart[],
-): Extract<BrewvaTurnLoopMessage, { role: "user" }>["content"] {
+): Extract<BrewvaAgentProtocolMessage, { role: "user" }>["content"] {
   return parts.map((part) => {
     if (part.type === "text") {
       return { type: "text", text: part.text };
@@ -52,7 +53,9 @@ function toAgentUserContent(
 export class ManagedSessionDeferredTurnState {
   readonly #queuedPrompts: QueuedPromptEntry[] = [];
   readonly #queuedPromptIdsByMessage = new WeakMap<QueuedUserMessage, string>();
-  readonly #pendingNextTurnMessages: Array<Extract<BrewvaTurnLoopMessage, { role: "custom" }>> = [];
+  readonly #pendingNextTurnMessages: Array<
+    Extract<BrewvaAgentProtocolMessage, { role: "custom" }>
+  > = [];
 
   getQueuedPromptViews(): readonly BrewvaQueuedPromptView[] {
     return this.#queuedPrompts.map((entry) => entry.view);
@@ -76,7 +79,7 @@ export class ManagedSessionDeferredTurnState {
       behavior,
     });
     this.#queuedPromptIdsByMessage.set(message, promptId);
-    const entry = { view, message };
+    const entry = { view, message, parts: cloneBrewvaPromptContentParts(parts) };
     this.#queuedPrompts.push(entry);
     return entry;
   }
@@ -113,14 +116,22 @@ export class ManagedSessionDeferredTurnState {
     return true;
   }
 
-  pushNextTurnMessage(message: Extract<BrewvaTurnLoopMessage, { role: "custom" }>): void {
+  pushNextTurnMessage(message: Extract<BrewvaAgentProtocolMessage, { role: "custom" }>): void {
     this.#pendingNextTurnMessages.push(message);
   }
 
-  consumeNextTurnMessages(): readonly Extract<BrewvaTurnLoopMessage, { role: "custom" }>[] {
+  consumeNextTurnMessages(): readonly Extract<BrewvaAgentProtocolMessage, { role: "custom" }>[] {
     const messages = [...this.#pendingNextTurnMessages];
     this.#pendingNextTurnMessages.length = 0;
     return messages;
+  }
+
+  consumeQueuedPrompt(): QueuedPromptEntry | null {
+    const entry = this.#queuedPrompts.shift() ?? null;
+    if (entry) {
+      this.#queuedPromptIdsByMessage.delete(entry.message);
+    }
+    return entry;
   }
 
   hasPending(agentHasQueuedMessages: boolean): boolean {

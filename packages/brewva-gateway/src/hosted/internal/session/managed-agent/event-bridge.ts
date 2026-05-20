@@ -1,21 +1,25 @@
-import { MODEL_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { DEFAULT_CONTEXT_STATE, type ContextState } from "@brewva/brewva-substrate/contracts";
+import { MODEL_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import type {
+  BrewvaAgentProtocolCustomMessage,
+  BrewvaAgentProtocolEvent,
+  BrewvaAgentProtocolMessage,
+} from "@brewva/brewva-substrate/agent-protocol";
 import type {
   BrewvaHostContext,
   BrewvaHostMessageVisibilityPatch,
   BrewvaHostPluginRunner,
 } from "@brewva/brewva-substrate/host-api";
-import type { BrewvaPromptSessionEvent, SessionPhase } from "@brewva/brewva-substrate/session";
-import type {
-  BrewvaTurnLoopCustomMessage,
-  BrewvaTurnLoopEvent,
-  BrewvaTurnLoopMessage,
-} from "@brewva/brewva-substrate/turn";
+import {
+  DEFAULT_CONTEXT_STATE,
+  type BrewvaPromptSessionEvent,
+  type ContextState,
+  type SessionPhase,
+} from "@brewva/brewva-substrate/session";
 
 function applyMessageEndTransform(
-  original: BrewvaTurnLoopMessage,
+  original: BrewvaAgentProtocolMessage,
   visibility: BrewvaHostMessageVisibilityPatch,
-): BrewvaTurnLoopMessage {
+): BrewvaAgentProtocolMessage {
   return {
     ...original,
     ...(visibility.display !== undefined ? { display: visibility.display } : {}),
@@ -44,7 +48,7 @@ export interface ManagedSessionEventBridgeOptions {
   runner: BrewvaHostPluginRunner;
   createHostContext: () => BrewvaHostContext;
   emitToListeners: (event: BrewvaPromptSessionEvent) => void;
-  appendMessage: (message: BrewvaTurnLoopMessage) => void;
+  appendMessage: (message: BrewvaAgentProtocolMessage) => void;
   appendCustomMessageEntry: (
     customType: string,
     content: string | Array<{ type: string } & Record<string, unknown>>,
@@ -177,7 +181,7 @@ export class ManagedSessionEventBridge {
     });
   }
 
-  async emitTurnLoopEvent(event: BrewvaTurnLoopEvent): Promise<BrewvaTurnLoopEvent> {
+  async emitTurnLoopEvent(event: BrewvaAgentProtocolEvent): Promise<BrewvaAgentProtocolEvent> {
     const ctx = this.#createHostContext();
     switch (event.type) {
       case "agent_start":
@@ -307,7 +311,7 @@ export class ManagedSessionEventBridge {
   }
 
   async appendPassiveCustomMessage(
-    customMessage: BrewvaTurnLoopCustomMessage,
+    customMessage: BrewvaAgentProtocolCustomMessage,
     options?: { transcript?: boolean },
   ): Promise<void> {
     const persistedMessage = options?.transcript

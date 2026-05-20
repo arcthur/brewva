@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import { TURN_INPUT_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import {
+  BOX_RELEASED_EVENT_TYPE,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import {
@@ -16,6 +19,10 @@ type RecordedExecTestEvent = {
   payload?: Record<string, unknown>;
   timestamp?: number;
   skipTapeCheckpoint?: boolean;
+};
+
+type RuntimeExecTestEventInput = Omit<RecordedExecTestEvent, "payload"> & {
+  payload?: object;
 };
 
 export function extractTextContent(result: {
@@ -114,7 +121,7 @@ export function createRuntimeForExecTests(input?: {
 
   const runtimeFixture = createRuntimeFixture({
     config,
-    inspect: {
+    capabilities: {
       events:
         turnPromptText === undefined
           ? undefined
@@ -145,25 +152,29 @@ export function createRuntimeForExecTests(input?: {
     },
   });
 
+  const recordEvent = (event: RuntimeExecTestEventInput): undefined => {
+    events.push({
+      sessionId: event.sessionId,
+      type: event.type,
+      turn: event.turn,
+      payload: event.payload as Record<string, unknown> | undefined,
+      timestamp: event.timestamp,
+      skipTapeCheckpoint: event.skipTapeCheckpoint,
+    });
+    return undefined;
+  };
+  const runtimeOps = runtimeFixture.ops;
+  runtimeOps.tools.execution.recordAudit = (event: RuntimeExecTestEventInput) => recordEvent(event);
+  runtimeOps.tools.lifecycle.boxReleased = (event: RuntimeExecTestEventInput) =>
+    recordEvent({ ...event, type: BOX_RELEASED_EVENT_TYPE });
+
   const runtime: BrewvaBundledToolRuntime = {
     identity: runtimeFixture.identity,
     config: runtimeFixture.config,
-    authority: runtimeFixture.authority,
-    inspect: runtimeFixture.inspect,
+    capabilities: runtimeOps,
     boxPlane: input?.boxPlane ?? createInMemoryBoxPlane(),
     extensions: {
       tools: {
-        recordEvent: (event) => {
-          events.push({
-            sessionId: event.sessionId,
-            type: event.type,
-            turn: event.turn,
-            payload: event.payload as Record<string, unknown> | undefined,
-            timestamp: event.timestamp,
-            skipTapeCheckpoint: event.skipTapeCheckpoint,
-          });
-          return undefined;
-        },
         onClearState: (listener) => {
           clearStateListeners.push(listener);
         },

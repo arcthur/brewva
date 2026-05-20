@@ -1,9 +1,10 @@
-import { SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type, type Static } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
+import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { failTextResult, textResult, toolDetails } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -69,7 +70,7 @@ export function createSubagentKnowledgeAdoptTool(options: BrewvaToolOptions): To
         );
       }
       const sessionId = getSessionId(ctx);
-      runtime.extensions?.tools?.recordEvent?.({
+      recordToolRuntimeEvent(runtime, {
         sessionId,
         type: SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE,
         payload: {

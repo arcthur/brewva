@@ -1,4 +1,5 @@
-import { BrewvaEffect, runEdgeOperation } from "@brewva/brewva-effect";
+import { runEdgeOperation } from "@brewva/brewva-effect";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
 import type {
   CliInteractiveSessionOptions,

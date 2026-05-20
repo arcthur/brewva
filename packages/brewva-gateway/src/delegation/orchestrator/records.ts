@@ -1,5 +1,4 @@
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
-import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/delegation";
+import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
 import type {
   DelegationPacket,
   DelegationTaskPacket,
@@ -8,6 +7,8 @@ import type {
   SubagentRunResult,
   SubagentStartResult,
 } from "@brewva/brewva-tools/contracts";
+import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
+import { recordRuntimeWorkbenchNote } from "../../hosted/api.js";
 import { HostedDelegationStore, cloneDelegationRunRecord } from "../delegation-store.js";
 import type { HostedDelegationTarget } from "../targets.js";
 
@@ -128,7 +129,7 @@ export function mergeDeliveryRecord(
 }
 
 export function deliverDelegationOutcome(input: {
-  runtime: BrewvaRuntimeRoot;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   delegate: string;
   outcome: SubagentOutcome;
@@ -142,7 +143,7 @@ export function deliverDelegationOutcome(input: {
   });
   let supplementalAppended = false;
   if (input.delivery.returnMode === "supplemental") {
-    input.runtime.authority.workbench.note(input.sessionId, {
+    recordRuntimeWorkbenchNote(input.runtime, input.sessionId, {
       content,
       sourceRefs: [input.outcome.runId],
       reason: input.delivery.returnScopeId ?? `subagent:${input.delegate}`,

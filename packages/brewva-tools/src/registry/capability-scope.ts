@@ -62,7 +62,7 @@ function createScopedRuntimePort<TPort extends object>(
 function createScopedRoot<TGroup extends object>(
   toolName: string,
   group: TGroup,
-  capabilityPrefix: "authority" | "inspect",
+  capabilityPrefix: "capabilities",
   allowedCapabilities: ReadonlySet<string>,
 ): TGroup {
   return createScopedRuntimePort(toolName, group, capabilityPrefix, allowedCapabilities);
@@ -75,32 +75,18 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
   const allowedCapabilities = new Set<string>(getBrewvaToolRequiredCapabilities(toolName));
   assertRequiredCapabilitiesInInventory(toolName, [...allowedCapabilities]);
   let changed = false;
-  let authority = runtime.authority;
-  let inspect = runtime.inspect;
+  let capabilities = runtime.capabilities;
   let extensions = runtime.extensions;
 
-  if (runtime.authority && typeof runtime.authority === "object") {
-    const scopedAuthority = createScopedRoot(
+  if (runtime.capabilities && typeof runtime.capabilities === "object") {
+    const scopedCapabilities = createScopedRoot(
       toolName,
-      runtime.authority,
-      "authority",
+      runtime.capabilities,
+      "capabilities",
       allowedCapabilities,
     );
-    if (scopedAuthority !== runtime.authority) {
-      authority = scopedAuthority;
-      changed = true;
-    }
-  }
-
-  if (runtime.inspect && typeof runtime.inspect === "object") {
-    const scopedInspect = createScopedRoot(
-      toolName,
-      runtime.inspect,
-      "inspect",
-      allowedCapabilities,
-    );
-    if (scopedInspect !== runtime.inspect) {
-      inspect = scopedInspect;
+    if (scopedCapabilities !== runtime.capabilities) {
+      capabilities = scopedCapabilities;
       changed = true;
     }
   }
@@ -127,8 +113,7 @@ export function createCapabilityScopedToolRuntime<T extends BrewvaToolRuntime>(
   return attachRuntimeSourceIdentity(
     {
       ...runtime,
-      authority,
-      inspect,
+      capabilities,
       ...(extensions ? { extensions } : {}),
     },
     runtime,

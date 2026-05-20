@@ -1,12 +1,12 @@
+import { BrewvaConfigService } from "@brewva/brewva-effect";
 import {
   BrewvaConfig,
-  BrewvaConfigService,
   BrewvaContext,
   BrewvaEffect,
   BrewvaLayer,
   BrewvaSchema,
   BrewvaStream,
-} from "@brewva/brewva-effect";
+} from "@brewva/brewva-effect/primitives";
 import type { Api, ThinkingBudgets, ThinkingLevel, Transport } from "./api.js";
 import type {
   ProviderCacheCapability,

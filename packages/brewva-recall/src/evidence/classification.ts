@@ -14,7 +14,7 @@ import {
   CLAIM_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   type BrewvaEventRecord,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import type { RecallEvidenceStrength, RecallTrustLabel } from "../types.js";
 
 export const RECALL_KERNEL_CLAIM_TAPE_EVENT_TYPES = [CLAIM_EVENT_TYPE] as const;

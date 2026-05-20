@@ -1,16 +1,19 @@
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/events";
-import { TASK_STALL_ADJUDICATED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
-import { deriveWorkflowStatus } from "@brewva/brewva-runtime/projection";
+import { type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import {
+  TASK_STALL_ADJUDICATED_EVENT_TYPE,
+  deriveWorkflowStatus,
+} from "@brewva/brewva-runtime/protocol";
 import type {
   WorkflowArtifact,
   WorkflowFinishView,
   WorkflowLaneStatus,
-} from "@brewva/brewva-runtime/projection";
-import { coerceTaskStallAdjudicatedPayload } from "@brewva/brewva-runtime/task";
+} from "@brewva/brewva-runtime/protocol";
+import { coerceTaskStallAdjudicatedPayload } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
+import { readWorkflowStatusState } from "../../runtime-port/workflow-status.js";
 import { textResult, withVerdict } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -89,7 +92,7 @@ function overallVerdict(input: {
   verifier: WorkflowLaneStatus;
   verification: WorkflowLaneStatus;
   ship: WorkflowLaneStatus;
-  acceptance: "not_required" | WorkflowLaneStatus;
+  acceptance: WorkflowLaneStatus;
 }): "pass" | "fail" | "inconclusive" {
   if (input.ship === "ready") return "pass";
   if (
@@ -186,16 +189,8 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
-      const events = workflowStatusTool.runtime.inspect.events.records.query(sessionId);
-      const taskState = workflowStatusTool.runtime.inspect.task.state.get(sessionId);
-      const openToolCalls =
-        workflowStatusTool.runtime.inspect.session.lifecycle.getOpenToolCalls(sessionId);
-      const uncleanShutdownDiagnostic =
-        workflowStatusTool.runtime.inspect.session.lifecycle.getUncleanShutdownDiagnostic(
-          sessionId,
-        );
-      const pendingWorkerResults =
-        workflowStatusTool.runtime.inspect.session.workerResults.list(sessionId);
+      const { events, taskState, openToolCalls, uncleanShutdownDiagnostic, pendingWorkerResults } =
+        readWorkflowStatusState(workflowStatusTool.runtime, sessionId);
       const pendingDelegationOutcomes = await listPendingDelegationOutcomes(
         workflowStatusTool.runtime,
         sessionId,

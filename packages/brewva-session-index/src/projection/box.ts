@@ -1,4 +1,4 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/events";
+import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import type { SessionIndexBox } from "../api.js";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import type { SessionIndexQueryPort } from "../query/port.js";

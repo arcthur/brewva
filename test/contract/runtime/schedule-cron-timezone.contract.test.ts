@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getNextCronRunAt, parseCronExpression } from "@brewva/brewva-runtime/schedule";
+import { getNextCronRunAt, parseCronExpression } from "@brewva/brewva-runtime/protocol";
 
 describe("schedule cron timezone boundary", () => {
   test("spring-forward skips nonexistent local hour", () => {
@@ -14,7 +14,7 @@ describe("schedule cron timezone boundary", () => {
     });
 
     // 2026-03-08 02:30 local does not exist; next match is 2026-03-09 02:30 EDT.
-    expect(nextRunAt).toBe(Date.UTC(2026, 2, 9, 6, 30, 0, 0));
+    expect(nextRunAt.getTime()).toBe(Date.UTC(2026, 2, 9, 6, 30, 0, 0));
   });
 
   test("fall-back picks first 01:30 before clock rollback", () => {
@@ -29,7 +29,7 @@ describe("schedule cron timezone boundary", () => {
     });
 
     // First occurrence of 01:30 local on fallback day (still EDT).
-    expect(nextRunAt).toBe(Date.UTC(2026, 10, 1, 5, 30, 0, 0));
+    expect(nextRunAt.getTime()).toBe(Date.UTC(2026, 10, 1, 5, 30, 0, 0));
   });
 
   test("fall-back can still hit second 01:30 after first occurrence passed", () => {
@@ -43,6 +43,6 @@ describe("schedule cron timezone boundary", () => {
       timeZone: "America/New_York",
     });
 
-    expect(nextRunAt).toBe(Date.UTC(2026, 10, 1, 6, 30, 0, 0));
+    expect(nextRunAt.getTime()).toBe(Date.UTC(2026, 10, 1, 6, 30, 0, 0));
   });
 });

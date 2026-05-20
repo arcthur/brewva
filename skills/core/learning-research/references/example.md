@@ -1,17 +1,17 @@
 # Concrete Example
 
-Input: "Before we change hosted recovery posture, find repository precedent about `session_turn_transition`, fallback recovery, and `workflow_status`."
+Input: "Before we change hosted recovery posture, find repository precedent about canonical runtime causes, fallback recovery, and `workflow_status`."
 
 Output:
 
 ```json
 {
-  "knowledge_brief": "No direct `docs/solutions/**` precedent covers this exact provider-fallback posture case. Adjacent stable references do establish three guardrails: `session_turn_transition` is the rebuildable hosted-flow contract, recovery posture is derived from transition state rather than process-local memory, and `workflow_status` is advisory only.",
+  "knowledge_brief": "No direct `docs/solutions/**` precedent covers this exact provider-fallback posture case. Adjacent stable references do establish three guardrails: canonical runtime causes are the recovery contract, recovery posture is derived from tape projection rather than process-local memory, and `workflow_status` is advisory only.",
   "precedent_refs": [
     {
       "path": "docs/reference/events.md",
       "source_type": "reference",
-      "key_lesson": "`session_turn_transition` is the durable contract for hosted recovery and interrupt posture"
+      "key_lesson": "Canonical runtime causes are the durable contract for recovery and interrupt posture"
     },
     {
       "path": "docs/reference/session-lifecycle.md",
@@ -19,18 +19,18 @@ Output:
       "key_lesson": "Recovery state is rebuilt from durable runtime surfaces, not from process-local session memory"
     },
     {
-      "path": "test/unit/gateway/turn-transition.unit.test.ts",
+      "path": "test/fitness/gateway/recovery-decision-union.fitness.test.ts",
       "source_type": "test_anchor",
-      "key_lesson": "Transition sequences and snapshot clearing already have unit-level contract coverage"
+      "key_lesson": "Gateway recovery cannot reintroduce the old hosted decision lattice"
     }
   ],
   "preventive_checks": [
     {
-      "check": "If a recovery path emits `status=entered`, tests must prove a later closing transition for the same reason and attempt",
-      "source": "docs/reference/events.md + test/unit/gateway/turn-transition.unit.test.ts"
+      "check": "If a recovery path emits a canonical cause, tests must prove its tape projection and hosted frame mapping",
+      "source": "docs/reference/runtime.md + test/fitness/gateway/recovery-decision-union.fitness.test.ts"
     },
     {
-      "check": "Do not fix recovery posture only in `workflow_status`; the hosted transition snapshot must also clear",
+      "check": "Do not fix recovery posture only in `workflow_status`; canonical tape projection must also explain it",
       "source": "docs/reference/session-lifecycle.md"
     },
     {
@@ -38,7 +38,7 @@ Output:
       "source": "inferred from runtime plugin posture rules"
     }
   ],
-  "precedent_query_summary": "Searched `docs/solutions/**` for `provider_fallback_retry`, `session_turn_transition`, `recovery posture`, and `workflow_status`; no direct solution record matched. Then checked `docs/reference/events.md`, `docs/reference/session-lifecycle.md`, and `test/unit/gateway/turn-transition.unit.test.ts` for stable contract anchors.",
+  "precedent_query_summary": "Searched `docs/solutions/**` for `provider_retry`, canonical runtime causes, `recovery posture`, and `workflow_status`; no direct solution record matched. Then checked `docs/reference/runtime.md`, `docs/reference/session-lifecycle.md`, and `test/fitness/gateway/recovery-decision-union.fitness.test.ts` for stable contract anchors.",
   "precedent_consult_status": "no_relevant_precedent_found"
 }
 ```

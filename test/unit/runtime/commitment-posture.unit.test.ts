@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   deriveEffectCommitmentPosture,
   resolveToolRecoveryPreparation,
-} from "@brewva/brewva-runtime/governance";
-import type { ToolActionPolicy } from "@brewva/brewva-runtime/governance";
+} from "@brewva/brewva-runtime/protocol";
+import type { ToolActionPolicy } from "@brewva/brewva-runtime/protocol";
 
 const workspacePatchPolicy: ToolActionPolicy = {
   actionClass: "workspace_patch",

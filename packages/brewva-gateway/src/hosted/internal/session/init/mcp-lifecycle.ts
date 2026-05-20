@@ -1,18 +1,17 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { HostedMcpOperationalEvent, HostedMcpToolBundle } from "./mcp-tools.js";
 import type { HostedSession } from "./session-assembly.js";
 
 export function recordHostedBootstrap(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   cwd: string;
   configPath?: string;
   managedToolMode: ManagedToolMode;
 }): void {
-  input.runtime.extensions.hosted.events.record({
+  input.runtime.ops.session.lifecycle.bootstrap({
     sessionId: input.sessionId,
-    type: "session_bootstrap",
     payload: {
       cwd: input.cwd,
       agentId: input.runtime.identity.agentId,
@@ -21,7 +20,7 @@ export function recordHostedBootstrap(input: {
         workspaceRoot: input.runtime.identity.workspaceRoot,
         configPath: input.configPath ?? null,
         artifactRoots: {
-          eventsDir: input.runtime.config.infrastructure.events.dir,
+          tapeDir: input.runtime.config.tape.dir,
           recoveryWalDir: input.runtime.config.infrastructure.recoveryWal.dir,
           projectionDir: input.runtime.config.projection.dir,
           ledgerPath: input.runtime.config.ledger.path,
@@ -31,18 +30,23 @@ export function recordHostedBootstrap(input: {
   });
 }
 
-export function createHostedMcpEventRecorder(runtime: BrewvaHostedRuntimePort): {
+export function createHostedMcpEventRecorder(runtime: HostedRuntimeAdapterPort): {
   setSessionId(sessionId: string): void;
   record(event: HostedMcpOperationalEvent): void;
 } {
   let sessionId: string | undefined;
   const pending: HostedMcpOperationalEvent[] = [];
   const recordNow = (event: HostedMcpOperationalEvent, activeSessionId: string) => {
-    runtime.extensions.hosted.events.record({
-      sessionId: activeSessionId,
-      type: event.type,
-      payload: event.payload,
-    });
+    const input = { sessionId: activeSessionId, payload: event.payload };
+    if (event.type === "mcp_server_connected") {
+      runtime.ops.session.mcp.serverConnected(input);
+    } else if (event.type === "mcp_server_disconnected") {
+      runtime.ops.session.mcp.serverDisconnected(input);
+    } else if (event.type === "mcp_tool_list_refreshed") {
+      runtime.ops.session.mcp.toolListRefreshed(input);
+    } else {
+      runtime.ops.session.mcp.toolCallFailed(input);
+    }
   };
   return {
     setSessionId(nextSessionId) {
@@ -65,7 +69,7 @@ const MCP_BUNDLE_DISPOSE_TIMEOUT_MS = 5_000;
 
 export function installHostedMcpBundleDisposal(
   session: HostedSession,
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   bundle: HostedMcpToolBundle | undefined,
   options: { shouldRecordDisposeFailure?: () => boolean } = {},
@@ -89,9 +93,8 @@ export function installHostedMcpBundleDisposal(
       if (options.shouldRecordDisposeFailure && !options.shouldRecordDisposeFailure()) {
         return;
       }
-      runtime.extensions.hosted.events.record({
+      runtime.ops.session.mcp.serverDisconnected({
         sessionId,
-        type: "mcp_server_disconnected",
         payload: {
           disposeFailed: true,
           ...payload,

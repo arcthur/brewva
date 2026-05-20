@@ -1,4 +1,4 @@
-import { normalizeToolName } from "@brewva/brewva-runtime/tools";
+import { normalizeToolName } from "@brewva/brewva-runtime/core";
 import type { BrewvaToolRequiredCapability } from "../contracts/index.js";
 import { MANAGED_BREWVA_TOOL_METADATA_BY_NAME } from "./managed-metadata.js";
 

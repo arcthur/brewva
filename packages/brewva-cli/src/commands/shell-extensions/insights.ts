@@ -3,7 +3,7 @@ import {
   type HostedExtensionPlugin,
   type HostedExtensionApi,
 } from "@brewva/brewva-gateway/extensions";
-import type { BrewvaOperatorRuntimePort } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import { clampText, resolveInspectDirectory } from "../../operator/inspect-analysis.js";
 
 const DEFAULT_MAX_NOTIFICATION_LINES = 28;
@@ -35,7 +35,7 @@ function resolveInsightsNotifyLevel(input: {
 }
 
 export function createInsightsCommandExtension(
-  runtime: BrewvaOperatorRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   options: {
     maxNotificationLines?: number;
     maxLineChars?: number;

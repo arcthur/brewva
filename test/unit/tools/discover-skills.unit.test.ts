@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SkillDocument } from "@brewva/brewva-runtime/skills";
+import type { SkillDocument } from "@brewva/brewva-runtime/protocol";
 import { createDiscoverSkillsTool } from "@brewva/brewva-tools/skills";
 import { createBundledToolRuntime, createRuntimeFixture } from "../../helpers/runtime.js";
 
@@ -41,7 +41,7 @@ function skill(input: {
 describe("discover_skills tool", () => {
   test("searches SkillCards with shared TF-IDF ranking", async () => {
     const runtime = createRuntimeFixture({
-      inspect: {
+      capabilities: {
         skills: {
           catalog: {
             list: () => [

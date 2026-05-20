@@ -1,4 +1,5 @@
-import { BrewvaEffect, BrewvaStream, runPromiseAtBoundary } from "@brewva/brewva-effect";
+import { runBoundaryOperation } from "@brewva/brewva-effect";
+import { BrewvaEffect, BrewvaStream } from "@brewva/brewva-effect/primitives";
 import type {
   Api,
   AssistantMessage,
@@ -134,7 +135,8 @@ export async function completeSimple<TApi extends Api>(
 function runProviderStreamToCompletion(
   providerStream: ProviderAssistantMessageStream,
 ): Promise<AssistantMessage> {
-  return runPromiseAtBoundary(
+  return runBoundaryOperation(
+    "provider.stream.complete",
     providerStream.pipe(
       BrewvaStream.runFoldEffect(
         (): AssistantMessage | undefined => undefined,

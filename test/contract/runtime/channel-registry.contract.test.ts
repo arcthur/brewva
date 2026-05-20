@@ -3,7 +3,7 @@ import {
   ChannelAdapterRegistry,
   DEFAULT_CHANNEL_CAPABILITIES,
   type ChannelAdapter,
-} from "@brewva/brewva-runtime/channels";
+} from "@brewva/brewva-runtime/protocol";
 
 function createAdapter(id: string): ChannelAdapter {
   return {

@@ -1,9 +1,9 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   normalizeChannelId,
   type ChannelTurnBridge,
   type TurnEnvelope,
-} from "@brewva/brewva-runtime/channels";
+} from "@brewva/brewva-runtime/protocol";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import type { TelegramChannelModeConfig } from "./bridges/telegram/webhook-config.js";
 
 export interface ChannelModeConfig {
@@ -20,7 +20,7 @@ export interface ChannelModeLaunchBundle {
 }
 
 export interface ChannelModeLauncherInput {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   channelConfig?: ChannelModeConfig;
   onInboundTurn: (turn: TurnEnvelope) => Promise<void>;
   onAdapterError?: (error: unknown) => Promise<void> | void;

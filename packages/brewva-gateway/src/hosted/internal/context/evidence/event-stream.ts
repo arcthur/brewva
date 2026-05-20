@@ -1,18 +1,12 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { JsonValue } from "@brewva/brewva-runtime/core";
-import { recordAssistantUsageFromMessage } from "@brewva/brewva-runtime/cost";
-import { type ToolLifecycleEventPayload } from "@brewva/brewva-runtime/events";
+import { type ToolLifecycleEventPayload } from "@brewva/brewva-runtime/protocol";
 import {
-  readSessionTurnTransitionEventPayload,
+  recordAssistantUsageFromMessage,
   SESSION_SHUTDOWN_EVENT_TYPE,
-  SESSION_TURN_TRANSITION_EVENT_TYPE,
-  TOOL_CALL_EVENT_TYPE,
-  TOOL_EXECUTION_END_EVENT_TYPE,
-  TOOL_EXECUTION_START_EVENT_TYPE,
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptAssistantMessageEvent,
@@ -21,13 +15,19 @@ import type {
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
 import { ensureSessionShutdownRecorded } from "../../../../utils/runtime.js";
-import { ToolAttemptBindingRegistry } from "../../thread-loop/attempts/tool-attempt-binding.js";
+import {
+  getRuntimeCostSummary,
+  recordRuntimeAssistantCost,
+  recordRuntimeReasoningCheckpoint,
+  subscribeRuntimeEvents,
+  type HostedRuntimeAdapterPort,
+} from "../../session/runtime-ports.js";
 import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
-} from "../../thread-loop/lifecycle/runtime-turn-clock.js";
-import { buildTranscriptMessagePayload } from "../../thread-loop/runtime-session-transcript.js";
-import { getHostedTurnTransitionCoordinator } from "../../thread-loop/turn-transition.js";
+} from "../../turn-adapter/lifecycle/runtime-turn-clock.js";
+import { buildTranscriptMessagePayload } from "../../turn-adapter/runtime-session-transcript.js";
+import { ToolAttemptBindingRegistry } from "./tool-attempt-binding.js";
 
 type MessageHealth = {
   score: number;
@@ -68,7 +68,7 @@ function resolveLeafEntryId(ctx: {
 // position) when no leaf is available, and the main revert semantic (branch
 // reset + continuity injection) is unaffected.
 function recordReasoningCheckpoint(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
     boundary: "turn_start" | "tool_boundary" | "verification_boundary" | "compaction_boundary";
@@ -76,7 +76,7 @@ function recordReasoningCheckpoint(
   },
 ): void {
   try {
-    runtime.authority.reasoning.checkpoints.record(input.sessionId, {
+    recordRuntimeReasoningCheckpoint(runtime, input.sessionId, {
       boundary: input.boundary,
       leafEntryId: input.leafEntryId,
     });
@@ -259,7 +259,7 @@ function resolveExecutionTraitsPayload(input: {
 
 export function registerEventStream(
   extensionApi: InternalHostPluginApi,
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   turnClock: RuntimeTurnClockStore = createRuntimeTurnClockStore(),
   options: EventStreamOptions = {},
 ): void {
@@ -271,7 +271,6 @@ export function registerEventStream(
   const activeToolExecutionsBySession = new Map<string, Map<string, ActiveToolExecution>>();
   const toolAttemptBindingsBySession = new Map<string, ToolAttemptBindingRegistry>();
   const pendingInterruptFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  const transitionCoordinator = getHostedTurnTransitionCoordinator(runtime);
 
   const getObservedToolCalls = (sessionId: string): Set<string> => {
     const existing = observedToolCallsBySession.get(sessionId);
@@ -306,7 +305,7 @@ export function registerEventStream(
   };
 
   const syncCurrentAttemptSequence = (sessionId: string): number | null => {
-    const activeAttemptSequence = transitionCoordinator.getActiveAttemptSequence(sessionId);
+    const activeAttemptSequence = getToolAttemptBindings(sessionId).getCurrentAttemptSequence();
     getToolAttemptBindings(sessionId).setCurrentAttemptSequence(activeAttemptSequence);
     return activeAttemptSequence;
   };
@@ -342,9 +341,8 @@ export function registerEventStream(
       toolName,
       attemptSequence,
     );
-    runtime.extensions.hosted.events.record({
+    runtime.ops.tools.lifecycle.callObserved({
       sessionId,
-      type: TOOL_CALL_EVENT_TYPE,
       payload: {
         toolCallId,
         toolName,
@@ -360,9 +358,8 @@ export function registerEventStream(
     if (!pendingToolResults || pendingToolResults.size === 0) return;
 
     for (const [toolCallId, pending] of pendingToolResults) {
-      runtime.extensions.hosted.events.record({
+      runtime.ops.tools.lifecycle.executionEnded({
         sessionId,
-        type: TOOL_EXECUTION_END_EVENT_TYPE,
         payload: {
           toolCallId,
           toolName: pending.toolName,
@@ -394,9 +391,8 @@ export function registerEventStream(
 
     for (const [toolCallId, activeExecution] of activeExecutions) {
       ensureObservedToolCall(sessionId, toolCallId, activeExecution.toolName);
-      runtime.extensions.hosted.events.record({
+      runtime.ops.tools.lifecycle.executionEnded({
         sessionId,
-        type: TOOL_EXECUTION_END_EVENT_TYPE,
         payload: {
           toolCallId,
           toolName: activeExecution.toolName,
@@ -420,17 +416,6 @@ export function registerEventStream(
     pendingInterruptFlushTimers.delete(sessionId);
   };
 
-  const scheduleInterruptFlush = (sessionId: string): void => {
-    clearPendingInterruptFlush(sessionId);
-    const timer = setTimeout(() => {
-      pendingInterruptFlushTimers.delete(sessionId);
-      flushPendingToolResults(sessionId);
-      flushActiveToolExecutions(sessionId, "cancelled_by_interrupt");
-    }, 50);
-    timer.unref?.();
-    pendingInterruptFlushTimers.set(sessionId, timer);
-  };
-
   const rememberLeafEntryId = (
     sessionId: string,
     ctx: {
@@ -445,7 +430,7 @@ export function registerEventStream(
     return latestLeafEntryIdBySession.get(sessionId) ?? null;
   };
 
-  runtime.inspect.events.records.subscribe((event) => {
+  subscribeRuntimeEvents(runtime, (event) => {
     if (event.type === TURN_INPUT_RECORDED_EVENT_TYPE) {
       getToolAttemptBindings(event.sessionId).beginTurn(1);
       return;
@@ -468,32 +453,13 @@ export function registerEventStream(
       });
       return;
     }
-    if (event.type === SESSION_TURN_TRANSITION_EVENT_TYPE) {
-      syncCurrentAttemptSequence(event.sessionId);
-    }
-    if (event.type !== SESSION_TURN_TRANSITION_EVENT_TYPE) {
-      return;
-    }
-    const payload = readSessionTurnTransitionEventPayload(event);
-    if (!payload) {
-      return;
-    }
-    if (
-      payload.status === "completed" &&
-      (payload.reason === "user_submit_interrupt" ||
-        payload.reason === "signal_interrupt" ||
-        payload.reason === "timeout_interrupt")
-    ) {
-      scheduleInterruptFlush(event.sessionId);
-    }
   });
 
   extensionApi.on("session_start", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     rememberLeafEntryId(sessionId, ctx);
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.started({
       sessionId,
-      type: "session_start",
       payload: {
         cwd: ctx.cwd,
       },
@@ -515,14 +481,13 @@ export function registerEventStream(
     toolAttemptBindingsBySession.delete(sessionId);
     latestLeafEntryIdBySession.delete(sessionId);
     turnClock.clearSession(sessionId);
-    runtime.operator.session.state.clear(sessionId);
+    runtime.ops.session.state.clear(sessionId);
     return undefined;
   });
 
   extensionApi.on("agent_start", (_event, ctx) => {
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.agentStarted({
       sessionId: ctx.sessionManager.getSessionId(),
-      type: "agent_start",
     });
     return undefined;
   });
@@ -530,12 +495,11 @@ export function registerEventStream(
   extensionApi.on("agent_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     flushPendingToolResults(sessionId);
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.agentEnded({
       sessionId,
-      type: "agent_end",
       payload: {
         messageCount: event.messages.length,
-        costSummary: runtime.inspect.cost.summary.get(sessionId),
+        costSummary: getRuntimeCostSummary(runtime, sessionId),
       },
     });
     return undefined;
@@ -551,9 +515,8 @@ export function registerEventStream(
       boundary: "turn_start",
       leafEntryId,
     });
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.turnStarted({
       sessionId,
-      type: "turn_start",
       turn: runtimeTurn,
       payload: {
         localTurn: event.turnIndex,
@@ -567,10 +530,9 @@ export function registerEventStream(
     const sessionId = ctx.sessionManager.getSessionId();
     const runtimeTurn = turnClock.getCurrentTurn(sessionId);
     flushPendingToolResults(sessionId);
-    runtime.operator.context.lifecycle.onTurnEnd(sessionId);
-    runtime.extensions.hosted.events.record({
+    runtime.ops.context.lifecycle.onTurnEnd(sessionId);
+    runtime.ops.session.lifecycle.turnEnded({
       sessionId,
-      type: "turn_end",
       turn: runtimeTurn,
       payload: {
         localTurn: event.turnIndex,
@@ -585,9 +547,8 @@ export function registerEventStream(
     const sessionId = ctx.sessionManager.getSessionId();
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.messageStarted({
       sessionId,
-      type: "message_start",
       payload: buildTranscriptMessagePayload(event.message),
     });
     return undefined;
@@ -624,15 +585,20 @@ export function registerEventStream(
     );
     lastAssistantTextBySession.delete(sessionId);
     assistantWindowBySession.delete(sessionId);
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.messageEnded({
       sessionId,
-      type: "message_end",
       payload: {
         ...buildTranscriptMessagePayload(event.message),
         health: computeMessageHealth(healthWindow, healthWindow.length),
       },
     });
-    recordAssistantUsageFromMessage(runtime, sessionId, event.message);
+    recordAssistantUsageFromMessage(
+      {
+        recordAssistantUsage: (usage) => recordRuntimeAssistantCost(runtime, usage),
+      },
+      sessionId,
+      event.message,
+    );
     return undefined;
   });
 
@@ -657,9 +623,8 @@ export function registerEventStream(
       toolName: event.toolName,
       attemptSequence: boundAttemptSequence,
     });
-    runtime.extensions.hosted.events.record({
+    runtime.ops.tools.lifecycle.executionStarted({
       sessionId,
-      type: TOOL_EXECUTION_START_EVENT_TYPE,
       payload: {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
@@ -705,9 +670,8 @@ export function registerEventStream(
         event.toolName,
         attemptSequence,
       );
-      runtime.extensions.hosted.events.record({
+      runtime.ops.tools.lifecycle.callObserved({
         sessionId,
-        type: TOOL_CALL_EVENT_TYPE,
         payload: {
           toolCallId: event.toolCallId,
           toolName: event.toolName,
@@ -722,9 +686,8 @@ export function registerEventStream(
       getToolAttemptBindings(sessionId).resolveAttemptSequence(event.toolCallId) ??
       getActiveToolExecutions(sessionId).get(event.toolCallId)?.attemptSequence ??
       null;
-    runtime.extensions.hosted.events.record({
+    runtime.ops.tools.lifecycle.executionEnded({
       sessionId,
-      type: TOOL_EXECUTION_END_EVENT_TYPE,
       payload: {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
@@ -756,9 +719,8 @@ export function registerEventStream(
       attemptSequence,
     );
     getObservedToolCalls(sessionId).add(event.toolCallId);
-    runtime.extensions.hosted.events.record({
+    runtime.ops.tools.lifecycle.callObserved({
       sessionId,
-      type: TOOL_CALL_EVENT_TYPE,
       payload: {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
@@ -775,9 +737,8 @@ export function registerEventStream(
     clearPendingInterruptFlush(sessionId);
     flushPendingToolResults(sessionId);
     flushActiveToolExecutions(sessionId, "cancelled_by_retry_supersession");
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.beforeCompact({
       sessionId,
-      type: "session_before_compact",
       payload: {
         branchEntries: event.branchEntries.length,
       },
@@ -797,9 +758,8 @@ export function registerEventStream(
   });
 
   extensionApi.on("model_select", (event, ctx) => {
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.modelSelected({
       sessionId: ctx.sessionManager.getSessionId(),
-      type: "model_select",
       payload: {
         provider: event.model.provider,
         model: event.model.id,
@@ -810,9 +770,8 @@ export function registerEventStream(
   });
 
   extensionApi.on("input", (event, ctx) => {
-    runtime.extensions.hosted.events.record({
+    runtime.ops.session.lifecycle.inputObserved({
       sessionId: ctx.sessionManager.getSessionId(),
-      type: "input",
       payload: {
         source: event.source,
         textChars: event.text.length,

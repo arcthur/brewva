@@ -2,7 +2,7 @@ import type {
   SessionLifecycleSnapshot,
   SessionWireFrame,
   SessionWireStatusState,
-} from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
 
 export interface SessionStatusSeed {
   state: SessionWireStatusState;

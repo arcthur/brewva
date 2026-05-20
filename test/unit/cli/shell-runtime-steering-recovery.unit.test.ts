@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import { type BrewvaReplaySession } from "@brewva/brewva-runtime/events";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
+import type { Context as ProviderContext } from "@brewva/brewva-provider-core/contracts";
+import { type BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import {
   buildBrewvaPromptText,
@@ -26,16 +26,43 @@ import type {
   ProviderOAuthAuthorization,
 } from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
 import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
+import {
+  fauxAssistantMessage,
+  registerFauxProvider,
+} from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import {
   createPromptMessageUpdateEvent,
   createTextDeltaAssistantEvent,
   createToolcallEndAssistantEvent,
 } from "../../helpers/prompt-session-events.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 function modelKey(model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">): string {
   return `${model.provider}/${model.id}`;
 }
+
+function latestUserTextFromProviderContext(context: ProviderContext): string {
+  for (let index = context.messages.length - 1; index >= 0; index--) {
+    const message = context.messages[index];
+    if (message?.role !== "user") {
+      continue;
+    }
+    return message.content
+      .map((part) => {
+        if (part.type === "text") {
+          return part.text;
+        }
+        if (part.type === "file") {
+          return part.displayText ?? part.name ?? part.uri;
+        }
+        return "";
+      })
+      .join("");
+  }
+  return "";
+}
+
 function createFakeBundle(
   options: {
     promptHandler?: (text: string) => Promise<void>;
@@ -72,40 +99,49 @@ function createFakeBundle(
       title: "New session",
     },
   ];
-  const rawRuntime = createBrewvaRuntime({
+  const rawRuntime = createRuntimeInstanceFixture({
     cwd: mkdtempSync(join(tmpdir(), "brewva-shell-runtime-")),
-  }).hosted;
+  });
   const runtime = rawRuntime;
-  Object.assign(runtime.authority.proposals.requests, {
+  const fauxProvider = registerFauxProvider({
+    provider: `faux-shell-runtime-${Math.random().toString(36).slice(2)}`,
+    api: "faux",
+    models: [
+      {
+        id: "faux-shell-1",
+        name: "Faux Shell",
+        reasoning: true,
+        input: ["text", "image"],
+        contextWindow: 128_000,
+        maxTokens: 16_384,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      },
+    ],
+    tokenSize: { min: 1, max: 1 },
+  });
+  Object.assign(runtime.ops.proposals.requests, {
     decide(_sessionId: string, requestId: string, input: unknown) {
       approvalDecisions.push({ requestId, input });
     },
   });
-  Object.assign(runtime.inspect.proposals.requests, {
+  Object.assign(runtime.ops.proposals.requests, {
     listPending() {
       return [];
     },
   });
-  Object.assign(runtime.inspect.events.log, {
-    listReplaySessions() {
+  Object.assign(runtime.ops.events.replay, {
+    listSessions() {
       return replaySessions;
     },
   });
-  const querySessionWire = runtime.inspect.sessionWire.query.bind(runtime.inspect.sessionWire);
+  const querySessionWire = runtime.ops.sessionWire.query.bind(runtime.ops.sessionWire);
   const providerConnects: Array<{ provider: string; key: string }> = [];
-  Object.assign(runtime.inspect.sessionWire, {
+  Object.assign(runtime.ops.sessionWire, {
     query(targetSessionId: string) {
       return options.sessionWireBySessionId?.[targetSessionId] ?? querySessionWire(targetSessionId);
     },
   });
-  const defaultModel: BrewvaSessionModelDescriptor = {
-    provider: "openai",
-    id: "gpt-5.4-mini",
-    name: "GPT-5.4 Mini",
-    contextWindow: 128_000,
-    maxTokens: 16_384,
-    reasoning: true,
-  };
+  const defaultModel = fauxProvider.getModel() as unknown as BrewvaSessionModelDescriptor;
   const allModels = options.models ?? [defaultModel];
   const availableModelKeys = new Set(options.availableModelKeys ?? allModels.map(modelKey));
   let currentModel = allModels[0] ?? defaultModel;
@@ -128,6 +164,23 @@ function createFakeBundle(
     showThinking: true,
     toolDetails: true,
   };
+  const applyPendingModelPreset = () => {
+    if (!modelPresetState.pendingName) {
+      return;
+    }
+    modelPresetState = {
+      ...modelPresetState,
+      activeName: modelPresetState.pendingName,
+      pendingName: undefined,
+    };
+  };
+  fauxProvider.setResponses(
+    Array.from({ length: 64 }, () => async (context: ProviderContext) => {
+      applyPendingModelPreset();
+      await options.promptHandler?.(latestUserTextFromProviderContext(context));
+      return fauxAssistantMessage("ok");
+    }),
+  );
 
   const session = {
     get model() {
@@ -241,13 +294,7 @@ function createFakeBundle(
       };
     },
     async prompt(parts: readonly BrewvaPromptContentPart[]) {
-      if (modelPresetState.pendingName) {
-        modelPresetState = {
-          ...modelPresetState,
-          activeName: modelPresetState.pendingName,
-          pendingName: undefined,
-        };
-      }
+      applyPendingModelPreset();
       await options.promptHandler?.(buildBrewvaPromptText(parts));
     },
     async steer(text: string) {
@@ -270,9 +317,26 @@ function createFakeBundle(
     },
     async waitForIdle() {},
     async abort() {},
-    dispose() {},
+    dispose() {
+      fauxProvider.unregister();
+    },
     setUiPort(ui: BrewvaToolUiPort) {
       attachedUi = ui;
+    },
+    getRegisteredTools() {
+      return [];
+    },
+    getRuntimeModelCatalog() {
+      return {
+        async getApiKeyAndHeaders() {
+          return { ok: true as const };
+        },
+      };
+    },
+    createRuntimeToolContext() {
+      return {
+        getSystemPrompt: () => "Shell runtime test system prompt.",
+      };
     },
   };
 
@@ -405,13 +469,13 @@ describe("shell runtime: steering and recovery", () => {
   test("records interactive rewind checkpoints with monotonic turn ids", async () => {
     const turnIds: string[] = [];
     const { bundle } = createFakeBundle();
-    Object.assign(bundle.runtime.authority.session.rewind, {
+    Object.assign(bundle.runtime.ops.session.rewind, {
       recordCheckpoint(
         _sessionId: string,
         input: { turnId?: string },
-      ): ReturnType<typeof bundle.runtime.authority.session.rewind.recordCheckpoint> {
+      ): ReturnType<typeof bundle.runtime.ops.session.rewind.recordCheckpoint> {
         turnIds.push(input.turnId ?? "");
-        return {} as ReturnType<typeof bundle.runtime.authority.session.rewind.recordCheckpoint>;
+        return {} as ReturnType<typeof bundle.runtime.ops.session.rewind.recordCheckpoint>;
       },
     });
     const restoreDateNow = patchDateNow(() => 1_710_000_000_000);
@@ -449,8 +513,8 @@ describe("shell runtime: steering and recovery", () => {
   test("blocks redo while the current session is streaming", async () => {
     const { bundle } = createFakeBundle();
     let redoCalls = 0;
-    Object.assign(bundle.runtime.authority.session.rewind, {
-      redo(): ReturnType<typeof bundle.runtime.authority.session.rewind.redo> {
+    Object.assign(bundle.runtime.ops.session.rewind, {
+      redo(): ReturnType<typeof bundle.runtime.ops.session.rewind.redo> {
         redoCalls += 1;
         return { ok: false, reason: "no_redo" };
       },
@@ -582,9 +646,14 @@ describe("shell runtime: steering and recovery", () => {
   });
 
   test("surfaces semantic input failures as notifications instead of rejecting the key handler", async () => {
-    const { bundle } = createFakeBundle({
-      promptHandler: async () => {
-        throw new Error("prompt exploded");
+    const { bundle } = createFakeBundle();
+    Object.assign(bundle.session, {
+      getRuntimeModelCatalog() {
+        return {
+          async getApiKeyAndHeaders() {
+            throw new Error("prompt exploded");
+          },
+        };
       },
     });
 

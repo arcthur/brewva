@@ -1,13 +1,13 @@
-import type { OperationalClaim } from "@brewva/brewva-runtime/claim";
-import type { ScheduleContinuityMode } from "@brewva/brewva-runtime/schedule";
+import type { OperationalClaim } from "@brewva/brewva-runtime/protocol";
+import type { TaskSpec } from "@brewva/brewva-runtime/protocol";
+import type { ScheduleContinuityMode } from "@brewva/brewva-runtime/protocol";
 import type {
   ContextStatusView,
   ManagedToolMode,
   SessionLifecycleSnapshot,
   SessionWireFrame,
   ToolOutputView,
-} from "@brewva/brewva-runtime/session";
-import type { TaskSpec } from "@brewva/brewva-runtime/task";
+} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 
 export interface OpenSessionInput {
@@ -64,7 +64,7 @@ export interface SendPromptOptions {
 
 export interface SendPromptOutput {
   assistantText: string;
-  toolOutputs: ToolOutputView[];
+  toolOutputs: readonly ToolOutputView[];
   attemptId: string;
 }
 

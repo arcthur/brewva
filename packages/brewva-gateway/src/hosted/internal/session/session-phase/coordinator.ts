@@ -1,9 +1,9 @@
+import type { BrewvaAgentProtocolEvent } from "@brewva/brewva-substrate/agent-protocol";
 import {
   advanceSessionPhaseResult,
   type SessionPhase,
   type SessionPhaseEvent,
 } from "@brewva/brewva-substrate/session";
-import type { BrewvaTurnLoopEvent } from "@brewva/brewva-substrate/turn";
 import { inferRecoveryCrashPoint, resolveModelCallId, sameSessionPhase } from "./projection.js";
 
 export interface ManagedSessionPhaseCoordinatorOptions {
@@ -32,7 +32,7 @@ export class ManagedSessionPhaseCoordinator {
     return this.#phase;
   }
 
-  async advanceFromAgentEvent(event: BrewvaTurnLoopEvent): Promise<void> {
+  async advanceFromAgentEvent(event: BrewvaAgentProtocolEvent): Promise<void> {
     switch (event.type) {
       case "message_start":
         if (event.message.role !== "assistant" || this.get().kind !== "idle") {

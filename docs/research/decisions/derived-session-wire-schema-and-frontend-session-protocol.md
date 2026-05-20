@@ -13,13 +13,13 @@
   - `docs/reference/session-lifecycle.md`
   - `docs/journeys/operator/interactive-session.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/domain/sessions/wire.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/wire.ts`
   - `packages/brewva-runtime/src/runtime/runtime.ts`
-  - `packages/brewva-runtime/src/domain/sessions/session-wire.ts`
-  - `packages/brewva-runtime/src/events/registry.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/session-wire.ts`
+  - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/event-types.ts`
   - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
   - `packages/brewva-gateway/src/daemon/session-supervisor/index.ts`
-  - `packages/brewva-gateway/src/daemon/session-supervisor/session-binding-tape.ts`
+  - `packages/brewva-gateway/src/daemon/session-supervisor/session-binding-store.ts`
   - `packages/brewva-gateway/src/daemon/internal/session-wire-status.ts`
 
 ## Decision Summary
@@ -32,4 +32,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

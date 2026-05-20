@@ -2,12 +2,18 @@ import {
   ITERATION_FACT_SESSION_SCOPE_VALUES,
   ITERATION_GUARD_STATUS_VALUES,
   ITERATION_METRIC_AGGREGATION_VALUES,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
+import {
+  listGuardResults,
+  listMetricObservations,
+  recordGuardResult,
+  recordMetricObservation,
+} from "../../runtime-port/iteration.js";
 import { failTextResult, textResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -133,7 +139,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
               },
             );
           }
-          const event = runtime.authority.events.recordMetricObservation(sessionId, {
+          const event = recordMetricObservation(runtime, sessionId, {
             metricKey: params.metric_key,
             value: params.value,
             unit: params.unit,
@@ -150,7 +156,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
               error: "record_failed",
             });
           }
-          const record = runtime.inspect.events.iteration.listMetricObservations(sessionId, {
+          const record = listMetricObservations(runtime, sessionId, {
             last: 1,
             metricKey: params.metric_key,
             source,
@@ -172,7 +178,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
               },
             );
           }
-          const event = runtime.authority.events.recordGuardResult(sessionId, {
+          const event = recordGuardResult(runtime, sessionId, {
             guardKey: params.guard_key,
             status: guardStatus,
             iterationKey: params.iteration_key,
@@ -186,7 +192,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
               error: "record_failed",
             });
           }
-          const record = runtime.inspect.events.iteration.listGuardResults(sessionId, {
+          const record = listGuardResults(runtime, sessionId, {
             last: 1,
             guardKey: params.guard_key,
             source,
@@ -204,7 +210,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
         const details: Record<string, unknown> = {};
 
         if (factKind === "metric" || factKind === "all") {
-          const metrics = runtime.inspect.events.iteration.listMetricObservations(sessionId, {
+          const metrics = listMetricObservations(runtime, sessionId, {
             last: historyLimit,
             iterationKey: params.iteration_key,
             metricKey: params.metric_key,
@@ -219,7 +225,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
         }
 
         if (factKind === "guard" || factKind === "all") {
-          const guards = runtime.inspect.events.iteration.listGuardResults(sessionId, {
+          const guards = listGuardResults(runtime, sessionId, {
             last: historyLimit,
             iterationKey: params.iteration_key,
             guardKey: params.guard_key,

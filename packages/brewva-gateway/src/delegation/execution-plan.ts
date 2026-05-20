@@ -1,18 +1,19 @@
-import type { BrewvaRuntimeRoot } from "@brewva/brewva-runtime";
 import type {
   DelegationModelRouteRecord,
   DelegationIsolationStrategy,
   DelegationVisibility,
-} from "@brewva/brewva-runtime/delegation";
-import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
-import { deriveToolGovernanceDescriptor } from "@brewva/brewva-runtime/governance";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/protocol";
+import { deriveToolGovernanceDescriptor } from "@brewva/brewva-runtime/protocol";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import type {
   DelegationPacket,
   SubagentExecutionBoundary,
   SubagentExecutionShape,
 } from "@brewva/brewva-tools/contracts";
+import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import { getRuntimeToolActionPolicy } from "../hosted/api.js";
 import {
   resolveDelegationModelRoute,
   type DelegationModelRoutingContext,
@@ -51,10 +52,10 @@ function boundaryWithinCeiling(
 }
 
 function resolveRuntimeToolBoundary(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   toolName: string,
 ): ToolExecutionBoundary | undefined {
-  const policy = runtime.inspect.tools.access.getActionPolicy(toolName);
+  const policy = getRuntimeToolActionPolicy(runtime, toolName);
   return policy ? deriveToolGovernanceDescriptor(policy).boundary : undefined;
 }
 
@@ -181,7 +182,7 @@ export function resolveRequestedBoundary(input: {
 }
 
 export function resolveBuiltinToolNamesForRun(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   target: HostedDelegationTarget,
   boundary: SubagentExecutionBoundary,
   packet?: DelegationPacket,
@@ -193,7 +194,7 @@ export function resolveBuiltinToolNamesForRun(
 }
 
 export function resolveManagedToolNamesForRun(
-  runtime: BrewvaRuntimeRoot,
+  runtime: HostedRuntimeAdapterPort,
   target: HostedDelegationTarget,
   boundary: SubagentExecutionBoundary,
   packet?: DelegationPacket,
@@ -215,7 +216,7 @@ export function resolveManagedToolNamesForRun(
 }
 
 export function resolveDelegationExecutionPlan(input: {
-  runtime: BrewvaRuntimeRoot;
+  runtime: HostedRuntimeAdapterPort;
   target: HostedDelegationTarget;
   delegate?: string;
   packet: DelegationPacket;

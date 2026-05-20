@@ -20,7 +20,7 @@ Output:
       {
         "from": "brewva-runtime",
         "to": "brewva-gateway",
-        "surface": "@brewva/brewva-runtime, @brewva/brewva-runtime/runtime-extensions, dedicated runtime subpaths"
+        "surface": "@brewva/brewva-runtime, dedicated runtime subpaths"
       },
       { "from": "brewva-gateway", "to": "brewva-cli", "surface": "@brewva/brewva-gateway/hosted" }
     ],

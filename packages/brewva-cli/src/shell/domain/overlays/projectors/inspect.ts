@@ -127,7 +127,7 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
       lines: [
         `Workspace root: ${base.bootstrap.workspaceRoot ?? "n/a"}`,
         `Config path: ${base.bootstrap.configPath ?? "n/a"}`,
-        `Events dir: ${base.bootstrap.eventsDir ?? "n/a"}`,
+        `Tape dir: ${base.bootstrap.tapeDir ?? "n/a"}`,
         `Recovery WAL dir: ${base.bootstrap.recoveryWalDir ?? "n/a"}`,
         `Projection dir: ${base.bootstrap.projectionDir ?? "n/a"}`,
       ],
@@ -135,19 +135,7 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
     {
       id: "hosted",
       title: "Hosted",
-      lines: [
-        `Transition sequence: ${base.hostedTransitions.sequence}`,
-        `Latest: ${
-          base.hostedTransitions.latest
-            ? `${base.hostedTransitions.latest.reason}:${base.hostedTransitions.latest.status}`
-            : "none"
-        }`,
-        `Pending family: ${base.hostedTransitions.pendingFamily ?? "none"}`,
-        `Operator-visible generation: ${base.hostedTransitions.operatorVisibleFactGeneration}`,
-        `Compaction breaker: ${base.hostedTransitions.breakerOpenByReason.compaction_retry ? "open" : "closed"} (${base.hostedTransitions.consecutiveFailuresByReason.compaction_retry ?? 0})`,
-        `Provider fallback breaker: ${base.hostedTransitions.breakerOpenByReason.provider_fallback_retry ? "open" : "closed"} (${base.hostedTransitions.consecutiveFailuresByReason.provider_fallback_retry ?? 0})`,
-        `Max-output breaker: ${base.hostedTransitions.breakerOpenByReason.max_output_recovery ? "open" : "closed"} (${base.hostedTransitions.consecutiveFailuresByReason.max_output_recovery ?? 0})`,
-      ],
+      lines: ["Legacy transition truth: removed", "Source: canonical tape projections"],
     },
   ];
 

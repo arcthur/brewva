@@ -150,8 +150,8 @@ describe("brewva std utility boundary", () => {
 
   test("generic production SHA-256 hashing stays behind std", () => {
     const allowedLocalSha256Files = new Set([
-      "packages/brewva-runtime/src/domain/credentials/credential-vault.ts",
-      "packages/brewva-runtime/src/domain/skills/system-install.ts",
+      "packages/brewva-runtime/src/credentials/credential-vault.ts",
+      "packages/brewva-runtime/src/internal/legacy-runtime/model/skills/system-install.ts",
     ]);
     const offenders: string[] = [];
     const genericSha256Hash = /createHash\(\s*["']sha256["']\s*\)/gu;

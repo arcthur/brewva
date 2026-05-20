@@ -1,9 +1,8 @@
 import { accessSync, constants, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/context";
-import { classifyToolFailure } from "@brewva/brewva-runtime/evidence";
-import type { EffectCommitmentDiffPreview } from "@brewva/brewva-runtime/proposals";
+import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/protocol";
+import { classifyToolFailure } from "@brewva/brewva-runtime/protocol";
+import type { EffectCommitmentDiffPreview, ProtocolRecord } from "@brewva/brewva-runtime/protocol";
 import { truncateText } from "@brewva/brewva-std/text";
 import {
   BrewvaHostInputEventResult as InputEventResult,
@@ -23,6 +22,11 @@ import {
   getBrewvaToolSurface,
 } from "@brewva/brewva-tools/registry";
 import {
+  sanitizeRuntimeContextInput,
+  startRuntimeToolInvocation,
+  type HostedRuntimeAdapterPort,
+} from "../runtime-ports.js";
+import {
   isCapabilityAuthorityGated,
   loadRuntimeCapabilityRegistry,
   readLatestCapabilitySelectionReceipt,
@@ -38,7 +42,7 @@ interface QualityGateToolResultResult {
   content?: ToolResultEvent["content"];
 }
 
-interface RuntimeCapabilityAccessFact {
+interface RuntimeCapabilityAccessFact extends ProtocolRecord {
   allowed: boolean;
   basis: string;
   reason?: string;
@@ -96,7 +100,7 @@ function readRuntimeRequiredCapabilities(value: unknown): {
 function resolveRuntimeCapabilityAccess(input: {
   toolName: string;
   args?: Record<string, unknown>;
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   toolDefinitionsByName?: ReadonlyMap<string, Parameters<typeof getBrewvaAgentParameters>[0]>;
 }): RuntimeCapabilityAccessFact {
@@ -168,7 +172,7 @@ function resolveRuntimeCapabilityAccess(input: {
 }
 
 export function createQualityGateLifecycle(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   options: QualityGateLifecycleOptions = {},
 ): QualityGateLifecycle {
   const pendingToolStateBySession = new Map<string, Map<string, PendingToolState>>();
@@ -355,7 +359,7 @@ export function createQualityGateLifecycle(
           ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
           : undefined,
       );
-      const started = runtime.authority.tools.invocation.start({
+      const started = startRuntimeToolInvocation(runtime, {
         sessionId,
         toolCallId,
         toolName,
@@ -432,13 +436,13 @@ export function createQualityGateLifecycle(
       const rawEvent = event as { text?: unknown; parts?: unknown };
       const sessionId = getSessionId(ctx);
       if (sessionId.length > 0) {
-        runtime.operator.context.lifecycle.onUserInput(sessionId);
+        runtime.ops.context.lifecycle.onUserInput(sessionId);
       }
       const parts = Array.isArray(rawEvent.parts)
         ? (rawEvent.parts as BrewvaPromptContentPart[])
         : [];
       const sanitizedParts = mapBrewvaPromptTextParts(parts, (partText) =>
-        runtime.inspect.context.sanitizeInput(partText),
+        sanitizeRuntimeContextInput(runtime, partText),
       );
       if (brewvaPromptContentPartsEqual(sanitizedParts, parts)) {
         return { action: "continue" };
@@ -454,7 +458,7 @@ export function createQualityGateLifecycle(
 
 export function registerQualityGate(
   extensionApi: InternalHostPluginApi,
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   options: QualityGateLifecycleOptions = {},
 ): void {
   const hooks = extensionApi as unknown as {

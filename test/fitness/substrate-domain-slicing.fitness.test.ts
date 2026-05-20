@@ -78,7 +78,6 @@ describe("substrate domain slicing quality guard", () => {
       join(substrateSrc, "host-api", "api.ts"),
       join(substrateSrc, "persistence", "api.ts"),
       join(substrateSrc, "provider", "api.ts"),
-      join(substrateSrc, "sdk", "api.ts"),
     ];
 
     for (const apiFile of apiFiles) {

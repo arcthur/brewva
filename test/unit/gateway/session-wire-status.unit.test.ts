@@ -4,7 +4,7 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/session";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import {
   deriveSessionStatusSeedFromLifecycleSnapshot,
   deriveSessionStatusSeedFromFrame,
@@ -78,7 +78,7 @@ function createTurnTransitionFrame(
     durability: "durable",
     type: "turn.transition",
     turnId: "turn-1",
-    reason: "reasoning_revert_resume",
+    reason: "wal_recovery_resume",
     status,
     family: "recovery",
   };
@@ -241,13 +241,13 @@ describe("session wire status seeds", () => {
         },
         execution: {
           kind: "recovering",
-          reason: "reasoning_revert_resume",
-          detail: null,
+          reason: "wal_recovery_resume",
+          detail: undefined,
           family: "recovery",
         },
         recovery: {
           mode: "resumable",
-          latestReason: "reasoning_revert_resume",
+          latestReason: "wal_recovery_resume",
           latestStatus: "entered",
           pendingFamily: "recovery",
           degradedReason: null,
@@ -273,13 +273,13 @@ describe("session wire status seeds", () => {
         },
         summary: {
           kind: "recovering",
-          reason: "reasoning_revert_resume",
-          detail: null,
+          reason: "wal_recovery_resume",
+          detail: undefined,
         },
       }),
     ).toEqual({
       state: "restarting",
-      reason: "reasoning_revert_resume",
+      reason: "wal_recovery_resume",
       detail: undefined,
     });
 

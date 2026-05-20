@@ -3,7 +3,7 @@ import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   type DelegationRunRecord,
-} from "@brewva/brewva-runtime/delegation";
+} from "@brewva/brewva-runtime/protocol";
 import { selectSubagentActivityItems } from "../../../packages/brewva-cli/src/shell/domain/subagent-activity.js";
 
 function run(input: Partial<DelegationRunRecord> & { runId: string }): DelegationRunRecord {

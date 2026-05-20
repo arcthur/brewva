@@ -1,12 +1,11 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { CHANNEL_COMMAND_RECEIVED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import { AgentRegistry } from "../agent-registry.js";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
 import { isPublicChannelControlCommand, resolveChannelControlCommand } from "../control-command.js";
 import { ChannelCoordinator } from "../coordinator.js";
 import type { ChannelOrchestrationConfig } from "../orchestration-config.js";
 import { isOwnerAuthorized } from "../policy/acl.js";
+import type { HostedRuntimeAdapterPort } from "../ports.js";
 import type { ChannelRuntimeSessionPort } from "../session/coordinator.js";
 import type { ChannelQuestionSurface } from "../session/queries.js";
 import type { ChannelUpdateLockManager } from "../session/update-lock.js";
@@ -36,7 +35,7 @@ import { handleChannelSteerCommand } from "./steer.js";
 import { handleChannelUpdateCommand, prepareChannelUpdateCommand } from "./update.js";
 
 export function createChannelControlRouter(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   registry: AgentRegistry;
   orchestrationConfig: ChannelOrchestrationConfig;
   replyWriter: ChannelReplyWriter;
@@ -239,9 +238,8 @@ export function createChannelControlRouter(input: {
       }
 
       if (match.kind === "error") {
-        input.runtime.extensions.hosted.events.record({
+        input.runtime.ops.channel.command.received({
           sessionId: turn.sessionId,
-          type: CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
           payload: {
             scopeKey,
             command: match.kind,
@@ -263,9 +261,8 @@ export function createChannelControlRouter(input: {
         return { handled: false };
       }
 
-      input.runtime.extensions.hosted.events.record({
+      input.runtime.ops.channel.command.received({
         sessionId: turn.sessionId,
-        type: CHANNEL_COMMAND_RECEIVED_EVENT_TYPE,
         payload: {
           scopeKey,
           command: command.kind,
@@ -287,9 +284,8 @@ export function createChannelControlRouter(input: {
           input.orchestrationConfig.aclModeWhenOwnersEmpty,
         );
         if (!authorized) {
-          input.runtime.extensions.hosted.events.record({
+          input.runtime.ops.channel.command.rejected({
             sessionId: turn.sessionId,
-            type: "channel_command_rejected",
             payload: {
               scopeKey,
               command: command.kind,

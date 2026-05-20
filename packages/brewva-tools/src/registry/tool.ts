@@ -1,5 +1,5 @@
-import { getExactToolActionPolicy } from "@brewva/brewva-runtime/governance";
-import { normalizeToolName } from "@brewva/brewva-runtime/tools";
+import { normalizeToolName } from "@brewva/brewva-runtime/core";
+import { getExactToolActionPolicy } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   ToolCatalog,

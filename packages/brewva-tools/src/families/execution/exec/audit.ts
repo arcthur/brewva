@@ -11,7 +11,7 @@ import {
   BOX_SNAPSHOT_CREATED_EVENT_TYPE,
   EXEC_FAILED_EVENT_TYPE,
   EXEC_STARTED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import {
   summarizeShellCommandAnalysis,
   summarizeVirtualReadonlyEligibility,

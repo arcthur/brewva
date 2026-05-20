@@ -1,18 +1,19 @@
-import type { BrewvaInspectionPort } from "@brewva/brewva-runtime";
 import { SESSION_INDEX_UNAVAILABLE } from "@brewva/brewva-session-index";
+import type { SessionIndexEventSource, SessionIndexTaskSource } from "@brewva/brewva-session-index";
 
-interface RecallBrokerEventsPort extends Pick<BrewvaInspectionPort["events"], "records" | "log"> {}
+interface RecallBrokerSkillsPort {
+  readonly catalog: unknown;
+}
 
 export interface RecallBrokerRuntime {
   readonly identity: {
     readonly workspaceRoot: string;
     readonly agentId: string;
   };
-  readonly inspect: {
-    readonly events: RecallBrokerEventsPort;
-    readonly task: Pick<BrewvaInspectionPort["task"], "target">;
-    readonly skills: Pick<BrewvaInspectionPort["skills"], "catalog">;
-  };
+  readonly events: SessionIndexEventSource;
+  readonly task: SessionIndexTaskSource;
+  readonly skills: RecallBrokerSkillsPort;
+  readonly cacheKey?: object;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

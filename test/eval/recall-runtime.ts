@@ -3,12 +3,37 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { getOrCreateRecallBroker } from "@brewva/brewva-recall/broker";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { RecallBrokerRuntime } from "@brewva/brewva-recall/broker";
 import { tokenizeSearchContent } from "@brewva/brewva-search";
 import { parse } from "yaml";
+import { createHostedRuntimeAdapter } from "../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 import type { EvalTelemetry, RecallEvalDataset, RecallEvalMetrics } from "./types.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+function asRecallBrokerRuntime(runtime: {
+  readonly identity: RecallBrokerRuntime["identity"];
+  readonly ops: {
+    readonly events: RecallBrokerRuntime["events"];
+    readonly task: RecallBrokerRuntime["task"];
+    readonly skills: RecallBrokerRuntime["skills"];
+  };
+}): RecallBrokerRuntime {
+  const records = runtime.ops.events.records;
+  return {
+    identity: runtime.identity,
+    events: {
+      records: {
+        listSessionIds: () => records.listSessionIds(),
+        list: (sessionId, query) => records.list(sessionId, query),
+        subscribe: (listener) => records.subscribe(listener),
+      },
+    },
+    task: runtime.ops.task,
+    skills: runtime.ops.skills,
+    cacheKey: runtime,
+  };
+}
 
 interface RecallRuntimeExecutionResult {
   outputs: Record<string, unknown>;
@@ -129,12 +154,12 @@ export async function executeRecallRuntimeScenario(input: {
     writeFileSync(absolutePath, file.content, "utf8");
   }
 
-  const runtime = createBrewvaRuntime({ cwd: workspace }).hosted;
+  const runtime = createHostedRuntimeAdapter({ cwd: workspace });
   const eventAliasMap = new Map<string, string>();
 
   for (const session of dataset.sessions) {
-    runtime.operator.context.lifecycle.onTurnStart(session.id, 1);
-    runtime.authority.task.spec.set(session.id, {
+    runtime.ops.context.lifecycle.onTurnStart(session.id, 1);
+    runtime.ops.task.spec.set(session.id, {
       schema: "brewva.task.v1",
       goal: session.goal,
       targets: session.target_files ? { files: session.target_files } : undefined,
@@ -142,18 +167,35 @@ export async function executeRecallRuntimeScenario(input: {
 
     for (const event of session.events ?? []) {
       const payload = resolveAliasRefs(cloneValue(event.payload ?? {}), eventAliasMap, session.id);
-      const recorded = runtime.extensions.hosted.events.record({
-        sessionId: session.id,
-        type: event.type,
-        turn: event.turn,
-        timestamp:
-          typeof event.timestamp === "number"
-            ? event.timestamp
-            : typeof event.age_days === "number"
-              ? Date.now() - event.age_days * DAY_MS
-              : undefined,
-        payload: isRecord(payload) ? payload : undefined,
-      });
+      const timestamp =
+        typeof event.timestamp === "number"
+          ? event.timestamp
+          : typeof event.age_days === "number"
+            ? Date.now() - event.age_days * DAY_MS
+            : undefined;
+      if (event.type === "recall_curation_recorded") {
+        runtime.ops.tools.recall.curationRecorded({
+          sessionId: session.id,
+          payload: isRecord(payload) ? payload : {},
+          ...(timestamp ? { timestamp } : {}),
+          ...(typeof event.turn === "number" ? { turn: event.turn } : {}),
+        });
+      } else if (
+        event.type === "task_event" &&
+        isRecord(payload) &&
+        payload.kind === "item_added"
+      ) {
+        const item = isRecord(payload.item) ? payload.item : {};
+        const text = typeof item.text === "string" ? item.text : "";
+        runtime.ops.task.items.add(session.id, {
+          id: typeof item.id === "string" ? item.id : undefined,
+          text,
+          status: typeof item.status === "string" ? item.status : undefined,
+          timestamp,
+          turn: typeof event.turn === "number" ? event.turn : undefined,
+        });
+      }
+      const recorded = runtime.ops.events.records.list(session.id).at(-1);
       if (event.alias && recorded) {
         eventAliasMap.set(`${session.id}:${event.alias}`, recorded.id);
       }
@@ -164,14 +206,14 @@ export async function executeRecallRuntimeScenario(input: {
   const currentSessionId = dataset.query.session_id;
 
   const baselineStartedAt = performance.now();
-  const baselineSearch = runtime.inspect.tape.search.search(currentSessionId, {
+  const baselineSearch = runtime.ops.tape.search.search(currentSessionId, {
     query: dataset.query.text,
     scope: "all_phases",
     limit,
   });
   const baselineLatencyMs = performance.now() - baselineStartedAt;
 
-  const broker = getOrCreateRecallBroker(runtime);
+  const broker = getOrCreateRecallBroker(asRecallBrokerRuntime(runtime));
   const genericBrokerStartedAt = performance.now();
   const genericBrokerSearch = await broker.search({
     sessionId: currentSessionId,
@@ -218,13 +260,15 @@ export async function executeRecallRuntimeScenario(input: {
       )
     : undefined;
 
-  const baselineResults = baselineSearch.matches.map((match) => ({
-    stable_id: `tape:${currentSessionId}:${match.eventId}`,
-    source_family: "tape_evidence",
-    type: match.type,
-    excerpt: match.excerpt,
-    timestamp: match.timestamp,
-  }));
+  const baselineResults = baselineSearch.matches.map(
+    (match: { eventId: string; type: string; excerpt: string; timestamp: number }) => ({
+      stable_id: `tape:${currentSessionId}:${match.eventId}`,
+      source_family: "tape_evidence",
+      type: match.type,
+      excerpt: match.excerpt,
+      timestamp: match.timestamp,
+    }),
+  );
   const brokerResults = brokerSearch.results.map((entry) => ({
     stable_id: entry.stableId,
     source_family: entry.sourceFamily,
@@ -238,9 +282,15 @@ export async function executeRecallRuntimeScenario(input: {
     freshness: entry.freshness,
   }));
 
-  const baselineStableIds = baselineResults.map((entry) => entry.stable_id);
-  const brokerStableIds = brokerResults.map((entry) => entry.stable_id);
-  const genericBrokerStableIds = genericBrokerSearch.results.map((entry) => entry.stableId);
+  const baselineStableIds = baselineResults.map(
+    (entry: { readonly stable_id: string }) => entry.stable_id,
+  );
+  const brokerStableIds = brokerResults.map(
+    (entry: { readonly stable_id: string }) => entry.stable_id,
+  );
+  const genericBrokerStableIds = genericBrokerSearch.results.map(
+    (entry: { readonly stableId: string }) => entry.stableId,
+  );
   const baselineTokenCost = estimateBaselineTokenCost(baselineResults);
   const brokerTokenCost = estimateBrokerTokenCost(brokerResults);
 

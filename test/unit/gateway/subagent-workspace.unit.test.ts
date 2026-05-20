@@ -57,9 +57,11 @@ describe("subagent isolated workspace helpers", () => {
       expect.objectContaining({ path: "src/delete.ts", action: "delete" }),
       expect.objectContaining({ path: "src/keep.ts", action: "modify" }),
     ]);
-    expect(patchSet.changes.some((change) => change.path.startsWith(".git/"))).toBe(false);
-    expect(patchSet.changes.some((change) => change.path.startsWith("node_modules/"))).toBe(false);
-    expect(patchSet.changes.some((change) => change.path.startsWith(".orchestrator/"))).toBe(false);
+    expect(patchSet.changes.some((change) => change.path?.startsWith(".git/"))).toBe(false);
+    expect(patchSet.changes.some((change) => change.path?.startsWith("node_modules/"))).toBe(false);
+    expect(patchSet.changes.some((change) => change.path?.startsWith(".orchestrator/"))).toBe(
+      false,
+    );
     expect(patchSet.changes.some((change) => change.path === ".brewva/skills_index.json")).toBe(
       false,
     );

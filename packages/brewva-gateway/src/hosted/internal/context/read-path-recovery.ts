@@ -1,15 +1,14 @@
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import {
   readToolResultRecordedEventPayload,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
-  TOOL_CONTRACT_WARNING_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
+} from "@brewva/brewva-runtime/protocol";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
-import type { TurnLifecyclePort } from "../thread-loop/lifecycle/turn-lifecycle-port.js";
+import { queryRuntimeEvents, type HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
+import type { TurnLifecyclePort } from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
 import { makeHostedContextBlock, type HostedContextBlock } from "./hosted-context-blocks.js";
 
 const RECENT_TOOL_RESULT_WINDOW = 12;
@@ -19,22 +18,7 @@ const MAX_OBSERVED_DIRECTORIES = 24;
 const MISSING_PATH_PATTERN =
   /\b(?:enoent|no such file or directory|cannot find the file|file does not exist|not found)\b/i;
 
-interface RuntimeEventQueryPort {
-  inspect: {
-    events: {
-      records: {
-        query(
-          sessionId: string,
-          query?: {
-            type?: string;
-            last?: number;
-            after?: number;
-          },
-        ): Array<{ payload?: unknown; timestamp: number }>;
-      };
-    };
-  };
-}
+type RuntimeEventQueryPort = Pick<HostedRuntimeAdapterPort, "ops">;
 
 type ReadPathRecoveryPhase = "inactive" | "required" | "satisfied";
 
@@ -99,7 +83,7 @@ function analyzeRecentMissingPathFailures(
   runtime: RuntimeEventQueryPort,
   sessionId: string,
 ): ReadPathFailureState {
-  const events = runtime.inspect.events.records.query(sessionId, {
+  const events = queryRuntimeEvents(runtime, sessionId, {
     type: TOOL_RESULT_RECORDED_EVENT_TYPE,
     last: RECENT_TOOL_RESULT_WINDOW,
   });
@@ -146,7 +130,7 @@ function collectObservedDiscoveryEvidence(
   observedPaths: string[];
   observedDirectories: string[];
 } {
-  const evidenceEvents = runtime.inspect.events.records.query(sessionId, {
+  const evidenceEvents = queryRuntimeEvents(runtime, sessionId, {
     type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
     after: armedAt - 1,
   });
@@ -183,7 +167,7 @@ export function analyzeReadPathRecoveryState(
   runtime: RuntimeEventQueryPort,
   sessionId: string,
 ): ReadPathRecoveryState {
-  const latestArm = runtime.inspect.events.records.query(sessionId, {
+  const latestArm = queryRuntimeEvents(runtime, sessionId, {
     type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
     last: 1,
   })[0];
@@ -263,7 +247,7 @@ export function isReadPathVerified(
 }
 
 export function createReadPathRecoveryLifecycle(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
 ): TurnLifecyclePort {
   return {
     toolResult(event, ctx) {
@@ -286,9 +270,8 @@ export function createReadPathRecoveryLifecycle(
         return undefined;
       }
 
-      runtime.extensions.hosted.events.record({
+      runtime.ops.tools.readPath.gateArmed({
         sessionId,
-        type: TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
         payload: {
           consecutiveMissingPathFailures: failureState.consecutiveMissingPathFailures,
           failedPaths: failureState.failedPaths,
@@ -361,16 +344,15 @@ export function buildReadPathGuardWarningPayload(input: {
 }
 
 export function recordReadPathGuardWarning(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
     requestedPath: string;
     state: ReadPathRecoveryState;
   },
 ): void {
-  runtime.extensions.hosted.events.record({
+  runtime.ops.tools.readPath.contractWarning({
     sessionId: input.sessionId,
-    type: TOOL_CONTRACT_WARNING_EVENT_TYPE,
     payload: buildReadPathGuardWarningPayload({
       requestedPath: input.requestedPath,
       state: input.state,

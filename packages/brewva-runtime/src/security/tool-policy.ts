@@ -1,7 +1,6 @@
-import type { ToolAccessResult } from "../domain/context/types.js";
-import { getToolGovernanceDescriptor } from "../domain/governance/tool-governance.js";
-import type { ToolGovernanceDescriptor } from "../domain/governance/types.js";
-import type { SkillCard } from "../domain/skills/types.js";
+import type { SkillCard, ToolAccessResult } from "../protocol.js";
+import type { ToolGovernanceDescriptor } from "../runtime/kernel/policy/public-contract.js";
+import { getToolGovernanceDescriptor } from "../runtime/kernel/policy/tool-decision.js";
 import { normalizeToolName } from "../utils/tool-name.js";
 
 export interface ToolPolicyOptions {

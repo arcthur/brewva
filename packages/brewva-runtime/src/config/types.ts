@@ -1,6 +1,9 @@
 import type { BrewvaIntentId, BrewvaSessionId } from "../core/identifiers-bridge.js";
 import type { SecurityEnforcementPreference, VerificationLevel } from "../core/shared.js";
-import type { ToolActionAdmissionOverrides, ToolActionClass } from "../domain/governance/types.js";
+import type {
+  ToolActionAdmissionOverrides,
+  ToolActionClass,
+} from "../runtime/kernel/policy/public-contract.js";
 
 export interface BrewvaSecurityBoundaryNetworkRule {
   host: string;
@@ -123,6 +126,8 @@ export interface BrewvaConfig {
   };
   ledger: { path: string; checkpointEveryTurns: number };
   tape: {
+    enabled: boolean;
+    dir: string;
     checkpointIntervalEntries: number;
   };
   projection: {
@@ -208,7 +213,6 @@ export interface BrewvaConfig {
   infrastructure: {
     events: {
       enabled: boolean;
-      dir: string;
       level: "audit" | "ops" | "debug";
     };
     contextBudget: {

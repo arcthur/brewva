@@ -1,8 +1,8 @@
 import type {
   DelegationRunQuery,
   DelegationRunRecord as RuntimeDelegationRunRecord,
-} from "@brewva/brewva-runtime/delegation";
-import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/governance";
+} from "@brewva/brewva-runtime/protocol";
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/protocol";
 import type { A2ABroadcastResult, A2ASendResult } from "./a2a.js";
 import type { ExplorerConsultBrief } from "./explorer.js";
 import type {
@@ -31,7 +31,7 @@ export interface DelegationRef {
   kind: DelegationRefKind;
   locator: string;
   summary?: string;
-  sourceSessionId?: string;
+  sourceSessionId?: string | null;
   hash?: string;
 }
 

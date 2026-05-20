@@ -16,16 +16,15 @@
 - Code anchors:
   - `packages/brewva-gateway/src/hosted/api.ts`
   - `packages/brewva-gateway/src/hosted/session.ts`
-  - `packages/brewva-gateway/src/hosted/thread-loop.ts`
+  - `packages/brewva-gateway/src/hosted/turn-adapter.ts`
   - `packages/brewva-gateway/src/hosted/provider.ts`
-  - `packages/brewva-gateway/src/hosted/compaction.ts`
   - `packages/brewva-gateway/src/hosted/context.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/init/orchestration.ts`
   - `packages/brewva-gateway/src/hosted/internal/provider/`
   - `packages/brewva-gateway/src/hosted/internal/compaction/`
   - `packages/brewva-gateway/src/hosted/internal/context/`
-  - `packages/brewva-gateway/src/hosted/internal/thread-loop/`
+  - `packages/brewva-gateway/src/hosted/internal/turn-adapter/`
   - `packages/brewva-gateway/src/hosted/internal/shared/`
   - `packages/brewva-gateway/src/extensions/api.ts`
   - `test/fitness/gateway/hosted-lane-layout.fitness.test.ts`
@@ -35,13 +34,13 @@
 
 - `@brewva/brewva-gateway/hosted` is the canonical public lane for hosted session creation and hosted turn execution.
 - The old `@brewva/brewva-gateway/host`, `@brewva/brewva-gateway/session`, and `@brewva/brewva-gateway/runtime-plugins` package subpaths are deleted, not shimmed.
-- Default hosted behavior no longer lives in a runtime-plugin family. The former context, evidence, lifecycle, provider, and tools families were absorbed under the hosted session and hosted thread-loop owner paths.
+- Default hosted behavior no longer lives in a runtime-plugin family. The former context, evidence, lifecycle, provider, and tools families were absorbed under the hosted session and hosted turn-adapter owner paths.
 - `@brewva/brewva-gateway/extensions` is the opt-in host extension facade for CLI command extensions, explicit tool registration, local hooks, and advisory transforms. It is not the implementation language for default hosted behavior.
 - Top-level hosted files are public facades. Side-effect ownership is enforced at the implementation paths that write receipts or mutate hosted state:
   - hosted session assembly, projection, tools, and bootstrap under `hosted/internal/session/`
   - provider payload and cache policy under `hosted/internal/provider/`
-  - turn envelope, recovery decisions, lifecycle, and worker behavior under `hosted/internal/thread-loop/`
-  - compaction generation and recovery under `hosted/internal/compaction/`
+  - turn envelope, lifecycle, and worker behavior under `hosted/internal/turn-adapter/`
+  - compaction generation under `hosted/internal/compaction/`
   - hosted context and context evidence under `hosted/internal/context/`
   - pure cross-owner contracts under `hosted/internal/shared/`
 - Hosted behavior installation is private to session assembly through `createHostedBehaviorHostAdapter` from `hosted/internal/session/host-api-installation.ts`; there is one production call site in `hosted/internal/session/init/orchestration.ts`.

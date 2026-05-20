@@ -128,6 +128,7 @@
       "name": "@brewva/brewva-gateway",
       "version": "0.1.0",
       "dependencies": {
+        "@brewva/brewva-capabilities": "workspace:*",
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-ingress-telegram": "workspace:*",
@@ -197,7 +198,6 @@
       "name": "@brewva/brewva-runtime",
       "version": "0.1.0",
       "dependencies": {
-        "@brewva/brewva-capabilities": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-std": "workspace:*",

@@ -69,6 +69,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-capabilities": "workspace:*",
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-ingress-telegram": "workspace:*",

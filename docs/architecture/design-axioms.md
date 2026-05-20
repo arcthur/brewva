@@ -120,7 +120,7 @@ call`; turn-level bounded recovery may grow later, but cross-agent saga
   - cache and cost accounting
   - provider request constraints
   - durability classes
-- `Gateway Model Boundary`
+- `Runtime Physics Boundary`
   - main turn model calls
   - LLM-driven compaction
   - model routing

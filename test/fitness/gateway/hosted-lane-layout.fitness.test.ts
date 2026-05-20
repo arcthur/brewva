@@ -15,7 +15,6 @@ describe("hosted lane layout", () => {
       "ToolAttemptBindingRegistry",
       "registerProviderRequestRecovery",
       "registerProviderRequestReduction",
-      "installSessionCompactionRecovery",
     ]) {
       expect(publicFacade).not.toContain(privateExport);
     }
@@ -39,6 +38,7 @@ describe("hosted lane layout", () => {
     expect(Object.keys(packageJson.exports)).not.toContain("./host");
     expect(Object.keys(packageJson.exports)).not.toContain("./session");
     expect(Object.keys(packageJson.exports)).not.toContain("./runtime-plugins");
+    expect(Object.keys(packageJson.exports)).not.toContain("./hosted/compaction");
 
     const sessionAssembly = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/init/orchestration.ts",
@@ -93,7 +93,7 @@ describe("hosted lane layout", () => {
       .filter((file) => file !== materializationPath)
       .filter((file) => {
         const source = readRepoFile(file);
-        return source.includes(".operator.context.visibleRead.rememberState(");
+        return source.includes(".ops.context.visibleRead.rememberState(");
       })
       .toSorted();
     expect(offenders).toEqual([]);
@@ -119,7 +119,7 @@ describe("hosted lane layout", () => {
       "packages/brewva-gateway/src/hosted/internal/context/",
       "packages/brewva-gateway/src/hosted/internal/compaction/",
       "packages/brewva-gateway/src/hosted/internal/session/tools/",
-      "packages/brewva-gateway/src/hosted/internal/thread-loop/",
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/",
     ];
     const allowedFiles = new Set([
       "packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts",

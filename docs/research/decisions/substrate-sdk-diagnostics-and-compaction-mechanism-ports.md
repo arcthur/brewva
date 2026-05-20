@@ -12,17 +12,16 @@
   - `skills/project/shared/package-boundaries.md`
   - `skills/project/shared/source-map.md`
 - Code anchors:
-  - `packages/brewva-substrate/src/sdk/index.ts`
   - `packages/brewva-substrate/src/provenance/index.ts`
   - `packages/brewva-substrate/src/execution/index.ts`
   - `packages/brewva-substrate/src/compaction/index.ts`
   - `packages/brewva-substrate/src/tools/wrap.ts`
-  - `test/unit/substrate/{sdk,provenance,event-bus,compaction,tool-wrapper}.unit.test.ts`
+  - `test/unit/substrate/{provenance,event-bus,compaction,tool-wrapper}.unit.test.ts`
   - `test/contract/substrate/substrate-entrypoint.contract.test.ts`
 
 ## Decision Summary
 
-- `@brewva/brewva-substrate/sdk` is the one-call and two-stage in-memory composition surface for direct substrate hosts.
+- `@brewva/brewva-substrate/sdk` was removed by the four-port runtime promotion; direct hosts construct `BrewvaRuntime` rather than creating a second turn owner.
 - SDK services return `BrewvaSubstrateDiagnostic` values for recoverable startup or composition issues; invariant failures still throw.
 - SDK host-api wiring covers turn-loop-aligned events and provider/context/tool hooks without synthesizing gateway hosted prompt input policy.
 - `@brewva/brewva-substrate/provenance` owns reusable source-info vocabulary for prompt, tool, SDK, resource, and future extension-discovered artifacts.
@@ -42,4 +41,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/four-port-runtime-simplification-rfc.md`

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/context";
+import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/protocol";
 
 describe("coerceContextBudgetUsage", () => {
   test("returns undefined when input is missing or invalid", () => {

@@ -31,6 +31,12 @@
       "import": "./dist/platform-node.js",
       "default": "./dist/platform-node.js"
     },
+    "./primitives": {
+      "types": "./src/primitives.ts",
+      "bun": "./src/primitives.ts",
+      "import": "./dist/primitives.js",
+      "default": "./dist/primitives.js"
+    },
     "./runtime": {
       "types": "./src/runtime-spine.ts",
       "bun": "./src/runtime-spine.ts",

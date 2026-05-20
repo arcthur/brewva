@@ -1,15 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
-import {
-  TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
-  TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
-  TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
-  TOOL_OUTPUT_OBSERVED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/events";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { LRUCache } from "lru-cache";
+import {
+  finishRuntimeToolInvocation,
+  getRuntimeContextStatus,
+  getRuntimeContextUsage,
+  type HostedRuntimeAdapterPort,
+} from "../../session/runtime-ports.js";
 import { distillToolOutput, estimateTokens } from "../../session/tools/tool-output-distiller.js";
 import { persistToolOutputArtifact } from "./tool-output-artifact-store.js";
 
@@ -241,7 +240,7 @@ function extractTextContent(content: unknown): string {
 }
 
 function buildOutputObservation(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   outputText: string,
 ): {
@@ -255,8 +254,8 @@ function buildOutputObservation(
   contextHardLimitPercent: number;
   contextCompactionThresholdPercent: number;
 } {
-  const usage = runtime.inspect.context.usage.get(sessionId);
-  const status = runtime.inspect.context.usage.getStatus(sessionId, usage);
+  const usage = getRuntimeContextUsage(runtime, sessionId);
+  const status = getRuntimeContextStatus(runtime, sessionId, usage);
   return {
     rawChars: outputText.length,
     rawBytes: Buffer.byteLength(outputText, "utf8"),
@@ -274,14 +273,14 @@ function buildOutputObservation(
   };
 }
 
-function resolveWorkspaceRoot(runtime: BrewvaHostedRuntimePort, context: unknown): string {
+function resolveWorkspaceRoot(runtime: HostedRuntimeAdapterPort, context: unknown): string {
   if (!context || typeof context !== "object") return runtime.identity.cwd;
   const cwd = (context as { cwd?: unknown }).cwd;
   return typeof cwd === "string" && cwd.trim().length > 0 ? cwd : runtime.identity.cwd;
 }
 
 function recordArtifactFailure(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
     toolCallId: string;
@@ -291,9 +290,8 @@ function recordArtifactFailure(
     artifactRef?: string | null;
   },
 ): void {
-  runtime.extensions.hosted.events.record({
+  runtime.ops.tools.outputs.artifactPersistFailed({
     sessionId: input.sessionId,
-    type: TOOL_OUTPUT_ARTIFACT_PERSIST_FAILED_EVENT_TYPE,
     payload: {
       toolCallId: input.toolCallId,
       toolName: input.toolName,
@@ -305,7 +303,7 @@ function recordArtifactFailure(
 }
 
 function recordToolOutcome(
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
     context: unknown;
@@ -351,9 +349,8 @@ function recordToolOutcome(
     verdict: input.verdict,
   });
 
-  runtime.extensions.hosted.events.record({
+  runtime.ops.tools.outputs.observed({
     sessionId: input.sessionId,
-    type: TOOL_OUTPUT_OBSERVED_EVENT_TYPE,
     payload: {
       toolCallId: input.toolCallId,
       toolName: input.toolName,
@@ -374,9 +371,8 @@ function recordToolOutcome(
     });
   }
   if (outputArtifact) {
-    runtime.extensions.hosted.events.record({
+    runtime.ops.tools.outputs.artifactPersisted({
       sessionId: input.sessionId,
-      type: TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
       payload: {
         toolCallId: input.toolCallId,
         toolName: input.toolName,
@@ -389,9 +385,8 @@ function recordToolOutcome(
     });
   }
   if (outputDistillation.distillationApplied) {
-    runtime.extensions.hosted.events.record({
+    runtime.ops.tools.outputs.distilled({
       sessionId: input.sessionId,
-      type: TOOL_OUTPUT_DISTILLED_EVENT_TYPE,
       payload: {
         toolCallId: input.toolCallId,
         toolName: input.toolName,
@@ -412,7 +407,7 @@ function recordToolOutcome(
     });
   }
 
-  runtime.authority.tools.invocation.finish({
+  finishRuntimeToolInvocation(runtime, {
     sessionId: input.sessionId,
     toolCallId: input.toolCallId,
     toolName: input.toolName,
@@ -453,7 +448,7 @@ function recordToolOutcome(
 
 export function registerLedgerWriter(
   extensionApi: InternalHostPluginApi,
-  runtime: BrewvaHostedRuntimePort,
+  runtime: HostedRuntimeAdapterPort,
 ): void {
   const lifecycleStatesBySession = new Map<string, Map<string, ToolLifecycleState>>();
   const finalizedToolCallsBySession = new Map<string, LRUCache<string, true>>();

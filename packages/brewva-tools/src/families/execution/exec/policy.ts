@@ -1,6 +1,6 @@
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
-import type { ToolBoxPolicy } from "@brewva/brewva-runtime/governance";
+import type { ToolBoxPolicy } from "@brewva/brewva-runtime/protocol";
 import { resolveBoundaryPolicy } from "@brewva/brewva-runtime/security";
 import type { ResolvedBoundaryPolicy, ShellCommandAnalysis } from "@brewva/brewva-runtime/security";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";

@@ -35,7 +35,7 @@ inputs where the family is marked rebuildable.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/domain/schedule/service.ts`
-- `packages/brewva-runtime/src/domain/projection/workflow/artifact-derivation.ts`
-- `packages/brewva-runtime/src/domain/projection/workflow/status-derivation.ts`
+- `packages/brewva-gateway/src/daemon/schedule-runner.ts`
+- `packages/brewva-runtime/src/protocol.ts`
+- `packages/brewva-runtime/src/protocol.ts`
 - `packages/brewva-gateway/src/delegation`

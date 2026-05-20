@@ -4,8 +4,8 @@ import type {
   DelegationModelCategory,
   PublicSubagentRole,
   DelegationVisibility,
-} from "@brewva/brewva-runtime/delegation";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/session";
+} from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import type {
   ExplorerConsultKind,
   DelegationPacket,

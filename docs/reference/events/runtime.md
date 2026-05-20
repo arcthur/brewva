@@ -49,7 +49,9 @@ changes, cache observations, and request-shaping decisions. They are used to
 inspect why the runtime advised or forced compaction, not to reconstruct hidden
 prompt state.
 
-Context compaction events should be read with `root.inspect.context.*`:
+Context compaction events should be read through `runtime.model.materialize(...)`
+for provider-ready prompt state and, for repo-owned hosted adapter diagnostics,
+through `HostedRuntimeAdapterPort.ops.context.*`:
 
 - compaction advisory and request events explain numeric status transitions
 - gate events explain why a tool was blocked or allowed
@@ -63,8 +65,8 @@ evidence. They do not replace task/claim state or verification reports.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/events/registry.ts`
-- `packages/brewva-runtime/src/domain/sessions/event-pipeline.ts`
-- `packages/brewva-runtime/src/domain/proposals/proposal-admission.ts`
-- `packages/brewva-runtime/src/domain/context/context.ts`
-- `packages/brewva-runtime/src/domain/task/task-watchdog.ts`
+- `packages/brewva-runtime/src/runtime/runtime-api.ts`
+- `packages/brewva-runtime/src/runtime/engine/turn.ts`
+- `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`
+- `packages/brewva-runtime/src/runtime/model/model.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn-adapter/watchdog/task-progress-watchdog.ts`

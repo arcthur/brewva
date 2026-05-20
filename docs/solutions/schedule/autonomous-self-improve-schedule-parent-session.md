@@ -6,8 +6,8 @@ problem_kind: design
 module: brewva-gateway
 boundaries:
   - gateway.daemon.scheduler
-  - runtime.inspect.skills
-  - runtime.authority.schedule
+  - HostedRuntimeAdapterPort.ops.skills
+  - HostedRuntimeAdapterPort.ops.schedule
 source_artifacts:
   - design_spec
   - retro_findings
@@ -71,5 +71,5 @@ maintenance, retrospection, or evidence-gated improvement work.
 
 - `docs/research/decisions/skill-compounding-loop-completeness-and-parameterization-model.md`
 - `packages/brewva-gateway/src/daemon/schedule-runner.ts`
-- `packages/brewva-gateway/src/hosted/internal/thread-loop/schedule-trigger.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn-adapter/schedule-trigger.ts`
 - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`

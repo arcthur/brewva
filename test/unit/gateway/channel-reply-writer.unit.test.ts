@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/channels";
-import { createTrustedLocalGovernancePort } from "@brewva/brewva-runtime/governance";
+import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import { createChannelReplyWriter } from "../../../packages/brewva-gateway/src/channels/channel-reply-writer.js";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import type { BrewvaRuntimeOptions } from "../../helpers/runtime.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
-  return createBrewvaRuntime(options).hosted;
+  return createRuntimeInstanceFixture(options);
 }
 
 function createInboundTurn(): TurnEnvelope {
@@ -28,11 +27,9 @@ describe("channel reply writer", () => {
     const workspace = createTestWorkspace("channel-reply-writer");
     const controllerRuntime = createHostedTestRuntime({
       cwd: workspace,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
     });
     const workerRuntime = createHostedTestRuntime({
       cwd: workspace,
-      governancePort: createTrustedLocalGovernancePort({ profile: "team" }),
       agentId: "worker",
     });
     const sentTurns: TurnEnvelope[] = [];

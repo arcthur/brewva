@@ -1,20 +1,21 @@
+import type { BrewvaAgentProtocolTool } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaHostToolInfo } from "@brewva/brewva-substrate/host-api";
 import { buildBrewvaSystemPrompt } from "@brewva/brewva-substrate/prompt";
 import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
 import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import type { BrewvaTurnLoopTool } from "@brewva/brewva-substrate/turn";
 import type { ToolSchemaSnapshot, ToolSchemaSnapshotTool } from "../../provider/cache/index.js";
 
 function toAgentTool(
   tool: BrewvaToolDefinition,
   ctxFactory: () => BrewvaToolContext,
   schemaOverride?: ToolSchemaSnapshotTool,
-): BrewvaTurnLoopTool {
+): BrewvaAgentProtocolTool {
   return {
     name: tool.name,
     label: tool.label,
     description: schemaOverride?.description ?? tool.description,
-    parameters: (schemaOverride?.parameters ?? tool.parameters) as BrewvaTurnLoopTool["parameters"],
+    parameters: (schemaOverride?.parameters ??
+      tool.parameters) as BrewvaAgentProtocolTool["parameters"],
     prepareArguments: tool.prepareArguments,
     execute: (toolCallId, params, signal, onUpdate) =>
       tool.execute(
@@ -126,7 +127,7 @@ export class ManagedSessionToolRegistry {
     definitions: readonly BrewvaToolDefinition[],
     snapshot: ToolSchemaSnapshot,
     ctxFactory: () => BrewvaToolContext,
-  ): BrewvaTurnLoopTool[] {
+  ): BrewvaAgentProtocolTool[] {
     const schemasByName = new Map(snapshot.tools.map((tool) => [tool.name, tool]));
     return definitions.map((tool) => toAgentTool(tool, ctxFactory, schemasByName.get(tool.name)));
   }

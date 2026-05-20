@@ -1,6 +1,10 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { BrewvaSessionModelDescriptor } from "@brewva/brewva-substrate/session";
 import type { BrewvaCompactionRequest } from "@brewva/brewva-substrate/tools";
+import {
+  getRuntimeCompactionGateStatus,
+  getRuntimeContextUsage,
+  type HostedRuntimeAdapterPort,
+} from "../session/runtime-ports.js";
 import { decideCompaction } from "./policy.js";
 
 export const MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS =
@@ -10,12 +14,12 @@ export const FALLBACK_MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS =
   "Compact before switching to a fallback model with a smaller context window. Preserve the current objective, latest user correction, failed attempt, and next step.";
 
 export function shouldCompactForModelDownshift(input: {
-  runtime: BrewvaHostedRuntimePort;
+  runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   currentModel: BrewvaSessionModelDescriptor;
   targetModel: BrewvaSessionModelDescriptor;
 }): boolean {
-  const usage = input.runtime.inspect.context.usage.get(input.sessionId);
+  const usage = getRuntimeContextUsage(input.runtime, input.sessionId);
   const usageKnown = typeof usage?.tokens === "number" && Number.isFinite(usage.tokens);
   const targetUsage = usageKnown
     ? {
@@ -24,10 +28,7 @@ export function shouldCompactForModelDownshift(input: {
         maxOutputTokens: input.targetModel.maxTokens,
       }
     : undefined;
-  const gateStatus = input.runtime.inspect.context.compaction.getGateStatus(
-    input.sessionId,
-    targetUsage,
-  );
+  const gateStatus = getRuntimeCompactionGateStatus(input.runtime, input.sessionId, targetUsage);
   return (
     decideCompaction({
       caller: "model_downshift",

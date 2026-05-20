@@ -1,11 +1,14 @@
 import { existsSync } from "node:fs";
+import type {
+  ToolActionClass,
+  ToolAdmissionBehavior,
+} from "../runtime/kernel/policy/public-contract.js";
 import {
   TOOL_ACTION_CLASSES,
   TOOL_ADMISSION_BEHAVIORS,
   compareToolAdmission,
   getToolActionClassAdmissionBounds,
-} from "../domain/governance/action-policy.js";
-import type { ToolActionClass, ToolAdmissionBehavior } from "../domain/governance/types.js";
+} from "../runtime/kernel/policy/tool-admission-policy.js";
 import {
   isRecord,
   normalizeBoolean,

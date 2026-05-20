@@ -41,7 +41,8 @@ export function getCanonicalSubagentPrompt(
 ): string {
   if (resultMode === "consult") {
     return consultKind
-      ? CANONICAL_CONSULT_PROMPT_BY_KIND[consultKind]
+      ? (CANONICAL_CONSULT_PROMPT_BY_KIND[consultKind] ??
+          "Act as a read-only explorer. Reduce uncertainty, keep evidence concrete, and optimize for the parent's next decision.")
       : "Act as a read-only explorer. Reduce uncertainty, keep evidence concrete, and optimize for the parent's next decision.";
   }
   return CANONICAL_PROMPT_BY_RESULT_MODE[resultMode];
@@ -221,9 +222,7 @@ function buildJsonShapeExample(input: {
             evidenceRefs: ["session:child:agent_end"],
           },
         ],
-        ownershipHints: [
-          "packages/brewva-runtime/src/domain/projection/workflow/status-derivation.ts owns semantic posture derivation.",
-        ],
+        ownershipHints: ["Runtime tape projections own semantic workflow posture derivation."],
         recommendedReads: [
           "packages/brewva-gateway/src/delegation/shared.ts",
           "packages/brewva-gateway/src/delegation/delegation-store.ts",

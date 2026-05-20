@@ -1,10 +1,5 @@
-import type { BrewvaHostedRuntimePort } from "@brewva/brewva-runtime";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
-import {
-  consumeNextPromptOutputBudgetEscalation,
-  markProviderRequestRecoveryInstalled,
-} from "../../thread-loop/recovery/output-budget-state.js";
-import { recordSessionTurnTransition } from "../../thread-loop/turn-transition.js";
+import type { HostedRuntimeAdapterPort } from "../../session/runtime-ports.js";
 
 const OUTPUT_BUDGET_PATHS = [
   ["max_tokens"],
@@ -120,30 +115,10 @@ export function applyOutputBudgetEscalationToPayload(
 }
 
 export function registerProviderRequestRecovery(
-  extensionApi: InternalHostPluginApi,
-  runtime: BrewvaHostedRuntimePort,
+  _extensionApi: InternalHostPluginApi,
+  _runtime: HostedRuntimeAdapterPort,
 ): void {
-  markProviderRequestRecoveryInstalled(runtime);
-  extensionApi.on("before_provider_request", (event, ctx) => {
-    const sessionId = ctx.sessionManager.getSessionId().trim();
-    if (!sessionId) {
-      return undefined;
-    }
-    const pending = consumeNextPromptOutputBudgetEscalation(runtime, sessionId);
-    if (!pending) {
-      return undefined;
-    }
-
-    const result = applyOutputBudgetEscalationToPayload(event.payload, pending.targetMaxTokens);
-    recordSessionTurnTransition(runtime, {
-      sessionId,
-      reason: "output_budget_escalation",
-      status: result.status,
-      error: result.detail,
-      model: pending.model,
-    });
-    return result.status === "completed" ? result.payload : undefined;
-  });
+  return;
 }
 
 export const PROVIDER_REQUEST_RECOVERY_TEST_ONLY = {

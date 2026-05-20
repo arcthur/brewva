@@ -2,11 +2,12 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
-import { BOX_RELEASED_EVENT_TYPE } from "@brewva/brewva-runtime/events";
+import { BOX_RELEASED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 import type { BrewvaBundledToolRuntime } from "../../contracts/index.js";
 import { createBoxPlane, type BoxPlane, type BoxPlaneOptions } from "../../internal/box/index.js";
+import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 
 export type RuntimeBoxConfig = BrewvaConfig["security"]["execution"]["box"];
 
@@ -117,7 +118,7 @@ async function releaseSessionBoxes(
   );
   await plane.releaseScope({ kind: "session", id: sessionId }, "session_closed");
   for (const box of matchingBoxes) {
-    runtime.extensions?.tools?.recordEvent?.({
+    recordToolRuntimeEvent(runtime, {
       sessionId,
       type: BOX_RELEASED_EVENT_TYPE,
       payload: {
