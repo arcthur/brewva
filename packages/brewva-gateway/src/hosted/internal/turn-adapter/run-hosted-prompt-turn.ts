@@ -1,4 +1,5 @@
 import type { ToolOutputView } from "@brewva/brewva-runtime/protocol";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
@@ -41,6 +42,7 @@ export async function runHostedPromptTurn(input: {
   readonly runtime: HostedRuntimeAdapterPort;
   readonly sessionId: string;
   readonly turnId?: string;
+  readonly onFrame?: (frame: SessionWireFrame) => void;
 }): Promise<HostedPromptTurnResult> {
   const result = await runHostedTurnEnvelope({
     session: input.session,
@@ -49,6 +51,7 @@ export async function runHostedPromptTurn(input: {
     sessionId: input.sessionId,
     turnId: input.turnId,
     source: input.source,
+    onFrame: input.onFrame,
   });
 
   if (result.status === "completed") {

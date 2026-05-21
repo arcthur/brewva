@@ -32,8 +32,9 @@ const OPEN_TUI_TEST_DATA_PATH_LISTENER_LIMIT = 100;
 const DEFAULT_KITTY_KEYBOARD_CONFIG = {
   disambiguate: true,
   alternateKeys: true,
-  allKeysAsEscapes: true,
-  reportText: true,
+  // Keep text-producing keys in the terminal's raw UTF-8 path. Requesting
+  // all-keys-as-escapes makes committed IME text depend on terminal-specific
+  // CSI-u associated-text support, which is less portable for CJK input.
 } as const;
 
 function createCliRendererConfig(

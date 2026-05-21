@@ -213,17 +213,20 @@ export function completionItemAuxText(item: ShellCompletionCandidate): string | 
   return item.description ?? item.detail;
 }
 
+function isPrintableKeySequence(event: OpenTuiKeyEvent): boolean {
+  if (event.ctrl || event.meta || event.sequence.length === 0) {
+    return false;
+  }
+  const firstCodePoint = event.sequence.codePointAt(0);
+  return firstCodePoint !== undefined && firstCodePoint >= 32 && firstCodePoint !== 127;
+}
+
 export function toSemanticInput(event: OpenTuiKeyEvent): CliShellInput {
-  const normalizedKey =
-    event.name.length === 1 && !event.ctrl && !event.meta ? "character" : event.name;
+  const isPrintableText = isPrintableKeySequence(event);
+  const normalizedKey = isPrintableText ? "character" : event.name;
   return {
     key: normalizedKey,
-    text:
-      normalizedKey === "character"
-        ? event.sequence.length > 0
-          ? event.sequence
-          : event.name
-        : undefined,
+    text: isPrintableText ? event.sequence : undefined,
     ctrl: event.ctrl,
     meta: event.meta,
     shift: event.shift,

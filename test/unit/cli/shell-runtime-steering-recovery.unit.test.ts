@@ -576,6 +576,30 @@ describe("shell runtime: steering and recovery", () => {
     runtime.dispose();
   });
 
+  test("projects non-streaming runtime turn assistant output after submit", async () => {
+    const fixture = createFakeBundle();
+    const { bundle } = fixture;
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.ui.setEditorText("你是谁");
+    await submitComposer(runtime);
+
+    const assistantMessages = runtime
+      .getViewState()
+      .transcript.messages.filter((message) => message.role === "assistant");
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.parts[0]).toMatchObject({ type: "text", text: "ok" });
+
+    runtime.dispose();
+  });
+
   test("submitted pasted text expands in the user transcript instead of showing the paste placeholder", async () => {
     const prompts: string[] = [];
     const { bundle } = createFakeBundle({

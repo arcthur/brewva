@@ -2,8 +2,13 @@ import { randomUUID } from "node:crypto";
 import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
 import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-runtime/protocol";
 import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-runtime/protocol";
-import type { SessionRewindDivergenceNote } from "@brewva/brewva-runtime/protocol";
 import type {
+  SessionRewindDivergenceNote,
+  SessionWireFrame,
+} from "@brewva/brewva-runtime/protocol";
+import type {
+  BrewvaPromptAssistantMessageEvent,
+  BrewvaPromptSessionEvent,
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
 } from "@brewva/brewva-substrate/session";
@@ -148,7 +153,118 @@ function appendRewindDivergenceSummary(
   );
 }
 
+type SessionViewPortListener = (event: BrewvaPromptSessionEvent) => void;
+
+type RuntimeToolSessionWireFrame = Extract<
+  SessionWireFrame,
+  { type: "tool.progress" | "tool.finished" }
+>;
+
+interface RuntimeTurnSessionProjectionState {
+  assistantText: string;
+  projectedAssistantEnd: boolean;
+}
+
+function buildAssistantTextMessage(text: string): {
+  readonly role: "assistant";
+  readonly stopReason: "stop";
+  readonly content: readonly [{ readonly type: "text"; readonly text: string }];
+  readonly timestamp: number;
+} {
+  return {
+    role: "assistant",
+    stopReason: "stop",
+    content: [{ type: "text", text }],
+    timestamp: Date.now(),
+  };
+}
+
+function buildAssistantDeltaEvent(input: {
+  delta: string;
+  assistantText: string;
+}): Extract<BrewvaPromptSessionEvent, { type: "message_update" }> {
+  return {
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "text_delta",
+      contentIndex: 0,
+      delta: input.delta,
+      partial: buildAssistantTextMessage(input.assistantText),
+    } satisfies Extract<BrewvaPromptAssistantMessageEvent, { type: "text_delta" }>,
+  };
+}
+
+function buildRuntimeToolResultPayload(frame: RuntimeToolSessionWireFrame): {
+  readonly content: readonly { readonly type: "text"; readonly text: string }[];
+  readonly details: { readonly verdict: string };
+  readonly display?: RuntimeToolSessionWireFrame["display"];
+  readonly isError: boolean;
+} {
+  return {
+    content: frame.text.length > 0 ? [{ type: "text", text: frame.text }] : [],
+    details: { verdict: frame.verdict },
+    ...(frame.display ? { display: frame.display } : {}),
+    isError: frame.isError,
+  };
+}
+
+function emitRuntimeTurnSessionFrame(input: {
+  frame: SessionWireFrame;
+  state: RuntimeTurnSessionProjectionState;
+  emit(event: BrewvaPromptSessionEvent): void;
+}): void {
+  const frame = input.frame;
+  const state = input.state;
+  if (frame.type === "assistant.delta" && frame.lane === "answer" && frame.delta.length > 0) {
+    state.assistantText += frame.delta;
+    input.emit(
+      buildAssistantDeltaEvent({ delta: frame.delta, assistantText: state.assistantText }),
+    );
+    return;
+  }
+  if (frame.type === "tool.started") {
+    input.emit({
+      type: "tool_execution_start",
+      toolCallId: frame.toolCallId,
+      toolName: frame.toolName,
+    });
+    return;
+  }
+  if (frame.type === "tool.progress") {
+    input.emit({
+      type: "tool_execution_update",
+      toolCallId: frame.toolCallId,
+      toolName: frame.toolName,
+      partialResult: buildRuntimeToolResultPayload(frame),
+    });
+    return;
+  }
+  if (frame.type === "tool.finished") {
+    input.emit({
+      type: "tool_execution_end",
+      toolCallId: frame.toolCallId,
+      toolName: frame.toolName,
+      result: buildRuntimeToolResultPayload(frame),
+      isError: frame.isError,
+    });
+    return;
+  }
+  if (frame.type === "turn.committed" && frame.assistantText.length > 0) {
+    input.emit({
+      type: "message_end",
+      message: buildAssistantTextMessage(frame.assistantText),
+    });
+    state.projectedAssistantEnd = true;
+  }
+}
+
 export function createSessionViewPort(bundle: CliShellSessionBundle): SessionViewPort {
+  const localListeners = new Set<SessionViewPortListener>();
+  const emitLocalSessionEvent = (event: BrewvaPromptSessionEvent): void => {
+    for (const listener of localListeners) {
+      listener(event);
+    }
+  };
   const fallbackPresetState = (): BrewvaModelPresetState => ({
     activeName: "Default",
     defaultName: "Default",
@@ -312,15 +428,36 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         await bundle.session.prompt(parts, options);
         return;
       }
+      const projectionState: RuntimeTurnSessionProjectionState = {
+        assistantText: "",
+        projectedAssistantEnd: false,
+      };
       const output = await runHostedPromptTurn({
         session: bundle.session,
         parts,
         source: "interactive",
         runtime: bundle.runtime,
         sessionId: bundle.session.sessionManager.getSessionId(),
+        onFrame(frame) {
+          emitRuntimeTurnSessionFrame({
+            frame,
+            state: projectionState,
+            emit: emitLocalSessionEvent,
+          });
+        },
       });
       if (output.status === "failed") {
         throw output.error instanceof Error ? output.error : new Error(String(output.error));
+      }
+      if (
+        output.status === "completed" &&
+        !projectionState.projectedAssistantEnd &&
+        output.assistantText.length > 0
+      ) {
+        emitLocalSessionEvent({
+          type: "message_end",
+          message: buildAssistantTextMessage(output.assistantText),
+        });
       }
     },
     getQueuedPrompts() {
@@ -339,7 +476,18 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return bundle.session.abort();
     },
     subscribe(listener) {
-      return bundle.session.subscribe(listener);
+      localListeners.add(listener);
+      let unsubscribeSession: () => void;
+      try {
+        unsubscribeSession = bundle.session.subscribe(listener);
+      } catch (error) {
+        localListeners.delete(listener);
+        throw error;
+      }
+      return () => {
+        localListeners.delete(listener);
+        unsubscribeSession();
+      };
     },
     getTranscriptSeed() {
       const messages = bundle.session.sessionManager.buildSessionContext?.().messages;

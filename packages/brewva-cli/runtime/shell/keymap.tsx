@@ -190,6 +190,29 @@ function registerKeyAliases(keymap: BrewvaOpenTuiKeymap): () => void {
   });
 }
 
+function replaceDefaultEventResolverWithImeSafeResolver(keymap: BrewvaOpenTuiKeymap): () => void {
+  // OpenTUI's default resolver normalizes event.name through resolveKey().
+  // Raw IME commits can carry the committed text in sequence while leaving name
+  // empty, so they must be treated as "no keymap match" instead of an invalid key.
+  keymap.clearEventMatchResolvers();
+  return keymap.appendEventMatchResolver((event, ctx) => {
+    const keyName = event.name.trim();
+    if (!keyName) {
+      return [];
+    }
+    return [
+      ctx.resolveKey({
+        name: keyName,
+        ctrl: event.ctrl,
+        shift: event.shift,
+        meta: event.meta,
+        super: event.super ?? false,
+        hyper: event.hyper || undefined,
+      }),
+    ];
+  });
+}
+
 function registerManagedTextareaLayer(
   keymap: BrewvaOpenTuiKeymap,
   renderer: CliRenderer,
@@ -237,6 +260,7 @@ export function registerBrewvaKeymap(input: RegisterBrewvaKeymapInput): BrewvaKe
   );
 
   disposers.push(registerModeLayerField(keymap));
+  disposers.push(replaceDefaultEventResolverWithImeSafeResolver(keymap));
   disposers.push(opentuiKeymapAddons.registerCommaBindings(keymap));
   disposers.push(registerKeyAliases(keymap));
   disposers.push(opentuiKeymapAddons.registerBaseLayoutFallback(keymap));

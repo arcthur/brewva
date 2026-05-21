@@ -8,13 +8,16 @@ import type {
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import { parseKeypress, type ParsedKey } from "@opentui/core";
 import {
   createOpenTuiSolidElement,
   openTuiSolidAct,
   openTuiSolidTestRender,
   type OpenTuiRenderer,
+  type OpenTuiKeyEvent,
 } from "../../../packages/brewva-cli/runtime/internal-opentui-runtime.js";
 import { BrewvaOpenTuiShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
+import { toSemanticInput } from "../../../packages/brewva-cli/runtime/shell/utils.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
   ProviderAuthMethod,
@@ -34,6 +37,12 @@ interface FakeOpenTuiSelectionRenderer extends OpenTuiRenderer {
 interface OpenTuiPasteRenderer extends OpenTuiRenderer {
   keyInput: {
     processPaste(bytes: Uint8Array): void;
+  };
+}
+
+interface OpenTuiKeyInputRenderer extends OpenTuiRenderer {
+  keyInput: {
+    processParsedKey(key: ParsedKey): boolean;
   };
 }
 
@@ -67,6 +76,49 @@ function createFakeSelectionRenderer(selectedText = "Selected transcript text"):
     wasCleared() {
       return cleared;
     },
+  };
+}
+
+function codepointsForText(text: string): number[] {
+  const codepoints: number[] = [];
+  for (let index = 0; index < text.length; ) {
+    const codepoint = text.codePointAt(index);
+    if (codepoint === undefined) {
+      throw new Error("expected text to contain valid codepoints");
+    }
+    codepoints.push(codepoint);
+    index += codepoint > 0xffff ? 2 : 1;
+  }
+  return codepoints;
+}
+
+function emitKittyTextReport(renderer: OpenTuiRenderer, text: string): void {
+  const codepoints = codepointsForText(text);
+  const sequence = `\x1b[0;1;${codepoints.join(":")}u`;
+  const parsed = parseKeypress(sequence, { useKittyKeyboard: true });
+  if (!parsed) {
+    throw new Error("expected kitty text report to parse");
+  }
+  (renderer as OpenTuiKeyInputRenderer).keyInput.processParsedKey(parsed);
+}
+
+function emitRawText(renderer: OpenTuiRenderer, text: string): void {
+  const parsed = parseKeypress(text, { useKittyKeyboard: true });
+  if (!parsed) {
+    throw new Error("expected raw text to parse");
+  }
+  (renderer as OpenTuiKeyInputRenderer).keyInput.processParsedKey(parsed);
+}
+
+function toOpenTuiKeyEvent(parsed: ParsedKey): OpenTuiKeyEvent {
+  return {
+    name: parsed.name,
+    ctrl: parsed.ctrl,
+    meta: parsed.meta,
+    shift: parsed.shift,
+    sequence: parsed.sequence,
+    preventDefault() {},
+    stopPropagation() {},
   };
 }
 
@@ -179,6 +231,7 @@ function createFakeBundle(
     completeOAuth?: (provider: string, methodId: string, code?: string) => Promise<void>;
     isStreaming?: boolean;
     abortHandler?: () => Promise<void>;
+    promptHandler?: (parts: readonly { type: string; text?: string }[]) => Promise<void> | void;
   } = {},
 ) {
   let attachedUi: BrewvaToolUiPort | undefined;
@@ -282,7 +335,9 @@ function createFakeBundle(
         }
       };
     },
-    async prompt() {},
+    async prompt(parts: readonly { type: string; text?: string }[]) {
+      await options.promptHandler?.(parts);
+    },
     getQueuedPrompts() {
       return queuedPrompts;
     },
@@ -435,6 +490,32 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
     return;
   }
+
+  test("normalizes printable OpenTUI sequences as semantic character input", () => {
+    const imeText = String.fromCodePoint(0x4f60, 0x597d);
+    const sequence = `\x1b[0;1;${codepointsForText(imeText).join(":")}u`;
+    const parsedIme = parseKeypress(sequence, { useKittyKeyboard: true });
+    const parsedSpace = parseKeypress(" ", { useKittyKeyboard: true });
+
+    if (!parsedIme || !parsedSpace) {
+      throw new Error("expected test key events to parse");
+    }
+
+    expect(toSemanticInput(toOpenTuiKeyEvent(parsedIme))).toEqual({
+      key: "character",
+      text: imeText,
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    expect(toSemanticInput(toOpenTuiKeyEvent(parsedSpace))).toEqual({
+      key: "character",
+      text: " ",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+  });
 
   test("updates the prompt model label after selecting a model", async () => {
     const models: BrewvaSessionModelDescriptor[] = [
@@ -620,6 +701,41 @@ describe("opentui solid shell runtime: interaction events", () => {
       await testSetup.renderOnce();
 
       expect(runtime.getViewState().overlay.active?.kind).toBe("approval");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps leader shortcuts with printable continuations active", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("x", { ctrl: true });
+        testSetup.mockInput.pressKey("?");
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(runtime.getViewState().overlay.active?.kind).toBe("shortcutOverlay");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1025,6 +1141,137 @@ describe("opentui solid shell runtime: interaction events", () => {
       await testSetup.renderOnce();
 
       expect(runtime.getViewState().composer.text).toBe("hello");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("commits kitty IME text reports into the composer textarea", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      const imeText = String.fromCodePoint(0x4f60, 0x597d);
+      await openTuiSolidAct(async () => {
+        emitKittyTextReport(testSetup.renderer, imeText);
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(runtime.getViewState().composer.text).toBe(imeText);
+      expect(testSetup.captureCharFrame()).toContain(imeText);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("commits raw IME text into the composer textarea", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      const imeText = String.fromCodePoint(0x4f60, 0x597d);
+      const originalConsoleError = console.error;
+      const consoleErrors: unknown[][] = [];
+      await openTuiSolidAct(async () => {
+        console.error = (...args: unknown[]) => {
+          consoleErrors.push(args);
+        };
+        try {
+          emitRawText(testSetup.renderer, imeText);
+          await Bun.sleep(0);
+        } finally {
+          console.error = originalConsoleError;
+        }
+      });
+      await testSetup.renderOnce();
+
+      expect(consoleErrors).toEqual([]);
+      expect(runtime.getViewState().composer.text).toBe(imeText);
+      expect(testSetup.captureCharFrame()).toContain(imeText);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("submits raw IME text from the composer with return", async () => {
+    const submittedText: string[] = [];
+    const { bundle } = createFakeBundle({
+      isStreaming: true,
+      promptHandler(parts) {
+        submittedText.push(parts.map((part) => part.text ?? "").join(""));
+      },
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      const imeText = String.fromCodePoint(0x4f60, 0x662f, 0x8c01);
+      await openTuiSolidAct(async () => {
+        emitRawText(testSetup.renderer, imeText);
+        testSetup.mockInput.pressEnter();
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(submittedText).toEqual([imeText]);
+      expect(runtime.getViewState().composer.text).toBe("");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

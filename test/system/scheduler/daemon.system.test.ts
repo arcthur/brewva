@@ -24,6 +24,7 @@ interface DaemonProcess {
 
 const SCHEDULER_DAEMON_WAIT_TIMEOUT_MS = 20_000;
 const SCHEDULER_DAEMON_TEST_TIMEOUT_MS = 30_000;
+const CLI_ENTRYPOINT = "packages/brewva-cli/src/index.ts";
 
 async function waitForCondition<T>(
   check: () => T | Promise<T | null | undefined> | null | undefined,
@@ -78,8 +79,7 @@ function startSchedulerDaemon(workspace: string): DaemonProcess {
   const child = spawn(
     "bun",
     [
-      "run",
-      "start",
+      CLI_ENTRYPOINT,
       "--cwd",
       workspace,
       "--config",
