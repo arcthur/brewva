@@ -7,6 +7,7 @@ import type {
   BrewvaHostToolInfo as ToolInfo,
   BrewvaHostToolResultEvent as ToolResultEvent,
 } from "@brewva/brewva-substrate/host-api";
+import { appendBrewvaSystemPromptTextSection } from "@brewva/brewva-substrate/prompt";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   getBrewvaToolSurface,
@@ -15,7 +16,6 @@ import {
   MANAGED_BREWVA_TOOL_NAMES,
   OPERATOR_BREWVA_TOOL_NAMES,
 } from "@brewva/brewva-tools/registry";
-import { appendHostedSystemPromptSection } from "../../system-prompt-text.js";
 import { recordRuntimeToolSurfaceResolved } from "../runtime-ports.js";
 import {
   readLatestSkillSelectionReceipt,
@@ -453,7 +453,7 @@ export function createToolSurfaceLifecycle(
       }
       const systemPrompt = typeof rawEvent.systemPrompt === "string" ? rawEvent.systemPrompt : "";
       return {
-        systemPrompt: appendHostedSystemPromptSection({
+        systemPrompt: appendBrewvaSystemPromptTextSection({
           systemPrompt,
           section: capabilitySection,
         }),

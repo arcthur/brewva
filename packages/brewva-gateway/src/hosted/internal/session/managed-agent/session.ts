@@ -29,6 +29,7 @@ import {
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate/host-api";
 import {
+  appendBrewvaSystemPromptTextSection,
   buildBrewvaProjectInstructionsPromptBlock,
   buildBrewvaPromptText,
   cloneBrewvaPromptContentParts,
@@ -104,7 +105,6 @@ import {
 } from "../../provider/cache/index.js";
 import { consumeProviderRequestReductionExpectedCacheBreak } from "../../provider/request/provider-request-reduction.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
-import { appendHostedSystemPromptSection } from "../../system-prompt-text.js";
 import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../turn-adapter/hosted-prompt-attempt.js";
 import {
   HOSTED_RUNTIME_TURN_CONTEXT,
@@ -193,15 +193,15 @@ import {
 
 function appendTargetScopedProjectInstructions(input: {
   baseSystemPrompt: string;
-  promptText: string;
+  promptTargetPaths: readonly string[];
   resourceLoader: BrewvaHostedResourceLoader;
 }): string {
   const targetInstructions: BrewvaProjectInstructionFile[] = [];
   const seen = new Set<string>();
-  for (const targetPath of extractPromptTargetPaths(input.promptText)) {
-    const instructionSet = input.resourceLoader.getProjectInstructionsForTarget(targetPath);
+  for (const targetPath of input.promptTargetPaths) {
+    const instructionSet = input.resourceLoader.getTargetOnlyProjectInstructions(targetPath);
     for (const instruction of instructionSet.files) {
-      if (instruction.source !== "target" || seen.has(instruction.path)) {
+      if (seen.has(instruction.path)) {
         continue;
       }
       seen.add(instruction.path);
@@ -212,7 +212,7 @@ function appendTargetScopedProjectInstructions(input: {
   if (!block) {
     return input.baseSystemPrompt;
   }
-  return appendHostedSystemPromptSection({
+  return appendBrewvaSystemPromptTextSection({
     systemPrompt: input.baseSystemPrompt,
     section: block.text,
   });
@@ -1040,9 +1040,10 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     ];
 
     const promptText = buildBrewvaPromptText(currentParts);
+    const promptTargetPaths = extractPromptTargetPaths(promptText);
     const systemPrompt = appendTargetScopedProjectInstructions({
       baseSystemPrompt: this.#baseSystemPrompt,
-      promptText,
+      promptTargetPaths,
       resourceLoader: this.#resourceLoader,
     });
 
@@ -1051,6 +1052,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         type: "before_agent_start",
         prompt: promptText,
         parts: cloneBrewvaPromptContentParts(currentParts),
+        promptPaths: promptTargetPaths,
         systemPrompt,
       },
       this.createHostContext(),

@@ -102,6 +102,7 @@ describe("managed-agent-session tool registry", () => {
           diagnostics: [],
         }),
         getProjectInstructionsForTarget: () => ({ files: [], diagnostics: [] }),
+        getTargetOnlyProjectInstructions: () => ({ files: [], diagnostics: [] }),
         getSkills: () => ({ skills: [] }),
       } as never,
       activeToolNames: ["write"],

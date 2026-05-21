@@ -154,9 +154,10 @@ describe("hosted advisory skill shortlist context", () => {
       candidateSkillCount: 0,
       renderedSkillCount: 0,
       omittedSkillCount: 4,
-      selectionMode: "discover_guidance_prompt_context",
+      selectionMode: "discover_guidance_receipt_only",
+      promptPaths: [],
     });
-    expect(result.renderedSection).toContain("No SkillCards were deterministically shortlisted");
+    expect(result.renderedSection).toBe("");
     expect(result.renderedSection).not.toContain("## code-review");
     expect(result.renderedSection).not.toContain("internal-probe");
   });
@@ -182,6 +183,7 @@ describe("hosted advisory skill shortlist context", () => {
         name: "code-review",
         category: "core",
         reasons: ["explicit_mention", "name_match"],
+        reasonCount: 2,
         score: 500,
         filePath: "/skills/code-review/SKILL.md",
       },
@@ -220,10 +222,12 @@ describe("hosted advisory skill shortlist context", () => {
       prompt: "Run runtime-forensics and check database rollback safety.",
     });
 
+    expect(pathGlob.receipt.promptPaths).toEqual(["docs/reference/skill-routing.md"]);
     expect(pathGlob.receipt.renderedSkillReasons).toContainEqual({
       name: "docs-audit",
       category: "docs",
       reasons: ["path_glob"],
+      reasonCount: 1,
       score: 400,
       filePath: "/skills/docs-audit/SKILL.md",
     });
@@ -231,6 +235,7 @@ describe("hosted advisory skill shortlist context", () => {
       name: "code-review",
       category: "core",
       reasons: ["path_glob"],
+      reasonCount: 1,
       score: 400,
       filePath: "/skills/code-review/SKILL.md",
     });
@@ -238,6 +243,7 @@ describe("hosted advisory skill shortlist context", () => {
       name: "code-review",
       category: "core",
       reasons: ["path_glob"],
+      reasonCount: 1,
       score: 400,
       filePath: "/skills/code-review/SKILL.md",
     });
@@ -245,6 +251,7 @@ describe("hosted advisory skill shortlist context", () => {
       name: "docs-audit",
       category: "docs",
       reasons: ["path_glob"],
+      reasonCount: 1,
       score: 400,
       filePath: "/skills/docs-audit/SKILL.md",
     });
@@ -252,6 +259,7 @@ describe("hosted advisory skill shortlist context", () => {
       expect.objectContaining({
         name: "runtime-forensics",
         category: "operator",
+        reasonCount: 2,
         score: 300,
         filePath: "/skills/runtime-forensics/SKILL.md",
       }),
@@ -285,10 +293,43 @@ describe("hosted advisory skill shortlist context", () => {
         name: "solution-memory",
         category: "docs",
         reasons: ["path_glob"],
+        reasonCount: 1,
         score: 400,
         filePath: "/skills/solution-memory/SKILL.md",
       },
     ]);
+  });
+
+  test("uses corroborating reasons as deterministic tie-break evidence", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "docs-audit",
+        category: "docs",
+        description: "Audit documentation coherence.",
+        pathGlobs: ["docs/**"],
+      }),
+      skill({
+        name: "docs-basic",
+        category: "docs",
+        description: "Basic documentation checks.",
+        pathGlobs: ["docs/**"],
+      }),
+    ]);
+
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "Use docs-audit for docs/reference/skill-routing.md.",
+    });
+
+    expect(result.receipt.renderedSkillReasons.map((entry) => entry.name)).toEqual([
+      "docs-audit",
+      "docs-basic",
+    ]);
+    expect(result.receipt.renderedSkillReasons[0]).toMatchObject({
+      reasons: ["path_glob", "name_match"],
+      reasonCount: 2,
+      score: 400,
+    });
   });
 
   test("caps deterministic shortlist at eight cards and records omission counts", () => {
@@ -371,6 +412,7 @@ describe("hosted advisory skill shortlist context", () => {
     expect(result?.message?.content).toContain("Available Brewva SkillCards: 4");
     expect(result?.message?.content).toContain("Candidate Brewva SkillCards: 1");
     expect(result?.message?.content).toContain("Rendered Brewva SkillCards: 1");
+    expect(result?.message?.content).toContain("Prompt Paths: 0");
     expect(result?.message?.content).toContain("Selection Mode: shortlist_prompt_context");
     expect(result?.message?.details).toMatchObject({
       selectionId: expect.stringMatching(/^skill_selection_[a-f0-9]{16}$/u),
@@ -380,6 +422,7 @@ describe("hosted advisory skill shortlist context", () => {
       renderedSkillCount: 1,
       omittedSkillCount: 3,
       selectionMode: "shortlist_prompt_context",
+      promptPaths: [],
     });
     expect(events).toHaveLength(1);
     expect(events[0]?.type).toBe("skill_selection_recorded");
@@ -399,6 +442,7 @@ describe("hosted advisory skill shortlist context", () => {
       candidateSkillCount: 1,
       renderedSkillCount: 1,
       omittedSkillCount: 3,
+      promptPaths: [],
     });
     const renderedSkillContext = expectObject(
       payload.renderedSkillContext,
@@ -412,5 +456,30 @@ describe("hosted advisory skill shortlist context", () => {
     });
     expect(renderedSkillContext.charCount).toBeGreaterThan(0);
     expect(renderedSkillContext.estimatedTokens).toBeGreaterThan(0);
+  });
+
+  test("records no-candidate receipts without injecting empty SkillCard prompt context", () => {
+    const { runtime, events } = createRuntime(createSkillCatalog());
+    const lifecycle = createSkillSelectionLifecycle(runtime);
+
+    const result = lifecycle.beforeAgentStart(
+      {
+        prompt: "Summarize the current turn.",
+        promptPaths: ["unknown/path.md"],
+        systemPrompt: "base\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo",
+      },
+      { sessionManager: { getSessionId: () => "no-skill-selection-event" } },
+    );
+
+    const resultObject = expectObject(result, "no-candidate lifecycle result");
+    const message = expectObject(resultObject.message, "no-candidate lifecycle message");
+    expect(message.customType).toBe("brewva-skill-selection");
+    expect(Object.hasOwn(resultObject, "systemPrompt")).toBe(false);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.payload).toMatchObject({
+      selectionMode: "discover_guidance_receipt_only",
+      promptPaths: ["unknown/path.md"],
+      renderedSkillCount: 0,
+    });
   });
 });

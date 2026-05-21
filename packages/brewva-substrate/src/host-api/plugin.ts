@@ -164,6 +164,7 @@ export interface BrewvaHostBeforeAgentStartEvent {
   type: "before_agent_start";
   prompt: string;
   parts: BrewvaPromptContentPart[];
+  promptPaths?: readonly string[];
   systemPrompt: string;
 }
 

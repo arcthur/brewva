@@ -34,10 +34,12 @@
 - Project instructions are structured `CLAUDE.md` / `AGENTS.md` files loaded in
   global, ancestor, and target-nested order. Target-path instructions are
   advisory prompt context and do not create mutation gates.
-- SkillCards are deterministic, turn-scoped advisory shortlist context. The
-  selector considers explicit `$skill` mention, path glob, trigger, name match,
-  and description or `when_to_use` text match, then records candidate, render,
-  omission, mode, and reason evidence.
+- SkillCards are deterministic, turn-scoped advisory shortlist context when
+  candidates exist. The selector considers explicit `$skill` mention, path
+  glob, trigger, name match, and description or `when_to_use` text match, then
+  records prompt paths, candidate/render/omission counts, mode, reasons, and
+  reason-count evidence. Empty shortlists are receipt-only and rely on the
+  stable operating contract for optional `discover_skills` guidance.
 - SkillCards still cannot grant tools, accounts, budgets, side effects, runtime
   authority, or completion requirements. Capability selection remains the
   authority receipt plane.

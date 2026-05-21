@@ -147,14 +147,15 @@ turn message. Explicit `$skill` mentions are mirrored as
 `tool_surface_resolved.explicitSkillMentionNames`; `skillSelectionId` and
 `skillSelectionMode` remain trace correlation fields. The event also records
 `candidateSkillCount`, `renderedSkillCount`, `omittedSkillCount`,
-`renderedSkillReasons`, and `renderedSkillContext` with character and
-token-estimate metadata for the prompt block that was injected.
+`promptPaths`, `renderedSkillReasons`, and `renderedSkillContext` with
+character and token-estimate metadata for any prompt block that was injected.
 
 Hosted shortlist selection is deterministic: explicit mention, path glob,
 trigger, name match, then description or `selection.when_to_use` text match.
 The default cap is 8 rendered SkillCards, except that explicit mentions over
 the cap are preserved and recorded with an over-budget reason. A turn with no
-candidate SkillCards renders discovery guidance instead of the full catalog.
+candidate SkillCards records receipt-only discovery guidance instead of the
+full catalog or an empty SkillCard block.
 
 Skill-surface tools are counted by `skillSurfaceToolActiveCount` and
 `hiddenSkillSurfaceToolCount`. They are tool inventory counters, not selected

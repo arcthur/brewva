@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  appendBrewvaSystemPromptTextSection,
   buildBrewvaCapabilitySelectionPromptBlock,
   buildBrewvaSystemPromptDocument,
+  BREWVA_SYSTEM_PROMPT_ENVIRONMENT_BLOCK_ID,
+  renderBrewvaSystemPromptEnvironmentBlockText,
   renderBrewvaSystemPromptText,
 } from "@brewva/brewva-substrate/prompt";
 
@@ -36,7 +39,7 @@ describe("Brewva system prompt document", () => {
       "custom_instructions",
       "project_instructions",
       "capability_selection",
-      "environment",
+      BREWVA_SYSTEM_PROMPT_ENVIRONMENT_BLOCK_ID,
     ]);
   });
 
@@ -109,6 +112,7 @@ describe("Brewva system prompt document", () => {
     expect(prompt).toContain("Verify before claiming completion");
     expect(prompt).toContain("Use direct local search for exact path, symbol, or string lookup");
     expect(prompt).toContain("SkillCards are current-turn advisory context only");
+    expect(prompt).toContain("use discover_skills before guessing");
     expect(prompt).toContain("Use short working updates during long-running work");
     expect(prompt).toContain("The user may not see raw tool output");
     expect(prompt).toContain("navigator for evidence, explorer for judgment");
@@ -143,5 +147,27 @@ describe("Brewva system prompt document", () => {
     expect(block?.text).toContain("[CapabilitySelection]");
     expect(block?.text).toContain("github");
     expect(block?.text).toContain("gmail: not configured");
+  });
+
+  test("appends hosted turn sections before the canonical environment block", () => {
+    const systemPrompt = renderBrewvaSystemPromptText(
+      buildBrewvaSystemPromptDocument({ cwd: "/workspace" }),
+    ).concat("\n");
+    const result = appendBrewvaSystemPromptTextSection({
+      systemPrompt,
+      section: "# CapabilitySelection\nselected: files",
+    });
+
+    expect(result).toContain("# CapabilitySelection\nselected: files\n\nCurrent date:");
+    expect(result.endsWith("Current working directory: /workspace")).toBe(true);
+  });
+
+  test("renders the environment block through the shared prompt contract", () => {
+    expect(
+      renderBrewvaSystemPromptEnvironmentBlockText({
+        date: "2026-05-21",
+        cwd: "/repo",
+      }),
+    ).toBe("Current date: 2026-05-21\nCurrent working directory: /repo");
   });
 });

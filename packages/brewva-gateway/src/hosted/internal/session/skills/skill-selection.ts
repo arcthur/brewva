@@ -5,8 +5,8 @@ import type {
   BrewvaHostBeforeAgentStartResult,
   BrewvaHostCustomMessage,
 } from "@brewva/brewva-substrate/host-api";
+import { appendBrewvaSystemPromptTextSection } from "@brewva/brewva-substrate/prompt";
 import { estimateModelTokens } from "@brewva/brewva-token-estimation";
-import { appendHostedSystemPromptSection } from "../../system-prompt-text.js";
 import { extractPromptTargetPaths, pathGlobMatches } from "../prompt-paths.js";
 import { recordRuntimeSkillSelection } from "../runtime-ports.js";
 
@@ -54,7 +54,7 @@ export type SkillSelectionTrigger = "user_message";
 export type SkillSelectionMode =
   | "shortlist_prompt_context"
   | "explicit_over_budget_prompt_context"
-  | "discover_guidance_prompt_context";
+  | "discover_guidance_receipt_only";
 export type SkillSelectionReason =
   | "explicit_mention"
   | "path_glob"
@@ -120,6 +120,7 @@ export interface RenderedSkillReason {
   name: string;
   category: LoadableSkillCategory;
   reasons: SkillSelectionReason[];
+  reasonCount: number;
   score: number;
   filePath: string;
 }
@@ -133,6 +134,7 @@ export interface SkillSelectionReceipt {
   renderedSkillCount: number;
   omittedSkillCount: number;
   selectionMode: SkillSelectionMode;
+  promptPaths: string[];
   renderedSkillReasons: RenderedSkillReason[];
   renderedSkillContext: {
     charCount: number;
@@ -166,6 +168,7 @@ interface RenderedSkillShortlist {
   tokenEstimate: ReturnType<typeof estimateModelTokens>;
   renderedCandidates: SkillCandidate[];
   candidateCount: number;
+  promptPaths: string[];
   selectionMode: SkillSelectionMode;
   overBudgetReason?: string;
 }
@@ -194,18 +197,22 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
+function wholeWordRegex(value: string, input: { dollarPrefixed?: boolean } = {}): RegExp {
+  const escapedValue = escapeRegExp(value);
+  const prefix = input.dollarPrefixed ? "\\$" : "";
+  return new RegExp(`(?:^|[^A-Za-z0-9_-])${prefix}${escapedValue}(?=$|[^A-Za-z0-9_-])`, "iu");
+}
+
 function normalizeWhitespace(value: string): string {
   return value.trim().replace(/\s+/gu, " ");
 }
 
 function hasExplicitMention(prompt: string, skillName: string): boolean {
-  const escapedName = escapeRegExp(skillName);
-  return new RegExp(`(?:^|[^A-Za-z0-9_-])\\$${escapedName}(?=$|[^A-Za-z0-9_-])`, "iu").test(prompt);
+  return wholeWordRegex(skillName, { dollarPrefixed: true }).test(prompt);
 }
 
 function hasNameMatch(prompt: string, skillName: string): boolean {
-  const escapedName = escapeRegExp(skillName);
-  return new RegExp(`(?:^|[^A-Za-z0-9_-])${escapedName}(?=$|[^A-Za-z0-9_-])`, "iu").test(prompt);
+  return wholeWordRegex(skillName).test(prompt);
 }
 
 function hasTriggerMatch(prompt: string, trigger: string): boolean {
@@ -310,6 +317,7 @@ function buildCandidate(input: {
 function compareCandidates(left: SkillCandidate, right: SkillCandidate): number {
   return (
     right.score - left.score ||
+    right.reasons.length - left.reasons.length ||
     left.skill.category.localeCompare(right.skill.category) ||
     left.skill.name.localeCompare(right.skill.name)
   );
@@ -338,14 +346,7 @@ function renderSkillEntry(candidate: SkillCandidate): string {
 
 function renderShortlistSection(candidates: readonly SkillCandidate[]): string {
   if (candidates.length === 0) {
-    return [
-      "",
-      "",
-      "# Available Brewva SkillCards",
-      "",
-      "SkillCards are advisory, turn-scoped prompt context. They do not grant tools, permissions, accounts, budgets, side effects, or runtime authority.",
-      "No SkillCards were deterministically shortlisted for this turn. Use discover_skills if a specialized workflow would materially help.",
-    ].join("\n");
+    return "";
   }
   return [
     "",
@@ -363,9 +364,10 @@ function renderShortlistSection(candidates: readonly SkillCandidate[]): string {
 function buildSkillShortlist(input: {
   skills: readonly AvailableSkillPromptContext[];
   prompt: string;
+  promptPaths?: readonly string[];
   maxRenderedSkills: number;
 }): RenderedSkillShortlist {
-  const promptPaths = extractPromptTargetPaths(input.prompt);
+  const promptPaths = input.promptPaths ?? extractPromptTargetPaths(input.prompt);
   const promptTokens = tokenizeForTextMatch(input.prompt);
   const candidates = input.skills
     .map((skill) =>
@@ -387,7 +389,7 @@ function buildSkillShortlist(input: {
     : candidates.slice(0, input.maxRenderedSkills);
   const selectionMode: SkillSelectionMode =
     candidates.length === 0
-      ? "discover_guidance_prompt_context"
+      ? "discover_guidance_receipt_only"
       : overExplicitBudget
         ? "explicit_over_budget_prompt_context"
         : "shortlist_prompt_context";
@@ -397,6 +399,7 @@ function buildSkillShortlist(input: {
     tokenEstimate: estimateModelTokens(section),
     renderedCandidates,
     candidateCount: candidates.length,
+    promptPaths: [...promptPaths],
     selectionMode,
     ...(overExplicitBudget ? { overBudgetReason: "explicit_mentions_exceed_render_cap" } : {}),
   };
@@ -406,12 +409,14 @@ function makeSelectionId(input: {
   trigger: SkillSelectionTrigger;
   prompt: string;
   renderedSkillReasons: readonly RenderedSkillReason[];
+  promptPaths: readonly string[];
   availableSkillNames: readonly string[];
 }): string {
   const digest = sha256Hex(
     [
       input.trigger,
       input.prompt,
+      input.promptPaths.join("\0"),
       input.renderedSkillReasons
         .map((skill) => `${skill.name}:${skill.reasons.join(",")}`)
         .join("\0"),
@@ -426,6 +431,7 @@ function toRenderedSkillReason(candidate: SkillCandidate): RenderedSkillReason {
     name: candidate.skill.name,
     category: candidate.skill.category,
     reasons: [...candidate.reasons],
+    reasonCount: candidate.reasons.length,
     score: candidate.score,
     filePath: candidate.skill.filePath,
   };
@@ -457,6 +463,7 @@ function buildReceipt(input: {
       trigger: input.trigger,
       prompt: input.prompt,
       renderedSkillReasons,
+      promptPaths: input.renderedShortlist.promptPaths,
       availableSkillNames: input.availableSkillNames,
     }),
     trigger: input.trigger,
@@ -467,6 +474,7 @@ function buildReceipt(input: {
     omittedSkillCount:
       input.availableSkillNames.length - input.renderedShortlist.renderedCandidates.length,
     selectionMode: input.renderedShortlist.selectionMode,
+    promptPaths: [...input.renderedShortlist.promptPaths],
     renderedSkillReasons,
     renderedSkillContext: {
       charCount: input.renderedShortlist.section.length,
@@ -501,6 +509,7 @@ export function readLatestSkillSelectionReceipt(input: {
 export function buildSkillShortlistContextForPrompt(input: {
   runtime: Pick<SkillSelectionRuntime, "ops">;
   prompt: string;
+  promptPaths?: readonly string[];
   maxRenderedSkills?: number;
 }): SkillSelectionResult {
   const trigger: SkillSelectionTrigger = "user_message";
@@ -510,6 +519,7 @@ export function buildSkillShortlistContextForPrompt(input: {
   const renderedShortlist = buildSkillShortlist({
     skills: availableSkills,
     prompt: input.prompt,
+    promptPaths: input.promptPaths,
     maxRenderedSkills,
   });
   const receipt = buildReceipt({
@@ -539,6 +549,7 @@ function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): Brewv
       `Candidate Brewva SkillCards: ${receipt.candidateSkillCount}`,
       `Rendered Brewva SkillCards: ${receipt.renderedSkillCount}`,
       `Omitted Brewva SkillCards: ${receipt.omittedSkillCount}`,
+      `Prompt Paths: ${receipt.promptPaths.length}`,
       `Explicit Brewva SkillCard Mentions: ${
         explicitSkillMentionNames.length > 0 ? explicitSkillMentionNames.join(", ") : "none"
       }`,
@@ -555,6 +566,7 @@ function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): Brewv
       candidateSkillCount: receipt.candidateSkillCount,
       renderedSkillCount: receipt.renderedSkillCount,
       omittedSkillCount: receipt.omittedSkillCount,
+      promptPaths: receipt.promptPaths,
       renderedSkillReasons: receipt.renderedSkillReasons,
       renderedSkillContext: receipt.renderedSkillContext,
       selectionMode: receipt.selectionMode,
@@ -568,26 +580,33 @@ export function createSkillSelectionLifecycle(
 ): SkillSelectionLifecycle {
   return {
     beforeAgentStart(event, ctx) {
-      const rawEvent = event as { prompt?: unknown; systemPrompt?: unknown };
+      const rawEvent = event as {
+        prompt?: unknown;
+        promptPaths?: unknown;
+        systemPrompt?: unknown;
+      };
       const sessionId = getSessionId(ctx);
       if (!sessionId) {
         return undefined;
       }
       const prompt = typeof rawEvent.prompt === "string" ? rawEvent.prompt : "";
-      const selection = buildSkillShortlistContextForPrompt({ runtime, prompt });
+      const promptPaths = Array.isArray(rawEvent.promptPaths)
+        ? rawEvent.promptPaths.filter((path): path is string => typeof path === "string")
+        : undefined;
+      const selection = buildSkillShortlistContextForPrompt({ runtime, prompt, promptPaths });
       recordRuntimeSkillSelection(runtime, sessionId, selection.receipt);
       const section = formatSkillSelectionSection(selection);
-      if (!section) {
-        return undefined;
-      }
       const systemPrompt = typeof rawEvent.systemPrompt === "string" ? rawEvent.systemPrompt : "";
-      return {
+      const result: BrewvaHostBeforeAgentStartResult = {
         message: formatSkillSelectionTraceMessage(selection.receipt),
-        systemPrompt: appendHostedSystemPromptSection({
+      };
+      if (section) {
+        result.systemPrompt = appendBrewvaSystemPromptTextSection({
           systemPrompt,
           section,
-        }),
-      };
+        });
+      }
+      return result;
     },
   };
 }

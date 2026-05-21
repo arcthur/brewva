@@ -1,4 +1,4 @@
-import { appendHostedSystemPromptSection } from "../system-prompt-text.js";
+import { appendBrewvaSystemPromptTextSection } from "@brewva/brewva-substrate/prompt";
 
 const CONTEXT_CONTRACT_MARKER = "[Brewva Context Contract]";
 const STATIC_CONTEXT_CONTRACT_BLOCK = [
@@ -24,7 +24,7 @@ export function applyContextContract(systemPrompt: unknown): string {
   if (baseWithoutContract.trim().length === 0) {
     return contract;
   }
-  return appendHostedSystemPromptSection({
+  return appendBrewvaSystemPromptTextSection({
     systemPrompt: baseWithoutContract,
     section: contract,
   });

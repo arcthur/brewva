@@ -182,12 +182,29 @@ Global review prompt.
       { path: join(workspace, "packages", "CLAUDE.md"), source: "target" },
       { path: join(workspace, "packages", "app", "AGENTS.md"), source: "target" },
     ]);
+    expect(
+      loader.getTargetOnlyProjectInstructions("packages/app/src/index.ts").files.map((file) => ({
+        path: file.path,
+        source: file.source,
+      })),
+    ).toEqual([
+      { path: join(workspace, "packages", "CLAUDE.md"), source: "target" },
+      { path: join(workspace, "packages", "app", "AGENTS.md"), source: "target" },
+    ]);
 
     const outside = loader.getProjectInstructionsForTarget(
       join(tmpdir(), "brewva-outside-target.ts"),
     );
     expect(outside.files.map((file) => file.path)).toEqual([join(workspace, "AGENTS.md")]);
     expect(outside.diagnostics).toContainEqual({
+      path: join(tmpdir(), "brewva-outside-target.ts"),
+      message: "target_path_outside_cwd",
+    });
+    const outsideTargetOnly = loader.getTargetOnlyProjectInstructions(
+      join(tmpdir(), "brewva-outside-target.ts"),
+    );
+    expect(outsideTargetOnly.files).toEqual([]);
+    expect(outsideTargetOnly.diagnostics).toContainEqual({
       path: join(tmpdir(), "brewva-outside-target.ts"),
       message: "target_path_outside_cwd",
     });

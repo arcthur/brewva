@@ -48,6 +48,8 @@ export interface BuildBrewvaSystemPromptDocumentOptions {
   capabilitySelection?: BrewvaSystemPromptCapabilitySelection;
 }
 
+export const BREWVA_SYSTEM_PROMPT_ENVIRONMENT_BLOCK_ID = "environment";
+
 const IDENTITY_SECTION =
   "You are an expert coding assistant operating inside Brewva, a coding-agent runtime.";
 
@@ -60,6 +62,7 @@ const OPERATING_CONTRACT_SECTION = `# Operating Contract
 - Use direct local search for exact path, symbol, or string lookup before broader exploration.
 - Delegate only when the role fits: navigator for evidence, explorer for judgment, worker for bounded isolated implementation, verifier for non-trivial implementation checks, and librarian for institutional knowledge.
 - SkillCards are current-turn advisory context only. Read the selected filePath first, use directly relevant references or scripts, and do not carry a workflow into later turns unless the later turn triggers it again.
+- When no SkillCard is shortlisted but a specialized workflow would materially help, use discover_skills before guessing.
 - Project instructions constrain repository work, but neither project instructions nor SkillCards grant tools, accounts, budgets, side effects, or runtime authority.`;
 
 const COMMUNICATION_CONTRACT_SECTION = `# Communication Contract
@@ -162,6 +165,13 @@ function buildProjectInstructionsText(
     lines.push("", `## ${instruction.path}`, instruction.content.trimEnd());
   }
   return lines.join("\n");
+}
+
+export function renderBrewvaSystemPromptEnvironmentBlockText(input: {
+  date: string;
+  cwd: string;
+}): string {
+  return `Current date: ${input.date}\nCurrent working directory: ${input.cwd}`;
 }
 
 export function buildBrewvaProjectInstructionsPromptBlock(
@@ -289,10 +299,10 @@ export function buildBrewvaSystemPromptDocument(
   }
 
   pushBlock(blocks, {
-    id: "environment",
+    id: BREWVA_SYSTEM_PROMPT_ENVIRONMENT_BLOCK_ID,
     stability: "session",
     authority: "contract",
-    text: `Current date: ${date}\nCurrent working directory: ${cwd}`,
+    text: renderBrewvaSystemPromptEnvironmentBlockText({ date, cwd }),
   });
 
   return {
@@ -306,4 +316,33 @@ export function renderBrewvaSystemPromptText(document: BrewvaSystemPromptDocumen
     .map((block) => block.text.trim())
     .filter(Boolean)
     .join("\n\n");
+}
+
+const ENVIRONMENT_BLOCK_PATTERN =
+  /\n\nCurrent date: \d{4}-\d{2}-\d{2}\nCurrent working directory: .+$/u;
+
+function appendPlainSystemPromptSection(input: { systemPrompt: string; section: string }): string {
+  const section = input.section.trim();
+  if (!section) {
+    return input.systemPrompt;
+  }
+  const base = input.systemPrompt.trimEnd();
+  return base ? `${base}\n\n${section}` : section;
+}
+
+export function appendBrewvaSystemPromptTextSection(input: {
+  systemPrompt: string;
+  section: string;
+  beforeBlockId?: typeof BREWVA_SYSTEM_PROMPT_ENVIRONMENT_BLOCK_ID;
+}): string {
+  const section = input.section.trim();
+  if (!section) {
+    return input.systemPrompt;
+  }
+  const base = input.systemPrompt.trimEnd();
+  const environmentBlock = ENVIRONMENT_BLOCK_PATTERN.exec(base);
+  if (!environmentBlock || environmentBlock.index === undefined) {
+    return appendPlainSystemPromptSection(input);
+  }
+  return `${base.slice(0, environmentBlock.index)}\n\n${section}${base.slice(environmentBlock.index)}`;
 }

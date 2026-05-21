@@ -45,7 +45,10 @@ export interface BrewvaHostedResourceLoader {
   };
   getProjectInstructions(): BrewvaProjectInstructionSet;
   getProjectInstructionsForTarget(targetPath: string): BrewvaProjectInstructionSet;
+  getTargetOnlyProjectInstructions(targetPath: string): BrewvaProjectInstructionSet;
+  /** Hosted adapters may override this with operator-authored session instructions. */
   getCustomInstructions(): string | undefined;
+  /** Hosted adapters may override this with append-only session instruction overlays. */
   getAppendInstructions(): string[];
   reload(): Promise<void>;
 }
@@ -182,6 +185,23 @@ function loadTargetProjectInstructions(input: {
     diagnostics: [...input.base.diagnostics],
   };
   const seen = new Set(output.files.map((file) => resolve(file.path)));
+  const targetOnly = loadTargetOnlyProjectInstructions({
+    cwd: input.cwd,
+    targetPath: input.targetPath,
+  });
+  addInstructionSet(output, seen, targetOnly);
+  return output;
+}
+
+function loadTargetOnlyProjectInstructions(input: {
+  cwd: string;
+  targetPath: string;
+}): BrewvaProjectInstructionSet {
+  const output: BrewvaProjectInstructionSet = {
+    files: [],
+    diagnostics: [],
+  };
+  const seen = new Set<string>();
   const nested = collectNestedDirectoriesFromCwdToTarget({
     cwd: input.cwd,
     targetPath: input.targetPath,
@@ -252,6 +272,13 @@ class InMemoryHostedResourceLoader implements BrewvaHostedResourceLoader {
     return loadTargetProjectInstructions({
       cwd: this.#cwd,
       base: this.#projectInstructions,
+      targetPath,
+    });
+  }
+
+  getTargetOnlyProjectInstructions(targetPath: string): BrewvaProjectInstructionSet {
+    return loadTargetOnlyProjectInstructions({
+      cwd: this.#cwd,
       targetPath,
     });
   }

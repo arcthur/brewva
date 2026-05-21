@@ -49,7 +49,8 @@ A hosted turn has one stable request shape:
   skill-selection lifecycle when deterministic SkillCard candidates exist
 - a hidden, context-excluded `brewva-skill-selection` custom message carrying
   explicit `$skill` mentions, candidate/render/omission counts, selection id,
-  rendered reasons, and render metadata for active-turn traceability
+  prompt paths, rendered reasons, and render metadata for active-turn
+  traceability
 - an optional `[CapabilitySelection]` section appended by the hosted tool
   surface when deterministic capability selection produces selected,
   forbidden, or policy evidence

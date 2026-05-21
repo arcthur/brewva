@@ -56,8 +56,9 @@ Skill routing is model-native and bounded by prompt context:
 - default render cap is 8 SkillCards
 - explicit mentions over the cap are all retained and recorded with an
   over-budget reason
-- no shortlisted SkillCard means Brewva renders discovery guidance, not the
-  full catalog
+- no shortlisted SkillCard means Brewva records receipt-only discovery guidance
+  and relies on the stable operating contract instead of injecting an empty
+  per-turn SkillCard block
 - the model reads the returned `filePath` before relying on the full skill body
 - SkillCard binding is current-turn only and must be re-triggered on later
   turns
@@ -67,9 +68,9 @@ Skill routing is model-native and bounded by prompt context:
 The event payload records `selectionId`, `trigger`, `explicitSkillMentions`,
 `availableSkillCount`, `candidateSkillCount`, `renderedSkillCount`,
 `omittedSkillCount`, `selectionMode`, `renderedSkillReasons`, and
-`renderedSkillContext`. `selectionMode` is one of
+`promptPaths`, and `renderedSkillContext`. `selectionMode` is one of
 `shortlist_prompt_context`, `explicit_over_budget_prompt_context`, or
-`discover_guidance_prompt_context`. `renderedSkillContext` contains the
+`discover_guidance_receipt_only`. `renderedSkillContext` contains the
 rendered character count and token estimate for the SkillCard prompt block so
 traces can explain the context-budget impact.
 

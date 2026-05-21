@@ -60,6 +60,8 @@ describe("substrate entrypoint surface", () => {
     expect(typeof prompt.expandBrewvaPromptTemplate).toBe("function");
     expect(typeof prompt.buildBrewvaSystemPromptDocument).toBe("function");
     expect(typeof prompt.renderBrewvaSystemPromptText).toBe("function");
+    expect(typeof prompt.appendBrewvaSystemPromptTextSection).toBe("function");
+    expect(typeof prompt.renderBrewvaSystemPromptEnvironmentBlockText).toBe("function");
     expect(typeof prompt.buildBrewvaCapabilitySelectionPromptBlock).toBe("function");
     expect("buildBrewvaSystemPrompt" in prompt).toBe(false);
   });
