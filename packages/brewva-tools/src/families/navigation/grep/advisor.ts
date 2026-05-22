@@ -1,13 +1,10 @@
 import { statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { scoreDocumentsByTfIdf, type TfIdfSearchDocument } from "@brewva/brewva-search";
 import type { BrewvaToolOptions } from "../../../contracts/index.js";
 import { buildSearchAdvisorSnapshot, normalizeSearchAdvisorPath } from "../search-advisor.js";
-import {
-  formatLineSpan,
-  normalizeRelativePath,
-  runTocSearchCore,
-  type TocSearchSessionCacheStore,
-} from "../toc-search-core.js";
+import { createSourceIntelligenceEngine } from "../source-intelligence/engine.js";
+import type { SourceDocument } from "../source-intelligence/ir.js";
 import type {
   GrepAdvisorDetails,
   GrepGroupedLines,
@@ -16,9 +13,7 @@ import type {
 } from "./types.js";
 
 const GREP_LOCATION_PATTERN = /^([^:\n]+):\d+(?::\d+)?(?:\s|:|$)/u;
-const GREP_TOC_SUGGESTION_LIMIT = 3;
-const GREP_TOC_SUGGESTION_MAX_FILES = 400;
-const GREP_TOC_SUGGESTION_MAX_INDEXED_BYTES = 2_000_000;
+const GREP_SOURCE_SUGGESTION_LIMIT = 3;
 const GREP_MAX_SUGGESTIONS = 5;
 
 function groupLocationLines(baseCwd: string, lines: string[]): GrepGroupedLines[] {
@@ -173,41 +168,54 @@ export function buildAdvisorHeader(header: string[], advisor: GrepAdvisorDetails
   return nextHeader;
 }
 
-export function buildGrepTocSuggestions(input: {
-  runtime?: BrewvaToolOptions["runtime"];
-  sessionId?: string;
+function documentSearchText(document: SourceDocument): string {
+  return [
+    document.filePath,
+    document.language,
+    ...document.imports.map((entry) => entry.rawSpecifier),
+    ...document.declarations.map((entry) => `${entry.kind} ${entry.name}`),
+    ...document.calls.map((entry) => entry.callee),
+  ].join("\n");
+}
+
+function formatLineSpan(startLine: number, endLine: number): string {
+  return startLine === endLine ? `L${startLine}` : `L${startLine}-L${endLine}`;
+}
+
+export async function buildGrepSourceSuggestions(input: {
   baseCwd: string;
   roots: string[];
   query: string;
-  cacheStore: TocSearchSessionCacheStore;
-}): GrepSuggestionItem[] {
-  const core = runTocSearchCore({
-    runtime: input.runtime,
-    sessionId: input.sessionId,
-    baseDir: input.baseCwd,
-    roots: input.roots,
-    queryText: input.query,
-    limit: GREP_TOC_SUGGESTION_LIMIT,
-    cacheStore: input.cacheStore,
-    maxCandidateFiles: GREP_TOC_SUGGESTION_MAX_FILES,
-    maxIndexedBytes: GREP_TOC_SUGGESTION_MAX_INDEXED_BYTES,
-  });
-  if (
-    core.tokens.length === 0 ||
-    core.scopeOverflow ||
-    core.noSupportedFiles ||
-    core.noAccessibleFiles ||
-    core.noIndexableFiles ||
-    core.rankedMatches.length === 0
-  ) {
+}): Promise<GrepSuggestionItem[]> {
+  const engine = createSourceIntelligenceEngine({ workspaceRoot: input.baseCwd, maxFiles: 400 });
+  const graph = await engine.buildGraph(input.roots);
+  const results = scoreDocumentsByTfIdf(
+    input.query,
+    graph.documents.map<TfIdfSearchDocument<SourceDocument>>((document) => ({
+      id: document.filePath,
+      text: documentSearchText(document),
+      metadata: document,
+    })),
+    { limit: GREP_SOURCE_SUGGESTION_LIMIT },
+  );
+  if (results.length === 0) {
     return [];
   }
-  return core.rankedMatches.slice(0, GREP_TOC_SUGGESTION_LIMIT).map((match) => {
-    const displayPath = normalizeRelativePath(input.baseCwd, match.filePath);
+  return results.flatMap((result) => {
+    const document = result.document.metadata;
+    if (!document) return [];
+    const displayPath = relative(input.baseCwd, document.filePath).replaceAll("\\", "/");
+    const declaration = document.declarations[0];
+    const declarationText = declaration
+      ? `source ${declaration.kind} ${declaration.name} @ ${formatLineSpan(
+          declaration.selectionSpan.startLine,
+          declaration.selectionSpan.endLine,
+        )}`
+      : `source ${document.language}`;
     return {
-      path: normalizeSearchAdvisorPath(input.baseCwd, match.filePath) ?? displayPath,
-      text: `${displayPath} (toc ${match.kind} ${match.name} @ ${formatLineSpan(match.lineStart, match.lineEnd)})`,
-      source: "toc",
+      path: normalizeSearchAdvisorPath(input.baseCwd, document.filePath) ?? displayPath,
+      text: `${displayPath} (${declarationText})`,
+      source: "source",
     };
   });
 }
@@ -215,7 +223,7 @@ export function buildGrepTocSuggestions(input: {
 export function finalizeSuggestionItems(input: {
   comboPath?: string;
   hotFiles: string[];
-  tocSuggestions: GrepSuggestionItem[];
+  sourceSuggestions: GrepSuggestionItem[];
 }): GrepSuggestionItem[] {
   const items: GrepSuggestionItem[] = [];
   if (input.comboPath) {
@@ -225,7 +233,7 @@ export function finalizeSuggestionItems(input: {
       source: "combo",
     });
   }
-  items.push(...input.tocSuggestions);
+  items.push(...input.sourceSuggestions);
   for (const hotFile of input.hotFiles) {
     items.push({
       path: hotFile,

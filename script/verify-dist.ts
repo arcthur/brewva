@@ -194,6 +194,7 @@ function main(): void {
     const packages = [
       "@brewva/brewva-runtime",
       "@brewva/brewva-search",
+      "@brewva/brewva-token-estimation",
       "@brewva/brewva-session-index",
       "@brewva/brewva-session-index/evidence",
       "@brewva/brewva-recall",
@@ -382,7 +383,9 @@ function main(): void {
     const { createHostedRuntimeAdapter } = hostModule;
     const runtimeConfigModule = await import("@brewva/brewva-runtime/config");
     const runtimeProtocolModule = await import("@brewva/brewva-runtime/protocol");
-    const { createOutputSearchTool } = await import("@brewva/brewva-tools/navigation");
+    const { createOutputSearchTool, createSourceIntelligenceTools } = await import(
+      "@brewva/brewva-tools/navigation"
+    );
     const runtime = createBrewvaRuntime({ cwd: isolatedWorkspace });
     const hostedRuntime = createHostedRuntimeAdapter({ cwd: isolatedWorkspace });
     if (typeof createBrewvaRuntime !== "function") {
@@ -474,6 +477,67 @@ function main(): void {
     const outputSearchText = outputSearchResult.content.find((item) => item.type === "text")?.text ?? "";
     if (!outputSearchText.includes("数据库连接") || !outputSearchText.includes("连接失败")) {
       throw new Error("dist output_search smoke failed: Chinese artifact was not matched");
+    }
+    const sourceFile = join(isolatedWorkspace, "source-intelligence-smoke.ts");
+    writeFileSync(
+      sourceFile,
+      "export function smokeValue() { return 1; }\nexport class SmokeRunner {}\n",
+      "utf8",
+    );
+    const sourceTools = createSourceIntelligenceTools({
+      runtime: toolRuntime,
+    });
+    const codeOutlineTool = sourceTools.find((tool) => tool.name === "code_outline");
+    if (!codeOutlineTool) {
+      throw new Error("dist source-intelligence smoke failed: missing code_outline");
+    }
+    const codeOutlineResult = await codeOutlineTool.execute(
+      "dist-code-outline-smoke",
+      { file_path: sourceFile },
+      undefined,
+      undefined,
+      {
+        cwd: isolatedWorkspace,
+        sessionManager: {
+          getSessionId() {
+            return "dist-code-outline-smoke";
+          },
+        },
+      },
+    );
+    const codeOutlineText = codeOutlineResult.content.find((item) => item.type === "text")?.text ?? "";
+    if (!codeOutlineText.includes("[CodeOutline]") || !codeOutlineText.includes("function smokeValue")) {
+      throw new Error("dist source-intelligence smoke failed: code_outline did not parse TS source");
+    }
+    const pythonSourceFile = join(isolatedWorkspace, "source_intelligence_smoke.py");
+    writeFileSync(
+      pythonSourceFile,
+      "def smoke_value():\n    return 1\n",
+      "utf8",
+    );
+    const pythonCodeOutlineResult = await codeOutlineTool.execute(
+      "dist-code-outline-python-smoke",
+      { file_path: pythonSourceFile },
+      undefined,
+      undefined,
+      {
+        cwd: isolatedWorkspace,
+        sessionManager: {
+          getSessionId() {
+            return "dist-code-outline-python-smoke";
+          },
+        },
+      },
+    );
+    const pythonCodeOutlineText =
+      pythonCodeOutlineResult.content.find((item) => item.type === "text")?.text ?? "";
+    if (
+      !pythonCodeOutlineText.includes("[CodeOutline]") ||
+      !pythonCodeOutlineText.includes("function smoke_value")
+    ) {
+      throw new Error(
+        "dist source-intelligence smoke failed: code_outline did not parse Python source through Tree-sitter",
+      );
     }
     const { createSessionIndex } = await import("@brewva/brewva-session-index");
     const sessionIndex = await createSessionIndex({

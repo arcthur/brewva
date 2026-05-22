@@ -442,7 +442,7 @@ The lifecycle covers:
 - read-unchanged state
 - prompt-stability observations
 - expected-break markers
-- source-text caches tied to visible session behavior, including TOC cache
+- source-text caches tied to visible session behavior, including source-intelligence cache
 
 There is no provider-agnostic global cache authority. Most token-cache state
 remains session-local, but Google explicit CachedContent uses a shared-or-

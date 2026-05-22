@@ -9,7 +9,7 @@ import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import { resolveScopedPath, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
 import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
-import { readSourceTextWithCache, registerTocSourceCacheRuntime } from "./toc-cache.js";
+import { readSourceTextCached } from "./source-intelligence/cache.js";
 
 const MAX_SPANS = 16;
 const MAX_TOTAL_RETURN_LINES = 400;
@@ -52,13 +52,12 @@ function formatSpan(startLine: number, endLine: number): string {
 export function createReadSpansTool(options?: {
   runtime?: BrewvaBundledToolRuntime;
 }): ToolDefinition {
-  registerTocSourceCacheRuntime(options?.runtime);
   const readSpansTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "read_spans");
   return readSpansTool.define({
     name: "read_spans",
     label: "Read Spans",
     description:
-      "Read bounded line ranges from one file. Prefer this after toc_document/toc_search instead of whole-file reads.",
+      "Read bounded line ranges from one file. Prefer this after code_outline/code_digest instead of whole-file reads.",
     parameters: Type.Object({
       file_path: Type.String({ minLength: 1 }),
       spans: Type.Array(
@@ -101,12 +100,8 @@ export function createReadSpansTool(options?: {
         });
       }
 
-      const source = readSourceTextWithCache({
-        sessionId,
-        absolutePath,
-        signature: `${stats.mtimeMs}:${stats.size}`,
-      });
-      const lines = source.lines;
+      const source = readSourceTextCached(absolutePath);
+      const lines = source.sourceText.split(/\r?\n/u);
       const normalized = normalizeSpans(params.spans);
       if (normalized.length === 0) {
         return inconclusiveTextResult(
@@ -136,13 +131,13 @@ export function createReadSpansTool(options?: {
             "reason=out_of_bounds",
             `file: ${absolutePath}`,
             `total_lines: ${lines.length}`,
-            "next_step=Use line spans returned by toc_document/toc_search or a lower range.",
+            "next_step=Use line spans returned by code_outline/code_digest or a lower range.",
           ].join("\n"),
           {
             status: "unavailable",
             reason: "out_of_bounds",
             totalLines: lines.length,
-            nextStep: "Use line spans returned by toc_document/toc_search or a lower range.",
+            nextStep: "Use line spans returned by code_outline/code_digest or a lower range.",
           },
         );
       }

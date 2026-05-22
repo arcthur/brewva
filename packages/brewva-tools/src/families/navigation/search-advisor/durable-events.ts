@@ -105,7 +105,7 @@ function foldDiscoveryObservedEvent(
   const observedDirectories = normalizeStringArray(payload.observedDirectories);
   for (const path of observedPaths) {
     applyPathSignal(state, "observed_path", path, OBSERVED_PATH_WEIGHT, timestamp);
-    if (toolName !== "grep" && toolName !== "toc_search") {
+    if (toolName !== "grep" && toolName !== "code_digest") {
       attributeFollowthrough(state, path, timestamp);
     }
   }

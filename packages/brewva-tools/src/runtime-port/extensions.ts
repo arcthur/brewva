@@ -81,8 +81,8 @@ export function recordToolRuntimeEvent(
     runtime?.capabilities?.tools?.lifecycle?.callBlocked(event);
   } else if (input.type === TOOL_OUTPUT_SEARCH_EVENT_TYPE) {
     runtime?.capabilities?.tools?.outputs?.search(event);
-  } else if (input.type === "tool_toc_query") {
-    runtime?.capabilities?.tools?.outputs?.tocQuery(event);
+  } else if (input.type === "tool_source_intelligence") {
+    runtime?.capabilities?.tools?.outputs?.sourceIntelligenceQuery(event);
   } else if (input.type === TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE) {
     runtime?.capabilities?.tools?.outputs?.artifactPersisted(event);
   } else if (input.type === BOX_RELEASED_EVENT_TYPE) {

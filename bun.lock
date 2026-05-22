@@ -267,7 +267,9 @@
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
+        "@brewva/brewva-token-estimation": "workspace:*",
         "@sinclair/typebox": "^0.34.49",
+        "@vscode/tree-sitter-wasm": "0.3.1",
         "date-fns": "^4.1.0",
         "eslint-scope": "^9.1.2",
         "fuse.js": "^7.3.0",
@@ -275,6 +277,7 @@
         "magic-string": "^0.30.21",
         "oxc-parser": "0.128.0",
         "typescript": "^6.0.2",
+        "web-tree-sitter": "0.25.10",
       },
     },
   },
@@ -638,6 +641,8 @@
     "@types/retry": ["@types/retry@0.12.0", "", {}, "sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA=="],
 
     "@types/ws": ["@types/ws@8.18.1", "", { "dependencies": { "@types/node": "*" } }, "sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg=="],
+
+    "@vscode/tree-sitter-wasm": ["@vscode/tree-sitter-wasm@0.3.1", "", {}, "sha512-RJFoomET6FajjG511fmQxeBQfU6M24a0aFZPqpid+ttIxanWf1VGytBG0UmsGjt07qmIPJS8U31D+aecuCucsQ=="],
 
     "accepts": ["accepts@2.0.0", "", { "dependencies": { "mime-types": "^3.0.0", "negotiator": "^1.0.0" } }, "sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng=="],
 

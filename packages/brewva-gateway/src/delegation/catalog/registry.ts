@@ -323,13 +323,18 @@ const NAVIGATOR_MANAGED_TOOLS = [
   "git_log",
   "read_spans",
   "look_at",
-  "toc_search",
-  "toc_document",
+  "code_outline",
+  "code_digest",
+  "code_surface",
+  "code_deps",
+  "code_reverse_deps",
+  "code_cycles",
+  "code_callers",
+  "code_callees",
   "ast_grep_search",
   "lsp_diagnostics",
   "lsp_find_references",
   "lsp_goto_definition",
-  "lsp_symbols",
   "output_search",
 ] as const;
 
@@ -347,8 +352,9 @@ const LIBRARIAN_MANAGED_TOOLS = [
   "precedent_audit",
   "read_spans",
   "look_at",
-  "toc_search",
-  "toc_document",
+  "code_outline",
+  "code_digest",
+  "code_surface",
 ] as const;
 
 const WORKER_TOOLS = EXPLORER_MANAGED_TOOLS.filter((tool) => tool !== "workflow_status");

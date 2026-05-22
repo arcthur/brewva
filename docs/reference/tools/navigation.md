@@ -14,9 +14,9 @@ governance.
 Representative surfaces:
 
 - browser state, screenshots, PDFs, and snapshots
-- grep, search-advisor recovery, output search, and TOC search
-- language-server navigation and rename preparation
-- table-of-contents document and search views
+- grep, search-advisor recovery, output search, and source-intelligence digest
+- language-server diagnostics/references/definitions and rename preparation
+- multi-language source outline, digest, surface, dependency, cycle, caller, and callee views
 - structural search
 - span reads and path-aware file inspection
 - git status, diff, and log inspection

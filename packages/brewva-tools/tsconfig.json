@@ -9,7 +9,8 @@
     { "path": "../brewva-search" },
     { "path": "../brewva-substrate" },
     { "path": "../brewva-std" },
-    { "path": "../brewva-recall" }
+    { "path": "../brewva-recall" },
+    { "path": "../brewva-token-estimation" }
   ],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.json"]
 }

@@ -5,6 +5,7 @@ export { createGrepTool, runRipgrep, type GrepRunResult } from "./grep.js";
 export { createLookAtTool } from "./look-at.js";
 export { createLspTools } from "./lsp.js";
 export { createOutputSearchTool } from "./output-search.js";
+export { createSourceIntelligenceTools } from "./source-intelligence/tools.js";
 export {
   buildReadPathDiscoveryObservationPayload,
   collectObservedPathsFromLocationLines,
@@ -21,15 +22,3 @@ export {
   type SearchAdvisorFileScore,
   type SearchAdvisorSnapshot,
 } from "./search-advisor.js";
-export { createTocTools } from "./toc.js";
-export {
-  createTocSearchSessionCacheStore,
-  formatLineSpan,
-  lookupTocDocument,
-  runTocSearchCore,
-  type TocDocument,
-  type TocLookupResult,
-  type TocSearchCoreResult,
-  type TocSearchMatch,
-  type TocSearchSummary,
-} from "./toc-search-core.js";

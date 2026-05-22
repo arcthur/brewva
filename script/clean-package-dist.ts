@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 
-import { existsSync, readdirSync, rmSync } from "node:fs";
-import { join, relative } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { dirname, extname, join, relative } from "node:path";
+
+const SOURCE_ASSET_EXTENSIONS = new Set([".json"]);
 
 function listFiles(rootDir: string): string[] {
   if (!existsSync(rootDir)) {
@@ -50,6 +52,10 @@ function buildExpectedOutputs(srcDir: string, distDir: string): Set<string> {
   const expected = new Set<string>();
   for (const sourceFile of listFiles(srcDir)) {
     if (!sourceFile.endsWith(".ts")) {
+      if (SOURCE_ASSET_EXTENSIONS.has(extname(sourceFile))) {
+        const relativeSourcePath = relative(srcDir, sourceFile).replace(/\\/gu, "/");
+        expected.add(join(distDir, relativeSourcePath));
+      }
       continue;
     }
     const relativeSourcePath = relative(srcDir, sourceFile).replace(/\\/gu, "/");
@@ -60,6 +66,18 @@ function buildExpectedOutputs(srcDir: string, distDir: string): Set<string> {
     expected.add(join(distDir, `${outputBase}.d.ts.map`));
   }
   return expected;
+}
+
+function copySourceAssets(srcDir: string, distDir: string): void {
+  for (const sourceFile of listFiles(srcDir)) {
+    if (!SOURCE_ASSET_EXTENSIONS.has(extname(sourceFile))) {
+      continue;
+    }
+    const relativeSourcePath = relative(srcDir, sourceFile).replace(/\\/gu, "/");
+    const outputPath = join(distDir, relativeSourcePath);
+    mkdirSync(dirname(outputPath), { recursive: true });
+    cpSync(sourceFile, outputPath);
+  }
 }
 
 function main(): void {
@@ -76,6 +94,7 @@ function main(): void {
     const srcDir = join(packageDir, "src");
     const distDir = join(packageDir, "dist");
     const expectedOutputs = buildExpectedOutputs(srcDir, distDir);
+    copySourceAssets(srcDir, distDir);
 
     for (const distFile of listFiles(distDir)) {
       if (expectedOutputs.has(distFile)) {

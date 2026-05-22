@@ -18,7 +18,7 @@ export const OBSERVED_DIRECTORY_WEIGHT = 1;
 export const PATCHED_FILE_WEIGHT = 6;
 export const FAILED_READ_DIRECTORY_WEIGHT = 2;
 
-export type SearchToolName = "grep" | "toc_search";
+export type SearchToolName = "grep" | "code_digest";
 export type SignalSourceKind =
   | "observed_path"
   | "observed_directory"

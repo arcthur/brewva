@@ -211,7 +211,7 @@ export interface BrewvaToolRuntimeCommandPort {
       artifactPersisted(input: unknown): unknown;
       observed(input: unknown): unknown;
       search(input: unknown): unknown;
-      tocQuery(input: unknown): unknown;
+      sourceIntelligenceQuery(input: unknown): unknown;
     };
     readonly readPath: {
       discoveryObserved(input: unknown): unknown;

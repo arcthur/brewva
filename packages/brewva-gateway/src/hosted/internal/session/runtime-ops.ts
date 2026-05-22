@@ -1442,7 +1442,7 @@ export function createHostedRuntimeOps(options: {
         artifactPersisted: recordInputPayload("tool_output_artifact_persisted"),
         artifactPersistFailed: recordInputPayload("tool_output_artifact_persist_failed"),
         search: recordInputPayload("tool_output_search"),
-        tocQuery: recordInputPayload("tool_output_toc_query"),
+        sourceIntelligenceQuery: recordInputPayload("tool_source_intelligence"),
       },
       recall: {
         curationRecorded: recordInputPayload(RECALL_CURATION_RECORDED_EVENT_TYPE),

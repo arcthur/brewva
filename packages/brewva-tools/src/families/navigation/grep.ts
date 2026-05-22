@@ -4,10 +4,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
-import {
-  recordToolRuntimeEvent,
-  registerToolRuntimeClearStateListener,
-} from "../../runtime-port/extensions.js";
+import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
   isPathInsideRoots,
@@ -17,7 +14,7 @@ import {
 import { failTextResult, textResult } from "../../utils/result.js";
 import {
   buildAdvisorHeader,
-  buildGrepTocSuggestions,
+  buildGrepSourceSuggestions,
   deriveBroadenedPaths,
   finalizeSuggestionItems,
   rerankGroupedLines,
@@ -36,8 +33,6 @@ import {
   normalizeSearchAdvisorPath,
   registerSearchIntent,
 } from "./search-advisor.js";
-import { resolveTocSessionKey } from "./toc-cache.js";
-import { createTocSearchSessionCacheStore } from "./toc-search-core.js";
 
 export { runRipgrep };
 export type { GrepRunResult };
@@ -73,10 +68,6 @@ function clampInt(value: unknown, fallback: number, options: { min: number; max:
 
 export function createGrepTool(options: GrepToolOptions): ToolDefinition {
   const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "grep");
-  const tocSearchCache = createTocSearchSessionCacheStore();
-  registerToolRuntimeClearStateListener(runtime, (sessionId) => {
-    tocSearchCache.delete(resolveTocSessionKey(sessionId));
-  });
 
   return define({
     name: "grep",
@@ -305,17 +296,14 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
             toolName: "grep",
             query,
           });
-          const tocSuggestions = buildGrepTocSuggestions({
-            runtime,
-            sessionId,
+          const sourceSuggestions = await buildGrepSourceSuggestions({
             baseCwd: scope.baseCwd,
             roots: paths.length > 0 ? paths.map((path) => resolve(cwd, path)) : [scope.baseCwd],
             query,
-            cacheStore: tocSearchCache,
           });
           const suggestionItems = finalizeSuggestionItems({
             comboPath: comboMatch?.filePath,
-            tocSuggestions,
+            sourceSuggestions,
             hotFiles: snapshot.hotFiles.slice(0, 3),
           });
 

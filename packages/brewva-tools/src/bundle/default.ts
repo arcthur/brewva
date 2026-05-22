@@ -33,7 +33,7 @@ import {
   createLspTools,
   createOutputSearchTool,
   createReadSpansTool,
-  createTocTools,
+  createSourceIntelligenceTools,
 } from "../families/navigation/api.js";
 import { createDiscoverSkillsTool } from "../families/skills/api.js";
 import {
@@ -63,7 +63,7 @@ export function buildDefaultBundledBrewvaTools(
 ): ToolDefinition[] {
   const tools = [
     ...createLspTools({ runtime }),
-    ...createTocTools({ runtime }),
+    ...createSourceIntelligenceTools({ runtime }),
     ...createAstGrepTools(),
     createReadSpansTool({ runtime }),
     createLookAtTool({ runtime }),

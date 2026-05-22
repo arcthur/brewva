@@ -118,7 +118,7 @@ describe("subagent delegation catalog", () => {
     const verifierTools = catalog.envelopes.get("verifier-runner")?.managedToolNames ?? [];
     const workerTools = catalog.envelopes.get("worker")?.managedToolNames ?? [];
 
-    expect(navigatorTools).toEqual(expect.arrayContaining(["grep", "read_spans", "toc_search"]));
+    expect(navigatorTools).toEqual(expect.arrayContaining(["grep", "read_spans", "code_digest"]));
     expect(navigatorTools).not.toContain("agent_send");
     expect(navigatorTools).not.toContain("knowledge_search");
     expect(navigatorTools).not.toContain("recall_search");

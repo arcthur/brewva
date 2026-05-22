@@ -128,7 +128,7 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "capabilities.tools.outputs.distilled",
   "capabilities.tools.outputs.observed",
   "capabilities.tools.outputs.search",
-  "capabilities.tools.outputs.tocQuery",
+  "capabilities.tools.outputs.sourceIntelligenceQuery",
   "capabilities.tools.parallel.acquire",
   "capabilities.tools.parallel.acquireAsync",
   "capabilities.tools.parallel.release",

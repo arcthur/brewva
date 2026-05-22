@@ -75,14 +75,17 @@
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
+    "@brewva/brewva-token-estimation": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
+    "@vscode/tree-sitter-wasm": "0.3.1",
     "date-fns": "^4.1.0",
     "eslint-scope": "^9.1.2",
     "fuse.js": "^7.3.0",
     "lru-cache": "^11.3.5",
     "magic-string": "^0.30.21",
     "oxc-parser": "0.128.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "web-tree-sitter": "0.25.10"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

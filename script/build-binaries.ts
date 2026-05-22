@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -127,6 +128,40 @@ const OXC_PARSER_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target
 const DUCKDB_RUNTIME_PACKAGES = ["@duckdb/node-api", "@duckdb/node-bindings"] as const;
 const BOXLITE_RUNTIME_PACKAGES = ["@boxlite-ai/boxlite"] as const;
 const OXC_PARSER_RUNTIME_PACKAGES = ["oxc-parser", "@oxc-project/types"] as const;
+const WEB_TREE_SITTER_VERSION = "0.25.10";
+const TREE_SITTER_WASM_VERSION = "0.3.1";
+const TREE_SITTER_RUNTIME_PACKAGES = ["web-tree-sitter"] as const;
+const TREE_SITTER_GRAMMAR_PACKAGE = "@vscode/tree-sitter-wasm";
+const TREE_SITTER_GRAMMAR_MANIFEST_PATH = join(
+  process.cwd(),
+  "packages",
+  "brewva-tools",
+  "src",
+  "families",
+  "navigation",
+  "source-intelligence",
+  "grammars",
+  "manifest.json",
+);
+const TREE_SITTER_GRAMMAR_ASSETS = [
+  "tree-sitter.wasm",
+  "tree-sitter-python.wasm",
+  "tree-sitter-go.wasm",
+  "tree-sitter-rust.wasm",
+  "tree-sitter-java.wasm",
+  "tree-sitter-cpp.wasm",
+] as const;
+
+interface TreeSitterGrammarManifest {
+  readonly runtime: {
+    readonly asset: string;
+    readonly sha256: string;
+  };
+  readonly grammars: readonly {
+    readonly asset: string;
+    readonly sha256: string;
+  }[];
+}
 
 function copyDirectory(source: string, target: string): void {
   if (!existsSync(source)) return;
@@ -164,6 +199,21 @@ function readPackagedDependencyVersion(packageRoot: string): string | undefined 
     return typeof manifest.version === "string" ? manifest.version : undefined;
   } catch {
     return undefined;
+  }
+}
+
+function readTreeSitterGrammarManifest(): TreeSitterGrammarManifest {
+  return JSON.parse(
+    readFileSync(TREE_SITTER_GRAMMAR_MANIFEST_PATH, "utf8"),
+  ) as TreeSitterGrammarManifest;
+}
+
+function assertSha256(path: string, expectedSha256: string, label: string): void {
+  const actual = createHash("sha256").update(readFileSync(path)).digest("hex");
+  if (actual !== expectedSha256) {
+    throw new Error(
+      `${label} checksum mismatch at ${path}: expected ${expectedSha256}, got ${actual}`,
+    );
   }
 }
 
@@ -327,6 +377,36 @@ async function copyOxcParserRuntimeAssets(outDir: string, platform: PlatformTarg
   }
 }
 
+async function copyTreeSitterRuntimeAssets(outDir: string): Promise<void> {
+  const targetNodeModules = join(outDir, "node_modules");
+  for (const packageName of TREE_SITTER_RUNTIME_PACKAGES) {
+    const source = await ensurePackagedDependency(packageName, WEB_TREE_SITTER_VERSION);
+    copyDirectory(source, packagePath(targetNodeModules, packageName));
+  }
+
+  const grammarSource = await ensurePackagedDependency(
+    TREE_SITTER_GRAMMAR_PACKAGE,
+    TREE_SITTER_WASM_VERSION,
+  );
+  const grammarTarget = packagePath(targetNodeModules, TREE_SITTER_GRAMMAR_PACKAGE);
+  copyDirectory(grammarSource, grammarTarget);
+  const manifest = readTreeSitterGrammarManifest();
+  const expectedShaByAsset = new Map<string, string>([
+    [manifest.runtime.asset, manifest.runtime.sha256],
+    ...manifest.grammars.map((entry) => [entry.asset, entry.sha256] as const),
+  ]);
+  for (const asset of TREE_SITTER_GRAMMAR_ASSETS) {
+    const assetPath = join(grammarTarget, "wasm", asset);
+    if (!existsSync(assetPath)) {
+      throw new Error(`Tree-sitter WASM asset ${asset} is missing at ${assetPath}`);
+    }
+    const expectedSha = expectedShaByAsset.get(asset);
+    if (expectedSha) {
+      assertSha256(assetPath, expectedSha, `Tree-sitter WASM asset ${asset}`);
+    }
+  }
+}
+
 function resolveCurrentHostTarget(): PlatformTarget["target"] | null {
   if (process.platform === "darwin" && process.arch === "arm64") return "bun-darwin-arm64";
   if (process.platform === "darwin" && process.arch === "x64") return "bun-darwin-x64";
@@ -365,6 +445,7 @@ This directory contains the packaged runtime assets that ship with \`${packageNa
 - \`brewva.schema.json\` runtime config schema
 - \`brewva-tui.schema.json\` interactive TUI config schema
 - \`jieba_rs_wasm_bg.wasm\` mandatory Chinese search tokenizer asset
+- \`node_modules/@vscode/tree-sitter-wasm/wasm/\` multi-language source-intelligence grammar assets
 - \`theme/\` interactive UI assets
 - \`export-html/\` HTML export assets
 - \`skills/\` bundled skill payload for runtime-managed system installation
@@ -419,6 +500,7 @@ async function copyRuntimeAssets(outDir: string, platform: PlatformTarget): Prom
   await copyDuckDBRuntimeAssets(outDir, platform);
   await copyBoxLiteRuntimeAssets(outDir, platform);
   await copyOxcParserRuntimeAssets(outDir, platform);
+  await copyTreeSitterRuntimeAssets(outDir);
   writeFileSync(join(outDir, ".gitkeep"), "");
 }
 

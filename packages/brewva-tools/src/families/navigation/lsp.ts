@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolRuntime } from "../../contracts/index.js";
@@ -28,8 +28,6 @@ import {
 import { isParsableFile } from "./parsing/language.js";
 import { collectObservedPathsFromLocationLines } from "./read-path-discovery.js";
 
-const LSP_SYMBOL_SCOPE_VALUES = ["document", "workspace"] as const;
-
 export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime }): ToolDefinition[] {
   const lspGotoDefinitionTool = createRuntimeBoundBrewvaToolFactory(
     options?.runtime,
@@ -39,7 +37,6 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
     options?.runtime,
     "lsp_find_references",
   );
-  const lspSymbolsTool = createRuntimeBoundBrewvaToolFactory(options?.runtime, "lsp_symbols");
   const lspDiagnosticsTool = createRuntimeBoundBrewvaToolFactory(
     options?.runtime,
     "lsp_diagnostics",
@@ -221,107 +218,6 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
     },
   });
 
-  const lspSymbols = lspSymbolsTool.define({
-    name: "lsp_symbols",
-    label: "LSP Symbols",
-    description:
-      "AST-based symbol listing. document scope visits a single file's AST; workspace scope walks the workspace and collects identifier occurrences via oxc parsing (no regex). Workspace scan is restricted to .ts/.tsx/.js/.jsx/.mjs/.cjs/.d.ts; symbols in other languages are not surfaced.",
-    parameters: Type.Object({
-      filePath: Type.String(),
-      scope: Type.Optional(
-        buildStringEnumSchema(LSP_SYMBOL_SCOPE_VALUES, {
-          recommendedValue: "document",
-          guidance:
-            "Use document by default. Use workspace only when you need a cross-repo symbol search, and provide query for workspace scope.",
-        }),
-      ),
-      query: Type.Optional(Type.String()),
-      limit: Type.Optional(Type.Number({ minimum: 1, maximum: 1000 })),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      const scope: "document" | "workspace" =
-        params.scope === "workspace" ? "workspace" : "document";
-      const limit = params.limit ?? 50;
-
-      if (scope === "document") {
-        const targetFilePath = resolveLspFilePath(ctx, params.filePath);
-        if (!targetFilePath) {
-          return failTextResult("Error: file path escapes current task target roots.");
-        }
-        if (!existsSync(targetFilePath)) {
-          return failTextResult(`Error: File not found: ${targetFilePath}`);
-        }
-        let targetStat: import("node:fs").Stats;
-        try {
-          targetStat = statSync(targetFilePath);
-        } catch (error) {
-          return failTextResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        if (!targetStat.isFile()) {
-          return failTextResult(`Error: Path is not a file: ${targetFilePath}`);
-        }
-        if (!isParsableFile(targetFilePath)) {
-          return failTextResult(
-            "Error: lsp_symbols only supports .ts, .tsx, .js, .jsx, .mjs, .cjs, .d.ts files.",
-          );
-        }
-        recordLspDiscoveryObservation({
-          runtime: lspSymbolsTool.runtime,
-          sessionId: getToolSessionId(ctx),
-          baseCwd: resolveLspCwd(ctx),
-          toolName: "lsp_symbols",
-          evidenceKind: "direct_file_access",
-          observedPaths: [targetFilePath],
-        });
-
-        const parsing = await loadParsingRuntime();
-        const parsed = await readAndParse(targetFilePath);
-        if (!parsed) {
-          return failTextResult(`Error: failed to parse ${targetFilePath}`);
-        }
-        const symbols = parsing.collectSymbols(parsed, { limit, query: params.query });
-        if (symbols.length === 0) return inconclusiveTextResult("No symbols found");
-        const lines = symbols.map((s) => parsing.formatSymbolLine(targetFilePath, s));
-        return textResult(lines.join("\n"));
-      }
-
-      if (!params.query || params.query.trim().length === 0) {
-        return failTextResult("Error: query is required for workspace scope.");
-      }
-
-      const anchorHint = resolveLspFilePath(ctx, params.filePath);
-
-      const scan: AstScanContext = {
-        runtime: lspSymbolsTool.runtime,
-        sessionId: getToolSessionId(ctx),
-        toolName: "lsp_symbols",
-        config: resolveParallelReadConfig(lspSymbolsTool.runtime),
-      };
-      const refs = await findReferencesInWorkspace(
-        resolveLspCwd(ctx),
-        params.query.trim(),
-        scan,
-        limit,
-        anchorHint ?? undefined,
-      );
-      const lines = workspaceMatchesToLines(refs);
-      recordLspDiscoveryObservation({
-        runtime: lspSymbolsTool.runtime,
-        sessionId: scan.sessionId,
-        baseCwd: resolveLspCwd(ctx),
-        toolName: "lsp_symbols",
-        evidenceKind: "search_match",
-        observedPaths: collectObservedPathsFromLocationLines({
-          baseCwd: resolveLspCwd(ctx),
-          lines,
-        }),
-      });
-      return refs.length > 0
-        ? textResult(lines.join("\n"))
-        : inconclusiveTextResult("No symbols found");
-    },
-  });
-
   const lspDiagnostics = lspDiagnosticsTool.define({
     name: "lsp_diagnostics",
     label: "LSP Diagnostics",
@@ -388,12 +284,5 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
     resolveLspFilePath,
   });
 
-  return [
-    lspGotoDefinition,
-    lspFindReferences,
-    lspSymbols,
-    lspDiagnostics,
-    astPrepareRename,
-    astRenameInFile,
-  ];
+  return [lspGotoDefinition, lspFindReferences, lspDiagnostics, astPrepareRename, astRenameInFile];
 }

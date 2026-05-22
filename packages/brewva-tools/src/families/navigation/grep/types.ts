@@ -5,7 +5,7 @@ export interface GrepToolOptions extends BrewvaToolOptions {
 }
 
 export type GrepCase = "smart" | "ignore" | "sensitive";
-export type GrepSuggestionMode = "combo" | "toc" | "path" | "hybrid";
+export type GrepSuggestionMode = "combo" | "source" | "path" | "hybrid";
 
 export type GrepRunResult = {
   exitCode: number;
