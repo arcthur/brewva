@@ -102,6 +102,7 @@ import {
 import { toJsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaToolRuntimeCapabilitiesPort } from "@brewva/brewva-tools/contracts";
 import type { RecoveryWalStoredRecord } from "../../../daemon/api.js";
+import { buildRuntimeTurnSessionWireFrames } from "../../../utils/runtime-session-wire-projection.js";
 
 type RuntimeEventRecord = BrewvaStructuredEvent & BrewvaEventRecord & ProtocolRecord;
 type RuntimeListener = (event: RuntimeEventRecord) => void;
@@ -501,48 +502,12 @@ export function createHostedRuntimeOps(options: {
   }
 
   function sessionWireFramesFor(sessionId: string): SessionWireFrame[] {
-    const frames: SessionWireFrame[] = [];
-    for (const event of listEvents(sessionId)) {
-      if (event.type === "turn.started") {
-        const payload =
-          event.payload && typeof event.payload === "object"
-            ? (event.payload as Record<string, unknown>)
-            : {};
-        frames.push({
-          schema: "brewva.session-wire.v2",
-          sessionId,
-          frameId: `canonical:${event.id}:turn.input`,
-          ts: event.timestamp,
-          source: "replay",
-          durability: "durable",
-          sourceEventId: event.id,
-          sourceEventType: event.type,
-          type: "turn.input",
-          turnId: String(event.turn ?? ""),
-          promptText: typeof payload.prompt === "string" ? payload.prompt : "",
-          trigger: "recovery",
-        });
-        continue;
-      }
-      if (event.type === "turn.ended") {
-        frames.push({
-          schema: "brewva.session-wire.v2",
-          sessionId,
-          frameId: `canonical:${event.id}:turn.committed`,
-          ts: event.timestamp,
-          source: "replay",
-          durability: "durable",
-          sourceEventId: event.id,
-          sourceEventType: event.type,
-          type: "turn.committed",
-          turnId: String(event.turn ?? ""),
-          attemptId: "runtime-turn",
-          status: "completed",
-          assistantText: "",
-          toolOutputs: [],
-        });
-        continue;
-      }
+    const events = listEvents(sessionId);
+    const frames: SessionWireFrame[] = buildRuntimeTurnSessionWireFrames({
+      sessionId,
+      events,
+    });
+    for (const event of events) {
       if (event.type === "session_shutdown") {
         const payload =
           event.payload && typeof event.payload === "object"
@@ -1056,6 +1021,11 @@ export function createHostedRuntimeOps(options: {
     return (sessionId: string, payload: object | null = {}) => emit(sessionId, type, payload ?? {});
   }
 
+  function latestRecordedPayload(sessionId: string, type: string): object | undefined {
+    const latest = listEvents(sessionId, { type, last: 1 })[0]?.payload;
+    return latest && typeof latest === "object" && !Array.isArray(latest) ? latest : undefined;
+  }
+
   function recordInputPayload(
     type: string,
   ): (inputValue: { readonly sessionId?: string } & Record<string, unknown>) => RuntimeEventRecord {
@@ -1400,7 +1370,7 @@ export function createHostedRuntimeOps(options: {
         },
       },
       capabilitySelection: {
-        latest: () => undefined,
+        latest: (sessionId: string) => latestRecordedPayload(sessionId, "tool.capability.selected"),
         record(sessionId: string, payload: object) {
           return emit(sessionId, "tool.capability.selected", payload);
         },
@@ -1813,7 +1783,7 @@ export function createHostedRuntimeOps(options: {
         refresh: () => loadSkillCatalog(options.runtime.identity.workspaceRoot).report,
       },
       selection: {
-        latest: () => undefined,
+        latest: (sessionId: string) => latestRecordedPayload(sessionId, "skill.selection.recorded"),
         record(sessionId: string, payload: object) {
           return emit(sessionId, "skill.selection.recorded", payload);
         },

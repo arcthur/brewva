@@ -99,6 +99,8 @@ export interface TurnStartedPayload {
 
 export interface TurnEndedPayload {
   readonly cause: Extract<RuntimeRecoveryCause, "terminal_commit">;
+  readonly status?: "completed" | "failed" | "cancelled";
+  readonly error?: string;
 }
 
 export interface TextCommittedPayload {
@@ -408,9 +410,16 @@ export interface PromptPlan {
   };
 }
 
+export interface PromptToolCall {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly args?: Record<string, unknown>;
+}
+
 export interface PromptMessage {
   readonly role: "system" | "user" | "assistant" | "tool";
   readonly content: PromptContent;
+  readonly toolCalls?: readonly PromptToolCall[];
   readonly toolCallId?: string;
   readonly toolName?: string;
   readonly isError?: boolean;

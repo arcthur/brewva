@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
@@ -90,6 +90,17 @@ describe("model materialization", () => {
     expect(prompt.messages).toEqual([
       { role: "user", content: "hello there" },
       {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            toolCallId: "call-1",
+            toolName: "read_file",
+            args: { path: "README.md" },
+          },
+        ],
+      },
+      {
         role: "tool",
         content: "tool-result",
         toolCallId: "call-1",
@@ -97,5 +108,114 @@ describe("model materialization", () => {
         isError: false,
       },
     ]);
+  });
+
+  test("materializes empty tool results when call metadata is present", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-model-empty-tool-result-")),
+    });
+
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        prompt: "run empty tool",
+      }),
+    );
+    const commitment = await runtime.kernel.beginToolCall({
+      sessionId: "s1",
+      toolCallId: "call-empty",
+      toolName: "read_file",
+      args: { path: "EMPTY.md" },
+    });
+    if (commitment.kind !== "allow") {
+      throw new Error("expected_tool_allow");
+    }
+    await runtime.kernel.commitToolResult({
+      commitmentId: commitment.commitment.id,
+      result: {
+        ok: true,
+        content: "",
+      },
+    });
+
+    const prompt = await runtime.model.materialize({
+      sessionId: "s1",
+      budget: { maxInputTokens: 100_000 },
+    });
+
+    expect(prompt.messages).toEqual([
+      { role: "user", content: "run empty tool" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            toolCallId: "call-empty",
+            toolName: "read_file",
+            args: { path: "EMPTY.md" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: "",
+        toolCallId: "call-empty",
+        toolName: "read_file",
+        isError: false,
+      },
+    ]);
+  });
+
+  test("does not materialize orphan tool result messages without call metadata", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-model-orphan-tool-messages-"));
+    const sessionId = "s1";
+    const tapeDir = join(cwd, ".brewva", "tape");
+    mkdirSync(tapeDir, { recursive: true });
+    writeFileSync(
+      join(tapeDir, `${encodeURIComponent(sessionId)}.jsonl`),
+      [
+        {
+          id: "evt-user",
+          sessionId,
+          type: "turn.started",
+          timestamp: 1,
+          payload: { prompt: "hello" },
+        },
+        {
+          id: "evt-orphan-tool-result",
+          sessionId,
+          type: "tool.committed",
+          timestamp: 2,
+          payload: {
+            commitmentId: "commitment-orphan",
+            result: { ok: true, content: "orphan result" },
+          },
+        },
+        {
+          id: "evt-orphan-tool-abort",
+          sessionId,
+          type: "tool.aborted",
+          timestamp: 3,
+          payload: {
+            commitmentId: "commitment-aborted",
+            reason: "orphan abort",
+          },
+        },
+      ]
+        .map((event) => JSON.stringify(event))
+        .join("\n") + "\n",
+    );
+
+    const runtime = createBrewvaRuntime({ cwd });
+    await runtime.start();
+
+    const prompt = await runtime.model.materialize({
+      sessionId,
+      budget: { maxInputTokens: 100_000 },
+    });
+
+    expect(prompt.messages).toEqual([{ role: "user", content: "hello" }]);
+
+    await runtime.close();
   });
 });

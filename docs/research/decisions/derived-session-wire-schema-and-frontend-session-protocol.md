@@ -28,6 +28,8 @@
 - Replayable UX requires durable committed presentation receipts. Accepted input and committed terminal rendering are durably captured through `turn_input_recorded` and `turn_render_committed`.
 - Live preview traffic remains cache-class. `assistant.delta`, live tool preview frames, `session.status`, and `attempt.started(reason=initial)` are transport-layer cache views and are not replay-critical durable facts.
 - Replay emits committed state, not live preview noise. Replay does not emit standalone durable `tool.finished`; committed tool output is carried only by `turn.committed.toolOutputs`.
+- Committed assistant output keeps both an aggregate `assistantText` compatibility field and timestamped `assistantSegments[]`; replay seed construction uses the segments so narration, tools, and final answers keep their original order.
+- Runtime turn failures after a turn has started are projected as terminal `turn.committed(status=failed)` frames, so frontend replay has a visible terminal state instead of an open half-turn.
 - Durable public-session replay must not depend on worker memory. Gateway replay resolves public `sessionId` to archived agent-session tape segments through durable `gateway_session_bound` control-tape receipts.
 
 ## Superseded by

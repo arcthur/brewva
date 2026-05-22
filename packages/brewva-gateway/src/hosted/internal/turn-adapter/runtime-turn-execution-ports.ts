@@ -20,6 +20,7 @@ import {
   type PromptContent,
   type PromptContentPart,
   type PromptMessage,
+  type PromptToolCall,
   type RuntimeProviderFrame,
   type RuntimeProviderPort,
   type RuntimeToolAuthorityResolver,
@@ -320,6 +321,15 @@ function toolResultContentFromPromptContent(
   });
 }
 
+function providerToolCallFromPromptToolCall(toolCall: PromptToolCall): ProviderToolCall {
+  return {
+    type: "toolCall",
+    id: toolCall.toolCallId,
+    name: toolCall.toolName,
+    arguments: toolCall.args ? { ...toolCall.args } : {},
+  };
+}
+
 function providerMessageFromPromptMessage(message: PromptMessage): ProviderMessage | null {
   if (message.role === "system") {
     return null;
@@ -332,9 +342,18 @@ function providerMessageFromPromptMessage(message: PromptMessage): ProviderMessa
     };
   }
   if (message.role === "assistant") {
+    const text = textFromPromptContent(message.content);
+    const toolCalls = message.toolCalls?.map(providerToolCallFromPromptToolCall) ?? [];
+    const content: Extract<ProviderMessage, { role: "assistant" }>["content"] = [
+      ...(text.length > 0 ? [{ type: "text" as const, text }] : []),
+      ...toolCalls,
+    ];
+    if (content.length === 0) {
+      return null;
+    }
     return {
       role: "assistant",
-      content: [{ type: "text", text: textFromPromptContent(message.content) }],
+      content,
       api: "faux",
       provider: "faux",
       model: "runtime-adapter-history",
@@ -346,7 +365,7 @@ function providerMessageFromPromptMessage(message: PromptMessage): ProviderMessa
         totalTokens: 0,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
       },
-      stopReason: "stop" as const,
+      stopReason: toolCalls.length > 0 ? "toolUse" : "stop",
       timestamp: Date.now(),
     };
   }

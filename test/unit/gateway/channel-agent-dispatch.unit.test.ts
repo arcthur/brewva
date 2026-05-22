@@ -342,7 +342,7 @@ describe("channel agent dispatch", () => {
         { type: "text", text: "final answer" },
         fauxToolCall("exec", { command: "pwd" }, { id: "tc-1" }),
       ]),
-      fauxAssistantMessage("after tool"),
+      fauxAssistantMessage(" after tool"),
     ]);
 
     try {
@@ -356,7 +356,7 @@ describe("channel agent dispatch", () => {
         },
       );
 
-      expect(outputs.assistantText).toBe("final answer");
+      expect(outputs.assistantText).toBe("final answer after tool");
       expect(outputs.toolOutputs).toHaveLength(1);
       expect(outputs.toolOutputs[0]?.text).toContain("Tool exec (tc-1) completed");
     } finally {

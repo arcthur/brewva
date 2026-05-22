@@ -192,6 +192,13 @@ posture is projected from canonical causes: `approval_pending`,
 Important protocol rules:
 
 - `turn.committed` is the only terminal turn frame.
+- `turn.committed.status` reflects the canonical runtime terminal receipt.
+  Runtime turn failures still close the turn with `status=failed` instead of
+  leaving replay with a half-written turn.
+- `turn.committed.assistantText` is an aggregate compatibility field.
+  Replay consumers that need chronological transcript reconstruction use
+  `turn.committed.assistantSegments[]`, whose segment timestamps preserve
+  assistant-text ordering around committed tool outputs.
 - replay does not emit standalone durable `tool.finished`; final tool outputs
   are carried by `turn.committed.toolOutputs`.
 - live tool frames are attempt-scoped cache frames: `tool.started`,
@@ -209,6 +216,12 @@ Important protocol rules:
 - `turn.committed.toolOutputs` includes only accepted final-attempt tool state.
   Late superseded-attempt live tool frames remain telemetry and do not re-enter
   committed replay state.
+- Committed tool outputs may include nested `ts` and `sourceEventId` fields.
+  Replay seed construction uses those timestamps together with
+  `assistantSegments[]` to rebuild transcript order.
+- Skill selection, capability selection, and subagent lifecycle receipts are
+  replayed through their runtime read models. They are not separate
+  session-wire frame types.
 - live and committed tool outputs may carry
   `display={summaryText?,detailsText?,rawText?}`. `summaryText` is semantic
   display metadata from explicit tool results, gateway distillation, or short

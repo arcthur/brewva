@@ -144,9 +144,38 @@ describe("runtime turn loop", () => {
     });
   });
 
-  test("executes provider tool calls through kernel commitments", async () => {
+  test("continues provider generation after committed tool results", async () => {
+    let calls = 0;
+    const observedMessageRoles: string[][] = [];
     const provider: RuntimeProviderPort = {
-      async *stream() {
+      async *stream(input) {
+        calls += 1;
+        observedMessageRoles.push(input.prompt.messages.map((message) => message.role));
+        if (calls === 2) {
+          expect(input.prompt.messages).toEqual([
+            { role: "user", content: "read" },
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [
+                {
+                  toolCallId: "call-1",
+                  toolName: "read_file",
+                  args: { path: "README.md" },
+                },
+              ],
+            },
+            {
+              role: "tool",
+              content: "executed:read_file:call-1",
+              toolCallId: "call-1",
+              toolName: "read_file",
+              isError: false,
+            },
+          ]);
+          yield { type: "text", delta: "read complete" };
+          return;
+        }
         yield {
           type: "tool",
           call: {
@@ -194,17 +223,203 @@ describe("runtime turn loop", () => {
       "tool.progress",
       "tool.progress",
       "runtime.event",
+      "text",
+      "runtime.event",
       "runtime.event",
     ]);
+    expect(calls).toBe(2);
+    expect(observedMessageRoles).toEqual([["user"], ["user", "assistant", "tool"]]);
     expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
       "turn.started",
       "tool.proposed",
       "tool.committed",
+      "msg.committed",
       "turn.ended",
     ]);
     expect(runtime.tape.list("s1", { type: "tool.committed" })[0]?.payload).toMatchObject({
       commitmentId: expect.stringMatching(/^tool:s1:turn_[^:]+:call-1$/u),
       result: { ok: true, content: "executed:read_file:call-1" },
+    });
+    expect(runtime.tape.list("s1", { type: "msg.committed" })[0]?.payload).toEqual({
+      text: "read complete",
+    });
+  });
+
+  test("does not treat pre-tool assistant text as the terminal answer", async () => {
+    let calls = 0;
+    const provider: RuntimeProviderPort = {
+      async *stream() {
+        calls += 1;
+        if (calls === 2) {
+          yield { type: "text", delta: "Architecture docs live under docs/architecture." };
+          return;
+        }
+        yield { type: "text", delta: "Let me search first." };
+        yield {
+          type: "tool",
+          call: {
+            toolCallId: "call-arch",
+            toolName: "grep",
+            args: { query: "architecture" },
+          },
+        };
+      },
+    };
+    const toolExecutor: RuntimeToolExecutorPort = {
+      async execute() {
+        return {
+          ok: true,
+          content: "docs/architecture/system-architecture.md",
+        };
+      },
+    };
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-pre-tool-text-")),
+      provider,
+      toolExecutor,
+    });
+
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        prompt: "show architecture docs",
+      }),
+    );
+
+    expect(calls).toBe(2);
+    expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
+      "turn.started",
+      "msg.committed",
+      "tool.proposed",
+      "tool.committed",
+      "msg.committed",
+      "turn.ended",
+    ]);
+    expect(
+      runtime.tape.list("s1", { type: "msg.committed" }).map((event) => event.payload),
+    ).toEqual([
+      { text: "Let me search first." },
+      { text: "Architecture docs live under docs/architecture." },
+    ]);
+  });
+
+  test("commits post-tool assistant text before continuing provider generation", async () => {
+    let calls = 0;
+    const provider: RuntimeProviderPort = {
+      async *stream() {
+        calls += 1;
+        if (calls === 2) {
+          yield { type: "text", delta: "Final answer." };
+          return;
+        }
+        yield {
+          type: "tool",
+          call: {
+            toolCallId: "call-post-tool",
+            toolName: "grep",
+            args: { query: "runtime" },
+          },
+        };
+        yield { type: "text", delta: "Tool result is available." };
+      },
+    };
+    const toolExecutor: RuntimeToolExecutorPort = {
+      async execute() {
+        return {
+          ok: true,
+          content: "packages/brewva-runtime/src/runtime/engine/turn.ts",
+        };
+      },
+    };
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-post-tool-text-")),
+      provider,
+      toolExecutor,
+    });
+
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        prompt: "inspect runtime",
+      }),
+    );
+
+    expect(calls).toBe(2);
+    expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
+      "turn.started",
+      "tool.proposed",
+      "tool.committed",
+      "msg.committed",
+      "msg.committed",
+      "turn.ended",
+    ]);
+    expect(
+      runtime.tape.list("s1", { type: "msg.committed" }).map((event) => event.payload),
+    ).toEqual([{ text: "Tool result is available." }, { text: "Final answer." }]);
+  });
+
+  test("continues provider generation after aborted tool results", async () => {
+    let calls = 0;
+    const provider: RuntimeProviderPort = {
+      async *stream(input) {
+        calls += 1;
+        if (calls === 2) {
+          expect(input.prompt.messages).toEqual([
+            { role: "user", content: "read without executor" },
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [
+                {
+                  toolCallId: "call-no-executor",
+                  toolName: "read_file",
+                  args: { path: "README.md" },
+                },
+              ],
+            },
+            {
+              role: "tool",
+              content: "missing_tool_executor",
+              toolCallId: "call-no-executor",
+              toolName: "read_file",
+              isError: true,
+            },
+          ]);
+          yield { type: "text", delta: "tool failed cleanly" };
+          return;
+        }
+        yield {
+          type: "tool",
+          call: {
+            toolCallId: "call-no-executor",
+            toolName: "read_file",
+            args: { path: "README.md" },
+          },
+        };
+      },
+    };
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-aborted-tool-")),
+      provider,
+    });
+
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        prompt: "read without executor",
+      }),
+    );
+
+    expect(calls).toBe(2);
+    expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
+      "turn.started",
+      "tool.proposed",
+      "tool.aborted",
+      "msg.committed",
+      "turn.ended",
+    ]);
+    expect(runtime.tape.list("s1", { type: "tool.aborted" })[0]?.payload).toMatchObject({
+      reason: "missing_tool_executor",
     });
   });
 
@@ -400,7 +615,132 @@ describe("runtime turn loop", () => {
       "turn.started",
       "tool.proposed",
       "tool.committed",
+      "turn.ended",
     ]);
+    expect(runtime.tape.list("s1", { type: "turn.ended" })[0]?.payload).toEqual({
+      cause: "terminal_commit",
+      status: "failed",
+      error: "provider_failed_after_tool",
+    });
+  });
+
+  test("does not provider-retry a failed continuation after a committed tool", async () => {
+    let calls = 0;
+    const provider: RuntimeProviderPort = {
+      async *stream() {
+        calls += 1;
+        if (calls === 2) {
+          throw new Error("continuation_failed_after_tool");
+        }
+        yield {
+          type: "tool",
+          call: {
+            toolCallId: "call-side-effect",
+            toolName: "read_file",
+            args: { path: "README.md" },
+          },
+        };
+      },
+    };
+    const toolExecutor: RuntimeToolExecutorPort = {
+      async execute(commitment) {
+        return {
+          ok: true,
+          content: `executed:${commitment.call.toolName}:${commitment.call.toolCallId}`,
+        };
+      },
+    };
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-no-retry-continuation-")),
+      provider,
+      toolExecutor,
+    });
+
+    try {
+      await Array.fromAsync(
+        runtime.turn({
+          sessionId: "s1",
+          prompt: "read",
+        }),
+      );
+      expect.unreachable("expected provider failure on tool continuation");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("continuation_failed_after_tool");
+    }
+
+    expect(calls).toBe(2);
+    expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
+      "turn.started",
+      "tool.proposed",
+      "tool.committed",
+      "turn.ended",
+    ]);
+    expect(runtime.tape.list("s1", { type: "turn.ended" })[0]?.payload).toEqual({
+      cause: "terminal_commit",
+      status: "failed",
+      error: "continuation_failed_after_tool",
+    });
+  });
+
+  test("commits a failed terminal receipt when provider tool continuations exceed the turn limit", async () => {
+    let calls = 0;
+    const provider: RuntimeProviderPort = {
+      async *stream() {
+        calls += 1;
+        yield {
+          type: "tool",
+          call: {
+            toolCallId: `call-loop-${calls}`,
+            toolName: "read_file",
+            args: { path: "README.md" },
+          },
+        };
+      },
+    };
+    const toolExecutor: RuntimeToolExecutorPort = {
+      async execute(commitment) {
+        return {
+          ok: true,
+          content: `executed:${commitment.call.toolCallId}`,
+        };
+      },
+    };
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-tool-limit-")),
+      provider,
+      toolExecutor,
+    });
+
+    try {
+      await Array.fromAsync(
+        runtime.turn({
+          sessionId: "s1",
+          prompt: "loop forever",
+        }),
+      );
+      expect.unreachable("expected provider continuation limit failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("provider_tool_continuation_limit_exceeded");
+    }
+
+    expect(calls).toBe(16);
+    expect(
+      runtime.tape
+        .list("s1")
+        .map((event) => event.type)
+        .at(-1),
+    ).toBe("turn.ended");
+    expect(runtime.tape.list("s1", { type: "turn.ended" })[0]?.payload).toEqual({
+      cause: "terminal_commit",
+      status: "failed",
+      error: "provider_tool_continuation_limit_exceeded",
+    });
+    expect(runtime.tape.project("s1", "turn_state")).toMatchObject({
+      active: false,
+      lastCause: "terminal_commit",
+    });
   });
 
   test("checkpoints and retries materialization when context is over budget", async () => {

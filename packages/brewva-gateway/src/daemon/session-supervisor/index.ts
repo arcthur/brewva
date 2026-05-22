@@ -21,12 +21,7 @@ import {
   type BrewvaConfig,
   type CanonicalEvent,
 } from "@brewva/brewva-runtime";
-import {
-  asBrewvaSessionId,
-  asBrewvaToolCallId,
-  asBrewvaToolName,
-  asBrewvaWalId,
-} from "@brewva/brewva-runtime/core";
+import { asBrewvaSessionId, asBrewvaWalId } from "@brewva/brewva-runtime/core";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
 import type { RecoveryWalRecord } from "@brewva/brewva-runtime/protocol";
 import type {
@@ -36,7 +31,6 @@ import type {
   SessionLifecycleSnapshot,
   SessionWireFrame,
   SessionWireTurnTrigger,
-  ToolOutputView,
 } from "@brewva/brewva-runtime/protocol";
 import { compileSessionWireFrames } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
@@ -48,6 +42,7 @@ import {
 } from "../../ingress/api.js";
 import { sleep } from "../../utils/async.js";
 import { toErrorMessage } from "../../utils/errors.js";
+import { buildRuntimeTurnSessionWireFrames } from "../../utils/runtime-session-wire-projection.js";
 import type { StructuredLogger } from "../logger.js";
 import { isProcessAlive } from "../pid.js";
 import { createRecoveryWalRecovery, type RecoveryWalStore } from "../recovery.js";
@@ -170,34 +165,6 @@ function readCanonicalTapeEvents(input: { cwd: string; sessionId: string }): Can
     });
 }
 
-function promptTextFromCanonicalTurnStarted(payload: unknown): string {
-  if (!isRecord(payload)) {
-    return "";
-  }
-  if (typeof payload.prompt === "string") {
-    return payload.prompt;
-  }
-  if (!Array.isArray(payload.content)) {
-    return "";
-  }
-  return payload.content
-    .map((part) => {
-      if (!isRecord(part)) {
-        return "";
-      }
-      if (part.type === "text" && typeof part.text === "string") {
-        return part.text;
-      }
-      if (part.type === "file") {
-        if (typeof part.displayText === "string") return part.displayText;
-        if (typeof part.name === "string") return part.name;
-        if (typeof part.uri === "string") return part.uri;
-      }
-      return "";
-    })
-    .join("");
-}
-
 function canonicalTriggerFromMode(payload: unknown): SessionWireTurnTrigger {
   const mode = isRecord(payload) && typeof payload.mode === "string" ? payload.mode : "";
   switch (mode) {
@@ -214,42 +181,6 @@ function canonicalTriggerFromMode(payload: unknown): SessionWireTurnTrigger {
     default:
       return "user";
   }
-}
-
-function canonicalAssistantText(payload: unknown): string | null {
-  return isRecord(payload) && typeof payload.text === "string" ? payload.text : null;
-}
-
-function canonicalContentText(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (content === undefined) {
-    return "";
-  }
-  try {
-    return JSON.stringify(content);
-  } catch {
-    return "[unserializable content]";
-  }
-}
-
-function canonicalToolOutput(event: CanonicalEvent): ToolOutputView | null {
-  if (event.type !== "tool.committed" || !isRecord(event.payload)) {
-    return null;
-  }
-  const call = isRecord(event.payload.call) ? event.payload.call : null;
-  const result = isRecord(event.payload.result) ? event.payload.result : null;
-  if (!call || typeof call.toolCallId !== "string" || typeof call.toolName !== "string") {
-    return null;
-  }
-  return {
-    toolCallId: asBrewvaToolCallId(call.toolCallId),
-    toolName: asBrewvaToolName(call.toolName),
-    verdict: result?.ok === false ? "fail" : "pass",
-    isError: result?.ok === false,
-    text: canonicalContentText(result?.content),
-  };
 }
 
 function readCanonicalEventRecord(event: CanonicalEvent): BrewvaStructuredEvent | null {
@@ -313,63 +244,13 @@ function querySessionWireFramesFromCanonicalTape(input: {
       reason: typeof payload.reason === "string" ? payload.reason : undefined,
     });
   }
-  const assistantTextByTurnId = new Map<string, string>();
-  const toolOutputsByTurnId = new Map<string, ToolOutputView[]>();
-  for (const event of events) {
-    const turnId = event.turnId?.trim();
-    if (!turnId) {
-      continue;
-    }
-    if (event.type === "turn.started") {
-      frames.push({
-        schema: "brewva.session-wire.v2",
-        sessionId: asBrewvaSessionId(event.sessionId),
-        frameId: `canonical:${event.id}:turn.input`,
-        ts: event.timestamp,
-        source: "replay",
-        durability: "durable",
-        sourceEventId: event.id,
-        sourceEventType: event.type,
-        type: "turn.input",
-        turnId,
-        trigger: canonicalTriggerFromMode(event.payload),
-        promptText: promptTextFromCanonicalTurnStarted(event.payload),
-      });
-      continue;
-    }
-    if (event.type === "msg.committed") {
-      const text = canonicalAssistantText(event.payload);
-      if (text !== null) {
-        assistantTextByTurnId.set(turnId, `${assistantTextByTurnId.get(turnId) ?? ""}${text}`);
-      }
-      continue;
-    }
-    const toolOutput = canonicalToolOutput(event);
-    if (toolOutput) {
-      const outputs = toolOutputsByTurnId.get(turnId) ?? [];
-      outputs.push(toolOutput);
-      toolOutputsByTurnId.set(turnId, outputs);
-      continue;
-    }
-    if (event.type === "turn.ended") {
-      frames.push({
-        schema: "brewva.session-wire.v2",
-        sessionId: asBrewvaSessionId(event.sessionId),
-        frameId: `canonical:${event.id}:turn.committed`,
-        ts: event.timestamp,
-        source: "replay",
-        durability: "durable",
-        sourceEventId: event.id,
-        sourceEventType: event.type,
-        type: "turn.committed",
-        turnId,
-        attemptId: "runtime-turn",
-        status: "completed",
-        assistantText: assistantTextByTurnId.get(turnId) ?? "",
-        toolOutputs: toolOutputsByTurnId.get(turnId) ?? [],
-      });
-    }
-  }
+  frames.push(
+    ...buildRuntimeTurnSessionWireFrames({
+      sessionId: input.sessionId,
+      events,
+      triggerFromTurnStartedPayload: canonicalTriggerFromMode,
+    }),
+  );
   return frames;
 }
 

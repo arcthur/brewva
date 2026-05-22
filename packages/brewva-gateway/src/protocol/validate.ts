@@ -181,8 +181,25 @@ function isToolOutputView(value: unknown): boolean {
     isToolVerdict(value.verdict) &&
     typeof value.isError === "boolean" &&
     typeof value.text === "string" &&
+    (value.ts === undefined || readFiniteNumberValue(value.ts) !== undefined) &&
+    isOptionalString(value.sourceEventId) &&
     isToolOutputDisplayView(value.display)
   );
+}
+
+function isAssistantTextSegmentView(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.text === "string" &&
+    readFiniteNumberValue(value.ts) !== undefined &&
+    isOptionalString(value.sourceEventId)
+  );
+}
+
+function isAssistantTextSegmentList(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.every(isAssistantTextSegmentView));
 }
 
 function hasSessionWireBase(value: Record<string, unknown>): string | null {
@@ -471,6 +488,7 @@ export function validateSessionWireFramePayload(
           value.status !== "failed" &&
           value.status !== "cancelled") ||
         typeof value.assistantText !== "string" ||
+        !isAssistantTextSegmentList(value.assistantSegments) ||
         !Array.isArray(value.toolOutputs) ||
         value.toolOutputs.some((entry) => !isToolOutputView(entry))
       ) {
@@ -510,44 +528,6 @@ export function validateSessionWireFramePayload(
         !isOptionalString(value.reason)
       ) {
         return { ok: false, error: "approval.decided payload is invalid" };
-      }
-      {
-        const semanticsError = requireDurableSemantics(value, type);
-        if (semanticsError) {
-          return { ok: false, error: semanticsError };
-        }
-      }
-      return { ok: true, frame: asSessionWireFrame(value) };
-    case "subagent.started":
-      if (
-        typeof value.turnId !== "string" ||
-        typeof value.runId !== "string" ||
-        typeof value.delegate !== "string" ||
-        typeof value.kind !== "string" ||
-        (value.lifecycle !== "spawned" && value.lifecycle !== "running") ||
-        !isOptionalString(value.label)
-      ) {
-        return { ok: false, error: "subagent.started payload is invalid" };
-      }
-      {
-        const semanticsError = requireDurableSemantics(value, type);
-        if (semanticsError) {
-          return { ok: false, error: semanticsError };
-        }
-      }
-      return { ok: true, frame: asSessionWireFrame(value) };
-    case "subagent.finished":
-      if (
-        typeof value.turnId !== "string" ||
-        typeof value.runId !== "string" ||
-        typeof value.delegate !== "string" ||
-        typeof value.kind !== "string" ||
-        (value.status !== "completed" &&
-          value.status !== "failed" &&
-          value.status !== "cancelled") ||
-        !isOptionalString(value.summary)
-      ) {
-        return { ok: false, error: "subagent.finished payload is invalid" };
       }
       {
         const semanticsError = requireDurableSemantics(value, type);

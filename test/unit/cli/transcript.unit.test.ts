@@ -1,9 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
+  asBrewvaSessionId,
+  asBrewvaToolCallId,
+  asBrewvaToolName,
+} from "@brewva/brewva-runtime/core";
+import {
   buildSeedTranscriptMessages,
   buildTranscriptMessageFromMessage,
   upsertToolExecutionIntoTranscriptMessages,
 } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
+import { buildSessionWireTranscriptSeedMessages } from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";
 
 describe("cli transcript model", () => {
   test("skips hidden assistant draft messages", () => {
@@ -161,6 +167,103 @@ describe("cli transcript model", () => {
           rawText: '{"verbose":true}',
         },
       },
+    });
+  });
+
+  test("builds transcript seed messages from replayed runtime session wire tool outputs", () => {
+    const seed = buildSessionWireTranscriptSeedMessages([
+      {
+        schema: "brewva.session-wire.v2",
+        sessionId: asBrewvaSessionId("session-wire-transcript"),
+        frameId: "a-frame-committed",
+        ts: 1_000,
+        source: "replay",
+        durability: "durable",
+        type: "turn.committed",
+        turnId: "turn-0",
+        attemptId: "runtime-turn",
+        status: "completed",
+        assistantText: "Let me search first.Architecture docs live under docs/architecture.",
+        assistantSegments: [
+          {
+            text: "Let me search first.",
+            ts: 1_200,
+            sourceEventId: "evt-assistant-before-tool",
+          },
+          {
+            text: "Architecture docs live under docs/architecture.",
+            ts: 1_400,
+            sourceEventId: "evt-assistant-after-tool",
+          },
+        ],
+        toolOutputs: [
+          {
+            toolCallId: asBrewvaToolCallId("call-grep-1"),
+            toolName: asBrewvaToolName("grep"),
+            verdict: "pass",
+            isError: false,
+            text: "docs/architecture/system-architecture.md",
+            ts: 1_300,
+            sourceEventId: "evt-tool-committed",
+          },
+        ],
+      },
+      {
+        schema: "brewva.session-wire.v2",
+        sessionId: asBrewvaSessionId("session-wire-transcript"),
+        frameId: "z-frame-input",
+        ts: 1_000,
+        source: "replay",
+        durability: "durable",
+        type: "turn.input",
+        turnId: "turn-0",
+        trigger: "user",
+        promptText: "show architecture docs",
+      },
+    ]);
+    const messages = buildSeedTranscriptMessages(seed, "session-wire-transcript");
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "tool",
+      "assistant",
+    ]);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      parts: [{ type: "text", text: "show architecture docs" }],
+    });
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "Let me search first.",
+        },
+      ],
+    });
+    expect(messages[2]).toMatchObject({
+      role: "tool",
+      parts: [
+        {
+          type: "tool",
+          toolName: "grep",
+          toolCallId: "call-grep-1",
+          status: "completed",
+          result: {
+            content: [{ type: "text", text: "docs/architecture/system-architecture.md" }],
+          },
+        },
+      ],
+    });
+    expect(messages[3]).toMatchObject({
+      role: "assistant",
+      parts: [
+        {
+          type: "text",
+          text: "Architecture docs live under docs/architecture.",
+        },
+      ],
     });
   });
 

@@ -811,12 +811,19 @@ export interface ToolOutputDisplayView extends ProtocolRecord {
   detailsText?: string;
   rawText?: string;
 }
+export interface AssistantTextSegmentView extends ProtocolRecord {
+  readonly text: string;
+  readonly ts: number;
+  readonly sourceEventId?: string;
+}
 export interface ToolOutputView extends ProtocolRecord {
   readonly toolCallId: string;
   readonly toolName: string;
   readonly verdict: string;
   readonly isError: boolean;
   readonly text: string;
+  readonly ts?: number;
+  readonly sourceEventId?: string;
   readonly display?: ToolOutputDisplayView;
 }
 export interface ToolLifecycleEventPayload extends ProtocolRecord {}
@@ -1734,6 +1741,7 @@ export type SessionWireFrame =
       readonly attemptId: string;
       readonly status: SessionWireCommittedStatus;
       readonly assistantText: string;
+      readonly assistantSegments?: readonly AssistantTextSegmentView[];
       readonly toolOutputs: readonly ToolOutputView[];
     })
   | (SessionWireFrameBase & {
@@ -1752,24 +1760,6 @@ export type SessionWireFrame =
       readonly decision: "approved" | "rejected";
       readonly actor?: string;
       readonly reason?: string;
-    })
-  | (SessionWireFrameBase & {
-      readonly type: "subagent.started";
-      readonly turnId: string;
-      readonly runId: string;
-      readonly delegate: string;
-      readonly kind: string;
-      readonly lifecycle: "spawned" | "running";
-      readonly label?: string;
-    })
-  | (SessionWireFrameBase & {
-      readonly type: "subagent.finished";
-      readonly turnId: string;
-      readonly runId: string;
-      readonly delegate: string;
-      readonly kind: string;
-      readonly status: "completed" | "failed" | "cancelled";
-      readonly summary?: string;
     })
   | (SessionWireFrameBase & {
       readonly type: "session.closed";

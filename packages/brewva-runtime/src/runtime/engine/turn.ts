@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { createAsyncBridge, linkAbortSignal } from "@brewva/brewva-std/async";
 import type {
+  CanonicalEvent,
   KernelPort,
   ModelPort,
+  PromptPlan,
   PromptContentPart,
   RuntimeProviderFrame,
   RuntimeProviderPort,
@@ -15,6 +17,8 @@ import type {
 const EMPTY_PROVIDER: RuntimeProviderPort = Object.freeze({
   async *stream() {},
 });
+
+const MAX_PROVIDER_PASSES_PER_TURN = 16;
 
 function clonePromptContentPart(part: PromptContentPart): PromptContentPart {
   return Object.freeze({ ...part });
@@ -77,7 +81,7 @@ export function createTurnRunner(input: {
 
     async function* handleProviderToolFrame(
       frame: Extract<RuntimeProviderFrame, { type: "tool" }>,
-    ): AsyncGenerator<TurnFrame, "continue" | "suspend", void> {
+    ): AsyncGenerator<TurnFrame, "continue" | "committed" | "suspend", void> {
       const decision = await input.kernel.beginToolCall({
         sessionId: turn.sessionId,
         turnId,
@@ -160,7 +164,7 @@ export function createTurnRunner(input: {
             result: next.result,
           });
           yield { type: "runtime.event", event: committed.event };
-          break;
+          return "committed";
         }
       } catch (error) {
         const aborted = await input.kernel.abortToolCall({
@@ -174,6 +178,95 @@ export function createTurnRunner(input: {
         void producer.catch(() => undefined);
       }
       return "continue";
+    }
+
+    async function materializeReadyPrompt(): Promise<{
+      readonly prompt: PromptPlan;
+      readonly events: readonly CanonicalEvent[];
+    }> {
+      const events: CanonicalEvent[] = [];
+      let prompt = await input.model.materialize({
+        sessionId: turn.sessionId,
+        budget: turn.budget,
+      });
+      if (prompt.status === "over_window") {
+        const candidate = await input.model.proposeCheckpoint({
+          sessionId: turn.sessionId,
+          budget: turn.budget,
+          reason: "compaction_required",
+        });
+        const checkpoint = input.tape.commit({
+          sessionId: turn.sessionId,
+          turnId,
+          type: "checkpoint.committed",
+          payload: { ...candidate, cause: "compaction_required" },
+        });
+        events.push(checkpoint);
+        prompt = await input.model.materialize({
+          sessionId: turn.sessionId,
+          budget: turn.budget,
+        });
+        if (prompt.status === "over_window") {
+          throw new Error("context_window_exceeded_after_checkpoint");
+        }
+      }
+      return { prompt, events };
+    }
+
+    function* commitBufferedAssistantOutput(buffer: {
+      assistantText: string;
+      reasonText: string;
+    }): Generator<TurnFrame, void, void> {
+      if (buffer.reasonText.length > 0) {
+        const reason = input.tape.commit({
+          sessionId: turn.sessionId,
+          turnId,
+          type: "reason.committed",
+          payload: { text: buffer.reasonText },
+        });
+        buffer.reasonText = "";
+        yield { type: "runtime.event", event: reason };
+      }
+
+      if (buffer.assistantText.length > 0) {
+        const message = input.tape.commit({
+          sessionId: turn.sessionId,
+          turnId,
+          type: "msg.committed",
+          payload: { text: buffer.assistantText },
+        });
+        buffer.assistantText = "";
+        yield { type: "runtime.event", event: message };
+      }
+    }
+
+    let terminalCommitted = false;
+
+    function failureMessage(error: unknown): string {
+      return error instanceof Error && error.message.length > 0
+        ? error.message
+        : "runtime_turn_failed";
+    }
+
+    function commitTurnEnded(
+      inputValue: {
+        status?: "completed" | "failed" | "cancelled";
+        error?: string;
+      } = {},
+    ): TurnFrame {
+      const status = inputValue.status ?? "completed";
+      const ended = input.tape.commit({
+        sessionId: turn.sessionId,
+        turnId,
+        type: "turn.ended",
+        payload: {
+          cause: "terminal_commit",
+          ...(status === "completed" ? {} : { status }),
+          ...(inputValue.error ? { error: inputValue.error } : {}),
+        },
+      });
+      terminalCommitted = true;
+      return { type: "runtime.event", event: ended };
     }
 
     const started = input.tape.commit({
@@ -190,126 +283,100 @@ export function createTurnRunner(input: {
       return;
     }
 
-    let prompt = await input.model.materialize({
-      sessionId: turn.sessionId,
-      budget: turn.budget,
-    });
-    if (prompt.status === "over_window") {
-      const candidate = await input.model.proposeCheckpoint({
-        sessionId: turn.sessionId,
-        budget: turn.budget,
-        reason: "compaction_required",
-      });
-      const checkpoint = input.tape.commit({
-        sessionId: turn.sessionId,
-        turnId,
-        type: "checkpoint.committed",
-        payload: { ...candidate, cause: "compaction_required" },
-      });
-      yield { type: "runtime.event", event: checkpoint };
-      prompt = await input.model.materialize({
-        sessionId: turn.sessionId,
-        budget: turn.budget,
-      });
-      if (prompt.status === "over_window") {
-        throw new Error("context_window_exceeded_after_checkpoint");
-      }
-    }
+    try {
+      let retryProviderOnce = true;
+      let committedToolThisTurn = false;
+      for (let providerPass = 0; ; providerPass += 1) {
+        if (providerPass >= MAX_PROVIDER_PASSES_PER_TURN) {
+          throw new Error("provider_tool_continuation_limit_exceeded");
+        }
+        const materialized = await materializeReadyPrompt();
+        for (const event of materialized.events) {
+          yield { type: "runtime.event", event };
+        }
 
-    if (turn.signal?.aborted) {
-      yield suspendForInterrupt();
-      yield { type: "runtime.suspended", cause: "interrupt" };
-      return;
-    }
+        if (turn.signal?.aborted) {
+          yield suspendForInterrupt();
+          yield { type: "runtime.suspended", cause: "interrupt" };
+          return;
+        }
 
-    let assistantText = "";
-    let reasonText = "";
-    let retryProviderOnce = true;
-    for (;;) {
-      let localFrameError: unknown = null;
-      let currentAttemptProducedFrame = false;
-      try {
-        for await (const frame of provider.stream({ turn, prompt })) {
-          currentAttemptProducedFrame = true;
-          if (turn.signal?.aborted) {
-            yield suspendForInterrupt();
-            yield { type: "runtime.suspended", cause: "interrupt" };
-            return;
+        const passOutput = { assistantText: "", reasonText: "" };
+        let passHadTool = false;
+        let localFrameError: unknown = null;
+        let currentAttemptProducedFrame = false;
+        try {
+          for await (const frame of provider.stream({ turn, prompt: materialized.prompt })) {
+            currentAttemptProducedFrame = true;
+            if (turn.signal?.aborted) {
+              yield suspendForInterrupt();
+              yield { type: "runtime.suspended", cause: "interrupt" };
+              return;
+            }
+            if (frame.type === "text") {
+              passOutput.assistantText += frame.delta;
+              yield frame;
+              continue;
+            }
+            if (frame.type === "reason") {
+              passOutput.reasonText += frame.delta;
+              yield { type: "reason", delta: frame.delta };
+              continue;
+            }
+            passHadTool = true;
+            yield* commitBufferedAssistantOutput(passOutput);
+            let toolOutcome: "continue" | "committed" | "suspend";
+            try {
+              toolOutcome = yield* handleProviderToolFrame(frame);
+            } catch (error) {
+              localFrameError = error;
+              throw error;
+            }
+            if (toolOutcome === "suspend") {
+              return;
+            }
+            if (toolOutcome === "committed") {
+              committedToolThisTurn = true;
+            }
           }
-          if (frame.type === "text") {
-            assistantText += frame.delta;
-            yield frame;
+          yield* commitBufferedAssistantOutput(passOutput);
+          if (passHadTool) {
             continue;
           }
-          if (frame.type === "reason") {
-            reasonText += frame.delta;
-            yield { type: "reason", delta: frame.delta };
-            continue;
-          }
-          let toolOutcome: "continue" | "suspend";
-          try {
-            toolOutcome = yield* handleProviderToolFrame(frame);
-          } catch (error) {
-            localFrameError = error;
+          break;
+        } catch (error) {
+          if (error === localFrameError) {
             throw error;
           }
-          if (toolOutcome === "suspend") {
-            return;
+          if (
+            !retryProviderOnce ||
+            currentAttemptProducedFrame ||
+            committedToolThisTurn ||
+            passOutput.assistantText.length > 0 ||
+            passOutput.reasonText.length > 0
+          ) {
+            throw error;
           }
+          retryProviderOnce = false;
+          const retry = input.tape.commit({
+            sessionId: turn.sessionId,
+            turnId,
+            type: "runtime.suspended",
+            payload: {
+              cause: "provider_retry",
+              error: error instanceof Error ? error.message : "provider_stream_failed",
+            },
+          });
+          yield { type: "runtime.event", event: retry };
         }
-        break;
-      } catch (error) {
-        if (error === localFrameError) {
-          throw error;
-        }
-        if (
-          !retryProviderOnce ||
-          currentAttemptProducedFrame ||
-          assistantText.length > 0 ||
-          reasonText.length > 0
-        ) {
-          throw error;
-        }
-        retryProviderOnce = false;
-        const retry = input.tape.commit({
-          sessionId: turn.sessionId,
-          turnId,
-          type: "runtime.suspended",
-          payload: {
-            cause: "provider_retry",
-            error: error instanceof Error ? error.message : "provider_stream_failed",
-          },
-        });
-        yield { type: "runtime.event", event: retry };
       }
-    }
 
-    if (reasonText.length > 0) {
-      const reason = input.tape.commit({
-        sessionId: turn.sessionId,
-        turnId,
-        type: "reason.committed",
-        payload: { text: reasonText },
-      });
-      yield { type: "runtime.event", event: reason };
+      yield commitTurnEnded();
+    } catch (error) {
+      if (!terminalCommitted) {
+        yield commitTurnEnded({ status: "failed", error: failureMessage(error) });
+      }
+      throw error;
     }
-
-    if (assistantText.length > 0) {
-      const message = input.tape.commit({
-        sessionId: turn.sessionId,
-        turnId,
-        type: "msg.committed",
-        payload: { text: assistantText },
-      });
-      yield { type: "runtime.event", event: message };
-    }
-
-    const ended = input.tape.commit({
-      sessionId: turn.sessionId,
-      turnId,
-      type: "turn.ended",
-      payload: { cause: "terminal_commit" },
-    });
-    yield { type: "runtime.event", event: ended };
   };
 }

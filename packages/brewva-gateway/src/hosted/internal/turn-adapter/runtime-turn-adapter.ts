@@ -11,6 +11,14 @@ import type {
   ToolOutputView,
 } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+import {
+  isRuntimeProjectionRecord,
+  promptTextFromRuntimeTurnStartedPayload,
+  readRuntimeToolOutputDisplay,
+  runtimeTurnCommittedStatusFromPayload,
+  summarizeRuntimeToolContent,
+  toolOutputFromRuntimeEvent,
+} from "../../../utils/runtime-session-wire-projection.js";
 import type { CollectSessionPromptOutputSession, SessionPromptInput } from "./collect-output.js";
 import {
   HOSTED_RUNTIME_TURN_PRELUDE,
@@ -100,91 +108,11 @@ function failedRuntimeResult(input: {
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function summarizeRuntimeToolContent(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    try {
-      return JSON.stringify(content);
-    } catch {
-      return String(content);
-    }
-  }
-  const textParts = content.flatMap((item) => {
-    if (!isRecord(item) || item.type !== "text" || typeof item.text !== "string") {
-      return [];
-    }
-    return [item.text];
-  });
-  return textParts.join("\n");
-}
-
-function toolOutputFromRuntimeEvent(
-  event: Extract<TurnFrame, { type: "runtime.event" }>["event"],
-): ToolOutputView | null {
-  const payload = isRecord(event.payload) ? event.payload : null;
-  if (!payload) {
-    return null;
-  }
-  if (event.type === "tool.committed") {
-    const call = isRecord(payload.call) ? payload.call : null;
-    const result = isRecord(payload.result) ? payload.result : null;
-    if (!call || typeof call.toolCallId !== "string" || typeof call.toolName !== "string") {
-      return null;
-    }
-    const display =
-      isRecord(result?.metadata) && isRecord(result.metadata.display)
-        ? {
-            summaryText:
-              typeof result.metadata.display.summaryText === "string"
-                ? result.metadata.display.summaryText
-                : undefined,
-            detailsText:
-              typeof result.metadata.display.detailsText === "string"
-                ? result.metadata.display.detailsText
-                : undefined,
-            rawText:
-              typeof result.metadata.display.rawText === "string"
-                ? result.metadata.display.rawText
-                : undefined,
-          }
-        : undefined;
-    const ok = result?.ok !== false;
-    return {
-      toolCallId: asBrewvaToolCallId(call.toolCallId),
-      toolName: asBrewvaToolName(call.toolName),
-      verdict: ok ? "pass" : "fail",
-      isError: !ok,
-      text: summarizeRuntimeToolContent(result?.content),
-      display,
-    };
-  }
-  if (event.type === "tool.aborted") {
-    const call = isRecord(payload.call) ? payload.call : null;
-    if (!call || typeof call.toolCallId !== "string" || typeof call.toolName !== "string") {
-      return null;
-    }
-    return {
-      toolCallId: asBrewvaToolCallId(call.toolCallId),
-      toolName: asBrewvaToolName(call.toolName),
-      verdict: "fail",
-      isError: true,
-      text: typeof payload.reason === "string" ? payload.reason : "tool_aborted",
-    };
-  }
-  return null;
-}
-
 function runtimeToolCallFromEventPayload(
   event: Extract<TurnFrame, { type: "runtime.event" }>["event"],
 ): { toolCallId: string; toolName: string } | null {
-  const payload = isRecord(event.payload) ? event.payload : null;
-  const call = isRecord(payload?.call) ? payload.call : null;
+  const payload = isRuntimeProjectionRecord(event.payload) ? event.payload : null;
+  const call = isRuntimeProjectionRecord(payload?.call) ? payload.call : null;
   if (!call || typeof call.toolCallId !== "string" || typeof call.toolName !== "string") {
     return null;
   }
@@ -213,34 +141,6 @@ function sessionWireTriggerFromProfile(profile: HostedTurnAdapterProfile): Sessi
   return "user";
 }
 
-function promptTextFromTurnStartedPayload(payload: unknown): string {
-  if (!isRecord(payload)) {
-    return "";
-  }
-  if (typeof payload.prompt === "string") {
-    return payload.prompt;
-  }
-  if (!Array.isArray(payload.content)) {
-    return "";
-  }
-  return payload.content
-    .map((part) => {
-      if (!isRecord(part)) {
-        return "";
-      }
-      if (part.type === "text" && typeof part.text === "string") {
-        return part.text;
-      }
-      if (part.type === "file") {
-        if (typeof part.displayText === "string") return part.displayText;
-        if (typeof part.name === "string") return part.name;
-        if (typeof part.uri === "string") return part.uri;
-      }
-      return "";
-    })
-    .join("");
-}
-
 function toolProgressFromRuntimeFrame(frame: Extract<TurnFrame, { type: "tool.progress" }>): {
   toolCallId: ReturnType<typeof asBrewvaToolCallId>;
   toolName: ReturnType<typeof asBrewvaToolName>;
@@ -249,21 +149,10 @@ function toolProgressFromRuntimeFrame(frame: Extract<TurnFrame, { type: "tool.pr
   text: string;
   display?: ToolOutputView["display"];
 } {
-  const metadata = isRecord(frame.progress.update.metadata) ? frame.progress.update.metadata : null;
-  const display = isRecord(metadata?.display)
-    ? {
-        summaryText:
-          typeof metadata.display.summaryText === "string"
-            ? metadata.display.summaryText
-            : undefined,
-        detailsText:
-          typeof metadata.display.detailsText === "string"
-            ? metadata.display.detailsText
-            : undefined,
-        rawText:
-          typeof metadata.display.rawText === "string" ? metadata.display.rawText : undefined,
-      }
-    : undefined;
+  const metadata = isRuntimeProjectionRecord(frame.progress.update.metadata)
+    ? frame.progress.update.metadata
+    : null;
+  const display = readRuntimeToolOutputDisplay(metadata);
   const verdict =
     metadata?.verdict === "pass" ||
     metadata?.verdict === "fail" ||
@@ -364,7 +253,7 @@ function emitRuntimeEventFrame(input: {
         type: "turn.input",
         turnId: input.turnId ?? "",
         trigger: sessionWireTriggerFromProfile(input.profile),
-        promptText: promptTextFromTurnStartedPayload(event.payload),
+        promptText: promptTextFromRuntimeTurnStartedPayload(event.payload),
       }),
     });
     emitRuntimeBranchFrame({
@@ -405,7 +294,7 @@ function emitRuntimeEventFrame(input: {
         type: "turn.committed",
         turnId: input.turnId ?? "",
         attemptId: input.attemptId,
-        status: "completed",
+        status: runtimeTurnCommittedStatusFromPayload(event.payload),
         assistantText: input.assistantText,
         toolOutputs: [...input.toolOutputs],
       }),
@@ -439,7 +328,7 @@ function emitRuntimeEventFrame(input: {
     return;
   }
   if (event.type === "approval.requested") {
-    const payload = isRecord(event.payload) ? event.payload : null;
+    const payload = isRuntimeProjectionRecord(event.payload) ? event.payload : null;
     if (
       !payload ||
       typeof payload.id !== "string" ||

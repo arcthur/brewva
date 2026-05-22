@@ -15,6 +15,7 @@ import type {
 import {
   getCliRuntimeLineageTree,
   getCliRuntimeRewindState,
+  getCliRuntimeSessionWire,
   listCliRuntimeRewindTargets,
   recordCliRuntimeLineageSelection,
   recordCliRuntimeRewindCheckpoint,
@@ -206,6 +207,106 @@ function buildRuntimeToolResultPayload(frame: RuntimeToolSessionWireFrame): {
     ...(frame.display ? { display: frame.display } : {}),
     isError: frame.isError,
   };
+}
+
+export function buildSessionWireTranscriptSeedMessages(
+  frames: readonly SessionWireFrame[],
+): unknown[] {
+  const turnInputsById = new Map<string, Extract<SessionWireFrame, { type: "turn.input" }>>();
+  const emittedTurnInputs = new Set<string>();
+  const messages: unknown[] = [];
+  type ReplaySeedItem = {
+    readonly ts: number;
+    readonly order: number;
+    readonly message: unknown;
+  };
+  const sortedFrames = [...frames].toSorted((left, right) => {
+    if (left.ts !== right.ts) {
+      return left.ts - right.ts;
+    }
+    return left.frameId.localeCompare(right.frameId);
+  });
+
+  for (const frame of sortedFrames) {
+    if (frame.type === "turn.input") {
+      turnInputsById.set(frame.turnId, turnInputsById.get(frame.turnId) ?? frame);
+    }
+  }
+
+  for (const frame of sortedFrames) {
+    if (frame.type !== "turn.committed") {
+      continue;
+    }
+
+    const inputFrame = turnInputsById.get(frame.turnId);
+    if (inputFrame && !emittedTurnInputs.has(frame.turnId)) {
+      emittedTurnInputs.add(frame.turnId);
+      if (inputFrame.promptText.trim().length > 0) {
+        messages.push({
+          role: "user",
+          content: [{ type: "text", text: inputFrame.promptText }],
+          timestamp: inputFrame.ts,
+        });
+      }
+    }
+
+    const replayItems: ReplaySeedItem[] = [];
+    const assistantSegments =
+      frame.assistantSegments?.filter((segment) => segment.text.trim().length > 0) ?? [];
+    let order = 0;
+    for (const segment of assistantSegments) {
+      replayItems.push({
+        ts: segment.ts,
+        order,
+        message: {
+          role: "assistant",
+          stopReason: frame.status === "completed" ? "stop" : "error",
+          content: [{ type: "text", text: segment.text }],
+          timestamp: segment.ts,
+        },
+      });
+      order += 1;
+    }
+    for (const toolOutput of frame.toolOutputs) {
+      replayItems.push({
+        ts: toolOutput.ts ?? frame.ts,
+        order,
+        message: {
+          role: "toolResult",
+          toolCallId: toolOutput.toolCallId,
+          toolName: toolOutput.toolName,
+          content: toolOutput.text.length > 0 ? [{ type: "text", text: toolOutput.text }] : [],
+          details: { verdict: toolOutput.verdict },
+          ...(toolOutput.display ? { display: toolOutput.display } : {}),
+          isError: toolOutput.isError,
+          timestamp: toolOutput.ts ?? frame.ts,
+        },
+      });
+      order += 1;
+    }
+    if (assistantSegments.length === 0 && frame.assistantText.trim().length > 0) {
+      replayItems.push({
+        ts: frame.ts,
+        order,
+        message: {
+          role: "assistant",
+          stopReason: frame.status === "completed" ? "stop" : "error",
+          content: [{ type: "text", text: frame.assistantText }],
+          timestamp: frame.ts,
+        },
+      });
+    }
+    for (const item of replayItems.toSorted((left, right) => {
+      if (left.ts !== right.ts) {
+        return left.ts - right.ts;
+      }
+      return left.order - right.order;
+    })) {
+      messages.push(item.message);
+    }
+  }
+
+  return messages;
 }
 
 function emitRuntimeTurnSessionFrame(input: {
@@ -491,7 +592,16 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     },
     getTranscriptSeed() {
       const messages = bundle.session.sessionManager.buildSessionContext?.().messages;
-      return Array.isArray(messages) ? messages : [];
+      if (Array.isArray(messages) && messages.length > 0) {
+        return messages;
+      }
+      try {
+        return buildSessionWireTranscriptSeedMessages(
+          getCliRuntimeSessionWire(bundle.runtime, bundle.session.sessionManager.getSessionId()),
+        );
+      } catch {
+        return [];
+      }
     },
     async recordRewindCheckpoint(input) {
       await ensureSessionInitialPersistence(bundle.session);

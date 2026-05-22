@@ -91,7 +91,7 @@ describe("hosted turn envelope", () => {
         fauxAssistantMessage([
           {
             type: "text",
-            text: context.messages.map((message) => message.role).join(">"),
+            text: ` after ${context.messages.map((message) => message.role).join(">")}`,
           },
         ]),
     ]);
@@ -178,7 +178,7 @@ describe("hosted turn envelope", () => {
 
       expect(result).toMatchObject({
         status: "completed",
-        assistantText: "runtime says hi",
+        assistantText: "runtime says hi after user>assistant>assistant>toolResult",
         toolOutputs: [
           {
             toolCallId: "tool-runtime-path-1",

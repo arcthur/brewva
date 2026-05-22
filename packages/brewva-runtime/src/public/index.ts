@@ -42,6 +42,7 @@ export type {
   PromptImageContentPart,
   PromptMessage,
   PromptPlan,
+  PromptToolCall,
   PromptTextContentPart,
   RecoveryHistoryView,
   RuntimeBudget,

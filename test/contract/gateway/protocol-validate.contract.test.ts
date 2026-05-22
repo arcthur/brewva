@@ -299,4 +299,54 @@ describe("gateway protocol validator", () => {
     }
     expect(result.error).toContain("live cache frame");
   });
+
+  test("given subagent session wire frame, when validating payload, then validation fails", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "live:subagent-started",
+      ts: 1,
+      source: "live",
+      durability: "durable",
+      sourceEventId: "evt-subagent-1",
+      sourceEventType: "subagent_spawned",
+      type: "subagent.started",
+      turnId: "turn-1",
+      runId: "run-1",
+      delegate: "navigator",
+      kind: "evidence",
+      lifecycle: "spawned",
+      label: "Inspect replay",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toContain("unsupported session wire frame type");
+  });
+
+  test("given invalid assistant segments on committed turn, when validating payload, then validation fails", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "replay:turn-1:committed",
+      ts: 1,
+      source: "replay",
+      durability: "durable",
+      sourceEventId: "evt-turn-ended",
+      sourceEventType: "turn.ended",
+      type: "turn.committed",
+      turnId: "turn-1",
+      attemptId: "runtime-turn",
+      status: "completed",
+      assistantText: "done",
+      assistantSegments: [{ text: 123, ts: "bad" }],
+      toolOutputs: [],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error).toContain("turn.committed payload is invalid");
+  });
 });

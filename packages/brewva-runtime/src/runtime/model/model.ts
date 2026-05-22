@@ -8,6 +8,7 @@ import type {
   PromptContentPart,
   PromptMessage,
   PromptPlan,
+  PromptToolCall,
   TapePort,
 } from "../runtime-api.js";
 
@@ -132,6 +133,20 @@ function textFromUnknown(value: unknown): string {
   }
 }
 
+function promptToolCallFromPayload(call: Record<string, unknown> | null): PromptToolCall | null {
+  const toolCallId = readString(call?.toolCallId);
+  const toolName = readString(call?.toolName);
+  if (!toolCallId || !toolName) {
+    return null;
+  }
+  const args = readRecord(call?.args);
+  return Object.freeze({
+    toolCallId,
+    toolName,
+    ...(args ? { args: Object.freeze({ ...args }) } : {}),
+  });
+}
+
 function truncateText(text: string, maxLength: number): string {
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
@@ -198,19 +213,25 @@ function promptMessagesFromEvent(event: CanonicalEvent): readonly PromptMessage[
     const call = readRecord(payload?.call);
     const result = readRecord(payload?.result);
     const content = textFromUnknown(result?.content);
-    const toolCallId = readString(call?.toolCallId);
-    const toolName = readString(call?.toolName);
-    return content
-      ? [
-          Object.freeze({
-            role: "tool" as const,
-            content,
-            toolCallId: toolCallId ?? undefined,
-            toolName: toolName ?? undefined,
-            isError: result?.ok === false,
-          }),
-        ]
-      : [];
+    const toolCall = promptToolCallFromPayload(call);
+    if (!toolCall) {
+      return [];
+    }
+    const toolResult = Object.freeze({
+      role: "tool" as const,
+      content,
+      toolCallId: toolCall.toolCallId,
+      toolName: toolCall.toolName,
+      isError: result?.ok === false,
+    });
+    return [
+      Object.freeze({
+        role: "assistant" as const,
+        content: "",
+        toolCalls: Object.freeze([toolCall]),
+      }),
+      toolResult,
+    ];
   }
   if (event.type === "tool.aborted") {
     const call = readRecord(payload?.call);
@@ -218,14 +239,24 @@ function promptMessagesFromEvent(event: CanonicalEvent): readonly PromptMessage[
     if (!reason) {
       return [];
     }
+    const toolCall = promptToolCallFromPayload(call);
+    if (!toolCall) {
+      return [];
+    }
+    const toolResult = Object.freeze({
+      role: "tool" as const,
+      content: reason,
+      toolCallId: toolCall.toolCallId,
+      toolName: toolCall.toolName,
+      isError: true,
+    });
     return [
       Object.freeze({
-        role: "tool" as const,
-        content: reason,
-        toolCallId: readString(call?.toolCallId) ?? undefined,
-        toolName: readString(call?.toolName) ?? undefined,
-        isError: true,
+        role: "assistant" as const,
+        content: "",
+        toolCalls: Object.freeze([toolCall]),
       }),
+      toolResult,
     ];
   }
   return [];

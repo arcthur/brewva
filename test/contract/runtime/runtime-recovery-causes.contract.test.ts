@@ -67,8 +67,14 @@ async function runScenario(cause: RuntimeRecoveryCause): Promise<readonly Runtim
     return runtime.tape.project("s1", "recovery_history").causes;
   }
 
+  let calls = 0;
   const provider: RuntimeProviderPort = {
     async *stream() {
+      calls += 1;
+      if (calls > 1) {
+        yield { type: "text", delta: "seeded" };
+        return;
+      }
       yield {
         type: "tool",
         call: {
