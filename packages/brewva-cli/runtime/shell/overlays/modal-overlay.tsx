@@ -22,10 +22,13 @@ import {
 } from "./form-overlays.js";
 import {
   AuthMethodPickerOverlay,
+  AuthorityOverlay,
   CommandPaletteOverlay,
+  ContextOverlay,
   HelpHubOverlay,
   ModelPickerOverlay,
   ProviderPickerOverlay,
+  SkillsOverlay,
   ShortcutOverlay,
   ThinkingPickerOverlay,
 } from "./picker-overlays.js";
@@ -215,6 +218,36 @@ export function ModalOverlay(input: {
       <Show when={overlayPayloadOf(payload(), "helpHub")}>
         {(current) => (
           <HelpHubOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "context")}>
+        {(current) => (
+          <ContextOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "authority")}>
+        {(current) => (
+          <AuthorityOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "skills")}>
+        {(current) => (
+          <SkillsOverlay
             payload={current()}
             theme={input.theme}
             width={input.width}

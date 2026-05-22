@@ -21,7 +21,12 @@ export type ShellInputRoute =
     };
 
 function isPickerOverlay(kind: CliShellOverlayPayload["kind"] | undefined): boolean {
-  return kind === "commandPalette" || kind === "modelPicker" || kind === "providerPicker";
+  return (
+    kind === "commandPalette" ||
+    kind === "modelPicker" ||
+    kind === "providerPicker" ||
+    kind === "skills"
+  );
 }
 
 /** Question overlay: route everything except ctrl+meta combos; allow ^n/^p (shift allowed, flow remaps). */

@@ -1,13 +1,16 @@
 /** @jsxImportSource @opentui/solid */
 
 import { For, Show, createEffect, createMemo } from "solid-js";
-import { padToWidth, visibleWidth } from "../../../src/internal/tui/index.js";
+import { padToWidth, visibleWidth, wrapTextToLines } from "../../../src/internal/tui/index.js";
 import type {
+  CliAuthorityOverlayPayload,
   CliAuthMethodPickerOverlayPayload,
   CliCommandPaletteOverlayPayload,
+  CliContextOverlayPayload,
   CliHelpHubOverlayPayload,
   CliModelPickerOverlayPayload,
   CliProviderPickerOverlayPayload,
+  CliSkillsOverlayPayload,
   CliShortcutOverlayPayload,
   CliThinkingPickerOverlayPayload,
 } from "../../../src/shell/domain/overlays/payloads.js";
@@ -20,8 +23,10 @@ import {
   resolveDialogContentWidth,
   resolveDialogSurfaceDimensions,
   resolveDialogTopInset,
+  resolveDialogWidth,
   resolveHighDensityPickerRows,
   resolveModelPickerTopInset,
+  resolveSkillsPickerRows,
 } from "../overlay-style.js";
 import type { SessionPalette } from "../palette.js";
 import { useShellRenderContext } from "../render-context.js";
@@ -47,7 +52,7 @@ type PickerRenderRow =
   | { kind: "section"; key: string; section: string }
   | { kind: "item"; key: string; item: PickerListItem; itemIndex: number };
 
-type PickerRowVariant = "default" | "palette";
+type PickerRowVariant = "default" | "palette" | "skills";
 
 function buildPickerRenderRows(
   items: readonly PickerListItem[],
@@ -73,12 +78,96 @@ function buildPickerRenderRows(
   return rows;
 }
 
-function findPickerItemRow(
+function findPickerItemVisualRange(
   rows: readonly PickerRenderRow[],
   selectedIndex: number,
-): number | undefined {
-  const rowIndex = rows.findIndex((row) => row.kind === "item" && row.itemIndex === selectedIndex);
-  return rowIndex >= 0 ? rowIndex : undefined;
+  rowHeightFor: (row: PickerRenderRow) => number,
+): { top: number; height: number } | undefined {
+  let visualRowIndex = 0;
+  for (const row of rows) {
+    const rowHeight = rowHeightFor(row);
+    if (row.kind === "item" && row.itemIndex === selectedIndex) {
+      return { top: visualRowIndex, height: rowHeight };
+    }
+    visualRowIndex += rowHeight;
+  }
+  return undefined;
+}
+
+function resolveSkillsNameColumnWidth(rows: readonly PickerRenderRow[], contentWidth: number) {
+  const maxLabelWidth = Math.max(
+    12,
+    ...rows
+      .filter((row): row is Extract<PickerRenderRow, { kind: "item" }> => row.kind === "item")
+      .map((row) => visibleWidth(row.item.label)),
+  );
+  return Math.min(maxLabelWidth, Math.max(12, Math.floor(contentWidth * 0.32)));
+}
+
+function resolveSkillsDescriptionWidth(contentWidth: number, nameColumnWidth: number): number {
+  const rowChromeWidth = DIALOG_HORIZONTAL_PADDING * 2 + 2;
+  return Math.max(12, contentWidth - rowChromeWidth - nameColumnWidth);
+}
+
+function wrapPickerText(text: string, width: number): string[] {
+  const boundedWidth = Math.max(1, Math.trunc(width));
+  const normalized = text.trim().replace(/\s+/gu, " ");
+  if (normalized.length === 0) {
+    return [""];
+  }
+
+  const lines: string[] = [];
+  let currentLine = "";
+  let currentWidth = 0;
+
+  for (const word of normalized.split(" ")) {
+    const wordWidth = visibleWidth(word);
+    if (wordWidth > boundedWidth) {
+      if (currentLine.length > 0) {
+        lines.push(currentLine);
+        currentLine = "";
+        currentWidth = 0;
+      }
+      lines.push(...wrapTextToLines(word, boundedWidth));
+      continue;
+    }
+
+    if (currentLine.length === 0) {
+      currentLine = word;
+      currentWidth = wordWidth;
+      continue;
+    }
+
+    if (currentWidth + 1 + wordWidth <= boundedWidth) {
+      currentLine = `${currentLine} ${word}`;
+      currentWidth += 1 + wordWidth;
+      continue;
+    }
+
+    lines.push(currentLine);
+    currentLine = word;
+    currentWidth = wordWidth;
+  }
+
+  if (currentLine.length > 0) {
+    lines.push(currentLine);
+  }
+
+  return lines.length > 0 ? lines : [""];
+}
+
+function pickerRenderRowHeight(
+  row: PickerRenderRow,
+  input: { variant: PickerRowVariant; contentWidth: number; skillsNameColumnWidth: number },
+): number {
+  if (row.kind !== "item" || input.variant !== "skills") {
+    return 1;
+  }
+  const descriptionWidth = resolveSkillsDescriptionWidth(
+    input.contentWidth,
+    input.skillsNameColumnWidth,
+  );
+  return wrapPickerText(row.item.detail ?? "No description provided.", descriptionWidth).length;
 }
 
 function SearchLine(input: { query: string; theme: SessionPalette }) {
@@ -100,6 +189,12 @@ function PickerRows(input: {
 }) {
   const contentWidth = createMemo(() => Math.max(1, input.width ?? 60));
   const markerWidth = createMemo(() => (input.variant === "palette" ? 0 : PICKER_MARKER_WIDTH));
+  const skillsNameColumnWidth = createMemo(() => {
+    if (input.variant !== "skills") {
+      return 0;
+    }
+    return resolveSkillsNameColumnWidth(input.rows, contentWidth());
+  });
   const renderSectionRow = (section: string) => (
     <box paddingLeft={DIALOG_HORIZONTAL_PADDING} flexShrink={0}>
       <text fg={input.theme.accent} attributes={TextAttributes.BOLD}>
@@ -109,21 +204,90 @@ function PickerRows(input: {
   );
   const renderItemRow = (item: PickerListItem, itemIndex: number) => {
     const selected = createMemo(() => itemIndex === input.selectedIndex);
+    if (input.variant === "skills") {
+      const descriptionWidth = createMemo(() => {
+        return resolveSkillsDescriptionWidth(contentWidth(), skillsNameColumnWidth());
+      });
+      const descriptionLines = createMemo(() =>
+        wrapPickerText(item.detail ?? "No description provided.", descriptionWidth()),
+      );
+      const rowHeight = createMemo(() => Math.max(1, descriptionLines().length));
+      const rowTextColor = createMemo(() =>
+        selected()
+          ? input.theme.selectionText
+          : item.disabled
+            ? input.theme.textMuted
+            : input.theme.text,
+      );
+      const descriptionColor = createMemo(() =>
+        selected() ? input.theme.selectionText : input.theme.textMuted,
+      );
+      return (
+        <box
+          width="100%"
+          height={rowHeight()}
+          flexDirection="row"
+          backgroundColor={selected() ? input.theme.primary : undefined}
+          paddingLeft={DIALOG_HORIZONTAL_PADDING - markerWidth()}
+          paddingRight={DIALOG_HORIZONTAL_PADDING}
+          flexShrink={0}
+          gap={2}
+        >
+          <Show when={markerWidth() > 0}>
+            <box width={markerWidth()} height={rowHeight()} flexShrink={0}>
+              <text
+                fg={selected() ? input.theme.selectionText : input.theme.primary}
+                wrapMode="none"
+              >
+                {padToWidth(item.marker ?? "", markerWidth())}
+              </text>
+              <For each={descriptionLines().slice(1)}>
+                {() => <text wrapMode="none">{padToWidth("", markerWidth())}</text>}
+              </For>
+            </box>
+          </Show>
+          <box width={skillsNameColumnWidth()} height={rowHeight()} flexShrink={0}>
+            <text
+              fg={rowTextColor()}
+              attributes={selected() ? TextAttributes.BOLD : undefined}
+              wrapMode="none"
+            >
+              {truncateDialogText(item.label, skillsNameColumnWidth())}
+            </text>
+            <For each={descriptionLines().slice(1)}>
+              {() => <text wrapMode="none">{padToWidth("", skillsNameColumnWidth())}</text>}
+            </For>
+          </box>
+          <box flexGrow={1} height={rowHeight()} flexDirection="column">
+            <For each={descriptionLines()}>
+              {(line) => (
+                <text fg={descriptionColor()} wrapMode="none">
+                  {line}
+                </text>
+              )}
+            </For>
+          </box>
+        </box>
+      );
+    }
     const detail = createMemo(() =>
-      input.variant !== "palette" && item.detail
+      input.variant !== "palette" && input.variant !== "skills" && item.detail
         ? truncateDialogText(item.detail, Math.min(24, Math.floor(contentWidth() / 3)))
         : undefined,
     );
     const footer = createMemo(() => {
-      if (!item.footer) {
+      const footerText = input.variant === "skills" ? item.detail : item.footer;
+      if (!footerText) {
         return undefined;
       }
       const defaultMaxWidth = Math.min(18, Math.floor(contentWidth() / 4));
       const maxWidth =
         input.variant === "palette"
           ? Math.max(1, contentWidth() - DIALOG_HORIZONTAL_PADDING * 2 - 1)
-          : defaultMaxWidth;
-      return truncateDialogText(item.footer, maxWidth);
+          : input.variant === "skills"
+            ? Math.max(12, Math.floor(contentWidth() * 0.58))
+            : defaultMaxWidth;
+      return truncateDialogText(footerText, maxWidth);
     });
     const label = createMemo(() => {
       const detailWidth = detail() ? visibleWidth(detail()!) + 1 : 0;
@@ -239,8 +403,23 @@ function PickerList(input: {
   let scrollbox: OpenTuiScrollBoxHandle | undefined;
   let previousResetKey: string | undefined;
   const rows = createMemo(() => buildPickerRenderRows(input.items));
+  const contentWidth = createMemo(() => Math.max(1, input.width));
+  const skillsNameColumnWidth = createMemo(() =>
+    input.variant === "skills" ? resolveSkillsNameColumnWidth(rows(), contentWidth()) : 0,
+  );
+  const rowHeightFor = (row: PickerRenderRow) =>
+    pickerRenderRowHeight(row, {
+      variant: input.variant,
+      contentWidth: contentWidth(),
+      skillsNameColumnWidth: skillsNameColumnWidth(),
+    });
+  const visualRowCount = createMemo(() =>
+    rows().reduce((count, row) => count + rowHeightFor(row), 0),
+  );
   const viewportRows = createMemo(() =>
-    resolveHighDensityPickerRows(input.height, rows().length, input.topInset),
+    input.variant === "skills"
+      ? resolveSkillsPickerRows(input.height, visualRowCount(), input.topInset)
+      : resolveHighDensityPickerRows(input.height, visualRowCount(), input.topInset),
   );
   createEffect(() => {
     const node = scrollbox;
@@ -252,19 +431,19 @@ function PickerList(input: {
       previousResetKey = resetKey;
       node.scrollTo(0);
     }
-    const selectedRow = findPickerItemRow(rows(), input.selectedIndex);
-    if (selectedRow === undefined) {
+    const selectedRange = findPickerItemVisualRange(rows(), input.selectedIndex, rowHeightFor);
+    if (selectedRange === undefined) {
       node.scrollTo(0);
       return;
     }
     const viewportHeight = Math.max(1, node.viewport.height || viewportRows());
     const scrollBottom = node.scrollTop + viewportHeight;
-    if (selectedRow < node.scrollTop) {
-      node.scrollBy(selectedRow - node.scrollTop);
+    if (selectedRange.top < node.scrollTop) {
+      node.scrollBy(selectedRange.top - node.scrollTop);
       return;
     }
-    if (selectedRow + 1 > scrollBottom) {
-      node.scrollBy(selectedRow + 1 - scrollBottom);
+    if (selectedRange.top + selectedRange.height > scrollBottom) {
+      node.scrollBy(selectedRange.top + selectedRange.height - scrollBottom);
     }
   });
   return (
@@ -273,7 +452,7 @@ function PickerList(input: {
       ref={(node: OpenTuiScrollBoxHandle) => {
         scrollbox = node;
       }}
-      width="100%"
+      width={input.width}
       height={viewportRows()}
       scrollbarOptions={{ visible: false }}
       scrollAcceleration={shellContext.scrollAcceleration()}
@@ -499,28 +678,125 @@ export function CommandPaletteOverlay(input: {
   );
 }
 
+export function SkillsOverlay(input: {
+  payload: CliSkillsOverlayPayload;
+  theme: SessionPalette;
+  width: number;
+  height: number;
+}) {
+  const listWidth = createMemo(() => resolveDialogWidth(input.width, "large"));
+  const topInset = createMemo(() => resolveCommandPaletteTopInset(input.height));
+  return (
+    <DialogSelectFrame
+      title={input.payload.title}
+      width={input.width}
+      height={input.height}
+      theme={input.theme}
+      size="large"
+      topInset={topInset()}
+      search={
+        <box paddingTop={1} flexDirection="column">
+          <text fg={input.theme.textMuted}>Search: {input.payload.query}</text>
+          <text fg={input.theme.textMuted}>{input.payload.summary}</text>
+        </box>
+      }
+      footer={
+        <box paddingLeft={DIALOG_HORIZONTAL_PADDING} paddingRight={DIALOG_HORIZONTAL_PADDING}>
+          <text fg={input.theme.textMuted}>Enter insert · Ctrl+N/Ctrl+P move · Esc close</text>
+        </box>
+      }
+    >
+      <Show
+        when={input.payload.items.length > 0}
+        fallback={
+          <box paddingLeft={DIALOG_HORIZONTAL_PADDING} paddingRight={DIALOG_HORIZONTAL_PADDING}>
+            <text fg={input.theme.textMuted}>
+              {input.payload.emptyMessage ?? "No skills are loaded."}
+            </text>
+          </box>
+        }
+      >
+        <PickerList
+          id="skills-picker-scrollbox"
+          items={input.payload.items}
+          selectedIndex={input.payload.selectedIndex}
+          theme={input.theme}
+          width={listWidth()}
+          height={input.height}
+          topInset={topInset()}
+          variant="skills"
+          resetKey={input.payload.query}
+        />
+      </Show>
+    </DialogSelectFrame>
+  );
+}
+
+function wrapOverlayLine(line: string, width: number): string[] {
+  if (line.length === 0) {
+    return [""];
+  }
+  const indent = /^\s*/u.exec(line)?.[0] ?? "";
+  const body = line.slice(indent.length);
+  const bodyWidth = Math.max(1, width - visibleWidth(indent));
+  return wrapTextToLines(body, bodyWidth).map((wrapped) => `${indent}${wrapped}`);
+}
+
+function wrapOverlayLines(lines: readonly string[], width: number): string[] {
+  return lines.flatMap((line) => wrapOverlayLine(line, width));
+}
+
 function TextLinesOverlay(input: {
-  payload: CliHelpHubOverlayPayload | CliShortcutOverlayPayload;
+  payload:
+    | CliAuthorityOverlayPayload
+    | CliContextOverlayPayload
+    | CliHelpHubOverlayPayload
+    | CliShortcutOverlayPayload;
   theme: SessionPalette;
   width: number;
   height: number;
 }) {
   const surface = createMemo(() => resolveDialogSurfaceDimensions(input.width, input.height));
+  const contentWidth = createMemo(() =>
+    Math.max(1, resolveDialogContentWidth(input.width, "large") - 1),
+  );
+  const renderedLines = createMemo(() => wrapOverlayLines(input.payload.lines, contentWidth()));
   const lineWindow = createMemo(() =>
-    visibleLineWindow(input.payload.lines, 0, surface().contentHeight),
+    visibleLineWindow(renderedLines(), 0, surface().contentHeight),
+  );
+  const title = createMemo(() => {
+    switch (input.payload.kind) {
+      case "authority":
+        return "Authority";
+      case "context":
+        return "Context";
+      case "helpHub":
+      case "shortcutOverlay":
+        return input.payload.title;
+      default:
+        input.payload satisfies never;
+        return "";
+    }
+  });
+  const footer = createMemo(() =>
+    input.payload.kind === "helpHub" || input.payload.kind === "shortcutOverlay"
+      ? input.payload.footer
+      : undefined,
   );
   return (
     <OverlaySurface
-      title={input.payload.title}
+      title={title()}
       width={input.width}
       height={input.height}
       theme={input.theme}
-      footer={input.payload.footer}
+      footer={footer()}
     >
       <TextLineBlock lines={lineWindow().visibleLines} color={input.theme.text} />
     </OverlaySurface>
   );
 }
 
+export const AuthorityOverlay = TextLinesOverlay;
+export const ContextOverlay = TextLinesOverlay;
 export const HelpHubOverlay = TextLinesOverlay;
 export const ShortcutOverlay = TextLinesOverlay;

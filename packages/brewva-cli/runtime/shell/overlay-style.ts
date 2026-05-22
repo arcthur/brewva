@@ -52,6 +52,16 @@ export function resolveHighDensityPickerRows(
   return Math.max(1, Math.min(normalizedRowCount, availableRows));
 }
 
+export function resolveSkillsPickerRows(
+  height: number,
+  rowCount: number,
+  topInset = resolveCommandPaletteTopInset(height),
+): number {
+  const normalizedRowCount = Math.max(1, Math.trunc(rowCount) || 1);
+  const availableRows = Math.max(1, Math.trunc(height) - topInset - 12);
+  return Math.max(1, Math.min(normalizedRowCount, availableRows));
+}
+
 export function resolveDialogSelectRows(height: number, itemCount: number): number {
   const availableRows = Math.max(1, Math.floor(height / 2) - 6);
   return Math.max(1, Math.min(itemCount || 1, availableRows));

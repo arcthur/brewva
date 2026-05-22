@@ -6,12 +6,9 @@ import type {
   ContextStatus,
   HistoryViewBaselineSnapshot,
 } from "@brewva/brewva-runtime/protocol";
-import type {
-  ProducerContract,
-  SkillDocument,
-  SkillRegistryLoadReport,
-} from "@brewva/brewva-runtime/protocol";
+import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-runtime/protocol";
 import type { OperatorSurfaceSnapshot } from "../../operator-snapshot.js";
+import { fuzzyScore } from "../../search-scoring.js";
 import type {
   CliAuthorityOverlayPayload,
   CliContextOverlayPayload,
@@ -211,66 +208,111 @@ export function buildAuthorityOverlayPayload(input: {
   return { kind: "authority", lines };
 }
 
-function formatSkillRoute(skill: SkillDocument, loadReport: SkillRegistryLoadReport): string {
-  if (loadReport.selectableSkills.includes(skill.name)) {
-    return "selectable";
-  }
-  if (loadReport.overlaySkills.includes(skill.name)) {
-    return "overlay";
-  }
-  return "loaded";
+const SKILL_CATEGORY_ORDER = new Map(
+  ["core", "project", "domain", "operator", "meta"].map((category, index) => [category, index]),
+);
+
+function formatPlural(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function formatSkillSelection(skill: SkillDocument): string {
-  const triggers = skill.card.selection?.triggers ?? [];
-  const globs = skill.card.selection?.pathGlobs ?? [];
-  const hints = [
-    triggers.length > 0 ? `triggers=${formatList(triggers, 3)}` : undefined,
-    globs.length > 0 ? `pathGlobs=${formatList(globs, 3)}` : undefined,
-  ].filter((part): part is string => part !== undefined);
-  return hints.length > 0 ? hints.join(" ") : "routingHints=none";
+function normalizeInlineText(value: string | null | undefined): string {
+  return value?.trim().replace(/\s+/gu, " ") ?? "";
+}
+
+function formatCategoryTitle(category: string): string {
+  const normalized = normalizeInlineText(category).replace(/[_-]+/gu, " ");
+  if (!normalized) {
+    return "Other";
+  }
+  return normalized
+    .split(" ")
+    .map((part) => (part ? `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}` : part))
+    .join(" ");
+}
+
+function categoryRank(category: string): number {
+  return SKILL_CATEGORY_ORDER.get(category.toLowerCase()) ?? SKILL_CATEGORY_ORDER.size;
+}
+
+function compareSkills(left: SkillDocument, right: SkillDocument): number {
+  const categoryDelta = categoryRank(left.category) - categoryRank(right.category);
+  if (categoryDelta !== 0) {
+    return categoryDelta;
+  }
+  const categoryNameDelta = left.category.localeCompare(right.category);
+  if (categoryNameDelta !== 0) {
+    return categoryNameDelta;
+  }
+  return left.name.localeCompare(right.name);
+}
+
+function skillSearchScore(query: string, skill: SkillDocument): number | null {
+  const fields = [skill.name, skill.category, skill.description, skill.card.description];
+  let best: number | null = null;
+  for (const field of fields) {
+    const score = fuzzyScore(query, field);
+    if (score === null) {
+      continue;
+    }
+    best = best === null ? score : Math.max(best, score);
+  }
+  return best;
+}
+
+function buildSkillsSummary(loadReport: SkillRegistryLoadReport): string {
+  return `${formatPlural(loadReport.loadedSkills.length, "skill")} available; ${formatPlural(
+    loadReport.selectableSkills.length,
+    "selectable skill",
+  )}; ${formatPlural(loadReport.overlaySkills.length, "project overlay", "project overlays")}; ${formatPlural(
+    loadReport.roots.length,
+    "source root",
+  )}.`;
 }
 
 export function buildSkillsOverlayPayload(input: {
+  query?: string;
+  selectedIndex?: number;
   loadReport: SkillRegistryLoadReport;
   skills: readonly SkillDocument[];
-  producers: readonly ProducerContract[];
 }): CliSkillsOverlayPayload {
-  const lines = [
-    `Skills: loaded=${input.loadReport.loadedSkills.length} selectable=${input.loadReport.selectableSkills.length} overlay=${input.loadReport.overlaySkills.length} roots=${input.loadReport.roots.length}`,
-    `Project guidance: ${input.loadReport.projectGuidance.length}`,
-  ];
-  for (const skill of input.skills) {
-    lines.push(
-      [
-        `- skill=${skill.name}`,
-        `category=${skill.category}`,
-        `route=${formatSkillRoute(skill, input.loadReport)}`,
-        formatSkillSelection(skill),
-        `resources=${skill.resources.references.length}/${skill.resources.scripts.length}/${skill.resources.invariants.length}`,
-        `file=${skill.filePath}`,
-      ].join(" "),
-    );
-  }
-  if (input.skills.length === 0) {
-    lines.push("No skills are currently loaded.");
-  }
-  for (const producer of input.producers) {
-    lines.push(
-      [
-        `- producer=${producer.producer}`,
-        `source=${producer.source}`,
-        `outputs=${formatList(producer.outputs ?? [], 5)}`,
-        `semanticBindings=${Object.keys(producer.semanticBindings ?? {}).length}`,
-        `file=${producer.filePath}`,
-      ].join(" "),
-    );
-  }
-  if (input.producers.length === 0) {
-    lines.push("No skill producers are currently loaded.");
-  }
+  const query = input.query ?? "";
+  const selectableSkillNames = new Set(input.loadReport.selectableSkills);
+  const scoredSkills = input.skills
+    .filter((skill) => selectableSkillNames.has(skill.name))
+    .map((skill) => ({ skill, score: skillSearchScore(query, skill) }))
+    .filter((entry): entry is { skill: SkillDocument; score: number } => entry.score !== null)
+    .toSorted((left, right) => {
+      if (query.trim()) {
+        const scoreDelta = right.score - left.score;
+        if (scoreDelta !== 0) {
+          return scoreDelta;
+        }
+      }
+      return compareSkills(left.skill, right.skill);
+    });
+  const items = scoredSkills.map(({ skill }) => {
+    const description = normalizeInlineText(skill.description || skill.card.description);
+    return {
+      id: `skill:${skill.name}`,
+      skillName: skill.name,
+      category: skill.category,
+      section: formatCategoryTitle(skill.category),
+      label: skill.name,
+      detail: description || "No description provided.",
+    };
+  });
+  const selectedIndex =
+    items.length === 0 ? 0 : Math.max(0, Math.min(input.selectedIndex ?? 0, items.length - 1));
   return {
     kind: "skills",
-    lines,
+    title: "Skills",
+    query,
+    selectedIndex,
+    summary: buildSkillsSummary(input.loadReport),
+    items,
+    emptyMessage: query.trim()
+      ? "No skills match the current search."
+      : "No selectable skills are loaded.",
   };
 }

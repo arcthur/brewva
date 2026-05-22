@@ -227,12 +227,6 @@ export function PromptPanel(input: {
     }
     return correction ? (baseStatus ? `${baseStatus} · ${correction}` : correction) : baseStatus;
   });
-  const operatorCounts = createMemo(() => {
-    const approvals = input.status.entries.approvals ?? "0";
-    const questions = input.status.entries.questions ?? "0";
-    const tasks = input.status.entries.tasks ?? "0";
-    return `approvals=${approvals} · questions=${questions} · tasks=${tasks}`;
-  });
   const selectedCompletion = createMemo(() => {
     const completion = input.composer.completion;
     if (!completion || input.overlayActive) {
@@ -483,11 +477,6 @@ export function PromptPanel(input: {
             <Show when={selectedCompletionLabel()}>
               <text fg={input.theme.accentSoft} wrapMode="none">
                 {selectedCompletionLabel()}
-              </text>
-            </Show>
-            <Show when={!selectedCompletionLabel()}>
-              <text fg={input.theme.textMuted} wrapMode="none">
-                {operatorCounts()}
               </text>
             </Show>
           </box>

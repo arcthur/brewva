@@ -358,8 +358,108 @@ describe("interactive command overlays", () => {
     expect(view.lines.join("\n")).toContain("gateway=not surfaced");
   });
 
-  test("skills overlay renders skill and producer catalog entries", () => {
+  test("skills overlay renders a searchable picker catalog", () => {
     const payload = buildSkillsOverlayPayload({
+      loadReport: {
+        roots: [],
+        loadedSkills: ["review", "loaded-only"],
+        selectableSkills: ["review"],
+        overlaySkills: [],
+        projectGuidance: [],
+        categories: {},
+      },
+      skills: [
+        {
+          name: "review",
+          category: "core",
+          description:
+            "Review code changes with enough context to decide whether the patch is ready for long-term maintenance.",
+          filePath: "/tmp/SKILL.md",
+          baseDir: "/tmp",
+          markdown: "# review",
+          authoredMarkdown: "# review",
+          inheritedMarkdown: "",
+          card: {
+            name: "review",
+            category: "core",
+            description:
+              "Review code changes with enough context to decide whether the patch is ready for long-term maintenance.",
+            selection: {
+              whenToUse: "review code changes before merging",
+              triggers: ["review"],
+            },
+          },
+          resources: { references: [], scripts: [], invariants: [] },
+          authoredResources: { references: [], scripts: [], invariants: [] },
+          inheritedResources: { references: [], scripts: [], invariants: [] },
+          projectGuidance: [],
+          overlayFiles: [],
+        },
+        {
+          name: "loaded-only",
+          category: "core",
+          description: "hidden-guidance-only",
+          filePath: "/tmp/loaded-only/SKILL.md",
+          baseDir: "/tmp/loaded-only",
+          markdown: "# loaded-only",
+          authoredMarkdown: "# loaded-only",
+          inheritedMarkdown: "",
+          card: {
+            name: "loaded-only",
+            category: "core",
+            description: "hidden-guidance-only",
+          },
+          resources: { references: [], scripts: [], invariants: [] },
+          authoredResources: { references: [], scripts: [], invariants: [] },
+          inheritedResources: { references: [], scripts: [], invariants: [] },
+          projectGuidance: [],
+          overlayFiles: [],
+        },
+      ],
+    });
+
+    const view = buildOverlayView(payload);
+    const text = view.lines.join("\n");
+
+    expect(view.title).toBe("Skills");
+    expect(payload).toMatchObject({
+      kind: "skills",
+      title: "Skills",
+      query: "",
+      selectedIndex: 0,
+      summary: "2 skills available; 1 selectable skill; 0 project overlays; 0 source roots.",
+      items: [
+        {
+          id: "skill:review",
+          skillName: "review",
+          section: "Core",
+          label: "review",
+          detail:
+            "Review code changes with enough context to decide whether the patch is ready for long-term maintenance.",
+        },
+      ],
+    });
+    expect(text).toContain("Search: ");
+    expect(text).toContain("Enter inserts $skill");
+    expect(text).toContain("> Core: review");
+    expect(text).toContain(
+      ":: Review code changes with enough context to decide whether the patch is ready for long-term maintenance.",
+    );
+    expect(text).not.toContain("skill=");
+    expect(text).not.toContain("producer=");
+    expect(text).not.toContain("file=");
+    expect(text).not.toContain("Producers");
+    expect(text).not.toContain("loaded-only");
+    expect(text).not.toContain("PgUp");
+    expect(text).not.toContain("PgDn");
+    expect(text).not.toContain("/tmp");
+    expect(text).not.toContain("review code changes before merging");
+    expect(text).not.toContain("...");
+  });
+
+  test("skills overlay filters by query and preserves selected bounds", () => {
+    const hiddenGuidancePayload = buildSkillsOverlayPayload({
+      query: "hidden-guidance-only",
       loadReport: {
         roots: [],
         loadedSkills: ["review"],
@@ -372,17 +472,19 @@ describe("interactive command overlays", () => {
         {
           name: "review",
           category: "core",
-          description: "Review code changes",
-          filePath: "/tmp/SKILL.md",
-          baseDir: "/tmp",
+          description: "Review code changes before merging.",
+          filePath: "/tmp/review/SKILL.md",
+          baseDir: "/tmp/review",
           markdown: "# review",
           authoredMarkdown: "# review",
           inheritedMarkdown: "",
           card: {
             name: "review",
             category: "core",
-            description: "Review code changes",
-            selection: { triggers: ["review"] },
+            description: "Review code changes before merging.",
+            selection: {
+              whenToUse: "hidden-guidance-only",
+            },
           },
           resources: { references: [], scripts: [], invariants: [] },
           authoredResources: { references: [], scripts: [], invariants: [] },
@@ -391,27 +493,79 @@ describe("interactive command overlays", () => {
           overlayFiles: [],
         },
       ],
-      producers: [
+    });
+    expect(hiddenGuidancePayload.items).toEqual([]);
+
+    const payload = buildSkillsOverlayPayload({
+      query: "sec",
+      selectedIndex: 12,
+      loadReport: {
+        roots: [],
+        loadedSkills: ["review", "security-review"],
+        selectableSkills: ["review", "security-review"],
+        overlaySkills: [],
+        projectGuidance: [],
+        categories: {},
+      },
+      skills: [
         {
-          producer: "review",
-          outputs: ["review_report"],
-          outputContracts: {},
-          semanticBindings: {},
-          filePath: "/tmp/review.producer.json",
-          source: "project_root",
-          rootDir: "/tmp",
+          name: "review",
+          category: "core",
+          description: "Review code changes before merging.",
+          filePath: "/tmp/review/SKILL.md",
+          baseDir: "/tmp/review",
+          markdown: "# review",
+          authoredMarkdown: "# review",
+          inheritedMarkdown: "",
+          card: {
+            name: "review",
+            category: "core",
+            description: "Review code changes before merging.",
+          },
+          resources: { references: [], scripts: [], invariants: [] },
+          authoredResources: { references: [], scripts: [], invariants: [] },
+          inheritedResources: { references: [], scripts: [], invariants: [] },
+          projectGuidance: [],
+          overlayFiles: [],
+        },
+        {
+          name: "security-review",
+          category: "domain",
+          description: "Audit security-sensitive code paths.",
+          filePath: "/tmp/security-review/SKILL.md",
+          baseDir: "/tmp/security-review",
+          markdown: "# security-review",
+          authoredMarkdown: "# security-review",
+          inheritedMarkdown: "",
+          card: {
+            name: "security-review",
+            category: "domain",
+            description: "Audit security-sensitive code paths.",
+            selection: {
+              whenToUse: "security review",
+            },
+          },
+          resources: { references: [], scripts: [], invariants: [] },
+          authoredResources: { references: [], scripts: [], invariants: [] },
+          inheritedResources: { references: [], scripts: [], invariants: [] },
+          projectGuidance: [],
+          overlayFiles: [],
         },
       ],
     });
 
-    const view = buildOverlayView(payload);
-
-    expect(view.title).toBe("Skills");
-    expect(view.lines.join("\n")).toContain("loaded=1");
-    expect(view.lines.join("\n")).toContain("skill=review category=core");
-    expect(view.lines.join("\n")).toContain(
-      "producer=review source=project_root outputs=review_report",
-    );
+    expect(payload).toMatchObject({
+      query: "sec",
+      selectedIndex: 0,
+      items: [
+        {
+          skillName: "security-review",
+          label: "security-review",
+          detail: "Audit security-sensitive code paths.",
+        },
+      ],
+    });
+    expect("footer" in payload.items[0]!).toBe(false);
   });
 });
 

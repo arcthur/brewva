@@ -13,7 +13,6 @@ import {
   getCliRuntimeSessionWire,
   getCliRuntimeVisibleReadEpoch,
   getCliRuntimeSkillCatalogLoadReport,
-  listCliRuntimeSkillProducers,
   listCliRuntimeSkills,
   toCliOperatorRuntime,
 } from "../../runtime/runtime-ports.js";
@@ -38,6 +37,10 @@ import {
   buildNotificationsOverlayPayload,
   buildSkillsOverlayPayload,
 } from "../domain/overlays/projectors/index.js";
+import {
+  cloneCliShellPromptParts,
+  rebasePromptPartsAfterTextReplace,
+} from "../domain/prompt-parts.js";
 import type { CliShellPromptPart } from "../domain/prompt.js";
 import { questionRequestsFromSnapshot } from "../domain/question-utils.js";
 import type { CliShellViewState } from "../domain/state.js";
@@ -532,6 +535,9 @@ export class ShellOverlayLifecycleHandler {
       case "commandPalette":
         await this.handleCommandPalettePrimary(active);
         return;
+      case "skills":
+        this.handleSkillsPrimary(active);
+        return;
       case "lineage":
         await this.handleLineagePrimary(active);
         return;
@@ -581,11 +587,18 @@ export class ShellOverlayLifecycleHandler {
     if (
       active?.kind !== "commandPalette" &&
       active?.kind !== "modelPicker" &&
-      active?.kind !== "providerPicker"
+      active?.kind !== "providerPicker" &&
+      active?.kind !== "skills"
     ) {
       return;
     }
     const handledShortcut = await this.handleShortcut(active, input);
+    if (active.kind === "skills") {
+      if (!handledShortcut) {
+        this.handleSkillsSearchInput(active, input);
+      }
+      return;
+    }
     if (!handledShortcut) {
       await this.context.modelSelection.handlePickerTextInput(active, input);
     }
@@ -712,14 +725,7 @@ export class ShellOverlayLifecycleHandler {
   }
 
   openSkillsOverlay(): void {
-    const runtime = this.context.getBundle().runtime;
-    this.openOverlay(
-      buildSkillsOverlayPayload({
-        loadReport: getCliRuntimeSkillCatalogLoadReport(runtime),
-        skills: listCliRuntimeSkills(runtime),
-        producers: listCliRuntimeSkillProducers(runtime),
-      }),
-    );
+    this.openOverlay(this.buildSkillsOverlayPayload());
   }
 
   openNotificationsOverlay(): void {
@@ -946,6 +952,35 @@ export class ShellOverlayLifecycleHandler {
     await this.context.submitComposer();
   }
 
+  private handleSkillsPrimary(active: Extract<CliShellOverlayPayload, { kind: "skills" }>): void {
+    const item = active.items[active.selectedIndex];
+    if (!item) {
+      return;
+    }
+    const state = this.context.getState();
+    const insertion = `$${item.skillName} `;
+    const start = state.composer.cursor;
+    const text = `${state.composer.text.slice(0, start)}${insertion}${state.composer.text.slice(
+      start,
+    )}`;
+    this.closeActiveOverlay(false);
+    this.context.commit(
+      [
+        {
+          type: "composer.setPromptState",
+          text,
+          cursor: start + insertion.length,
+          parts: rebasePromptPartsAfterTextReplace(cloneCliShellPromptParts(state.composer.parts), {
+            start,
+            end: start,
+            replacementText: insertion,
+          }),
+        },
+      ],
+      { refreshCompletions: false },
+    );
+  }
+
   private async handleInboxPrimary(
     active: Extract<CliShellOverlayPayload, { kind: "inbox" }>,
   ): Promise<void> {
@@ -1047,6 +1082,57 @@ export class ShellOverlayLifecycleHandler {
       query,
       selection,
     });
+  }
+
+  private buildSkillsOverlayPayload(input: { query?: string; selectedIndex?: number } = {}) {
+    const runtime = this.context.getBundle().runtime;
+    return buildSkillsOverlayPayload({
+      query: input.query,
+      selectedIndex: input.selectedIndex,
+      loadReport: getCliRuntimeSkillCatalogLoadReport(runtime),
+      skills: listCliRuntimeSkills(runtime),
+    });
+  }
+
+  private handleSkillsSearchInput(
+    active: Extract<CliShellOverlayPayload, { kind: "skills" }>,
+    input: CliShellInput,
+  ): boolean {
+    const key = normalizeShellInputKey(input.key);
+    if (input.meta || input.ctrl) {
+      return false;
+    }
+    if (key === "backspace") {
+      if (active.query.length === 0) {
+        return true;
+      }
+      this.replaceActiveOverlay(
+        this.buildSkillsOverlayPayload({
+          query: active.query.slice(0, -1),
+          selectedIndex: 0,
+        }),
+      );
+      return true;
+    }
+    if (key === "paste" && typeof input.text === "string") {
+      this.replaceActiveOverlay(
+        this.buildSkillsOverlayPayload({
+          query: `${active.query}${input.text}`,
+          selectedIndex: 0,
+        }),
+      );
+      return true;
+    }
+    if (key === "character" && typeof input.text === "string") {
+      this.replaceActiveOverlay(
+        this.buildSkillsOverlayPayload({
+          query: `${active.query}${input.text}`,
+          selectedIndex: 0,
+        }),
+      );
+      return true;
+    }
+    return false;
   }
 
   private handleSessionsSearchInput(

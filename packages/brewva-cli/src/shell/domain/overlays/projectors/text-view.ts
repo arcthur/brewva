@@ -253,8 +253,16 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
       };
     case "skills":
       return {
-        title: "Skills",
-        lines: payload.lines,
+        title: payload.title,
+        lines: [
+          payload.summary,
+          `Search: ${payload.query}`,
+          "Enter inserts $skill; Ctrl+N/Ctrl+P move; Esc closes.",
+          "",
+          ...(payload.items.length > 0
+            ? renderPickerInspectLines(payload.items, payload.selectedIndex)
+            : [payload.emptyMessage ?? "No skills are loaded."]),
+        ],
       };
     case "shortcutOverlay":
       return {

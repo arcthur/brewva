@@ -30,6 +30,8 @@ import {
   resolveDialogContentWidth,
   resolveDialogSurfaceDimensions,
   resolveDialogWidth,
+  resolveHighDensityPickerRows,
+  resolveSkillsPickerRows,
   resolveToastMaxWidth,
 } from "../../../packages/brewva-cli/runtime/shell/overlay-style.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
@@ -357,6 +359,11 @@ describe("opentui solid shell runtime: layout contract", () => {
     expect(surface.surfaceHeight).toBeGreaterThanOrEqual(1);
     expect(surface.contentHeight).toBeGreaterThanOrEqual(1);
     expect(Object.keys(surface)).not.toContain("topInset");
+
+    expect(resolveSkillsPickerRows(36, 100, 4)).toBeLessThan(
+      resolveHighDensityPickerRows(36, 100, 4),
+    );
+    expect(resolveSkillsPickerRows(8, 100, 0)).toBe(1);
   });
 
   test("uses opencode-style automatic split diff thresholds", () => {
@@ -500,7 +507,7 @@ describe("opentui solid shell runtime: layout contract", () => {
       expect(frame).toContain("subagents");
       expect(frame).toContain("Patch Worker running");
       expect(frame).toContain("+2");
-      expect(frame).toContain("tasks=7");
+      expect(frame).not.toContain("tasks=7");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -911,8 +918,9 @@ describe("opentui solid shell runtime: layout contract", () => {
       expect(frame).toContain("Ctrl+K");
       expect(frame).toContain("/help");
       expect(frame).toContain("Ctrl+O");
-      expect(frame).toContain("approvals=0");
-      expect(frame).toContain("questions=0");
+      expect(frame).not.toContain("approvals=0");
+      expect(frame).not.toContain("questions=0");
+      expect(frame).not.toContain("tasks=0");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

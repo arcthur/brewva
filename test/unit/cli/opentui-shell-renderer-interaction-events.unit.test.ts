@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
+import { type BrewvaReplaySession, type SkillDocument } from "@brewva/brewva-runtime/protocol";
 import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
@@ -210,6 +210,41 @@ function renderedLineUsesBackground(
   });
 }
 
+function fakeSkill(input: {
+  name: string;
+  category: string;
+  description: string;
+  whenToUse?: string;
+}): SkillDocument {
+  return {
+    name: input.name,
+    category: input.category,
+    description: input.description,
+    filePath: `/tmp/${input.name}/SKILL.md`,
+    baseDir: `/tmp/${input.name}`,
+    markdown: `# ${input.name}`,
+    authoredMarkdown: `# ${input.name}`,
+    inheritedMarkdown: "",
+    card: {
+      name: input.name,
+      category: input.category,
+      description: input.description,
+      ...(input.whenToUse
+        ? {
+            selection: {
+              whenToUse: input.whenToUse,
+            },
+          }
+        : {}),
+    },
+    resources: { references: [], scripts: [], invariants: [] },
+    authoredResources: { references: [], scripts: [], invariants: [] },
+    inheritedResources: { references: [], scripts: [], invariants: [] },
+    projectGuidance: [],
+    overlayFiles: [],
+  };
+}
+
 function createFakeBundle(
   options: {
     approvals?: number;
@@ -232,6 +267,7 @@ function createFakeBundle(
     isStreaming?: boolean;
     abortHandler?: () => Promise<void>;
     promptHandler?: (parts: readonly { type: string; text?: string }[]) => Promise<void> | void;
+    skills?: SkillDocument[];
   } = {},
 ) {
   let attachedUi: BrewvaToolUiPort | undefined;
@@ -281,6 +317,7 @@ function createFakeBundle(
       title: "New session",
     },
   ];
+  const skills = options.skills ?? [];
 
   const session = {
     get model() {
@@ -400,6 +437,26 @@ function createFakeBundle(
               };
             },
             listTargets() {
+              return [];
+            },
+          },
+        },
+        skills: {
+          catalog: {
+            getLoadReport() {
+              return {
+                roots: [],
+                loadedSkills: skills.map((skill) => skill.name),
+                selectableSkills: skills.map((skill) => skill.name),
+                overlaySkills: [],
+                projectGuidance: [],
+                categories: {},
+              };
+            },
+            list() {
+              return skills;
+            },
+            listProducers() {
               return [];
             },
           },
@@ -666,6 +723,118 @@ describe("opentui solid shell runtime: interaction events", () => {
       expect(frame).toContain("Ctrl+K opens the command palette");
       expect(frame).toContain("Enter runs");
       expect(frame).toContain("Switch model");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("runs slash skills from composer completion with return", async () => {
+    const { bundle } = createFakeBundle({
+      skills: [
+        fakeSkill({
+          name: "review",
+          category: "core",
+          description: "Review code changes before merging.",
+          whenToUse: "select only before release hardening",
+        }),
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 120,
+        height: 36,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        await testSetup.mockInput.typeText("/skills");
+        testSetup.mockInput.pressEnter();
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+        kind: "skills",
+        query: "",
+        selectedIndex: 0,
+      });
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain("Skills");
+      expect(frame).toContain("Search:");
+      expect(frame).toContain("review");
+      expect(frame).toContain("Review code changes before merging.");
+      expect(frame).toContain("Enter insert");
+      expect(frame).not.toContain("select only before release hardening");
+      expect(frame).not.toContain("PgUp");
+      expect(frame).not.toContain("PgDn");
+      expect(runtime.getViewState().composer.text).toBe("");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders long skill descriptions across all wrapped lines", async () => {
+    const { bundle } = createFakeBundle({
+      skills: [
+        fakeSkill({
+          name: "long-skill",
+          category: "core",
+          description:
+            "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron hidden-tail-should-not-render",
+          whenToUse: "hidden selection guidance",
+        }),
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 70,
+        height: 24,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        await testSetup.mockInput.typeText("/skills");
+        testSetup.mockInput.pressEnter();
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const frame = testSetup.captureCharFrame();
+      expect(frame).toContain("long-skill");
+      const firstSkillLine = frame.split("\n").find((line) => line.includes("long-skill")) ?? "";
+      expect(firstSkillLine).toContain("zeta eta");
+      expect(frame).toContain("alpha beta gamma");
+      expect(frame).toContain("iota kappa lambda");
+      expect(frame).toContain("hidden-tail-should-not-render");
+      expect(frame).not.toContain("hidden selection guidance");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1369,6 +1538,194 @@ describe("opentui solid shell runtime: interaction events", () => {
       frame = testSetup.captureCharFrame();
       expect(frame).toContain("line-20");
       expect(frame).not.toContain("line-4");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("filters skills overlay text and moves selection with ctrl-n", async () => {
+    const { bundle } = createFakeBundle({
+      skills: [
+        fakeSkill({
+          name: "review",
+          category: "core",
+          description: "Review code changes before merging.",
+        }),
+        fakeSkill({
+          name: "security-review",
+          category: "domain",
+          description: "Audit security-sensitive code paths.",
+        }),
+        fakeSkill({
+          name: "test-planning",
+          category: "domain",
+          description: "Plan high-signal tests for risky changes.",
+        }),
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.ui.setEditorText("/skills");
+    await runtime.handleInput({
+      type: "keymap.effect",
+      effect: { type: "composer.submit" },
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 28,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        await testSetup.mockInput.typeText("review");
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+        kind: "skills",
+        query: "review",
+        selectedIndex: 0,
+      });
+      let frame = testSetup.captureCharFrame();
+      expect(frame).toContain("review");
+      expect(frame).toContain("security-review");
+      expect(frame).not.toContain("test-planning");
+
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("n", { ctrl: true });
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      frame = testSetup.captureCharFrame();
+      expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
+        kind: "skills",
+        selectedIndex: 1,
+      });
+      expect(frame).toContain("security-review");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("inserts selected skill mention from skills overlay", async () => {
+    const { bundle } = createFakeBundle({
+      skills: [
+        fakeSkill({
+          name: "review",
+          category: "core",
+          description: "Review code changes before merging.",
+        }),
+        fakeSkill({
+          name: "security-review",
+          category: "domain",
+          description: "Audit security-sensitive code paths.",
+        }),
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.ui.setEditorText("/skills");
+    await runtime.handleInput({
+      type: "keymap.effect",
+      effect: { type: "composer.submit" },
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 28,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("n", { ctrl: true });
+        testSetup.mockInput.pressEnter();
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      expect(runtime.getViewState().overlay.active?.payload?.kind ?? "none").toBe("none");
+      expect(runtime.getViewState().composer.text).toBe("$security-review ");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("inserts selected skill mention without replacing an existing draft", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.ui.setEditorText("Use ");
+    runtime.openOverlay({
+      kind: "skills",
+      title: "Skills",
+      query: "",
+      selectedIndex: 0,
+      summary: "1 skill available; 1 selectable skill; 0 project overlays; 0 source roots.",
+      items: [
+        {
+          id: "skill:review",
+          skillName: "review",
+          category: "core",
+          section: "Core",
+          label: "review",
+          detail: "Review code changes before merging.",
+        },
+      ],
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 28,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressEnter();
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(runtime.getViewState().overlay.active?.payload?.kind ?? "none").toBe("none");
+      expect(runtime.getViewState().composer.text).toBe("Use $review ");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

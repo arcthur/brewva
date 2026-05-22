@@ -135,11 +135,6 @@ export interface CliAuthorityOverlayPayload {
   lines: string[];
 }
 
-export interface CliSkillsOverlayPayload {
-  kind: "skills";
-  lines: string[];
-}
-
 export interface CliOverlaySection {
   id: string;
   title: string;
@@ -193,6 +188,21 @@ export interface CliPickerItem {
   footer?: string;
   marker?: string;
   disabled?: boolean;
+}
+
+export interface CliSkillsOverlayItem extends CliPickerItem {
+  skillName: string;
+  category: string;
+}
+
+export interface CliSkillsOverlayPayload {
+  kind: "skills";
+  title: string;
+  query: string;
+  selectedIndex: number;
+  summary: string;
+  items: CliSkillsOverlayItem[];
+  emptyMessage?: string;
 }
 
 export interface CliModelPickerItem extends CliPickerItem {

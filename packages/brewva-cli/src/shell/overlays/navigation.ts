@@ -52,6 +52,9 @@ export function selectableItemCount(payload: CliShellOverlayPayload): number | u
   if (payload.kind === "select") {
     return payload.options.length;
   }
+  if (payload.kind === "skills") {
+    return payload.items.length;
+  }
   if (
     payload.kind === "commandPalette" ||
     payload.kind === "modelPicker" ||

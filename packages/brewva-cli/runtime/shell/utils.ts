@@ -167,10 +167,14 @@ export function cloneOverlayPayload(payload: CliShellOverlayPayload): CliShellOv
     case "helpHub":
     case "context":
     case "authority":
-    case "skills":
       return {
         ...payload,
         lines: [...payload.lines],
+      };
+    case "skills":
+      return {
+        ...payload,
+        items: [...payload.items],
       };
     case "inbox":
       return {
