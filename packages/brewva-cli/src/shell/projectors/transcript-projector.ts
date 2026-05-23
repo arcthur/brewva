@@ -104,6 +104,7 @@ function toolResultStatus(input: { result?: unknown; isError?: boolean }): "comp
 
 export class ShellTranscriptProjector {
   #assistantEntryId: string | undefined;
+  #assistantEntrySequence = 0;
   #rewindTranscriptMarkerSequence = 0;
   readonly #rewindTranscriptMarkersBySessionId = new Map<string, CliShellTranscriptMessage>();
   readonly #toolProjectionInputByCallId = new Map<string, ToolProjectionInputState>();
@@ -181,7 +182,7 @@ export class ShellTranscriptProjector {
 
       const delta = asRecord(event.assistantMessageEvent)?.delta;
       if (typeof delta === "string" && delta.length > 0) {
-        const id = this.#assistantEntryId ?? `assistant:${Date.now()}`;
+        const id = this.#assistantEntryId ?? this.nextAssistantEntryId("assistant");
         this.#assistantEntryId = id;
         this.upsertMessage(
           buildTextTranscriptMessage({
@@ -233,7 +234,7 @@ export class ShellTranscriptProjector {
         }
         this.appendMessage(
           buildTranscriptMessageFromMessage(event.message, {
-            id: `assistant:end:${Date.now()}`,
+            id: this.nextAssistantEntryId("assistant:end"),
             renderMode: "stable",
           }),
         );
@@ -392,8 +393,13 @@ export class ShellTranscriptProjector {
       .join("");
   }
 
+  private nextAssistantEntryId(prefix: string): string {
+    this.#assistantEntrySequence += 1;
+    return `${prefix}:${this.context.getSessionId()}:${this.#assistantEntrySequence}`;
+  }
+
   private upsertAssistantMessage(message: unknown, renderMode: "stable" | "streaming"): void {
-    const id = this.#assistantEntryId ?? `assistant:${Date.now()}`;
+    const id = this.#assistantEntryId ?? this.nextAssistantEntryId("assistant");
     this.#assistantEntryId = id;
     const nextMessage = buildTranscriptMessageFromMessage(message, {
       id,

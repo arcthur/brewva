@@ -182,6 +182,7 @@ function isToolOutputView(value: unknown): boolean {
     typeof value.isError === "boolean" &&
     typeof value.text === "string" &&
     (value.ts === undefined || readFiniteNumberValue(value.ts) !== undefined) &&
+    (value.sequence === undefined || readFiniteNumberValue(value.sequence) !== undefined) &&
     isOptionalString(value.sourceEventId) &&
     isToolOutputDisplayView(value.display)
   );
@@ -194,6 +195,7 @@ function isAssistantTextSegmentView(value: unknown): boolean {
   return (
     typeof value.text === "string" &&
     readFiniteNumberValue(value.ts) !== undefined &&
+    (value.sequence === undefined || readFiniteNumberValue(value.sequence) !== undefined) &&
     isOptionalString(value.sourceEventId)
   );
 }

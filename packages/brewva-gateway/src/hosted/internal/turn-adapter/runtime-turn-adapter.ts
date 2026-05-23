@@ -6,6 +6,7 @@ import {
 } from "@brewva/brewva-runtime/core";
 import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/protocol";
 import type {
+  AssistantTextSegmentView,
   SessionWireFrame,
   SessionWireTurnTrigger,
   ToolOutputView,
@@ -64,6 +65,45 @@ function hasRuntimeTurn(runtime: unknown): runtime is BrewvaRuntime {
     runtime !== null &&
     typeof (runtime as { turn?: unknown }).turn === "function"
   );
+}
+
+interface AssistantSegmentAccumulator {
+  text: string;
+  startedAt: number | undefined;
+  startedSequence: number | undefined;
+}
+
+function appendAssistantSegmentDelta(input: {
+  readonly accumulator: AssistantSegmentAccumulator;
+  readonly delta: string;
+  readonly timestamp: number;
+  readonly sequence: number;
+}): void {
+  if (input.accumulator.text.length === 0) {
+    input.accumulator.startedAt = input.timestamp;
+    input.accumulator.startedSequence = input.sequence;
+  }
+  input.accumulator.text += input.delta;
+}
+
+function flushAssistantSegment(input: {
+  readonly accumulator: AssistantSegmentAccumulator;
+  readonly segments: AssistantTextSegmentView[];
+}): void {
+  const text = input.accumulator.text;
+  input.accumulator.text = "";
+  const startedAt = input.accumulator.startedAt;
+  input.accumulator.startedAt = undefined;
+  const startedSequence = input.accumulator.startedSequence;
+  input.accumulator.startedSequence = undefined;
+  if (text.trim().length === 0) {
+    return;
+  }
+  input.segments.push({
+    text,
+    ts: startedAt ?? Date.now(),
+    ...(startedSequence !== undefined ? { sequence: startedSequence } : {}),
+  });
 }
 
 function completedRuntimePreludeResult(input: {
@@ -232,7 +272,9 @@ function emitRuntimeEventFrame(input: {
   readonly onFrame?: (frame: SessionWireFrame) => void;
   readonly nextSequence: () => number;
   readonly assistantText: string;
+  readonly assistantSegments: readonly AssistantTextSegmentView[];
   readonly toolOutputs: ToolOutputView[];
+  readonly sequence: number;
 }): void {
   const event = input.frame.event;
   if (event.type === "turn.started") {
@@ -296,6 +338,7 @@ function emitRuntimeEventFrame(input: {
         attemptId: input.attemptId,
         status: runtimeTurnCommittedStatusFromPayload(event.payload),
         assistantText: input.assistantText,
+        assistantSegments: [...input.assistantSegments],
         toolOutputs: [...input.toolOutputs],
       }),
     });
@@ -367,7 +410,7 @@ function emitRuntimeEventFrame(input: {
   if (!toolOutput) {
     return;
   }
-  input.toolOutputs.push(toolOutput);
+  input.toolOutputs.push({ ...toolOutput, sequence: input.sequence });
   emitRuntimeBranchFrame({
     sessionId: input.sessionId,
     turnId: input.turnId,
@@ -420,12 +463,23 @@ export async function runHostedRuntimeTurnAdapter(
   }
 
   let assistantText = "";
+  const assistantSegments: AssistantTextSegmentView[] = [];
+  const assistantSegmentAccumulator: AssistantSegmentAccumulator = {
+    text: "",
+    startedAt: undefined,
+    startedSequence: undefined,
+  };
   const toolOutputs: ToolOutputView[] = [];
   const attemptId = "runtime-turn";
   let frameSequence = 0;
   const nextFrameSequence = () => {
     frameSequence += 1;
     return frameSequence;
+  };
+  let projectionSequence = 0;
+  const nextProjectionSequence = () => {
+    projectionSequence += 1;
+    return projectionSequence;
   };
 
   try {
@@ -436,6 +490,7 @@ export async function runHostedRuntimeTurnAdapter(
       mode: input.profile.name,
       ...(prompt.prelude?.signal ? { signal: prompt.prelude.signal } : {}),
     })) {
+      const currentProjectionSequence = nextProjectionSequence();
       if (frame.type === "runtime.suspended") {
         await prompt.prelude?.complete?.();
         if (frame.cause === "interrupt") {
@@ -462,7 +517,14 @@ export async function runHostedRuntimeTurnAdapter(
         };
       }
       if (frame.type === "text") {
+        const frameTimestamp = Date.now();
         assistantText += frame.delta;
+        appendAssistantSegmentDelta({
+          accumulator: assistantSegmentAccumulator,
+          delta: frame.delta,
+          timestamp: frameTimestamp,
+          sequence: currentProjectionSequence,
+        });
         emitRuntimeBranchFrame({
           sessionId,
           turnId: input.turnId,
@@ -472,7 +534,7 @@ export async function runHostedRuntimeTurnAdapter(
             schema: SESSION_WIRE_SCHEMA,
             sessionId: wireSessionId,
             frameId,
-            ts: Date.now(),
+            ts: frameTimestamp,
             source: "live",
             durability: "cache",
             type: "assistant.delta",
@@ -485,6 +547,7 @@ export async function runHostedRuntimeTurnAdapter(
         continue;
       }
       if (frame.type === "reason") {
+        // Thinking uses a separate lane and must not split answer text segments.
         emitRuntimeBranchFrame({
           sessionId,
           turnId: input.turnId,
@@ -507,6 +570,10 @@ export async function runHostedRuntimeTurnAdapter(
         continue;
       }
       if (frame.type === "tool.progress") {
+        flushAssistantSegment({
+          accumulator: assistantSegmentAccumulator,
+          segments: assistantSegments,
+        });
         const toolProgress = toolProgressFromRuntimeFrame(frame);
         emitRuntimeBranchFrame({
           sessionId,
@@ -533,6 +600,10 @@ export async function runHostedRuntimeTurnAdapter(
         });
         continue;
       }
+      flushAssistantSegment({
+        accumulator: assistantSegmentAccumulator,
+        segments: assistantSegments,
+      });
       emitRuntimeEventFrame({
         frame,
         sessionId,
@@ -542,7 +613,9 @@ export async function runHostedRuntimeTurnAdapter(
         onFrame: input.onFrame,
         nextSequence: nextFrameSequence,
         assistantText,
+        assistantSegments,
         toolOutputs,
+        sequence: currentProjectionSequence,
       });
     }
     await prompt.prelude?.complete?.();

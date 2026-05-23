@@ -161,9 +161,18 @@ type RuntimeToolSessionWireFrame = Extract<
   { type: "tool.progress" | "tool.finished" }
 >;
 
+function readReplayItemSequence(value: unknown): number | undefined {
+  if (typeof value !== "object" || value === null || !("sequence" in value)) {
+    return undefined;
+  }
+  const sequence = value.sequence;
+  return typeof sequence === "number" && Number.isFinite(sequence) ? sequence : undefined;
+}
+
 interface RuntimeTurnSessionProjectionState {
-  assistantText: string;
-  projectedAssistantEnd: boolean;
+  assistantSegmentText: string;
+  assistantSegmentProjected: boolean;
+  emittedAssistantMessage: boolean;
 }
 
 function buildAssistantTextMessage(text: string): {
@@ -195,6 +204,31 @@ function buildAssistantDeltaEvent(input: {
   };
 }
 
+function createRuntimeTurnSessionProjectionState(): RuntimeTurnSessionProjectionState {
+  return {
+    assistantSegmentText: "",
+    assistantSegmentProjected: false,
+    emittedAssistantMessage: false,
+  };
+}
+
+function finishRuntimeTurnAssistantSegment(input: {
+  state: RuntimeTurnSessionProjectionState;
+  emit(event: BrewvaPromptSessionEvent): void;
+}): void {
+  const text = input.state.assistantSegmentText;
+  input.state.assistantSegmentText = "";
+  input.state.assistantSegmentProjected = false;
+  if (text.trim().length === 0) {
+    return;
+  }
+  input.state.emittedAssistantMessage = true;
+  input.emit({
+    type: "message_end",
+    message: buildAssistantTextMessage(text),
+  });
+}
+
 function buildRuntimeToolResultPayload(frame: RuntimeToolSessionWireFrame): {
   readonly content: readonly { readonly type: "text"; readonly text: string }[];
   readonly details: { readonly verdict: string };
@@ -217,6 +251,7 @@ export function buildSessionWireTranscriptSeedMessages(
   const messages: unknown[] = [];
   type ReplaySeedItem = {
     readonly ts: number;
+    readonly sequence?: number;
     readonly order: number;
     readonly message: unknown;
   };
@@ -257,6 +292,7 @@ export function buildSessionWireTranscriptSeedMessages(
     for (const segment of assistantSegments) {
       replayItems.push({
         ts: segment.ts,
+        sequence: readReplayItemSequence(segment),
         order,
         message: {
           role: "assistant",
@@ -270,6 +306,7 @@ export function buildSessionWireTranscriptSeedMessages(
     for (const toolOutput of frame.toolOutputs) {
       replayItems.push({
         ts: toolOutput.ts ?? frame.ts,
+        sequence: readReplayItemSequence(toolOutput),
         order,
         message: {
           role: "toolResult",
@@ -297,6 +334,12 @@ export function buildSessionWireTranscriptSeedMessages(
       });
     }
     for (const item of replayItems.toSorted((left, right) => {
+      if (left.sequence !== undefined && right.sequence !== undefined) {
+        const sequenceOrder = left.sequence - right.sequence;
+        if (sequenceOrder !== 0) {
+          return sequenceOrder;
+        }
+      }
       if (left.ts !== right.ts) {
         return left.ts - right.ts;
       }
@@ -317,13 +360,25 @@ function emitRuntimeTurnSessionFrame(input: {
   const frame = input.frame;
   const state = input.state;
   if (frame.type === "assistant.delta" && frame.lane === "answer" && frame.delta.length > 0) {
-    state.assistantText += frame.delta;
+    const previousSegmentText = state.assistantSegmentText;
+    state.assistantSegmentText += frame.delta;
+    if (state.assistantSegmentText.trim().length === 0) {
+      return;
+    }
+    const projectedDelta = state.assistantSegmentProjected
+      ? frame.delta
+      : `${previousSegmentText}${frame.delta}`;
+    state.assistantSegmentProjected = true;
     input.emit(
-      buildAssistantDeltaEvent({ delta: frame.delta, assistantText: state.assistantText }),
+      buildAssistantDeltaEvent({
+        delta: projectedDelta,
+        assistantText: state.assistantSegmentText,
+      }),
     );
     return;
   }
   if (frame.type === "tool.started") {
+    finishRuntimeTurnAssistantSegment(input);
     input.emit({
       type: "tool_execution_start",
       toolCallId: frame.toolCallId,
@@ -332,6 +387,7 @@ function emitRuntimeTurnSessionFrame(input: {
     return;
   }
   if (frame.type === "tool.progress") {
+    finishRuntimeTurnAssistantSegment(input);
     input.emit({
       type: "tool_execution_update",
       toolCallId: frame.toolCallId,
@@ -341,6 +397,7 @@ function emitRuntimeTurnSessionFrame(input: {
     return;
   }
   if (frame.type === "tool.finished") {
+    finishRuntimeTurnAssistantSegment(input);
     input.emit({
       type: "tool_execution_end",
       toolCallId: frame.toolCallId,
@@ -350,13 +407,33 @@ function emitRuntimeTurnSessionFrame(input: {
     });
     return;
   }
-  if (frame.type === "turn.committed" && frame.assistantText.length > 0) {
-    input.emit({
-      type: "message_end",
-      message: buildAssistantTextMessage(frame.assistantText),
-    });
-    state.projectedAssistantEnd = true;
+  if (frame.type === "turn.committed" && frame.assistantText.trim().length > 0) {
+    finishRuntimeTurnAssistantSegment(input);
+    if (!state.emittedAssistantMessage) {
+      state.emittedAssistantMessage = true;
+      input.emit({
+        type: "message_end",
+        message: buildAssistantTextMessage(frame.assistantText),
+      });
+    }
   }
+}
+
+export function projectRuntimeTurnSessionWireFrames(
+  frames: readonly SessionWireFrame[],
+): BrewvaPromptSessionEvent[] {
+  const events: BrewvaPromptSessionEvent[] = [];
+  const state = createRuntimeTurnSessionProjectionState();
+  for (const frame of frames) {
+    emitRuntimeTurnSessionFrame({
+      frame,
+      state,
+      emit(event) {
+        events.push(event);
+      },
+    });
+  }
+  return events;
 }
 
 export function createSessionViewPort(bundle: CliShellSessionBundle): SessionViewPort {
@@ -529,10 +606,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         await bundle.session.prompt(parts, options);
         return;
       }
-      const projectionState: RuntimeTurnSessionProjectionState = {
-        assistantText: "",
-        projectedAssistantEnd: false,
-      };
+      const projectionState = createRuntimeTurnSessionProjectionState();
       const output = await runHostedPromptTurn({
         session: bundle.session,
         parts,
@@ -547,13 +621,17 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
           });
         },
       });
+      finishRuntimeTurnAssistantSegment({
+        state: projectionState,
+        emit: emitLocalSessionEvent,
+      });
       if (output.status === "failed") {
         throw output.error instanceof Error ? output.error : new Error(String(output.error));
       }
       if (
         output.status === "completed" &&
-        !projectionState.projectedAssistantEnd &&
-        output.assistantText.length > 0
+        !projectionState.emittedAssistantMessage &&
+        output.assistantText.trim().length > 0
       ) {
         emitLocalSessionEvent({
           type: "message_end",

@@ -814,6 +814,7 @@ export interface ToolOutputDisplayView extends ProtocolRecord {
 export interface AssistantTextSegmentView extends ProtocolRecord {
   readonly text: string;
   readonly ts: number;
+  readonly sequence?: number;
   readonly sourceEventId?: string;
 }
 export interface ToolOutputView extends ProtocolRecord {
@@ -823,6 +824,7 @@ export interface ToolOutputView extends ProtocolRecord {
   readonly isError: boolean;
   readonly text: string;
   readonly ts?: number;
+  readonly sequence?: number;
   readonly sourceEventId?: string;
   readonly display?: ToolOutputDisplayView;
 }

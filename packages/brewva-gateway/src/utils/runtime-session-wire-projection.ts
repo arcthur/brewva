@@ -200,7 +200,9 @@ export function buildRuntimeTurnSessionWireFrames(input: {
   const assistantSegmentsByTurnId = new Map<string, AssistantTextSegmentView[]>();
   const toolOutputsByTurnId = new Map<string, ToolOutputView[]>();
 
+  let sequence = 0;
   for (const event of input.events) {
+    sequence += 1;
     const turnId = runtimeProjectionEventTurnId(event);
     if (!turnId) {
       continue;
@@ -231,7 +233,7 @@ export function buildRuntimeTurnSessionWireFrames(input: {
         `${assistantTextByTurnId.get(turnId) ?? ""}${assistantSegment.text}`,
       );
       const segments = assistantSegmentsByTurnId.get(turnId) ?? [];
-      segments.push(assistantSegment);
+      segments.push({ ...assistantSegment, sequence });
       assistantSegmentsByTurnId.set(turnId, segments);
       continue;
     }
@@ -239,7 +241,7 @@ export function buildRuntimeTurnSessionWireFrames(input: {
     const toolOutput = toolOutputFromRuntimeEvent(event);
     if (toolOutput) {
       const outputs = toolOutputsByTurnId.get(turnId) ?? [];
-      outputs.push(toolOutput);
+      outputs.push({ ...toolOutput, sequence });
       toolOutputsByTurnId.set(turnId, outputs);
       continue;
     }

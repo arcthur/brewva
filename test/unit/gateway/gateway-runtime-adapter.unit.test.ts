@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import { createHostedRuntimeAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 import {
   canResolveHostedRuntimeTurnRuntime,
@@ -37,6 +38,58 @@ describe("gateway runtime adapter", () => {
       "turn.started",
       "turn.ended",
     ]);
+  });
+
+  test("hosted runtime adapter commits assistant segments around live tool frames", async () => {
+    const observedFrames: SessionWireFrame[] = [];
+
+    await runHostedRuntimeTurnAdapter({
+      runtime: {
+        async *turn() {
+          yield { type: "text", delta: "Before tool." };
+          yield {
+            type: "tool.progress",
+            progress: {
+              toolCallId: "tool-1",
+              toolName: "read",
+              update: {
+                ok: true,
+                content: "src/app.ts",
+              },
+            },
+          };
+          yield { type: "text", delta: "After tool." };
+          yield {
+            type: "runtime.event",
+            event: {
+              id: "event-turn-ended",
+              type: "turn.ended",
+              timestamp: 1_030,
+              turn: "turn-1",
+              payload: { status: "completed" },
+            },
+          };
+        },
+      } as never,
+      sessionId: "adapter-segment-session",
+      turnId: "turn-1",
+      session: {} as never,
+      prompt: "inspect",
+      profile: resolveHostedTurnAdapterProfile({ source: "interactive" }),
+      onFrame(frame) {
+        observedFrames.push(frame);
+      },
+    });
+
+    const committed = observedFrames.find((frame) => frame.type === "turn.committed");
+    expect(committed).toMatchObject({
+      type: "turn.committed",
+      assistantText: "Before tool.After tool.",
+      assistantSegments: [
+        { text: "Before tool.", sequence: 1 },
+        { text: "After tool.", sequence: 3 },
+      ],
+    });
   });
 
   test("hosted runtime adapter keeps canonical tape durability enabled", async () => {
