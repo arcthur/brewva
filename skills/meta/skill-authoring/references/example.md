@@ -17,7 +17,6 @@ Output:
     "description": "Inspect runtime artifacts and reconstruct causal traces from durable evidence.",
     "selection": {
       "when_to_use": "Use when the task asks what happened at runtime from logs, events, WAL, or artifacts.",
-      "triggers": ["runtime trace", "WAL replay", "artifact evidence"],
       "path_globs": ["packages/brewva-runtime/src/**", "test/**/runtime/**"]
     }
   },

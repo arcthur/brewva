@@ -7,7 +7,8 @@ export type SourceLanguage =
   | "go"
   | "rust"
   | "java"
-  | "cpp";
+  | "cpp"
+  | "json";
 
 export type SourceDeclarationKind =
   | "function"

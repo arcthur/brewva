@@ -11,7 +11,6 @@ function skill(input: {
   category?: SkillDocument["category"];
   description: string;
   whenToUse?: string;
-  triggers?: readonly string[];
   pathGlobs?: readonly string[];
   markdown?: string;
 }): SkillDocument {
@@ -29,11 +28,10 @@ function skill(input: {
       name: input.name,
       category,
       description: input.description,
-      ...(input.whenToUse || input.triggers || input.pathGlobs
+      ...(input.whenToUse || input.pathGlobs
         ? {
             selection: {
               ...(input.whenToUse ? { whenToUse: input.whenToUse } : {}),
-              ...(input.triggers ? { triggers: input.triggers } : {}),
               ...(input.pathGlobs ? { pathGlobs: input.pathGlobs } : {}),
             },
           }
@@ -93,21 +91,18 @@ function createSkillCatalog(): SkillDocument[] {
       name: "code-review",
       description: "Review TypeScript correctness, maintainability, and regression risk.",
       whenToUse: "Use for code review passes after implementation.",
-      triggers: ["review pass"],
       pathGlobs: ["packages/**/*.ts"],
     }),
     skill({
       name: "docs-audit",
       category: "docs",
       description: "Audit documentation coherence, references, and publishing readiness.",
-      triggers: ["documentation audit"],
       pathGlobs: ["docs/**"],
     }),
     skill({
       name: "runtime-forensics",
       category: "operator",
       description: "Inspect runtime artifacts, event streams, ledgers, WAL evidence, and traces.",
-      triggers: ["wal evidence"],
     }),
     skill({
       name: "migration-safety",
@@ -118,7 +113,6 @@ function createSkillCatalog(): SkillDocument[] {
       name: "internal-probe",
       category: "internal",
       description: "Internal-only probe.",
-      triggers: ["probe"],
     }),
   ];
 }
@@ -194,7 +188,7 @@ describe("hosted advisory skill shortlist context", () => {
     expect(result.renderedSection).toContain("Do not carry a SkillCard workflow into later turns");
   });
 
-  test("selects by path_glob, trigger, name, and description text match", () => {
+  test("selects by path_glob, name, and description text match", () => {
     const { runtime } = createRuntime(createSkillCatalog());
 
     const pathGlob = buildSkillShortlistContextForPrompt({
@@ -212,10 +206,6 @@ describe("hosted advisory skill shortlist context", () => {
     const directoryPathGlob = buildSkillShortlistContextForPrompt({
       runtime,
       prompt: "Audit docs/solutions/model-interface.md.",
-    });
-    const trigger = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "Need WAL evidence for this incident.",
     });
     const nameAndText = buildSkillShortlistContextForPrompt({
       runtime,
@@ -255,22 +245,45 @@ describe("hosted advisory skill shortlist context", () => {
       score: 400,
       filePath: "/skills/docs-audit/SKILL.md",
     });
-    expect(trigger.receipt.renderedSkillReasons).toContainEqual(
-      expect.objectContaining({
-        name: "runtime-forensics",
-        category: "operator",
-        reasonCount: 2,
-        score: 300,
-        filePath: "/skills/runtime-forensics/SKILL.md",
-      }),
-    );
-    expect(trigger.receipt.renderedSkillReasons[0]?.reasons).toContain("trigger");
     expect(nameAndText.receipt.renderedSkillReasons.map((entry) => entry.name)).toEqual([
       "runtime-forensics",
       "migration-safety",
     ]);
     expect(nameAndText.receipt.renderedSkillReasons[0]?.reasons).toContain("name_match");
     expect(nameAndText.receipt.renderedSkillReasons[1]?.reasons).toEqual(["text_match"]);
+  });
+
+  test("bridges Chinese task wording to English SkillCard descriptions without trigger metadata", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "architecture",
+        category: "core",
+        description:
+          "Find deepening opportunities by assessing architecture, module boundaries, interface burden, and design quality.",
+        whenToUse: "Use when a task asks for architecture improvement or module design analysis.",
+      }),
+      skill({
+        name: "docs-audit",
+        category: "docs",
+        description: "Audit documentation coherence, references, and publishing readiness.",
+      }),
+    ]);
+
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "brewva 运行有没有核心架构图看下",
+    });
+
+    expect(renderedNames(result.renderedSection)).toEqual(["architecture"]);
+    expect(result.receipt.renderedSkillReasons).toContainEqual({
+      name: "architecture",
+      category: "core",
+      reasons: ["text_match"],
+      reasonCount: 1,
+      score: 100,
+      filePath: "/skills/architecture/SKILL.md",
+    });
+    expect(result.renderedSection).not.toContain("triggers:");
   });
 
   test("treats directory path_globs as descendant matches", () => {
@@ -335,17 +348,16 @@ describe("hosted advisory skill shortlist context", () => {
   test("caps deterministic shortlist at eight cards and records omission counts", () => {
     const skills = Array.from({ length: 10 }, (_, index) =>
       skill({
-        name: `triggered-${index}`,
+        name: `common-${index}`,
         category: "core",
-        description: `Skill ${index} for common trigger routing.`,
-        triggers: ["common-trigger"],
+        description: `Skill ${index} for common routing selection.`,
       }),
     );
     const { runtime } = createRuntime(skills);
 
     const result = buildSkillShortlistContextForPrompt({
       runtime,
-      prompt: "common-trigger",
+      prompt: "common routing",
     });
 
     expect(result.receipt).toMatchObject({
@@ -406,7 +418,7 @@ describe("hosted advisory skill shortlist context", () => {
       /Available Brewva SkillCards[\s\S]+Current date: 2026-05-20/u,
     );
     expect(result?.message?.customType).toBe("brewva-skill-selection");
-    expect(result?.message?.display).toBe(false);
+    expect(result?.message?.display).toBe(true);
     expect(result?.message?.excludeFromContext).toBe(true);
     expect(typeof result?.message?.content).toBe("string");
     expect(result?.message?.content).toContain("Available Brewva SkillCards: 4");
@@ -474,6 +486,7 @@ describe("hosted advisory skill shortlist context", () => {
     const resultObject = expectObject(result, "no-candidate lifecycle result");
     const message = expectObject(resultObject.message, "no-candidate lifecycle message");
     expect(message.customType).toBe("brewva-skill-selection");
+    expect(message.display).toBe(false);
     expect(Object.hasOwn(resultObject, "systemPrompt")).toBe(false);
     expect(events).toHaveLength(1);
     expect(events[0]?.payload).toMatchObject({

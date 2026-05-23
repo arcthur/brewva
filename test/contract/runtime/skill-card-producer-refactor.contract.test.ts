@@ -34,6 +34,25 @@ intent:
     expect(() => parseSkillDocument(path, "core")).toThrow(/field 'intent' has been removed/);
   });
 
+  test("rejects removed SkillCard selection trigger metadata", () => {
+    const path = tempFile(
+      "SKILL.md",
+      `---
+name: legacy-trigger
+description: Legacy trigger skill.
+selection:
+  triggers:
+    - advisory
+---
+# Legacy Trigger
+`,
+    );
+
+    expect(() => parseSkillDocument(path, "core")).toThrow(
+      /field 'selection\.triggers' has been removed/,
+    );
+  });
+
   test("accepts a minimal advisory SkillCard", () => {
     const path = tempFile(
       "SKILL.md",
@@ -42,8 +61,6 @@ name: advisory
 description: Advisory only.
 selection:
   when_to_use: Use when advisory context is relevant.
-  triggers:
-    - advisory
   path_globs:
     - docs/**
 references:
@@ -61,7 +78,6 @@ references:
       description: "Advisory only.",
       selection: {
         whenToUse: "Use when advisory context is relevant.",
-        triggers: ["advisory"],
         pathGlobs: ["docs/**"],
       },
     });

@@ -41,7 +41,7 @@ REMOVED_AUTHORITY_FIELDS = {
     "forked_at",
     "tool",
 }
-SELECTION_FIELDS = {"when_to_use", "triggers", "path_globs"}
+SELECTION_FIELDS = {"when_to_use", "path_globs"}
 STRING_ARRAY_FIELDS = {"references", "scripts", "invariants"}
 PRODUCER_FIELDS = {"producer", "outputs", "output_contracts", "semantic_bindings"}
 OUTPUT_CONTRACT_KINDS = {"text", "enum", "json"}
@@ -190,21 +190,17 @@ def validate_selection(
     ):
         return False, "Field 'selection.when_to_use' must be a non-empty string"
 
-    for key in ("triggers", "path_globs"):
-        if key not in selection:
-            continue
-        ok, message = validate_string_array_value(selection[key], f"selection.{key}")
+    if "path_globs" in selection:
+        ok, message = validate_string_array_value(
+            selection["path_globs"], "selection.path_globs"
+        )
         if not ok:
             return ok, message
 
-    if (
-        when_to_use is None
-        and not selection.get("triggers")
-        and not selection.get("path_globs")
-    ):
+    if when_to_use is None and not selection.get("path_globs"):
         return False, (
             "Field 'selection' must declare at least one of: "
-            "when_to_use, triggers, path_globs"
+            "when_to_use, path_globs"
         )
     return True, None
 

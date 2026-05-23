@@ -685,6 +685,7 @@ describe("runtime turn loop", () => {
 
   test("commits a failed terminal receipt when provider tool continuations exceed the turn limit", async () => {
     let calls = 0;
+    let executedTools = 0;
     const provider: RuntimeProviderPort = {
       async *stream() {
         calls += 1;
@@ -700,6 +701,7 @@ describe("runtime turn loop", () => {
     };
     const toolExecutor: RuntimeToolExecutorPort = {
       async execute(commitment) {
+        executedTools += 1;
         return {
           ok: true,
           content: `executed:${commitment.call.toolCallId}`,
@@ -725,7 +727,8 @@ describe("runtime turn loop", () => {
       expect((error as Error).message).toContain("provider_tool_continuation_limit_exceeded");
     }
 
-    expect(calls).toBe(16);
+    expect(calls).toBe(17);
+    expect(executedTools).toBe(16);
     expect(
       runtime.tape
         .list("s1")

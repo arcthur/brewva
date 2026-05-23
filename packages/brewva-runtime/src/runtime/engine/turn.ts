@@ -18,7 +18,7 @@ const EMPTY_PROVIDER: RuntimeProviderPort = Object.freeze({
   async *stream() {},
 });
 
-const MAX_PROVIDER_PASSES_PER_TURN = 16;
+const MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN = 16;
 
 function clonePromptContentPart(part: PromptContentPart): PromptContentPart {
   return Object.freeze({ ...part });
@@ -286,10 +286,8 @@ export function createTurnRunner(input: {
     try {
       let retryProviderOnce = true;
       let committedToolThisTurn = false;
-      for (let providerPass = 0; ; providerPass += 1) {
-        if (providerPass >= MAX_PROVIDER_PASSES_PER_TURN) {
-          throw new Error("provider_tool_continuation_limit_exceeded");
-        }
+      let providerToolContinuations = 0;
+      for (;;) {
         const materialized = await materializeReadyPrompt();
         for (const event of materialized.events) {
           yield { type: "runtime.event", event };
@@ -323,8 +321,11 @@ export function createTurnRunner(input: {
               yield { type: "reason", delta: frame.delta };
               continue;
             }
-            passHadTool = true;
             yield* commitBufferedAssistantOutput(passOutput);
+            if (providerToolContinuations >= MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN) {
+              throw new Error("provider_tool_continuation_limit_exceeded");
+            }
+            passHadTool = true;
             let toolOutcome: "continue" | "committed" | "suspend";
             try {
               toolOutcome = yield* handleProviderToolFrame(frame);
@@ -341,6 +342,7 @@ export function createTurnRunner(input: {
           }
           yield* commitBufferedAssistantOutput(passOutput);
           if (passHadTool) {
+            providerToolContinuations += 1;
             continue;
           }
           break;

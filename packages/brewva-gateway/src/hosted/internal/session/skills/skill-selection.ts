@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import type { LoadableSkillCategory, SkillDocument } from "@brewva/brewva-runtime/protocol";
+import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type {
   BrewvaHostBeforeAgentStartResult,
@@ -49,23 +50,54 @@ const STOP_WORDS = new Set([
   "work",
   "workflow",
 ]);
+const CJK_SKILL_INTENT_KEYWORD_BRIDGES: readonly {
+  readonly pattern: RegExp;
+  readonly keywords: readonly string[];
+}[] = [
+  {
+    pattern: /架构图|系统图|核心架构|调用链|链路|架构|结构|模块|边界|接口|设计/u,
+    keywords: ["architecture", "design", "module", "interface", "diagram", "system"],
+  },
+  {
+    pattern: /仓库|代码库|项目结构|目录结构/u,
+    keywords: ["repository", "analysis", "mapping"],
+  },
+  {
+    pattern: /报错|错误|异常|卡住|死循环|根因|定位/u,
+    keywords: ["debugging", "failure", "root", "cause"],
+  },
+  {
+    pattern: /审查|评审|复查|review/u,
+    keywords: ["review", "audit"],
+  },
+  {
+    pattern: /计划|方案|规划/u,
+    keywords: ["plan", "strategy"],
+  },
+  {
+    pattern: /实现|修复|改代码|开发/u,
+    keywords: ["implementation", "code"],
+  },
+  {
+    pattern: /文档|说明|指南/u,
+    keywords: ["documentation", "docs", "audit"],
+  },
+  {
+    pattern: /测试|验证|校验/u,
+    keywords: ["test", "verification", "verifier"],
+  },
+];
 
 export type SkillSelectionTrigger = "user_message";
 export type SkillSelectionMode =
   | "shortlist_prompt_context"
   | "explicit_over_budget_prompt_context"
   | "discover_guidance_receipt_only";
-export type SkillSelectionReason =
-  | "explicit_mention"
-  | "path_glob"
-  | "trigger"
-  | "name_match"
-  | "text_match";
+export type SkillSelectionReason = "explicit_mention" | "path_glob" | "name_match" | "text_match";
 
 const REASON_PRIORITY: Record<SkillSelectionReason, number> = {
   explicit_mention: 500,
   path_glob: 400,
-  trigger: 300,
   name_match: 200,
   text_match: 100,
 };
@@ -104,7 +136,6 @@ export interface AvailableSkillPromptContext {
   category: LoadableSkillCategory;
   description: string;
   whenToUse?: string;
-  triggers: readonly string[];
   pathGlobs: readonly string[];
   filePath: string;
 }
@@ -215,11 +246,6 @@ function hasNameMatch(prompt: string, skillName: string): boolean {
   return wholeWordRegex(skillName).test(prompt);
 }
 
-function hasTriggerMatch(prompt: string, trigger: string): boolean {
-  const normalizedTrigger = normalizeWhitespace(trigger).toLowerCase();
-  return normalizedTrigger.length > 0 && prompt.toLowerCase().includes(normalizedTrigger);
-}
-
 function listPromptVisibleSkills(skills: readonly SkillDocument[]): SkillDocument[] {
   return skills
     .filter((skill) => !HIDDEN_CATEGORIES.has(skill.category))
@@ -235,29 +261,52 @@ function toPromptContext(skill: SkillDocument): AvailableSkillPromptContext {
     category: skill.category,
     description: skill.description,
     ...(skill.card.selection?.whenToUse ? { whenToUse: skill.card.selection.whenToUse } : {}),
-    triggers: skill.card.selection?.triggers ?? [],
     pathGlobs: skill.card.selection?.pathGlobs ?? [],
     filePath: skill.filePath,
   };
 }
 
-function tokenizeForTextMatch(text: string): Set<string> {
-  const tokens = new Set<string>();
-  for (const rawToken of text.toLowerCase().match(/[a-z0-9][a-z0-9_-]{2,}/gu) ?? []) {
-    const token = rawToken.replace(/^[-_]+|[-_]+$/gu, "");
-    if (token.length < 4 || STOP_WORDS.has(token)) {
+function expandPromptForSkillIntent(prompt: string): string {
+  const keywords = new Set<string>();
+  for (const bridge of CJK_SKILL_INTENT_KEYWORD_BRIDGES) {
+    if (!bridge.pattern.test(prompt)) {
       continue;
     }
-    tokens.add(token);
+    for (const keyword of bridge.keywords) {
+      keywords.add(keyword);
+    }
   }
-  return tokens;
+  return keywords.size > 0 ? `${prompt} ${[...keywords].join(" ")}` : prompt;
+}
+
+function filterTextMatchTokens(tokens: readonly string[]): Set<string> {
+  const filtered = new Set<string>();
+  for (const token of tokens) {
+    if (/^[a-z0-9_-]+$/u.test(token) && (token.length < 4 || STOP_WORDS.has(token))) {
+      continue;
+    }
+    filtered.add(token);
+  }
+  return filtered;
+}
+
+function tokenizePromptForTextMatch(prompt: string): Set<string> {
+  return filterTextMatchTokens(
+    tokenizeSearchQuery(expandPromptForSkillIntent(prompt), { minLength: 2 }),
+  );
+}
+
+function tokenizeSkillTextForTextMatch(text: string): Set<string> {
+  return filterTextMatchTokens(tokenizeSearchContent(text, { minLength: 2 }));
 }
 
 function hasTextMatch(
   promptTokens: ReadonlySet<string>,
   skill: AvailableSkillPromptContext,
 ): boolean {
-  const skillTokens = tokenizeForTextMatch([skill.description, skill.whenToUse ?? ""].join(" "));
+  const skillTokens = tokenizeSkillTextForTextMatch(
+    [skill.description, skill.whenToUse ?? ""].join(" "),
+  );
   let overlap = 0;
   for (const token of skillTokens) {
     if (!promptTokens.has(token)) {
@@ -293,9 +342,6 @@ function buildCandidate(input: {
   }
   if (input.skill.pathGlobs.some((pathGlob) => pathGlobMatches(pathGlob, input.promptPaths))) {
     reasons.add("path_glob");
-  }
-  if (input.skill.triggers.some((trigger) => hasTriggerMatch(input.prompt, trigger))) {
-    reasons.add("trigger");
   }
   if (hasNameMatch(input.prompt, input.skill.name)) {
     reasons.add("name_match");
@@ -335,9 +381,6 @@ function renderSkillEntry(candidate: SkillCandidate): string {
   if (skill.whenToUse) {
     lines.push(`whenToUse: ${normalizeWhitespace(skill.whenToUse)}`);
   }
-  if (skill.triggers.length > 0) {
-    lines.push(`triggers: ${skill.triggers.map(normalizeWhitespace).join(", ")}`);
-  }
   if (skill.pathGlobs.length > 0) {
     lines.push(`pathGlobs: ${skill.pathGlobs.map(normalizeWhitespace).join(", ")}`);
   }
@@ -355,7 +398,7 @@ function renderShortlistSection(candidates: readonly SkillCandidate[]): string {
     "",
     "These SkillCards are advisory, turn-scoped prompt context. They do not grant tools, permissions, accounts, budgets, side effects, or runtime authority.",
     "If you use a SkillCard, read its filePath first, then load only directly relevant references or scripts.",
-    "Do not carry a SkillCard workflow into later turns unless that later turn triggers it again.",
+    "Do not carry a SkillCard workflow into later turns unless that later turn selects it again.",
     "",
     ...candidates.map(renderSkillEntry),
   ].join("\n");
@@ -368,7 +411,7 @@ function buildSkillShortlist(input: {
   maxRenderedSkills: number;
 }): RenderedSkillShortlist {
   const promptPaths = input.promptPaths ?? extractPromptTargetPaths(input.prompt);
-  const promptTokens = tokenizeForTextMatch(input.prompt);
+  const promptTokens = tokenizePromptForTextMatch(input.prompt);
   const candidates = input.skills
     .map((skill) =>
       buildCandidate({
@@ -542,6 +585,7 @@ export function formatSkillSelectionSection(selection: SkillSelectionResult): st
 
 function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): BrewvaHostCustomMessage {
   const explicitSkillMentionNames = explicitSkillMentionNamesFromReceipt(receipt);
+  const visibleSelection = receipt.renderedSkillCount > 0 || explicitSkillMentionNames.length > 0;
   return {
     customType: "brewva-skill-selection",
     content: [
@@ -556,7 +600,7 @@ function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): Brewv
       `Selection ID: ${receipt.selectionId}`,
       `Selection Mode: ${receipt.selectionMode}`,
     ].join("\n"),
-    display: false,
+    display: visibleSelection,
     excludeFromContext: true,
     details: {
       selectionId: receipt.selectionId,

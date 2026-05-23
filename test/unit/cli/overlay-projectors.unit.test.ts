@@ -386,7 +386,6 @@ describe("interactive command overlays", () => {
               "Review code changes with enough context to decide whether the patch is ready for long-term maintenance.",
             selection: {
               whenToUse: "review code changes before merging",
-              triggers: ["review"],
             },
           },
           resources: { references: [], scripts: [], invariants: [] },

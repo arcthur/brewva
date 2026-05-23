@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { createOxcTypeScriptAdapter } from "./adapters/oxc-typescript.js";
+import { packageJsonAdapter } from "./adapters/package-json.js";
 import { treeSitterCppAdapter } from "./adapters/tree-sitter-cpp.js";
 import { treeSitterGoAdapter } from "./adapters/tree-sitter-go.js";
 import { treeSitterJavaAdapter } from "./adapters/tree-sitter-java.js";
@@ -35,16 +36,50 @@ export { clearSourceIntelligenceCaches };
 export interface SourceIntelligenceEngineOptions {
   readonly workspaceRoot: string;
   readonly maxFiles?: number;
+  readonly extraSkippedDirectories?: readonly string[];
+}
+
+export interface SourceIntelligenceOperationOptions {
+  readonly signal?: AbortSignal;
+  readonly maxFiles?: number;
+  readonly loadConcurrency?: number;
+}
+
+export interface SourceFileListing {
+  readonly files: readonly string[];
+  readonly truncated: boolean;
 }
 
 export interface SourceIntelligenceEngine {
   readonly workspaceRoot: string;
-  loadDocument(filePath: string): Promise<SourceDocument>;
-  listDocuments(paths?: readonly string[]): Promise<readonly SourceDocument[]>;
-  buildGraph(paths?: readonly string[]): Promise<SourceGraph>;
-  resolveSurface(path: string): Promise<SourceSurface>;
-  findCallers(input: SourceCallQuery): Promise<readonly SourceGraphEdge[]>;
-  findCallees(input: SourceCallQuery): Promise<readonly SourceGraphEdge[]>;
+  loadDocument(
+    filePath: string,
+    options?: SourceIntelligenceOperationOptions,
+  ): Promise<SourceDocument>;
+  listSourceFilePaths(
+    paths?: readonly string[],
+    options?: SourceIntelligenceOperationOptions,
+  ): Promise<SourceFileListing>;
+  listDocuments(
+    paths?: readonly string[],
+    options?: SourceIntelligenceOperationOptions,
+  ): Promise<readonly SourceDocument[]>;
+  buildGraph(
+    paths?: readonly string[],
+    options?: SourceIntelligenceOperationOptions,
+  ): Promise<SourceGraph>;
+  resolveSurface(
+    path: string,
+    options?: SourceIntelligenceOperationOptions,
+  ): Promise<SourceSurface>;
+  findCallers(
+    input: SourceCallQuery,
+    options?: SourceIntelligenceOperationOptions,
+  ): Promise<readonly SourceGraphEdge[]>;
+  findCallees(
+    input: SourceCallQuery,
+    options?: SourceIntelligenceOperationOptions,
+  ): Promise<readonly SourceGraphEdge[]>;
 }
 
 export interface SourceCallQuery {
@@ -54,11 +89,12 @@ export interface SourceCallQuery {
 }
 
 const DEFAULT_MAX_FILES = 2_000;
-const SKIPPED_DIRECTORIES = new Set([
+const DEFAULT_LOAD_CONCURRENCY = 8;
+const MAX_SOURCE_FILE_BYTES = 512 * 1024;
+const DEFAULT_SKIPPED_DIRECTORIES = [
   ".git",
   ".hg",
   ".svn",
-  ".brewva",
   "node_modules",
   "dist",
   "build",
@@ -67,7 +103,36 @@ const SKIPPED_DIRECTORIES = new Set([
   ".turbo",
   ".venv",
   "target",
-]);
+  "vendor",
+] as const;
+
+function normalizeSkippedDirectoryName(value: string): string | null {
+  const segments = value.replaceAll("\\", "/").split("/");
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const normalized = segments[index]?.trim();
+    if (normalized && normalized.length > 0) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+function buildSkippedDirectories(extraSkippedDirectories?: readonly string[]): ReadonlySet<string> {
+  const skipped = new Set<string>(DEFAULT_SKIPPED_DIRECTORIES);
+  for (const directory of extraSkippedDirectories ?? []) {
+    const name = normalizeSkippedDirectoryName(directory);
+    if (name) {
+      skipped.add(name);
+    }
+  }
+  return skipped;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new Error("source_intelligence_aborted");
+  }
+}
 
 const SOURCE_RESOLUTION_EXTENSIONS = [
   ".ts",
@@ -108,6 +173,7 @@ function createAdapterRegistry(): ReadonlyMap<SourceLanguage, SourceParserAdapte
     ["rust", treeSitterRustAdapter],
     ["java", treeSitterJavaAdapter],
     ["cpp", treeSitterCppAdapter],
+    ["json", packageJsonAdapter],
   ]);
 }
 
@@ -203,11 +269,21 @@ function isIgnoredByGitignore(input: {
   return ignored;
 }
 
-function walkSourceFiles(root: string, maxFiles: number): readonly string[] {
+function walkSourceFiles(
+  root: string,
+  maxFiles: number,
+  skippedDirectories: ReadonlySet<string>,
+  options: SourceIntelligenceOperationOptions = {},
+): SourceFileListing {
   const gitignoreRules = readRootGitignoreRules(root);
   const out: string[] = [];
+  let truncated = false;
   const visit = (entry: string): void => {
-    if (out.length >= maxFiles) return;
+    throwIfAborted(options.signal);
+    if (out.length >= maxFiles) {
+      truncated = true;
+      return;
+    }
     let stats: import("node:fs").Stats;
     try {
       stats = statSync(entry);
@@ -216,7 +292,7 @@ function walkSourceFiles(root: string, maxFiles: number): readonly string[] {
     }
     if (stats.isDirectory()) {
       const name = entry.split(/[\\/]/u).at(-1) ?? "";
-      if (SKIPPED_DIRECTORIES.has(name)) return;
+      if (skippedDirectories.has(name)) return;
       if (
         isIgnoredByGitignore({
           root,
@@ -227,9 +303,12 @@ function walkSourceFiles(root: string, maxFiles: number): readonly string[] {
       ) {
         return;
       }
-      for (const child of readdirSync(entry)) {
+      for (const child of readdirSync(entry).toSorted((left, right) => left.localeCompare(right))) {
         visit(join(entry, child));
-        if (out.length >= maxFiles) return;
+        if (out.length >= maxFiles) {
+          truncated = true;
+          return;
+        }
       }
       return;
     }
@@ -243,12 +322,12 @@ function walkSourceFiles(root: string, maxFiles: number): readonly string[] {
     ) {
       return;
     }
-    if (stats.isFile() && isSourceIntelligenceFile(entry)) {
+    if (stats.isFile() && stats.size <= MAX_SOURCE_FILE_BYTES && isSourceIntelligenceFile(entry)) {
       out.push(entry);
     }
   };
   visit(root);
-  return out;
+  return { files: out, truncated };
 }
 
 function candidateRoots(workspaceRoot: string, paths?: readonly string[]): readonly string[] {
@@ -607,12 +686,48 @@ function buildCallees(graph: SourceGraph, query: SourceCallQuery): readonly Sour
   return edges;
 }
 
-function findSourceFiles(root: string, maxFiles: number): readonly string[] {
-  if (!existsSync(root)) return [];
+async function mapWithConcurrency<T, U>(
+  items: readonly T[],
+  concurrency: number,
+  signal: AbortSignal | undefined,
+  fn: (item: T) => Promise<U>,
+): Promise<readonly U[]> {
+  throwIfAborted(signal);
+  const limit = Math.max(1, Math.min(concurrency, items.length || 1));
+  const results: U[] = [];
+  let nextIndex = 0;
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < items.length) {
+      throwIfAborted(signal);
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index] as T;
+      results[index] = await fn(item);
+    }
+  };
+
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  throwIfAborted(signal);
+  return results;
+}
+
+function findSourceFiles(
+  root: string,
+  maxFiles: number,
+  skippedDirectories: ReadonlySet<string>,
+  options: SourceIntelligenceOperationOptions = {},
+): SourceFileListing {
+  throwIfAborted(options.signal);
+  if (!existsSync(root)) return { files: [], truncated: false };
   if (isDirectory(root)) {
-    return walkSourceFiles(root, maxFiles);
+    return walkSourceFiles(root, maxFiles, skippedDirectories, options);
   }
-  return isSourceIntelligenceFile(root) ? [root] : [];
+  return {
+    files:
+      isSourceIntelligenceFile(root) && statSync(root).size <= MAX_SOURCE_FILE_BYTES ? [root] : [],
+    truncated: false,
+  };
 }
 
 function extractPythonAllExports(filePath: string): ReadonlySet<string> | null {
@@ -763,15 +878,25 @@ class DefaultSourceIntelligenceEngine implements SourceIntelligenceEngine {
   readonly workspaceRoot: string;
   readonly #maxFiles: number;
   readonly #adapters: ReadonlyMap<SourceLanguage, SourceParserAdapter>;
+  readonly #skippedDirectories: ReadonlySet<string>;
 
   constructor(options: SourceIntelligenceEngineOptions) {
     this.workspaceRoot = normalizePath(options.workspaceRoot);
     this.#maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
     this.#adapters = createAdapterRegistry();
+    this.#skippedDirectories = buildSkippedDirectories(options.extraSkippedDirectories);
   }
 
-  async loadDocument(filePath: string): Promise<SourceDocument> {
+  async loadDocument(
+    filePath: string,
+    options: SourceIntelligenceOperationOptions = {},
+  ): Promise<SourceDocument> {
+    throwIfAborted(options.signal);
     const absolutePath = normalizePath(filePath);
+    const stats = statSync(absolutePath);
+    if (stats.size > MAX_SOURCE_FILE_BYTES) {
+      throw new Error(`Source file too large for source intelligence: ${absolutePath}`);
+    }
     const language = detectSourceLanguage(absolutePath);
     if (!language) {
       throw new Error(`Unsupported source language: ${absolutePath}`);
@@ -793,35 +918,76 @@ class DefaultSourceIntelligenceEngine implements SourceIntelligenceEngine {
     if (cached) {
       return cached;
     }
+    throwIfAborted(options.signal);
     const parsed = await adapter.parse({
       filePath: absolutePath,
       language: isTypeScriptFamily(language) ? language : adapter.language,
       sourceText: source.sourceText,
       sourceHash: source.sourceHash,
     });
+    throwIfAborted(options.signal);
     setCachedSourceDocument(cacheKey, parsed);
     return parsed;
   }
 
-  async listDocuments(paths?: readonly string[]): Promise<readonly SourceDocument[]> {
+  async listSourceFilePaths(
+    paths?: readonly string[],
+    options: SourceIntelligenceOperationOptions = {},
+  ): Promise<SourceFileListing> {
     const roots = candidateRoots(this.workspaceRoot, paths);
-    const files = roots.flatMap((root) => findSourceFiles(root, this.#maxFiles));
+    const maxFiles = options.maxFiles ?? this.#maxFiles;
+    const files: string[] = [];
+    let truncated = false;
+    for (const [index, root] of roots.entries()) {
+      throwIfAborted(options.signal);
+      const remaining = Math.max(0, maxFiles - files.length);
+      if (remaining === 0) {
+        truncated = true;
+        break;
+      }
+      const listing = findSourceFiles(root, remaining, this.#skippedDirectories, options);
+      files.push(...listing.files);
+      truncated = truncated || listing.truncated;
+      if (files.length >= maxFiles) {
+        truncated = truncated || index < roots.length - 1;
+        break;
+      }
+    }
     const unique = [...new Set(files.map(normalizePath))].toSorted((left, right) =>
       relative(this.workspaceRoot, left).localeCompare(relative(this.workspaceRoot, right)),
     );
-    return Promise.all(unique.map((filePath) => this.loadDocument(filePath)));
+    return { files: unique, truncated };
   }
 
-  async buildGraph(paths?: readonly string[]): Promise<SourceGraph> {
+  async listDocuments(
+    paths?: readonly string[],
+    options: SourceIntelligenceOperationOptions = {},
+  ): Promise<readonly SourceDocument[]> {
+    const listing = await this.listSourceFilePaths(paths, options);
+    return mapWithConcurrency(
+      listing.files,
+      options.loadConcurrency ?? DEFAULT_LOAD_CONCURRENCY,
+      options.signal,
+      (filePath) => this.loadDocument(filePath, options),
+    );
+  }
+
+  async buildGraph(
+    paths?: readonly string[],
+    options: SourceIntelligenceOperationOptions = {},
+  ): Promise<SourceGraph> {
+    throwIfAborted(options.signal);
     const roots = candidateRoots(this.workspaceRoot, paths);
-    const documents = await this.listDocuments(paths);
+    const documents = await this.listDocuments(paths, options);
     const key = graphCacheKey(this.workspaceRoot, roots, documents);
     const cached = getCachedSourceGraph(key);
     if (cached) {
       return cached;
     }
+    throwIfAborted(options.signal);
     const edges: SourceGraphEdge[] = [];
     for (const document of documents) {
+      throwIfAborted(options.signal);
       for (const sourceImport of document.imports) {
         const toPath = resolveImportTarget(this.workspaceRoot, document, sourceImport);
         edges.push(buildImportEdge({ document, sourceImport, toPath, index: edges.length }));
@@ -839,13 +1005,19 @@ class DefaultSourceIntelligenceEngine implements SourceIntelligenceEngine {
     return graph;
   }
 
-  async resolveSurface(path: string): Promise<SourceSurface> {
+  async resolveSurface(
+    path: string,
+    options: SourceIntelligenceOperationOptions = {},
+  ): Promise<SourceSurface> {
+    throwIfAborted(options.signal);
     const absolutePath = normalizePath(path);
     if (isDirectory(absolutePath)) {
       const entryPaths = packageSurfaceEntryPaths(absolutePath);
       if (entryPaths.length > 0) {
         const surfaces = await Promise.all(
-          entryPaths.map((entryPath) => this.#resolveFileSurface(entryPath, new Set<string>())),
+          entryPaths.map((entryPath) =>
+            this.#resolveFileSurface(entryPath, new Set<string>(), options),
+          ),
         );
         return {
           path: absolutePath,
@@ -856,7 +1028,7 @@ class DefaultSourceIntelligenceEngine implements SourceIntelligenceEngine {
           diagnostics: surfaces.flatMap((surface) => surface.diagnostics),
         };
       }
-      const graph = await this.buildGraph([relative(this.workspaceRoot, absolutePath)]);
+      const graph = await this.buildGraph([relative(this.workspaceRoot, absolutePath)], options);
       return {
         path: absolutePath,
         declarations: graph.documents.flatMap((document) => [...publicDeclarations(document)]),
@@ -866,18 +1038,29 @@ class DefaultSourceIntelligenceEngine implements SourceIntelligenceEngine {
         diagnostics: graph.diagnostics,
       };
     }
-    return this.#resolveFileSurface(absolutePath, new Set<string>());
+    return this.#resolveFileSurface(absolutePath, new Set<string>(), options);
   }
 
-  async findCallers(input: SourceCallQuery): Promise<readonly SourceGraphEdge[]> {
-    return buildCallers(await this.buildGraph(), input);
+  async findCallers(
+    input: SourceCallQuery,
+    options: SourceIntelligenceOperationOptions = {},
+  ): Promise<readonly SourceGraphEdge[]> {
+    return buildCallers(await this.buildGraph(undefined, options), input);
   }
 
-  async findCallees(input: SourceCallQuery): Promise<readonly SourceGraphEdge[]> {
-    return buildCallees(await this.buildGraph(), input);
+  async findCallees(
+    input: SourceCallQuery,
+    options: SourceIntelligenceOperationOptions = {},
+  ): Promise<readonly SourceGraphEdge[]> {
+    return buildCallees(await this.buildGraph(undefined, options), input);
   }
 
-  async #resolveFileSurface(path: string, seen: Set<string>): Promise<SourceSurface> {
+  async #resolveFileSurface(
+    path: string,
+    seen: Set<string>,
+    options: SourceIntelligenceOperationOptions,
+  ): Promise<SourceSurface> {
+    throwIfAborted(options.signal);
     const absolutePath = normalizePath(path);
     if (seen.has(absolutePath)) {
       return {
@@ -888,14 +1071,14 @@ class DefaultSourceIntelligenceEngine implements SourceIntelligenceEngine {
       };
     }
     seen.add(absolutePath);
-    const document = await this.loadDocument(absolutePath);
+    const document = await this.loadDocument(absolutePath, options);
     const reExports = document.imports.filter((entry) => entry.kind === "re-export");
     const childSurfaces = await Promise.all(
       reExports.flatMap((entry) => {
         const target = resolveImportTarget(this.workspaceRoot, document, entry);
         return target
           ? [
-              this.#resolveFileSurface(target, seen).then((surface) => ({
+              this.#resolveFileSurface(target, seen, options).then((surface) => ({
                 reExport: entry,
                 surface,
               })),

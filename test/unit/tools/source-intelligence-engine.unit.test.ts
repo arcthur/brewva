@@ -187,6 +187,20 @@ describe("source intelligence engine", () => {
     );
   });
 
+  test("parses package manifests as project structure documents", async () => {
+    clearSourceIntelligenceCaches();
+    const workspace = makeWorkspace();
+    const engine = createSourceIntelligenceEngine({ workspaceRoot: workspace });
+
+    const manifest = await engine.loadDocument(join(workspace, "package.json"));
+
+    expect(manifest.language).toBe("json");
+    expect(manifest.declarations.map((entry) => `${entry.kind}:${entry.name}`)).toContain(
+      "module:source-intelligence-fixture",
+    );
+    expect(manifest.imports.map((entry) => entry.rawSpecifier)).toContain("./src/barrel.ts");
+  });
+
   test("builds forward, reverse, and cycle-safe dependency graphs", async () => {
     clearSourceIntelligenceCaches();
     const workspace = makeWorkspace();
@@ -217,6 +231,27 @@ describe("source intelligence engine", () => {
 
     expect(documents.map((document) => document.filePath)).not.toContain(
       join(workspace, "generated/ignored.ts"),
+    );
+  });
+
+  test("workspace document listing honors caller-provided skipped directories", async () => {
+    clearSourceIntelligenceCaches();
+    const workspace = makeWorkspace();
+    mkdirSync(join(workspace, ".local-index"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".local-index/cache.ts"),
+      ["export function cachedArtifact() {", "  return null;", "}", ""].join("\n"),
+      "utf8",
+    );
+    const engine = createSourceIntelligenceEngine({
+      workspaceRoot: workspace,
+      extraSkippedDirectories: [".local-index"],
+    });
+
+    const documents = await engine.listDocuments();
+
+    expect(documents.map((document) => document.filePath)).not.toContain(
+      join(workspace, ".local-index/cache.ts"),
     );
   });
 

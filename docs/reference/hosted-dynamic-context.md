@@ -47,10 +47,11 @@ A hosted turn has one stable request shape:
   not block read, edit, or write tools
 - an optional `Available Brewva SkillCards` shortlist appended by the hosted
   skill-selection lifecycle when deterministic SkillCard candidates exist
-- a hidden, context-excluded `brewva-skill-selection` custom message carrying
+- a context-excluded `brewva-skill-selection` custom message carrying
   explicit `$skill` mentions, candidate/render/omission counts, selection id,
   prompt paths, rendered reasons, and render metadata for active-turn
-  traceability
+  traceability; it is visible only when a shortlist is rendered or an explicit
+  mention is present
 - an optional `[CapabilitySelection]` section appended by the hosted tool
   surface when deterministic capability selection produces selected,
   forbidden, or policy evidence

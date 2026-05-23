@@ -156,7 +156,7 @@ describe("skill layout quality", () => {
     }
   });
 
-  it("keeps catalog descriptions distinct from routing triggers", () => {
+  it("keeps catalog descriptions distinct from when-to-use routing text", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
 

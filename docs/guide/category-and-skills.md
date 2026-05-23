@@ -45,7 +45,6 @@ The runtime accepts only these SkillCard fields:
 - `name`
 - `description`
 - `selection.when_to_use`
-- `selection.triggers`
 - `selection.path_globs`
 - `references`
 - `scripts`

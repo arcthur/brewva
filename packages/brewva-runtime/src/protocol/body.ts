@@ -2598,7 +2598,6 @@ export interface SkillResourceSet extends ProtocolRecord {
 export type SkillRootSource = string;
 export interface SkillSelectionPolicy extends ProtocolRecord {
   readonly whenToUse?: string;
-  readonly triggers?: readonly string[];
   readonly pathGlobs?: readonly string[];
 }
 export type SkillSemanticBindings = Record<string, string>;
@@ -2675,17 +2674,21 @@ function readStringArray(value: unknown): string[] {
 function readSkillSelection(value: unknown): SkillSelectionPolicy | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const record = value as ProtocolRecord;
+  if ("triggers" in record) {
+    throw new Error("SkillCard field 'selection.triggers' has been removed");
+  }
+  if ("whenToUse" in record) {
+    throw new Error("SkillCard field 'selection.whenToUse' has been removed");
+  }
+  if ("paths" in record) {
+    throw new Error("SkillCard field 'selection.paths' has been removed");
+  }
   const selection: {
     whenToUse?: string;
-    triggers?: string[];
     pathGlobs?: string[];
   } = {};
   if (typeof record.when_to_use === "string") {
     selection.whenToUse = record.when_to_use;
-  }
-  const triggers = readStringArray(record.triggers);
-  if (triggers.length > 0) {
-    selection.triggers = triggers;
   }
   const pathGlobs = readStringArray(record.path_globs);
   if (pathGlobs.length > 0) {

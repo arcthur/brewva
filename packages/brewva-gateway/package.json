@@ -76,6 +76,7 @@
     "@brewva/brewva-mcp-adapter": "workspace:*",
     "@brewva/brewva-provider-core": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
+    "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-session-index": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",

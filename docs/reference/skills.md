@@ -89,7 +89,6 @@ Skill frontmatter is intentionally small. The accepted SkillCard fields are:
 - `name`
 - `description`
 - `selection.when_to_use`
-- `selection.triggers`
 - `selection.path_globs`
 - `references`
 - `scripts`
@@ -150,8 +149,10 @@ turn message. Explicit `$skill` mentions are mirrored as
 `promptPaths`, `renderedSkillReasons`, and `renderedSkillContext` with
 character and token-estimate metadata for any prompt block that was injected.
 
-Hosted shortlist selection is deterministic: explicit mention, path glob,
-trigger, name match, then description or `selection.when_to_use` text match.
+Hosted shortlist selection is deterministic: explicit mention, path glob, name
+match, then shared-search-tokenized description or `selection.when_to_use` text
+match. Runtime-only Chinese keyword bridging supports common task wording
+without adding trigger metadata to `SKILL.md`.
 The default cap is 8 rendered SkillCards, except that explicit mentions over
 the cap are preserved and recorded with an over-budget reason. A turn with no
 candidate SkillCards records receipt-only discovery guidance instead of the

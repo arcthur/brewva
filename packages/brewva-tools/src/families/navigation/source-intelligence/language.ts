@@ -1,4 +1,4 @@
-import { extname } from "node:path";
+import { basename, extname } from "node:path";
 import type { SourceLanguage } from "./ir.js";
 
 const EXTENSION_LANGUAGE: ReadonlyMap<string, SourceLanguage> = new Map([
@@ -22,6 +22,8 @@ const EXTENSION_LANGUAGE: ReadonlyMap<string, SourceLanguage> = new Map([
   [".hxx", "cpp"],
   [".h", "cpp"],
 ]);
+
+export const SOURCE_INTELLIGENCE_SUPPORTED_FILENAMES = ["package.json"] as const;
 
 export const SOURCE_INTELLIGENCE_SUPPORTED_EXTENSIONS = [
   ".ts",
@@ -47,6 +49,9 @@ export const SOURCE_INTELLIGENCE_SUPPORTED_EXTENSIONS = [
 ] as const;
 
 export function detectSourceLanguage(filePath: string): SourceLanguage | null {
+  if (basename(filePath) === "package.json") {
+    return "json";
+  }
   if (filePath.endsWith(".d.ts")) {
     return "typescript";
   }

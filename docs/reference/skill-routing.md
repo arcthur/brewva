@@ -48,11 +48,14 @@ consequences.
 Skill routing is model-native and bounded by prompt context:
 
 - prompt-visible SkillCards are pre-filtered by explicit `$skill` mention,
-  `selection.path_globs`, `selection.triggers`, `name`, and
-  `description` / `selection.when_to_use` text match
+  `selection.path_globs`, `name`, and shared-search-tokenized `description` /
+  `selection.when_to_use` text match
+- Chinese task wording gets a small runtime keyword bridge before text matching
+  so prompts like "核心架构图" can match English SkillCard descriptions without
+  adding trigger metadata to `SKILL.md`
 - shortlisted entries render with `name`, `category`, `filePath`,
-  `selectionReasons`, `description`, and any available `whenToUse`, `triggers`,
-  or `pathGlobs`
+  `selectionReasons`, `description`, and any available `whenToUse` or
+  `pathGlobs`
 - default render cap is 8 SkillCards
 - explicit mentions over the cap are all retained and recorded with an
   over-budget reason
@@ -60,7 +63,7 @@ Skill routing is model-native and bounded by prompt context:
   and relies on the stable operating contract instead of injecting an empty
   per-turn SkillCard block
 - the model reads the returned `filePath` before relying on the full skill body
-- SkillCard binding is current-turn only and must be re-triggered on later
+- SkillCard binding is current-turn only and must be selected again on later
   turns
 - `discover_skills` provides optional TF-IDF catalog search through
   `@brewva/brewva-search`
@@ -74,8 +77,10 @@ The event payload records `selectionId`, `trigger`, `explicitSkillMentions`,
 rendered character count and token estimate for the SkillCard prompt block so
 traces can explain the context-budget impact.
 
-The hidden custom message carries explicit mention names, selection id,
-selection mode, rendered reasons, counts, and render metadata.
+The context-excluded custom message carries explicit mention names, selection
+id, selection mode, rendered reasons, counts, and render metadata. It is visible
+only when a shortlist is rendered or an explicit mention is present; no-candidate
+receipts stay hidden.
 `tool_surface_resolved` mirrors these as
 `explicitSkillMentionNames`, `skillSelectionId`, and `skillSelectionMode`.
 These fields are trace evidence, not gates.

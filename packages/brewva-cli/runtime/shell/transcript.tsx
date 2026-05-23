@@ -84,12 +84,9 @@ function TranscriptTextBlockView(input: {
   theme: SessionPalette;
 }) {
   const renderer = useRenderer();
-  const classified = createMemo(() => {
-    const classified = classifyTranscriptTextBlock({ content: input.content });
-    return classified;
-  });
+  const classification = createMemo(() => classifyTranscriptTextBlock({ content: input.content }));
   const mermaidSource = createMemo(() => {
-    const current = classified();
+    const current = classification();
     return current.kind === "mermaid" ? current.source : undefined;
   });
   const maxBlockWidth = createMemo(() => Math.max(24, renderer.width - 12));
@@ -1004,6 +1001,41 @@ function AssistantMessageView(input: {
   );
 }
 
+function ToolMessageView(input: {
+  message: CliShellTranscriptMessage;
+  theme: SessionPalette;
+  toolDefinitions: ReadonlyMap<string, BrewvaToolDefinition>;
+  toolRenderCache: ToolRenderCache;
+  transcriptWidth: number;
+  showToolDetails: boolean;
+}) {
+  return (
+    <For each={input.message.parts}>
+      {(part) => {
+        if (part.type === "text") {
+          return <TextPartView message={input.message} part={part} theme={input.theme} />;
+        }
+        if (part.type === "reasoning") {
+          return <ReasoningPartView part={part} theme={input.theme} />;
+        }
+        if (part.type === "tool") {
+          return (
+            <ToolPartView
+              part={part}
+              theme={input.theme}
+              toolDefinitions={input.toolDefinitions}
+              toolRenderCache={input.toolRenderCache}
+              transcriptWidth={input.transcriptWidth}
+              showDetails={input.showToolDetails}
+            />
+          );
+        }
+        return null;
+      }}
+    </For>
+  );
+}
+
 function UserMessageView(input: {
   message: CliShellTranscriptMessage;
   theme: SessionPalette;
@@ -1114,7 +1146,16 @@ export function TranscriptMessageView(input: {
     return <NoteMessageView message={input.message} theme={input.theme} label="System" />;
   }
   if (input.message.role === "tool") {
-    return <NoteMessageView message={input.message} theme={input.theme} label="Tool" />;
+    return (
+      <ToolMessageView
+        message={input.message}
+        theme={input.theme}
+        toolDefinitions={input.toolDefinitions}
+        toolRenderCache={input.toolRenderCache}
+        transcriptWidth={input.transcriptWidth}
+        showToolDetails={input.showToolDetails}
+      />
+    );
   }
   return <NoteMessageView message={input.message} theme={input.theme} label="Note" />;
 }

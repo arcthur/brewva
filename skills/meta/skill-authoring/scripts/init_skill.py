@@ -19,7 +19,6 @@ name: {skill_name}
 description: "TODO: explain what this skill does and exactly when it should be used."
 selection:
   when_to_use: "TODO: describe when this advisory context should be selected."
-  triggers: []
   path_globs: []
 references:
   - references/api_reference.md

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import { createSourceIntelligenceTools } from "@brewva/brewva-tools/navigation";
+import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
 import { requireDefined } from "../../helpers/assertions.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
@@ -110,6 +111,24 @@ describe("source intelligence managed tools", () => {
     expect(names).not.toContain("lsp_symbols");
   });
 
+  test("source intelligence tools advertise cancelable execution traits", () => {
+    const workspace = makeWorkspace();
+    const tools = createSourceIntelligenceTools({ runtime: runtimeFor(workspace) });
+
+    for (const tool of tools) {
+      const traits = resolveBrewvaToolExecutionTraits(tool, {
+        args: {},
+        cwd: workspace,
+      });
+      expect(traits).toEqual({
+        concurrencySafe: true,
+        interruptBehavior: "cancel",
+        streamingEligible: false,
+        contextModifying: false,
+      });
+    }
+  });
+
   test("code_outline returns language-neutral outline details and records source intelligence telemetry", async () => {
     const workspace = makeWorkspace();
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
@@ -136,6 +155,27 @@ describe("source intelligence managed tools", () => {
         type: "tool_source_intelligence",
       }).length,
     ).toBeGreaterThan(0);
+  });
+
+  test("code_outline supports package manifests used during architecture exploration", async () => {
+    const workspace = makeWorkspace();
+    const tools = createSourceIntelligenceTools({ runtime: runtimeFor(workspace) });
+    const codeOutline = requireTool(tools, "code_outline");
+
+    const result = await codeOutline.execute(
+      "tc-code-outline-package-manifest",
+      { file_path: join(workspace, "package.json") },
+      undefined,
+      undefined,
+      fakeContext("source-intelligence-outline-package"),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("[CodeOutline]");
+    expect(text).toContain("language: json");
+    expect(text).toContain("module source-intelligence-tool-fixture");
+    expect(text).toContain("./src/barrel.ts");
+    expect((result as { details?: { status?: string } }).details?.status).toBe("ok");
   });
 
   test("code_digest uses token budget accounting and supports Python outlines", async () => {
@@ -165,6 +205,118 @@ describe("source intelligence managed tools", () => {
     expect(details.details?.budget?.renderedTokens ?? Infinity).toBeLessThanOrEqual(
       details.details?.budget?.maxTokens ?? 0,
     );
+  });
+
+  test("code_digest bounds root parsing to selected digest files", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-code-digest-bounded-"));
+    mkdirSync(join(workspace, "src"), { recursive: true });
+    writeFileSync(join(workspace, "src/a.ts"), "export function alpha() { return 1; }\n", "utf8");
+    const unreadablePath = join(workspace, "src/z.ts");
+    writeFileSync(unreadablePath, "export function zeta() { return 2; }\n", "utf8");
+    chmodSync(unreadablePath, 0o000);
+
+    try {
+      const tools = createSourceIntelligenceTools({ runtime: runtimeFor(workspace) });
+      const codeDigest = requireTool(tools, "code_digest");
+
+      const result = await codeDigest.execute(
+        "tc-code-digest-bounded",
+        { paths: [workspace], max_tokens: 400, limit: 1 },
+        undefined,
+        undefined,
+        fakeContext("source-intelligence-digest-bounded"),
+      );
+
+      const text = extractTextContent(
+        result as { content: Array<{ type: string; text?: string }> },
+      );
+      expect(text).toContain("[CodeDigest]");
+      expect(text).toContain("src/a.ts");
+      expect(text).not.toContain("src/z.ts");
+      expect(
+        (result as { details?: { omitted?: { files?: number } } }).details?.omitted?.files,
+      ).toBe(1);
+    } finally {
+      chmodSync(unreadablePath, 0o600);
+    }
+  });
+
+  test("code_digest prioritizes workspace package manifests before source file overflow", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-code-digest-manifests-"));
+    mkdirSync(join(workspace, "packages/alpha/src"), { recursive: true });
+    mkdirSync(join(workspace, "packages/gateway"), { recursive: true });
+    writeFileSync(
+      join(workspace, "package.json"),
+      JSON.stringify({ name: "root", workspaces: ["packages/*"] }, null, 2),
+      "utf8",
+    );
+    writeFileSync(
+      join(workspace, "packages/alpha/package.json"),
+      JSON.stringify({ name: "@fixture/alpha" }, null, 2),
+      "utf8",
+    );
+    for (let index = 0; index < 32; index += 1) {
+      writeFileSync(
+        join(workspace, "packages/alpha/src", `file-${String(index).padStart(2, "0")}.ts`),
+        `export const value${index} = ${index};\n`,
+        "utf8",
+      );
+    }
+    writeFileSync(
+      join(workspace, "packages/gateway/package.json"),
+      JSON.stringify(
+        {
+          name: "@fixture/gateway",
+          exports: {
+            ".": {
+              bun: "./src/index.ts",
+            },
+            "./hosted": {
+              bun: "./src/hosted/api.ts",
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const tools = createSourceIntelligenceTools({ runtime: runtimeFor(workspace) });
+    const codeDigest = requireTool(tools, "code_digest");
+
+    const result = await codeDigest.execute(
+      "tc-code-digest-package-manifest-priority",
+      { paths: [workspace], max_tokens: 800, limit: 4 },
+      undefined,
+      undefined,
+      fakeContext("source-intelligence-digest-manifest-priority"),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("packages/gateway/package.json");
+    expect(text).toContain("module @fixture/gateway");
+    expect(text).toContain("./src/hosted/api.ts");
+  });
+
+  test("code_digest honors an already aborted signal before scanning", async () => {
+    const workspace = makeWorkspace();
+    const tools = createSourceIntelligenceTools({ runtime: runtimeFor(workspace) });
+    const codeDigest = requireTool(tools, "code_digest");
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await codeDigest.execute(
+      "tc-code-digest-aborted",
+      { paths: [workspace], max_tokens: 400, limit: 5 },
+      controller.signal,
+      undefined,
+      fakeContext("source-intelligence-digest-aborted"),
+    );
+
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("source_intelligence_aborted");
+    expect((result as { details?: { verdict?: string } }).details?.verdict).toBe("fail");
   });
 
   test("code_deps and code_callers expose graph confidence without edit authority", async () => {
