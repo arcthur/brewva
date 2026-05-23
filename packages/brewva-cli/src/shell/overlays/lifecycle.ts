@@ -10,7 +10,6 @@ import {
   getCliRuntimeContextUsage,
   getCliRuntimeHistoryViewBaseline,
   getCliRuntimePendingCompactionReason,
-  getCliRuntimeSessionWire,
   getCliRuntimeVisibleReadEpoch,
   getCliRuntimeSkillCatalogLoadReport,
   listCliRuntimeSkills,
@@ -44,7 +43,6 @@ import {
 import type { CliShellPromptPart } from "../domain/prompt.js";
 import { questionRequestsFromSnapshot } from "../domain/question-utils.js";
 import type { CliShellViewState } from "../domain/state.js";
-import { buildTaskRunOutputLines } from "../domain/task-details.js";
 import type { CliShellSessionBundle, SessionViewPort } from "../ports/session-port.js";
 import { getOverlayPageStep, hasDiffPreviewPayload, selectableItemCount } from "./navigation.js";
 import { ShellSessionsOverlayProjector } from "./sessions-projector.js";
@@ -883,19 +881,6 @@ export class ShellOverlayLifecycleHandler {
       return {
         title: section.title,
         lines: section.lines,
-      };
-    }
-    if (active.kind === "tasks") {
-      const run = active.snapshot.taskRuns[active.selectedIndex];
-      if (!run) {
-        return undefined;
-      }
-      const sessionWireFrames = run.workerSessionId
-        ? getCliRuntimeSessionWire(this.context.getBundle().runtime, run.workerSessionId)
-        : undefined;
-      return {
-        title: `Task ${run.runId} output`,
-        lines: buildTaskRunOutputLines(run, { sessionWireFrames }),
       };
     }
     if (active.kind === "notifications") {

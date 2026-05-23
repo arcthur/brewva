@@ -8,6 +8,7 @@ export type BrewvaKeymapLayer =
   | "completion"
   | "overlay"
   | "pager"
+  | "subagentFooter"
   | "selection";
 
 export interface BrewvaKeymapBindingDefinition {

@@ -33,6 +33,7 @@ const LAYER_PRIORITY: Readonly<Record<BrewvaKeymapLayer, number>> = {
   completion: 20,
   overlay: 30,
   pager: 40,
+  subagentFooter: 45,
   selection: 50,
 };
 const TEXTAREA_LAYER_PRIORITY = LAYER_PRIORITY.composer - 1;
@@ -307,7 +308,14 @@ export function registerBrewvaKeymap(input: RegisterBrewvaKeymapInput): BrewvaKe
       await input.syncComposerFromEditor();
     }
   };
-  for (const layer of ["global", "composer", "completion", "overlay", "pager"] as const) {
+  for (const layer of [
+    "global",
+    "composer",
+    "completion",
+    "overlay",
+    "pager",
+    "subagentFooter",
+  ] as const) {
     disposers.push(registerLayer(keymap, input.runtime, bindings, layer, beforeDispatch));
   }
   disposers.push(

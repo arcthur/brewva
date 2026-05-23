@@ -9,6 +9,7 @@ export type {
   CliShellDisplayState,
   CliShellNotification,
   CliShellOverlayState,
+  CliShellSubagentFooterState,
   CliShellStatusState,
   CliShellViewState,
   ShellFocusOwner,

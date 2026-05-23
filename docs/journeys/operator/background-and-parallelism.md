@@ -137,16 +137,18 @@ flowchart TD
 ## Interactive Task Review
 
 In the interactive shell, delegated runs surface through the task browser
-rather than through a hidden local queue.
+rather than through a hidden local queue. The task browser owns selection and
+summary preview; detailed worker output opens in the subagent footer above the
+composer.
 
 Operator expectations:
 
 - list entries show running, completed, and failed runs with recent summaries
-- selecting a run opens a pager-backed drill-down with status, delivery state,
-  summary/error, worker session id, token/cost summary, structured result data,
-  and artifact refs
-- when a worker session id exists, the shell exposes the exact
-  `brewva inspect --session <workerSessionId>` handoff
+- selecting a run opens the subagent footer inspector with worker-session
+  assistant text, tool output summaries, status, delivery metadata, worker
+  session id, summary/error, and artifact refs
+- when a worker session id exists, the footer can open that worker session from
+  the same runtime-owned session wire used by replay and inspection
 - stop or cancel still routes through the existing operator ports and
   `subagent_cancel`; the task browser does not own independent task truth
 

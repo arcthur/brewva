@@ -5,7 +5,11 @@ import {
   questionRequestsFromSnapshot,
   resolveQuestionOverlayTitle,
 } from "../../question-utils.js";
-import { buildTaskRunListLabel, buildTaskRunPreviewLines } from "../../task-details.js";
+import {
+  TASKS_OVERLAY_HELP_LINE,
+  buildTaskRunListLabel,
+  buildTaskRunPreviewLines,
+} from "../../task-overlay-preview.js";
 import type { CliInboxOverlayItem, CliShellOverlayPayload } from "../payloads.js";
 import { renderNotificationSummary } from "./notifications.js";
 import { renderQueuePromptSummary } from "./queue.js";
@@ -86,10 +90,7 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
       return { title: "Inbox", lines };
     }
     case "tasks": {
-      const lines = [
-        `Task runs: ${payload.snapshot.taskRuns.length}`,
-        "Use ↑/↓ to choose, c to cancel the selected run, Esc to close.",
-      ];
+      const lines = [`Task runs: ${payload.snapshot.taskRuns.length}`, TASKS_OVERLAY_HELP_LINE];
       for (const [index, item] of payload.snapshot.taskRuns.entries()) {
         const marker = index === payload.selectedIndex ? ">" : " ";
         lines.push(`${marker} ${buildTaskRunListLabel(item)}`);

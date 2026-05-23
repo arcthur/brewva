@@ -1,3 +1,4 @@
+import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { ShellInput } from "./input.js";
 import type { BrewvaResolvedKeymapBindings, BrewvaTuiConfig } from "./tui.js";
@@ -10,6 +11,7 @@ export interface ShellRendererNotifier {
 export interface ShellRendererController {
   readonly ui: ShellRendererNotifier;
   getViewState(): ShellViewModel;
+  getSessionWireFrames(sessionId: string): readonly SessionWireFrame[];
   getToolDefinitions(): ReadonlyMap<string, BrewvaToolDefinition>;
   getTuiConfig(): BrewvaTuiConfig;
   getKeymapBindings(): BrewvaResolvedKeymapBindings;

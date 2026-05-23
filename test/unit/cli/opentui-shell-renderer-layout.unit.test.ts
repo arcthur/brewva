@@ -1221,7 +1221,7 @@ describe("opentui solid shell runtime: layout contract", () => {
     }
   });
 
-  test("renders structured task overlays with a details panel in the Solid shell", async () => {
+  test("opens selected task overlay rows in the subagent footer inspector", async () => {
     const { bundle } = createFakeBundle({
       sessionWireBySessionId: {
         "worker-session-1": [
@@ -1330,20 +1330,19 @@ describe("opentui solid shell runtime: layout contract", () => {
           effect: { type: "overlay.primary" },
         });
       });
-      await openTuiSolidAct(async () => {
-        await runtime.handleInput({
-          type: "keymap.effect",
-          effect: { type: "overlay.scrollPage", direction: 1 },
-        });
-      });
       await testSetup.renderOnce();
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
-      expect(frame).toContain("Task run-1 output");
+      const viewState = runtime.getViewState();
+      expect(viewState.overlay.active?.kind ?? "none").toBe("none");
+      expect(viewState.overlay.queue.map((entry) => entry.kind)).toEqual([]);
+      expect(viewState.focus.active).toBe("subagentFooter");
+      expect(viewState.subagentFooter.mode).toBe("inspecting");
+      expect(frame).toContain("subagent detail");
+      expect(frame).toContain("Review operator state");
       expect(frame).toContain("worker-session-1");
       expect(frame).toContain("Found stale contract drift.");
       expect(frame).toContain("1775 pass");
-      expect(frame).toContain("brewva inspect --session worker-session-1");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

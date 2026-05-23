@@ -19,9 +19,10 @@ import {
 } from "../../../src/shell/domain/overlays/projectors/queue.js";
 import { buildSessionsOverlayRows } from "../../../src/shell/domain/overlays/projectors/sessions.js";
 import {
+  TASKS_OVERLAY_FOOTER_TEXT,
   buildTaskRunListLabel,
   buildTaskRunPreviewLines,
-} from "../../../src/shell/domain/task-details.js";
+} from "../../../src/shell/domain/task-overlay-preview.js";
 import type { OpenTuiScrollBoxHandle } from "../../internal-opentui-runtime.js";
 import { TextAttributes } from "../../opentui/index.js";
 import {
@@ -766,7 +767,7 @@ export function TasksOverlay(input: {
       width={input.width}
       height={input.height}
       theme={input.theme}
-      footer="Enter inspect output · c cancel task · Esc close"
+      footer={TASKS_OVERLAY_FOOTER_TEXT}
       splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>

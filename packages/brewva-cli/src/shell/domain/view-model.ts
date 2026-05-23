@@ -45,6 +45,11 @@ export function projectShellViewModel(state: CliShellViewState): ShellViewModel 
     operator: {
       taskRuns: [...state.operator.taskRuns],
     },
+    subagentFooter: {
+      mode: state.subagentFooter.mode,
+      selectedRunId: state.subagentFooter.selectedRunId,
+      scrollOffset: state.subagentFooter.scrollOffset,
+    },
     status: {
       ...state.status,
       entries: { ...state.status.entries },

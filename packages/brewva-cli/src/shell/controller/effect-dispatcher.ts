@@ -47,6 +47,13 @@ export interface ShellEffectDispatcherContext {
   openExternalTranscriptPager(): Promise<boolean>;
   copyLatestAssistantAnswer(): Promise<void>;
   requestTranscriptNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void;
+  toggleSubagentFooter(): void;
+  closeSubagentFooter(): void;
+  selectSubagentFooterRun(runId: string): void;
+  selectRelativeSubagentFooterRun(delta: -1 | 1): void;
+  scrollSubagentFooter(delta: number): void;
+  openSelectedSubagentSession(): Promise<void>;
+  cancelSelectedSubagent(): Promise<void>;
   requestContextCompaction(): void;
   projectSessionEvent(effect: Extract<ShellEffect, { type: "session.projectEvent" }>): void;
   abortSession(notification?: string): Promise<void>;
@@ -227,6 +234,27 @@ export async function dispatchShellEffect(
       return;
     case "transcript.navigate":
       context.requestTranscriptNavigation(effect.kind);
+      return;
+    case "subagentFooter.toggle":
+      context.toggleSubagentFooter();
+      return;
+    case "subagentFooter.close":
+      context.closeSubagentFooter();
+      return;
+    case "subagentFooter.select":
+      context.selectSubagentFooterRun(effect.runId);
+      return;
+    case "subagentFooter.selectRelative":
+      context.selectRelativeSubagentFooterRun(effect.delta);
+      return;
+    case "subagentFooter.scroll":
+      context.scrollSubagentFooter(effect.delta);
+      return;
+    case "subagentFooter.openSelectedSession":
+      await context.openSelectedSubagentSession();
+      return;
+    case "subagentFooter.cancelSelected":
+      await context.cancelSelectedSubagent();
       return;
     case "context.requestCompaction":
       context.requestContextCompaction();

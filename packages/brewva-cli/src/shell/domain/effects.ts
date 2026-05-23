@@ -46,6 +46,13 @@ export type ShellEffect =
   | { type: "transcript.externalPager" }
   | { type: "transcript.copyLatestAnswer" }
   | { type: "transcript.navigate"; kind: "pageUp" | "pageDown" | "top" | "bottom" }
+  | { type: "subagentFooter.toggle" }
+  | { type: "subagentFooter.close" }
+  | { type: "subagentFooter.select"; runId: string }
+  | { type: "subagentFooter.selectRelative"; delta: -1 | 1 }
+  | { type: "subagentFooter.scroll"; delta: number }
+  | { type: "subagentFooter.openSelectedSession" }
+  | { type: "subagentFooter.cancelSelected" }
   | { type: "context.requestCompaction" }
   | { type: "session.projectEvent"; event: BrewvaPromptSessionEvent }
   | { type: "session.abort"; notification?: string }

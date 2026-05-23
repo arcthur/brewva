@@ -2,7 +2,7 @@
 
 Interactive mode is the OpenTUI-backed Brewva shell. It is the default
 operator home for conversation, approvals, questions, tasks, inspect views,
-sessions, and pager drill-down.
+sessions, subagent footer detail, and pager drill-down.
 
 ## Shell Contract
 
@@ -96,5 +96,6 @@ slash spelling.
 
 Supported overlays include approval, question, task browser, queued prompts,
 model picker, provider connection, thinking level, inspect, context, authority,
-skills, session switcher, and pager surfaces. Opening an overlay preserves the
+skills, session switcher, and pager surfaces. Background subagent detail opens
+in the footer surface above the composer. Opening an overlay preserves the
 composer draft.

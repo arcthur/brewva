@@ -16,6 +16,7 @@ export type ShellFocusOwner =
   | "questionOverlay"
   | "inspectOverlay"
   | "taskBrowser"
+  | "subagentFooter"
   | "sessionSwitcher"
   | "notificationCenter"
   | "pager"
@@ -38,6 +39,12 @@ export interface CliShellStatusState {
 
 export interface CliShellOperatorState {
   taskRuns: DelegationRunRecord[];
+}
+
+export interface CliShellSubagentFooterState {
+  mode: "collapsed" | "inspecting";
+  selectedRunId?: string;
+  scrollOffset: number;
 }
 
 export type CliShellDiffStyle = "auto" | "stacked";
@@ -109,6 +116,7 @@ export interface CliShellViewState {
   notifications: CliShellNotification[];
   queue: readonly BrewvaQueuedPromptView[];
   operator: CliShellOperatorState;
+  subagentFooter: CliShellSubagentFooterState;
   status: CliShellStatusState;
   diff: CliShellDiffState;
   view: CliShellDisplayState;
@@ -188,6 +196,29 @@ export type CliShellAction =
   | {
       type: "operator.setTaskRuns";
       taskRuns: DelegationRunRecord[];
+    }
+  | {
+      type: "subagentFooter.open";
+      runId?: string;
+    }
+  | {
+      type: "subagentFooter.close";
+    }
+  | {
+      type: "subagentFooter.toggle";
+      runId?: string;
+    }
+  | {
+      type: "subagentFooter.select";
+      runId: string;
+    }
+  | {
+      type: "subagentFooter.selectRelative";
+      delta: -1 | 1;
+    }
+  | {
+      type: "subagentFooter.scroll";
+      delta: number;
     }
   | {
       type: "status.set";

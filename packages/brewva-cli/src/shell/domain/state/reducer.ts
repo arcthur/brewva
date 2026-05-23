@@ -1,4 +1,8 @@
 import { FocusManager, OverlayManager } from "../../../internal/tui/index.js";
+import {
+  resolveRelativeSubagentFooterRunId,
+  resolveSubagentFooterSelectedRunId,
+} from "../subagent-footer.js";
 import type { CliShellAction, CliShellOverlayState, CliShellViewState } from "./types.js";
 
 function snapshotOverlayState(overlays: OverlayManager): CliShellOverlayState {
@@ -6,6 +10,28 @@ function snapshotOverlayState(overlays: OverlayManager): CliShellOverlayState {
   return {
     active,
     queue: [...overlays.getQueued()],
+  };
+}
+
+function focusSubagentFooter(state: CliShellViewState): CliShellViewState["focus"] {
+  if (state.focus.active === "subagentFooter") {
+    return state.focus;
+  }
+  return {
+    active: "subagentFooter",
+    returnStack: [...state.focus.returnStack, state.focus.active],
+  };
+}
+
+function restoreSubagentFooterFocus(state: CliShellViewState): CliShellViewState["focus"] {
+  if (state.focus.active !== "subagentFooter") {
+    return state.focus;
+  }
+  const returnStack = state.focus.returnStack.slice(0, -1);
+  const restored = state.focus.returnStack.at(-1);
+  return {
+    active: restored && restored !== "subagentFooter" ? restored : "composer",
+    returnStack,
   };
 }
 
@@ -199,12 +225,170 @@ export function reduceCliShellState(
         ...state,
         queue: [...action.items],
       };
-    case "operator.setTaskRuns":
+    case "operator.setTaskRuns": {
+      const selectedRunId =
+        state.subagentFooter.mode === "inspecting"
+          ? resolveSubagentFooterSelectedRunId({
+              runs: action.taskRuns,
+              state: state.subagentFooter,
+            })
+          : state.subagentFooter.selectedRunId &&
+              action.taskRuns.some((run) => run.runId === state.subagentFooter.selectedRunId)
+            ? state.subagentFooter.selectedRunId
+            : undefined;
+      const mode =
+        state.subagentFooter.mode === "inspecting" && !selectedRunId
+          ? "collapsed"
+          : state.subagentFooter.mode;
       return {
         ...state,
+        focus:
+          state.subagentFooter.mode === "inspecting" && !selectedRunId
+            ? restoreSubagentFooterFocus(state)
+            : state.focus,
         operator: {
           ...state.operator,
           taskRuns: [...action.taskRuns],
+        },
+        subagentFooter: {
+          ...state.subagentFooter,
+          mode,
+          selectedRunId,
+          scrollOffset:
+            selectedRunId === state.subagentFooter.selectedRunId
+              ? state.subagentFooter.scrollOffset
+              : 0,
+        },
+      };
+    }
+    case "subagentFooter.open": {
+      // Runtime command handlers avoid modal focus changes first; this keeps the state invariant
+      // intact when actions are reduced directly.
+      if (state.overlay.active) {
+        return state;
+      }
+      const selectedRunId = resolveSubagentFooterSelectedRunId({
+        runs: state.operator.taskRuns,
+        state: state.subagentFooter,
+        runId: action.runId,
+      });
+      if (!selectedRunId) {
+        return {
+          ...state,
+          focus: restoreSubagentFooterFocus(state),
+          subagentFooter: {
+            ...state.subagentFooter,
+            mode: "collapsed",
+            selectedRunId: undefined,
+            scrollOffset: 0,
+          },
+        };
+      }
+      return {
+        ...state,
+        focus: focusSubagentFooter(state),
+        subagentFooter: {
+          ...state.subagentFooter,
+          mode: "inspecting",
+          selectedRunId,
+          scrollOffset:
+            selectedRunId === state.subagentFooter.selectedRunId
+              ? state.subagentFooter.scrollOffset
+              : 0,
+        },
+      };
+    }
+    case "subagentFooter.close":
+      return {
+        ...state,
+        focus: restoreSubagentFooterFocus(state),
+        subagentFooter: {
+          ...state.subagentFooter,
+          mode: "collapsed",
+        },
+      };
+    case "subagentFooter.toggle": {
+      if (state.subagentFooter.mode === "inspecting") {
+        return {
+          ...state,
+          focus: restoreSubagentFooterFocus(state),
+          subagentFooter: {
+            ...state.subagentFooter,
+            mode: "collapsed",
+          },
+        };
+      }
+      if (state.overlay.active) {
+        return state;
+      }
+      const selectedRunId = resolveSubagentFooterSelectedRunId({
+        runs: state.operator.taskRuns,
+        state: state.subagentFooter,
+        runId: action.runId,
+      });
+      if (!selectedRunId) {
+        return {
+          ...state,
+          focus: restoreSubagentFooterFocus(state),
+          subagentFooter: {
+            ...state.subagentFooter,
+            mode: "collapsed",
+            selectedRunId: undefined,
+            scrollOffset: 0,
+          },
+        };
+      }
+      return {
+        ...state,
+        focus: focusSubagentFooter(state),
+        subagentFooter: {
+          ...state.subagentFooter,
+          mode: "inspecting",
+          selectedRunId,
+          scrollOffset:
+            selectedRunId === state.subagentFooter.selectedRunId
+              ? state.subagentFooter.scrollOffset
+              : 0,
+        },
+      };
+    }
+    case "subagentFooter.select": {
+      if (!state.operator.taskRuns.some((run) => run.runId === action.runId)) {
+        return state;
+      }
+      return {
+        ...state,
+        subagentFooter: {
+          ...state.subagentFooter,
+          selectedRunId: action.runId,
+          scrollOffset: 0,
+        },
+      };
+    }
+    case "subagentFooter.selectRelative": {
+      const selectedRunId = resolveRelativeSubagentFooterRunId({
+        runs: state.operator.taskRuns,
+        selectedRunId: state.subagentFooter.selectedRunId,
+        delta: action.delta,
+      });
+      if (!selectedRunId) {
+        return state;
+      }
+      return {
+        ...state,
+        subagentFooter: {
+          ...state.subagentFooter,
+          selectedRunId,
+          scrollOffset: 0,
+        },
+      };
+    }
+    case "subagentFooter.scroll":
+      return {
+        ...state,
+        subagentFooter: {
+          ...state.subagentFooter,
+          scrollOffset: Math.max(0, state.subagentFooter.scrollOffset + action.delta),
         },
       };
     case "status.set": {

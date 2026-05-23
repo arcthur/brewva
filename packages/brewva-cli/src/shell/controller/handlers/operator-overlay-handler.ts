@@ -20,6 +20,7 @@ export interface ShellOperatorOverlayHandlerContext {
   getExternalPagerTarget(): PagerTarget | undefined;
   getCurrentSessionId(): string;
   openSession(sessionId: string): Promise<void>;
+  openSubagentFooter(runId: string): void;
   handleQuestionPrimary(
     active: Extract<CliShellOverlayPayload, { kind: "question" }>,
   ): Promise<void>;
@@ -136,7 +137,16 @@ export class ShellOperatorOverlayHandler {
         if (!item) {
           return true;
         }
-        return this.openDetailPager();
+        this.context.commit(
+          {
+            type: "operator.setTaskRuns",
+            taskRuns: active.snapshot.taskRuns,
+          },
+          { debounceStatus: false },
+        );
+        this.context.closeActiveOverlay(false);
+        this.context.openSubagentFooter(item.runId);
+        return true;
       }
       case "sessions": {
         const item = active.sessions[active.selectedIndex];

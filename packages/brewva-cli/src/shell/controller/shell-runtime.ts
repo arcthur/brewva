@@ -28,6 +28,7 @@ import {
 import {
   getCliRuntimeCompactionGateStatus,
   getCliRuntimeContextUsage,
+  getCliRuntimeSessionWire,
   getCliRuntimePendingCompactionReason,
   getCliRuntimeTurnProjection,
   renderCliRuntimeTurnDigest,
@@ -458,6 +459,7 @@ export class CliShellRuntime {
       getCurrentSessionId: () => this.#sessionPort.getSessionId(),
       openSession: async (sessionId) =>
         this.#sessionHandler.switchBundle(await this.#operatorPort.openSession(sessionId)),
+      openSubagentFooter: (runId) => this.openSubagentFooter(runId),
       handleQuestionPrimary: async (active) => {
         await this.#questionOverlayHandler.handleInput(active, {
           key: "enter",
@@ -612,6 +614,10 @@ export class CliShellRuntime {
 
   getViewState(): ShellViewModel {
     return projectShellViewModel(this.#state);
+  }
+
+  getSessionWireFrames(sessionId: string) {
+    return getCliRuntimeSessionWire(this.#bundle.runtime, sessionId);
   }
 
   getToolDefinitions(): CliShellSessionBundle["toolDefinitions"] {
@@ -1186,6 +1192,13 @@ export class CliShellRuntime {
       openExternalTranscriptPager: () => this.openExternalTranscriptPager(),
       copyLatestAssistantAnswer: () => this.copyLatestAssistantAnswer(),
       requestTranscriptNavigation: (kind) => this.requestTranscriptNavigation(kind),
+      toggleSubagentFooter: () => this.toggleSubagentFooter(),
+      closeSubagentFooter: () => this.closeSubagentFooter(),
+      selectSubagentFooterRun: (runId) => this.selectSubagentFooterRun(runId),
+      selectRelativeSubagentFooterRun: (delta) => this.selectRelativeSubagentFooterRun(delta),
+      scrollSubagentFooter: (delta) => this.scrollSubagentFooter(delta),
+      openSelectedSubagentSession: () => this.openSelectedSubagentSession(),
+      cancelSelectedSubagent: () => this.cancelSelectedSubagent(),
       requestContextCompaction: () => this.requestContextCompaction(),
       projectSessionEvent: (projectEffect) => {
         try {
@@ -1452,6 +1465,105 @@ export class CliShellRuntime {
       },
       { debounceStatus: false },
     );
+  }
+
+  private getSelectedSubagentRun() {
+    const selectedRunId =
+      this.#state.subagentFooter.selectedRunId ?? this.#state.operator.taskRuns[0]?.runId;
+    return selectedRunId
+      ? this.#state.operator.taskRuns.find((run) => run.runId === selectedRunId)
+      : undefined;
+  }
+
+  private openSubagentFooter(runId?: string): void {
+    // Command handlers keep modal focus ownership user-visible; the reducer also enforces it
+    // for direct state transitions.
+    if (this.#state.overlay.active) {
+      return;
+    }
+    this.commit(
+      {
+        type: "subagentFooter.open",
+        runId,
+      },
+      { debounceStatus: false, refreshCompletions: false },
+    );
+  }
+
+  private toggleSubagentFooter(): void {
+    if (this.#state.operator.taskRuns.length === 0) {
+      this.ui.notify("No background subagents are available.", "info");
+      return;
+    }
+    // Keep global toggles from changing focus while a modal overlay owns input.
+    if (this.#state.overlay.active) {
+      return;
+    }
+    this.commit(
+      {
+        type: "subagentFooter.toggle",
+      },
+      { debounceStatus: false, refreshCompletions: false },
+    );
+  }
+
+  private closeSubagentFooter(): void {
+    this.commit(
+      {
+        type: "subagentFooter.close",
+      },
+      { debounceStatus: false, refreshCompletions: false },
+    );
+  }
+
+  private selectSubagentFooterRun(runId: string): void {
+    this.commit(
+      {
+        type: "subagentFooter.select",
+        runId,
+      },
+      { debounceStatus: false, refreshCompletions: false },
+    );
+  }
+
+  private selectRelativeSubagentFooterRun(delta: -1 | 1): void {
+    this.commit(
+      {
+        type: "subagentFooter.selectRelative",
+        delta,
+      },
+      { debounceStatus: false, refreshCompletions: false },
+    );
+  }
+
+  private scrollSubagentFooter(delta: number): void {
+    this.commit(
+      {
+        type: "subagentFooter.scroll",
+        delta,
+      },
+      { debounceStatus: false, refreshCompletions: false },
+    );
+  }
+
+  private async openSelectedSubagentSession(): Promise<void> {
+    const run = this.getSelectedSubagentRun();
+    if (!run?.workerSessionId) {
+      this.ui.notify("The selected subagent has no worker session.", "warning");
+      return;
+    }
+    await this.openSessionById(run.workerSessionId);
+  }
+
+  private async cancelSelectedSubagent(): Promise<void> {
+    const run = this.getSelectedSubagentRun();
+    if (!run) {
+      this.ui.notify("No background subagent is selected.", "warning");
+      return;
+    }
+    await this.#operatorPort.stopTask(run.runId);
+    this.ui.notify(`Stopped task ${run.runId}.`, "warning");
+    await this.refreshOperatorSnapshotEffect();
   }
 
   private requestContextCompaction(): void {

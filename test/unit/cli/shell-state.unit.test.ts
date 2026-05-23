@@ -1,8 +1,42 @@
 import { describe, expect, test } from "bun:test";
+import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import {
+  CURRENT_DELEGATION_CONTRACT_VERSION,
+  type DelegationRunRecord,
+} from "@brewva/brewva-runtime/protocol";
 import {
   createCliShellState,
   reduceCliShellState,
 } from "../../../packages/brewva-cli/src/shell/domain/state.js";
+
+function run(input: Partial<DelegationRunRecord> & { runId: string }): DelegationRunRecord {
+  return {
+    contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+    agent: "worker",
+    targetName: "worker",
+    delegate: "worker",
+    taskName: "implement-widget",
+    taskPath: "/implement-widget",
+    nickname: "Implement widget",
+    depth: 1,
+    forkTurns: "none",
+    gateReason: "implement_isolated",
+    modelCategory: "isolated-execution",
+    executionPrimitive: "named",
+    visibility: "public",
+    isolationStrategy: "shared",
+    adoption: {
+      contractId: "shell-state-subagent-footer-test",
+      decision: "require_human",
+      reason: "Fixture run requires explicit adoption.",
+    },
+    parentSessionId: asBrewvaSessionId("parent-session"),
+    status: "completed",
+    createdAt: 100,
+    updatedAt: 100,
+    ...input,
+  };
+}
 
 describe("cli shell state", () => {
   test("queues priority overlays without stealing focus and restores the composer focus after the queue drains", () => {
@@ -188,5 +222,115 @@ describe("cli shell state", () => {
 
     expect(state.transcript.followMode).toBe("scrolled");
     expect(state.transcript.scrollOffset).toBe(3);
+  });
+
+  test("opens the subagent footer as a focused sibling surface and restores composer focus on close", () => {
+    let state = createCliShellState();
+
+    state = reduceCliShellState(state, {
+      type: "operator.setTaskRuns",
+      taskRuns: [
+        run({
+          runId: "run-1",
+          status: "running",
+          updatedAt: 200,
+          workerSessionId: asBrewvaSessionId("worker-session-1"),
+        }),
+        run({
+          runId: "run-2",
+          status: "completed",
+          updatedAt: 300,
+          workerSessionId: asBrewvaSessionId("worker-session-2"),
+        }),
+      ],
+    });
+    state = reduceCliShellState(state, {
+      type: "subagentFooter.open",
+      runId: "run-1",
+    });
+
+    expect(state.subagentFooter.mode).toBe("inspecting");
+    expect(state.subagentFooter.selectedRunId).toBe("run-1");
+    expect(state.focus.active).toBe("subagentFooter");
+
+    state = reduceCliShellState(state, {
+      type: "subagentFooter.selectRelative",
+      delta: 1,
+    });
+
+    expect(state.subagentFooter.selectedRunId).toBe("run-2");
+    expect(state.subagentFooter.scrollOffset).toBe(0);
+
+    state = reduceCliShellState(state, {
+      type: "subagentFooter.close",
+    });
+
+    expect(state.subagentFooter.mode).toBe("collapsed");
+    expect(state.focus.active).toBe("composer");
+  });
+
+  test("does not let the subagent footer steal focus from an active modal overlay", () => {
+    let state = createCliShellState();
+
+    state = reduceCliShellState(state, {
+      type: "operator.setTaskRuns",
+      taskRuns: [
+        run({
+          runId: "run-1",
+          status: "running",
+          workerSessionId: asBrewvaSessionId("worker-session-1"),
+        }),
+      ],
+    });
+    state = reduceCliShellState(state, {
+      type: "overlay.open",
+      overlay: {
+        id: "tasks",
+        kind: "tasks",
+        focusOwner: "taskBrowser",
+        priority: "queued",
+      },
+    });
+    state = reduceCliShellState(state, {
+      type: "subagentFooter.open",
+      runId: "run-1",
+    });
+
+    expect(state.overlay.active?.id).toBe("tasks");
+    expect(state.focus.active).toBe("taskBrowser");
+    expect(state.focus.returnStack).toEqual(["composer"]);
+    expect(state.subagentFooter.mode).toBe("collapsed");
+    expect(state.subagentFooter.selectedRunId ?? null).toBe(null);
+  });
+
+  test("collapses the subagent footer when the selected run disappears", () => {
+    let state = createCliShellState();
+
+    state = reduceCliShellState(state, {
+      type: "operator.setTaskRuns",
+      taskRuns: [
+        run({
+          runId: "run-1",
+          status: "running",
+          workerSessionId: asBrewvaSessionId("worker-session-1"),
+        }),
+      ],
+    });
+    state = reduceCliShellState(state, {
+      type: "subagentFooter.open",
+      runId: "run-1",
+    });
+
+    expect(state.focus.active).toBe("subagentFooter");
+    expect(state.subagentFooter.mode).toBe("inspecting");
+
+    state = reduceCliShellState(state, {
+      type: "operator.setTaskRuns",
+      taskRuns: [],
+    });
+
+    expect(state.focus.active).toBe("composer");
+    expect(state.subagentFooter.mode).toBe("collapsed");
+    expect(state.subagentFooter.selectedRunId ?? null).toBe(null);
   });
 });

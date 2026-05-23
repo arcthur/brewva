@@ -29,6 +29,11 @@ export function createCliShellState(): CliShellViewState {
     operator: {
       taskRuns: [],
     },
+    subagentFooter: {
+      mode: "collapsed",
+      selectedRunId: undefined,
+      scrollOffset: 0,
+    },
     status: {
       entries: {},
       trust: buildTrustLoopIdleProjection(),

@@ -8,7 +8,7 @@ import {
 } from "../../src/shell/domain/prompt-parts.js";
 import type { CliShellPromptPart } from "../../src/shell/domain/prompt.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
-import { selectSubagentActivityItems } from "../../src/shell/domain/subagent-activity.js";
+import { buildSubagentFooterView } from "../../src/shell/domain/subagent-footer.js";
 import type {
   OpenTuiKeyEvent,
   OpenTuiRenderer,
@@ -36,6 +36,7 @@ import {
   copyTextWithShellFeedback,
   type ClipboardCopy,
 } from "./selection.js";
+import { SubagentFooterPanel } from "./subagent-footer.js";
 import { ToastStrip } from "./toast.js";
 import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";
 import { TranscriptMessageView } from "./transcript.js";
@@ -227,6 +228,9 @@ export function BrewvaOpenTuiShell(input: {
     }
     if (payload) {
       return "overlay" as const;
+    }
+    if (state.focus.active === "subagentFooter") {
+      return "subagentFooter" as const;
     }
     if (state.composer.completion) {
       return "completion" as const;
@@ -472,7 +476,16 @@ export function BrewvaOpenTuiShell(input: {
   const lineageLabel = createMemo(
     () => state.status.entries.lineage ?? input.runtime.getSessionIdentity().lineageLabel ?? "",
   );
-  const subagentActivity = createMemo(() => selectSubagentActivityItems(state.operator.taskRuns));
+  const subagentFooterView = createMemo(() =>
+    buildSubagentFooterView({
+      runs: state.operator.taskRuns,
+      state: state.subagentFooter,
+      getSessionWireFrames: (sessionId) => input.runtime.getSessionWireFrames(sessionId),
+    }),
+  );
+  const promptInputBlocked = createMemo(
+    () => Boolean(state.overlay.active) || state.focus.active === "subagentFooter",
+  );
   const inlineApproval = createMemo(() => {
     const payload = activeOverlay()?.payload;
     return payload?.kind === "approval" ? payload : undefined;
@@ -565,20 +578,27 @@ export function BrewvaOpenTuiShell(input: {
             />
           </Show>
 
+          <SubagentFooterPanel
+            runtime={input.runtime}
+            view={subagentFooterView()}
+            theme={theme()}
+            width={dimensions().width}
+            height={dimensions().height}
+            shortcutLabel={(id) => input.runtime.getShortcutLabel(id)}
+          />
+
           <PromptPanel
             runtime={input.runtime}
             composer={state.composer}
             queue={state.queue}
             status={state.status}
-            overlayActive={Boolean(state.overlay.active)}
+            overlayActive={promptInputBlocked()}
             theme={theme()}
             width={dimensions().width}
             assistantLabel={assistantLabel()}
             modelLabel={modelLabel()}
             thinkingLevel={thinkingLevel()}
             lineageLabel={lineageLabel()}
-            subagentActivity={subagentActivity()}
-            subagentActivityTotal={state.operator.taskRuns.length}
             tuiConfig={input.runtime.getTuiConfig()}
             shortcutLabel={(id) => input.runtime.getShortcutLabel(id)}
             syncComposerFromEditor={syncComposerFromEditor}

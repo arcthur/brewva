@@ -236,8 +236,9 @@ canonical runtime events and tape projections directly.
     OpenTUI-backed shell in `alternate-screen`
   - ordinary non-streaming prompts run through the `interactive` hosted-loop
     profile; streaming follow-up remains a low-level agent-loop continuation
-  - approvals, questions, tasks, inspect, lineage checkout, session switching,
-    and pager drill-down remain presentation over Brewva-owned session state
+  - approvals, questions, task browser summaries, subagent footer detail,
+    inspect, lineage checkout, session switching, and pager drill-down remain
+    presentation over Brewva-owned session state
     rather than a second lifecycle authority
   - `/lineage` opens the channel-local lineage tree, records advisory selection
     on checkout, and refreshes the visible transcript from the selected

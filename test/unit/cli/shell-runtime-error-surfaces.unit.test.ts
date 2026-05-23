@@ -31,6 +31,7 @@ import type {
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
 } from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import { buildSubagentFooterView } from "../../../packages/brewva-cli/src/shell/domain/subagent-footer.js";
 import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 import {
   createPromptMessageUpdateEvent,
@@ -662,7 +663,7 @@ describe("shell runtime: error surfaces and overlays", () => {
     runtime.dispose();
   });
 
-  test("task overlays drill down into run output, artifact refs, and worker session hints", async () => {
+  test("task overlays open run output in the subagent footer inspector", async () => {
     const { bundle } = createFakeBundle({
       sessionWireBySessionId: {
         "worker-session-1": [
@@ -760,28 +761,29 @@ describe("shell runtime: error surfaces and overlays", () => {
     const consumedEnter = await keymapEffect(runtime, { type: "overlay.primary" });
 
     expect(consumedEnter).toBe(true);
-    expect(runtime.getViewState().overlay.active?.payload).toMatchObject({
-      kind: "pager",
-      title: "Task run-1 output",
-    });
+    const viewState = runtime.getViewState();
+    expect(viewState.overlay.active?.kind ?? "none").toBe("none");
+    expect(viewState.focus.active).toBe("subagentFooter");
+    expect(viewState.subagentFooter.mode).toBe("inspecting");
+    expect(runtime.getSessionWireFrames("worker-session-1")).toHaveLength(1);
 
-    const pagerPayload = runtime.getViewState().overlay.active?.payload;
-    expect(pagerPayload && pagerPayload.kind === "pager" ? pagerPayload.lines : []).toEqual(
+    const footerView = buildSubagentFooterView({
+      runs: viewState.operator.taskRuns,
+      state: viewState.subagentFooter,
+      getSessionWireFrames: (sessionId) => runtime.getSessionWireFrames(sessionId),
+    });
+    expect(footerView.detail?.lines).toEqual(
       expect.arrayContaining([
-        "workerSessionRecentOutput:",
-        "  assistant:",
-        "    Verifier summary line",
-        "    Found stale contract drift.",
-        "  toolOutputs:",
-        "    - exec [pass]",
+        "assistant:",
+        "  Verifier summary line",
+        "  Found stale contract drift.",
+        "toolOutputs:",
+        "  - exec [pass]",
         "      bun test",
-        "workerSessionId: worker-session-1",
-        "summary: Collected output summary",
-        "delivery: supplemental / surfaced",
-        "artifactRefs:",
-        "  - patch: .orchestrator/subagent-runs/run-1/patch.diff :: Suggested patch",
-        "resultData:",
-        '    "verdict": "pass",',
+        "      1775 pass",
+        "  runId: run-1",
+        "  workerSessionId: worker-session-1",
+        "  summary: Collected output summary",
       ]),
     );
 
@@ -875,7 +877,7 @@ describe("shell runtime: error surfaces and overlays", () => {
 
     runtime.openOverlay({
       kind: "pager",
-      title: "Task run-1 output",
+      title: "Pager output",
       lines: ["line-1", "line-2"],
       scrollOffset: 0,
     });
@@ -885,7 +887,7 @@ describe("shell runtime: error surfaces and overlays", () => {
     expect(consumed).toBe(true);
     expect(pagerCalls).toEqual([
       {
-        title: "Task run-1 output",
+        title: "Pager output",
         lines: ["line-1", "line-2"],
       },
     ]);
