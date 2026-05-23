@@ -1,6 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { clearMermaidRuntimeRenderCache } from "../../../packages/brewva-cli/runtime/shell/mermaid/runtime-renderer.js";
 import { createToolRenderCache } from "../../../packages/brewva-cli/runtime/shell/tool-render.js";
 import { renderCliTranscriptScrollbackLines } from "../../../packages/brewva-cli/runtime/shell/transcript-scrollback.js";
 import { DEFAULT_TUI_THEME } from "../../../packages/brewva-cli/src/internal/tui/index.js";
@@ -9,6 +13,20 @@ import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src
 import { buildTrustLoopToolProjection } from "../../../packages/brewva-cli/src/shell/domain/trust-loop/projection.js";
 
 describe("transcript scrollback rendering", () => {
+  let previewDir = "";
+
+  beforeEach(() => {
+    previewDir = mkdtempSync(join(tmpdir(), "brewva-mermaid-scrollback-"));
+    process.env.BREWVA_MERMAID_PREVIEW_DIR = previewDir;
+    clearMermaidRuntimeRenderCache();
+  });
+
+  afterEach(() => {
+    delete process.env.BREWVA_MERMAID_PREVIEW_DIR;
+    clearMermaidRuntimeRenderCache();
+    rmSync(previewDir, { recursive: true, force: true });
+  });
+
   test("renders transcript messages through the OpenTUI scrollback snapshot path", async () => {
     const runtime = {
       getViewState() {
@@ -192,8 +210,88 @@ describe("transcript scrollback rendering", () => {
 
     const joined = lines.join("\n");
     expect(joined).toContain("Mermaid diagram");
-    expect(joined).toContain("[Start] ----> [Rendered]");
+    expect(joined).toContain("Runtime preview ready");
+    expect(joined).toContain("Open preview");
     expect(joined).not.toContain("```mermaid");
+  });
+
+  test("renders complex Mermaid fences through the runtime preview path", async () => {
+    const runtime = {
+      getViewState() {
+        return {
+          theme: DEFAULT_TUI_THEME,
+          transcript: {
+            messages: [
+              {
+                id: "assistant-mermaid-complex",
+                role: "assistant",
+                renderMode: "stable",
+                parts: [
+                  {
+                    type: "text",
+                    id: "assistant-mermaid-complex:text",
+                    text: [
+                      "```mermaid",
+                      "graph TB",
+                      '  CLI["@brewva/brewva-cli<br/>CLI entry"]',
+                      '  RUNTIME["@brewva/brewva-runtime<br/>Runtime core"]',
+                      '  subgraph runtime ["Runtime internals"]',
+                      '    KERNEL["Kernel Port"]',
+                      '    MODEL["Model Port"]',
+                      "  end",
+                      "  CLI --> RUNTIME",
+                      "  RUNTIME --> KERNEL",
+                      "  RUNTIME --> MODEL",
+                      "```",
+                    ].join("\n"),
+                    renderMode: "stable",
+                  },
+                ],
+              },
+            ] satisfies CliShellTranscriptMessage[],
+            followMode: "live",
+            scrollOffset: 0,
+          },
+          diff: {
+            style: "auto",
+            wrapMode: "word",
+          },
+          view: {
+            showThinking: true,
+            toolDetails: true,
+          },
+        };
+      },
+      getSessionIdentity() {
+        return {
+          sessionId: "session-mermaid-complex",
+          assistantLabel: "Brewva",
+          lineageLabel: null,
+          modelLabel: "GPT-5.4 Mini",
+          thinkingLevel: "high",
+        };
+      },
+      getToolDefinitions() {
+        return new Map();
+      },
+      handleInput() {
+        return Promise.resolve(true);
+      },
+    } as unknown as CliShellRuntime;
+
+    const lines = await renderCliTranscriptScrollbackLines({
+      runtime,
+      toolRenderCache: createToolRenderCache(),
+      width: 72,
+    });
+
+    const joined = lines.join("\n");
+    expect(joined).toContain("Mermaid diagram");
+    expect(joined).toContain("Runtime preview ready");
+    expect(joined).toContain("Open preview");
+    expect(joined).not.toContain("Mermaid source");
+    expect(joined).not.toContain("```mermaid");
+    expect(joined).not.toContain("graph TB");
   });
 
   test("renders standalone runtime tool messages", async () => {

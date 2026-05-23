@@ -1,6 +1,10 @@
 /** @jsxImportSource @opentui/solid */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { clearMermaidRuntimeRenderCache } from "../../../packages/brewva-cli/runtime/shell/mermaid/runtime-renderer.js";
 import { createToolRenderCache } from "../../../packages/brewva-cli/runtime/shell/tool-render.js";
 import { renderCliTranscriptScrollbackLines } from "../../../packages/brewva-cli/runtime/shell/transcript-scrollback.js";
 import { DEFAULT_TUI_THEME } from "../../../packages/brewva-cli/src/internal/tui/index.js";
@@ -46,6 +50,20 @@ function createRuntime(messages: CliShellTranscriptMessage[]): CliShellRuntime {
 }
 
 describe("streaming Mermaid transcript rendering", () => {
+  let previewDir = "";
+
+  beforeEach(() => {
+    previewDir = mkdtempSync(join(tmpdir(), "brewva-mermaid-streaming-"));
+    process.env.BREWVA_MERMAID_PREVIEW_DIR = previewDir;
+    clearMermaidRuntimeRenderCache();
+  });
+
+  afterEach(() => {
+    delete process.env.BREWVA_MERMAID_PREVIEW_DIR;
+    clearMermaidRuntimeRenderCache();
+    rmSync(previewDir, { recursive: true, force: true });
+  });
+
   test("renders complete streaming Mermaid fences as transcript diagrams", async () => {
     const runtime = createRuntime([
       {
@@ -71,7 +89,8 @@ describe("streaming Mermaid transcript rendering", () => {
 
     const joined = lines.join("\n");
     expect(joined).toContain("Mermaid diagram");
-    expect(joined).toContain("[Start] ----> [Rendered]");
+    expect(joined).toContain("Runtime preview ready");
+    expect(joined).toContain("Open preview");
     expect(joined).not.toContain("```mermaid");
   });
 });

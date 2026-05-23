@@ -83,13 +83,11 @@ function TranscriptTextBlockView(input: {
   isStreaming: () => boolean;
   theme: SessionPalette;
 }) {
-  const renderer = useRenderer();
   const classification = createMemo(() => classifyTranscriptTextBlock({ content: input.content }));
   const mermaidSource = createMemo(() => {
     const current = classification();
     return current.kind === "mermaid" ? current.source : undefined;
   });
-  const maxBlockWidth = createMemo(() => Math.max(24, renderer.width - 12));
   return (
     <Show
       when={mermaidSource()}
@@ -109,9 +107,7 @@ function TranscriptTextBlockView(input: {
         </Show>
       }
     >
-      {(source) => (
-        <MermaidBlock source={source()} theme={input.theme} maxWidth={maxBlockWidth()} />
-      )}
+      {(source) => <MermaidBlock source={source()} theme={input.theme} />}
     </Show>
   );
 }

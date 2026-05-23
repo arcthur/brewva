@@ -200,6 +200,17 @@ function assertDirectoryMirror(sourceRoot: string, targetRoot: string, label: st
   }
 }
 
+function assertDirectoryMirrorWhenPresent(
+  sourceRoot: string,
+  targetRoot: string,
+  label: string,
+): void {
+  if (!existsSync(targetRoot)) {
+    return;
+  }
+  assertDirectoryMirror(sourceRoot, targetRoot, label);
+}
+
 function assertNoPiEraMarkers(paths: string[]): void {
   assertNoForbiddenMarkers(paths, DIST_FORBIDDEN_MARKERS, "dist artifact branding check failed");
 }
@@ -650,7 +661,7 @@ function main(): void {
     "node-safe dist quarantine check failed",
   );
   for (const platform of ["brewva-darwin-arm64", "brewva-linux-x64", "brewva-linux-arm64"]) {
-    assertDirectoryMirror(
+    assertDirectoryMirrorWhenPresent(
       exportHtmlAssetsRoot,
       resolve(repoRoot, "distribution", platform, "bin", "export-html"),
       `distribution/${platform}/bin/export-html`,

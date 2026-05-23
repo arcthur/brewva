@@ -84,8 +84,8 @@ flowchart TD
 9. Verification remains explicit runtime authority. It is derived from fresh
    evidence and does not depend on an active skill slot.
 10. When assistant text reaches stable transcript state, the CLI presentation
-    boundary renders Markdown tables and bounded Mermaid diagrams as terminal
-    presentation. This does not alter event tape, replay, or runtime
+    boundary renders Markdown tables and Mermaid diagrams through runtime-backed
+    presentation artifacts. This does not alter event tape, replay, or runtime
     inspection truth.
 11. If the operator submits another prompt while the current turn is still
     streaming, the interactive composer defaults that submission to queued
