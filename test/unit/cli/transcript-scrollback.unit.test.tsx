@@ -129,4 +129,69 @@ describe("transcript scrollback rendering", () => {
 
     expect(lines).toEqual([]);
   });
+
+  test("renders stable Mermaid fences as transcript diagrams", async () => {
+    const runtime = {
+      getViewState() {
+        return {
+          theme: DEFAULT_TUI_THEME,
+          transcript: {
+            messages: [
+              {
+                id: "assistant-mermaid",
+                role: "assistant",
+                renderMode: "stable",
+                parts: [
+                  {
+                    type: "text",
+                    id: "assistant-mermaid:text",
+                    text: ["```mermaid", "flowchart TD", "  A[Start] --> B[Rendered]", "```"].join(
+                      "\n",
+                    ),
+                    renderMode: "stable",
+                  },
+                ],
+              },
+            ] satisfies CliShellTranscriptMessage[],
+            followMode: "live",
+            scrollOffset: 0,
+          },
+          diff: {
+            style: "auto",
+            wrapMode: "word",
+          },
+          view: {
+            showThinking: true,
+            toolDetails: true,
+          },
+        };
+      },
+      getSessionIdentity() {
+        return {
+          sessionId: "session-mermaid",
+          assistantLabel: "Brewva",
+          lineageLabel: null,
+          modelLabel: "GPT-5.4 Mini",
+          thinkingLevel: "high",
+        };
+      },
+      getToolDefinitions() {
+        return new Map();
+      },
+      handleInput() {
+        return Promise.resolve(true);
+      },
+    } as unknown as CliShellRuntime;
+
+    const lines = await renderCliTranscriptScrollbackLines({
+      runtime,
+      toolRenderCache: createToolRenderCache(),
+      width: 72,
+    });
+
+    const joined = lines.join("\n");
+    expect(joined).toContain("Mermaid diagram");
+    expect(joined).toContain("[Start] ----> [Rendered]");
+    expect(joined).not.toContain("```mermaid");
+  });
 });

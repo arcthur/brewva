@@ -78,17 +78,39 @@ function trustToneColor(theme: SessionPalette, tone: TrustLoopTone): string {
   }
 }
 
-function StableTranscriptTextBlock(input: { content: string; theme: SessionPalette }) {
+function TranscriptTextBlockView(input: {
+  content: string;
+  isStreaming: () => boolean;
+  theme: SessionPalette;
+}) {
   const renderer = useRenderer();
-  const mermaidSource = createMemo(() => {
+  const classified = createMemo(() => {
     const classified = classifyTranscriptTextBlock({ content: input.content });
-    return classified.kind === "mermaid" ? classified.source : undefined;
+    return classified;
+  });
+  const mermaidSource = createMemo(() => {
+    const current = classified();
+    return current.kind === "mermaid" ? current.source : undefined;
   });
   const maxBlockWidth = createMemo(() => Math.max(24, renderer.width - 12));
   return (
     <Show
       when={mermaidSource()}
-      fallback={<MarkdownTranscriptBlock content={input.content} theme={input.theme} />}
+      fallback={
+        <Show
+          when={input.isStreaming()}
+          fallback={<MarkdownTranscriptBlock content={input.content} theme={input.theme} />}
+        >
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            streaming={true}
+            syntaxStyle={getTranscriptSyntaxStyle(input.theme)}
+            content={input.content}
+            fg={input.theme.text}
+          />
+        </Show>
+      }
     >
       {(source) => (
         <MermaidBlock source={source()} theme={input.theme} maxWidth={maxBlockWidth()} />
@@ -258,21 +280,11 @@ function TextPartView(input: {
         <Index each={blocks()}>
           {(block, index) => (
             <box id={`text-${input.part.id}:block:${index}`} marginTop={index === 0 ? 0 : 1}>
-              <Show
-                when={streaming()}
-                fallback={
-                  <StableTranscriptTextBlock content={block().content} theme={input.theme} />
-                }
-              >
-                <code
-                  filetype="markdown"
-                  drawUnstyledText={false}
-                  streaming={true}
-                  syntaxStyle={getTranscriptSyntaxStyle(input.theme)}
-                  content={block().content}
-                  fg={input.theme.text}
-                />
-              </Show>
+              <TranscriptTextBlockView
+                content={block().content}
+                isStreaming={streaming}
+                theme={input.theme}
+              />
             </box>
           )}
         </Index>

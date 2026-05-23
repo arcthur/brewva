@@ -56,17 +56,22 @@ function getMermaidLines(source: string): readonly string[] {
 
 function stripQuotes(value: string): string {
   const trimmed = value.trim();
+  const normalize = (label: string): string =>
+    label
+      .replace(/<br\s*\/?>/giu, " ")
+      .replace(/\s+/gu, " ")
+      .trim();
   if (
     (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
     (trimmed.startsWith("'") && trimmed.endsWith("'"))
   ) {
-    return trimmed.slice(1, -1).trim();
+    return normalize(trimmed.slice(1, -1));
   }
-  return trimmed;
+  return normalize(trimmed);
 }
 
 function parseFlowEndpoint(rawEndpoint: string): MermaidNode | undefined {
-  const endpoint = rawEndpoint.trim();
+  const endpoint = rawEndpoint.trim().replace(/;$/u, "").trim();
   const match = endpoint.match(
     new RegExp(
       `^(${IDENTIFIER_PATTERN})(?:\\s*(?:\\[([^\\]]+)\\]|\\(([^)]+)\\)|\\{([^}]+)\\}))?$`,
@@ -105,6 +110,13 @@ function parseFlowEdge(rawLine: string):
   return label ? { from, to, label } : { from, to };
 }
 
+function upsertFlowNode(nodesById: Map<string, MermaidNode>, node: MermaidNode): void {
+  const existing = nodesById.get(node.id);
+  if (!existing || (existing.label === existing.id && node.label !== node.id)) {
+    nodesById.set(node.id, node);
+  }
+}
+
 function parseFlowchart(source: string, lines: readonly string[]): ParsedMermaidDiagram {
   const header = lines[0]?.match(FLOW_HEADER_PATTERN);
   const direction = header?.[1]?.toUpperCase();
@@ -118,11 +130,23 @@ function parseFlowchart(source: string, lines: readonly string[]): ParsedMermaid
   for (const line of lines.slice(1)) {
     const edge = parseFlowEdge(line);
     if (!edge) {
+      const node = parseFlowEndpoint(line);
+      if (node) {
+        upsertFlowNode(nodesById, node);
+        if (nodesById.size > MAX_FLOW_NODES) {
+          return unsupported(source, "too_large");
+        }
+        continue;
+      }
       return unsupported(source, "unsupported_syntax");
     }
-    nodesById.set(edge.from.id, edge.from);
-    nodesById.set(edge.to.id, edge.to);
-    edges.push({ from: edge.from.id, to: edge.to.id, label: edge.label });
+    upsertFlowNode(nodesById, edge.from);
+    upsertFlowNode(nodesById, edge.to);
+    edges.push(
+      edge.label
+        ? { from: edge.from.id, to: edge.to.id, label: edge.label }
+        : { from: edge.from.id, to: edge.to.id },
+    );
     if (nodesById.size > MAX_FLOW_NODES || edges.length > MAX_FLOW_EDGES) {
       return unsupported(source, "too_large");
     }

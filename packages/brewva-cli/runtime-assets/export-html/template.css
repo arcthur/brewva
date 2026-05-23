@@ -844,6 +844,24 @@
       color: var(--text);
     }
 
+    .markdown-content pre.brewva-mermaid {
+      background: var(--exportCardBg);
+      border: 1px solid var(--dim);
+      border-radius: 4px;
+      color: var(--text);
+      margin: var(--line-height) 0;
+      overflow-x: auto;
+      padding: calc(var(--line-height) * 0.75);
+      white-space: pre-wrap;
+    }
+
+    .markdown-content pre.brewva-mermaid svg {
+      display: block;
+      height: auto;
+      margin: 0 auto;
+      max-width: 100%;
+    }
+
     .markdown-content blockquote {
       border-left: 3px solid var(--mdQuoteBorder);
       padding-left: var(--line-height);

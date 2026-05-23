@@ -2,7 +2,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { extname, resolve } from "node:path";
+import { extname, relative, resolve } from "node:path";
 
 const NODE_VERSION_RANGE = "^20.19.0 || >=22.13.0";
 
@@ -139,6 +139,67 @@ function collectTextFiles(root: string): string[] {
   return files;
 }
 
+function collectFiles(root: string): string[] {
+  if (!existsSync(root)) {
+    return [];
+  }
+
+  const pending = [root];
+  const files: string[] = [];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) {
+      continue;
+    }
+
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const entryPath = resolve(current, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+        continue;
+      }
+      if (entry.isFile()) {
+        files.push(entryPath);
+      }
+    }
+  }
+  return files;
+}
+
+function assertDirectoryMirror(sourceRoot: string, targetRoot: string, label: string): void {
+  const sourceFiles = collectFiles(sourceRoot);
+  const targetFiles = collectFiles(targetRoot);
+  const sourceRelativeFiles = new Set(
+    sourceFiles.map((filePath) => relative(sourceRoot, filePath)),
+  );
+  const targetRelativeFiles = new Set(
+    targetFiles.map((filePath) => relative(targetRoot, filePath)),
+  );
+  const missing = [...sourceRelativeFiles].filter((filePath) => !targetRelativeFiles.has(filePath));
+  const extra = [...targetRelativeFiles].filter((filePath) => !sourceRelativeFiles.has(filePath));
+  const changed = [...sourceRelativeFiles].filter((filePath) => {
+    if (!targetRelativeFiles.has(filePath)) {
+      return false;
+    }
+    return !readFileSync(resolve(sourceRoot, filePath)).equals(
+      readFileSync(resolve(targetRoot, filePath)),
+    );
+  });
+
+  if (missing.length > 0 || extra.length > 0 || changed.length > 0) {
+    throw new Error(
+      `${label} is stale:\n` +
+        [
+          ...missing.map((filePath) => `missing ${filePath}`),
+          ...extra.map((filePath) => `extra ${filePath}`),
+          ...changed.map((filePath) => `changed ${filePath}`),
+        ]
+          .slice(0, 30)
+          .join("\n"),
+    );
+  }
+}
+
 function assertNoPiEraMarkers(paths: string[]): void {
   assertNoForbiddenMarkers(paths, DIST_FORBIDDEN_MARKERS, "dist artifact branding check failed");
 }
@@ -170,6 +231,13 @@ function assertNoForbiddenMarkers(
 function main(): void {
   const repoRoot = process.cwd();
   assertSupportedNodeRuntime(repoRoot);
+  const exportHtmlAssetsRoot = resolve(
+    repoRoot,
+    "packages",
+    "brewva-cli",
+    "runtime-assets",
+    "export-html",
+  );
 
   const cliDistPath = resolve(repoRoot, "packages/brewva-cli/dist/index.js");
   if (!existsSync(cliDistPath)) {
@@ -581,6 +649,13 @@ function main(): void {
     NODE_SAFE_DIST_FORBIDDEN_MARKERS,
     "node-safe dist quarantine check failed",
   );
+  for (const platform of ["brewva-darwin-arm64", "brewva-linux-x64", "brewva-linux-arm64"]) {
+    assertDirectoryMirror(
+      exportHtmlAssetsRoot,
+      resolve(repoRoot, "distribution", platform, "bin", "export-html"),
+      `distribution/${platform}/bin/export-html`,
+    );
+  }
 
   console.log("dist smoke checks passed");
 }

@@ -32,6 +32,30 @@ flowchart LR
     expect(lines.every((line) => line.length <= 48)).toBe(true);
   });
 
+  test("parses flowchart node declarations before edges", () => {
+    const diagram = parseMermaidDiagram(`
+flowchart TD
+  MODEL["Model<br/>owns attention"]
+  WORKBENCH["Workbench Plane<br/>notes + evictions + on-demand recall"]
+  MODEL --> WORKBENCH
+`);
+
+    expect(diagram).toMatchObject({
+      kind: "flowchart",
+      direction: "TD",
+      nodes: [
+        { id: "MODEL", label: "Model owns attention" },
+        { id: "WORKBENCH", label: "Workbench Plane notes + evictions + on-demand recall" },
+      ],
+      edges: [{ from: "MODEL", to: "WORKBENCH" }],
+    });
+
+    const lines = renderMermaidText(diagram, { maxWidth: 96 });
+    expect(lines.join("\n")).toContain(
+      "[Model owns attention] ----> [Workbench Plane notes + evictions + on-demand recall]",
+    );
+  });
+
   test("parses sequence participants and messages", () => {
     const diagram = parseMermaidDiagram(`
 sequenceDiagram

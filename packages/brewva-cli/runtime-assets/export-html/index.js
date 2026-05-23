@@ -82,6 +82,12 @@ function generateThemeVars(themeName) {
     lines.push(`--exportInfoBg: ${themeExport.infoBg ?? derivedColors.infoBg};`);
     return lines.join("\n      ");
 }
+function renderTemplate(template, replacements) {
+    return template.replace(/\{\{([A-Z_]+)\}\}/g, (match, key) => {
+        const replacement = replacements[key];
+        return replacement === undefined ? match : replacement;
+    });
+}
 /**
  * Core HTML generation logic shared by both export functions.
  */
@@ -92,6 +98,7 @@ function generateHtml(sessionData, themeName) {
     const templateJs = readFileSync(join(templateDir, "template.js"), "utf-8");
     const markedJs = readFileSync(join(templateDir, "vendor", "marked.min.js"), "utf-8");
     const hljsJs = readFileSync(join(templateDir, "vendor", "highlight.min.js"), "utf-8");
+    const mermaidJs = readFileSync(join(templateDir, "vendor", "mermaid.min.js"), "utf-8");
     const themeVars = generateThemeVars(themeName);
     const colors = getResolvedThemeColors(themeName);
     const themeExport = getThemeExportColors(themeName);
@@ -102,17 +109,20 @@ function generateHtml(sessionData, themeName) {
     // Base64 encode session data to avoid escaping issues
     const sessionDataBase64 = Buffer.from(JSON.stringify(sessionData)).toString("base64");
     // Build the CSS with theme variables injected
-    const css = templateCss
-        .replace("{{THEME_VARS}}", themeVars)
-        .replace("{{BODY_BG}}", bodyBg)
-        .replace("{{CONTAINER_BG}}", containerBg)
-        .replace("{{INFO_BG}}", infoBg);
-    return template
-        .replace("{{CSS}}", css)
-        .replace("{{JS}}", templateJs)
-        .replace("{{SESSION_DATA}}", sessionDataBase64)
-        .replace("{{MARKED_JS}}", markedJs)
-        .replace("{{HIGHLIGHT_JS}}", hljsJs);
+    const css = renderTemplate(templateCss, {
+        THEME_VARS: themeVars,
+        BODY_BG: bodyBg,
+        CONTAINER_BG: containerBg,
+        INFO_BG: infoBg,
+    });
+    return renderTemplate(template, {
+        CSS: css,
+        JS: templateJs,
+        SESSION_DATA: sessionDataBase64,
+        MARKED_JS: markedJs,
+        HIGHLIGHT_JS: hljsJs,
+        MERMAID_JS: mermaidJs,
+    });
 }
 /** Built-in tool names that have custom rendering in template.js */
 const BUILTIN_TOOLS = new Set(["exec", "read", "write", "edit", "ls", "find", "grep"]);

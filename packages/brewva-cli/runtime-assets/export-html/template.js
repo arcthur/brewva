@@ -1422,8 +1422,7 @@
         messagesEl.innerHTML = '';
         messagesEl.appendChild(fragment);
 
-        // Use setTimeout(0) to ensure DOM is fully laid out before scrolling
-        setTimeout(() => {
+        const scrollAfterLayout = () => {
           const content = document.getElementById('content');
           if (scrollMode === 'bottom') {
             content.scrollTop = content.scrollHeight;
@@ -1440,7 +1439,12 @@
               }
             }
           }
-        }, 0);
+        };
+
+        void renderMermaidDiagrams(messagesEl).finally(() => {
+          // Use setTimeout(0) to ensure DOM is fully laid out before scrolling
+          setTimeout(scrollAfterLayout, 0);
+        });
       }
 
       // ============================================================
@@ -1452,6 +1456,76 @@
         return text.replace(/<(?=[a-zA-Z\/])/g, '&lt;');
       }
 
+      function isMermaidLanguage(lang) {
+        return typeof lang === 'string' && lang.trim().toLowerCase().split(/\s+/)[0] === 'mermaid';
+      }
+
+      function renderMermaidBlock(source) {
+        return `<pre class="mermaid brewva-mermaid">${escapeHtml(source)}</pre>`;
+      }
+
+      let mermaidInitialized = false;
+      let mermaidRuntimeUnavailable = false;
+
+      function readCssVariable(name, fallback) {
+        const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return value || fallback;
+      }
+
+      function initializeMermaidRuntime() {
+        if (mermaidInitialized) {
+          return true;
+        }
+
+        if (mermaidRuntimeUnavailable || !window.mermaid) {
+          return false;
+        }
+
+        try {
+          window.mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: 'strict',
+            suppressErrorRendering: true,
+            theme: 'base',
+            maxTextSize: 100000,
+            maxEdges: 500,
+            themeVariables: {
+              background: 'transparent',
+              primaryColor: readCssVariable('--exportCardBg', '#20242c'),
+              primaryTextColor: readCssVariable('--text', '#f2f2f2'),
+              lineColor: readCssVariable('--muted', '#a8a8a8'),
+              textColor: readCssVariable('--text', '#f2f2f2'),
+            },
+          });
+          mermaidInitialized = true;
+          return true;
+        } catch (error) {
+          mermaidRuntimeUnavailable = true;
+          console.warn('Mermaid runtime initialization failed; leaving source blocks visible.', error);
+          return false;
+        }
+      }
+
+      async function renderMermaidDiagrams(root) {
+        if (!initializeMermaidRuntime()) {
+          return;
+        }
+
+        const nodes = Array.from(root.querySelectorAll('pre.brewva-mermaid:not([data-processed="true"])'));
+        if (nodes.length === 0) {
+          return;
+        }
+
+        try {
+          await window.mermaid.run({
+            nodes,
+            suppressErrors: true,
+          });
+        } catch (error) {
+          console.warn('Mermaid rendering failed; leaving source blocks visible.', error);
+        }
+      }
+
       // Configure marked with syntax highlighting and HTML escaping for text
       marked.use({
         breaks: true,
@@ -1461,6 +1535,10 @@
           code(token) {
             const code = token.text;
             const lang = token.lang;
+            if (isMermaidLanguage(lang)) {
+              return renderMermaidBlock(code);
+            }
+
             let highlighted;
             if (lang && hljs.getLanguage(lang)) {
               try {
