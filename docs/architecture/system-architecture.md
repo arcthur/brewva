@@ -189,6 +189,11 @@ Brewva provides durable semantics for:
 - linked tool outcomes
 - rollback-bearing mutation receipts where supported
 
+Source edits preserve this boundary. `source_patch_prepare` is validation and
+planning only; `source_patch_apply` is the single source mutation gate, records
+the rollback-bearing `PatchSet`, and is the path used by real LSP
+`WorkspaceEdit` writes and worker-result adoption.
+
 Brewva does not currently provide a stable contract for generalized
 compensation graphs, automatic partial-failure repair across delegated runs,
 or default-path backpressure guarantees across the broader control plane.
@@ -236,8 +241,9 @@ compatibility story.
   admission pipeline.
 - `@brewva/brewva-tools`: family-sliced managed tool adapters, centralized
   managed-tool capability registry, capability-scoped runtime facades,
-  controlled runtime-port helpers, and default bundle assembly. It does not own
-  hosted orchestration or model routing policy.
+  controlled runtime-port helpers, source snapshot and patch-plan gates, real
+  LSP adapters, and default bundle assembly. It does not own hosted
+  orchestration or model routing policy.
 - `@brewva/brewva-gateway`: hosted sessions, daemon, hosted extensions,
   subagents, local control-plane orchestration, hosted provider execution,
   cache-aware request shaping, and LLM-driven compaction.

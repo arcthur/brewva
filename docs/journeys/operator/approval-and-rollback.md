@@ -26,7 +26,7 @@ effect commitment, explicit approval, exact resume, and rollback surfaces.
 - tool access and effect-boundary classification
 - effect-commitment admission
 - operator approval and exact resume
-- `workspace_patchset` preparation and `PatchSet` rollback
+- anchored `SourcePatchPlan` apply and `PatchSet` rollback
 
 ## Out Of Scope
 
@@ -42,7 +42,7 @@ flowchart TD
   A["Tool invocation"] --> B["KernelToolAuthorizer classifies boundary"]
   B --> C{"Boundary result"}
   C -->|Safe| D["Execute directly"]
-  C -->|Effectful with workspace_patchset preparation| E["Execute directly and record mutation receipt"]
+  C -->|Effectful with source patch preparation| E["source_patch_apply records mutation receipt"]
   C -->|Effectful approval-bound| F["Create effect_commitment request"]
   F --> G["Operator desk / channel approval"]
   G --> H{"Decision"}
@@ -71,9 +71,9 @@ flowchart TD
    `effectCommitmentRequestId`, original `toolCallId`, and canonical argument
    identity.
 6. Approval is consumed only after a durable linked tool result is recorded.
-7. For workspace patchset mutations, the runtime prepares a patch anchor before
-   execution and only treats the result as reversible after the recorded
-   mutation receipt contains a rollback handle.
+7. Source mutations prepare a `SourcePatchPlan` before execution and only
+   mutate through `source_patch_apply`. The result is reversible only after the
+   recorded mutation receipt links a `PatchSet` and rollback artifact.
 
 ## Execution Semantics
 
@@ -96,7 +96,8 @@ flowchart TD
 - if an external effect completes before durable observation is recorded, the
   path still carries at-least-once semantics; backends should treat the request
   id as an idempotency key whenever possible
-- `rollback_last_patch` only covers tracked `PatchSet` artifacts
+- `rollback_last_patch` only covers tracked `PatchSet` artifacts, including
+  source patches that recorded rollback artifacts during apply
 - `rollbackLastMutation(...)` is the receipt-aware rollback surface and returns
   an explicit no-candidate result when no rollback receipt exists
 
@@ -123,7 +124,11 @@ flowchart TD
 - Tool authorizer: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
 - Tool transaction log: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
 - Effect-commitment desk: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- `PatchSet` rollback: `packages/brewva-runtime/src/protocol.ts`
+- `PatchSet` rollback: `packages/brewva-runtime/src/protocol/types/patch.ts`
+- Source patch protocol:
+  `packages/brewva-runtime/src/protocol/types/source-patch.ts`
+- Source patch gate:
+  `packages/brewva-tools/src/families/navigation/source-patch.ts`
 - Receipt-aware rollback: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
 - Rollback tool: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 

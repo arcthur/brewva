@@ -53,11 +53,28 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
   ]),
-  read_spans: metadata("base", "workspace_read", [
+  source_read: metadata("base", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "capabilities.tools.outputs.observed",
     "capabilities.tools.readPath.discoveryObserved",
+    "capabilities.tools.sourcePatch.snapshots.record",
+  ]),
+  resource_read: metadata("base", "workspace_read", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.tools.sourcePatch.resources.read",
+  ]),
+  source_patch_prepare: metadata("skill", "workspace_patch", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.tools.sourcePatch.plans.prepare",
+    "capabilities.tools.sourcePatch.staleRecovery.record",
+  ]),
+  source_patch_apply: metadata("skill", "workspace_patch", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.tools.sourcePatch.plans.apply",
   ]),
   look_at: metadata("base", "workspace_read", [
     "capabilities.events.records.query",
@@ -238,10 +255,12 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   ]),
   tape_search: metadata("skill", "runtime_observe", ["capabilities.tape.search.search"]),
   task_view_state: metadata("control_plane", "runtime_observe", ["capabilities.task.state.get"]),
-  ast_grep_search: metadata("skill", "workspace_read"),
-  ast_grep_replace: metadata("skill", "workspace_patch"),
   ledger_query: metadata("control_plane", "runtime_observe", ["capabilities.ledger.store.query"]),
-  lsp_find_references: metadata("skill", "workspace_read", [
+  lsp_status: metadata("base", "workspace_read", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+  ]),
+  lsp_hover: metadata("skill", "workspace_read", [
     "capabilities.tools.parallel.acquireAsync",
     "capabilities.tools.parallel.release",
     "capabilities.tools.lifecycle.parallelRead",
@@ -250,7 +269,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.observed",
     "capabilities.tools.readPath.discoveryObserved",
   ]),
-  lsp_goto_definition: metadata("skill", "workspace_read", [
+  lsp_definition: metadata("skill", "workspace_read", [
     "capabilities.tools.parallel.acquireAsync",
     "capabilities.tools.parallel.release",
     "capabilities.tools.lifecycle.parallelRead",
@@ -259,15 +278,50 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.observed",
     "capabilities.tools.readPath.discoveryObserved",
   ]),
-  ast_prepare_rename: metadata("skill", "workspace_read", [
+  lsp_references: metadata("skill", "workspace_read", [
+    "capabilities.tools.parallel.acquireAsync",
+    "capabilities.tools.parallel.release",
+    "capabilities.tools.lifecycle.parallelRead",
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "capabilities.tools.outputs.observed",
+    "capabilities.tools.readPath.discoveryObserved",
   ]),
-  ast_rename_in_file: metadata("skill", "workspace_patch", [
+  lsp_type_definition: metadata("skill", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
-    "capabilities.tools.outputs.observed",
+  ]),
+  lsp_implementation: metadata("skill", "workspace_read", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+  ]),
+  lsp_rename: metadata("skill", "workspace_patch", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.tools.sourcePatch.snapshots.record",
+    "capabilities.tools.sourcePatch.plans.prepare",
+    "capabilities.tools.sourcePatch.staleRecovery.record",
+  ]),
+  lsp_file_rename: metadata("skill", "workspace_patch", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.tools.sourcePatch.snapshots.record",
+    "capabilities.tools.sourcePatch.plans.prepare",
+    "capabilities.tools.sourcePatch.staleRecovery.record",
+  ]),
+  lsp_code_action: metadata("skill", "workspace_patch", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.tools.sourcePatch.snapshots.record",
+    "capabilities.tools.sourcePatch.plans.prepare",
+    "capabilities.tools.sourcePatch.staleRecovery.record",
+  ]),
+  lsp_format: metadata("skill", "workspace_patch", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.tools.sourcePatch.snapshots.record",
+    "capabilities.tools.sourcePatch.plans.prepare",
+    "capabilities.tools.sourcePatch.staleRecovery.record",
   ]),
   output_search: metadata("skill", "workspace_read", [
     "capabilities.events.records.list",
@@ -291,7 +345,12 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.session.workerResults.merge",
   ]),
   worker_results_apply: metadata("skill", "workspace_patch", [
-    "capabilities.session.workerResults.applyMerged",
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.session.workerResults.list",
+    "capabilities.tools.sourcePatch.snapshots.record",
+    "capabilities.tools.sourcePatch.plans.prepare",
+    "capabilities.tools.sourcePatch.plans.apply",
   ]),
   schedule_intent: metadata("skill", "schedule_mutation", [
     "capabilities.schedule.intents.getProjectionSnapshot",

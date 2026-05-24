@@ -114,6 +114,7 @@ Every accepted decision inherits these rules:
 
 ### Projection And Tool Proofs
 
+- [anchored-edit-lsp-resource-plane](./anchored-edit-lsp-resource-plane.md)
 - [managed-tool-capability-proof](./managed-tool-capability-proof.md)
 - [projection-admission](./projection-admission.md)
 

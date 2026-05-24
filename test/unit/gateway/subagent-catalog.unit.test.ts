@@ -118,7 +118,7 @@ describe("subagent delegation catalog", () => {
     const verifierTools = catalog.envelopes.get("verifier-runner")?.managedToolNames ?? [];
     const workerTools = catalog.envelopes.get("worker")?.managedToolNames ?? [];
 
-    expect(navigatorTools).toEqual(expect.arrayContaining(["grep", "read_spans", "code_digest"]));
+    expect(navigatorTools).toEqual(expect.arrayContaining(["grep", "source_read", "code_digest"]));
     expect(navigatorTools).not.toContain("agent_send");
     expect(navigatorTools).not.toContain("knowledge_search");
     expect(navigatorTools).not.toContain("recall_search");
@@ -149,7 +149,7 @@ describe("subagent delegation catalog", () => {
       'name: "security-explorer"',
       'description: "Workspace security explorer"',
       'extends: "explorer"',
-      'tools: ["grep", "read_spans"]',
+      'tools: ["grep", "source_read"]',
       'modelPreset: "high-reasoning"',
       'reasoningEffort: "high"',
       "---",
@@ -171,7 +171,7 @@ describe("subagent delegation catalog", () => {
       fallbackResultMode: "consult",
       modelPreset: "high-reasoning",
       reasoningEffort: "high",
-      managedToolNames: ["grep", "read_spans"],
+      managedToolNames: ["grep", "source_read"],
       executorPreamble:
         "Operate as an explorer. Use evidence to make a bounded judgment, preserve counterevidence, and recommend the parent's next decision.",
       instructionsMarkdown: "Focus on trust boundaries, credential exposure, and misuse paths.",

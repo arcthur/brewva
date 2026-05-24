@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { InternalHostPlugin } from "../host-api/plugin.js";
 import { type BrewvaPromptTemplate, loadBrewvaPromptTemplates } from "../prompt/templates.js";
+import type { BrewvaResourceProvider } from "./resource-types.js";
 import { discoverHostedSkills } from "./skill-discovery.js";
 
 export interface BrewvaHostedSkill {
@@ -46,6 +47,8 @@ export interface BrewvaHostedResourceLoader {
   getProjectInstructions(): BrewvaProjectInstructionSet;
   getProjectInstructionsForTarget(targetPath: string): BrewvaProjectInstructionSet;
   getTargetOnlyProjectInstructions(targetPath: string): BrewvaProjectInstructionSet;
+  getResourceProviders(): readonly BrewvaResourceProvider[];
+  registerResourceProvider(provider: BrewvaResourceProvider): () => void;
   /** Hosted adapters may override this with operator-authored session instructions. */
   getCustomInstructions(): string | undefined;
   /** Hosted adapters may override this with append-only session instruction overlays. */
@@ -235,6 +238,7 @@ class InMemoryHostedResourceLoader implements BrewvaHostedResourceLoader {
     files: [],
     diagnostics: [],
   };
+  #resourceProviders = new Map<string, BrewvaResourceProvider>();
 
   constructor(input: {
     cwd: string;
@@ -283,6 +287,19 @@ class InMemoryHostedResourceLoader implements BrewvaHostedResourceLoader {
     });
   }
 
+  getResourceProviders(): readonly BrewvaResourceProvider[] {
+    return [...this.#resourceProviders.values()];
+  }
+
+  registerResourceProvider(provider: BrewvaResourceProvider): () => void {
+    this.#resourceProviders.set(provider.scheme, provider);
+    return () => {
+      if (this.#resourceProviders.get(provider.scheme) === provider) {
+        this.#resourceProviders.delete(provider.scheme);
+      }
+    };
+  }
+
   getCustomInstructions(): string | undefined {
     return undefined;
   }
@@ -328,4 +345,12 @@ export async function createHostedResourceLoader(input: {
   const loader = new InMemoryHostedResourceLoader(input);
   await loader.reload();
   return loader;
+}
+
+export function createEmptyHostedResourceLoader(input: {
+  cwd: string;
+  agentDir: string;
+  runtimePlugins?: readonly InternalHostPlugin[];
+}): BrewvaHostedResourceLoader {
+  return new InMemoryHostedResourceLoader(input);
 }

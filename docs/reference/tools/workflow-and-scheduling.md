@@ -9,13 +9,15 @@ workflow status.
 
 These tools coordinate work over runtime receipts. They do not widen the
 runtime transaction boundary beyond the current authoritative action.
+Worker-result patch adoption prepares or applies `SourcePatchPlan` data and
+must not write source files around `source_patch_apply`.
 
 ## Surfaces
 
 - follow-up and schedule intent
 - resource lease request and cancellation
 - session compaction
-- worker result merge and apply
+- worker result merge and SourcePatchPlan-backed apply
 - task spec, item, blocker, acceptance, and state views
 - tape handoff, information, and search
 - ledger, observability, cost, and iteration-fact inspection

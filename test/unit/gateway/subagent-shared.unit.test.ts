@@ -319,7 +319,7 @@ describe("subagent shared execution resolution", () => {
         'name: "security-explorer"',
         'description: "Workspace security explorer"',
         'extends: "explorer"',
-        'tools: ["grep", "read_spans"]',
+        'tools: ["grep", "source_read"]',
         "---",
         "Focus on security-relevant evidence.",
       ].join("\n"),
@@ -339,7 +339,7 @@ describe("subagent shared execution resolution", () => {
     expect(resolved.delegate).toBe("security-explorer");
     expect(resolved.target.agentSpecName).toBe("security-explorer");
     expect(resolved.target.envelopeName).toBe("explorer-readonly");
-    expect(resolved.target.managedToolNames).toEqual(["grep", "read_spans"]);
+    expect(resolved.target.managedToolNames).toEqual(["grep", "source_read"]);
   });
 
   test("resolveDelegationTarget rejects legacy workspace envelope configs", async () => {
@@ -354,7 +354,7 @@ describe("subagent shared execution resolution", () => {
           name: "tight-explorer",
           extends: "explorer-readonly",
           description: "Narrowed explorer envelope",
-          managedToolNames: ["grep", "read_spans", "look_at"],
+          managedToolNames: ["grep", "source_read", "look_at"],
           defaultContextBudget: {
             maxTurnTokens: 3200,
           },

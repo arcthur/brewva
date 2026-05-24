@@ -1,6 +1,6 @@
 import type { JsonValue } from "./foundation.js";
 
-export type PatchFileAction = "add" | "modify" | "delete" | (string & {});
+export type PatchFileAction = "add" | "modify" | "delete" | "rename" | (string & {});
 
 export interface PatchFileChange {
   readonly path: string;
@@ -23,6 +23,15 @@ export interface PatchSet {
   readonly createdAt?: number;
   readonly summary?: string;
   readonly status?: string;
+  readonly sourcePatchPlanId?: string;
+  readonly sourceSnapshotIds?: readonly string[];
+  readonly preflight?: {
+    readonly ok: boolean;
+    readonly staleRecovered?: boolean;
+    readonly generatedFileRejected?: boolean;
+    readonly reason?: string;
+  };
+  readonly rollbackArtifactRef?: string;
   changes: PatchFileChange[];
 }
 

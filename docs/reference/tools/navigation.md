@@ -6,19 +6,18 @@ search, and output-artifact space.
 ## Boundary
 
 Most navigation tools are read-only and produce inspection evidence rather than
-approval receipts. Structural source-change tools in this family, such as
-AST-backed replacement or rename helpers, still go through runtime capability
-checks and receipt recording; the family boundary does not bypass mutation
-governance.
+approval receipts. Source-changing navigation helpers must prepare a
+`SourcePatchPlan`; `source_patch_apply` is the only source mutation gate.
 
 Representative surfaces:
 
 - browser state, screenshots, PDFs, and snapshots
-- grep, search-advisor recovery, output search, and source-intelligence digest
-- language-server diagnostics/references/definitions and rename preparation
+- grep, search-advisor recovery, output search, and hash-anchored `source_read`
+- `brewva-resource:///` reads through `resource_read`
+- real language-server status, diagnostics, references, definitions, and edit
+  preparation
 - multi-language source outline, digest, surface, dependency, cycle, caller, and callee views
-- structural search
-- span reads and path-aware file inspection
+- `source_patch_prepare` and `source_patch_apply` for anchored multi-file edits
 - git status, diff, and log inspection
 
 ## Scope
@@ -39,5 +38,5 @@ so symlinks cannot disguise a shallow host root.
 
 Navigation failures should return explicit diagnostics and avoid mutating
 session state beyond replay-visible tool result records. Source-changing
-navigation helpers must surface denial, defer, or failure through the same
-runtime receipt path as other effect-bearing tools.
+navigation helpers must surface denial, defer, or failure through source patch
+snapshot, preflight, and apply receipts.

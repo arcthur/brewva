@@ -66,10 +66,13 @@ import type {
   DecisionReceipt,
   EffectCommitmentProposal,
 } from "@brewva/brewva-runtime/protocol";
+import type { WorkerMergeReport, WorkerResult } from "@brewva/brewva-runtime/protocol";
 import type {
-  WorkerApplyReport,
-  WorkerMergeReport,
-  WorkerResult,
+  SourcePatchApplyResult,
+  SourcePatchPlan,
+  SourcePatchStaleRecoveryRecord,
+  SourceResourceDescriptor,
+  SourceSnapshot,
 } from "@brewva/brewva-runtime/protocol";
 import type { ManagedExecProcessRegistryRuntime } from "../families/execution/exec-process-registry/runtime.js";
 import type { BoxPlane } from "../internal/box/index.js";
@@ -148,9 +151,6 @@ export interface BrewvaToolRuntimeCommandPort {
       compactFailed(input: unknown): unknown;
       compactRequestFailed(input: unknown): unknown;
       compactRequested(input: unknown): unknown;
-    };
-    readonly workerResults: {
-      applyMerged(sessionId: string, input?: unknown): WorkerApplyReport;
     };
   };
   readonly tape: {
@@ -239,6 +239,21 @@ export interface BrewvaToolRuntimeCommandPort {
         restoredPaths: string[];
         failedPaths: string[];
         reason?: string;
+      };
+    };
+    readonly sourcePatch: {
+      readonly snapshots: {
+        record(sessionId: string, input: SourceSnapshot): unknown;
+      };
+      readonly plans: {
+        prepare(sessionId: string, input: SourcePatchPlan): unknown;
+        apply(sessionId: string, input: SourcePatchApplyResult): unknown;
+      };
+      readonly staleRecovery: {
+        record(sessionId: string, input: SourcePatchStaleRecoveryRecord): unknown;
+      };
+      readonly resources: {
+        read(sessionId: string, input: SourceResourceDescriptor): unknown;
       };
     };
     readonly resourceLeases: {

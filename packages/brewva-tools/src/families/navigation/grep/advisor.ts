@@ -12,7 +12,7 @@ import type {
   GrepSuggestionMode,
 } from "./types.js";
 
-const GREP_LOCATION_PATTERN = /^([^:\n]+):\d+(?::\d+)?(?:\s|:|$)/u;
+const GREP_LOCATION_PATTERN = /^([^:\n]+):(?:L)?\d+(?:@[A-Za-z0-9_-]+)?(?::|\||\s|$)/u;
 const GREP_SOURCE_SUGGESTION_LIMIT = 3;
 const GREP_MAX_SUGGESTIONS = 5;
 

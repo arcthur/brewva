@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createProcessTool } from "@brewva/brewva-tools/execution";
-import { createReadSpansTool } from "@brewva/brewva-tools/navigation";
+import { createSourceReadTool } from "@brewva/brewva-tools/navigation";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
   const textPart = result.content.find(
@@ -13,9 +13,9 @@ function extractTextContent(result: { content: Array<{ type: string; text?: stri
 }
 
 describe("managed Brewva tool schemas", () => {
-  test("read_spans exposes a canonical schema without legacy alias paths", async () => {
+  test("source_read exposes a canonical schema without legacy alias paths", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-managed-tool-schema-"));
-    const tool = createReadSpansTool();
+    const tool = createSourceReadTool();
 
     const parameters = tool.parameters as {
       anyOf?: unknown;
@@ -28,15 +28,14 @@ describe("managed Brewva tool schemas", () => {
     expect(parameters.type).toBe("object");
     expect(Object.hasOwn(parameters, "anyOf")).toBe(false);
     expect(Object.hasOwn(parameters, "allOf")).toBe(false);
-    expect(Object.hasOwn(parameters.properties ?? {}, "file_path")).toBe(true);
-    expect(Object.hasOwn(parameters.properties ?? {}, "filePath")).toBe(false);
-    expect(parameters.required).toEqual(["file_path", "spans"]);
+    expect(Object.hasOwn(parameters.properties ?? {}, "uri")).toBe(true);
+    expect(Object.hasOwn(parameters.properties ?? {}, "file_path")).toBe(false);
+    expect(parameters.required).toEqual(["uri"]);
 
     const result = await tool.execute(
       "tc-read-spans-managed-schema",
       {
-        file_path: "missing.ts",
-        spans: [{ start_line: 1, end_line: 2 }],
+        uri: "missing.ts",
       } as never,
       undefined,
       undefined,

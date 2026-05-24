@@ -105,7 +105,7 @@ describe("parallel-read utils", () => {
       } as unknown as BrewvaToolRuntime,
       "session-telemetry",
       {
-        toolName: "lsp_find_references",
+        toolName: "lsp_references",
         operation: "find_references",
         batchSize: 8,
         mode: "parallel",
@@ -120,7 +120,7 @@ describe("parallel-read utils", () => {
     expect(calls).toHaveLength(0);
 
     recordParallelReadTelemetry(runtime, undefined, {
-      toolName: "lsp_find_references",
+      toolName: "lsp_references",
       operation: "find_references",
       batchSize: 8,
       mode: "parallel",
@@ -134,7 +134,7 @@ describe("parallel-read utils", () => {
     expect(calls).toHaveLength(0);
 
     recordParallelReadTelemetry(runtime, "session-telemetry", {
-      toolName: "lsp_find_references",
+      toolName: "lsp_references",
       operation: "find_references",
       batchSize: 8,
       mode: "parallel",
@@ -151,7 +151,7 @@ describe("parallel-read utils", () => {
       sessionId: "session-telemetry",
       type: "tool_parallel_read",
       payload: {
-        toolName: "lsp_find_references",
+        toolName: "lsp_references",
         operation: "find_references",
         batchSize: 8,
         mode: "parallel",

@@ -102,7 +102,7 @@ describe("subagent fork context", () => {
           role: "toolResult",
           timestamp: 3,
           toolCallId: "tc-1",
-          toolName: "read_spans",
+          toolName: "source_read",
           content: [{ type: "text", text: "raw tool output" }],
           isError: false,
         }),

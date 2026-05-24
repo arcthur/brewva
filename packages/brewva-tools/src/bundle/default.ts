@@ -23,7 +23,6 @@ import {
   createWorkbenchUndoEvictTool,
 } from "../families/memory/api.js";
 import {
-  createAstGrepTools,
   createBrowserTools,
   createGitDiffTool,
   createGitLogTool,
@@ -32,7 +31,9 @@ import {
   createLookAtTool,
   createLspTools,
   createOutputSearchTool,
-  createReadSpansTool,
+  createResourceReadTool,
+  createSourcePatchTools,
+  createSourceReadTool,
   createSourceIntelligenceTools,
 } from "../families/navigation/api.js";
 import { createDiscoverSkillsTool } from "../families/skills/api.js";
@@ -64,8 +65,9 @@ export function buildDefaultBundledBrewvaTools(
   const tools = [
     ...createLspTools({ runtime }),
     ...createSourceIntelligenceTools({ runtime }),
-    ...createAstGrepTools(),
-    createReadSpansTool({ runtime }),
+    createSourceReadTool({ runtime }),
+    ...createSourcePatchTools({ runtime }),
+    createResourceReadTool({ runtime }),
     createLookAtTool({ runtime }),
     createGrepTool({ runtime }),
     createDiscoverSkillsTool({ runtime }),

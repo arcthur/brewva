@@ -1,288 +1,978 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { delimiter, extname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import type { SourcePatchIntent } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolRuntime } from "../../contracts/index.js";
+import {
+  formatSourceAnchor,
+  prepareAndStoreSourcePatchPlan,
+  recordSourceSnapshot,
+  toSourceFileResourceUri,
+} from "../../internal/source-patch-gate.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
-import { getToolSessionId, resolveParallelReadConfig } from "../../runtime-port/parallel-read.js";
-import { resolveScopedPath, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
+import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
-  failTextResult,
-  inconclusiveTextResult,
-  textResult,
-  withVerdict,
-} from "../../utils/result.js";
-import { LSP_DIAGNOSTIC_SEVERITIES, runTscDiagnostics } from "./lsp/diagnostics.js";
-import { createAstRenameTools } from "./lsp/rename-tools.js";
+  resolveScopedPath,
+  resolveToolTargetScope,
+  type ToolTargetScope,
+} from "../../runtime-port/target-scope.js";
+import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
 import {
-  loadParsingRuntime,
-  readAndParse,
-  recordLspDiscoveryObservation,
-  type AstScanContext,
-} from "./lsp/runtime.js";
+  type LspPosition,
+  type LspRange,
+  type LspTextEdit,
+  type LspWorkspaceEdit,
+} from "./lsp-server/client.js";
 import {
-  findDefinitionsInWorkspace,
-  findReferencesInWorkspace,
-  workspaceMatchesToLines,
-} from "./lsp/workspace-scan.js";
-import { isParsableFile } from "./parsing/language.js";
-import { collectObservedPathsFromLocationLines } from "./read-path-discovery.js";
+  lspWorkspaceServerManager,
+  shutdownLspWorkspaceServerManager,
+  type LspWorkspaceClientLease,
+} from "./lsp-server/manager.js";
+
+export { shutdownLspWorkspaceServerManager };
+
+type LspToolName =
+  | "lsp_status"
+  | "lsp_hover"
+  | "lsp_definition"
+  | "lsp_references"
+  | "lsp_type_definition"
+  | "lsp_implementation"
+  | "lsp_diagnostics"
+  | "lsp_rename"
+  | "lsp_file_rename"
+  | "lsp_code_action"
+  | "lsp_format";
+
+interface LspServerResolution {
+  readonly available: boolean;
+  readonly command?: string;
+  readonly args: readonly string[];
+  readonly source?: "workspace_config" | "workspace" | "path";
+  readonly reason?: string;
+}
+
+interface TextEditDocument {
+  readonly uri: string;
+  readonly edits: readonly LspTextEdit[];
+}
+
+const POSITION_SCHEMA = {
+  uri: Type.String({ minLength: 1 }),
+  line: Type.Integer({ minimum: 0 }),
+  character: Type.Integer({ minimum: 0 }),
+} as const;
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function splitCommand(value: string): {
+  readonly command: string;
+  readonly args: readonly string[];
+} {
+  const parts = value.split(/\s+/u).filter(Boolean);
+  return {
+    command: parts[0] ?? value,
+    args: parts.slice(1),
+  };
+}
+
+function readJsonFile(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function commandFromConfigValue(value: unknown):
+  | {
+      readonly command: string;
+      readonly args: readonly string[];
+    }
+  | undefined {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return splitCommand(value.trim());
+  }
+  if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+    const [command, ...args] = value;
+    return command ? { command, args } : undefined;
+  }
+  const record = asRecord(value);
+  const command = typeof record?.command === "string" ? record.command : undefined;
+  const args = Array.isArray(record?.args)
+    ? record.args.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  return command ? { command, args } : undefined;
+}
+
+function readWorkspaceConfiguredServer(cwd: string):
+  | {
+      readonly command: string;
+      readonly args: readonly string[];
+    }
+  | undefined {
+  const brewvaConfig = commandFromConfigValue(readJsonFile(resolve(cwd, ".brewva/lsp.json")));
+  if (brewvaConfig) {
+    return brewvaConfig;
+  }
+  const rootConfig = commandFromConfigValue(readJsonFile(resolve(cwd, "brewva.lsp.json")));
+  if (rootConfig) {
+    return rootConfig;
+  }
+  const packageJson = asRecord(readJsonFile(resolve(cwd, "package.json")));
+  const brewva = asRecord(packageJson?.brewva);
+  const lsp = asRecord(brewva?.lsp);
+  return commandFromConfigValue(lsp);
+}
+
+function findOnPath(command: string): string | undefined {
+  for (const entry of (process.env.PATH ?? "").split(delimiter)) {
+    const candidate = resolve(entry, command);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function resolveTypeScriptLanguageServer(cwd: string): LspServerResolution {
+  const configured = readWorkspaceConfiguredServer(cwd);
+  if (configured) {
+    return {
+      available: true,
+      command: configured.command,
+      args: configured.args,
+      source: "workspace_config",
+    };
+  }
+
+  const workspaceServer = resolve(cwd, "node_modules/.bin/typescript-language-server");
+  if (existsSync(workspaceServer)) {
+    return {
+      available: true,
+      command: workspaceServer,
+      args: ["--stdio"],
+      source: "workspace",
+    };
+  }
+
+  const pathServer = findOnPath("typescript-language-server");
+  if (pathServer) {
+    return {
+      available: true,
+      command: pathServer,
+      args: ["--stdio"],
+      source: "path",
+    };
+  }
+
+  return {
+    available: false,
+    args: [],
+    reason: "typescript_language_server_unavailable",
+  };
+}
+
+function unavailable(toolName: LspToolName, resolution: LspServerResolution) {
+  return inconclusiveTextResult(
+    [
+      `[${toolName}]`,
+      "status: unavailable",
+      `reason: ${resolution.reason ?? "lsp_request_transport_unavailable"}`,
+      "next_step: configure .brewva/lsp.json or install typescript-language-server in the workspace.",
+    ].join("\n"),
+    {
+      ok: false,
+      status: "unavailable",
+      reason: resolution.reason ?? "lsp_request_transport_unavailable",
+      stderr: null,
+    },
+  );
+}
+
+function languageIdForPath(path: string): string {
+  switch (extname(path).toLowerCase()) {
+    case ".tsx":
+      return "typescriptreact";
+    case ".ts":
+      return "typescript";
+    case ".jsx":
+      return "javascriptreact";
+    case ".js":
+    case ".mjs":
+    case ".cjs":
+      return "javascript";
+    case ".json":
+      return "json";
+    default:
+      return "plaintext";
+  }
+}
+
+function uriToPath(uri: string, scope: ToolTargetScope): string | undefined {
+  if (uri.startsWith("file://")) {
+    const path = fileURLToPath(uri);
+    return resolveScopedPath(path, scope) ?? undefined;
+  }
+  if (uri.startsWith("brewva-resource:///file/")) {
+    const path = decodeURIComponent(uri.slice("brewva-resource:///file/".length));
+    return resolveScopedPath(path, scope) ?? undefined;
+  }
+  return resolveScopedPath(uri, scope) ?? undefined;
+}
+
+function pathToLspUri(path: string): string {
+  return pathToFileURL(path).toString();
+}
+
+function lspPosition(line: number, character: number): LspPosition {
+  return { line, character };
+}
+
+function lspRange(input: {
+  readonly startLine: number;
+  readonly startCharacter: number;
+  readonly endLine: number;
+  readonly endCharacter: number;
+}): LspRange {
+  return {
+    start: lspPosition(input.startLine, input.startCharacter),
+    end: lspPosition(input.endLine, input.endCharacter),
+  };
+}
+
+function lineOffsets(text: string): number[] {
+  const offsets = [0];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === "\n") {
+      offsets.push(index + 1);
+    }
+  }
+  return offsets;
+}
+
+function offsetAt(text: string, position: LspPosition): number {
+  const offsets = lineOffsets(text);
+  const lineOffset = offsets[Math.min(position.line, offsets.length - 1)] ?? text.length;
+  return Math.min(text.length, lineOffset + position.character);
+}
+
+function applyTextEdits(text: string, edits: readonly LspTextEdit[]): string {
+  const sorted = [...edits].toSorted((left, right) => {
+    const leftOffset = offsetAt(text, left.range.start);
+    const rightOffset = offsetAt(text, right.range.start);
+    return rightOffset - leftOffset;
+  });
+  let next = text;
+  for (const edit of sorted) {
+    const start = offsetAt(next, edit.range.start);
+    const end = offsetAt(next, edit.range.end);
+    next = `${next.slice(0, start)}${edit.newText}${next.slice(end)}`;
+  }
+  return next;
+}
+
+function isTextEdit(value: unknown): value is LspTextEdit {
+  const record = asRecord(value);
+  const range = asRecord(record?.range);
+  const start = asRecord(range?.start);
+  const end = asRecord(range?.end);
+  return (
+    typeof record?.newText === "string" &&
+    typeof start?.line === "number" &&
+    typeof start.character === "number" &&
+    typeof end?.line === "number" &&
+    typeof end.character === "number"
+  );
+}
+
+function collectTextEditDocuments(edit: LspWorkspaceEdit): TextEditDocument[] {
+  const documents: TextEditDocument[] = [];
+  if (edit.changes) {
+    for (const [uri, edits] of Object.entries(edit.changes)) {
+      documents.push({ uri, edits: edits.filter(isTextEdit) });
+    }
+  }
+  for (const entry of edit.documentChanges ?? []) {
+    const record = asRecord(entry);
+    const textDocument = asRecord(record?.textDocument);
+    const uri = typeof textDocument?.uri === "string" ? textDocument.uri : undefined;
+    const edits = Array.isArray(record?.edits) ? record.edits.filter(isTextEdit) : undefined;
+    if (uri && edits) {
+      documents.push({ uri, edits });
+    }
+  }
+  return documents;
+}
+
+function collectResourceIntents(
+  edit: LspWorkspaceEdit,
+  scope: ToolTargetScope,
+  options?: { readonly skipCreateUris?: ReadonlySet<string> },
+): SourcePatchIntent[] {
+  const intents: SourcePatchIntent[] = [];
+  for (const entry of edit.documentChanges ?? []) {
+    const record = asRecord(entry);
+    if (!record) {
+      continue;
+    }
+    const kind = record?.kind;
+    if (kind === "create" && typeof record.uri === "string") {
+      if (options?.skipCreateUris?.has(record.uri)) {
+        continue;
+      }
+      const path = uriToPath(record.uri, scope);
+      if (path) {
+        intents.push({
+          kind: "create_file",
+          uri: toSourceFileResourceUri(scope, path),
+          content: "",
+        });
+      }
+    }
+    if (kind === "delete" && typeof record.uri === "string") {
+      const path = uriToPath(record.uri, scope);
+      if (path) {
+        intents.push({ kind: "delete_file", uri: toSourceFileResourceUri(scope, path) });
+      }
+    }
+    if (
+      kind === "rename" &&
+      typeof record.oldUri === "string" &&
+      typeof record.newUri === "string"
+    ) {
+      const oldPath = uriToPath(record.oldUri, scope);
+      const newPath = uriToPath(record.newUri, scope);
+      if (oldPath && newPath) {
+        intents.push({
+          kind: "rename_file",
+          uri: toSourceFileResourceUri(scope, oldPath),
+          newUri: toSourceFileResourceUri(scope, newPath),
+        });
+      }
+    }
+  }
+  return intents;
+}
+
+function workspaceEditToIntents(input: {
+  readonly edit: LspWorkspaceEdit;
+  readonly scope: ToolTargetScope;
+  readonly runtime?: BrewvaBundledToolRuntime;
+  readonly sessionId?: string;
+}): SourcePatchIntent[] {
+  const textEditDocuments = collectTextEditDocuments(input.edit);
+  const textEditUris = new Set(
+    textEditDocuments
+      .filter((document) => document.edits.length > 0)
+      .map((document) => document.uri),
+  );
+  const intents = collectResourceIntents(input.edit, input.scope, {
+    skipCreateUris: textEditUris,
+  });
+  for (const document of textEditDocuments) {
+    const path = uriToPath(document.uri, input.scope);
+    if (!path || document.edits.length === 0) {
+      continue;
+    }
+    if (!existsSync(path)) {
+      const content = applyTextEdits("", document.edits);
+      intents.push({
+        kind: "create_file",
+        uri: toSourceFileResourceUri(input.scope, path),
+        content,
+      });
+      continue;
+    }
+    const before = readFileSync(path, "utf8");
+    const after = applyTextEdits(before, document.edits);
+    const snapshot = recordSourceSnapshot({
+      uri: toSourceFileResourceUri(input.scope, path),
+      path,
+      sourceText: before,
+      runtime: input.runtime,
+      sessionId: input.sessionId,
+    });
+    const first = snapshot.anchors[0];
+    const last = snapshot.anchors.at(-1);
+    if (!first || !last) {
+      continue;
+    }
+    intents.push({
+      kind: "replace_anchor",
+      uri: snapshot.uri,
+      snapshotId: snapshot.id,
+      startAnchor: formatSourceAnchor(first),
+      endAnchor: formatSourceAnchor(last),
+      replacement: after,
+    });
+  }
+  return intents;
+}
+
+function formatJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
+async function withClient<T>(input: {
+  readonly scope: ToolTargetScope;
+  readonly resolution: LspServerResolution;
+  readonly fn: (lease: LspWorkspaceClientLease) => Promise<T>;
+}): Promise<
+  | { readonly ok: true; readonly value: T; readonly stderr: string }
+  | { readonly ok: false; readonly error: string; readonly stderr: string }
+> {
+  if (!input.resolution.command) {
+    return { ok: false, error: "missing_lsp_command", stderr: "" };
+  }
+  let stderr = "";
+  try {
+    const value = await lspWorkspaceServerManager().withClient(
+      {
+        command: input.resolution.command,
+        args: input.resolution.args,
+        cwd: input.scope.baseCwd,
+        rootUri: pathToFileURL(input.scope.baseCwd).toString(),
+      },
+      async (lease) => {
+        try {
+          return await input.fn(lease);
+        } finally {
+          stderr = lease.client.stderr;
+        }
+      },
+    );
+    return { ok: true, value, stderr };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      stderr,
+    };
+  }
+}
+
+function openDocumentForUri(
+  lease: LspWorkspaceClientLease,
+  uri: string,
+  scope: ToolTargetScope,
+): string | undefined {
+  const path = uriToPath(uri, scope);
+  if (!path || !existsSync(path)) {
+    return undefined;
+  }
+  const lspUri = pathToLspUri(path);
+  lease.openDocument({
+    uri: lspUri,
+    languageId: languageIdForPath(path),
+    text: readFileSync(path, "utf8"),
+  });
+  return lspUri;
+}
+
+function prepareWorkspaceEditResult(input: {
+  readonly toolName: LspToolName;
+  readonly edit: LspWorkspaceEdit;
+  readonly scope: ToolTargetScope;
+  readonly runtime?: BrewvaBundledToolRuntime;
+  readonly sessionId?: string;
+  readonly summary: string;
+}) {
+  const intents = workspaceEditToIntents({
+    edit: input.edit,
+    scope: input.scope,
+    runtime: input.runtime,
+    sessionId: input.sessionId,
+  });
+  if (intents.length === 0) {
+    return inconclusiveTextResult(`[${input.toolName}]\nstatus: no_edit`, {
+      ok: false,
+      status: "no_edit",
+      edit: input.edit,
+    });
+  }
+  const prepared = prepareAndStoreSourcePatchPlan({
+    edits: intents,
+    scope: input.scope,
+    runtime: input.runtime,
+    sessionId: input.sessionId,
+    summary: input.summary,
+  });
+  const plan = prepared.plan;
+  const body = [
+    `[${input.toolName}]`,
+    `status: ${plan.preflight.ok ? "prepared" : "conflict"}`,
+    `plan_id: ${plan.id}`,
+    `changes: ${plan.changes.length}`,
+    "",
+    plan.preview,
+  ].join("\n");
+  const details = {
+    ok: plan.preflight.ok,
+    status: plan.preflight.ok ? "prepared" : "conflict",
+    planId: plan.id,
+    plan,
+  };
+  return plan.preflight.ok ? textResult(body, details) : failTextResult(body, details);
+}
+
+function createReadRequestTool(input: {
+  readonly runtime?: BrewvaBundledToolRuntime;
+  readonly name: LspToolName;
+  readonly label: string;
+  readonly description: string;
+  readonly method: string;
+  readonly parameters: ToolDefinition["parameters"];
+  buildParams(params: Record<string, unknown>, lspUri: string): unknown;
+}): ToolDefinition {
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(input.runtime, input.name);
+  return define({
+    name: input.name,
+    label: input.label,
+    description: input.description,
+    parameters: input.parameters,
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const requestParams = asRecord(params);
+      if (!requestParams || typeof requestParams.uri !== "string") {
+        return failTextResult(`[${input.name}]\nstatus: failed\nreason: invalid_params`, {
+          ok: false,
+          reason: "invalid_params",
+        });
+      }
+      const requestUri = requestParams.uri;
+      const scope = resolveToolTargetScope(runtime, ctx);
+      const resolution = resolveTypeScriptLanguageServer(scope.baseCwd);
+      if (!resolution.available) {
+        return unavailable(input.name, resolution);
+      }
+      const result = await withClient({
+        scope,
+        resolution,
+        fn: async (lease) => {
+          const lspUri = openDocumentForUri(lease, requestUri, scope);
+          if (!lspUri) {
+            throw new Error("document_not_found");
+          }
+          return await lease.client.request(input.method, input.buildParams(requestParams, lspUri));
+        },
+      });
+      if (!result.ok) {
+        return failTextResult(`[${input.name}]\nstatus: failed\nreason: ${result.error}`, {
+          ok: false,
+          status: "failed",
+          reason: result.error,
+          stderr: result.stderr,
+        });
+      }
+      return textResult(
+        [`[${input.name}]`, "status: ok", "result:", formatJson(result.value)].join("\n"),
+        {
+          ok: true,
+          status: "ok",
+          result: result.value,
+          stderr: result.stderr,
+        },
+      );
+    },
+  });
+}
 
 export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime }): ToolDefinition[] {
-  const lspGotoDefinitionTool = createRuntimeBoundBrewvaToolFactory(
-    options?.runtime,
-    "lsp_goto_definition",
-  );
-  const lspFindReferencesTool = createRuntimeBoundBrewvaToolFactory(
-    options?.runtime,
-    "lsp_find_references",
-  );
-  const lspDiagnosticsTool = createRuntimeBoundBrewvaToolFactory(
+  const statusFactory = createRuntimeBoundBrewvaToolFactory(options?.runtime, "lsp_status");
+  const status = statusFactory.define({
+    name: "lsp_status",
+    label: "LSP Status",
+    description:
+      "Report the real language-server command Brewva will use for this workspace. No AST fallback is used.",
+    parameters: Type.Object({}),
+    async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(statusFactory.runtime, ctx);
+      const resolution = resolveTypeScriptLanguageServer(scope.baseCwd);
+      if (!resolution.available) {
+        return unavailable("lsp_status", resolution);
+      }
+      return textResult(
+        [
+          "[lsp_status]",
+          "status: available",
+          `source: ${resolution.source ?? "unknown"}`,
+          `command: ${resolution.command}`,
+          `args: ${resolution.args.join(" ")}`,
+        ].join("\n"),
+        {
+          ok: true,
+          status: "available",
+          source: resolution.source ?? null,
+          command: resolution.command,
+          args: resolution.args,
+        },
+      );
+    },
+  });
+
+  const positionParams = (params: Record<string, unknown>, lspUri: string) => ({
+    textDocument: { uri: lspUri },
+    position: lspPosition(Number(params.line), Number(params.character)),
+  });
+
+  const referenceParams = (params: Record<string, unknown>, lspUri: string) => ({
+    ...positionParams(params, lspUri),
+    context: { includeDeclaration: params.include_declaration !== false },
+  });
+
+  const diagnosticsFactory = createRuntimeBoundBrewvaToolFactory(
     options?.runtime,
     "lsp_diagnostics",
   );
-
-  const resolveLspScope = (ctx: unknown) => resolveToolTargetScope(options?.runtime, ctx);
-  const resolveLspCwd = (ctx: unknown) => resolveLspScope(ctx).baseCwd;
-  const resolveLspFilePath = (ctx: unknown, filePath: string): string | null =>
-    resolveScopedPath(filePath, resolveLspScope(ctx));
-
-  const lspGotoDefinition = lspGotoDefinitionTool.define({
-    name: "lsp_goto_definition",
-    label: "LSP Go To Definition",
-    description:
-      "AST-based: parse the file with oxc, identify the scoped symbol at the cursor, and search the workspace for top-level declarations of that name. Skips comments, strings, and property accessors. Workspace scan is restricted to .ts/.tsx/.js/.jsx/.mjs/.cjs/.d.ts; declarations in other languages are not visible.",
-    parameters: Type.Object({
-      filePath: Type.String(),
-      line: Type.Number({ minimum: 1 }),
-      character: Type.Number({ minimum: 0 }),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      const targetFilePath = resolveLspFilePath(ctx, params.filePath);
-      if (!targetFilePath) {
-        return failTextResult("Error: file path escapes current task target roots.");
-      }
-      if (!existsSync(targetFilePath)) {
-        return failTextResult(`Error: File not found: ${targetFilePath}`);
-      }
-      if (!isParsableFile(targetFilePath)) {
-        return failTextResult(
-          "Error: lsp_goto_definition only supports .ts, .tsx, .js, .jsx, .mjs, .cjs, .d.ts files.",
-        );
-      }
-      const sessionId = getToolSessionId(ctx);
-      recordLspDiscoveryObservation({
-        runtime: lspGotoDefinitionTool.runtime,
-        sessionId,
-        baseCwd: resolveLspCwd(ctx),
-        toolName: "lsp_goto_definition",
-        evidenceKind: "direct_file_access",
-        observedPaths: [targetFilePath],
-      });
-
-      const parsing = await loadParsingRuntime();
-      const parsed = await readAndParse(targetFilePath);
-      if (!parsed) {
-        return failTextResult(`Error: failed to parse ${targetFilePath}`);
-      }
-      const identifier = parsing.findIdentifierAtPosition(parsed, params.line, params.character);
-      if (!identifier) {
-        return inconclusiveTextResult("No identifier at cursor.");
-      }
-
-      const scan: AstScanContext = {
-        runtime: lspGotoDefinitionTool.runtime,
-        sessionId,
-        toolName: "lsp_goto_definition",
-        config: resolveParallelReadConfig(lspGotoDefinitionTool.runtime),
-      };
-      const matches = await findDefinitionsInWorkspace(
-        resolveLspCwd(ctx),
-        identifier.name,
-        scan,
-        targetFilePath,
-        1,
-      );
-      if (matches.length === 0) {
-        return inconclusiveTextResult(`No definition found for '${identifier.name}'.`);
-      }
-      const lines = workspaceMatchesToLines(matches.slice(0, 20));
-      recordLspDiscoveryObservation({
-        runtime: lspGotoDefinitionTool.runtime,
-        sessionId,
-        baseCwd: resolveLspCwd(ctx),
-        toolName: "lsp_goto_definition",
-        evidenceKind: "symbol_match",
-        observedPaths: collectObservedPathsFromLocationLines({
-          baseCwd: resolveLspCwd(ctx),
-          lines,
-        }),
-      });
-      return textResult(lines.join("\n"), {
-        symbol: identifier.name,
-        count: matches.length,
-      });
-    },
-  });
-
-  const lspFindReferences = lspFindReferencesTool.define({
-    name: "lsp_find_references",
-    label: "LSP Find References",
-    description:
-      "AST-based: parse the file with oxc, identify the scoped symbol at the cursor, and search the workspace for textual occurrences of that identifier (excluding comments, strings, and property names). Cross-file matches are textual; use lsp_diagnostics for type-aware verification. Workspace scan is restricted to .ts/.tsx/.js/.jsx/.mjs/.cjs/.d.ts; references in other languages are not visible.",
-    parameters: Type.Object({
-      filePath: Type.String(),
-      line: Type.Number({ minimum: 1 }),
-      character: Type.Number({ minimum: 0 }),
-      includeDeclaration: Type.Optional(Type.Boolean()),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      const targetFilePath = resolveLspFilePath(ctx, params.filePath);
-      if (!targetFilePath) {
-        return failTextResult("Error: file path escapes current task target roots.");
-      }
-      if (!existsSync(targetFilePath)) {
-        return failTextResult(`Error: File not found: ${targetFilePath}`);
-      }
-      if (!isParsableFile(targetFilePath)) {
-        return failTextResult(
-          "Error: lsp_find_references only supports .ts, .tsx, .js, .jsx, .mjs, .cjs, .d.ts files.",
-        );
-      }
-      const sessionId = getToolSessionId(ctx);
-      recordLspDiscoveryObservation({
-        runtime: lspFindReferencesTool.runtime,
-        sessionId,
-        baseCwd: resolveLspCwd(ctx),
-        toolName: "lsp_find_references",
-        evidenceKind: "direct_file_access",
-        observedPaths: [targetFilePath],
-      });
-
-      const parsing = await loadParsingRuntime();
-      const parsed = await readAndParse(targetFilePath);
-      if (!parsed) {
-        return failTextResult(`Error: failed to parse ${targetFilePath}`);
-      }
-      const identifier = parsing.findIdentifierAtPosition(parsed, params.line, params.character);
-      if (!identifier) {
-        return inconclusiveTextResult("No identifier at cursor.");
-      }
-
-      const scan: AstScanContext = {
-        runtime: lspFindReferencesTool.runtime,
-        sessionId,
-        toolName: "lsp_find_references",
-        config: resolveParallelReadConfig(lspFindReferencesTool.runtime),
-      };
-      let refs = await findReferencesInWorkspace(
-        resolveLspCwd(ctx),
-        identifier.name,
-        scan,
-        500,
-        targetFilePath,
-      );
-      if (params.includeDeclaration === false) {
-        // Every declaration site is also a textual occurrence, so the count of
-        // declarations cannot exceed `refs.length`. Sizing the definition scan
-        // to `refs.length` keeps the filter complete without an arbitrary cap.
-        const defs = await findDefinitionsInWorkspace(
-          resolveLspCwd(ctx),
-          identifier.name,
-          scan,
-          targetFilePath,
-          Math.max(refs.length, 1),
-        );
-        const defPositions = new Set(defs.map((d) => `${d.filePath}:${d.line}:${d.column}`));
-        refs = refs.filter((ref) => !defPositions.has(`${ref.filePath}:${ref.line}:${ref.column}`));
-      }
-      if (refs.length === 0) {
-        return inconclusiveTextResult(`No references found for '${identifier.name}'.`);
-      }
-      const lines = workspaceMatchesToLines(refs.slice(0, 200));
-      recordLspDiscoveryObservation({
-        runtime: lspFindReferencesTool.runtime,
-        sessionId,
-        baseCwd: resolveLspCwd(ctx),
-        toolName: "lsp_find_references",
-        evidenceKind: "symbol_match",
-        observedPaths: collectObservedPathsFromLocationLines({
-          baseCwd: resolveLspCwd(ctx),
-          lines,
-        }),
-      });
-      return textResult(lines.join("\n"), {
-        symbol: identifier.name,
-        total: refs.length,
-      });
-    },
-  });
-
-  const lspDiagnostics = lspDiagnosticsTool.define({
+  const diagnostics = diagnosticsFactory.define({
     name: "lsp_diagnostics",
     label: "LSP Diagnostics",
-    description:
-      "Runs the TypeScript compiler (tsc --noEmit) for full type-aware diagnostics scoped to one file.",
-    parameters: Type.Object({
-      filePath: Type.String(),
-      severity: Type.Optional(
-        buildStringEnumSchema(LSP_DIAGNOSTIC_SEVERITIES, {
-          recommendedValue: "all",
-          guidance:
-            "Use all by default. Narrow to error, warning, information, or hint only when you need a filtered diagnostic slice.",
-        }),
-      ),
-    }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
-      try {
-        const targetFilePath = resolveLspFilePath(ctx, params.filePath);
-        if (!targetFilePath) {
-          return failTextResult("Error: file path escapes current task target roots.");
-        }
-        if (existsSync(targetFilePath)) {
-          recordLspDiscoveryObservation({
-            runtime: lspDiagnosticsTool.runtime,
-            sessionId: getToolSessionId(ctx),
-            baseCwd: resolveLspCwd(ctx),
-            toolName: "lsp_diagnostics",
-            evidenceKind: "direct_file_access",
-            observedPaths: [targetFilePath],
-          });
-        }
-        const severity =
-          typeof params.severity === "string" &&
-          (LSP_DIAGNOSTIC_SEVERITIES as readonly string[]).includes(params.severity)
-            ? params.severity
-            : undefined;
-        const run = await runTscDiagnostics(resolveLspCwd(ctx), targetFilePath, severity);
-        return textResult(
-          run.text,
-          withVerdict(
-            {
-              status: run.status,
-              reason: run.reason ?? null,
-              filePath: targetFilePath,
-              severity: severity ?? "all",
-              exitCode: run.exitCode,
-              filteredLineCount: run.filteredLineCount,
-              diagnosticsCount: run.diagnostics.length,
-              truncated: run.truncated,
-              countsByCode: run.countsByCode,
-              diagnostics: run.diagnostics,
-            },
-            run.status === "unavailable" ? "inconclusive" : undefined,
-          ),
-        );
-      } catch (error) {
-        return failTextResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    description: "Report diagnostics published by a real language server.",
+    parameters: Type.Object({ uri: Type.String({ minLength: 1 }) }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(diagnosticsFactory.runtime, ctx);
+      const resolution = resolveTypeScriptLanguageServer(scope.baseCwd);
+      if (!resolution.available) {
+        return unavailable("lsp_diagnostics", resolution);
       }
+      const result = await withClient({
+        scope,
+        resolution,
+        fn: async (lease) => {
+          const lspUri = openDocumentForUri(lease, params.uri, scope);
+          if (!lspUri) {
+            throw new Error("document_not_found");
+          }
+          return await lease.client.waitForDiagnostics(lspUri);
+        },
+      });
+      if (!result.ok) {
+        return failTextResult(`[lsp_diagnostics]\nstatus: failed\nreason: ${result.error}`, {
+          ok: false,
+          status: "failed",
+          reason: result.error,
+          stderr: result.stderr,
+        });
+      }
+      return textResult(
+        ["[lsp_diagnostics]", "status: ok", "diagnostics:", formatJson(result.value)].join("\n"),
+        { ok: true, status: "ok", diagnostics: result.value, stderr: result.stderr },
+      );
     },
   });
 
-  const [astPrepareRename, astRenameInFile] = createAstRenameTools({
-    runtime: options?.runtime,
-    resolveLspFilePath,
+  const renameFactory = createRuntimeBoundBrewvaToolFactory(options?.runtime, "lsp_rename");
+  const rename = renameFactory.define({
+    name: "lsp_rename",
+    label: "LSP Rename",
+    description:
+      "Request textDocument/rename from a real language server and prepare a SourcePatchPlan. It never mutates directly.",
+    parameters: Type.Object({
+      ...POSITION_SCHEMA,
+      new_name: Type.String({ minLength: 1 }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(renameFactory.runtime, ctx);
+      const resolution = resolveTypeScriptLanguageServer(scope.baseCwd);
+      if (!resolution.available) {
+        return unavailable("lsp_rename", resolution);
+      }
+      const sessionId = getToolSessionId(ctx);
+      const result = await withClient({
+        scope,
+        resolution,
+        fn: async (lease) => {
+          const lspUri = openDocumentForUri(lease, params.uri, scope);
+          if (!lspUri) {
+            throw new Error("document_not_found");
+          }
+          return await lease.client.request("textDocument/rename", {
+            textDocument: { uri: lspUri },
+            position: lspPosition(params.line, params.character),
+            newName: params.new_name,
+          });
+        },
+      });
+      if (!result.ok) {
+        return failTextResult(`[lsp_rename]\nstatus: failed\nreason: ${result.error}`, {
+          ok: false,
+          status: "failed",
+          reason: result.error,
+          stderr: result.stderr,
+        });
+      }
+      return prepareWorkspaceEditResult({
+        toolName: "lsp_rename",
+        edit: (asRecord(result.value) ?? {}) as LspWorkspaceEdit,
+        scope,
+        runtime: renameFactory.runtime,
+        sessionId,
+        summary: `LSP rename to ${params.new_name}`,
+      });
+    },
   });
 
-  return [lspGotoDefinition, lspFindReferences, lspDiagnostics, astPrepareRename, astRenameInFile];
+  const fileRenameFactory = createRuntimeBoundBrewvaToolFactory(
+    options?.runtime,
+    "lsp_file_rename",
+  );
+  const fileRename = fileRenameFactory.define({
+    name: "lsp_file_rename",
+    label: "LSP File Rename",
+    description:
+      "Request workspace/willRenameFiles from a real language server and prepare a SourcePatchPlan.",
+    parameters: Type.Object({
+      old_uri: Type.String({ minLength: 1 }),
+      new_uri: Type.String({ minLength: 1 }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(fileRenameFactory.runtime, ctx);
+      const resolution = resolveTypeScriptLanguageServer(scope.baseCwd);
+      if (!resolution.available) {
+        return unavailable("lsp_file_rename", resolution);
+      }
+      const oldPath = uriToPath(params.old_uri, scope);
+      const newPath = uriToPath(params.new_uri, scope);
+      if (!oldPath || !newPath) {
+        return failTextResult("[lsp_file_rename]\nstatus: failed\nreason: path_outside_target", {
+          ok: false,
+          reason: "path_outside_target",
+        });
+      }
+      const sessionId = getToolSessionId(ctx);
+      const oldUri = pathToLspUri(oldPath);
+      const newUri = pathToLspUri(newPath);
+      const result = await withClient({
+        scope,
+        resolution,
+        fn: async (lease) =>
+          await lease.client.request("workspace/willRenameFiles", {
+            files: [{ oldUri, newUri }],
+          }),
+      });
+      if (!result.ok) {
+        return failTextResult(`[lsp_file_rename]\nstatus: failed\nreason: ${result.error}`, {
+          ok: false,
+          status: "failed",
+          reason: result.error,
+          stderr: result.stderr,
+        });
+      }
+      const edit = (asRecord(result.value) ?? {}) as LspWorkspaceEdit;
+      const withRename: LspWorkspaceEdit = {
+        ...edit,
+        documentChanges: [...(edit.documentChanges ?? []), { kind: "rename", oldUri, newUri }],
+      };
+      return prepareWorkspaceEditResult({
+        toolName: "lsp_file_rename",
+        edit: withRename,
+        scope,
+        runtime: fileRenameFactory.runtime,
+        sessionId,
+        summary: "LSP file rename",
+      });
+    },
+  });
+
+  const codeActionFactory = createRuntimeBoundBrewvaToolFactory(
+    options?.runtime,
+    "lsp_code_action",
+  );
+  const codeAction = codeActionFactory.define({
+    name: "lsp_code_action",
+    label: "LSP Code Action",
+    description:
+      "Request textDocument/codeAction from a real language server and prepare the selected edit as a SourcePatchPlan.",
+    parameters: Type.Object({
+      uri: Type.String({ minLength: 1 }),
+      start_line: Type.Integer({ minimum: 0 }),
+      start_character: Type.Integer({ minimum: 0 }),
+      end_line: Type.Integer({ minimum: 0 }),
+      end_character: Type.Integer({ minimum: 0 }),
+      action_index: Type.Optional(Type.Integer({ minimum: 0, default: 0 })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(codeActionFactory.runtime, ctx);
+      const resolution = resolveTypeScriptLanguageServer(scope.baseCwd);
+      if (!resolution.available) {
+        return unavailable("lsp_code_action", resolution);
+      }
+      const sessionId = getToolSessionId(ctx);
+      const result = await withClient({
+        scope,
+        resolution,
+        fn: async (lease) => {
+          const lspUri = openDocumentForUri(lease, params.uri, scope);
+          if (!lspUri) {
+            throw new Error("document_not_found");
+          }
+          return await lease.client.request("textDocument/codeAction", {
+            textDocument: { uri: lspUri },
+            range: lspRange({
+              startLine: params.start_line,
+              startCharacter: params.start_character,
+              endLine: params.end_line,
+              endCharacter: params.end_character,
+            }),
+            context: { diagnostics: [] },
+          });
+        },
+      });
+      if (!result.ok) {
+        return failTextResult(`[lsp_code_action]\nstatus: failed\nreason: ${result.error}`, {
+          ok: false,
+          status: "failed",
+          reason: result.error,
+          stderr: result.stderr,
+        });
+      }
+      const actions = Array.isArray(result.value) ? result.value : [];
+      const action = asRecord(actions[params.action_index ?? 0]);
+      const edit = asRecord(action?.edit) as LspWorkspaceEdit | undefined;
+      if (!edit) {
+        return inconclusiveTextResult(
+          ["[lsp_code_action]", "status: no_edit", "actions:", formatJson(actions)].join("\n"),
+          { ok: false, status: "no_edit", actions, stderr: result.stderr },
+        );
+      }
+      return prepareWorkspaceEditResult({
+        toolName: "lsp_code_action",
+        edit,
+        scope,
+        runtime: codeActionFactory.runtime,
+        sessionId,
+        summary: "LSP code action",
+      });
+    },
+  });
+
+  const formatFactory = createRuntimeBoundBrewvaToolFactory(options?.runtime, "lsp_format");
+  const format = formatFactory.define({
+    name: "lsp_format",
+    label: "LSP Format",
+    description:
+      "Request textDocument/formatting from a real language server and prepare edits as a SourcePatchPlan.",
+    parameters: Type.Object({
+      uri: Type.String({ minLength: 1 }),
+      tab_size: Type.Optional(Type.Integer({ minimum: 1, maximum: 8, default: 2 })),
+      insert_spaces: Type.Optional(Type.Boolean({ default: true })),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(formatFactory.runtime, ctx);
+      const resolution = resolveTypeScriptLanguageServer(scope.baseCwd);
+      if (!resolution.available) {
+        return unavailable("lsp_format", resolution);
+      }
+      const sessionId = getToolSessionId(ctx);
+      const result = await withClient({
+        scope,
+        resolution,
+        fn: async (lease) => {
+          const lspUri = openDocumentForUri(lease, params.uri, scope);
+          if (!lspUri) {
+            throw new Error("document_not_found");
+          }
+          return await lease.client.request("textDocument/formatting", {
+            textDocument: { uri: lspUri },
+            options: {
+              tabSize: params.tab_size ?? 2,
+              insertSpaces: params.insert_spaces !== false,
+            },
+          });
+        },
+      });
+      if (!result.ok) {
+        return failTextResult(`[lsp_format]\nstatus: failed\nreason: ${result.error}`, {
+          ok: false,
+          status: "failed",
+          reason: result.error,
+          stderr: result.stderr,
+        });
+      }
+      const path = uriToPath(params.uri, scope);
+      if (!path) {
+        return failTextResult("[lsp_format]\nstatus: failed\nreason: path_outside_target", {
+          ok: false,
+          reason: "path_outside_target",
+        });
+      }
+      return prepareWorkspaceEditResult({
+        toolName: "lsp_format",
+        edit: {
+          changes: {
+            [pathToLspUri(path)]: Array.isArray(result.value)
+              ? result.value.filter(isTextEdit)
+              : [],
+          },
+        },
+        scope,
+        runtime: formatFactory.runtime,
+        sessionId,
+        summary: "LSP format",
+      });
+    },
+  });
+
+  return [
+    status,
+    createReadRequestTool({
+      runtime: options?.runtime,
+      name: "lsp_hover",
+      label: "LSP Hover",
+      description: "Request textDocument/hover from a real language server.",
+      method: "textDocument/hover",
+      parameters: Type.Object(POSITION_SCHEMA),
+      buildParams: positionParams,
+    }),
+    createReadRequestTool({
+      runtime: options?.runtime,
+      name: "lsp_definition",
+      label: "LSP Definition",
+      description: "Request textDocument/definition from a real language server.",
+      method: "textDocument/definition",
+      parameters: Type.Object(POSITION_SCHEMA),
+      buildParams: positionParams,
+    }),
+    createReadRequestTool({
+      runtime: options?.runtime,
+      name: "lsp_references",
+      label: "LSP References",
+      description: "Request textDocument/references from a real language server.",
+      method: "textDocument/references",
+      parameters: Type.Object({
+        ...POSITION_SCHEMA,
+        include_declaration: Type.Optional(Type.Boolean({ default: true })),
+      }),
+      buildParams: referenceParams,
+    }),
+    createReadRequestTool({
+      runtime: options?.runtime,
+      name: "lsp_type_definition",
+      label: "LSP Type Definition",
+      description: "Request textDocument/typeDefinition from a real language server.",
+      method: "textDocument/typeDefinition",
+      parameters: Type.Object(POSITION_SCHEMA),
+      buildParams: positionParams,
+    }),
+    createReadRequestTool({
+      runtime: options?.runtime,
+      name: "lsp_implementation",
+      label: "LSP Implementation",
+      description: "Request textDocument/implementation from a real language server.",
+      method: "textDocument/implementation",
+      parameters: Type.Object(POSITION_SCHEMA),
+      buildParams: positionParams,
+    }),
+    diagnostics,
+    rename,
+    fileRename,
+    codeAction,
+    format,
+  ];
 }

@@ -43,7 +43,7 @@ runtime contract.
 - Check:
   - `packages/brewva-tools/src/runtime-port/parallel-read.ts`
   - `packages/brewva-tools/src/families/navigation/lsp.ts`
-  - `packages/brewva-tools/src/families/navigation/ast-grep.ts`
+  - `packages/brewva-tools/src/families/navigation/source-patch.ts`
   - `docs/reference/events/README.md` (`tool_parallel_read`)
 - Action:
   - Start with `brewva inspect --session <id>` to confirm tape/projection health, then inspect session events for `tool_parallel_read` payloads.

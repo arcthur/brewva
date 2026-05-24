@@ -1,4 +1,5 @@
 export {
+  createEmptyHostedResourceLoader,
   createHostedResourceLoader,
   type BrewvaHostedResourceExtensions,
   type BrewvaHostedResourceLoader,
@@ -7,4 +8,10 @@ export {
   type BrewvaProjectInstructionFile,
   type BrewvaProjectInstructionSet,
   type BrewvaProjectInstructionSource,
+  createBrewvaResourceRouter,
+  toBrewvaFileResourceUri,
+  type BrewvaResourceProvider,
+  type BrewvaResourceReadResult,
+  type BrewvaResourceRouter,
+  type BrewvaResourceStatus,
 } from "./api.js";

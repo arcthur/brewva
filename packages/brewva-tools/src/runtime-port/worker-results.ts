@@ -7,14 +7,6 @@ export function mergeWorkerResults(
   return runtime.capabilities.session.workerResults.merge(sessionId);
 }
 
-export function applyMergedWorkerResults(
-  runtime: BrewvaToolRuntime,
-  sessionId: string,
-  input: unknown,
-): ReturnType<BrewvaToolRuntime["capabilities"]["session"]["workerResults"]["applyMerged"]> {
-  return runtime.capabilities.session.workerResults.applyMerged(sessionId, input);
-}
-
 export function listWorkerResults(
   runtime: BrewvaToolRuntime,
   sessionId: string,

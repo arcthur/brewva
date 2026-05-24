@@ -12,6 +12,11 @@ import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
   SCHEDULE_EVENT_TYPE,
+  SOURCE_PATCH_APPLIED_EVENT_TYPE,
+  SOURCE_PATCH_PREPARED_EVENT_TYPE,
+  SOURCE_PATCH_STALE_RECOVERED_EVENT_TYPE,
+  SOURCE_RESOURCE_READ_EVENT_TYPE,
+  SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
   TASK_STALL_ADJUDICATED_EVENT_TYPE,
   TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
@@ -89,11 +94,7 @@ import type {
   WorkbenchEntry,
 } from "@brewva/brewva-runtime/protocol";
 import { getToolActionPolicy } from "@brewva/brewva-runtime/protocol";
-import type {
-  WorkerApplyReport,
-  WorkerMergeReport,
-  WorkerResult,
-} from "@brewva/brewva-runtime/protocol";
+import type { WorkerMergeReport, WorkerResult } from "@brewva/brewva-runtime/protocol";
 import {
   classifyToolBoundaryRequest,
   evaluateBoundaryClassification,
@@ -1390,6 +1391,27 @@ export function createHostedRuntimeOps(options: {
         redoLastPatchSet: () => ({ ok: false, reason: "not_available" }),
         rollbackLastMutation: () => ({ ok: false, reason: "not_available" }),
       },
+      sourcePatch: {
+        snapshots: {
+          record(sessionId: string, inputValue: object) {
+            return emit(sessionId, SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE, inputValue);
+          },
+        },
+        plans: {
+          prepare(sessionId: string, inputValue: object) {
+            return emit(sessionId, SOURCE_PATCH_PREPARED_EVENT_TYPE, inputValue);
+          },
+          apply: recordSessionPayload(SOURCE_PATCH_APPLIED_EVENT_TYPE),
+        },
+        staleRecovery: {
+          record(sessionId: string, inputValue: object) {
+            return emit(sessionId, SOURCE_PATCH_STALE_RECOVERED_EVENT_TYPE, inputValue);
+          },
+        },
+        resources: {
+          read: recordSessionPayload(SOURCE_RESOURCE_READ_EVENT_TYPE),
+        },
+      },
       rollbackLastMutation: () => ({ ok: false, reason: "not_available" }),
       readPath: {
         discoveryObserved: recordInputPayload("tool_read_path_discovery_observed"),
@@ -1620,32 +1642,6 @@ export function createHostedRuntimeOps(options: {
         clear(sessionId: string) {
           workerResults.delete(sessionId);
           return emit(sessionId, "worker.results.cleared", {});
-        },
-        applyMerged(sessionId: string, value?: unknown) {
-          const workerIds = readStringArrayRecord(value, "workerIds");
-          const appliedPaths = readStringArrayRecord(value, "appliedPaths");
-          const failedPaths = readStringArrayRecord(value, "failedPaths");
-          const status =
-            failedPaths.length > 0
-              ? ("apply_failed" as const)
-              : appliedPaths.length > 0
-                ? ("applied" as const)
-                : workerIds.length > 0
-                  ? ("empty" as const)
-                  : ("empty" as const);
-          const rawReason =
-            typeof value === "object" && value !== null && "reason" in value
-              ? (value as { reason?: unknown }).reason
-              : undefined;
-          const report: WorkerApplyReport = {
-            status,
-            workerIds,
-            appliedPaths,
-            failedPaths,
-            reason: typeof rawReason === "string" ? rawReason : undefined,
-          };
-          emit(sessionId, "worker.results.apply_merged", report);
-          return report;
         },
         merge(sessionId: string, value?: unknown) {
           const workerIds = readStringArrayRecord(value, "workerIds");
@@ -2309,7 +2305,6 @@ export interface HostedRuntimeOpsPort extends BrewvaToolRuntimeCapabilitiesPort 
       list(sessionId: string): WorkerResult[];
       record(sessionId: string, input: WorkerResult): RuntimeEventRecord;
       clear(sessionId: string): RuntimeEventRecord;
-      applyMerged(sessionId: string, input?: unknown): WorkerApplyReport;
       merge(sessionId: string, input?: unknown): WorkerMergeReport;
     };
     readonly title: {

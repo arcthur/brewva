@@ -40,8 +40,9 @@ but source intelligence was uneven across languages. Pre-cutover
 `toc_document` and `toc_search` used navigation-family cache and Brewva search
 tokenization; OXC kept TypeScript/JavaScript parsing in-process; LSP-style
 definition/reference and rename paths preserved byte spans and scope safety;
-`read_spans` remained the precise source-reading primitive; and `ast-grep`
-remained useful for structural search.
+`source_read` now owns hash-anchored precise source reads; and structural search
+remains useful only when it feeds Brewva-owned source-intelligence data rather
+than direct write paths.
 
 The gaps are multi-language structure and graph awareness: Python, Go, Rust,
 Java, C++, and other user languages do not have equivalent outlines; Brewva has
@@ -65,7 +66,7 @@ digest rendering; TypeScript/JavaScript and Python public API surface tools;
 and hard replacement of `toc_*` contracts and duplicated outline-style LSP
 surfaces.
 
-Out of scope: replacing OXC, `read_spans`, scope-aware rename, or diagnostics;
+Out of scope: replacing OXC, `source_read`, scope-aware rename, or diagnostics;
 using `ast-outline` binary/MCP/search/model download paths at runtime; writing
 `.ast-outline` or other non-Brewva caches; adding package-local tokenizers,
 language-specific tokenizer fallbacks, `madge`, `dependency-cruiser`, `ctags`,
@@ -82,9 +83,8 @@ or a full type checker, diagnostics engine, or language server.
 - `packages/brewva-tools/src/families/navigation/source-intelligence/cache.ts`
 - `packages/brewva-tools/src/families/navigation/source-intelligence/adapters/oxc-typescript.ts`
 - `packages/brewva-tools/src/families/navigation/source-intelligence/grammars/manifest.json`
-- `packages/brewva-tools/src/families/navigation/lsp/workspace-scan.ts`
-- `packages/brewva-tools/src/families/navigation/lsp/rename-tools.ts`
-- `packages/brewva-tools/src/families/navigation/ast-grep.ts`
+- `packages/brewva-tools/src/families/navigation/lsp.ts`
+- `packages/brewva-tools/src/families/navigation/source-patch.ts`
 - `docs/research/decisions/tools-family-slicing-and-capability-contracts.md`
 - `skills/project/shared/critical-rules.md`
 - `skills/project/shared/package-boundaries.md`
@@ -285,7 +285,7 @@ Call graph resolution is staged:
 
 Ambiguous results are useful for model awareness, but they cannot authorize
 automatic edits. Any edit tool that wants to consume graph output must require
-exact spans from parser, LSP, or `read_spans` evidence.
+exact spans from parser, LSP, or hash-anchored `source_read` evidence.
 
 Public surface analysis starts with TypeScript/JavaScript and Python:
 

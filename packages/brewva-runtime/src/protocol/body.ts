@@ -12,6 +12,7 @@ import type { SessionRewindTargetView } from "./types/session-rewind.js";
 
 export type { JsonPrimitive, JsonRecord, JsonValue, ProtocolRecord } from "./types/foundation.js";
 export * from "./types/patch.js";
+export * from "./types/source-patch.js";
 export * from "./types/effect-commitment.js";
 export * from "./types/session-rewind.js";
 
@@ -381,6 +382,11 @@ export const SESSION_SHUTDOWN_EVENT_TYPE = "session.shutdown" as const;
 export const SESSION_TITLE_RECORDED_EVENT_TYPE = "session.title.recorded" as const;
 export const SESSION_UNCLEAN_SHUTDOWN_RECONCILED_EVENT_TYPE =
   "session.unclean_shutdown.reconciled" as const;
+export const SOURCE_PATCH_APPLIED_EVENT_TYPE = "source_patch_applied" as const;
+export const SOURCE_PATCH_PREPARED_EVENT_TYPE = "source_patch_prepared" as const;
+export const SOURCE_PATCH_STALE_RECOVERED_EVENT_TYPE = "source_patch_stale_recovered" as const;
+export const SOURCE_RESOURCE_READ_EVENT_TYPE = "source_resource_read" as const;
+export const SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE = "source_snapshot_recorded" as const;
 export const STEER_APPLIED_EVENT_TYPE = "steer.applied" as const;
 export const STEER_DROPPED_EVENT_TYPE = "steer.dropped" as const;
 export const STEER_QUEUED_EVENT_TYPE = "steer.queued" as const;

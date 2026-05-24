@@ -17,9 +17,9 @@ describe("managed tool registration modes", () => {
     const behaviorHostAdapter = createHostedBehaviorHostAdapter({ runtime });
     await behaviorHostAdapter.register(api.api);
 
-    const readSpans = api.api.getAllTools().find((tool) => tool.name === "read_spans");
+    const sourceRead = api.api.getAllTools().find((tool) => tool.name === "source_read");
     const parameters = requireDefined(
-      readSpans?.parameters as
+      sourceRead?.parameters as
         | {
             anyOf?: unknown;
             allOf?: unknown;
@@ -27,14 +27,14 @@ describe("managed tool registration modes", () => {
             required?: string[];
           }
         | undefined,
-      "missing canonical parameters for read_spans",
+      "missing canonical parameters for source_read",
     );
 
     expect(parameters.anyOf).toBe(undefined);
     expect(parameters.allOf).toBe(undefined);
-    requireDefined(parameters.properties?.file_path, "missing file_path parameter in read_spans");
-    expect(parameters.properties?.filePath).toBe(undefined);
-    expect(parameters.required).toEqual(["file_path", "spans"]);
+    requireDefined(parameters.properties?.uri, "missing uri parameter in source_read");
+    expect(parameters.properties?.file_path).toBe(undefined);
+    expect(parameters.required).toEqual(["uri"]);
   });
 
   test("registerTools only affects tool registration, not hosted behavior handler surfaces", async () => {

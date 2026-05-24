@@ -1,7 +1,7 @@
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 const MAX_OBSERVED_PATHS = 24;
-const LOCATION_PATH_PATTERN = /^([^:\n]+):\d+(?::\d+)?(?:\s|:|$)/u;
+const LOCATION_PATH_PATTERN = /^([^:\n]+):(?:L)?\d+(?:@[A-Za-z0-9_-]+)?(?::|\||\s|$)/u;
 
 export interface ReadPathDiscoveryObservationPayload {
   toolName: string;

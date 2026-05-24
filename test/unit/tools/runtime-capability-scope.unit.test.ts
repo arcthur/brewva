@@ -124,13 +124,6 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
           },
         },
       },
-      session: {
-        workerResults: {
-          applyMerged(sessionId: string) {
-            return { status: "applied", sessionId };
-          },
-        },
-      },
       proposals: {
         proposals: {
           submit(sessionId: string) {

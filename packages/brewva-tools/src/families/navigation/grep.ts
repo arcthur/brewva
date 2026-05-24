@@ -1,7 +1,13 @@
+import { existsSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
+import {
+  formatSourceAnchor,
+  recordSourceSnapshot,
+  toSourceFileResourceUri,
+} from "../../internal/source-patch-gate.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
@@ -33,6 +39,7 @@ import {
   normalizeSearchAdvisorPath,
   registerSearchIntent,
 } from "./search-advisor.js";
+import { readSourceTextCached } from "./source-intelligence/cache.js";
 
 export { runRipgrep };
 export type { GrepRunResult };
@@ -64,6 +71,22 @@ function normalizeGrepCase(value: unknown): GrepCase {
 function clampInt(value: unknown, fallback: number, options: { min: number; max: number }): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.max(options.min, Math.min(options.max, Math.trunc(value)));
+}
+
+function parseGrepLocationLine(line: string): {
+  readonly path: string;
+  readonly line: number;
+  readonly content: string;
+} | null {
+  const match = /^(.*?):(\d+):(.*)$/u.exec(line);
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+  return {
+    path: match[1],
+    line: Number(match[2]),
+    content: match[3] ?? "",
+  };
 }
 
 export function createGrepTool(options: GrepToolOptions): ToolDefinition {
@@ -172,12 +195,45 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
           globs.length > 0 ? `- glob: ${globs.join(", ")}` : null,
         ].filter(Boolean) as string[];
 
+        const anchorMatchedLines = (lines: string[]) => {
+          const snapshots = new Map<string, ReturnType<typeof recordSourceSnapshot>>();
+          const anchoredLines = lines.map((line) => {
+            const parsed = parseGrepLocationLine(line);
+            if (!parsed) {
+              return line;
+            }
+            const absolutePath = resolveScopedPath(parsed.path, scope, { relativeTo: cwd });
+            if (!absolutePath || !existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
+              return line;
+            }
+            let snapshot = snapshots.get(absolutePath);
+            if (!snapshot) {
+              const sourceText = readSourceTextCached(absolutePath).sourceText;
+              snapshot = recordSourceSnapshot({
+                uri: toSourceFileResourceUri(scope, absolutePath),
+                path: absolutePath,
+                sourceText,
+                runtime,
+                sessionId,
+              });
+              snapshots.set(absolutePath, snapshot);
+            }
+            const anchor = snapshot.anchors[parsed.line - 1];
+            return anchor ? `${parsed.path}:${formatSourceAnchor(anchor)}|${parsed.content}` : line;
+          });
+          return {
+            lines: anchoredLines,
+            snapshots: [...snapshots.values()],
+          };
+        };
+
         const finalizeMatchedResult = (input: {
           result: GrepRunResult;
           advisor: GrepAdvisorDetails;
           lines: string[];
           candidatePaths: string[];
         }) => {
+          const anchored = anchorMatchedLines(input.lines);
           attachSearchIntentPreviewCandidates({
             sessionId,
             toolName: "grep",
@@ -190,7 +246,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
             evidenceKind: "search_match",
             observedPaths: collectObservedPathsFromLocationLines({
               baseCwd: scope.baseCwd,
-              lines: input.lines,
+              lines: anchored.lines,
             }),
           });
           if (sessionId && discoveryPayload) {
@@ -204,16 +260,18 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
             [
               ...baseHeader,
               `- exit_code: ${input.result.exitCode}`,
-              `- matches_shown: ${input.lines.length}`,
+              `- matches_shown: ${anchored.lines.length}`,
               `- truncated: ${input.result.truncated}`,
               `- timed_out: ${input.result.timedOut}`,
+              ...anchored.snapshots.map((snapshot) => `- snapshot: ${snapshot.id} ${snapshot.uri}`),
             ],
             input.advisor,
           );
-          return textResult([...header, "", ...input.lines].join("\n"), {
+          return textResult([...header, "", ...anchored.lines].join("\n"), {
             ok: true,
             ...input.result,
             advisor: input.advisor,
+            snapshots: anchored.snapshots,
           });
         };
 

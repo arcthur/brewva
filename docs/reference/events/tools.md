@@ -27,6 +27,18 @@ surface promotes them.
 Patch, reversible mutation, rollback, and redo events connect an effectful tool
 call to its receipt, recovery preparation, and commitment posture.
 
+Source patch events add the read-before-write evidence chain for source edits:
+
+- `source_snapshot_recorded` records a bounded source read/search snapshot with
+  hash-backed line anchors
+- `source_resource_read` records a resource-plane read receipt for
+  `brewva-resource:///` resources
+- `source_patch_prepared` records a validated `SourcePatchPlan` before mutation
+- `source_patch_stale_recovered` records whether an anchor was safely recovered
+  after file drift
+- `source_patch_applied` records the apply receipt after the mutation gate
+  rechecks current file hashes
+
 Commitment posture has two orthogonal axes:
 
 - recoverability: `observe_only`, `reversible`, `compensatable`,
@@ -51,6 +63,11 @@ Read-path discovery, output observation, output distillation, artifact
 persistence, and output search events are inspection support. They help explain
 what was read, what output was retained, and how the runtime compressed noisy
 tool output.
+
+`source_read` emits source snapshots for editable file-backed reads. Generic
+resource reads use `resource_read` over `brewva-resource:///` and remain
+read-only unless a later `SourcePatchPlan` explicitly consumes a source
+snapshot.
 
 Repository-scoped retrieval filters repository artifacts to the current task
 target roots. Browser outputs remain workspace-root scoped.
