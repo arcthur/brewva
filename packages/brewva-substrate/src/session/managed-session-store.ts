@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { BrewvaModelPreset, BrewvaPromptThinkingLevel } from "./prompt-session.js";
+import type {
+  BrewvaModelPreset,
+  BrewvaModelRoleMap,
+  BrewvaPromptThinkingLevel,
+} from "./prompt-session.js";
 
 export interface BrewvaTextContent {
   type: "text";
@@ -86,11 +90,7 @@ export interface BrewvaModelPresetSelectEntry extends BrewvaSessionEntryBase {
   presetName: string;
   previousPresetName?: string;
   source?: string;
-  mainModel?: string;
-  delegationModels?: Record<string, string>;
-  auxiliaryModels?: {
-    title?: string;
-  };
+  roles?: BrewvaModelRoleMap;
   synthetic?: boolean;
 }
 
@@ -139,27 +139,19 @@ export interface BrewvaSessionContext {
 function createSyntheticDefaultModelPreset(): BrewvaModelPreset {
   return {
     name: "Default",
-    delegationModels: {},
+    roles: {},
     synthetic: true,
   };
 }
 
-function cloneDelegationModels(value: Record<string, string> | undefined): Record<string, string> {
+function cloneRoleMap(value: BrewvaModelRoleMap | undefined): BrewvaModelRoleMap {
   return value ? { ...value } : {};
-}
-
-function cloneAuxiliaryModels(
-  value: BrewvaModelPreset["auxiliaryModels"] | undefined,
-): BrewvaModelPreset["auxiliaryModels"] | undefined {
-  return value ? { ...value } : undefined;
 }
 
 function modelPresetFromSelectionEntry(entry: BrewvaModelPresetSelectEntry): BrewvaModelPreset {
   return {
     name: entry.presetName,
-    mainModel: entry.mainModel,
-    delegationModels: cloneDelegationModels(entry.delegationModels),
-    auxiliaryModels: cloneAuxiliaryModels(entry.auxiliaryModels),
+    roles: cloneRoleMap(entry.roles),
     synthetic: entry.synthetic,
   };
 }
@@ -528,9 +520,7 @@ export class BrewvaManagedSessionStore {
     presetName: string;
     previousPresetName?: string;
     source?: string;
-    mainModel?: string;
-    delegationModels?: Record<string, string>;
-    auxiliaryModels?: BrewvaModelPreset["auxiliaryModels"];
+    roles?: BrewvaModelRoleMap;
     synthetic?: boolean;
   }): string {
     const entry: BrewvaModelPresetSelectEntry = {
@@ -541,9 +531,7 @@ export class BrewvaManagedSessionStore {
       presetName: input.presetName,
       previousPresetName: input.previousPresetName,
       source: input.source,
-      mainModel: input.mainModel,
-      delegationModels: input.delegationModels ? { ...input.delegationModels } : undefined,
-      auxiliaryModels: cloneAuxiliaryModels(input.auxiliaryModels),
+      roles: cloneRoleMap(input.roles),
       synthetic: input.synthetic,
     };
     this.#append(entry);

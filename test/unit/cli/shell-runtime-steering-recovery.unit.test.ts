@@ -170,7 +170,7 @@ function createFakeBundle(
   let modelPresetState: BrewvaModelPresetState = options.modelPresetState ?? {
     activeName: "Default",
     defaultName: "Default",
-    presets: [{ name: "Default", delegationModels: {}, synthetic: true }],
+    presets: [{ name: "Default", roles: {}, synthetic: true }],
   };
   let modelPreferences = { recent: [], favorite: [] } as {
     recent: Array<{ provider: string; id: string }>;
@@ -279,7 +279,7 @@ function createFakeBundle(
         previousName,
         modelChanged: false,
         queued: false,
-        effectiveMainModel: preset.mainModel,
+        effectiveDefaultModel: preset.roles.default,
       };
     },
     queueModelPresetForNextTurn(name: string) {
@@ -296,7 +296,7 @@ function createFakeBundle(
         previousName: modelPresetState.activeName,
         modelChanged: false,
         queued: true,
-        effectiveMainModel: preset.mainModel,
+        effectiveDefaultModel: preset.roles.default,
       };
     },
     getAvailableThinkingLevels() {
@@ -452,9 +452,9 @@ describe("shell runtime: steering and recovery", () => {
         activeName: "Default",
         defaultName: "Default",
         presets: [
-          { name: "Default", delegationModels: {}, synthetic: true },
-          { name: "Claude Lead", mainModel: "anthropic/claude-main:high", delegationModels: {} },
-          { name: "OpenAI Stack", mainModel: "openai/gpt-5.5:high", delegationModels: {} },
+          { name: "Default", roles: {}, synthetic: true },
+          { name: "Claude Lead", roles: { default: "anthropic/claude-main:high" } },
+          { name: "OpenAI Stack", roles: { default: "openai/gpt-5.5:high" } },
         ],
       },
     });

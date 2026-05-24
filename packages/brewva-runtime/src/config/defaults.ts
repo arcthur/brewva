@@ -87,6 +87,9 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     },
     execution: {
       backend: "box",
+      autoBackground: {
+        foregroundWaitMs: 10_000,
+      },
       box: {
         home: "~/.brewva/boxes",
         image: "ghcr.io/arcthur/box-default:latest",

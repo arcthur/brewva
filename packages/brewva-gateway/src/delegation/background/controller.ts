@@ -543,7 +543,7 @@ export function createDetachedSubagentBackgroundController(
       });
 
       const spec: DetachedSubagentRunSpec = {
-        schema: "brewva.subagent-run-spec.v7",
+        schema: "brewva.subagent-run-spec.v8",
         runId,
         parentSessionId: input.parentSessionId,
         workspaceRoot: runtime.identity.workspaceRoot,
@@ -552,6 +552,7 @@ export function createDetachedSubagentBackgroundController(
         delegate,
         target: input.target,
         executionShape: input.executionShape,
+        modelRole: executionPlan.modelRole,
         modelRoute: executionPlan.modelRoute,
         label: input.label,
         taskName: taskIdentity.taskName,

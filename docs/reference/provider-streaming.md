@@ -61,6 +61,30 @@ service-directed retry delays from response headers and error text. The shared
 policy owns the schedule and retry budget; provider adapters own
 retryability classification.
 
+Gateway-hosted model fallback wraps provider stream attempts above
+provider-core. Fallback is allowed only before any provider frame has been
+emitted. Once text, thinking, tool-call, or done/error frames begin flowing, the
+attempt stays on that provider/model and surfaces the failure normally.
+Fallback chain selection uses the active hosted model role first, then the
+`default` chain.
+
+Fallback metadata enters `ProviderPayloadMetadata.providerFallback` with the
+attempted route, selected route, reason, revert policy, and
+`cache_invalidated: true` when provider/model cache identity changes. Provider
+cache fingerprints include this metadata so replay and cache diagnostics can
+explain fallback drift. `cache_invalidated` is intentionally snake_case because
+it is a stable provider payload wire field; adjacent in-process fields may remain
+camelCase.
+
+Credential-slot rotation is also hosted gateway behavior. It may retry the same
+provider with a different credential slot after quota, rate-limit, or auth
+failures, but the redacted runtime event is limited to
+`provider_credential_rotated` with `{ providerId, credentialSlot, reason,
+cooldownMs }`. The provider fallback metadata marks this as
+`cache_invalidated: true` and may include the non-secret `credentialSlot` on the
+selected route so cache diagnostics can explain account-scope drift. Secret
+material never enters provider events, artifacts, or inspect output.
+
 ## Internal Seams
 
 Provider-core now uses two internal streaming seams:

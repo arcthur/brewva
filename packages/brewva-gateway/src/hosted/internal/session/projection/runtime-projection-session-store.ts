@@ -32,6 +32,8 @@ import {
   type BrewvaCompactionEntry,
   type BrewvaModelChangeEntry,
   type BrewvaModelPresetSelectEntry,
+  type BrewvaModelRoleAlias,
+  type BrewvaModelRoleMap,
   type BrewvaSessionContext,
   type BrewvaSessionEntry,
   type BrewvaSessionMessageEntry,
@@ -81,11 +83,7 @@ type DeferredInitialSessionEntries = {
     presetName: string;
     previousPresetName?: string;
     source?: string;
-    mainModel?: string;
-    delegationModels?: Record<string, string>;
-    auxiliaryModels?: {
-      title?: string;
-    };
+    roles?: BrewvaModelRoleMap;
     synthetic?: boolean;
   };
   modelChange?: {
@@ -152,25 +150,30 @@ function readCompactionGenerationMetadata(
   return value as unknown as SessionCompactionGenerationMetadata;
 }
 
-function readOptionalStringRecord(value: unknown): Record<string, string> | undefined {
+const MODEL_ROLE_ALIASES = new Set<BrewvaModelRoleAlias>([
+  "default",
+  "smol",
+  "slow",
+  "plan",
+  "commit",
+  "task",
+]);
+
+function readOptionalRoleMap(value: unknown): BrewvaModelRoleMap | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
-  const record: Record<string, string> = {};
+  const record: BrewvaModelRoleMap = {};
   for (const [key, rawValue] of Object.entries(value)) {
-    if (typeof rawValue === "string" && rawValue.trim().length > 0) {
-      record[key] = rawValue;
+    if (
+      MODEL_ROLE_ALIASES.has(key as BrewvaModelRoleAlias) &&
+      typeof rawValue === "string" &&
+      rawValue.trim().length > 0
+    ) {
+      record[key as BrewvaModelRoleAlias] = rawValue.trim();
     }
   }
   return Object.keys(record).length > 0 ? record : {};
-}
-
-function readOptionalAuxiliaryModels(value: unknown): { title?: string } | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const title = readOptionalString(value.title);
-  return title ? { title } : {};
 }
 
 function mapContextBudgetPressure(status: {
@@ -577,11 +580,7 @@ export class HostedRuntimeTapeSessionStore {
     presetName: string;
     previousPresetName?: string;
     source?: string;
-    mainModel?: string;
-    delegationModels?: Record<string, string>;
-    auxiliaryModels?: {
-      title?: string;
-    };
+    roles?: BrewvaModelRoleMap;
     synthetic?: boolean;
   }): string {
     if (this.#deferInitialPersistence && !this.#initialPersistenceEnsured) {
@@ -589,9 +588,7 @@ export class HostedRuntimeTapeSessionStore {
         presetName: input.presetName,
         previousPresetName: input.previousPresetName,
         source: input.source,
-        mainModel: input.mainModel,
-        delegationModels: input.delegationModels ? { ...input.delegationModels } : undefined,
-        auxiliaryModels: input.auxiliaryModels ? { ...input.auxiliaryModels } : undefined,
+        roles: input.roles ? { ...input.roles } : undefined,
         synthetic: input.synthetic,
       };
       return `deferred:preset:${this.sessionId}`;
@@ -603,9 +600,7 @@ export class HostedRuntimeTapeSessionStore {
         presetName: input.presetName,
         previousPresetName: input.previousPresetName,
         source: input.source ?? "session_store",
-        mainModel: input.mainModel,
-        delegationModels: input.delegationModels ? { ...input.delegationModels } : undefined,
-        auxiliaryModels: input.auxiliaryModels ? { ...input.auxiliaryModels } : undefined,
+        roles: input.roles ? { ...input.roles } : undefined,
         synthetic: input.synthetic,
       },
     });
@@ -976,7 +971,7 @@ export class HostedRuntimeTapeSessionStore {
       activeModelPresetName: "Default",
       activeModelPreset: {
         name: "Default",
-        delegationModels: {},
+        roles: {},
         synthetic: true,
       },
     };
@@ -993,9 +988,7 @@ export class HostedRuntimeTapeSessionStore {
         control.activeModelPresetName = entry.presetName;
         control.activeModelPreset = {
           name: entry.presetName,
-          mainModel: entry.mainModel,
-          delegationModels: entry.delegationModels ? { ...entry.delegationModels } : {},
-          auxiliaryModels: entry.auxiliaryModels ? { ...entry.auxiliaryModels } : undefined,
+          roles: entry.roles ? { ...entry.roles } : {},
           synthetic: entry.synthetic,
         };
         continue;
@@ -1131,9 +1124,7 @@ export class HostedRuntimeTapeSessionStore {
         presetName,
         previousPresetName: readOptionalString(payload.previousPresetName),
         source: readOptionalString(payload.source),
-        mainModel: readOptionalString(payload.mainModel),
-        delegationModels: readOptionalStringRecord(payload.delegationModels),
-        auxiliaryModels: readOptionalAuxiliaryModels(payload.auxiliaryModels),
+        roles: readOptionalRoleMap(payload.roles),
         synthetic: payload.synthetic === true ? true : undefined,
       } satisfies BrewvaModelPresetSelectEntry;
     }

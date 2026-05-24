@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createExecTool } from "@brewva/brewva-tools/execution";
-import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
-import { createRuntimeForExecTests, fakeContext } from "./tools-exec-process.helpers.js";
+import { requireDefined, requireNonEmptyString, requireRecord } from "../../helpers/assertions.js";
+import {
+  createRuntimeForExecTests,
+  extractTextContent,
+  fakeContext,
+} from "./tools-exec-process.helpers.js";
 
 describe("exec command guardrails", () => {
   test("command deny list blocks before execution", async () => {
@@ -44,21 +48,41 @@ describe("exec command guardrails", () => {
     const execTool = createExecTool({ runtime });
     const sessionId = "s13-exec-tool-misroute";
 
-    expect(
-      execTool.execute(
-        "tc-exec-tool-misroute",
-        {
-          command: "workbench_compact",
-        },
-        undefined,
-        undefined,
-        fakeContext(sessionId),
-      ),
-    ).rejects.toThrow("exec_blocked_isolation");
+    const result = await execTool.execute(
+      "tc-exec-tool-misroute",
+      {
+        command: "workbench_compact",
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
 
-    const blockedEvent = events.find((event) => event.type === "exec.failed");
-    expect(blockedEvent?.payload?.blockedAsToolNameMisroute).toBe(true);
-    expect(blockedEvent?.payload?.suggestedTool).toBe("workbench_compact");
+    expect(extractTextContent(result)).toContain("Exec rejected");
+    expect(result.details).toMatchObject({
+      status: "failed",
+      reason: "shell_as_tool",
+      executionPreflight: {
+        decision: "block",
+        findings: [
+          expect.objectContaining({
+            code: "shell_as_tool",
+            severity: "block",
+            suggestedTool: "workbench_compact",
+          }),
+        ],
+      },
+    });
+
+    const blockedEvent = requireDefined(
+      events.find((event) => event.type === "exec.failed"),
+      "Expected exec.failed event.",
+    );
+    const executionPreflight = requireRecord(
+      blockedEvent.payload?.executionPreflight,
+      "Expected executionPreflight payload.",
+    );
+    expect(executionPreflight).toMatchObject({ decision: "block" });
   });
 
   test("command deny list blocks shell wrapper inline scripts", async () => {

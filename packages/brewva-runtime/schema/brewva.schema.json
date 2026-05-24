@@ -196,9 +196,6 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "dir": {
-                  "type": "string"
-                },
                 "enabled": {
                   "type": "boolean"
                 },
@@ -559,6 +556,16 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
+                "autoBackground": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "foregroundWaitMs": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["foregroundWaitMs"]
+                },
                 "backend": {
                   "type": "string",
                   "enum": ["host", "box"]

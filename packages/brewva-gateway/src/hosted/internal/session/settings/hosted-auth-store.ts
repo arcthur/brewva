@@ -29,7 +29,20 @@ export type HostedAuthCredential =
       expires?: number;
     } & Record<string, unknown>);
 
-type HostedAuthStorageData = Record<string, HostedAuthCredential>;
+export type HostedCredentialRotationReason = "quota" | "rate_limit" | "auth" | "manual";
+
+export interface HostedAuthCredentialSlot {
+  id: string;
+  credential: HostedAuthCredential;
+  cooldownUntil?: number;
+}
+
+interface HostedAuthProviderCredentials {
+  activeSlot: string;
+  slots: Record<string, HostedAuthCredentialSlot>;
+}
+
+type HostedAuthStorageData = Record<string, HostedAuthProviderCredentials>;
 
 interface ResolvedOAuthCredential {
   accessToken?: string;
@@ -100,7 +113,7 @@ export class HostedAuthStore {
   private constructor(authPath?: string, initialData?: HostedAuthStorageData) {
     this.#authPath = authPath;
     if (initialData) {
-      this.#data = { ...initialData };
+      this.#data = normalizeStorageData(initialData);
     } else {
       this.reload();
     }
@@ -123,11 +136,11 @@ export class HostedAuthStore {
   }
 
   get(provider: string): HostedAuthCredential | undefined {
-    return this.#data[provider];
+    return this.getActiveSlot(provider)?.credential;
   }
 
   hasAuth(provider: string): boolean {
-    const storedCredential = this.#data[provider];
+    const storedCredential = this.get(provider);
     return (
       this.#runtimeOverrides.has(provider) ||
       (provider === GOOGLE_OAUTH_PROVIDER
@@ -142,11 +155,7 @@ export class HostedAuthStore {
       this.#data = {};
       return;
     }
-    try {
-      this.#data = JSON.parse(readFileSync(this.#authPath, "utf8")) as HostedAuthStorageData;
-    } catch {
-      this.#data = {};
-    }
+    this.#data = normalizeStorageData(JSON.parse(readFileSync(this.#authPath, "utf8")));
   }
 
   async getApiKey(
@@ -158,7 +167,7 @@ export class HostedAuthStore {
       return runtimeKey;
     }
 
-    const credential = this.#data[provider];
+    const credential = this.get(provider);
     if (credential?.type === "api_key") {
       return resolveHostedConfigValue(credential.key);
     }
@@ -204,7 +213,7 @@ export class HostedAuthStore {
       refresh: nextRefreshToken,
       expires: refreshed.expiresAt,
     };
-    this.#data[provider] = nextCredential;
+    this.replaceActiveCredential(provider, nextCredential);
     this.persist();
     return refreshed.accessToken;
   }
@@ -247,14 +256,76 @@ export class HostedAuthStore {
       tokenType: refreshed.tokenType ?? googleCredential.tokenType,
       scope: refreshed.scope ?? googleCredential.scope,
     };
-    this.#data[provider] = nextCredential;
+    this.replaceActiveCredential(provider, nextCredential);
     this.persist();
     return renderGoogleCloudCodeAssistCredential(nextCredential as GoogleHostedOAuthCredential);
   }
 
   set(provider: string, credential: HostedAuthCredential): void {
-    this.#data[provider] = credential;
+    const id = "default";
+    this.#data[provider] = {
+      activeSlot: id,
+      slots: {
+        [id]: {
+          id,
+          credential,
+        },
+      },
+    };
     this.persist();
+  }
+
+  setCredentialSlot(provider: string, slot: HostedAuthCredentialSlot): void {
+    const current =
+      this.#data[provider] ??
+      ({
+        activeSlot: slot.id,
+        slots: {},
+      } satisfies HostedAuthProviderCredentials);
+    current.slots[slot.id] = { ...slot, credential: { ...slot.credential } };
+    if (!current.activeSlot || !current.slots[current.activeSlot]) {
+      current.activeSlot = slot.id;
+    }
+    this.#data[provider] = current;
+    this.persist();
+  }
+
+  rotateCredential(
+    provider: string,
+    reason: HostedCredentialRotationReason,
+    cooldownMs: number,
+  ):
+    | {
+        providerId: string;
+        credentialSlot: string;
+        reason: HostedCredentialRotationReason;
+        cooldownMs: number;
+      }
+    | undefined {
+    const entry = this.#data[provider];
+    if (!entry) {
+      return undefined;
+    }
+    const now = Date.now();
+    const current = entry.slots[entry.activeSlot];
+    if (current) {
+      current.cooldownUntil = now + Math.max(0, cooldownMs);
+    }
+    const next = Object.values(entry.slots)
+      .filter((slot) => slot.id !== entry.activeSlot)
+      .find((slot) => !slot.cooldownUntil || slot.cooldownUntil <= now);
+    if (!next) {
+      this.persist();
+      return undefined;
+    }
+    entry.activeSlot = next.id;
+    this.persist();
+    return {
+      providerId: provider,
+      credentialSlot: next.id,
+      reason,
+      cooldownMs: Math.max(0, cooldownMs),
+    };
   }
 
   remove(provider: string): void {
@@ -269,4 +340,94 @@ export class HostedAuthStore {
     mkdirSync(dirname(this.#authPath), { recursive: true });
     writeFileSync(this.#authPath, JSON.stringify(this.#data, null, 2), "utf8");
   }
+
+  private getActiveSlot(provider: string): HostedAuthCredentialSlot | undefined {
+    const entry = this.#data[provider];
+    return entry?.slots[entry.activeSlot];
+  }
+
+  private replaceActiveCredential(provider: string, credential: HostedAuthCredential): void {
+    const entry = this.#data[provider];
+    const slot = entry?.slots[entry.activeSlot];
+    if (!entry || !slot) {
+      this.set(provider, credential);
+      return;
+    }
+    slot.credential = credential;
+  }
+}
+
+function isProviderCredentials(value: unknown): value is HostedAuthProviderCredentials {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as { activeSlot?: unknown }).activeSlot === "string" &&
+    Boolean((value as { slots?: unknown }).slots) &&
+    typeof (value as { slots?: unknown }).slots === "object" &&
+    !Array.isArray((value as { slots?: unknown }).slots)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isHostedAuthCredential(value: unknown): value is HostedAuthCredential {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (value.type === "api_key") {
+    return readString(value.key) !== undefined;
+  }
+  return value.type === "oauth";
+}
+
+function assertStorageError(message: string): never {
+  throw new Error(`Invalid hosted auth storage: ${message}`);
+}
+
+function normalizeStorageData(input: unknown): HostedAuthStorageData {
+  if (!isRecord(input)) {
+    assertStorageError("root must be an object keyed by provider id.");
+  }
+  const normalized: HostedAuthStorageData = {};
+  for (const [provider, value] of Object.entries(input)) {
+    if (!readString(provider)) {
+      assertStorageError("provider ids must be non-empty strings.");
+    }
+    if (!isProviderCredentials(value)) {
+      assertStorageError(`provider "${provider}" must use credential slots.`);
+    }
+    const slots: Record<string, HostedAuthCredentialSlot> = {};
+    for (const [slotId, rawSlot] of Object.entries(value.slots)) {
+      if (!readString(slotId)) {
+        assertStorageError(`provider "${provider}" has an empty credential slot id.`);
+      }
+      if (!isRecord(rawSlot)) {
+        assertStorageError(`provider "${provider}" slot "${slotId}" must be an object.`);
+      }
+      const id = readString(rawSlot.id);
+      if (!id || id !== slotId) {
+        assertStorageError(`provider "${provider}" slot "${slotId}" id must match its key.`);
+      }
+      if (!isHostedAuthCredential(rawSlot.credential)) {
+        assertStorageError(`provider "${provider}" slot "${slotId}" has an invalid credential.`);
+      }
+      const cooldownUntil = readFiniteNumber(rawSlot.cooldownUntil);
+      slots[slotId] = {
+        id: slotId,
+        credential: { ...rawSlot.credential },
+        ...(cooldownUntil === undefined ? {} : { cooldownUntil }),
+      };
+    }
+    if (!slots[value.activeSlot]) {
+      assertStorageError(`provider "${provider}" active slot does not exist.`);
+    }
+    normalized[provider] = {
+      activeSlot: value.activeSlot,
+      slots,
+    };
+  }
+  return normalized;
 }

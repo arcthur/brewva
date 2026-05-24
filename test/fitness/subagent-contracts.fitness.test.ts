@@ -9,7 +9,7 @@ function readRepoFile(relativePath: string): string {
 }
 
 describe("subagent contract guard", () => {
-  it("keeps detached subagent durable specs on v7 only", () => {
+  it("keeps detached subagent durable specs on v8 only", () => {
     const readerSource = readRepoFile(
       "packages/brewva-gateway/src/delegation/background/runner-main.ts",
     );
@@ -17,10 +17,10 @@ describe("subagent contract guard", () => {
       "packages/brewva-gateway/src/delegation/background/protocol.ts",
     );
 
-    expect(readerSource).toContain("brewva.subagent-run-spec.v7");
+    expect(readerSource).toContain("brewva.subagent-run-spec.v8");
     expect(readerSource).toContain("clear_.orchestrator/subagent-runs");
-    expect(readerSource).not.toContain("brewva.subagent-run-spec.v6");
-    expect(protocolSource).toContain('schema: "brewva.subagent-run-spec.v7"');
+    expect(readerSource).not.toContain("brewva.subagent-run-spec.v7");
+    expect(protocolSource).toContain('schema: "brewva.subagent-run-spec.v8"');
   });
 
   it("keeps markdown worker overlays scoped to the supported project roots", () => {

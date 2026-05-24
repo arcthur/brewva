@@ -5,7 +5,10 @@ import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions } from "@brewva/brewva-runtime/protocol";
 import { sha256Hex, stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
-import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
+import type {
+  BrewvaManagedPromptSession,
+  BrewvaModelRoleAlias,
+} from "@brewva/brewva-substrate/session";
 import type {
   BrewvaToolExecutionTraits,
   BrewvaToolOrchestration,
@@ -36,6 +39,7 @@ import {
 } from "../session-factory.js";
 import type { HostedSessionPhase } from "../session-phase/api.js";
 import { findModelPreset } from "../settings/model-presets.js";
+import { isBrewvaModelRoleAlias } from "../settings/model-presets.js";
 import {
   createHostedToolExecutionCoordinator,
   wrapToolDefinitionWithHostedExecutionTraits,
@@ -83,6 +87,7 @@ export interface HostedSessionResult {
 
 export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOptions {
   runtime?: HostedRuntimeAdapterPort;
+  modelRole?: BrewvaModelRoleAlias;
   extensions?: HostedExtensionPlugin[];
   localHooks?: readonly LocalHookPort[];
   orchestration?: BrewvaToolOrchestration;
@@ -96,6 +101,17 @@ export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOp
   deferPersistenceUntilPrompt?: boolean;
   ui?: BrewvaToolUiPort;
   logger?: HostedSessionLogger;
+}
+
+function resolveHostedModelRole(value: unknown): BrewvaModelRoleAlias | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string" && isBrewvaModelRoleAlias(value)) {
+    return value;
+  }
+  const label = typeof value === "string" ? value : value === null ? "null" : typeof value;
+  throw new Error(`Unknown model role alias: ${label}`);
 }
 
 interface HostedToolRenderTheme {
@@ -595,6 +611,7 @@ export async function createHostedSession(
   options: CreateHostedSessionOptions = {},
 ): Promise<HostedSessionResult> {
   const environment = resolveHostedEnvironment(options);
+  const requestedModelRole = resolveHostedModelRole(options.modelRole);
   const runtime = createKernelRuntime(options, environment.cwd);
   assertRoutingScopeCompatibility(runtime, options);
 
@@ -609,7 +626,11 @@ export async function createHostedSession(
     delegationStore,
     cwd: environment.cwd,
     modelCatalog: environment.sessionFactory.modelCatalog,
-    createChildSession: (childOptions) => createHostedSession(childOptions),
+    createChildSession: (childOptions) =>
+      createHostedSession({
+        ...childOptions,
+        modelRole: childOptions.modelRole,
+      }),
     getActiveModelPreset: () => {
       const state = activeSession?.getModelPresetState?.();
       return state ? findModelPreset(state) : undefined;
@@ -695,6 +716,7 @@ export async function createHostedSession(
     runtime,
     extensions,
     requestedModel: environment.requestedModelSelection.model,
+    requestedModelRole,
     requestedThinkingLevel: environment.requestedModelSelection.thinkingLevel,
     customTools,
     sessionId: options.sessionId,

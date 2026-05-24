@@ -20,6 +20,7 @@ import {
   subscribeRuntimeEvents,
   type HostedRuntimeAdapterPort,
 } from "./runtime-ports.js";
+import { resolvePresetRoleModel } from "./settings/model-presets.js";
 import type { BrewvaSessionTitleGenerator } from "./title-generator.js";
 
 export interface SessionTitleCoordinatorOptions {
@@ -34,7 +35,7 @@ export interface SessionTitleCoordinatorOptions {
 
 type TitleModelCandidate =
   | {
-      source: "preset_title" | "preset_main";
+      source: "preset_smol" | "preset_default";
       modelText: string;
       presetName?: string;
     }
@@ -123,18 +124,20 @@ export class SessionTitleCoordinator {
   #titleModelCandidates(): TitleModelCandidate[] {
     const activePreset = this.#getActiveModelPreset();
     const candidates: TitleModelCandidate[] = [];
-    if (activePreset?.auxiliaryModels?.title) {
+    const smolModel = resolvePresetRoleModel(activePreset, "smol");
+    const defaultModel = resolvePresetRoleModel(activePreset, "default");
+    if (smolModel) {
       candidates.push({
-        source: "preset_title",
-        modelText: activePreset.auxiliaryModels.title,
-        presetName: activePreset.name,
+        source: "preset_smol",
+        modelText: smolModel,
+        presetName: activePreset?.name,
       });
     }
-    if (activePreset?.mainModel && activePreset.mainModel !== activePreset.auxiliaryModels?.title) {
+    if (defaultModel && defaultModel !== smolModel) {
       candidates.push({
-        source: "preset_main",
-        modelText: activePreset.mainModel,
-        presetName: activePreset.name,
+        source: "preset_default",
+        modelText: defaultModel,
+        presetName: activePreset?.name,
       });
     }
     const current = this.#getCurrentModel();

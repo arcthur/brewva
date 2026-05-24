@@ -26,6 +26,12 @@ transient host diagnostic.
 Detailed recovery history stays process-local unless it changes durable replay
 or operator-visible recovery truth.
 
+Hosted provider credential rotation is recorded as a redacted lifecycle event
+named `provider_credential_rotated`. Its payload is exactly
+`{ providerId, credentialSlot, reason, cooldownMs }`, where `reason` is
+`"quota" | "rate_limit" | "auth" | "manual"`. It records the selected slot and
+cooldown policy only; provider secrets and credential values are forbidden.
+
 ## Rewind And Recovery
 
 Session rewind events record checkpoints, completed rewinds, redo completion,

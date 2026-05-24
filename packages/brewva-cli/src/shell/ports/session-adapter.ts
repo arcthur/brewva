@@ -446,7 +446,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
   const fallbackPresetState = (): BrewvaModelPresetState => ({
     activeName: "Default",
     defaultName: "Default",
-    presets: [{ name: "Default", delegationModels: {}, synthetic: true }],
+    presets: [{ name: "Default", roles: {}, synthetic: true }],
   });
   return {
     session: bundle.session,
@@ -536,7 +536,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
           previousName: state.activeName,
           modelChanged: false,
           queued: false,
-          effectiveMainModel: state.presets[0]?.mainModel,
+          effectiveDefaultModel: state.presets[0]?.roles.default,
         };
       }
       const nextName = selectNextModelPresetName(

@@ -120,8 +120,8 @@ describe("managed-agent-session model selection", () => {
         ...createFallbackModelPresetState("Default"),
         presets: [
           ...createFallbackModelPresetState("Default").presets,
-          { name: "High", mainModel: "openai/gpt-5.4-mini:high", delegationModels: {} },
-          { name: "Low", mainModel: "openai/gpt-5.4-mini:low", delegationModels: {} },
+          { name: "High", roles: { default: "openai/gpt-5.4-mini:high" } },
+          { name: "Low", roles: { default: "openai/gpt-5.4-mini:low" } },
         ],
       },
       catalog: createCatalog([TEST_MODEL]),
@@ -162,8 +162,8 @@ describe("managed-agent-session model selection", () => {
       activeName: "Fast",
       defaultName: "Default",
       presets: [
-        { name: "Default", synthetic: true, delegationModels: {} },
-        { name: "Fast", mainModel: "openai/gpt-5.4-mini:high", delegationModels: {} },
+        { name: "Default", synthetic: true, roles: {} },
+        { name: "Fast", roles: { default: "openai/gpt-5.4-mini:high" } },
       ],
     };
     const controller = new ManagedSessionModelSelectionController({

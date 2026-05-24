@@ -65,13 +65,13 @@ export interface BrewvaModelPreferences {
   favorite: BrewvaModelPreferenceRef[];
 }
 
+export type BrewvaModelRoleAlias = "default" | "smol" | "slow" | "plan" | "commit" | "task";
+
+export type BrewvaModelRoleMap = Partial<Record<BrewvaModelRoleAlias, string>>;
+
 export interface BrewvaModelPreset {
   name: string;
-  mainModel?: string;
-  delegationModels: Record<string, string>;
-  auxiliaryModels?: {
-    title?: string;
-  };
+  roles: BrewvaModelRoleMap;
   synthetic?: boolean;
 }
 
@@ -92,7 +92,7 @@ export interface BrewvaModelPresetSelectionResult {
   previousName?: string;
   modelChanged: boolean;
   queued: boolean;
-  effectiveMainModel?: string;
+  effectiveDefaultModel?: string;
 }
 
 export type BrewvaDiffStyle = "auto" | "stacked";

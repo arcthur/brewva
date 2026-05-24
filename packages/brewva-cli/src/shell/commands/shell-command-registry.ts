@@ -3,6 +3,7 @@ import type {
   ShellCommandProvider,
   ShellSlashReservation,
 } from "./command-provider.js";
+import { registerFileBackedSlashCommands } from "./file-command-provider.js";
 
 const builtInShellCommands: readonly ShellCommand[] = [
   {
@@ -378,9 +379,26 @@ const reservedShellSlashNames: readonly ShellSlashReservation[] = [
   },
 ];
 
-export function registerShellCommands(commandProvider: ShellCommandProvider): void {
+export function registerShellCommands(
+  commandProvider: ShellCommandProvider,
+  options: { cwd?: string; homeDir?: string; loadFileCommands?: boolean } = {},
+): void {
   for (const command of builtInShellCommands) {
-    commandProvider.register(command);
+    commandProvider.register(command, {
+      provenance: {
+        providerId: "brewva.builtin",
+        providerLabel: "Built-in Brewva",
+        builtIn: true,
+      },
+    });
   }
   commandProvider.reserveSlashNames(reservedShellSlashNames);
+  if (options.loadFileCommands !== true) {
+    return;
+  }
+  registerFileBackedSlashCommands({
+    commandProvider,
+    cwd: options.cwd ?? process.cwd(),
+    homeDir: options.homeDir,
+  });
 }

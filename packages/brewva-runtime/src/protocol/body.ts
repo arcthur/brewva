@@ -337,6 +337,7 @@ export const ITERATION_METRIC_OBSERVED_EVENT_TYPE = "iteration.metric.observed" 
 export const MESSAGE_END_EVENT_TYPE = "message.end" as const;
 export const MODEL_PRESET_SELECT_EVENT_TYPE = "model_preset_select" as const;
 export const MODEL_SELECT_EVENT_TYPE = "model_select" as const;
+export const PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE = "provider_credential_rotated" as const;
 export const OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE =
   "observability.assertion.recorded" as const;
 export const OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE = "observability.query.executed" as const;
@@ -1941,6 +1942,8 @@ export interface DelegationModelRouteRecord extends ProtocolRecord {
   readonly policyId?: string;
   readonly presetName?: string;
   readonly category?: string;
+  readonly role?: string;
+  readonly presetMissReason?: string;
   readonly reason?: string;
   readonly source?: DelegationModelRouteSource;
 }

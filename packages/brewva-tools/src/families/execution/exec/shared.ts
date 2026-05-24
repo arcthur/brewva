@@ -15,6 +15,7 @@ export const DANGEROUS_OBJECT_KEYS = new Set(["__proto__", "constructor", "proto
 export type SecurityMode = BrewvaConfig["security"]["mode"];
 export type ExecutionBackend = BrewvaConfig["security"]["execution"]["backend"];
 export type BoxConfig = BrewvaConfig["security"]["execution"]["box"];
+export type ExecutionAutoBackgroundConfig = BrewvaConfig["security"]["execution"]["autoBackground"];
 
 export interface ExecToolOptions {
   runtime?: import("../../../contracts/index.js").BrewvaBundledToolRuntime;
@@ -63,10 +64,19 @@ export function resolveWorkdir(baseCwd: string, value: unknown): string {
   return resolve(baseCwd, trimmed);
 }
 
-export function resolveYieldMs(params: { yieldMs?: unknown }): number {
+export function resolveYieldMs(
+  params: { yieldMs?: unknown },
+  defaultYieldMs = DEFAULT_YIELD_MS,
+): number {
   const raw = params.yieldMs;
-  if (typeof raw !== "number" || !Number.isFinite(raw)) return DEFAULT_YIELD_MS;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return defaultYieldMs;
   return Math.max(0, Math.min(120_000, Math.trunc(raw)));
+}
+
+export function resolveForegroundWaitMs(config: ExecutionAutoBackgroundConfig | undefined): number {
+  const raw = config?.foregroundWaitMs;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return DEFAULT_YIELD_MS;
+  return Math.max(1, Math.min(120_000, Math.trunc(raw)));
 }
 
 export function resolveTimeoutSec(params: { timeout?: unknown }): number | undefined {

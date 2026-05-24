@@ -27,15 +27,17 @@ import {
   serializeBoxRootMappings,
 } from "./exec/box-root-map.js";
 import { buildHostEnv, executeHostCommandEffect } from "./exec/host-lane.js";
+import { DENY_LIST_BEST_EFFORT_MESSAGE, resolveExecutionPolicy } from "./exec/policy.js";
 import {
-  DENY_LIST_BEST_EFFORT_MESSAGE,
-  resolveExecutionPolicy,
-  resolveMisroutedToolName,
-} from "./exec/policy.js";
+  analyzeExecPreflight,
+  attachExecPreflightDetails,
+  preflightDetails,
+} from "./exec/preflight.js";
 import {
   isExecAbortedError,
   normalizeCommand,
   normalizeOptionalString,
+  resolveForegroundWaitMs,
   resolveRequestedEnv,
   resolveTimeoutSec,
   resolveWorkdir,
@@ -65,7 +67,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
       name: "exec",
       label: "Exec",
       description:
-        "Execute shell commands with optional background continuation. Pair with process tool for list/poll/log/kill.",
+        "Execute shell commands with optional background continuation. Pair with process tool for list/poll/log/kill. yieldMs overrides the session default foreground wait.",
       promptSnippet:
         "Run a bounded shell command when real workspace execution or verification is required.",
       promptGuidelines: [
@@ -114,7 +116,10 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
         const hostEnv = buildHostEnv(requestedEnv.env);
         const timeoutSec = resolveTimeoutSec(params);
         const background = params.background === true;
-        const yieldMs = background ? 0 : resolveYieldMs(params);
+        const foregroundWaitMs = resolveForegroundWaitMs(
+          runtime?.config.security.execution.autoBackground,
+        );
+        const yieldMs = background ? 0 : resolveYieldMs(params, foregroundWaitMs);
 
         const actionPolicy = getToolActionPolicy(
           "exec",
@@ -133,9 +138,15 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
         const virtualReadonly = commandPolicy
           ? analyzeVirtualReadonlyEligibility(commandPolicy)
           : undefined;
-        const misroutedToolName = resolveMisroutedToolName(primaryTokens);
-        if (misroutedToolName) {
-          const reason = `Command '${misroutedToolName}' is a Brewva tool name. Call tool '${misroutedToolName}' directly instead of using exec.`;
+        const executionPreflight = analyzeExecPreflight({
+          command,
+          detectedCommands: primaryTokens,
+        });
+        if (executionPreflight.decision === "block") {
+          const details = preflightDetails(executionPreflight);
+          const reason =
+            executionPreflight.findings.find((finding) => finding.severity === "block")?.message ??
+            "Command was blocked by exec preflight.";
           recordExecEvent(
             runtime,
             ownerSessionId,
@@ -147,14 +158,23 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               payload: {
                 detectedCommands: primaryTokens,
                 reason,
-                blockedAsToolNameMisroute: true,
-                suggestedTool: misroutedToolName,
+                executionPreflight: details,
                 ...buildCommandPolicyAuditPayload(commandPolicy),
                 ...buildVirtualReadonlyAuditPayload(virtualReadonly),
               },
             }),
           );
-          throw new Error(`exec_blocked_isolation: ${reason}`);
+          return textResult(
+            `Exec rejected (shell_as_tool). ${reason}`,
+            withVerdict(
+              {
+                status: "failed",
+                reason: "shell_as_tool",
+                executionPreflight: details,
+              },
+              "fail",
+            ),
+          );
         }
 
         const boundaryDecision = evaluateBoundaryClassification(
@@ -228,14 +248,17 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
             }),
           );
           try {
-            return await executeVirtualReadonlyCommand({
-              command,
-              commandPolicy,
-              virtualReadonly,
-              cwd: hostCwd,
-              timeoutSec,
-              signal,
-            });
+            return attachExecPreflightDetails(
+              await executeVirtualReadonlyCommand({
+                command,
+                commandPolicy,
+                virtualReadonly,
+                cwd: hostCwd,
+                timeoutSec,
+                signal,
+              }),
+              executionPreflight,
+            );
           } catch (error) {
             if (isExecAbortedError(error) || signal?.aborted) {
               throw error;
@@ -300,7 +323,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               },
             }),
           );
-          return await runHost();
+          return attachExecPreflightDetails(await runHost(), executionPreflight);
         }
 
         const boxRootMappings = buildBoxRootMappings({
@@ -332,38 +355,45 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               },
             }),
           );
-          return textResult(
-            "Exec rejected (box_unmapped_host_path).",
-            withVerdict(
-              {
-                status: "failed",
-                reason: "box_unmapped_host_path",
-                unmappedPaths: boxCommandPathRewrite.unmappedPaths,
-                mappedRoots: rootMappings,
-                ...buildCommandPolicyAuditPayload(commandPolicy),
-              },
-              "fail",
+          return attachExecPreflightDetails(
+            textResult(
+              "Exec rejected (box_unmapped_host_path).",
+              withVerdict(
+                {
+                  status: "failed",
+                  reason: "box_unmapped_host_path",
+                  unmappedPaths: boxCommandPathRewrite.unmappedPaths,
+                  mappedRoots: rootMappings,
+                  ...buildCommandPolicyAuditPayload(commandPolicy),
+                },
+                "fail",
+              ),
             ),
+            executionPreflight,
           );
         }
 
-        return await executeBoxCommandWithAudit({
-          ownerSessionId,
-          toolCallId,
-          command: boxCommandPathRewrite.command,
-          policy,
-          runtime,
-          boxWorkspaceRoot,
-          boxRootMappings,
-          boxRequestedCwd,
-          requestedEnv,
-          timeoutSec,
-          background,
-          signal,
-          commandPolicy,
-          virtualReadonly,
-          preferredBackend,
-        });
+        return attachExecPreflightDetails(
+          await executeBoxCommandWithAudit({
+            ownerSessionId,
+            toolCallId,
+            command: boxCommandPathRewrite.command,
+            policy,
+            runtime,
+            boxWorkspaceRoot,
+            boxRootMappings,
+            boxRequestedCwd,
+            requestedEnv,
+            timeoutSec,
+            background,
+            yieldMs,
+            signal,
+            commandPolicy,
+            virtualReadonly,
+            preferredBackend,
+          }),
+          executionPreflight,
+        );
       },
     },
     {},

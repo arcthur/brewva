@@ -55,6 +55,8 @@ export interface BoxBackgroundExecutionResult {
   status: "running";
   output: string;
   sessionId: string;
+  pid: number | null;
+  tail: string;
   boxId: string;
   executionId: string;
   fingerprint?: string;
@@ -101,6 +103,7 @@ export interface ExecuteBoxCommandInput {
   requestedTimeoutSec?: number;
   snapshotBefore: boolean;
   background: boolean;
+  yieldMs: number;
   signal?: AbortSignal;
   onBootstrapStarted?(scope: BoxScope): void;
   onBootstrapProgress?(scope: BoxScope, phase: string): void;
@@ -268,6 +271,7 @@ export const executeBoxCommandEffect: (
       input.onBootstrapStarted?.(scope);
 
       let released = false;
+      let detachBoxOnRelease = input.background;
       const releaseBoxOnce = async (box: BoxHandle, reason: ReleaseReason): Promise<void> => {
         if (reason === "detach" || released) {
           return;
@@ -285,7 +289,7 @@ export const executeBoxCommandEffect: (
             if (abortSignal.aborted) {
               await releaseBoxOnce(
                 acquired,
-                resolveBoxReleaseReason(acquired, input.policy, input.background),
+                resolveBoxReleaseReason(acquired, input.policy, detachBoxOnRelease),
               );
               throw new ExecAbortedError();
             }
@@ -303,7 +307,7 @@ export const executeBoxCommandEffect: (
           BrewvaEffect.promise(() =>
             releaseBoxOnce(
               boxHandle,
-              resolveBoxReleaseReason(boxHandle, input.policy, input.background),
+              resolveBoxReleaseReason(boxHandle, input.policy, detachBoxOnRelease),
             ),
           ),
       );
@@ -327,7 +331,7 @@ export const executeBoxCommandEffect: (
               cwd: effectiveCwd,
               env: boxCommand.env,
               timeoutSec,
-              detach: input.background,
+              detach: input.background || input.yieldMs > 0,
             }),
           input.signal,
         ),
@@ -340,7 +344,8 @@ export const executeBoxCommandEffect: (
           }),
       );
 
-      if (input.background) {
+      if (input.background || input.yieldMs === 0) {
+        detachBoxOnRelease = true;
         executionDetached = true;
         const started = yield* registry.startBox({
           ownerSessionId: input.ownerSessionId,
@@ -359,10 +364,19 @@ export const executeBoxCommandEffect: (
             };
           })(),
         });
+        const outputLines = [
+          `Command still running (session ${started.session.id}, box ${box.id}, execution ${execution.id}).`,
+          "Use process (list/poll/log/kill/clear/remove) for follow-up.",
+        ];
+        if (started.session.tail.trim().length > 0) {
+          outputLines.push("", started.session.tail.trimEnd());
+        }
         return {
           status: "running",
-          output: `Command still running (session ${started.session.id}, box ${box.id}, execution ${execution.id}).\nUse process (list/poll/log/kill/clear/remove) for follow-up.`,
+          output: outputLines.join("\n"),
           sessionId: started.session.id,
+          pid: started.session.pid,
+          tail: started.session.tail,
           boxId: box.id,
           executionId: execution.id,
           fingerprint: box.fingerprint,
@@ -375,7 +389,55 @@ export const executeBoxCommandEffect: (
         } satisfies BoxBackgroundExecutionResult;
       }
 
-      const result = yield* waitForBoxExecutionEffect(execution, input.signal);
+      const result = yield* waitForBoxExecutionOrYieldEffect(
+        execution,
+        input.signal,
+        input.yieldMs,
+      );
+      if (!result) {
+        detachBoxOnRelease = true;
+        executionDetached = true;
+        const started = yield* registry.startBox({
+          ownerSessionId: input.ownerSessionId,
+          command: input.command,
+          cwd: effectiveCwd,
+          boxId: box.id,
+          fingerprint: box.fingerprint,
+          execution,
+          plane,
+          timeoutSec,
+          releaseOnCompletion: (() => {
+            const releaseReason = resolveBoxCompletionReleaseReason(box, input.policy);
+            if (!releaseReason) return undefined;
+            return async () => {
+              await releaseBoxOnce(box, releaseReason);
+            };
+          })(),
+        });
+        const outputLines = [
+          `Command still running (session ${started.session.id}, box ${box.id}, execution ${execution.id}).`,
+          "Use process (list/poll/log/kill/clear/remove) for follow-up.",
+        ];
+        if (started.session.tail.trim().length > 0) {
+          outputLines.push("", started.session.tail.trimEnd());
+        }
+        return {
+          status: "running",
+          output: outputLines.join("\n"),
+          sessionId: started.session.id,
+          pid: started.session.pid,
+          tail: started.session.tail,
+          boxId: box.id,
+          executionId: execution.id,
+          fingerprint: box.fingerprint,
+          requestedCwd: boxCommand.requestedCwd,
+          effectiveCwd,
+          requestedEnvKeys: boxCommand.requestedEnvKeys,
+          appliedEnvKeys: boxCommand.appliedEnvKeys,
+          droppedEnvKeys: boxCommand.droppedEnvKeys,
+          timeoutSec,
+        } satisfies BoxBackgroundExecutionResult;
+      }
       executionCompleted = true;
       const combined = [result.stdout.trimEnd(), result.stderr.trimEnd()]
         .filter((part) => part.length > 0)
@@ -414,15 +476,21 @@ function killBoxExecutionBestEffort(execution: BoxExec): Promise<void> {
   return execution.kill("SIGKILL").catch(() => undefined);
 }
 
-function waitForBoxExecutionEffect(
+function waitForBoxExecutionOrYieldEffect(
   execution: BoxExec,
-  externalSignal?: AbortSignal,
-): BrewvaEffect.Effect<BoxExecResult, BrewvaBoundaryError> {
+  externalSignal: AbortSignal | undefined,
+  yieldMs: number,
+): BrewvaEffect.Effect<BoxExecResult | undefined, BrewvaBoundaryError> {
+  if (yieldMs === 0) {
+    return BrewvaEffect.succeed(undefined);
+  }
   return fromAbortableBoundaryPromise(
     async (signal) =>
-      await new Promise<BoxExecResult>((resolveWait, rejectWait) => {
+      await new Promise<BoxExecResult | undefined>((resolveWait, rejectWait) => {
         let settled = false;
+        const timer = setTimeout(() => settle(() => resolveWait(undefined)), yieldMs);
         const cleanup = () => {
+          clearTimeout(timer);
           signal.removeEventListener("abort", onAbort);
         };
         const settle = (callback: () => void) => {

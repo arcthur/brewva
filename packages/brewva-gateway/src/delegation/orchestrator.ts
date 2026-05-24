@@ -6,6 +6,7 @@ import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/protocol";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import type { PatchSet } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type {
   BrewvaToolOrchestration,
   DelegationPacket,
@@ -102,6 +103,7 @@ import {
 export interface HostedSubagentSessionOptions {
   agentId: string;
   model?: string;
+  modelRole?: BrewvaModelRoleAlias;
   cwd?: string;
   configPath?: string;
   config?: BrewvaConfig;
@@ -694,6 +696,7 @@ export function createHostedSubagentAdapter(
         child = await options.createChildSession({
           agentId: buildSubagentAgentId(delegate),
           model: executionPlan.model,
+          modelRole: executionPlan.modelRole,
           cwd: isolatedWorkspace?.root,
           config: structuredClone(options.runtime.config) as BrewvaConfig,
           builtinToolNames: executionPlan.builtinToolNames,

@@ -13,8 +13,6 @@ import {
   foldClaimLedgerEvents,
   readVerificationOutcomeRecordedEventPayload,
   TASK_EVENT_TYPE,
-  SUBAGENT_RUNNING_EVENT_TYPE,
-  SUBAGENT_SPAWNED_EVENT_TYPE,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
   CLAIM_EVENT_TYPE,
@@ -144,9 +142,8 @@ interface InspectReport {
     activeName: string;
     previousName: string | null;
     source: string | null;
-    mainModel: string | null;
-    delegationModels: Record<string, string>;
-    unmatchedSubagentModelKeys: string[];
+    roles: Record<string, string>;
+    unmatchedRoleKeys: string[];
     eventId: string | null;
     selectedAt: string | null;
   };
@@ -307,36 +304,10 @@ function readPayloadStringRecord(payload: unknown, key: string): Record<string, 
   return record;
 }
 
-function readEventPayloadString(event: BrewvaEventRecord, key: string): string | null {
-  if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
-    return null;
-  }
-  const value = (event.payload as Record<string, unknown>)[key];
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
-
-function resolveUnmatchedPresetSubagentModelKeys(input: {
-  delegationModels: Record<string, string>;
-  events: BrewvaEventRecord[];
-}): string[] {
-  const knownDelegationModelCategories = new Set([
-    "fast-evidence",
-    "deep-reasoning",
-    "isolated-execution",
-    "verification",
-    "knowledge",
-  ]);
-  for (const event of input.events) {
-    if (event.type !== SUBAGENT_SPAWNED_EVENT_TYPE && event.type !== SUBAGENT_RUNNING_EVENT_TYPE) {
-      continue;
-    }
-    const modelCategory = readEventPayloadString(event, "modelCategory");
-    if (modelCategory) {
-      knownDelegationModelCategories.add(modelCategory);
-    }
-  }
-  return Object.keys(input.delegationModels)
-    .filter((key) => !knownDelegationModelCategories.has(key))
+function resolveUnmatchedPresetRoleKeys(roles: Record<string, string>): string[] {
+  const knownRoles = new Set(["default", "smol", "slow", "plan", "commit", "task"]);
+  return Object.keys(roles)
+    .filter((key) => !knownRoles.has(key))
     .toSorted((left, right) => left.localeCompare(right));
 }
 
@@ -617,10 +588,7 @@ function buildInspectReport(
   const latestModelPresetEvent = events
     .toReversed()
     .find((event) => event.type === MODEL_PRESET_SELECT_EVENT_TYPE);
-  const modelPresetDelegationModels = readPayloadStringRecord(
-    latestModelPresetEvent?.payload,
-    "delegationModels",
-  );
+  const modelPresetRoles = readPayloadStringRecord(latestModelPresetEvent?.payload, "roles");
 
   const projectionRoot = resolve(runtime.identity.workspaceRoot, effectiveProjectionDir);
   const projectionWorkingPath = join(
@@ -721,12 +689,8 @@ function buildInspectReport(
       activeName: readPayloadString(latestModelPresetEvent?.payload, "presetName") ?? "Default",
       previousName: readPayloadString(latestModelPresetEvent?.payload, "previousPresetName"),
       source: readPayloadString(latestModelPresetEvent?.payload, "source"),
-      mainModel: readPayloadString(latestModelPresetEvent?.payload, "mainModel"),
-      delegationModels: modelPresetDelegationModels,
-      unmatchedSubagentModelKeys: resolveUnmatchedPresetSubagentModelKeys({
-        delegationModels: modelPresetDelegationModels,
-        events,
-      }),
+      roles: modelPresetRoles,
+      unmatchedRoleKeys: resolveUnmatchedPresetRoleKeys(modelPresetRoles),
       eventId: latestModelPresetEvent?.id ?? null,
       selectedAt: toIso(latestModelPresetEvent?.timestamp),
     },

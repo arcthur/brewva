@@ -16,6 +16,7 @@ Execution includes:
 - box-plane configuration and routing
 - host, box, and virtual read-only exec lanes
 - managed process lifecycle and output buffering
+- preflight diagnostics and output distillation metadata
 
 ## Receipts
 
@@ -23,6 +24,36 @@ Effectful execution must produce a receipt or a denial/defer reason. Managed
 process tools expose lifecycle and output state, but they do not replace the
 runtime receipt boundary for the command that created or controlled the
 process.
+
+## Preflight And Output
+
+`exec` runs a typed preflight after parameter normalization and before actual
+execution. Preflight is not an authorization boundary; security/action policy
+remains the source of truth. Preflight can:
+
+- block high-confidence shell-as-tool misuse, such as trying to run
+  `source_read` as a shell command
+- attach advisory diagnostics for shell reads/searches that should usually use
+  dedicated tools
+- attach execution hints for noisy or long-running commands
+
+Preflight results live in tool result metadata at
+`details.executionPreflight`. Advisory state does not fork the `exec.failed`
+event schema.
+
+Hosted output distillation preserves raw output first, then presents a compact
+display summary when needed. Distilled results include
+`details.outputDistillation` with strategy, raw size, summary size, truncation
+state, and raw artifact reference when one exists.
+
+Foreground host and box commands auto-background after
+`security.execution.autoBackground.foregroundWaitMs` and return a managed
+process session. Follow-up observation and control stay on the `process` tool.
+The per-call `yieldMs` parameter overrides this session default, including
+`0` for immediate backgrounding and larger bounded waits for commands that
+should remain foreground longer.
+Virtual-readonly output remains exploration evidence and never becomes
+verification evidence because it was minimized or backgrounded.
 
 ## Scope
 

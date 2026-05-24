@@ -79,6 +79,48 @@ Reserved slash names stay out of completion and do not submit prompts:
 Slash commands are presentation and control-plane veneers. Runtime receipts and
 inspection state remain owned by the runtime surfaces they call.
 
+## File-Backed Slash Commands
+
+The shell registry also loads Markdown slash commands from deterministic
+provider roots:
+
+1. built-in Brewva commands
+2. project `.brewva/commands`
+3. user `~/.brewva/commands`
+4. project `.claude/commands`
+5. user `~/.claude/commands`
+6. project `.codex/commands`
+7. user `~/.codex/commands`
+8. project `.opencode/commands`
+9. user `~/.opencode/commands`
+
+Built-in commands have highest precedence and cannot be replaced. Later
+duplicate slash names are retained as shadowed diagnostics so completion/help
+can show provider, path, and shadow state, but lookup still resolves to the
+highest-precedence command. The source order is fixed: project Brewva commands
+win over user Brewva commands, both Brewva roots win over Claude, Codex, and
+OpenCode roots, and project roots win over user roots inside each family.
+
+File-backed commands use a Markdown frontmatter subset:
+
+```yaml
+---
+description: Run a focused review.
+arguments:
+  - name: target
+    description: File, directory, or topic to review.
+    required: true
+---
+Review {{target}} and report only actionable findings.
+```
+
+The body expands as ordinary operator-authored prompt text. Missing required
+arguments fail before submission. Frontmatter that asks for external authority
+or tool permissions fails closed; command files do not grant capabilities.
+Argument parsing supports whitespace splitting, single/double quotes, and
+backslash escapes outside single quotes. Missing optional template variables
+submit with an interactive warning and expand to an empty string.
+
 ## Command Palette
 
 Palette-only actions include:

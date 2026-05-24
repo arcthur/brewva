@@ -47,6 +47,10 @@ There is no automatic host fallback. `security.execution.backend` is either
   launch
 - unbounded readonly output or implicit whole-workspace scans exhaust local
   resources
+- shell-as-tool mistakes waste turns or bypass richer tool protocols when the
+  model tries to invoke Brewva tools through `exec`
+- long-running foreground commands can stall the turn loop if they are not
+  promoted to managed processes
 - symlinks or special files turn a read-looking command into an escape from the
   task target root
 - stateful box compromise persists for the whole session/task box lifetime
@@ -82,6 +86,19 @@ There is no automatic host fallback. `security.execution.backend` is either
 - Box runtime failures emit `box.exec.failed` or `box.bootstrap.failed` and do
   not downgrade to host. Host and virtual-readonly routing failures emit
   `exec.failed`.
+- Exec preflight runs before execution and writes
+  `details.executionPreflight`. It may block high-confidence shell-as-tool
+  misuse and may advise on better dedicated tools, but it cannot authorize a
+  command that security/action policy rejects.
+- Ergonomic preflight is evaluated before boundary policy so shell-as-tool
+  category mistakes can fail quickly. This ordering does not replace the
+  boundary check: every command that reaches execution still has to pass
+  security/action policy, and any command not allowed by that policy is rejected.
+- Commands that exceed `security.execution.autoBackground.foregroundWaitMs`
+  become managed process sessions. The initial result discloses process state
+  and follow-up `process` controls.
+- Output minimization is lossless through raw artifact recovery metadata and
+  cannot upgrade virtual-readonly exploration to verification evidence.
 - `process` manages explicit host background sessions; box detached execution
   is identified by `(box_id, execution_id)`.
 - Box detached execution is reattached through Brewva supervisor metadata inside

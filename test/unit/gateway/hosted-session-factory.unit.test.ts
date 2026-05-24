@@ -83,12 +83,10 @@ describe("hosted session factory", () => {
       defaultThinkingLevel: "low",
       modelPresets: {
         "Claude Lead": {
-          mainModel: "anthropic/preset-main:high",
-          delegationModels: {
-            "deep-reasoning": "openai/gpt-5.5:medium",
-          },
-          auxiliaryModels: {
-            title: "anthropic/preset-main",
+          roles: {
+            default: "anthropic/preset-main:high",
+            slow: "openai/gpt-5.5:medium",
+            smol: "anthropic/preset-main",
           },
         },
       },
@@ -124,7 +122,7 @@ describe("hosted session factory", () => {
     expect(result.session.getModelPresetState?.().activeName).toBe("Claude Lead");
     expect(
       result.session.getModelPresetState?.().presets.find((preset) => preset.name === "Claude Lead")
-        ?.auxiliaryModels?.title,
+        ?.roles.smol,
     ).toBe("anthropic/preset-main");
     expect(result.modelFallbackMessage).toBe(undefined);
 
@@ -139,7 +137,7 @@ describe("hosted session factory", () => {
       defaultModelPreset: "Missing",
       modelPresets: {
         "Claude Lead": {
-          mainModel: "anthropic/preset-main:high",
+          roles: { default: "anthropic/preset-main:high" },
         },
       },
     });
@@ -156,7 +154,7 @@ describe("hosted session factory", () => {
       defaultModelPreset: "Claude Lead",
       modelPresets: {
         " Claude Lead ": {
-          mainModel: "anthropic/preset-main:high",
+          roles: { default: "anthropic/preset-main:high" },
         },
       },
     });
@@ -166,7 +164,7 @@ describe("hosted session factory", () => {
     expect(() => settings.getModelPresetState()).toThrow("Model preset names must be trimmed");
   });
 
-  test("rejects malformed auxiliary model preset settings", () => {
+  test("rejects removed auxiliary model preset settings", () => {
     const workspace = createTestWorkspace("session-factory-malformed-auxiliary-preset");
     const agentDir = join(workspace, ".brewva-agent");
     writeHostedSettings(agentDir, {
@@ -182,11 +180,11 @@ describe("hosted session factory", () => {
     const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
 
     expect(() => settings.getModelPresetState()).toThrow(
-      "modelPresets.Claude Lead.auxiliaryModels must be an object",
+      "modelPresets.Claude Lead uses removed model preset fields: mainModel, auxiliaryModels",
     );
   });
 
-  test("rejects unknown auxiliary model preset settings", () => {
+  test("rejects removed unknown auxiliary model preset settings", () => {
     const workspace = createTestWorkspace("session-factory-unknown-auxiliary-preset");
     const agentDir = join(workspace, ".brewva-agent");
     writeHostedSettings(agentDir, {
@@ -205,7 +203,7 @@ describe("hosted session factory", () => {
     const settings = readHostedSettingsHandle(createHostedSettingsManager(workspace, agentDir));
 
     expect(() => settings.getModelPresetState()).toThrow(
-      "modelPresets.Claude Lead.auxiliaryModels.summary is not supported",
+      "modelPresets.Claude Lead uses removed model preset fields: mainModel, auxiliaryModels",
     );
   });
 
@@ -216,7 +214,7 @@ describe("hosted session factory", () => {
       defaultModelPreset: "Global",
       modelPresets: {
         Global: {
-          mainModel: "anthropic/global-main:low",
+          roles: { default: "anthropic/global-main:low" },
         },
       },
     });
@@ -224,9 +222,9 @@ describe("hosted session factory", () => {
       defaultModelPreset: "Project",
       modelPresets: {
         Project: {
-          mainModel: "anthropic/project-main:high",
-          delegationModels: {
-            "deep-reasoning": "anthropic/project-explorer:medium",
+          roles: {
+            default: "anthropic/project-main:high",
+            slow: "anthropic/project-explorer:medium",
           },
         },
       },
@@ -240,9 +238,9 @@ describe("hosted session factory", () => {
       presets: expect.arrayContaining([
         expect.objectContaining({
           name: "Project",
-          mainModel: "anthropic/project-main:high",
-          delegationModels: {
-            "deep-reasoning": "anthropic/project-explorer:medium",
+          roles: {
+            default: "anthropic/project-main:high",
+            slow: "anthropic/project-explorer:medium",
           },
         }),
       ]),
@@ -279,7 +277,7 @@ describe("hosted session factory", () => {
     writeHostedSettings(agentDir, {
       modelPresets: {
         Default: {
-          mainModel: "anthropic/current-default:high",
+          roles: { default: "anthropic/current-default:high" },
         },
       },
     });
@@ -300,7 +298,7 @@ describe("hosted session factory", () => {
     expect(result.session.getModelPresetState?.().presets[0]).toMatchObject({
       name: "Default",
       synthetic: true,
-      mainModel: undefined,
+      roles: {},
     });
 
     await result.session.abort();
@@ -322,9 +320,9 @@ describe("hosted session factory", () => {
       presetName: "Claude Lead",
       previousPresetName: "Default",
       source: "tui",
-      mainModel: "anthropic/replayed-main:high",
-      delegationModels: {
-        "deep-reasoning": "anthropic/replayed-explorer:medium",
+      roles: {
+        default: "anthropic/replayed-main:high",
+        slow: "anthropic/replayed-explorer:medium",
       },
     });
     store.appendModelChange("anthropic", "replayed-main");
@@ -333,9 +331,9 @@ describe("hosted session factory", () => {
       defaultModelPreset: "Claude Lead",
       modelPresets: {
         "Claude Lead": {
-          mainModel: "anthropic/current-main:low",
-          delegationModels: {
-            "deep-reasoning": "anthropic/current-explorer:low",
+          roles: {
+            default: "anthropic/current-main:low",
+            slow: "anthropic/current-explorer:low",
           },
         },
       },
@@ -362,9 +360,9 @@ describe("hosted session factory", () => {
     expect(result.session.getModelPresetState?.().presets).toContainEqual(
       expect.objectContaining({
         name: "Claude Lead",
-        mainModel: "anthropic/replayed-main:high",
-        delegationModels: {
-          "deep-reasoning": "anthropic/replayed-explorer:medium",
+        roles: {
+          default: "anthropic/replayed-main:high",
+          slow: "anthropic/replayed-explorer:medium",
         },
       }),
     );
@@ -380,10 +378,10 @@ describe("hosted session factory", () => {
       defaultThinkingLevel: "low",
       modelPresets: {
         Default: {
-          mainModel: "anthropic/default-main:low",
+          roles: { default: "anthropic/default-main:low" },
         },
         "Claude Lead": {
-          mainModel: "anthropic/claude-main:high",
+          roles: { default: "anthropic/claude-main:high" },
         },
       },
     });
@@ -685,7 +683,7 @@ describe("hosted session factory", () => {
       defaultThinkingLevel: "high",
       modelPresets: {
         Default: {
-          mainModel: "demo/alpha",
+          roles: { default: "demo/alpha" },
         },
       },
     });

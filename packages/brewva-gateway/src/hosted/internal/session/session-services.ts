@@ -15,7 +15,11 @@ import type {
 } from "./managed-agent/session.js";
 import type { HostedRuntimeAdapterPort } from "./runtime-ports.js";
 import type { HostedSessionUiOverrides } from "./session-factory.js";
-import type { HostedAuthCredential } from "./settings/hosted-auth-store.js";
+import type {
+  HostedAuthCredential,
+  HostedAuthCredentialSlot,
+  HostedCredentialRotationReason,
+} from "./settings/hosted-auth-store.js";
 
 export type HostedSessionModelDescriptor = BrewvaRegisteredModel;
 
@@ -52,6 +56,19 @@ export interface HostedSessionAuthStore {
   hasAuth(provider: string): boolean;
   isUsingOAuth(provider: string): boolean;
   set(provider: string, credential: HostedAuthCredential): void;
+  setCredentialSlot?(provider: string, slot: HostedAuthCredentialSlot): void;
+  rotateCredential?(
+    provider: string,
+    reason: HostedCredentialRotationReason,
+    cooldownMs: number,
+  ):
+    | {
+        providerId: string;
+        credentialSlot: string;
+        reason: HostedCredentialRotationReason;
+        cooldownMs: number;
+      }
+    | undefined;
   remove(provider: string): void;
   setFallbackResolver?(resolver: (provider: string) => string | undefined): void;
 }

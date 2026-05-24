@@ -48,11 +48,12 @@ export function buildProviderPayloadMetadata(
     transport: overrides.transport ?? (options?.transport as Transport | undefined),
     headers: overrides.headers ?? mergeMetadataHeaders(model.headers, options?.headers),
     extraBody: overrides.extraBody ?? payload,
-    providerFallback: overrides.providerFallback ?? {
-      provider: model.provider,
-      api: model.api,
-      baseUrl: model.baseUrl,
-    },
+    providerFallback: overrides.providerFallback ??
+      options?.metadata?.providerFallback ?? {
+        provider: model.provider,
+        api: model.api,
+        baseUrl: model.baseUrl,
+      },
   };
 }
 

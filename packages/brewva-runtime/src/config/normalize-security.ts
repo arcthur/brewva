@@ -313,6 +313,17 @@ export function normalizeSecurityConfig(
     },
     execution: {
       backend: configuredExecutionBackend,
+      autoBackground: {
+        foregroundWaitMs: Math.min(
+          120_000,
+          normalizePositiveInteger(
+            isRecord(securityExecutionInput.autoBackground)
+              ? securityExecutionInput.autoBackground.foregroundWaitMs
+              : undefined,
+            defaults.execution.autoBackground.foregroundWaitMs,
+          ),
+        ),
+      },
       box: {
         home: normalizeBoxHomePath(securityExecutionBoxInput.home, defaults.execution.box.home),
         image:

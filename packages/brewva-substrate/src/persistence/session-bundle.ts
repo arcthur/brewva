@@ -12,6 +12,7 @@ import {
   type BrewvaSessionMessageEntry,
   type BrewvaThinkingLevelChangeEntry,
 } from "../session/managed-session-store.js";
+import type { BrewvaModelRoleAlias, BrewvaModelRoleMap } from "../session/prompt-session.js";
 
 export interface BrewvaSessionBundleManifest {
   format: "brewva.session.bundle.v1";
@@ -96,26 +97,30 @@ function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-function readOptionalStringRecord(value: unknown): Record<string, string> | undefined {
+const MODEL_ROLE_ALIASES = new Set<BrewvaModelRoleAlias>([
+  "default",
+  "smol",
+  "slow",
+  "plan",
+  "commit",
+  "task",
+]);
+
+function readOptionalRoleMap(value: unknown): BrewvaModelRoleMap | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
-  const record: Record<string, string> = {};
+  const record: BrewvaModelRoleMap = {};
   for (const [key, rawValue] of Object.entries(value)) {
+    if (!MODEL_ROLE_ALIASES.has(key as BrewvaModelRoleAlias)) {
+      continue;
+    }
     const stringValue = readOptionalString(rawValue);
     if (key.trim().length > 0 && stringValue) {
-      record[key] = stringValue;
+      record[key as BrewvaModelRoleAlias] = stringValue;
     }
   }
   return Object.keys(record).length > 0 ? record : {};
-}
-
-function readOptionalAuxiliaryModels(value: unknown): { title?: string } | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const title = readOptionalString(value.title);
-  return title ? { title } : {};
 }
 
 function ensureTimestamp(value: unknown, fallback: string): string {
@@ -340,9 +345,7 @@ function toImportedSessionEntry(
       presetName,
       previousPresetName: readOptionalString(entry.previousPresetName),
       source: readOptionalString(entry.source),
-      mainModel: readOptionalString(entry.mainModel),
-      delegationModels: readOptionalStringRecord(entry.delegationModels),
-      auxiliaryModels: readOptionalAuxiliaryModels(entry.auxiliaryModels),
+      roles: readOptionalRoleMap(entry.roles),
       synthetic: entry.synthetic === true ? true : undefined,
     } satisfies BrewvaModelPresetSelectEntry;
   }
@@ -549,9 +552,7 @@ export function replayImportedSessionEntries(
           presetName: entry.presetName,
           previousPresetName: entry.previousPresetName,
           source: entry.source,
-          mainModel: entry.mainModel,
-          delegationModels: entry.delegationModels,
-          auxiliaryModels: entry.auxiliaryModels,
+          roles: entry.roles,
           synthetic: entry.synthetic,
         });
         break;

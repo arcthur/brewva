@@ -32,6 +32,9 @@ describe("box runtime contract", () => {
     expect(DEFAULT_BREWVA_CONFIG.security.credentials.boxSecretsRef).toBe(undefined);
     expect(DEFAULT_BREWVA_CONFIG.security.execution).toEqual({
       backend: "box",
+      autoBackground: {
+        foregroundWaitMs: 10_000,
+      },
       box: {
         home: "~/.brewva/boxes",
         image: "ghcr.io/arcthur/box-default:latest",

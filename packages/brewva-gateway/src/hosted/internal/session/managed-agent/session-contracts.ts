@@ -27,6 +27,8 @@ import type {
   BrewvaManagedSessionStore,
   BrewvaModelPreferenceRef,
   BrewvaModelPreferences,
+  BrewvaModelRoleAlias,
+  BrewvaModelRoleMap,
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
   BrewvaSessionContext,
@@ -38,6 +40,7 @@ import type { BrewvaCompactionSummaryGenerator } from "../../compaction/summary-
 import type { GoogleCachedContentManager } from "../../provider/cache/index.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
+import type { HostedModelRoutingSettings } from "../settings/settings-store.js";
 import type { BrewvaSessionTitleGenerator } from "../title-generator.js";
 
 export const REQUIRED_HOSTED_PERSISTENCE_EVENTS = ["message_end", "session_compact"] as const;
@@ -70,6 +73,7 @@ export interface BrewvaManagedAgentSessionSettingsPort {
   getCachePolicy(): ProviderCachePolicy;
   getThinkingBudgets(): BrewvaAgentProtocolThinkingBudgets | undefined;
   getRetrySettings(): { maxDelayMs: number } | undefined;
+  getModelRoutingSettings?(): HostedModelRoutingSettings;
   getModelPresetState?(): BrewvaModelPresetState;
   setDefaultThinkingLevel(thinkingLevel: string): void;
   getSelectedModelPreference?(): BrewvaModelPreferenceRef | undefined;
@@ -93,6 +97,7 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   extensions?: CreateBrewvaHostPluginRunnerOptions["plugins"];
   customTools?: readonly BrewvaToolDefinition[];
   initialModel?: BrewvaRegisteredModel;
+  initialModelRole?: BrewvaModelRoleAlias;
   initialThinkingLevel?: BrewvaPromptThinkingLevel;
   initialModelPresetState?: BrewvaModelPresetState;
   deferPersistenceUntilPrompt?: boolean;
@@ -131,11 +136,7 @@ export interface ManagedSessionInitialModelPresetSelection {
   presetName: string;
   previousPresetName?: string;
   source?: string;
-  mainModel?: string;
-  delegationModels?: Record<string, string>;
-  auxiliaryModels?: {
-    title?: string;
-  };
+  roles?: BrewvaModelRoleMap;
   synthetic?: boolean;
 }
 

@@ -281,6 +281,22 @@ export function updateShellIntent(
   switch (intent.type) {
     case "input.received":
       return handled({ effects: [{ type: "input.handle", input: intent.input }] });
+    case "prompt.submit":
+      return handled({
+        effects: [
+          ...(intent.warnings ?? []).map((message) => ({
+            type: "notification.show" as const,
+            message,
+            level: "warning" as const,
+          })),
+          {
+            type: "session.prompt",
+            sessionGeneration: context.sessionGeneration,
+            parts: [{ type: "text", text: intent.text }],
+            options: { source: intent.source },
+          },
+        ],
+      });
     case "effect.dispatch":
       return handled({ effects: [intent.effect] });
     case "dialog.input":

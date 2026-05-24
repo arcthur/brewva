@@ -75,11 +75,29 @@ describe("tool result inline distiller", () => {
     expect(finished).toHaveLength(1);
     expect(String(finished[0]?.outputText)).toContain("trace line 219");
     expect(String(finished[0]?.outputText)).toContain("error: failed at step 204");
-    expect(results[0]).toBe(undefined);
     expect(results).toHaveLength(2);
+    const artifactRef = (results[0] as { details?: { outputArtifact?: { artifactRef?: unknown } } })
+      .details?.outputArtifact?.artifactRef;
+    if (typeof artifactRef !== "string") {
+      throw new Error("Expected ledger writer to expose the raw output artifact ref.");
+    }
+    expect(results[0]).toMatchObject({
+      details: {
+        outputArtifact: {
+          artifactRef: expect.stringContaining(".orchestrator/tool-output-artifacts/"),
+          rawChars: output.length,
+          rawBytes: Buffer.byteLength(output, "utf8"),
+        },
+      },
+    });
     if (results[1] !== undefined) {
       expect(results[1]).toMatchObject({
         content: [{ type: "text", text: expect.any(String) }],
+        details: {
+          outputDistillation: {
+            artifactRef,
+          },
+        },
       });
     }
   });
@@ -184,6 +202,11 @@ describe("tool result inline distiller", () => {
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
       content: [{ type: "text", text: expect.stringContaining("[BrowserSnapshotDistilled]") }],
+      details: {
+        outputDistillation: {
+          artifactRef: ".orchestrator/browser-artifacts/browser-session-3/snapshot.txt",
+        },
+      },
     });
   });
 });

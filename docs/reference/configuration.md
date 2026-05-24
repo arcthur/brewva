@@ -93,6 +93,12 @@ execution evidence can become authoritative. Box execution config controls the
 default sandbox image, resource limits, guest workspace path, network posture,
 and garbage-collection behavior.
 
+`security.execution.autoBackground.foregroundWaitMs` controls how long
+foreground `exec` waits before handing a still-running command to the managed
+process registry. The default is `10000` milliseconds. The setting applies to
+host and box lanes; it does not turn virtual-readonly exploration into
+verification evidence.
+
 `security.execution.box.network.mode="off"` disables outbound network access in
 the BoxLite-backed box. `mode="allowlist"` forwards `network.allow` to BoxLite as
 the native `allowNet` list, so only those hostnames are available from the box.
@@ -112,6 +118,45 @@ through the gateway adapter, runtime-owned turn loop, and provider-core.
 Supported hosted cache policy fields are retention, write mode, scope, and
 reason. Provider-specific cache details remain in
 `@brewva/brewva-provider-core`.
+
+## Hosted Model Routing
+
+Model presets are hosted settings, not top-level `BrewvaConfig` keys. Presets
+use one model-facing role map:
+
+```json
+{
+  "modelPresets": {
+    "Balanced": {
+      "roles": {
+        "default": "openai/gpt-5.5:high",
+        "smol": "openai/gpt-5.5:low",
+        "slow": "anthropic/claude-opus-4.1",
+        "plan": "anthropic/claude-opus-4.1",
+        "commit": "openai/gpt-5.5:medium",
+        "task": "openai/gpt-5.5:medium"
+      }
+    }
+  },
+  "defaultModelPreset": "Balanced"
+}
+```
+
+Accepted role aliases are `default`, `smol`, `slow`, `plan`, `commit`, and
+`task`. Removed preset fields fail validation instead of being normalized.
+
+`modelRouting.fallbackChains` maps role aliases to fallback model selectors or
+role aliases. Fallback is attempted only before the provider has emitted any
+frame. A turn uses its active role chain first, then the `default` chain. When
+fallback changes provider/model cache identity, provider payload metadata records
+`cache_invalidated: true`. Global and project fallback chains merge by role key;
+if both files define the same role, the project array replaces the global array
+rather than concatenating.
+
+`modelRouting.credentialRotation` controls same-provider credential slot
+rotation after quota, rate-limit, or auth failures. Rotation records only
+redacted `provider_credential_rotated` payloads:
+`{ providerId, credentialSlot, reason, cooldownMs }`.
 
 ## Integrations
 

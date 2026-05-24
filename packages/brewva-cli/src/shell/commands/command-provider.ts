@@ -28,6 +28,13 @@ export interface ShellSlashReservation {
   readonly redirectCommandId?: string;
 }
 
+export interface ShellCommandProvenance {
+  readonly providerId: string;
+  readonly providerLabel: string;
+  readonly path?: string;
+  readonly builtIn?: boolean;
+}
+
 export interface ShellCommand {
   readonly id: string;
   readonly title: string;
@@ -44,6 +51,11 @@ export interface ShellCommand {
   readonly createIntent?: ShellCommandIntentFactory;
 }
 
+export interface ShellCommandRegistrationOptions {
+  readonly provenance?: ShellCommandProvenance;
+  readonly allowSlashShadowing?: boolean;
+}
+
 export interface ShellCommandListItem {
   readonly id: string;
   readonly title: string;
@@ -54,6 +66,10 @@ export interface ShellCommandListItem {
   readonly shortcuts: readonly string[];
   readonly shortcutLabel?: string;
   readonly suggested: boolean;
+  readonly providerId?: string;
+  readonly providerLabel?: string;
+  readonly path?: string;
+  readonly shadowedBy?: string;
 }
 
 function takeBetterScore(current: number | null, next: number | null): number | null {
@@ -103,6 +119,8 @@ export class ShellCommandProvider {
   readonly #slashNames = new Map<string, string>();
   readonly #reservedSlashNames = new Map<string, ShellSlashReservation>();
   readonly #shortcuts = new Map<string, string>();
+  readonly #provenance = new Map<string, ShellCommandProvenance>();
+  readonly #slashShadowedBy = new Map<string, string>();
 
   static #isEnabled(command: ShellCommand): boolean {
     return command.enabled !== false;
@@ -130,7 +148,7 @@ export class ShellCommandProvider {
     return ShellCommandProvider.#isSlashCallable(command) && command.slash?.visibility !== "hidden";
   }
 
-  register(command: ShellCommand): void {
+  register(command: ShellCommand, options: ShellCommandRegistrationOptions = {}): void {
     if (this.#commands.has(command.id)) {
       throw new Error(`Duplicate shell command id: ${command.id}`);
     }
@@ -144,15 +162,23 @@ export class ShellCommandProvider {
         const normalized = name.toLowerCase();
         const reservation = this.#reservedSlashNames.get(normalized);
         if (reservation) {
-          throw new Error(
-            `Slash name '${name}' for ${command.id} is reserved by ${reservation.owner}`,
-          );
+          if (!options.allowSlashShadowing) {
+            throw new Error(
+              `Slash name '${name}' for ${command.id} is reserved by ${reservation.owner}`,
+            );
+          }
+          this.#slashShadowedBy.set(command.id, `reserved:${reservation.owner}`);
+          continue;
         }
         const existing = this.#slashNames.get(normalized);
         if (existing) {
-          throw new Error(
-            `Duplicate shell command slash name '${name}' for ${command.id}; already used by ${existing}`,
-          );
+          if (!options.allowSlashShadowing) {
+            throw new Error(
+              `Duplicate shell command slash name '${name}' for ${command.id}; already used by ${existing}`,
+            );
+          }
+          this.#slashShadowedBy.set(command.id, existing);
+          continue;
         }
         this.#slashNames.set(normalized, command.id);
       }
@@ -168,6 +194,9 @@ export class ShellCommandProvider {
       this.#shortcuts.set(identity, command.id);
     }
     this.#commands.set(command.id, command);
+    if (options.provenance) {
+      this.#provenance.set(command.id, options.provenance);
+    }
   }
 
   reserveSlashNames(reservations: readonly ShellSlashReservation[]): void {
@@ -234,6 +263,10 @@ export class ShellCommandProvider {
           shortcuts: item.shortcuts,
           shortcutLabel: item.shortcutLabel,
           suggested: item.suggested,
+          providerId: item.providerId,
+          providerLabel: item.providerLabel,
+          path: item.path,
+          shadowedBy: item.shadowedBy,
         };
       })
       .toSorted(compareSlashCommandItems);
@@ -323,6 +356,7 @@ export class ShellCommandProvider {
 
   private toListItem(command: ShellCommand): ShellCommandListItem {
     const slash = ShellCommandProvider.#isSlashVisible(command) ? command.slash : undefined;
+    const provenance = this.#provenance.get(command.id);
     return {
       id: command.id,
       title: command.title,
@@ -333,6 +367,10 @@ export class ShellCommandProvider {
       shortcuts: command.shortcuts?.map(normalizeShortcutSequence) ?? [],
       shortcutLabel: formatShortcutLabels(command.shortcuts ?? []),
       suggested: command.suggested === true,
+      providerId: provenance?.providerId,
+      providerLabel: provenance?.providerLabel,
+      path: provenance?.path,
+      shadowedBy: this.#slashShadowedBy.get(command.id),
     };
   }
 }

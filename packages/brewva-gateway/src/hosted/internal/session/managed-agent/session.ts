@@ -52,6 +52,7 @@ import {
   type BrewvaModelPresetSelectionRequest,
   type BrewvaModelPresetSelectionResult,
   type BrewvaModelPresetState,
+  type BrewvaModelRoleAlias,
   type BrewvaSteerOptions,
   type BrewvaSteerOutcome,
   type BrewvaPromptOptions,
@@ -344,6 +345,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     | undefined;
   readonly #onDispose: (() => void) | undefined;
   readonly #onInitialPersistence: (() => void) | undefined;
+  readonly #modelRole: BrewvaModelRoleAlias | undefined;
   #initialPersistenceEnsured = false;
   #sessionStartEmitted = false;
 
@@ -355,6 +357,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     resourceLoader: BrewvaHostedResourceLoader;
     sessionStore: ManagedAgentSessionStore;
     modelPresetState?: BrewvaModelPresetState;
+    modelRole?: BrewvaModelRoleAlias;
     customTools: readonly BrewvaToolDefinition[];
     runner: BrewvaHostPluginRunner;
     agent: BrewvaAgentProtocolController;
@@ -390,6 +393,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#observeRuntimeCacheRender = input.observeRuntimeCacheRender;
     this.#onInitialPersistence = input.onInitialPersistence;
     this.#onDispose = input.onDispose;
+    this.#modelRole = input.modelRole;
     this.#liveTranscript = new ManagedSessionLiveTranscript({
       agent: this.#agent,
       clearProviderCacheSessionState: () => this.clearProviderCacheSessionState(),
@@ -612,6 +616,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       resourceLoader: options.resourceLoader,
       sessionStore: options.sessionStore,
       modelPresetState: options.initialModelPresetState,
+      modelRole: options.initialModelRole,
       customTools: toolDefinitions,
       runner,
       agent,
@@ -825,6 +830,10 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return this.#modelSelection.getState();
   }
 
+  getRuntimeActiveModelRole(): BrewvaModelRoleAlias {
+    return this.#modelRole ?? "default";
+  }
+
   queueModelPresetForNextTurn(name: string): BrewvaModelPresetSelectionResult {
     return this.#modelSelection.queueModelPresetForNextTurn(name);
   }
@@ -948,6 +957,22 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   getRuntimeProviderTransport() {
     return this.#settings.getTransport();
+  }
+
+  getRuntimeModelRoutingSettings() {
+    return this.#settings.getModelRoutingSettings?.();
+  }
+
+  recordRuntimeProviderCredentialRotated(input: {
+    providerId: string;
+    credentialSlot: string;
+    reason: "quota" | "rate_limit" | "auth" | "manual";
+    cooldownMs: number;
+  }): void {
+    this.#runtime.ops.session.lifecycle.providerCredentialRotated({
+      sessionId: this.sessionManager.getSessionId(),
+      payload: input,
+    });
   }
 
   async prepareRuntimeProviderPayload(input: RuntimeProviderPayloadInput): Promise<unknown> {

@@ -122,9 +122,7 @@ describe("subagent shared execution resolution", () => {
         ],
         activePreset: {
           name: "Test",
-          delegationModels: {
-            "deep-reasoning": "openai/gpt-5.4-mini",
-          },
+          roles: { slow: "openai/gpt-5.4-mini" },
         },
       },
     });
@@ -136,7 +134,9 @@ describe("subagent shared execution resolution", () => {
       category: "deep-reasoning",
       source: "preset",
       mode: "explicit",
-      reason: 'Model selected by preset "Test" for delegation category "deep-reasoning".',
+      role: "slow",
+      reason:
+        'Model selected by preset "Test" for role "slow" mapped from delegation category "deep-reasoning".',
       presetName: "Test",
     });
     expect(plan.managedToolMode).toBe("direct");

@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { buildCommandPalettePayload } from "../../../packages/brewva-cli/src/shell/commands/command-palette.js";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  buildCommandPalettePayload,
+  buildHelpHubPayload,
+} from "../../../packages/brewva-cli/src/shell/commands/command-palette.js";
 import { ShellCommandProvider } from "../../../packages/brewva-cli/src/shell/commands/command-provider.js";
 import { registerShellCommands } from "../../../packages/brewva-cli/src/shell/commands/shell-command-registry.js";
 
@@ -330,6 +336,125 @@ describe("shell command provider", () => {
     );
     expect(provider.keymapCommandBindings().some((command) => command.id === "app.exit")).toBe(
       true,
+    );
+  });
+
+  test("loads file-backed slash commands with fixed provider precedence and shadow diagnostics", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-commands-project-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "brewva-shell-commands-home-"));
+    const projectCommands = join(cwd, ".brewva", "commands");
+    const userCommands = join(homeDir, ".brewva", "commands");
+    mkdirSync(projectCommands, { recursive: true });
+    mkdirSync(userCommands, { recursive: true });
+    writeFileSync(
+      join(projectCommands, "triage.md"),
+      [
+        "---",
+        "description: Project triage",
+        "arguments:",
+        "  - name: topic",
+        "    description: Topic to triage",
+        "    required: true",
+        "---",
+        "Review {{topic}} with project context.",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      join(userCommands, "triage.md"),
+      ["---", "description: User triage", "---", "User command should be shadowed."].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      join(projectCommands, "help.md"),
+      [
+        "---",
+        "description: Shadow help",
+        "---",
+        "Project help should not replace built-in help.",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
+      join(projectCommands, "optional.md"),
+      [
+        "---",
+        "description: Optional variables",
+        "arguments:",
+        "  - name: mode",
+        "    description: Optional mode",
+        "---",
+        "Run in {{mode}} mode with {{missing}}.",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const provider = new ShellCommandProvider();
+    registerShellCommands(provider, { cwd, homeDir, loadFileCommands: true });
+
+    expect(
+      provider.createSlashCommandIntent("triage", {
+        args: 'topic="cache \\"drift\\""',
+        source: "slash",
+      }),
+    ).toEqual({
+      type: "prompt.submit",
+      source: "slash",
+      text: 'Review cache "drift" with project context.',
+    });
+    expect(provider.createSlashCommandIntent("optional", { args: "", source: "slash" })).toEqual({
+      type: "prompt.submit",
+      source: "slash",
+      text: "Run in  mode with .",
+      warnings: ["Slash command /optional has missing optional template variables: missing, mode"],
+    });
+    expect(provider.createSlashCommandIntent("help", { args: "", source: "slash" })).toMatchObject({
+      type: "command.invoke",
+      commandId: "app.help",
+    });
+
+    expect(provider.slashCommands()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "file-command.brewva.project.triage",
+          providerLabel: "Project Brewva",
+          shadowedBy: undefined,
+          path: join(projectCommands, "triage.md"),
+        }),
+        expect.objectContaining({
+          id: "file-command.brewva.user.triage",
+          providerLabel: "User Brewva",
+          shadowedBy: "file-command.brewva.project.triage",
+          path: join(userCommands, "triage.md"),
+        }),
+        expect.objectContaining({
+          id: "file-command.brewva.project.help",
+          shadowedBy: "app.help",
+        }),
+      ]),
+    );
+    const help = buildHelpHubPayload(provider);
+    expect(help.lines.join("\n")).toContain(
+      `Project Brewva · ${join(projectCommands, "triage.md")}`,
+    );
+    expect(help.lines.join("\n")).toContain("shadowed by file-command.brewva.project.triage");
+  });
+
+  test("file-backed slash commands fail closed when frontmatter requests authority", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-commands-authority-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "brewva-shell-commands-authority-home-"));
+    const commandRoot = join(cwd, ".claude", "commands");
+    mkdirSync(commandRoot, { recursive: true });
+    writeFileSync(
+      join(commandRoot, "deploy.md"),
+      ["---", "description: Deploy", "allowed-tools:", "  - Bash", "---", "Deploy now."].join("\n"),
+      "utf8",
+    );
+
+    const provider = new ShellCommandProvider();
+
+    expect(() => registerShellCommands(provider, { cwd, homeDir, loadFileCommands: true })).toThrow(
+      "file-backed slash commands cannot request authority",
     );
   });
 

@@ -89,7 +89,7 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   const raw = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
   const schema =
     typeof raw.schema === "string" ? raw.schema : "missing_detached_subagent_spec_schema";
-  if (schema !== "brewva.subagent-run-spec.v7") {
+  if (schema !== "brewva.subagent-run-spec.v8") {
     throw new Error(
       `unsupported_detached_subagent_spec_schema:${schema}:clear_.orchestrator/subagent-runs`,
     );
@@ -99,7 +99,7 @@ async function loadSpec(path: string): Promise<DetachedSubagentRunSpec> {
   }
   return {
     ...raw,
-    schema: "brewva.subagent-run-spec.v7",
+    schema: "brewva.subagent-run-spec.v8",
   } as unknown as DetachedSubagentRunSpec;
 }
 
@@ -221,6 +221,7 @@ async function main(): Promise<void> {
       config: spec.config,
       configPath: spec.configPath,
       model: executionPlan.model,
+      modelRole: executionPlan.modelRole ?? spec.modelRole,
       agentId: buildSubagentAgentId(spec.delegate),
       managedToolMode: executionPlan.managedToolMode,
       enableSubagents: false,

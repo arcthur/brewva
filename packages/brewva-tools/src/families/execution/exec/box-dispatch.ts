@@ -48,6 +48,7 @@ export async function executeBoxCommandWithAudit(input: {
   requestedEnv: RequestedEnvResolution;
   timeoutSec: number | undefined;
   background: boolean;
+  yieldMs: number;
   signal: AbortSignal | undefined;
   commandPolicy: ShellCommandAnalysis | undefined;
   virtualReadonly: VirtualReadonlyEligibility | undefined;
@@ -65,6 +66,7 @@ export async function executeBoxCommandWithAudit(input: {
     requestedEnv,
     timeoutSec,
     background,
+    yieldMs,
     signal,
     commandPolicy,
     virtualReadonly,
@@ -90,6 +92,7 @@ export async function executeBoxCommandWithAudit(input: {
           boxPolicy: policy.boxPolicy,
         }),
         background,
+        yieldMs,
         signal,
         onBootstrapStarted: (scope) => {
           recordExecEvent(
@@ -288,6 +291,8 @@ export async function executeBoxCommandWithAudit(input: {
         status: "running",
         verdict: "inconclusive",
         sessionId: result.sessionId,
+        pid: result.pid,
+        tail: result.tail,
         boxId: result.boxId,
         executionId: result.executionId,
         fingerprint: result.fingerprint,

@@ -32,6 +32,11 @@ interface ArtifactResolutionResult {
   failureReason?: string;
 }
 
+interface ToolOutcomeRecordingResult {
+  outputArtifact?: ArtifactOverride;
+  artifactFailureReason?: string;
+}
+
 function normalizeArgs(input: unknown): Record<string, unknown> | undefined {
   if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
   return input as Record<string, unknown>;
@@ -316,7 +321,7 @@ function recordToolOutcome(
     verdict: "pass" | "fail" | "inconclusive";
     lifecycleFallbackReason?: string;
   },
-): void {
+): ToolOutcomeRecordingResult {
   const workspaceRoot = resolveWorkspaceRoot(runtime, input.context);
   const normalizedArtifactOverride = normalizeArtifactOverride(input.details);
   const artifactOverrideResolution = normalizedArtifactOverride
@@ -338,6 +343,14 @@ function recordToolOutcome(
       outputText: input.outputText,
       timestamp: Date.now(),
     });
+  const outputArtifactDetails = outputArtifact
+    ? {
+        artifactRef: outputArtifact.artifactRef,
+        rawChars: outputArtifact.rawChars,
+        rawBytes: outputArtifact.rawBytes,
+        sha256: outputArtifact.sha256,
+      }
+    : undefined;
   if (!outputArtifact && input.outputText.length > 0 && !artifactFailureReason) {
     artifactFailureReason = "artifact_persist_failed";
   }
@@ -444,6 +457,11 @@ function recordToolOutcome(
         : null,
     },
   });
+
+  return {
+    outputArtifact: outputArtifactDetails,
+    artifactFailureReason,
+  };
 }
 
 export function registerLedgerWriter(
@@ -499,7 +517,7 @@ export function registerLedgerWriter(
       details,
     });
     const outputText = extractTextContent(event.content);
-    recordToolOutcome(runtime, {
+    const recording = recordToolOutcome(runtime, {
       sessionId,
       context: ctx,
       toolCallId: event.toolCallId,
@@ -513,7 +531,18 @@ export function registerLedgerWriter(
     markToolCallFinalized(finalizedToolCallsBySession, sessionId, event.toolCallId);
     deleteToolLifecycleState(lifecycleStatesBySession, sessionId, event.toolCallId);
 
-    return undefined;
+    if (!recording.outputArtifact && !recording.artifactFailureReason) {
+      return undefined;
+    }
+    return {
+      details: {
+        ...details,
+        ...(recording.outputArtifact ? { outputArtifact: recording.outputArtifact } : {}),
+        ...(recording.artifactFailureReason
+          ? { outputArtifactFailureReason: recording.artifactFailureReason }
+          : {}),
+      },
+    };
   });
 
   extensionApi.on("tool_execution_end", (event, ctx) => {

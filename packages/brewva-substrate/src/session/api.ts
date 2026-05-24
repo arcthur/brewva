@@ -21,6 +21,8 @@ export {
   type BrewvaModelPreferenceRef,
   type BrewvaModelPreferences,
   type BrewvaModelPreset,
+  type BrewvaModelRoleAlias,
+  type BrewvaModelRoleMap,
   type BrewvaModelPresetSelectionRequest,
   type BrewvaModelPresetSelectionResult,
   type BrewvaModelPresetState,

@@ -78,6 +78,9 @@ export interface ShellCommandCompletionItem {
   readonly slashAliases: readonly string[];
   readonly shortcutLabel?: string;
   readonly suggested: boolean;
+  readonly providerLabel?: string;
+  readonly path?: string;
+  readonly shadowedBy?: string;
 }
 
 export interface ShellCommandCompletionProvider {
@@ -435,7 +438,16 @@ export function createCommandCompletionSource(
           value: slashName,
           insertText: `/${slashName} `,
           description: command.description,
-          detail: [command.category, shortcutLabel].filter(Boolean).join(" · ") || undefined,
+          detail:
+            [
+              command.category,
+              command.providerLabel,
+              command.path,
+              command.shadowedBy ? `shadowed by ${command.shadowedBy}` : undefined,
+              shortcutLabel,
+            ]
+              .filter(Boolean)
+              .join(" · ") || undefined,
           aliases: command.slashAliases,
           searchText: [command.title, command.category],
           suggested: command.suggested,

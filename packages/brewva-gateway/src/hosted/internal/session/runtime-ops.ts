@@ -6,6 +6,7 @@ import {
   CHANNEL_SESSION_CONVERSATION_BOUND_EVENT_TYPE,
   type ContextBudgetUsage,
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
+  PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE,
   deriveTurnEffectCommitmentProjection,
   renderTurnConsequenceDigest,
   parseSkillDocument,
@@ -1625,6 +1626,7 @@ export function createHostedRuntimeOps(options: {
         messageEnded: recordSemanticEvent("message.end"),
         modelPresetSelected: recordSemanticEvent("model_preset_select"),
         modelSelected: recordSemanticEvent("model_select"),
+        providerCredentialRotated: recordSemanticEvent(PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE),
         shutdown: recordSemanticEvent("session_shutdown"),
         started: recordSemanticEvent("session_started"),
         thinkingLevelSelected: recordSemanticEvent("thinking_level_select"),
@@ -2295,6 +2297,7 @@ export interface HostedRuntimeOpsPort extends BrewvaToolRuntimeCapabilitiesPort 
       messageEnded: RuntimeSemanticRecorder;
       modelPresetSelected: RuntimeSemanticRecorder;
       modelSelected: RuntimeSemanticRecorder;
+      providerCredentialRotated: RuntimeSemanticRecorder;
       shutdown: RuntimeSemanticRecorder;
       started: RuntimeSemanticRecorder;
       thinkingLevelSelected: RuntimeSemanticRecorder;

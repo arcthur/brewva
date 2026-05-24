@@ -241,6 +241,7 @@ class HostedSessionRuntimeFactory implements HostedSessionFactory {
     const services = await this.createServices(options);
     const result = await services.createSession({
       model: options.requestedModel,
+      modelRole: options.requestedModelRole,
       thinkingLevel: options.requestedThinkingLevel,
       customTools: options.customTools,
       deferPersistenceUntilPrompt: options.deferPersistenceUntilPrompt,

@@ -4,6 +4,12 @@ import type { CliShellInput } from "./input.js";
 
 export type ShellIntent =
   | { type: "input.received"; input: CliShellInput }
+  | {
+      type: "prompt.submit";
+      text: string;
+      source: "slash" | "internal";
+      warnings?: readonly string[];
+    }
   | { type: "effect.dispatch"; effect: ShellEffect }
   | { type: "dialog.input"; input: CliShellInput }
   | { type: "question.input"; input: CliShellInput }

@@ -84,9 +84,7 @@ describe("subagent model routing", () => {
         availableModels: [...AVAILABLE_MODELS],
         activePreset: {
           name: "Claude Lead",
-          delegationModels: {
-            "deep-reasoning": "anthropic/claude-opus-4.1",
-          },
+          roles: { slow: "anthropic/claude-opus-4.1" },
         },
       } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
     });
@@ -100,7 +98,7 @@ describe("subagent model routing", () => {
     });
   });
 
-  test("inherits active preset main model when no subagent-specific model is configured", () => {
+  test("keeps verification category outside model-facing preset roles", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({
         agent: "verifier",
@@ -116,20 +114,49 @@ describe("subagent model routing", () => {
         availableModels: [...AVAILABLE_MODELS],
         activePreset: {
           name: "OpenAI Stack",
-          mainModel: "openai/gpt-5.5:high",
-          delegationModels: {
-            "deep-reasoning": "anthropic/claude-opus-4.1",
-          },
+          roles: { default: "openai/gpt-5.5:high", slow: "anthropic/claude-opus-4.1" },
         },
       } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
     });
 
-    expect(resolved.model).toBe("openai/gpt-5.5:high");
+    expect(resolved.model).toBe("openai/gpt-5.5:medium");
     expect(resolved.modelRoute).toMatchObject({
-      selectedModel: "openai/gpt-5.5:high",
-      source: "preset",
-      mode: "explicit",
-      presetName: "OpenAI Stack",
+      selectedModel: "openai/gpt-5.5:medium",
+      source: "policy",
+      mode: "auto",
+      policyId: "review-and-verification",
+      presetMissReason:
+        'Preset "OpenAI Stack" has no public role mapping for delegation category "verification".',
+    });
+  });
+
+  test("does not force unknown delegation categories through the task role", () => {
+    const resolved = resolveDelegationModelRoute({
+      target: makeTarget({
+        modelCategory: "unknown-category",
+        resultMode: "patch",
+      }),
+      packet: {
+        objective: "Fix the failing CI patch and keep edits minimal.",
+      },
+      modelRouting: {
+        availableModels: [...AVAILABLE_MODELS],
+        activePreset: {
+          name: "Task Stack",
+          roles: { task: "openai/gpt-5.3-codex-spark:high" },
+        },
+      } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
+    });
+
+    expect(resolved.model).toBe("openai/gpt-5.3-codex-spark:high");
+    expect({ modelRole: resolved.modelRole ?? null }).toEqual({ modelRole: null });
+    expect(resolved.modelRoute).toMatchObject({
+      selectedModel: "openai/gpt-5.3-codex-spark:high",
+      source: "policy",
+      policyId: "fast-patch-loop",
+      category: "unknown-category",
+      presetMissReason:
+        'Preset "Task Stack" has no public role mapping for delegation category "unknown-category".',
     });
   });
 
@@ -184,6 +211,7 @@ describe("subagent model routing", () => {
     });
 
     expect(resolved.model).toBe("openai/gpt-5.3-codex-spark:high");
+    expect(resolved.modelRole).toBe("slow");
     expect(resolved.modelRoute).toMatchObject({
       selectedModel: "openai/gpt-5.3-codex-spark:high",
       source: "policy",

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { HostedAuthStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  HostedAuthStore,
+  type HostedAuthCredential,
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
 import { patchDateNow, patchProcessEnv } from "../../helpers/global-state.js";
 
 const INTRINSIC_FETCH = globalThis.fetch;
@@ -31,22 +37,62 @@ function toRequestBodyText(body: BodyInit | null | undefined): string {
   return "";
 }
 
+function authSlots(credential: HostedAuthCredential) {
+  return {
+    activeSlot: "default",
+    slots: {
+      default: {
+        id: "default",
+        credential,
+      },
+    },
+  };
+}
+
 afterEach(() => {
   globalThis.fetch = INTRINSIC_FETCH;
 });
 
 describe("hosted auth store", () => {
+  test("rejects legacy single-credential auth storage shape", () => {
+    expect(() =>
+      HostedAuthStore.inMemory({
+        openai: { type: "api_key", key: "sk-legacy" },
+      } as never),
+    ).toThrow('provider "openai" must use credential slots');
+  });
+
+  test("rejects legacy single-credential auth files", () => {
+    const authDir = mkdtempSync(join(tmpdir(), "brewva-hosted-auth-legacy-"));
+    try {
+      const authPath = join(authDir, "auth.json");
+      writeFileSync(
+        authPath,
+        JSON.stringify({
+          openai: { type: "api_key", key: "sk-legacy" },
+        }),
+        "utf8",
+      );
+
+      expect(() => HostedAuthStore.create(authPath)).toThrow(
+        'provider "openai" must use credential slots',
+      );
+    } finally {
+      rmSync(authDir, { recursive: true, force: true });
+    }
+  });
+
   for (const provider of ["openai", "openai-codex"]) {
     test(`reads opencode-style oauth access tokens for ${provider}`, async () => {
       const restoreNow = patchDateNow(() => 1_000_000);
       try {
         const authStore = HostedAuthStore.inMemory({
-          [provider]: {
+          [provider]: authSlots({
             type: "oauth",
             access: "legacy-access-token",
             refresh: "legacy-refresh-token",
             expires: 1_060_000,
-          },
+          }),
         });
 
         expect(await authStore.getApiKey(provider)).toBe("legacy-access-token");
@@ -78,12 +124,12 @@ describe("hosted auth store", () => {
 
       try {
         const authStore = HostedAuthStore.inMemory({
-          [provider]: {
+          [provider]: authSlots({
             type: "oauth",
             access: "stale-access-token",
             refresh: "legacy-refresh-token",
             expires: now - 1,
-          },
+          }),
         });
 
         expect(await authStore.getApiKey(provider)).toBe("fresh-access-token");
@@ -106,13 +152,13 @@ describe("hosted auth store", () => {
 
   test("renders Google OAuth credentials as Cloud Code Assist credential JSON", async () => {
     const authStore = HostedAuthStore.inMemory({
-      google: {
+      google: authSlots({
         type: "oauth",
         accessToken: "google-access-token",
         refreshToken: "google-refresh-token",
         expiresAt: Date.now() + 60_000,
         projectId: "project-1",
-      },
+      }),
     });
 
     expect(JSON.parse((await authStore.getApiKey("google")) ?? "{}")).toEqual({
@@ -136,13 +182,13 @@ describe("hosted auth store", () => {
       });
     }) as typeof fetch;
     const authStore = HostedAuthStore.inMemory({
-      google: {
+      google: authSlots({
         type: "oauth",
         accessToken: "expired-google-access-token",
         refreshToken: "google-refresh-token",
         expiresAt: Date.now() - 60_000,
         projectId: "project-1",
-      },
+      }),
     });
 
     try {
@@ -162,6 +208,37 @@ describe("hosted auth store", () => {
       });
     } finally {
       restoreEnv();
+    }
+  });
+
+  test("rotates provider credential slots without exposing secret material", async () => {
+    const restoreNow = patchDateNow(() => 1_000);
+    try {
+      const authStore = HostedAuthStore.inMemory();
+      authStore.setCredentialSlot("openai", {
+        id: "primary",
+        credential: { type: "api_key", key: "sk-primary-secret" },
+      });
+      authStore.setCredentialSlot("openai", {
+        id: "secondary",
+        credential: { type: "api_key", key: "sk-secondary-secret" },
+      });
+
+      expect(await authStore.getApiKey("openai")).toBe("sk-primary-secret");
+
+      const rotation = authStore.rotateCredential("openai", "rate_limit", 5_000);
+
+      expect(rotation).toEqual({
+        providerId: "openai",
+        credentialSlot: "secondary",
+        reason: "rate_limit",
+        cooldownMs: 5_000,
+      });
+      expect(JSON.stringify(rotation)).not.toContain("sk-");
+      expect(await authStore.getApiKey("openai")).toBe("sk-secondary-secret");
+      expect(authStore.rotateCredential("openai", "quota", 5_000)).toBe(undefined);
+    } finally {
+      restoreNow();
     }
   });
 });

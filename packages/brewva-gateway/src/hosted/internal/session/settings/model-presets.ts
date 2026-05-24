@@ -1,14 +1,26 @@
-import type { BrewvaModelPreset, BrewvaModelPresetState } from "@brewva/brewva-substrate/session";
+import type {
+  BrewvaModelPreset,
+  BrewvaModelPresetState,
+  BrewvaModelRoleAlias,
+  BrewvaModelRoleMap,
+} from "@brewva/brewva-substrate/session";
 
 export const DEFAULT_MODEL_PRESET_NAME = "Default";
 
-const DELEGATION_MODEL_CATEGORIES = new Set([
-  "fast-evidence",
-  "deep-reasoning",
-  "isolated-execution",
-  "verification",
-  "knowledge",
-] as const);
+export const MODEL_ROLE_ALIASES = [
+  "default",
+  "smol",
+  "slow",
+  "plan",
+  "commit",
+  "task",
+] as const satisfies readonly BrewvaModelRoleAlias[];
+
+const MODEL_ROLE_ALIAS_SET = new Set<BrewvaModelRoleAlias>(MODEL_ROLE_ALIASES);
+
+export function isBrewvaModelRoleAlias(value: string): value is BrewvaModelRoleAlias {
+  return MODEL_ROLE_ALIAS_SET.has(value as BrewvaModelRoleAlias);
+}
 
 export interface HostedModelPresetSettingsShape {
   defaultModelPreset?: unknown;
@@ -31,55 +43,30 @@ function readOptionalTrimmedString(value: unknown, field: string): string | unde
   return value;
 }
 
-function readDelegationModels(value: unknown, presetName: string): Record<string, string> {
+function readRoleModels(value: unknown, presetName: string): BrewvaModelRoleMap {
   if (value === undefined) {
     return {};
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`modelPresets.${presetName}.delegationModels must be an object`);
+    throw new Error(`modelPresets.${presetName}.roles must be an object`);
   }
-  const models: Record<string, string> = {};
+  const models: BrewvaModelRoleMap = {};
   for (const [rawKey, rawValue] of Object.entries(value)) {
     if (rawKey.trim().length === 0) {
-      throw new Error(`modelPresets.${presetName}.delegationModels keys must be non-empty`);
+      throw new Error(`modelPresets.${presetName}.roles keys must be non-empty`);
     }
     if (rawKey !== rawKey.trim()) {
-      throw new Error(`modelPresets.${presetName}.delegationModels keys must be trimmed`);
+      throw new Error(`modelPresets.${presetName}.roles keys must be trimmed`);
     }
-    if (!DELEGATION_MODEL_CATEGORIES.has(rawKey as never)) {
-      throw new Error(
-        `modelPresets.${presetName}.delegationModels.${rawKey} must be a delegation model category`,
-      );
+    if (!MODEL_ROLE_ALIAS_SET.has(rawKey as BrewvaModelRoleAlias)) {
+      throw new Error(`modelPresets.${presetName}.roles.${rawKey} must be a model role alias`);
     }
-    models[rawKey] = readOptionalTrimmedString(
+    models[rawKey as BrewvaModelRoleAlias] = readOptionalTrimmedString(
       rawValue,
-      `modelPresets.${presetName}.delegationModels.${rawKey}`,
+      `modelPresets.${presetName}.roles.${rawKey}`,
     )!;
   }
   return models;
-}
-
-function readAuxiliaryModels(
-  value: unknown,
-  presetName: string,
-): BrewvaModelPreset["auxiliaryModels"] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`modelPresets.${presetName}.auxiliaryModels must be an object`);
-  }
-  const record = value as Record<string, unknown>;
-  for (const key of Object.keys(record)) {
-    if (key !== "title") {
-      throw new Error(`modelPresets.${presetName}.auxiliaryModels.${key} is not supported`);
-    }
-  }
-  const title = readOptionalTrimmedString(
-    record.title,
-    `modelPresets.${presetName}.auxiliaryModels.title`,
-  );
-  return title ? { title } : {};
 }
 
 function readPresetName(name: string): string {
@@ -98,23 +85,28 @@ function readPreset(name: string, value: unknown): BrewvaModelPreset | undefined
     throw new Error(`modelPresets.${presetName} must be an object`);
   }
   const record = value as Record<string, unknown>;
-  if (record.subagentModels !== undefined) {
+  const removedKeys = ["mainModel", "delegationModels", "auxiliaryModels", "subagentModels"].filter(
+    (key) => record[key] !== undefined,
+  );
+  if (removedKeys.length > 0) {
     throw new Error(
-      `modelPresets.${presetName}.subagentModels is no longer supported; use delegationModels keyed by model category`,
+      `modelPresets.${presetName} uses removed model preset fields: ${removedKeys.join(
+        ", ",
+      )}. Use roles keyed by model role alias.`,
     );
   }
   return {
     name: presetName,
-    mainModel: readOptionalTrimmedString(record.mainModel, `modelPresets.${presetName}.mainModel`),
-    delegationModels: readDelegationModels(record.delegationModels, presetName),
-    auxiliaryModels: readAuxiliaryModels(record.auxiliaryModels, presetName),
+    roles: readRoleModels(record.roles, presetName),
   };
 }
 
 export function createSyntheticDefaultModelPreset(): BrewvaModelPreset {
   return {
     name: DEFAULT_MODEL_PRESET_NAME,
-    delegationModels: {},
+    // Synthetic default intentionally leaves roles empty; startup falls back to the
+    // session/operator selected model rather than inventing a hidden preset model.
+    roles: {},
     synthetic: true,
   };
 }
@@ -122,9 +114,7 @@ export function createSyntheticDefaultModelPreset(): BrewvaModelPreset {
 export function cloneModelPreset(preset: BrewvaModelPreset): BrewvaModelPreset {
   return {
     name: preset.name,
-    mainModel: preset.mainModel,
-    delegationModels: { ...preset.delegationModels },
-    auxiliaryModels: preset.auxiliaryModels ? { ...preset.auxiliaryModels } : undefined,
+    roles: { ...preset.roles },
     synthetic: preset.synthetic,
   };
 }
@@ -187,6 +177,13 @@ export function findModelPreset(
   name = state.activeName,
 ): BrewvaModelPreset | undefined {
   return state.presets.find((preset) => preset.name === name);
+}
+
+export function resolvePresetRoleModel(
+  preset: BrewvaModelPreset | undefined,
+  role: BrewvaModelRoleAlias,
+): string | undefined {
+  return preset?.roles[role] ?? (role === "default" ? undefined : preset?.roles.default);
 }
 
 export function selectNextModelPresetName(state: BrewvaModelPresetState): string {

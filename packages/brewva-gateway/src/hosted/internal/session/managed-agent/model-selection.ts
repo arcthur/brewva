@@ -4,6 +4,7 @@ import type {
 } from "@brewva/brewva-substrate/provider";
 import type {
   BrewvaModelPreferenceRef,
+  BrewvaModelRoleMap,
   BrewvaModelPresetSelectionRequest,
   BrewvaModelPresetSelectionResult,
   BrewvaModelPresetState,
@@ -15,6 +16,7 @@ import {
   cloneModelPresetState,
   DEFAULT_MODEL_PRESET_NAME,
   findModelPreset,
+  resolvePresetRoleModel,
 } from "../settings/model-presets.js";
 
 export function createFallbackModelPresetState(
@@ -26,7 +28,7 @@ export function createFallbackModelPresetState(
     presets: [
       {
         name: DEFAULT_MODEL_PRESET_NAME,
-        delegationModels: {},
+        roles: {},
         synthetic: true,
       },
     ],
@@ -81,11 +83,7 @@ export interface ManagedSessionModelSelectionControllerOptions {
     presetName: string;
     previousPresetName?: string;
     source?: string;
-    mainModel?: string;
-    delegationModels?: Record<string, string>;
-    auxiliaryModels?: {
-      title?: string;
-    };
+    roles?: BrewvaModelRoleMap;
     synthetic?: boolean;
   }) => void;
   appendModelChange: (provider: string, modelId: string) => void;
@@ -143,7 +141,7 @@ export class ManagedSessionModelSelectionController {
       previousName: this.#state.activeName,
       modelChanged: false,
       queued: true,
-      effectiveMainModel: preset.mainModel,
+      effectiveDefaultModel: resolvePresetRoleModel(preset, "default"),
     };
   }
 
@@ -162,8 +160,9 @@ export class ManagedSessionModelSelectionController {
     if (!preset) {
       throw new Error(`Unknown model preset: ${request.name}`);
     }
-    const selection = preset.mainModel
-      ? resolvePresetModelSelection(preset.mainModel, this.#catalog)
+    const defaultModelText = resolvePresetRoleModel(preset, "default");
+    const selection = defaultModelText
+      ? resolvePresetModelSelection(defaultModelText, this.#catalog)
       : undefined;
     if (selection && !this.#catalog.hasConfiguredAuth(selection.model)) {
       throw new Error(`No API key for ${selection.model.provider}/${selection.model.id}`);
@@ -179,9 +178,7 @@ export class ManagedSessionModelSelectionController {
       presetName: preset.name,
       previousPresetName: previousName,
       source: request.source ?? "session",
-      mainModel: preset.mainModel,
-      delegationModels: preset.delegationModels,
-      auxiliaryModels: preset.auxiliaryModels,
+      roles: preset.roles,
       synthetic: preset.synthetic,
     });
 
@@ -211,7 +208,7 @@ export class ManagedSessionModelSelectionController {
       previousName,
       modelChanged,
       queued: false,
-      effectiveMainModel: preset.mainModel,
+      effectiveDefaultModel: defaultModelText,
     };
   }
 

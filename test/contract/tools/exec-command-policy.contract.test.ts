@@ -53,6 +53,16 @@ describe("exec command policy routing", () => {
     });
     const details = requireRecord(result.details, "Expected exec details.");
     expect(details.materializedPaths).toEqual(["package.json"]);
+    expect(details.executionPreflight).toMatchObject({
+      decision: "allow",
+      findings: [
+        expect.objectContaining({
+          severity: "advisory",
+          code: "prefer_source_read",
+          suggestedTool: "source_read",
+        }),
+      ],
+    });
 
     const routed = requireDefined(
       events.find((event) => event.type === "exec.started"),
@@ -71,6 +81,48 @@ describe("exec command policy routing", () => {
     ) as VirtualReadonlyPayload;
     expect(virtualReadonly.eligible).toBe(true);
     expect(virtualReadonly.materializedCandidates).toEqual(["package.json"]);
+  });
+
+  test("direct Brewva tool names fail before shell execution with preflight metadata", async () => {
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+    });
+    const execTool = createExecTool({ runtime });
+
+    const result = await execTool.execute(
+      "tc-exec-preflight-shell-as-tool",
+      {
+        command: "source_read package.json",
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-preflight-shell-as-tool"),
+    );
+
+    expect(extractTextContent(result)).toContain("Exec rejected");
+    expect(result.details).toMatchObject({
+      status: "failed",
+      reason: "shell_as_tool",
+      executionPreflight: {
+        decision: "block",
+        findings: [
+          expect.objectContaining({
+            severity: "block",
+            code: "shell_as_tool",
+            suggestedTool: "source_read",
+          }),
+        ],
+      },
+    });
+    expect(eventTypes(events)).toEqual(["exec.failed"]);
+    const failed = requireDefined(
+      events.find((event) => event.type === "exec.failed"),
+      "Expected exec.failed event.",
+    );
+    expect(failed.payload?.executionPreflight).toMatchObject({
+      decision: "block",
+    });
   });
 
   test("readonly virtual route withholds bound credential environment", async () => {

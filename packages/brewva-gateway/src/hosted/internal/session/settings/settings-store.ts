@@ -12,6 +12,7 @@ import type {
   BrewvaShellViewPreferences,
   BrewvaModelPreferenceRef,
   BrewvaModelPreferences,
+  BrewvaModelRoleAlias,
   BrewvaModelPresetState,
 } from "@brewva/brewva-substrate/session";
 import type {
@@ -70,7 +71,31 @@ interface HostedSettingsData {
     showThinking?: unknown;
     toolDetails?: unknown;
   };
+  modelRouting?: {
+    fallbackChains?: Record<string, unknown>;
+    credentialRotation?: {
+      enabled?: unknown;
+      cooldownMs?: unknown;
+    };
+  };
 }
+
+export interface HostedModelRoutingSettings {
+  fallbackChains: Partial<Record<BrewvaModelRoleAlias, readonly string[]>>;
+  credentialRotation: {
+    enabled: boolean;
+    cooldownMs: number;
+  };
+}
+
+const MODEL_ROLE_ALIASES = new Set<BrewvaModelRoleAlias>([
+  "default",
+  "smol",
+  "slow",
+  "plan",
+  "commit",
+  "task",
+]);
 
 function readSettingsFile(path: string): HostedSettingsData {
   if (!existsSync(path)) {
@@ -139,6 +164,18 @@ function mergeSettings(base: HostedSettingsData, override: HostedSettingsData): 
     shellViewPreferences: {
       ...base.shellViewPreferences,
       ...override.shellViewPreferences,
+    },
+    modelRouting: {
+      ...base.modelRouting,
+      ...override.modelRouting,
+      credentialRotation: {
+        ...base.modelRouting?.credentialRotation,
+        ...override.modelRouting?.credentialRotation,
+      },
+      fallbackChains: {
+        ...base.modelRouting?.fallbackChains,
+        ...override.modelRouting?.fallbackChains,
+      },
     },
   };
 }
@@ -220,6 +257,42 @@ function normalizeCacheReason(value: unknown): ProviderCachePolicyReason {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : DEFAULT_PROVIDER_CACHE_POLICY.reason;
+}
+
+function normalizeFallbackChains(value: unknown): HostedModelRoutingSettings["fallbackChains"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const chains: Partial<Record<BrewvaModelRoleAlias, readonly string[]>> = {};
+  for (const [rawRole, rawChain] of Object.entries(value)) {
+    if (!MODEL_ROLE_ALIASES.has(rawRole as BrewvaModelRoleAlias) || !Array.isArray(rawChain)) {
+      continue;
+    }
+    const entries = rawChain
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter((entry) => entry.length > 0);
+    if (entries.length > 0) {
+      chains[rawRole as BrewvaModelRoleAlias] = [...new Set(entries)];
+    }
+  }
+  return chains;
+}
+
+function normalizeModelRoutingSettings(settings: HostedSettingsData): HostedModelRoutingSettings {
+  const input = settings.modelRouting ?? {};
+  const credentialRotation = input.credentialRotation ?? {};
+  const cooldownMs =
+    typeof credentialRotation.cooldownMs === "number" &&
+    Number.isFinite(credentialRotation.cooldownMs)
+      ? Math.max(0, Math.trunc(credentialRotation.cooldownMs))
+      : 60_000;
+  return {
+    fallbackChains: normalizeFallbackChains(input.fallbackChains),
+    credentialRotation: {
+      enabled: credentialRotation.enabled === true,
+      cooldownMs,
+    },
+  };
 }
 
 const HOSTED_SETTINGS_BRIDGE = Symbol("brewva.hosted.settings-store");
@@ -319,6 +392,10 @@ class BrewvaHostedSettingsHandle implements HostedSessionSettings, HostedSession
     return {
       maxDelayMs: this.settings.retry?.maxDelayMs ?? 60_000,
     };
+  }
+
+  getModelRoutingSettings(): HostedModelRoutingSettings {
+    return normalizeModelRoutingSettings(this.settings);
   }
 
   setDefaultThinkingLevel(thinkingLevel: string): void {

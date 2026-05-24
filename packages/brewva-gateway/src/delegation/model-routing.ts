@@ -1,9 +1,9 @@
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
 import type { DelegationModelRouteRecord } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
-import type { BrewvaModelPreset } from "@brewva/brewva-substrate/session";
+import type { BrewvaModelPreset, BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type { DelegationPacket, SubagentExecutionShape } from "@brewva/brewva-tools/contracts";
-import { createHostedModelCatalog } from "../hosted/api.js";
+import { createHostedModelCatalog, resolvePresetRoleModel } from "../hosted/api.js";
 import { resolveBrewvaModelSelection } from "../policy/model-routing/api.js";
 import type { HostedDelegationTarget } from "./targets.js";
 
@@ -29,6 +29,7 @@ export interface DelegationModelRoutingContext {
 
 export interface ResolvedDelegationModelRoute {
   model?: string;
+  modelRole?: BrewvaModelRoleAlias;
   modelRoute?: DelegationModelRouteRecord;
 }
 
@@ -103,6 +104,71 @@ function normalizeObjectiveText(packet: DelegationPacket): string {
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ")
     .toLowerCase();
+}
+
+function resolveDelegationRoleAlias(input: {
+  target: HostedDelegationTarget;
+  effectiveSkillName?: string;
+}): BrewvaModelRoleAlias | undefined {
+  switch (input.target.modelCategory) {
+    case "fast-evidence":
+      return "smol";
+    case "isolated-execution":
+      return "task";
+    case "deep-reasoning":
+      return input.effectiveSkillName === "plan" ||
+        input.effectiveSkillName === "office-hours" ||
+        input.target.consultKind === "design" ||
+        input.target.consultKind === "diagnose"
+        ? "plan"
+        : "slow";
+    case "verification":
+    case "knowledge":
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
+function isBrewvaModelRoleAlias(value: string): value is BrewvaModelRoleAlias {
+  return (
+    value === "default" ||
+    value === "smol" ||
+    value === "slow" ||
+    value === "plan" ||
+    value === "commit" ||
+    value === "task"
+  );
+}
+
+function readRouteRole(
+  route: DelegationModelRouteRecord | undefined,
+): BrewvaModelRoleAlias | undefined {
+  const role = route?.role;
+  return typeof role === "string" && isBrewvaModelRoleAlias(role) ? role : undefined;
+}
+
+function presetMissRoute(input: {
+  activePresetName: string | undefined;
+  category: string;
+  role: BrewvaModelRoleAlias | undefined;
+  reason: string | undefined;
+}): ResolvedDelegationModelRoute {
+  return {
+    ...(input.role ? { modelRole: input.role } : {}),
+    ...(input.reason
+      ? {
+          modelRoute: {
+            category: input.category,
+            ...(input.role ? { role: input.role } : {}),
+            source: "preset",
+            mode: "auto",
+            presetName: input.activePresetName,
+            reason: input.reason,
+          },
+        }
+      : {}),
+  };
 }
 
 function formatSelectedModel(input: {
@@ -245,37 +311,49 @@ export function resolveDelegationModelRoute(input: {
   if (input.preselectedModelRoute) {
     return {
       model: input.preselectedModelRoute.selectedModel,
+      modelRole: readRouteRole(input.preselectedModelRoute),
       modelRoute: input.preselectedModelRoute,
     };
   }
 
   const activePreset = input.modelRouting?.getActivePreset?.() ?? input.modelRouting?.activePreset;
   const category = input.target.modelCategory;
-  const presetModel = activePreset?.delegationModels[category] ?? activePreset?.mainModel;
-  if (activePreset && presetModel) {
+  const effectiveSkillName = input.target.skillName;
+  const role = resolveDelegationRoleAlias({ target: input.target, effectiveSkillName });
+  const presetModel = role ? resolvePresetRoleModel(activePreset, role) : undefined;
+  const presetMissReason =
+    activePreset && !presetModel
+      ? role
+        ? `Preset "${activePreset.name}" has no configured model for role "${role}" mapped from delegation category "${category}".`
+        : `Preset "${activePreset.name}" has no public role mapping for delegation category "${category}".`
+      : undefined;
+  if (activePreset && role && presetModel) {
     const selectedModel = resolveModelTextAgainstInventory(presetModel, input.modelRouting);
-    const categorySpecific = activePreset.delegationModels[category] === presetModel;
     return {
       model: selectedModel,
+      modelRole: role,
       modelRoute: {
         selectedModel,
         category,
+        role,
         source: "preset",
         mode: "explicit",
-        reason: categorySpecific
-          ? `Model selected by preset "${activePreset.name}" for delegation category "${category}".`
-          : `Model inherited from preset "${activePreset.name}" mainModel.`,
+        reason: `Model selected by preset "${activePreset.name}" for role "${role}" mapped from delegation category "${category}".`,
         presetName: activePreset.name,
       },
     };
   }
 
   if (!input.modelRouting || input.modelRouting.availableModels.length === 0) {
-    return {};
+    return presetMissRoute({
+      activePresetName: activePreset?.name,
+      category,
+      role,
+      reason: presetMissReason,
+    });
   }
 
   const keywordText = normalizeKeywordText(normalizeObjectiveText(input.packet));
-  const effectiveSkillName = input.target.skillName;
   let resolvedRoute: ResolvedDelegationModelRoute | undefined;
   let resolvedScore = 0;
 
@@ -298,13 +376,16 @@ export function resolveDelegationModelRoute(input: {
           resolvedScore = score;
           resolvedRoute = {
             model: selectedModel,
+            modelRole: role,
             modelRoute: {
               selectedModel,
               category,
+              ...(role ? { role } : {}),
               source: "policy",
               mode: "auto",
               reason: policy.reason,
               policyId: policy.id,
+              ...(presetMissReason ? { presetMissReason } : {}),
             },
           };
         }
@@ -315,5 +396,13 @@ export function resolveDelegationModelRoute(input: {
     }
   }
 
-  return resolvedRoute ?? {};
+  return (
+    resolvedRoute ??
+    presetMissRoute({
+      activePresetName: activePreset?.name,
+      category,
+      role,
+      reason: presetMissReason,
+    })
+  );
 }

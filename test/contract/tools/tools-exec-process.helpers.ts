@@ -57,6 +57,7 @@ export function createRuntimeForExecTests(input?: {
   targetRoots?: string[];
   turnPromptText?: string;
   boxDetach?: boolean;
+  autoBackgroundForegroundWaitMs?: number;
 }) {
   const mode = input?.mode ?? "standard";
   const events: RecordedExecTestEvent[] = [];
@@ -100,6 +101,9 @@ export function createRuntimeForExecTests(input?: {
     };
     runtimeConfig.security.execution = {
       backend: input?.backend ?? "box",
+      autoBackground: {
+        foregroundWaitMs: input?.autoBackgroundForegroundWaitMs ?? 10_000,
+      },
       box: {
         home: "~/.brewva/boxes-test",
         image: "ghcr.io/arcthur/box-default:latest",

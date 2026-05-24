@@ -16,6 +16,7 @@ import type {
   DelegationModelRouteRecord,
   DelegationRunRecord,
 } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type {
   DelegationPacket,
   SubagentExecutionShape,
@@ -24,7 +25,7 @@ import type {
 import type { HostedDelegationTarget } from "../targets.js";
 
 export interface DetachedSubagentRunSpec {
-  schema: "brewva.subagent-run-spec.v7";
+  schema: "brewva.subagent-run-spec.v8";
   runId: string;
   parentSessionId: string;
   workspaceRoot: string;
@@ -33,6 +34,7 @@ export interface DetachedSubagentRunSpec {
   delegate: string;
   target: HostedDelegationTarget;
   executionShape?: SubagentExecutionShape;
+  modelRole?: BrewvaModelRoleAlias;
   modelRoute?: DelegationModelRouteRecord;
   label?: string;
   taskName: string;

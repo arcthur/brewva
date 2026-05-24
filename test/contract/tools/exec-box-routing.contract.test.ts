@@ -836,6 +836,54 @@ describe("exec box routing", () => {
     expect((polled.details as { backend?: string }).backend).toBe("box");
   });
 
+  test("box foreground execution auto-backgrounds after the configured wait", async () => {
+    const calls = {
+      scopes: [] as BoxScope[],
+      execs: [] as BoxExecSpec[],
+      snapshots: [] as string[],
+      waitDelayMs: 50,
+    };
+    const { runtime } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      autoBackgroundForegroundWaitMs: 1,
+      boxPlane: createCapturingBoxPlane(calls),
+    });
+    const execTool = createExecTool({ runtime });
+    const processTool = createProcessTool({ runtime });
+    const sessionId = "s13-exec-box-auto-background";
+
+    const started = await execTool.execute(
+      "tc-exec-box-auto-background",
+      {
+        command: "sleep 1 && echo done",
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    const details = started.details as { sessionId?: string; status?: string; backend?: string };
+
+    expect(details.status).toBe("running");
+    expect(details.backend).toBe("box");
+    expect(calls.execs[0]?.detach).toBe(true);
+    expect(typeof details.sessionId).toBe("string");
+
+    const polled = await processTool.execute(
+      "tc-process-box-auto-background",
+      {
+        action: "poll",
+        sessionId: details.sessionId,
+        timeout: 1000,
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    expect(extractTextContent(polled)).toContain("captured");
+  });
+
   test("box background execution defers non-detach release until completion", async () => {
     const calls = {
       scopes: [] as BoxScope[],

@@ -36,6 +36,7 @@ import {
   cloneModelPresetState,
   createSyntheticDefaultModelPreset,
   findModelPreset,
+  resolvePresetRoleModel,
 } from "./settings/model-presets.js";
 import {
   createHostedSettingsHandle as createLocalHostedSettingsHandle,
@@ -98,10 +99,10 @@ async function resolveHostedInitialModel(
   }
 
   const activePreset = findModelPreset(modelPresetState);
-  const presetMainModel = activePreset?.mainModel?.trim();
-  if (presetMainModel) {
+  const presetDefaultModel = resolvePresetRoleModel(activePreset, "default")?.trim();
+  if (presetDefaultModel) {
     try {
-      const presetSelection = resolveBrewvaModelSelection(presetMainModel, modelRegistry);
+      const presetSelection = resolveBrewvaModelSelection(presetDefaultModel, modelRegistry);
       if (presetSelection.model && modelRegistry.hasConfiguredAuth(presetSelection.model)) {
         return {
           model: presetSelection.model,
@@ -361,9 +362,7 @@ export async function createHostedSessionResult(input: {
       modelPresetSelection: {
         presetName: modelPresetState.activeName,
         source: "startup",
-        mainModel: activePreset?.mainModel,
-        delegationModels: activePreset?.delegationModels,
-        auxiliaryModels: activePreset?.auxiliaryModels,
+        roles: activePreset?.roles,
         synthetic: activePreset?.synthetic,
       },
       modelChange: sessionResolution.model
@@ -412,6 +411,7 @@ export async function createHostedSessionResult(input: {
         ? () => input.options.onInitialPersistence?.(sessionManager.getSessionId())
         : undefined,
       initialModel: sessionResolution.model,
+      initialModelRole: input.options.modelRole,
       initialThinkingLevel: thinkingLevel,
       initialModelPresetState: modelPresetState,
     }),

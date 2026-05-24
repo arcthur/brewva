@@ -21,6 +21,21 @@ function extractTextOnlyContent(content: unknown): string | undefined {
   return lines.join("\n");
 }
 
+function extractArtifactRef(details: Record<string, unknown> | undefined): string | null {
+  const direct = details?.artifactRef;
+  if (typeof direct === "string" && direct.trim().length > 0) {
+    return direct.trim();
+  }
+  const outputArtifact = details?.outputArtifact;
+  if (outputArtifact && typeof outputArtifact === "object" && !Array.isArray(outputArtifact)) {
+    const artifactRef = (outputArtifact as { artifactRef?: unknown }).artifactRef;
+    if (typeof artifactRef === "string" && artifactRef.trim().length > 0) {
+      return artifactRef.trim();
+    }
+  }
+  return null;
+}
+
 export function registerToolResultDistiller(
   extensionApi: InternalHostPluginApi,
   _runtime: HostedRuntimeAdapterPort,
@@ -53,6 +68,21 @@ export function registerToolResultDistiller(
 
     return {
       content: [{ type: "text" as const, text: distillation.summaryText.trim() }],
+      details: {
+        ...details,
+        outputDistillation: {
+          strategy: distillation.strategy,
+          rawChars: distillation.rawChars,
+          rawBytes: distillation.rawBytes,
+          rawTokens: distillation.rawTokens,
+          summaryChars: distillation.summaryChars,
+          summaryBytes: distillation.summaryBytes,
+          summaryTokens: distillation.summaryTokens,
+          compressionRatio: distillation.compressionRatio,
+          truncated: distillation.truncated,
+          artifactRef: extractArtifactRef(details),
+        },
+      },
     };
   });
 }

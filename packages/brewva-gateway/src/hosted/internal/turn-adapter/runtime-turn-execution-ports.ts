@@ -42,12 +42,22 @@ import type {
 } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type {
+  BrewvaModelPresetState,
+  BrewvaModelRoleAlias,
+} from "@brewva/brewva-substrate/session";
+import type {
   BrewvaToolContext,
   BrewvaToolDefinition,
   BrewvaToolResult,
 } from "@brewva/brewva-substrate/tools";
 import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
+import {
+  resolveBrewvaModelSelection,
+  selectBrewvaFallbackModel,
+} from "../../../policy/model-routing/api.js";
 import { streamProviderMessage } from "../provider/execution-port.js";
+import { isBrewvaModelRoleAlias as isHostedModelRoleAlias } from "../session/settings/model-presets.js";
+import type { HostedModelRoutingSettings } from "../session/settings/settings-store.js";
 import {
   resolveToolDisplay,
   resolveToolDisplayVerdict,
@@ -63,12 +73,35 @@ interface RuntimeAdapterSession extends CollectSessionPromptOutputSession {
   readonly model?: BrewvaRegisteredModel;
   getRegisteredTools(): readonly BrewvaToolDefinition[];
   getRuntimeModelCatalog(): {
+    getAll?(): readonly BrewvaRegisteredModel[];
+    find?(provider: string, id: string): BrewvaRegisteredModel | undefined;
     getApiKeyAndHeaders(
       model: BrewvaRegisteredModel,
     ): Promise<
       { ok: true; apiKey?: string; headers?: Record<string, string> } | { ok: false; error: string }
     >;
+    rotateCredential?(
+      provider: string,
+      reason: "quota" | "rate_limit" | "auth" | "manual",
+      cooldownMs: number,
+    ):
+      | {
+          providerId: string;
+          credentialSlot: string;
+          reason: "quota" | "rate_limit" | "auth" | "manual";
+          cooldownMs: number;
+        }
+      | undefined;
   };
+  getModelPresetState?(): BrewvaModelPresetState;
+  getRuntimeActiveModelRole?(): BrewvaModelRoleAlias | undefined;
+  getRuntimeModelRoutingSettings?(): HostedModelRoutingSettings | undefined;
+  recordRuntimeProviderCredentialRotated?(input: {
+    providerId: string;
+    credentialSlot: string;
+    reason: "quota" | "rate_limit" | "auth" | "manual";
+    cooldownMs: number;
+  }): void;
   createRuntimeToolContext(): BrewvaToolContext;
   getRuntimeProviderCachePolicy?(): ProviderCachePolicy;
   getRuntimeProviderTransport?(): ProviderStreamOptions["transport"];
@@ -563,6 +596,129 @@ type RuntimeProviderQueueItem =
   | { readonly kind: "done" }
   | { readonly kind: "error"; readonly error: unknown };
 
+type ProviderFailureReason = "quota" | "rate_limit" | "auth" | "provider" | "context" | "unknown";
+
+class ProviderAttemptError extends Error {
+  constructor(
+    readonly causeError: unknown,
+    readonly sawFrame: boolean,
+  ) {
+    super(causeError instanceof Error ? causeError.message : String(causeError));
+    this.name = "ProviderAttemptError";
+  }
+}
+
+function modelKey(model: BrewvaRegisteredModel): string {
+  return `${model.provider}/${model.id}`;
+}
+
+function classifyProviderFailure(error: unknown): ProviderFailureReason {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  if (/\b(quota|insufficient_quota|billing)\b/u.test(message)) return "quota";
+  if (/\b(rate.?limit|429|too many requests)\b/u.test(message)) return "rate_limit";
+  if (/\b(auth|api key|unauthorized|forbidden|401|403)\b/u.test(message)) return "auth";
+  if (/\b(context|token|maximum context|too long)\b/u.test(message)) return "context";
+  if (/\b(provider|upstream|service unavailable|overloaded|timeout|temporar)\b/u.test(message)) {
+    return "provider";
+  }
+  return "unknown";
+}
+
+function credentialRotationReason(
+  reason: ProviderFailureReason,
+): "quota" | "rate_limit" | "auth" | undefined {
+  if (reason === "quota" || reason === "rate_limit" || reason === "auth") {
+    return reason;
+  }
+  return undefined;
+}
+
+function activePresetFromSession(
+  session: RuntimeAdapterSession,
+): BrewvaModelPresetState["presets"][number] | undefined {
+  const state = session.getModelPresetState?.();
+  return state?.presets.find((preset) => preset.name === state.activeName);
+}
+
+function resolveModelText(
+  session: RuntimeAdapterSession,
+  modelText: string,
+): BrewvaRegisteredModel | undefined {
+  const catalog = session.getRuntimeModelCatalog();
+  if (!catalog.getAll) {
+    return undefined;
+  }
+  const selection = resolveBrewvaModelSelection(modelText, {
+    getAll: () => [...(catalog.getAll?.() ?? [])],
+  });
+  return selection.model;
+}
+
+function fallbackCandidates(input: {
+  session: RuntimeAdapterSession;
+  currentModel: BrewvaRegisteredModel;
+  attemptedModelKeys: ReadonlySet<string>;
+  activeRole: BrewvaModelRoleAlias;
+}): BrewvaRegisteredModel[] {
+  const catalog = input.session.getRuntimeModelCatalog();
+  const availableModels = catalog.getAll?.() ?? [];
+  const settings = input.session.getRuntimeModelRoutingSettings?.();
+  const activePreset = activePresetFromSession(input.session);
+  const candidates: BrewvaRegisteredModel[] = [];
+  const push = (model: BrewvaRegisteredModel | undefined) => {
+    if (!model) return;
+    const key = modelKey(model);
+    if (key === modelKey(input.currentModel) || input.attemptedModelKeys.has(key)) return;
+    if (candidates.some((candidate) => modelKey(candidate) === key)) return;
+    candidates.push(model);
+  };
+  const chain =
+    settings?.fallbackChains[input.activeRole] ?? settings?.fallbackChains.default ?? [];
+  for (const entry of chain) {
+    const modelText = isHostedModelRoleAlias(entry) ? activePreset?.roles[entry] : entry;
+    if (modelText) {
+      push(resolveModelText(input.session, modelText));
+    }
+  }
+  if (availableModels.length > 0) {
+    push(
+      selectBrewvaFallbackModel({
+        currentModel: input.currentModel,
+        availableModels,
+      }),
+    );
+  }
+  return candidates;
+}
+
+function providerFallbackMetadata(input: {
+  active: boolean;
+  attemptedModel: BrewvaRegisteredModel;
+  selectedModel: BrewvaRegisteredModel;
+  reason: ProviderFailureReason;
+  cacheInvalidated?: boolean;
+  credentialSlot?: string;
+}): Record<string, JsonValue> {
+  return {
+    active: input.active,
+    attemptedRoute: {
+      provider: input.attemptedModel.provider,
+      model: input.attemptedModel.id,
+    },
+    selectedRoute: {
+      provider: input.selectedModel.provider,
+      model: input.selectedModel.id,
+      ...(input.credentialSlot ? { credentialSlot: input.credentialSlot } : {}),
+    },
+    reason: input.reason,
+    revertPolicy: "next_turn_uses_active_preset_or_explicit_selection",
+    cache_invalidated:
+      input.cacheInvalidated ??
+      (input.attemptedModel.provider !== input.selectedModel.provider ||
+        input.attemptedModel.id !== input.selectedModel.id),
+  };
+}
+
 function frameFromProviderEvent(event: AssistantMessageEvent): RuntimeProviderFrame | null {
   if (event.type === "text_delta" && event.delta.length > 0) {
     return { type: "text", delta: event.delta };
@@ -583,6 +739,113 @@ function frameFromProviderEvent(event: AssistantMessageEvent): RuntimeProviderFr
   return null;
 }
 
+async function* streamRuntimeProviderAttempt(
+  session: RuntimeAdapterSession,
+  input: Parameters<RuntimeProviderPort["stream"]>[0],
+  model: BrewvaRegisteredModel,
+  providerFallback: Record<string, JsonValue> | undefined,
+): AsyncGenerator<RuntimeProviderFrame> {
+  const resolvedAuth = await session.getRuntimeModelCatalog().getApiKeyAndHeaders(model);
+  if (!resolvedAuth.ok) {
+    throw new ProviderAttemptError(
+      new Error(`hosted_runtime_provider_auth_failed:${resolvedAuth.error}`),
+      false,
+    );
+  }
+  const providerAbort = new AbortController();
+  const unlinkAbort = linkAbortSignal(input.turn.signal, providerAbort);
+  const options: ProviderStreamOptions = {
+    signal: providerAbort.signal,
+    apiKey: resolvedAuth.apiKey,
+    headers: cloneHeaders(resolvedAuth.headers),
+    sessionId: input.turn.sessionId,
+    cachePolicy: resolveRuntimeProviderCachePolicy(session),
+    transport: resolveRuntimeProviderTransport(session),
+    ...(providerFallback ? { metadata: { providerFallback } } : {}),
+    onPayload: (payload, providerModel, metadata) =>
+      session.prepareRuntimeProviderPayload?.({
+        payload,
+        model: providerModel,
+        metadata,
+      }) ?? payload,
+    onCacheRender: (render, providerModel) =>
+      session.observeRuntimeCacheRender?.({
+        render,
+        model: providerModel,
+      }),
+  };
+  const providerStream = streamProviderMessage(
+    toProviderModel(model),
+    toProviderContext(session, input),
+    options,
+  );
+  let sawIncrementalFrame = false;
+  const bridge = createAsyncBridge<RuntimeProviderQueueItem>({
+    onCancel() {
+      providerAbort.abort();
+    },
+  });
+  const consume = runBoundaryOperation(
+    "gateway.hosted.provider.consume",
+    providerStream.pipe(
+      BrewvaStream.runForEach((event) =>
+        BrewvaEffect.promise(async () => {
+          if (event.type === "error") {
+            session.observeRuntimeAssistantMessage?.(toTurnLoopAssistantMessage(event.error));
+            await bridge.write({
+              kind: "error",
+              error: new ProviderAttemptError(
+                new Error(event.error.errorMessage ?? "provider_stream_failed"),
+                sawIncrementalFrame,
+              ),
+            });
+            return;
+          }
+          const frame = frameFromProviderEvent(event);
+          if (frame) {
+            sawIncrementalFrame = true;
+            await bridge.write({ kind: "frame", frame });
+            return;
+          }
+          if (event.type === "done") {
+            session.observeRuntimeAssistantMessage?.(toTurnLoopAssistantMessage(event.message));
+            if (!sawIncrementalFrame) {
+              for (const fallback of framesFromAssistantMessage(event.message)) {
+                await bridge.write({ kind: "frame", frame: fallback });
+              }
+            }
+          }
+        }),
+      ),
+      BrewvaEffect.provide(providerRuntimeLayer),
+    ),
+    { signal: providerAbort.signal },
+  )
+    .then(() => bridge.write({ kind: "done" }))
+    .then(() => {
+      bridge.close();
+    })
+    .catch((error) => bridge.fail(new ProviderAttemptError(error, sawIncrementalFrame)));
+
+  try {
+    for await (const next of bridge) {
+      if (next.kind === "frame") {
+        yield next.frame;
+        continue;
+      }
+      if (next.kind === "error") {
+        throw next.error;
+      }
+      break;
+    }
+  } finally {
+    providerAbort.abort();
+    unlinkAbort();
+    bridge.close();
+    void consume.catch(() => undefined);
+  }
+}
+
 export function createHostedRuntimeProviderPort(
   session: CollectSessionPromptOutputSession,
 ): RuntimeProviderPort {
@@ -591,101 +854,66 @@ export function createHostedRuntimeProviderPort(
   }
   return {
     async *stream(input) {
-      const model = session.model;
-      if (!model) {
+      const initialModel = session.model;
+      if (!initialModel) {
         throw new Error("hosted_runtime_provider_missing_model");
       }
-      const resolvedAuth = await session.getRuntimeModelCatalog().getApiKeyAndHeaders(model);
-      if (!resolvedAuth.ok) {
-        throw new Error(`hosted_runtime_provider_auth_failed:${resolvedAuth.error}`);
-      }
-      const providerAbort = new AbortController();
-      const unlinkAbort = linkAbortSignal(input.turn.signal, providerAbort);
-      const options: ProviderStreamOptions = {
-        signal: providerAbort.signal,
-        apiKey: resolvedAuth.apiKey,
-        headers: cloneHeaders(resolvedAuth.headers),
-        sessionId: input.turn.sessionId,
-        cachePolicy: resolveRuntimeProviderCachePolicy(session),
-        transport: resolveRuntimeProviderTransport(session),
-        onPayload: (payload, providerModel, metadata) =>
-          session.prepareRuntimeProviderPayload?.({
-            payload,
-            model: providerModel,
-            metadata,
-          }) ?? payload,
-        onCacheRender: (render, providerModel) =>
-          session.observeRuntimeCacheRender?.({
-            render,
-            model: providerModel,
-          }),
-      };
-      const providerStream = streamProviderMessage(
-        toProviderModel(model),
-        toProviderContext(session, input),
-        options,
-      );
-      let sawIncrementalFrame = false;
-      const bridge = createAsyncBridge<RuntimeProviderQueueItem>({
-        onCancel() {
-          providerAbort.abort();
-        },
-      });
-      const consume = runBoundaryOperation(
-        "gateway.hosted.provider.consume",
-        providerStream.pipe(
-          BrewvaStream.runForEach((event) =>
-            BrewvaEffect.promise(async () => {
-              if (event.type === "error") {
-                session.observeRuntimeAssistantMessage?.(toTurnLoopAssistantMessage(event.error));
-                await bridge.write({
-                  kind: "error",
-                  error: new Error(event.error.errorMessage ?? "provider_stream_failed"),
-                });
-                return;
-              }
-              const frame = frameFromProviderEvent(event);
-              if (frame) {
-                sawIncrementalFrame = true;
-                await bridge.write({ kind: "frame", frame });
-                return;
-              }
-              if (event.type === "done") {
-                session.observeRuntimeAssistantMessage?.(toTurnLoopAssistantMessage(event.message));
-                if (!sawIncrementalFrame) {
-                  for (const fallback of framesFromAssistantMessage(event.message)) {
-                    await bridge.write({ kind: "frame", frame: fallback });
-                  }
-                }
-              }
-            }),
-          ),
-          BrewvaEffect.provide(providerRuntimeLayer),
-        ),
-        { signal: providerAbort.signal },
-      )
-        .then(() => bridge.write({ kind: "done" }))
-        .then(() => {
-          bridge.close();
-        })
-        .catch((error) => bridge.fail(error));
-
-      try {
-        for await (const next of bridge) {
-          if (next.kind === "frame") {
-            yield next.frame;
-            continue;
+      const activeRole = session.getRuntimeActiveModelRole?.() ?? "default";
+      let activeModel = initialModel;
+      let fallbackMetadata: Record<string, JsonValue> | undefined;
+      const attempted = new Set<string>();
+      while (true) {
+        attempted.add(modelKey(activeModel));
+        try {
+          yield* streamRuntimeProviderAttempt(session, input, activeModel, fallbackMetadata);
+          return;
+        } catch (error) {
+          const attemptError =
+            error instanceof ProviderAttemptError ? error : new ProviderAttemptError(error, false);
+          if (attemptError.sawFrame || input.turn.signal?.aborted === true) {
+            throw attemptError.causeError;
           }
-          if (next.kind === "error") {
-            throw next.error;
+          const reason = classifyProviderFailure(attemptError.causeError);
+          const rotationReason = credentialRotationReason(reason);
+          const rotationSettings = session.getRuntimeModelRoutingSettings?.()?.credentialRotation;
+          if (rotationReason && rotationSettings?.enabled === true) {
+            const rotation = session
+              .getRuntimeModelCatalog()
+              .rotateCredential?.(
+                activeModel.provider,
+                rotationReason,
+                rotationSettings.cooldownMs,
+              );
+            if (rotation) {
+              session.recordRuntimeProviderCredentialRotated?.(rotation);
+              fallbackMetadata = providerFallbackMetadata({
+                active: true,
+                attemptedModel: activeModel,
+                selectedModel: activeModel,
+                reason,
+                cacheInvalidated: true,
+                credentialSlot: rotation.credentialSlot,
+              });
+              continue;
+            }
           }
-          break;
+          const [nextModel] = fallbackCandidates({
+            session,
+            currentModel: activeModel,
+            attemptedModelKeys: attempted,
+            activeRole,
+          });
+          if (!nextModel) {
+            throw attemptError.causeError;
+          }
+          fallbackMetadata = providerFallbackMetadata({
+            active: true,
+            attemptedModel: activeModel,
+            selectedModel: nextModel,
+            reason,
+          });
+          activeModel = nextModel;
         }
-      } finally {
-        providerAbort.abort();
-        unlinkAbort();
-        bridge.close();
-        void consume.catch(() => undefined);
       }
     },
   };

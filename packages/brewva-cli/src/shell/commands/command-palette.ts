@@ -12,6 +12,16 @@ function commandShortcutLabel(
   return lookup ? lookup(command.id) : command.shortcutLabel;
 }
 
+function commandHelpMetadata(command: ShellCommandListItem): string[] {
+  return [
+    command.providerId && command.providerId !== "brewva.builtin"
+      ? command.providerLabel
+      : undefined,
+    command.path,
+    command.shadowedBy ? `shadowed by ${command.shadowedBy}` : undefined,
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+}
+
 function keymapHint(lookup: ShortcutLabelLookup | undefined, id: string): string | undefined {
   return lookup?.(id);
 }
@@ -116,7 +126,11 @@ export function buildHelpHubPayload(
     lines.push("", category);
     for (const command of commands) {
       const slash = command.slashName ? `/${command.slashName}` : "";
-      const suffix = [slash, commandShortcutLabel(command, input.shortcutLabel) ?? ""]
+      const suffix = [
+        slash,
+        commandShortcutLabel(command, input.shortcutLabel) ?? "",
+        ...commandHelpMetadata(command),
+      ]
         .filter(Boolean)
         .join(" · ");
       lines.push(`  ${command.title}${suffix ? ` (${suffix})` : ""}`);

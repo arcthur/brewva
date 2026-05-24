@@ -4,7 +4,10 @@ import type {
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
 } from "@brewva/brewva-substrate/provider";
-import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
+import type {
+  BrewvaManagedPromptSession,
+  BrewvaModelRoleAlias,
+} from "@brewva/brewva-substrate/session";
 import type {
   BrewvaReadToolDetails,
   BrewvaReadToolOptions,
@@ -49,6 +52,7 @@ export interface HostedSessionServiceDiagnostic {
 
 export interface CreateHostedManagedSessionOptions {
   model?: BrewvaRegisteredModel;
+  modelRole?: BrewvaModelRoleAlias;
   thinkingLevel?: string;
   customTools?: HostedSessionCustomTool[];
   deferPersistenceUntilPrompt?: boolean;
@@ -74,6 +78,7 @@ export interface CreateHostedSessionRuntimeOptions {
   runtime?: HostedRuntimeAdapterPort;
   extensions?: readonly InternalHostPlugin[];
   requestedModel?: BrewvaRegisteredModel;
+  requestedModelRole?: BrewvaModelRoleAlias;
   requestedThinkingLevel?: string;
   customTools?: HostedSessionCustomTool[];
   sessionId?: string;

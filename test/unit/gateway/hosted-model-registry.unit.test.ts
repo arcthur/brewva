@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HostedAuthStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
+import {
+  HostedAuthStore,
+  type HostedAuthCredential,
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
 import {
   createHostedModelServices,
   HostedModelRegistry,
@@ -11,6 +14,18 @@ import { requireDefined } from "../../helpers/assertions.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 
 const TEST_ENV_KEY = "BREWVA_HOSTED_MODEL_REGISTRY_TEST_KEY";
+
+function authSlots(credential: HostedAuthCredential) {
+  return {
+    activeSlot: "default",
+    slots: {
+      default: {
+        id: "default",
+        credential,
+      },
+    },
+  };
+}
 
 describe("hosted model registry", () => {
   test("uses literal hosted provider config values without reading ambient env", async () => {
@@ -63,10 +78,10 @@ describe("hosted model registry", () => {
     const restoreEnv = patchProcessEnv({ [TEST_ENV_KEY]: "stored-token" });
     try {
       const authStore = HostedAuthStore.inMemory({
-        demo: {
+        demo: authSlots({
           type: "api_key",
           key: TEST_ENV_KEY,
-        },
+        }),
       });
 
       const apiKey = await authStore.getApiKey("demo");
@@ -102,12 +117,12 @@ describe("hosted model registry", () => {
 
   test("exposes derived OpenAI Codex models after ChatGPT auth is configured", () => {
     const authStore = HostedAuthStore.inMemory({
-      "openai-codex": {
+      "openai-codex": authSlots({
         type: "oauth",
         accessToken: "access-token",
         refreshToken: "refresh-token",
         expiresAt: Date.now() + 60_000,
-      },
+      }),
     });
     const registry = HostedModelRegistry.inMemory(authStore);
 
@@ -147,9 +162,16 @@ describe("hosted model registry", () => {
 
       const raw = JSON.parse(readFileSync(join(agentDir, "auth.json"), "utf8")) as Record<
         string,
-        { type?: string }
+        { activeSlot?: string; slots?: Record<string, { credential?: { type?: string } }> }
       >;
-      expect(raw["openai-codex"]).toMatchObject({ type: "oauth" });
+      expect(raw["openai-codex"]).toMatchObject({
+        activeSlot: "default",
+        slots: {
+          default: {
+            credential: { type: "oauth" },
+          },
+        },
+      });
 
       const second = createHostedModelServices(agentDir);
       expect(second.authStore.get("openai-codex")).toMatchObject({

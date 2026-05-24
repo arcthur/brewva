@@ -2,6 +2,7 @@ export type { CreateHostedSessionOptions, HostedSession, HostedSessionResult } f
 export {
   createHostedModelCatalog,
   createHostedSession,
+  resolvePresetRoleModel,
   selectNextModelPresetName,
 } from "./session.js";
 export type {

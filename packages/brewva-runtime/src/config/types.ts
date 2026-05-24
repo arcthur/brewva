@@ -153,6 +153,9 @@ export interface BrewvaConfig {
     credentials: BrewvaSecurityCredentialsConfig;
     execution: {
       backend: "host" | "box";
+      autoBackground: {
+        foregroundWaitMs: number;
+      };
       box: {
         home: string;
         image: string;

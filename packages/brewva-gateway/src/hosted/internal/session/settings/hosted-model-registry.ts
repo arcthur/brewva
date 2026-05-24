@@ -256,6 +256,14 @@ export class HostedModelRegistry implements HostedSessionModelRegistry {
     return this.#authStore.get(model.provider)?.type === "oauth";
   }
 
+  rotateCredential(
+    provider: string,
+    reason: "quota" | "rate_limit" | "auth" | "manual",
+    cooldownMs: number,
+  ) {
+    return this.#authStore.rotateCredential(provider, reason, cooldownMs);
+  }
+
   private applyProviderConfig(providerName: string, config: HostedProviderConfig): void {
     this.storeProviderRequestConfig(providerName, config);
 
@@ -339,6 +347,9 @@ export function createHostedModelServices(agentDir: string): HostedSessionModelS
       hasAuth: (provider) => authStore.hasAuth(provider),
       isUsingOAuth: (provider) => authStore.get(provider)?.type === "oauth",
       set: (provider, credential) => authStore.set(provider, credential),
+      setCredentialSlot: (provider, slot) => authStore.setCredentialSlot(provider, slot),
+      rotateCredential: (provider, reason, cooldownMs) =>
+        authStore.rotateCredential(provider, reason, cooldownMs),
       remove: (provider) => authStore.remove(provider),
       setFallbackResolver: (resolver) => authStore.setFallbackResolver(resolver),
     },

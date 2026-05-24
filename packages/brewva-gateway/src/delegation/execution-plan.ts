@@ -7,6 +7,7 @@ import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/protocol";
 import { deriveToolGovernanceDescriptor } from "@brewva/brewva-runtime/protocol";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+import type { BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type {
   DelegationPacket,
   SubagentExecutionBoundary,
@@ -126,6 +127,7 @@ export interface ResolvedDelegationExecutionPlan {
   packet: DelegationPacket;
   boundary: SubagentExecutionBoundary;
   model?: string;
+  modelRole?: BrewvaModelRoleAlias;
   modelRoute?: DelegationModelRouteRecord;
   managedToolMode: ManagedToolMode;
   builtinToolNames: HostedDelegationBuiltinToolName[];
@@ -252,6 +254,7 @@ export function resolveDelegationExecutionPlan(input: {
     packet: input.packet,
     boundary,
     model: routedModel.model,
+    modelRole: routedModel.modelRole,
     modelRoute: routedModel.modelRoute,
     managedToolMode,
     builtinToolNames: resolveBuiltinToolNamesForRun(

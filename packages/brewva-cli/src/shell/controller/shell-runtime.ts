@@ -349,7 +349,7 @@ export class CliShellRuntime {
       openSession: (sessionId) => options.openSession(sessionId),
       createSession: () => options.createSession(),
     });
-    registerShellCommands(this.#commandProvider);
+    registerShellCommands(this.#commandProvider, { cwd: options.cwd, loadFileCommands: true });
     const commandKeymapBindings = this.#commandProvider.keymapCommandBindings();
     const knownKeymapIds = new Set([
       ...BREWVA_BUILT_IN_KEYMAP_BINDINGS.map((binding) => binding.id),
