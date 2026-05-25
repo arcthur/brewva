@@ -57,6 +57,7 @@ export {
 export type {
   HostedRuntimeAdapterPort,
   BrewvaRuntimeOptions,
+  HostedRuntimeAdapterOptions,
   RuntimeAdapterCapabilitiesPort,
   RuntimeAdapterOpsPort,
   ToolRuntimeAdapterPort,

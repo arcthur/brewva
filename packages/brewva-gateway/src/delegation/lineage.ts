@@ -1,5 +1,5 @@
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
-import type { ContextAdmission } from "@brewva/brewva-runtime/protocol";
+import type { ContextAdmission } from "@brewva/brewva-vocabulary/context";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import {
   adoptRuntimeLineageOutcome,

@@ -1,4 +1,4 @@
-import type { ContextCompactionGateStatus } from "@brewva/brewva-runtime/protocol";
+import type { ContextCompactionGateStatus } from "@brewva/brewva-vocabulary/context";
 import {
   CONTEXT_COMPACTION_ADVISORY_EVENT_TYPE,
   CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
@@ -9,8 +9,8 @@ import {
   CONTEXT_COMPACTION_SKIPPED_EVENT_TYPE,
   CONTEXT_COMPOSED_EVENT_TYPE,
   CRITICAL_WITHOUT_COMPACT_EVENT_TYPE,
-  SESSION_COMPACT_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/context";
+import { SESSION_COMPACT_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import {
   buildContextComposedEventPayload,

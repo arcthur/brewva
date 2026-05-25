@@ -1,12 +1,12 @@
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { readNonEmptyString } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   readToolResultRecordedEventPayload,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import { readNonEmptyString } from "@brewva/brewva-std/text";
-import { isRecord } from "@brewva/brewva-std/unknown";
+} from "@brewva/brewva-vocabulary/iteration";
 import { queryRuntimeEvents, type HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import type { TurnLifecyclePort } from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
 import { makeHostedContextBlock, type HostedContextBlock } from "./hosted-context-blocks.js";

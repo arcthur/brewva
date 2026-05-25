@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context as ProviderContext } from "@brewva/brewva-provider-core/contracts";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import { type BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import {
   buildBrewvaPromptText,
@@ -19,6 +17,8 @@ import type {
   BrewvaShellViewPreferences,
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
+import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { DEFAULT_TUI_THEME } from "../../../packages/brewva-cli/src/internal/tui/index.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type { ShellEffect } from "../../../packages/brewva-cli/src/shell/domain/effects.js";

@@ -2,8 +2,8 @@
 
 Skill parsing, merge, and inventory anchors:
 
-- `packages/brewva-runtime/src/protocol.ts`
-- `packages/brewva-runtime/src/runtime/model/model.ts`
+- `packages/brewva-vocabulary/src/session.ts`
+- `packages/brewva-runtime/src/runtime/model/impl.ts`
 
 This page owns skill taxonomy, SkillCard metadata, ProducerContract metadata,
 and the generated skill inventory. Hosted turns may select skills as bounded

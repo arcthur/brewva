@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AgentRuntimeManager } from "@brewva/brewva-gateway/channels";
-import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterOptions as BrewvaRuntimeOptions } from "@brewva/brewva-gateway/hosted";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

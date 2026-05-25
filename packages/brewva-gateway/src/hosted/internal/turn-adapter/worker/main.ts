@@ -20,12 +20,13 @@ import {
   registerExternalApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
-import type { ContextStatusView, SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaMutableModelCatalog,
   BrewvaProviderModelDefinition,
   BrewvaRegisteredModel,
 } from "@brewva/brewva-substrate/provider";
+import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { recordSessionShutdownIfMissing } from "../../../../utils/runtime.js";
 import {
   createHostedSession as createGatewaySession,

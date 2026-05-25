@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type {
+  AdapterSendResult,
   AdapterStartContext,
   ChannelAdapter,
-  AdapterSendResult,
   TurnEnvelope,
-} from "@brewva/brewva-runtime/protocol";
-import { ChannelTurnBridge } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
+import { ChannelTurnBridge } from "@brewva/brewva-vocabulary/wire";
 
 const BASE_TURN: TurnEnvelope = {
   schema: "brewva.turn.v1",

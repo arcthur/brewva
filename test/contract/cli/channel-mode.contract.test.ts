@@ -11,7 +11,7 @@ import {
   resolveSupportedChannel,
 } from "@brewva/brewva-gateway/channels";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 describe("channel mode prompt output collector", () => {
   test("normalizes supported channels", () => {
@@ -44,6 +44,7 @@ describe("channel mode prompt output collector", () => {
   test("fails fast when the channel session is not runtime-turn-compatible", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-channel-incompatible-")),
+      physics: { mode: "noop" },
     });
     const session = {
       sessionManager: {

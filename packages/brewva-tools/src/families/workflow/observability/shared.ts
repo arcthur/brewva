@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate/tools";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolRuntime } from "../../../contracts/index.js";
 import { buildStringEnumSchema } from "../../../registry/string-enum-contract.js";

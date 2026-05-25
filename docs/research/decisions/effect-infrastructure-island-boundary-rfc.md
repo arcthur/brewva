@@ -16,7 +16,7 @@
   - `skills/project/shared/anti-patterns.md`
 - Code anchors:
   - `packages/brewva-std/src/async.ts`
-  - `packages/brewva-runtime/src/runtime/engine/turn.ts`
+  - `packages/brewva-runtime/src/runtime/turn/impl.ts`
   - `packages/brewva-effect/src/schedules.ts`
   - `packages/brewva-gateway/src/channels/effect-serial-queue.ts`
   - `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts`

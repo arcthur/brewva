@@ -1,5 +1,5 @@
-import type { SessionCostSummary } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { SessionCostSummary } from "@brewva/brewva-vocabulary/session";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "../../contracts/index.js";

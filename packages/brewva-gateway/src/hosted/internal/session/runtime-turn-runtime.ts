@@ -28,7 +28,7 @@ export async function resolveHostedRuntimeTurnRuntime(input: {
   runtime: {
     readonly identity: BrewvaRuntime["identity"];
     readonly config: BrewvaRuntime["config"];
-    readonly bindTurnPorts?: HostedRuntimeAdapterPort["bindTurnPorts"];
+    readonly createRuntime?: HostedRuntimeAdapterPort["createRuntime"];
   };
 }): Promise<BrewvaRuntime> {
   const existing = SESSION_RUNTIMES.get(input.session);
@@ -40,15 +40,19 @@ export async function resolveHostedRuntimeTurnRuntime(input: {
   const resolveToolAuthority = createHostedRuntimeToolAuthorityResolver(input.session, {
     actionAdmissionOverrides: input.runtime.config.security.actionAdmissionOverrides,
   });
+  const physics = {
+    mode: "real" as const,
+    provider,
+    toolExecutor,
+    resolveToolAuthority,
+  };
   const runtime =
-    input.runtime.bindTurnPorts?.({ provider, toolExecutor, resolveToolAuthority }) ??
+    input.runtime.createRuntime?.({ physics }) ??
     createBrewvaRuntime({
       cwd: input.runtime.identity.cwd,
       agentId: input.runtime.identity.agentId,
       config: cloneRuntimeConfigForHostedTurn(input.runtime),
-      provider,
-      toolExecutor,
-      resolveToolAuthority,
+      physics,
     });
   await runtime.start();
   SESSION_RUNTIMES.set(input.session, runtime);

@@ -44,7 +44,11 @@ describe("brewva-tools public entrypoints", () => {
     expect("classifyReviewChangedFiles" in workflow).toBe(false);
     expect(typeof modelRouting.resolveBrewvaModelSelection).toBe("function");
     expect(typeof modelRouting.selectBrewvaFallbackModel).toBe("function");
-    expect(Object.keys(contracts).toSorted()).toEqual([]);
+    expect(Object.keys(contracts).toSorted()).toEqual([
+      "BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES",
+      "BREWVA_TOOL_RUNTIME_COMMAND_NAMESPACES",
+      "BREWVA_TOOL_RUNTIME_QUERY_NAMESPACES",
+    ]);
   });
 
   test("rejects legacy tools subpaths instead of forwarding compatibility barrels", async () => {

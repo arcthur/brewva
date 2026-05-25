@@ -1,9 +1,9 @@
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   ITERATION_FACT_SESSION_SCOPE_VALUES,
   ITERATION_GUARD_STATUS_VALUES,
   ITERATION_METRIC_AGGREGATION_VALUES,
-} from "@brewva/brewva-runtime/protocol";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+} from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

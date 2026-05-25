@@ -7,8 +7,8 @@ import {
 import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   type DelegationRunRecord,
-  type SessionWireFrame,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/delegation";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import {
   buildSubagentFooterView,
   selectCompactSubagentFooterTabs,

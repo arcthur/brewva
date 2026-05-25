@@ -21,9 +21,9 @@
     }
   },
   "dependencies": {
-    "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
+    "@brewva/brewva-vocabulary": "workspace:*",
     "@duckdb/node-api": "1.5.2-r.1"
   },
   "engines": {

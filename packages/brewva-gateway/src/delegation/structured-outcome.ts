@@ -1,4 +1,3 @@
-import { normalizeReviewLaneName } from "@brewva/brewva-runtime/protocol";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import type { BrewvaQuestionOption, BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";
@@ -22,6 +21,7 @@ import type {
   SubagentOutcomeData,
   SubagentResultMode,
 } from "@brewva/brewva-tools/contracts";
+import { normalizeReviewLaneName } from "@brewva/brewva-vocabulary/delegation";
 import { STRUCTURED_OUTCOME_CLOSE, STRUCTURED_OUTCOME_OPEN } from "./protocol.js";
 
 function readString(value: unknown): string | undefined {

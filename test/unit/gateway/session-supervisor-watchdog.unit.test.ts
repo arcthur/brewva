@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { SessionSupervisor } from "@brewva/brewva-gateway";
-import { TASK_STUCK_DETECTED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import { TASK_STUCK_DETECTED_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import {
   listGatewaySessionBindings,
   resolveGatewaySessionBindingStorePath,

@@ -7,19 +7,21 @@ import {
 } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import type { BrewvaForensicConfigWarning } from "@brewva/brewva-runtime/config";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
-  MODEL_PRESET_SELECT_EVENT_TYPE,
+  CLAIM_EVENT_TYPE,
   foldClaimLedgerEvents,
+  MODEL_PRESET_SELECT_EVENT_TYPE,
   readVerificationOutcomeRecordedEventPayload,
-  TASK_EVENT_TYPE,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/iteration";
+import {
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
-  CLAIM_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import { foldTaskLedgerEvents } from "@brewva/brewva-runtime/protocol";
-import { PATCH_HISTORY_FILE } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/session";
+import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { foldTaskLedgerEvents } from "@brewva/brewva-vocabulary/task";
+import { PATCH_HISTORY_FILE } from "@brewva/brewva-vocabulary/workbench";
 import { formatISO } from "date-fns";
 import {
   getCliRuntimeLifecycleHydration,

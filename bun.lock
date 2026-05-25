@@ -21,6 +21,7 @@
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
+        "@brewva/brewva-vocabulary": "workspace:*",
         "@duckdb/node-api": "1.5.2-r.1",
         "@opentui/core": "0.2.14",
         "@opentui/keymap": "0.2.14",
@@ -89,8 +90,8 @@
       "version": "0.1.0",
       "dependencies": {
         "@brewva/brewva-effect": "workspace:*",
-        "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
+        "@brewva/brewva-vocabulary": "workspace:*",
         "lru-cache": "^11.2.7",
       },
     },
@@ -108,6 +109,7 @@
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
+        "@brewva/brewva-vocabulary": "workspace:*",
         "@opentui/core": "0.2.14",
         "@opentui/keymap": "0.2.14",
         "@opentui/solid": "0.2.14",
@@ -143,6 +145,7 @@
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
+        "@brewva/brewva-vocabulary": "workspace:*",
         "@sinclair/typebox": "^0.34.49",
         "ajv": "^8.18.0",
         "lru-cache": "^11.3.5",
@@ -190,10 +193,10 @@
       "name": "@brewva/brewva-recall",
       "version": "0.1.0",
       "dependencies": {
-        "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-session-index": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
+        "@brewva/brewva-vocabulary": "workspace:*",
         "fuse.js": "^7.3.0",
       },
     },
@@ -220,9 +223,9 @@
       "name": "@brewva/brewva-session-index",
       "version": "0.1.0",
       "dependencies": {
-        "@brewva/brewva-runtime": "workspace:*",
         "@brewva/brewva-search": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
+        "@brewva/brewva-vocabulary": "workspace:*",
         "@duckdb/node-api": "1.5.2-r.1",
       },
     },
@@ -269,6 +272,7 @@
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
+        "@brewva/brewva-vocabulary": "workspace:*",
         "@sinclair/typebox": "^0.34.49",
         "@vscode/tree-sitter-wasm": "0.3.1",
         "date-fns": "^4.1.0",
@@ -279,6 +283,14 @@
         "oxc-parser": "0.128.0",
         "typescript": "^6.0.2",
         "web-tree-sitter": "0.25.10",
+      },
+    },
+    "packages/brewva-vocabulary": {
+      "name": "@brewva/brewva-vocabulary",
+      "version": "0.1.0",
+      "dependencies": {
+        "@brewva/brewva-std": "workspace:*",
+        "yaml": "^2.8.3",
       },
     },
   },
@@ -386,6 +398,8 @@
     "@brewva/brewva-token-estimation": ["@brewva/brewva-token-estimation@workspace:packages/brewva-token-estimation"],
 
     "@brewva/brewva-tools": ["@brewva/brewva-tools@workspace:packages/brewva-tools"],
+
+    "@brewva/brewva-vocabulary": ["@brewva/brewva-vocabulary@workspace:packages/brewva-vocabulary"],
 
     "@duckdb/node-api": ["@duckdb/node-api@1.5.2-r.1", "", { "dependencies": { "@duckdb/node-bindings": "1.5.2-r.1" } }, "sha512-OzBBnS0JGXMoS5mzKNY/Ylr7SshcRQiLFIoxQ4AlePwJ2fNeDL/fbHu/knjxUrXwW1fJBTUgwWftmxDdnZZb3A=="],
 

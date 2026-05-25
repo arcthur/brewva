@@ -1,14 +1,14 @@
+import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
 import {
-  getProducerSemanticBindings,
   getProducerOutputContracts,
+  getProducerSemanticBindings,
   listProducerOutputs,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/session";
 import type {
   ProducerContract,
   SkillDocument,
   SkillOutputContract,
-} from "@brewva/brewva-runtime/protocol";
-import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
+} from "@brewva/brewva-vocabulary/session";
 import type { ContextBundle } from "../context/api.js";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";
 import type { HostedDelegationTarget } from "./targets.js";

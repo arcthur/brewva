@@ -3,11 +3,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type {
-  DelegationRunRecord,
-  SourcePatchPlan,
-  SourceSnapshot,
-} from "@brewva/brewva-runtime/protocol";
 import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
 import {
   createResourceReadTool,
@@ -16,6 +11,8 @@ import {
   type SourceReadToolDetails,
 } from "@brewva/brewva-tools/navigation";
 import { createWorkerResultsApplyTool } from "@brewva/brewva-tools/workflow";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import type { SourcePatchPlan, SourceSnapshot } from "@brewva/brewva-vocabulary/workbench";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 

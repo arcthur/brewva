@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function envelopeFor(input: { turnId: string; sessionId: string; channel: string }): TurnEnvelope {

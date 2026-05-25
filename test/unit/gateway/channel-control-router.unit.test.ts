@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-vocabulary/wire";
 import type { ChannelCommandMatch } from "../../../packages/brewva-gateway/src/channels/command/parser.js";
 import { createChannelControlRouter } from "../../../packages/brewva-gateway/src/channels/command/router.js";
 import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/session/update-lock.js";

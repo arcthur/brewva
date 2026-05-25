@@ -1,12 +1,10 @@
 import { resolve } from "node:path";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import {
-  BOX_RELEASED_EVENT_TYPE,
-  TURN_INPUT_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import { createManagedExecProcessRegistryRuntime } from "@brewva/brewva-tools/execution";
+import { BOX_RELEASED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
+import { TURN_INPUT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import {
   createInMemoryBoxPlane,
   type BoxPlane,

@@ -20,6 +20,7 @@ describe("kernel tool transaction", () => {
   test("records allow and commit as a two-phase tool transaction", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-allow-")),
+      physics: { mode: "noop" },
     });
 
     const decision = await runtime.kernel.beginToolCall({
@@ -50,6 +51,7 @@ describe("kernel tool transaction", () => {
   test("records block and explicit abort as canonical abort events", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-abort-")),
+      physics: { mode: "noop" },
     });
 
     const blocked = await runtime.kernel.beginToolCall({
@@ -84,6 +86,7 @@ describe("kernel tool transaction", () => {
   test("enforces runtime action policy before tool execution", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-policy-")),
+      physics: { mode: "noop" },
     });
 
     const deferred = await runtime.kernel.beginToolCall({
@@ -138,6 +141,7 @@ describe("kernel tool transaction", () => {
   test("records approval deferral as a proposed tool plus approval request", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-defer-")),
+      physics: { mode: "noop" },
     });
 
     const decision = await runtime.kernel.beginToolCall({
@@ -163,9 +167,57 @@ describe("kernel tool transaction", () => {
     ]);
   });
 
+  test("scopes approval request ids by turn when tool call ids repeat", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-defer-turn-scope-")),
+      physics: { mode: "noop" },
+    });
+
+    const first = await runtime.kernel.beginToolCall({
+      sessionId: "kernel-session",
+      turnId: "turn-1",
+      toolCallId: "call-defer",
+      toolName: "write",
+      approval: {
+        required: true,
+        reason: "requires_operator_approval",
+      },
+    });
+    const second = await runtime.kernel.beginToolCall({
+      sessionId: "kernel-session",
+      turnId: "turn-2",
+      toolCallId: "call-defer",
+      toolName: "write",
+      approval: {
+        required: true,
+        reason: "requires_operator_approval",
+      },
+    });
+
+    expect(first).toMatchObject({
+      kind: "defer",
+      commitmentId: "tool:kernel-session:turn-1:call-defer",
+      request: { id: "approval:kernel-session:turn-1:call-defer" },
+    });
+    expect(second).toMatchObject({
+      kind: "defer",
+      commitmentId: "tool:kernel-session:turn-2:call-defer",
+      request: { id: "approval:kernel-session:turn-2:call-defer" },
+    });
+    expect(
+      runtime.tape
+        .list("kernel-session", { type: "approval.requested" })
+        .map((event) => event.payload),
+    ).toMatchObject([
+      { id: "approval:kernel-session:turn-1:call-defer", turnId: "turn-1" },
+      { id: "approval:kernel-session:turn-2:call-defer", turnId: "turn-2" },
+    ]);
+  });
+
   test("does not expose approval as an out-of-band kernel writer", () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-approval-")),
+      physics: { mode: "noop" },
     });
 
     expect("requestApproval" in runtime.kernel).toBe(false);
@@ -175,6 +227,7 @@ describe("kernel tool transaction", () => {
   test("records advisory custom events without widening canonical commitment authority", () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-advisory-")),
+      physics: { mode: "noop" },
     });
 
     const receipt = runtime.kernel.recordAdvisoryEvent({
@@ -210,7 +263,7 @@ describe("kernel tool transaction", () => {
     config.infrastructure.events.enabled = true;
     config.tape.dir = ".brewva/events";
 
-    const writer = createBrewvaRuntime({ cwd, config });
+    const writer = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
     const decision = await writer.kernel.beginToolCall({
       sessionId: "kernel-session",
       toolCallId: "call-restart",
@@ -218,7 +271,7 @@ describe("kernel tool transaction", () => {
     });
     const commitmentId = expectAllow(decision);
 
-    const reader = createBrewvaRuntime({ cwd, config });
+    const reader = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
     expect(await reader.start()).toEqual({ recoveredSessions: ["kernel-session"] });
     await reader.kernel.commitToolResult({
       commitmentId,
@@ -234,6 +287,7 @@ describe("kernel tool transaction", () => {
   test("beginToolCall is idempotent for an active commitment", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-idempotent-")),
+      physics: { mode: "noop" },
     });
     const call = {
       sessionId: "kernel-session",
@@ -253,6 +307,7 @@ describe("kernel tool transaction", () => {
   test("beginToolCall fails closed when a provider reuses a tool call id for different work", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-call-mismatch-")),
+      physics: { mode: "noop" },
     });
 
     const first = await runtime.kernel.beginToolCall({
@@ -284,6 +339,7 @@ describe("kernel tool transaction", () => {
   test("abortToolCall fails closed when no proposed commitment exists", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-unknown-abort-")),
+      physics: { mode: "noop" },
     });
 
     try {

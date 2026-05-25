@@ -6,7 +6,7 @@ import { startBoundaryTimeout, type BoundaryTimeoutHandle } from "@brewva/brewva
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { connectGatewayClient, readGatewayToken } from "@brewva/brewva-gateway";
 import { queryGatewayStatus, resolveGatewayPaths } from "@brewva/brewva-gateway/admin";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 
 export type CliBackendKind = "auto" | "embedded" | "gateway";
 

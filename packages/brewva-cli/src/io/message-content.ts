@@ -1,4 +1,4 @@
-import type { ToolOutputDisplayView } from "@brewva/brewva-runtime/protocol";
+import type { ToolOutputDisplayView } from "@brewva/brewva-vocabulary/wire";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {

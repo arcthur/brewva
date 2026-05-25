@@ -45,6 +45,7 @@ describe("four-port runtime entrypoint surface", () => {
     const runtimeModule = await import("@brewva/brewva-runtime");
     const runtime = runtimeModule.createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-four-port-runtime-")),
+      physics: { mode: "noop" },
     });
 
     expect(Object.keys(runtime)).toEqual([

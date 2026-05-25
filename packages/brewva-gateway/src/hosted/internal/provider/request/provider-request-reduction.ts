@@ -1,8 +1,3 @@
-import type {
-  ContextBudgetUsage,
-  ExpectedProviderCacheBreak,
-  TransientReductionObservationInput,
-} from "@brewva/brewva-runtime/protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
   estimateProviderPayloadTextTokens,
@@ -10,6 +5,11 @@ import {
   resolveContextUsageRatio,
   resolveContextUsageTokens,
 } from "@brewva/brewva-token-estimation";
+import type {
+  ContextBudgetUsage,
+  ExpectedProviderCacheBreak,
+  TransientReductionObservationInput,
+} from "@brewva/brewva-vocabulary/context";
 import { recordTransientReductionEvidence } from "../../context/evidence/context-evidence.js";
 import {
   getRuntimeCompactionGateStatus,

@@ -1,0 +1,69 @@
+{
+  "name": "@brewva/brewva-vocabulary",
+  "version": "0.1.0",
+  "description": "Brewva product vocabulary contracts shared across hosted, tools, recall, session-index, and channels.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "bun": "./src/context.ts",
+      "import": "./dist/context.js",
+      "default": "./dist/context.js"
+    },
+    "./delegation": {
+      "types": "./dist/delegation.d.ts",
+      "bun": "./src/delegation.ts",
+      "import": "./dist/delegation.js",
+      "default": "./dist/delegation.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "bun": "./src/events.ts",
+      "import": "./dist/events.js",
+      "default": "./dist/events.js"
+    },
+    "./iteration": {
+      "types": "./dist/iteration.d.ts",
+      "bun": "./src/iteration.ts",
+      "import": "./dist/iteration.js",
+      "default": "./dist/iteration.js"
+    },
+    "./schedule": {
+      "types": "./dist/schedule.d.ts",
+      "bun": "./src/schedule.ts",
+      "import": "./dist/schedule.js",
+      "default": "./dist/schedule.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "bun": "./src/session.ts",
+      "import": "./dist/session.js",
+      "default": "./dist/session.js"
+    },
+    "./task": {
+      "types": "./dist/task.d.ts",
+      "bun": "./src/task.ts",
+      "import": "./dist/task.js",
+      "default": "./dist/task.js"
+    },
+    "./wire": {
+      "types": "./dist/wire.d.ts",
+      "bun": "./src/wire.ts",
+      "import": "./dist/wire.js",
+      "default": "./dist/wire.js"
+    },
+    "./workbench": {
+      "types": "./dist/workbench.d.ts",
+      "bun": "./src/workbench.ts",
+      "import": "./dist/workbench.js",
+      "default": "./dist/workbench.js"
+    }
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.13.0"
+  }
+}

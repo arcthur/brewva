@@ -1,14 +1,10 @@
-import type { OperationalClaim } from "@brewva/brewva-runtime/protocol";
-import type { TaskSpec } from "@brewva/brewva-runtime/protocol";
-import type { ScheduleContinuityMode } from "@brewva/brewva-runtime/protocol";
-import type {
-  ContextStatusView,
-  ManagedToolMode,
-  SessionLifecycleSnapshot,
-  SessionWireFrame,
-  ToolOutputView,
-} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
+import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
+import type { OperationalClaim } from "@brewva/brewva-vocabulary/iteration";
+import type { ScheduleContinuityMode } from "@brewva/brewva-vocabulary/schedule";
+import type { ManagedToolMode, SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
+import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
+import type { SessionWireFrame, ToolOutputView } from "@brewva/brewva-vocabulary/wire";
 
 export interface OpenSessionInput {
   sessionId: string;

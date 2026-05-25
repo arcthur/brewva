@@ -1,12 +1,12 @@
+import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/security";
 import type {
   DelegationForkTurns,
   DelegationGateReason,
   DelegationModelCategory,
   PublicSubagentRole,
-} from "@brewva/brewva-runtime/protocol";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
-import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/protocol";
-import type { PatchSet } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/delegation";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
+import type { PatchSet } from "@brewva/brewva-vocabulary/workbench";
 import type {
   DelegationContextBudget,
   DelegationContextRef,

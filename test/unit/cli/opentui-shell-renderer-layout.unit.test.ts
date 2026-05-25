@@ -4,12 +4,6 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import {
-  CURRENT_DELEGATION_CONTRACT_VERSION,
-  type DelegationRunRecord,
-} from "@brewva/brewva-runtime/protocol";
-import { type BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptSessionEvent,
@@ -17,6 +11,12 @@ import type {
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import {
+  CURRENT_DELEGATION_CONTRACT_VERSION,
+  type DelegationRunRecord,
+} from "@brewva/brewva-vocabulary/delegation";
+import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { createTestRenderer } from "@opentui/core/testing";
 import {
   createOpenTuiRoot,

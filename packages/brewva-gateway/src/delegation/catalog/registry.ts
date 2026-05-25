@@ -1,19 +1,19 @@
 import type {
-  DelegationGateReason,
-  DelegationIsolationStrategy,
-  DelegationModelCategory,
-  PublicSubagentRole,
-  DelegationVisibility,
-} from "@brewva/brewva-runtime/protocol";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
-import { normalizeReviewLaneName } from "@brewva/brewva-runtime/protocol";
-import type {
   ExplorerConsultKind,
   ReviewLaneName,
   SubagentContextBudget,
   SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools/contracts";
+import type {
+  DelegationGateReason,
+  DelegationIsolationStrategy,
+  DelegationModelCategory,
+  DelegationVisibility,
+  PublicSubagentRole,
+} from "@brewva/brewva-vocabulary/delegation";
+import { normalizeReviewLaneName } from "@brewva/brewva-vocabulary/delegation";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import {
   asString,
   asStringArray,

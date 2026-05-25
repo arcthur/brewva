@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-runtime/protocol";
+import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-vocabulary/context";
 import { buildContextBundle } from "../../../packages/brewva-gateway/src/context/context-bundle.js";
 import type { HostedContextRenderResult } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-blocks.js";
 import {

@@ -1,5 +1,4 @@
 import { basename } from "node:path";
-import type { LoadableSkillCategory, SkillDocument } from "@brewva/brewva-runtime/protocol";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type {
@@ -8,6 +7,7 @@ import type {
 } from "@brewva/brewva-substrate/host-api";
 import { appendBrewvaSystemPromptTextSection } from "@brewva/brewva-substrate/prompt";
 import { estimateModelTokens } from "@brewva/brewva-token-estimation";
+import type { LoadableSkillCategory, SkillDocument } from "@brewva/brewva-vocabulary/session";
 import { extractPromptTargetPaths, pathGlobMatches } from "../prompt-paths.js";
 import { recordRuntimeSkillSelection } from "../runtime-ports.js";
 

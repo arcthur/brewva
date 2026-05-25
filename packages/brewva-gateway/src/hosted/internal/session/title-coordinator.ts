@@ -1,8 +1,3 @@
-import {
-  TURN_INPUT_RECORDED_EVENT_TYPE,
-  readTurnInputRecordedEventPayload,
-  type BrewvaStructuredEvent,
-} from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
@@ -11,6 +6,11 @@ import type {
   BrewvaModelPreset,
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
+import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
+import {
+  readTurnInputRecordedEventPayload,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/session";
 import { resolveBrewvaModelSelection } from "../../../policy/model-routing/api.js";
 import type { HostedSessionLogger } from "../shared/logger.js";
 import {

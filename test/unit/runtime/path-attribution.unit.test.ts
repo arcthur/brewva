@@ -10,7 +10,7 @@ import {
   collectPersistedPatchPaths,
   listPersistedPatchSets,
   resolveSessionPatchHistoryPath,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/workbench";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("shared path attribution helpers", () => {

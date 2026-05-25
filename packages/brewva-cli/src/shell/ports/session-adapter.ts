@@ -1,17 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
-import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-runtime/protocol";
-import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-runtime/protocol";
-import type {
-  SessionRewindDivergenceNote,
-  SessionWireFrame,
-} from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaPromptAssistantMessageEvent,
   BrewvaPromptSessionEvent,
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
 } from "@brewva/brewva-substrate/session";
+import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-vocabulary/iteration";
+import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-vocabulary/session";
+import type { SessionRewindDivergenceNote } from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import {
   getCliRuntimeLineageTree,
   getCliRuntimeRewindState,

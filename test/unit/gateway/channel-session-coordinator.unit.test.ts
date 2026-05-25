@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { HostedSessionResult } from "@brewva/brewva-gateway/hosted";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { createDeferred } from "@brewva/brewva-std/async";
 import {
   CHANNEL_SESSION_CONVERSATION_BOUND_EVENT_TYPE,
   type TurnEnvelope,
-} from "@brewva/brewva-runtime/protocol";
-import { createDeferred } from "@brewva/brewva-std/async";
+} from "@brewva/brewva-vocabulary/wire";
 import { AgentRegistry } from "../../../packages/brewva-gateway/src/channels/agent-registry.js";
 import { AgentRuntimeManager } from "../../../packages/brewva-gateway/src/channels/agent-runtime-manager.js";
 import { createChannelSessionCoordinator } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";

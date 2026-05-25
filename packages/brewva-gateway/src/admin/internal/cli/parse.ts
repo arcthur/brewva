@@ -1,5 +1,5 @@
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 
 export type GatewayCliValueResult<T> = RuntimeResult<{ value: T }>;
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CONTEXT_COMPOSED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import { CONTEXT_COMPOSED_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
 import type { HostedContextRenderResult } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-blocks.js";
 import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";

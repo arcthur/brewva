@@ -12,16 +12,16 @@ import {
 } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
-import type {
-  DelegationModelRouteRecord,
-  DelegationRunRecord,
-} from "@brewva/brewva-runtime/protocol";
 import type { BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type {
   DelegationPacket,
   SubagentExecutionShape,
   SubagentRunRequest,
 } from "@brewva/brewva-tools/contracts";
+import type {
+  DelegationModelRouteRecord,
+  DelegationRunRecord,
+} from "@brewva/brewva-vocabulary/delegation";
 import type { HostedDelegationTarget } from "../targets.js";
 
 export interface DetachedSubagentRunSpec {

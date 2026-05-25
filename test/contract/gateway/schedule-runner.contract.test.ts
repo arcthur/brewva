@@ -5,15 +5,15 @@ import {
   type SessionBackend,
   type SendPromptOptions,
 } from "@brewva/brewva-gateway";
-import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterOptions as BrewvaRuntimeOptions } from "@brewva/brewva-gateway/hosted";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/schedule";
+import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-vocabulary/schedule";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 

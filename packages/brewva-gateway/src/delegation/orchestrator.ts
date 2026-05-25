@@ -1,11 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
-import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/protocol";
-import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
-import type { PatchSet } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type {
   BrewvaToolOrchestration,
@@ -20,6 +15,11 @@ import type {
   SubagentStartResult,
   SubagentStatusResult,
 } from "@brewva/brewva-tools/contracts";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import { isDelegationRunTerminalStatus } from "@brewva/brewva-vocabulary/delegation";
+import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-vocabulary/delegation";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
+import type { PatchSet } from "@brewva/brewva-vocabulary/workbench";
 import {
   resolveSubagentSessionShutdownReason,
   runHostedTurnEnvelope,

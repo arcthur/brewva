@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { SkillDocument } from "@brewva/brewva-runtime/protocol";
 import { createDiscoverSkillsTool } from "@brewva/brewva-tools/skills";
+import type { SkillDocument } from "@brewva/brewva-vocabulary/session";
 import { createBundledToolRuntime, createRuntimeFixture } from "../../helpers/runtime.js";
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {

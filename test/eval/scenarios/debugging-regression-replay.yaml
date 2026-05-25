@@ -6,8 +6,8 @@ context:
     Typecheck passes, but cascade events stop reconciling after session replay.
     The user sees stale state in the UI after resuming a saved session.
   workspace_state: |
-    packages/brewva-runtime/src/runtime/tape/memory-tape.ts exists.
-    packages/brewva-runtime/src/runtime/engine/turn.ts exists.
+    packages/brewva-runtime/src/runtime/tape/impl.ts exists.
+    packages/brewva-runtime/src/runtime/turn/impl.ts exists.
     Recent commit touched canonical tape replay and turn projection code.
   available_artifacts:
     runtime_trace: "Turn 12: replay completes. Turn 13: cascade intent scheduled. Turn 14: reconciler skips event (epoch mismatch)."

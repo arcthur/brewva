@@ -1,4 +1,4 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import type { AgentRegistry } from "../agent-registry.js";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
 import type { ChannelCoordinator } from "../coordinator.js";

@@ -233,7 +233,7 @@ Important protocol rules:
   compaction, approval suspension, and interrupt posture are derived from
   canonical runtime frames and tape projections.
 - live retry, checkpoint-driven compaction, approval suspension, and interrupt
-  decisions are owned by the runtime turn engine; the protocol exposes their
+  decisions are owned by the runtime turn implementation; the protocol exposes their
   resulting frames and replayable canonical receipts,
   not the loop's process-local state.
 - durable session-wire frames carry `sourceEventId` and `sourceEventType`;

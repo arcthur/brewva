@@ -1,4 +1,3 @@
-import { MODEL_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaAgentProtocolCustomMessage,
   BrewvaAgentProtocolEvent,
@@ -15,6 +14,7 @@ import {
   type ContextState,
   type SessionPhase,
 } from "@brewva/brewva-substrate/session";
+import { MODEL_SELECT_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 
 function applyMessageEndTransform(
   original: BrewvaAgentProtocolMessage,

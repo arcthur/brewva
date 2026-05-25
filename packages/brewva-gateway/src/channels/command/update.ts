@@ -1,4 +1,4 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { buildBrewvaUpdatePrompt } from "../../ingress/api.js";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
 import type { HostedRuntimeAdapterPort } from "../ports.js";

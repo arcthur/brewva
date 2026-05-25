@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildChannelPolicyBlock, DEFAULT_TELEGRAM_CHANNEL_NAME } from "@brewva/brewva-gateway";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 function createTurn(channel: string): TurnEnvelope {
   return {

@@ -1,4 +1,3 @@
-import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
 import type {
   DelegationPacket,
   DelegationTaskPacket,
@@ -7,6 +6,7 @@ import type {
   SubagentRunResult,
   SubagentStartResult,
 } from "@brewva/brewva-tools/contracts";
+import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
 import { recordRuntimeWorkbenchNote } from "../../hosted/api.js";
 import { HostedDelegationStore, cloneDelegationRunRecord } from "../delegation-store.js";

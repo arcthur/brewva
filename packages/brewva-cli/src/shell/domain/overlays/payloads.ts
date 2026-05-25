@@ -3,9 +3,9 @@ import type {
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
 } from "@brewva/brewva-gateway/hosted";
-import type { BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaInteractiveQuestionRequest } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
+import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
 import type { OperatorSurfaceSnapshot } from "../operator-snapshot.js";
 
 export interface CliQuestionDraftState {

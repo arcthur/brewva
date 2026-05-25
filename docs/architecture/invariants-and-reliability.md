@@ -85,15 +85,15 @@ recovery, and bounded execution.
 ## Implementation Anchors
 
 - `packages/brewva-runtime/src/runtime/runtime.ts`
-- `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- `packages/brewva-runtime/src/runtime/tape/impl.ts`
+- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
 - `packages/brewva-runtime/src/runtime/kernel/policy/tool-decision.ts`
 - `packages/brewva-std/src/async.ts`
 - `packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`
 - `packages/brewva-gateway/src/channels/effect-serial-queue.ts`
 - `packages/brewva-effect/src/index.ts`
 - `packages/brewva-effect/src/schedules.ts`
-- runtime turn execution: `packages/brewva-runtime/src/runtime/engine/turn.ts`
+- runtime turn execution: `packages/brewva-runtime/src/runtime/turn/impl.ts`
 - `packages/brewva-provider-core/src/stream/run-provider-stream.ts`
 - `packages/brewva-tools/src/families/execution/exec-process-registry/service.ts`
 

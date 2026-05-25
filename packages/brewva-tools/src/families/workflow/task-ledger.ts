@@ -1,10 +1,10 @@
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   formatTaskStateBlock,
   TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
   TASK_AGENT_ITEM_STATUS_VALUES,
-} from "@brewva/brewva-runtime/protocol";
-import type { TaskItemStatus } from "@brewva/brewva-runtime/protocol";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+} from "@brewva/brewva-vocabulary/task";
+import type { TaskItemStatus } from "@brewva/brewva-vocabulary/task";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

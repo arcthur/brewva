@@ -1,4 +1,4 @@
-import type { ToolOutputDisplayView } from "@brewva/brewva-runtime/protocol";
+import type { ToolOutputDisplayView } from "@brewva/brewva-vocabulary/wire";
 import { distillToolOutput } from "./tool-output-distiller.js";
 
 export type ToolDisplayVerdict = "pass" | "fail" | "inconclusive";

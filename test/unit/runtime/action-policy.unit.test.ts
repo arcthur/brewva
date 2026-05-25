@@ -8,8 +8,8 @@ import {
   resolveToolRecoveryPreparation,
   sameToolActionPolicy,
   validateToolActionPolicy,
-} from "@brewva/brewva-runtime/protocol";
-import type { ToolActionPolicy } from "@brewva/brewva-runtime/protocol";
+  type ToolActionPolicy,
+} from "@brewva/brewva-runtime/security";
 import { requireDefined } from "../../helpers/assertions.js";
 
 describe("tool action policy", () => {

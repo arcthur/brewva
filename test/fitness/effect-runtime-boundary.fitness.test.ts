@@ -259,6 +259,7 @@ describe("Effect runtime boundary fitness", () => {
       "packages/brewva-gateway/src/daemon/session-supervisor/index.ts",
       "packages/brewva-gateway/src/daemon/session-supervisor/worker-rpc.ts",
       "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-provider.ts",
       "packages/brewva-gateway/src/utils/async.ts",
       "packages/brewva-provider-core/src/stream/index.ts",
       "packages/brewva-substrate/src/host-api/plugin-runner.ts",

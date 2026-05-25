@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
-import type { WorkbenchEntry } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaSessionMessageEntry } from "@brewva/brewva-substrate/session";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import {
   applyWorkbenchEvictionsToMessages,
   shouldExcludeSessionEntryForWorkbench,

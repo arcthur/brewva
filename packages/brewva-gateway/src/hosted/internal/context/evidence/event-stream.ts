@@ -1,12 +1,4 @@
 import type { JsonValue } from "@brewva/brewva-runtime/core";
-import { type ToolLifecycleEventPayload } from "@brewva/brewva-runtime/protocol";
-import {
-  recordAssistantUsageFromMessage,
-  SESSION_SHUTDOWN_EVENT_TYPE,
-  TURN_INPUT_RECORDED_EVENT_TYPE,
-  TURN_RENDER_COMMITTED_EVENT_TYPE,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptAssistantMessageEvent,
@@ -14,6 +6,14 @@ import type {
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
+import { recordAssistantUsageFromMessage } from "@brewva/brewva-vocabulary/context";
+import type { ToolLifecycleEventPayload } from "@brewva/brewva-vocabulary/iteration";
+import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
+import {
+  SESSION_SHUTDOWN_EVENT_TYPE,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+  TURN_RENDER_COMMITTED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/session";
 import { ensureSessionShutdownRecorded } from "../../../../utils/runtime.js";
 import {
   getRuntimeCostSummary,

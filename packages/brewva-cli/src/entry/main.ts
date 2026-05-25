@@ -13,8 +13,8 @@ import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
-import { parseTaskSpec } from "@brewva/brewva-runtime/protocol";
-import type { TaskSpec } from "@brewva/brewva-runtime/protocol";
+import { normalizeTaskSpec } from "@brewva/brewva-vocabulary/task";
+import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
 import { formatISO } from "date-fns";
 import { handleInsightsChannelCommand } from "../commands/channel-handlers/insights.js";
 import { handleInspectChannelCommand } from "../commands/channel-handlers/inspect.js";
@@ -66,9 +66,19 @@ const BREWVA_OPENTUI_UNSUPPORTED_MESSAGE =
 type CliInteractiveShellRuntimeModule = typeof import("@brewva/brewva-cli/internal-shell-runtime");
 
 type CliValueResult<T> = RuntimeResult<{ value: T }>;
+type TaskSpecParseResult =
+  | { readonly ok: true; readonly spec: TaskSpec }
+  | { readonly ok: false; readonly reason: string };
 
 function okCliValue<T>(value: T): CliValueResult<T> {
   return { ok: true, value };
+}
+
+function parseTaskSpec(value: unknown): TaskSpecParseResult {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { ok: false, reason: "TaskSpec must be an object" };
+  }
+  return { ok: true, spec: normalizeTaskSpec(value) };
 }
 
 async function runInsightsCli(argv: string[]): Promise<number> {
@@ -409,6 +419,7 @@ export async function runCliRootOperation(): Promise<void> {
     const canonicalRuntime = createBrewvaRuntime({
       cwd: parsed.cwd,
       configPath: parsed.configPath,
+      physics: { mode: "noop" },
     });
     await canonicalRuntime.start();
     const canonicalEvents = canonicalRuntime.tape.list(targetSessionId);

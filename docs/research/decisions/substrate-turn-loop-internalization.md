@@ -15,7 +15,7 @@
   - `packages/brewva-substrate/src/agent-protocol/`
   - `packages/brewva-substrate/package.json`
   - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
-  - `packages/brewva-runtime/src/runtime/engine/turn.ts`
+  - `packages/brewva-runtime/src/runtime/turn/impl.ts`
 
 ## Decision Summary
 

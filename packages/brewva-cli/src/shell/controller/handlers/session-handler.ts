@@ -1,10 +1,10 @@
 import { recordSessionShutdownIfMissing } from "@brewva/brewva-gateway";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   SessionRewindMode,
   SessionRewindSummary,
   SessionRewindTargetView,
-} from "@brewva/brewva-runtime/protocol";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+} from "@brewva/brewva-vocabulary/session";
 import type { ShellCommitInput, ShellCommitOptions } from "../../domain/actions.js";
 import type { ShellEffect } from "../../domain/effects.js";
 import {

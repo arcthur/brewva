@@ -23,7 +23,7 @@ import {
   getRuntimeOpsPort,
   toHostedRuntimeAdapterPort,
   toToolRuntimeAdapterPort,
-  type BrewvaRuntimeOptions,
+  type HostedRuntimeAdapterOptions,
   type HostedRuntimeAdapterPort,
 } from "./runtime-ports.js";
 import { createSkillSelectionLifecycle } from "./skills/skill-selection.js";
@@ -175,7 +175,7 @@ export {
   type ToolDisplayVerdict,
 } from "./tools/tool-output-display.js";
 
-export interface CreateHostedBehaviorHostAdapterOptions extends BrewvaRuntimeOptions {
+export interface CreateHostedBehaviorHostAdapterOptions extends HostedRuntimeAdapterOptions {
   runtime?: HostedRuntimeAdapterPort;
   registerTools?: boolean;
   orchestration?: BrewvaToolOrchestration;

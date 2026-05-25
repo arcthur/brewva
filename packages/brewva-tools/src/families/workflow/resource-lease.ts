@@ -1,5 +1,5 @@
-import type { ResourceLeaseRecord } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { ResourceLeaseRecord } from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

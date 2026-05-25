@@ -6,25 +6,26 @@ import {
   resolveWorkspacePath,
   toWorkspaceRelativePath,
 } from "@brewva/brewva-runtime/config";
-import { type BrewvaEventRecord, type TapeLedgerRow } from "@brewva/brewva-runtime/protocol";
+import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+import { CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
   BOX_EXEC_FAILED_EVENT_TYPE,
   EXEC_FAILED_EVENT_TYPE,
-  CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
   readToolResultRecordedEventPayload,
-  FILE_SNAPSHOT_CAPTURED_EVENT_TYPE,
   TOOL_CALL_BLOCKED_EVENT_TYPE,
   TOOL_CONTRACT_WARNING_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/iteration";
+import type { TapeLedgerRow } from "@brewva/brewva-vocabulary/session";
+import { FILE_SNAPSHOT_CAPTURED_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
 import {
   collectPersistedPatchPaths,
   listPersistedPatchSets,
   type PersistedPatchSet,
-} from "@brewva/brewva-runtime/protocol";
-import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+} from "@brewva/brewva-vocabulary/workbench";
 import { formatISO } from "date-fns";
 import { listCliRuntimeLedgerRows, queryCliRuntimeEvents } from "../runtime/runtime-ports.js";
 

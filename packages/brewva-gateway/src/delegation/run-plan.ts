@@ -1,5 +1,5 @@
-import type { DelegationModelRouteRecord } from "@brewva/brewva-runtime/protocol";
 import type { DelegationPacket, SubagentRunRequest } from "@brewva/brewva-tools/contracts";
+import type { DelegationModelRouteRecord } from "@brewva/brewva-vocabulary/delegation";
 import type { ContextBundle } from "../context/api.js";
 import type { DelegationTaskIdentity } from "./delegation-records.js";
 import type { ResolvedDelegationExecutionPlan } from "./execution-plan.js";

@@ -1,31 +1,25 @@
-import type { BrewvaRuntime, TurnFrame, TurnInput } from "@brewva/brewva-runtime";
-import {
-  asBrewvaSessionId,
-  asBrewvaToolCallId,
-  asBrewvaToolName,
-} from "@brewva/brewva-runtime/core";
-import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaRuntime, TurnInput } from "@brewva/brewva-runtime";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   AssistantTextSegmentView,
   SessionWireFrame,
-  SessionWireTurnTrigger,
   ToolOutputView,
-} from "@brewva/brewva-runtime/protocol";
-import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
-import {
-  isRuntimeProjectionRecord,
-  promptTextFromRuntimeTurnStartedPayload,
-  readRuntimeToolOutputDisplay,
-  runtimeTurnCommittedStatusFromPayload,
-  summarizeRuntimeToolContent,
-  toolOutputFromRuntimeEvent,
-} from "../../../utils/runtime-session-wire-projection.js";
+} from "@brewva/brewva-vocabulary/wire";
 import type { CollectSessionPromptOutputSession, SessionPromptInput } from "./collect-output.js";
 import {
   HOSTED_RUNTIME_TURN_PRELUDE,
   hasHostedRuntimeTurnPrelude,
   type HostedRuntimeTurnPreludeResult,
 } from "./runtime-turn-prelude.js";
+import {
+  appendAssistantSegmentDelta,
+  emitRuntimeAssistantDeltaFrame,
+  emitRuntimeEventFrame,
+  emitRuntimeReasonDeltaFrame,
+  emitRuntimeToolProgressFrame,
+  flushAssistantSegment,
+  type AssistantSegmentAccumulator,
+} from "./session-mux/runtime-frame-projection.js";
 import {
   createMinimalHostedTurnAdapterDiagnostic,
   type HostedTurnAdapterProfile,
@@ -65,45 +59,6 @@ function hasRuntimeTurn(runtime: unknown): runtime is BrewvaRuntime {
     runtime !== null &&
     typeof (runtime as { turn?: unknown }).turn === "function"
   );
-}
-
-interface AssistantSegmentAccumulator {
-  text: string;
-  startedAt: number | undefined;
-  startedSequence: number | undefined;
-}
-
-function appendAssistantSegmentDelta(input: {
-  readonly accumulator: AssistantSegmentAccumulator;
-  readonly delta: string;
-  readonly timestamp: number;
-  readonly sequence: number;
-}): void {
-  if (input.accumulator.text.length === 0) {
-    input.accumulator.startedAt = input.timestamp;
-    input.accumulator.startedSequence = input.sequence;
-  }
-  input.accumulator.text += input.delta;
-}
-
-function flushAssistantSegment(input: {
-  readonly accumulator: AssistantSegmentAccumulator;
-  readonly segments: AssistantTextSegmentView[];
-}): void {
-  const text = input.accumulator.text;
-  input.accumulator.text = "";
-  const startedAt = input.accumulator.startedAt;
-  input.accumulator.startedAt = undefined;
-  const startedSequence = input.accumulator.startedSequence;
-  input.accumulator.startedSequence = undefined;
-  if (text.trim().length === 0) {
-    return;
-  }
-  input.segments.push({
-    text,
-    ts: startedAt ?? Date.now(),
-    ...(startedSequence !== undefined ? { sequence: startedSequence } : {}),
-  });
 }
 
 function completedRuntimePreludeResult(input: {
@@ -148,88 +103,6 @@ function failedRuntimeResult(input: {
   };
 }
 
-function runtimeToolCallFromEventPayload(
-  event: Extract<TurnFrame, { type: "runtime.event" }>["event"],
-): { toolCallId: string; toolName: string } | null {
-  const payload = isRuntimeProjectionRecord(event.payload) ? event.payload : null;
-  const call = isRuntimeProjectionRecord(payload?.call) ? payload.call : null;
-  if (!call || typeof call.toolCallId !== "string" || typeof call.toolName !== "string") {
-    return null;
-  }
-  return {
-    toolCallId: call.toolCallId,
-    toolName: call.toolName,
-  };
-}
-
-function sessionWireTriggerFromProfile(profile: HostedTurnAdapterProfile): SessionWireTurnTrigger {
-  switch (profile.name) {
-    case "scheduled":
-      return "schedule";
-    case "heartbeat":
-      return "heartbeat";
-    case "channel":
-      return "channel";
-    case "wal_recovery":
-      return "recovery";
-    case "subagent":
-      return "subagent";
-    case "interactive":
-    case "print":
-      return "user";
-  }
-  return "user";
-}
-
-function toolProgressFromRuntimeFrame(frame: Extract<TurnFrame, { type: "tool.progress" }>): {
-  toolCallId: ReturnType<typeof asBrewvaToolCallId>;
-  toolName: ReturnType<typeof asBrewvaToolName>;
-  verdict: ToolOutputView["verdict"];
-  isError: boolean;
-  text: string;
-  display?: ToolOutputView["display"];
-} {
-  const metadata = isRuntimeProjectionRecord(frame.progress.update.metadata)
-    ? frame.progress.update.metadata
-    : null;
-  const display = readRuntimeToolOutputDisplay(metadata);
-  const verdict =
-    metadata?.verdict === "pass" ||
-    metadata?.verdict === "fail" ||
-    metadata?.verdict === "inconclusive"
-      ? metadata.verdict
-      : frame.progress.update.ok
-        ? "pass"
-        : "fail";
-  return {
-    toolCallId: asBrewvaToolCallId(frame.progress.toolCallId),
-    toolName: asBrewvaToolName(frame.progress.toolName),
-    verdict,
-    isError: !frame.progress.update.ok,
-    text: summarizeRuntimeToolContent(frame.progress.update.content),
-    ...(display ? { display } : {}),
-  };
-}
-
-function emitRuntimeBranchFrame(input: {
-  readonly sessionId: string;
-  readonly turnId?: string;
-  readonly onFrame?: (frame: SessionWireFrame) => void;
-  readonly build: (
-    frameId: string,
-    sessionId: ReturnType<typeof asBrewvaSessionId>,
-  ) => SessionWireFrame;
-  readonly nextSequence: () => number;
-}): void {
-  const turnId = input.turnId?.trim();
-  if (!turnId || !input.onFrame) {
-    return;
-  }
-  const sessionId = asBrewvaSessionId(input.sessionId);
-  const frameId = `live:${input.sessionId}:${turnId}:runtime:${input.nextSequence()}`;
-  input.onFrame(input.build(frameId, sessionId));
-}
-
 async function resolveRuntimePrompt(input: {
   readonly session: CollectSessionPromptOutputSession;
   readonly prompt: SessionPromptInput;
@@ -261,179 +134,6 @@ async function resolveRuntimePrompt(input: {
     prompt: prelude.promptContent,
     prelude,
   };
-}
-
-function emitRuntimeEventFrame(input: {
-  readonly frame: Extract<TurnFrame, { type: "runtime.event" }>;
-  readonly sessionId: string;
-  readonly turnId?: string;
-  readonly attemptId: string;
-  readonly profile: HostedTurnAdapterProfile;
-  readonly onFrame?: (frame: SessionWireFrame) => void;
-  readonly nextSequence: () => number;
-  readonly assistantText: string;
-  readonly assistantSegments: readonly AssistantTextSegmentView[];
-  readonly toolOutputs: ToolOutputView[];
-  readonly sequence: number;
-}): void {
-  const event = input.frame.event;
-  if (event.type === "turn.started") {
-    emitRuntimeBranchFrame({
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      onFrame: input.onFrame,
-      nextSequence: input.nextSequence,
-      build: (frameId, wireSessionId) => ({
-        schema: SESSION_WIRE_SCHEMA,
-        sessionId: wireSessionId,
-        frameId,
-        ts: Date.now(),
-        source: "live",
-        durability: "durable",
-        sourceEventId: event.id,
-        sourceEventType: event.type,
-        type: "turn.input",
-        turnId: input.turnId ?? "",
-        trigger: sessionWireTriggerFromProfile(input.profile),
-        promptText: promptTextFromRuntimeTurnStartedPayload(event.payload),
-      }),
-    });
-    emitRuntimeBranchFrame({
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      onFrame: input.onFrame,
-      nextSequence: input.nextSequence,
-      build: (frameId, wireSessionId) => ({
-        schema: SESSION_WIRE_SCHEMA,
-        sessionId: wireSessionId,
-        frameId,
-        ts: Date.now(),
-        source: "live",
-        durability: "cache",
-        type: "attempt.started",
-        turnId: input.turnId ?? "",
-        attemptId: input.attemptId,
-        reason: "initial",
-      }),
-    });
-    return;
-  }
-  if (event.type === "turn.ended") {
-    emitRuntimeBranchFrame({
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      onFrame: input.onFrame,
-      nextSequence: input.nextSequence,
-      build: (frameId, wireSessionId) => ({
-        schema: SESSION_WIRE_SCHEMA,
-        sessionId: wireSessionId,
-        frameId,
-        ts: Date.now(),
-        source: "live",
-        durability: "durable",
-        sourceEventId: event.id,
-        sourceEventType: event.type,
-        type: "turn.committed",
-        turnId: input.turnId ?? "",
-        attemptId: input.attemptId,
-        status: runtimeTurnCommittedStatusFromPayload(event.payload),
-        assistantText: input.assistantText,
-        assistantSegments: [...input.assistantSegments],
-        toolOutputs: [...input.toolOutputs],
-      }),
-    });
-    return;
-  }
-  if (event.type === "tool.proposed") {
-    const toolCall = runtimeToolCallFromEventPayload(event);
-    if (!toolCall) {
-      return;
-    }
-    emitRuntimeBranchFrame({
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      onFrame: input.onFrame,
-      nextSequence: input.nextSequence,
-      build: (frameId, wireSessionId) => ({
-        schema: SESSION_WIRE_SCHEMA,
-        sessionId: wireSessionId,
-        frameId,
-        ts: Date.now(),
-        source: "live",
-        durability: "cache",
-        type: "tool.started",
-        turnId: input.turnId ?? "",
-        attemptId: input.attemptId,
-        toolCallId: asBrewvaToolCallId(toolCall.toolCallId),
-        toolName: asBrewvaToolName(toolCall.toolName),
-      }),
-    });
-    return;
-  }
-  if (event.type === "approval.requested") {
-    const payload = isRuntimeProjectionRecord(event.payload) ? event.payload : null;
-    if (
-      !payload ||
-      typeof payload.id !== "string" ||
-      typeof payload.toolName !== "string" ||
-      typeof payload.toolCallId !== "string"
-    ) {
-      return;
-    }
-    const requestId = payload.id;
-    const toolName = payload.toolName;
-    const toolCallId = payload.toolCallId;
-    emitRuntimeBranchFrame({
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      onFrame: input.onFrame,
-      nextSequence: input.nextSequence,
-      build: (frameId, wireSessionId) => ({
-        schema: SESSION_WIRE_SCHEMA,
-        sessionId: wireSessionId,
-        frameId,
-        ts: Date.now(),
-        source: "live",
-        durability: "cache",
-        type: "approval.requested",
-        turnId: input.turnId ?? "",
-        requestId,
-        toolName: asBrewvaToolName(toolName),
-        toolCallId: asBrewvaToolCallId(toolCallId),
-        subject: toolName,
-        detail: typeof payload.reason === "string" ? payload.reason : undefined,
-      }),
-    });
-    return;
-  }
-  const toolOutput = toolOutputFromRuntimeEvent(event);
-  if (!toolOutput) {
-    return;
-  }
-  input.toolOutputs.push({ ...toolOutput, sequence: input.sequence });
-  emitRuntimeBranchFrame({
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-    onFrame: input.onFrame,
-    nextSequence: input.nextSequence,
-    build: (frameId, wireSessionId) => ({
-      schema: SESSION_WIRE_SCHEMA,
-      sessionId: wireSessionId,
-      frameId,
-      ts: Date.now(),
-      source: "live",
-      durability: "cache",
-      type: "tool.finished",
-      turnId: input.turnId ?? "",
-      attemptId: input.attemptId,
-      toolCallId: toolOutput.toolCallId,
-      toolName: toolOutput.toolName,
-      verdict: toolOutput.verdict,
-      isError: toolOutput.isError,
-      text: toolOutput.text,
-      ...(toolOutput.display ? { display: toolOutput.display } : {}),
-    }),
-  });
 }
 
 export async function runHostedRuntimeTurnAdapter(
@@ -525,47 +225,26 @@ export async function runHostedRuntimeTurnAdapter(
           timestamp: frameTimestamp,
           sequence: currentProjectionSequence,
         });
-        emitRuntimeBranchFrame({
+        emitRuntimeAssistantDeltaFrame({
           sessionId,
           turnId: input.turnId,
+          attemptId,
+          delta: frame.delta,
+          timestamp: frameTimestamp,
           onFrame: input.onFrame,
           nextSequence: nextFrameSequence,
-          build: (frameId, wireSessionId) => ({
-            schema: SESSION_WIRE_SCHEMA,
-            sessionId: wireSessionId,
-            frameId,
-            ts: frameTimestamp,
-            source: "live",
-            durability: "cache",
-            type: "assistant.delta",
-            turnId: input.turnId ?? "",
-            attemptId,
-            lane: "answer",
-            delta: frame.delta,
-          }),
         });
         continue;
       }
       if (frame.type === "reason") {
-        // Thinking uses a separate lane and must not split answer text segments.
-        emitRuntimeBranchFrame({
+        emitRuntimeReasonDeltaFrame({
           sessionId,
           turnId: input.turnId,
+          attemptId,
+          delta: frame.delta,
+          timestamp: Date.now(),
           onFrame: input.onFrame,
           nextSequence: nextFrameSequence,
-          build: (frameId, wireSessionId) => ({
-            schema: SESSION_WIRE_SCHEMA,
-            sessionId: wireSessionId,
-            frameId,
-            ts: Date.now(),
-            source: "live",
-            durability: "cache",
-            type: "assistant.delta",
-            turnId: input.turnId ?? "",
-            attemptId,
-            lane: "thinking",
-            delta: frame.delta,
-          }),
         });
         continue;
       }
@@ -574,29 +253,13 @@ export async function runHostedRuntimeTurnAdapter(
           accumulator: assistantSegmentAccumulator,
           segments: assistantSegments,
         });
-        const toolProgress = toolProgressFromRuntimeFrame(frame);
-        emitRuntimeBranchFrame({
+        emitRuntimeToolProgressFrame({
+          frame,
           sessionId,
           turnId: input.turnId,
+          attemptId,
           onFrame: input.onFrame,
           nextSequence: nextFrameSequence,
-          build: (frameId, wireSessionId) => ({
-            schema: SESSION_WIRE_SCHEMA,
-            sessionId: wireSessionId,
-            frameId,
-            ts: Date.now(),
-            source: "live",
-            durability: "cache",
-            type: "tool.progress",
-            turnId: input.turnId ?? "",
-            attemptId,
-            toolCallId: toolProgress.toolCallId,
-            toolName: toolProgress.toolName,
-            verdict: toolProgress.verdict,
-            isError: toolProgress.isError,
-            text: toolProgress.text,
-            ...(toolProgress.display ? { display: toolProgress.display } : {}),
-          }),
         });
         continue;
       }

@@ -7,13 +7,13 @@ context:
     were moved to the public package entrypoint.
   workspace_state: |
     packages/brewva-runtime/src/public/index.ts modified.
-    packages/brewva-runtime/src/runtime/model/model.ts modified.
+    packages/brewva-runtime/src/runtime/model/impl.ts modified.
   available_artifacts:
     change_set: "Moved SkillRouteMatch and SkillRouteContext from internal to public exports."
     files_changed:
       [
         "packages/brewva-runtime/src/public/index.ts",
-        "packages/brewva-runtime/src/runtime/model/model.ts",
+        "packages/brewva-runtime/src/runtime/model/impl.ts",
       ]
     impact_map:
       summary: "Public export surface widened with internal routing types"

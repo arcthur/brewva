@@ -36,6 +36,6 @@ inputs where the family is marked rebuildable.
 ## Implementation Anchors
 
 - `packages/brewva-gateway/src/daemon/schedule-runner.ts`
-- `packages/brewva-runtime/src/protocol.ts`
-- `packages/brewva-runtime/src/protocol.ts`
+- `packages/brewva-vocabulary/src/schedule.ts`
+- `packages/brewva-vocabulary/src/workbench.ts`
 - `packages/brewva-gateway/src/delegation`

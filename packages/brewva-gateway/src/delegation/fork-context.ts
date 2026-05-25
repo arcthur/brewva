@@ -1,6 +1,7 @@
-import type { DelegationForkTurns } from "@brewva/brewva-runtime/protocol";
-import { MESSAGE_END_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
-import type { ContextEntryRecord } from "@brewva/brewva-runtime/protocol";
+import type { ContextEntryRecord } from "@brewva/brewva-vocabulary/context";
+import type { DelegationForkTurns } from "@brewva/brewva-vocabulary/delegation";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import { MESSAGE_END_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import { deterministicTokenTruncate, type ContextBundleBlockInput } from "../context/api.js";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { getRuntimeSessionLineageContextEntryPath, listRuntimeEvents } from "../hosted/api.js";

@@ -76,6 +76,7 @@
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
+    "@brewva/brewva-vocabulary": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
     "@vscode/tree-sitter-wasm": "0.3.1",
     "date-fns": "^4.1.0",

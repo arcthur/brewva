@@ -7,12 +7,12 @@ import {
   runHostedPromptTurn,
 } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
-import type { SessionPromptSnapshot } from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaManagedPromptSession,
   BrewvaPromptSessionEvent,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { SessionPromptSnapshot } from "@brewva/brewva-vocabulary/session";
 import {
   extractMessageError,
   extractVisibleTextFromMessage,

@@ -1,6 +1,6 @@
-import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/protocol";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
+import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-vocabulary/wire";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { Ajv, type ErrorObject } from "ajv";
 import {
   ConnectParamsSchema,

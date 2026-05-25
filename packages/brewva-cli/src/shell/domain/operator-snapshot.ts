@@ -1,7 +1,7 @@
 import type { SessionOpenQuestion } from "@brewva/brewva-gateway";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
-import type { BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
-import type { PendingEffectCommitmentRequest } from "@brewva/brewva-runtime/protocol";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import type { PendingEffectCommitmentRequest } from "@brewva/brewva-vocabulary/iteration";
+import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
 
 export interface OperatorSurfaceSnapshot {
   approvals: PendingEffectCommitmentRequest[];

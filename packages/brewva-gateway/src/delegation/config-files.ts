@@ -2,8 +2,6 @@ import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
-import type { DelegationIsolationStrategy } from "@brewva/brewva-runtime/protocol";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord as isUnknownRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
@@ -13,6 +11,8 @@ import type {
   SubagentExecutionBoundary,
   SubagentResultMode,
 } from "@brewva/brewva-tools/contracts";
+import type { DelegationIsolationStrategy } from "@brewva/brewva-vocabulary/delegation";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 
 export type HostedDelegationBuiltinToolName = "read" | "edit" | "write";
 export type HostedWorkspaceSubagentConfigKind = "envelope" | "agentSpec";

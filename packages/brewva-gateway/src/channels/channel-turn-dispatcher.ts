@@ -1,5 +1,5 @@
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
-import { type TurnEnvelope, type TurnPart } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope, TurnPart } from "@brewva/brewva-vocabulary/wire";
 import { LRUCache } from "lru-cache";
 import type { RecoveryWalStore } from "../daemon/api.js";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";

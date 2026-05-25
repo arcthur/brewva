@@ -2,7 +2,7 @@ import type {
   ContextCompactionGateStatus,
   ContextCompactionReason,
   ContextStatus,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/context";
 
 export type CompactionPolicyCaller = "manual" | "auto" | "model_downshift";
 

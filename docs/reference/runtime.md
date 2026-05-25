@@ -43,11 +43,22 @@ interface BrewvaRuntime {
 `identity` holds `{ cwd, workspaceRoot, agentId }` as read-only runtime facts.
 `config` is a deep-readonly snapshot after normalization.
 
-Runtime provider and tool execution adapters are construction dependencies, not
-root ports. `BrewvaRuntimeOptions.provider` supplies the provider stream consumed
-by `runtime.turn(...)`; `BrewvaRuntimeOptions.toolExecutor` executes approved
-tool commitments. Both are runtime physics, so callers observe their effects
-only through streamed `TurnFrame`s and canonical tape events.
+Runtime provider and tool execution adapters are physics dependencies, not root
+ports. `BrewvaRuntimeOptions.physics` is required and declares exactly how turn
+execution may touch the world:
+
+- `mode: "real"` requires a provider and tool executor, and may commit new
+  canonical events.
+- `mode: "replay"` takes a source event stream, disables durable tape writes,
+  rejects provider/tool executor ports, and emits only recorded runtime events.
+- `mode: "replay-then-real"` replays a cloned prefix into an explicit fork
+  target, then continues through real provider/tool execution. It never writes
+  divergent events to the source session's tape.
+- `mode: "noop"` constructs the ports for tests and hosted assembly, but
+  `runtime.turn(...)` fails before committing turn events.
+
+Callers observe all physics effects only through streamed `TurnFrame`s and
+canonical tape events.
 
 ## Canonical Tape
 

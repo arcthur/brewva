@@ -14,7 +14,8 @@
     { "path": "../brewva-std" },
     { "path": "../brewva-substrate" },
     { "path": "../brewva-tools" },
-    { "path": "../brewva-recall" }
+    { "path": "../brewva-recall" },
+    { "path": "../brewva-vocabulary" }
   ],
   "include": ["src/**/*.ts"]
 }

@@ -66,7 +66,7 @@ evidence. They do not replace task/claim state or verification reports.
 ## Implementation Anchors
 
 - `packages/brewva-runtime/src/runtime/runtime-api.ts`
-- `packages/brewva-runtime/src/runtime/engine/turn.ts`
+- `packages/brewva-runtime/src/runtime/turn/impl.ts`
 - `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`
-- `packages/brewva-runtime/src/runtime/model/model.ts`
+- `packages/brewva-runtime/src/runtime/model/impl.ts`
 - `packages/brewva-gateway/src/hosted/internal/turn-adapter/watchdog/task-progress-watchdog.ts`

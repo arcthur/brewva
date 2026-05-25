@@ -121,15 +121,14 @@ flowchart TD
 ## Code Pointers
 
 - Proposal boundary: `docs/reference/proposal-boundary.md`
-- Tool authorizer: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- Tool transaction log: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- Effect-commitment desk: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- `PatchSet` rollback: `packages/brewva-runtime/src/protocol/types/patch.ts`
-- Source patch protocol:
-  `packages/brewva-runtime/src/protocol/types/source-patch.ts`
+- Tool authorizer: `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- Tool transaction log: `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- Effect-commitment desk: `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- `PatchSet` rollback: `@brewva/brewva-vocabulary/workbench`
+- Source patch protocol: `@brewva/brewva-vocabulary/workbench`
 - Source patch gate:
   `packages/brewva-tools/src/families/navigation/source-patch.ts`
-- Receipt-aware rollback: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- Receipt-aware rollback: `packages/brewva-runtime/src/runtime/kernel/impl.ts`
 - Rollback tool: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 
 ## Related Docs

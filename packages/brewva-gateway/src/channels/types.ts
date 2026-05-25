@@ -1,4 +1,4 @@
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import type { ChannelModeConfig } from "./launcher.js";
 import type { RunChannelModeDependencies } from "./ports.js";

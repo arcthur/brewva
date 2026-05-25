@@ -31,12 +31,6 @@
       "bun": "./src/security.ts",
       "import": "./dist/security.js",
       "default": "./dist/security.js"
-    },
-    "./protocol": {
-      "types": "./dist/protocol.d.ts",
-      "bun": "./src/protocol.ts",
-      "import": "./dist/protocol.js",
-      "default": "./dist/protocol.js"
     }
   },
   "dependencies": {

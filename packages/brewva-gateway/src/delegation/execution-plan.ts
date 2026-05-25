@@ -1,11 +1,7 @@
-import type {
-  DelegationModelRouteRecord,
-  DelegationIsolationStrategy,
-  DelegationVisibility,
-} from "@brewva/brewva-runtime/protocol";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
-import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/protocol";
-import { deriveToolGovernanceDescriptor } from "@brewva/brewva-runtime/protocol";
+import {
+  deriveToolGovernanceDescriptor,
+  type ToolExecutionBoundary,
+} from "@brewva/brewva-runtime/security";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import type { BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type {
@@ -13,6 +9,12 @@ import type {
   SubagentExecutionBoundary,
   SubagentExecutionShape,
 } from "@brewva/brewva-tools/contracts";
+import type {
+  DelegationIsolationStrategy,
+  DelegationModelRouteRecord,
+  DelegationVisibility,
+} from "@brewva/brewva-vocabulary/delegation";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { getRuntimeToolActionPolicy } from "../hosted/api.js";
 import {

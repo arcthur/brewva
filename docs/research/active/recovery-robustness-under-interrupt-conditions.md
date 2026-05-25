@@ -38,7 +38,7 @@ This note does not reopen:
 ## Source Anchors
 
 - Recovery WAL append/recover: `packages/brewva-gateway/src/daemon/recovery.ts`
-- Tape replay engine: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Tape replay engine: `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - CLI replay and undo entrypoint: `packages/brewva-cli/src/index.ts`
 
 ## Validation Signals

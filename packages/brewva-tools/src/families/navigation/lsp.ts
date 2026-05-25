@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, extname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { SourcePatchIntent } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { SourcePatchIntent } from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolRuntime } from "../../contracts/index.js";
 import {

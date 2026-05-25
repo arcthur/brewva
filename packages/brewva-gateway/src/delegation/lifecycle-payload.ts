@@ -1,4 +1,4 @@
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 
 export function buildDelegationLifecyclePayload(
   record: DelegationRunRecord,

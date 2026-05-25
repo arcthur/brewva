@@ -1,8 +1,8 @@
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   listInvalidWorkbenchEvictionSpanRefs,
   type WorkbenchEntry,
-} from "@brewva/brewva-runtime/protocol";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+} from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

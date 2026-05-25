@@ -4,18 +4,20 @@ import type {
   BrewvaRuntimeIdentity,
   BrewvaRuntimeOptions,
   DeepReadonly,
-  RuntimeProviderPort,
-  RuntimeToolAuthorityResolver,
-  RuntimeToolExecutorPort,
+  RuntimePhysicsDeclaration,
   TurnInput,
 } from "@brewva/brewva-runtime";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { ContextEvidenceKind } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolRuntimeCapabilitiesPort } from "@brewva/brewva-tools/contracts";
+import type { ContextEvidenceKind } from "@brewva/brewva-vocabulary/context";
 import { createRecoveryWalStore } from "../../../daemon/api.js";
-import { createHostedRuntimeOps, type HostedRuntimeOpsPort } from "./runtime-ops.js";
+import type { HostedRuntimeOpsPort } from "./runtime-ops-port.js";
+import { createHostedRuntimeOps } from "./runtime-ops.js";
 
 export type { BrewvaRuntimeOptions };
+export type HostedRuntimeAdapterOptions = Omit<BrewvaRuntimeOptions, "physics"> & {
+  readonly physics?: RuntimePhysicsDeclaration;
+};
 
 export type RuntimeAdapterOpsPort = HostedRuntimeOpsPort;
 export type RuntimeAdapterCapabilitiesPort = BrewvaToolRuntimeCapabilitiesPort;
@@ -81,11 +83,7 @@ export interface HostedRuntimeAdapterPort {
   readonly ops: RuntimeAdapterOpsPort;
   readonly capabilities: RuntimeAdapterCapabilitiesPort;
   readonly extensions: HostedRuntimeExtensionsPort;
-  bindTurnPorts(input: {
-    readonly provider?: RuntimeProviderPort;
-    readonly toolExecutor?: RuntimeToolExecutorPort;
-    readonly resolveToolAuthority?: RuntimeToolAuthorityResolver;
-  }): BrewvaRuntime;
+  createRuntime(input: { readonly physics: RuntimePhysicsDeclaration }): BrewvaRuntime;
 }
 
 export interface ToolRuntimeAdapterPort extends Pick<
@@ -130,7 +128,7 @@ export function getRuntimeTaskOpsPort(
 }
 
 export function createHostedRuntimeAdapter(
-  options: BrewvaRuntimeOptions = {},
+  options: HostedRuntimeAdapterOptions = {},
 ): HostedRuntimeAdapterPort {
   const observedSessionIds = new Set<string>();
 
@@ -160,13 +158,18 @@ export function createHostedRuntimeAdapter(
     });
   }
 
-  let runtimeTarget = wrapRuntime(createBrewvaRuntime(options));
+  let runtimeTarget = wrapRuntime(
+    createBrewvaRuntime({
+      ...options,
+      physics: options.physics ?? { mode: "noop" },
+    }),
+  );
   const ops = createHostedRuntimeOps({
     get runtime() {
       return runtimeTarget;
     },
     listSessionIds: () => [...observedSessionIds].toSorted(),
-  }) as unknown as RuntimeAdapterOpsPort;
+  });
   const recoveryWal = createRecoveryWalStore({
     workspaceRoot: runtimeTarget.identity.workspaceRoot,
     config: runtimeTarget.config.infrastructure.recoveryWal,
@@ -184,7 +187,7 @@ export function createHostedRuntimeAdapter(
       resolveCredentialBindings: () => ({}),
     },
   });
-  const adapter = {
+  const adapter: HostedRuntimeAdapterPort = {
     identity: runtimeTarget.identity,
     config: runtimeTarget.config,
     get runtime() {
@@ -193,23 +196,17 @@ export function createHostedRuntimeAdapter(
     ops,
     capabilities: ops,
     extensions,
-    bindTurnPorts(input: {
-      readonly provider?: RuntimeProviderPort;
-      readonly toolExecutor?: RuntimeToolExecutorPort;
-      readonly resolveToolAuthority?: RuntimeToolAuthorityResolver;
-    }) {
+    createRuntime(input: { readonly physics: RuntimePhysicsDeclaration }) {
       runtimeTarget = wrapRuntime(
         createBrewvaRuntime({
           ...options,
-          provider: input.provider,
-          toolExecutor: input.toolExecutor,
-          resolveToolAuthority: input.resolveToolAuthority ?? options.resolveToolAuthority,
+          physics: input.physics,
         }),
       );
       return runtimeTarget;
     },
   };
-  return freezePort(adapter) as unknown as HostedRuntimeAdapterPort;
+  return freezePort(adapter);
 }
 
 export function toHostedRuntimeAdapterPort(
@@ -224,16 +221,10 @@ export function toToolRuntimeAdapterPort(
   return Object.freeze({
     identity: runtime.identity,
     config: runtime.config,
-    runtime: runtime.runtime,
     capabilities: runtime.capabilities,
     extensions: Object.freeze({
       tools: runtime.extensions.tools,
     }),
-    bindTurnPorts: (input: {
-      readonly provider?: RuntimeProviderPort;
-      readonly toolExecutor?: RuntimeToolExecutorPort;
-      readonly resolveToolAuthority?: RuntimeToolAuthorityResolver;
-    }) => runtime.bindTurnPorts(input),
   });
 }
 

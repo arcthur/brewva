@@ -10,22 +10,6 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  SOURCE_PATCH_PREPARED_EVENT_TYPE,
-  SOURCE_PATCH_STALE_RECOVERED_EVENT_TYPE,
-  SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
-  type PatchFileChange,
-  type PatchSet,
-  type SourceLineAnchor,
-  type SourcePatchApplyResult,
-  type SourcePatchConflict,
-  type SourcePatchIntent,
-  type SourcePatchPlan,
-  type SourcePatchPreflight,
-  type SourcePatchStaleRecoveryRecord,
-  type SourceSnapshot,
-  resolveSessionPatchHistoryDirectory,
-} from "@brewva/brewva-runtime/protocol";
 import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
 import {
   createBrewvaResourceRouter,
@@ -35,6 +19,22 @@ import {
   type BrewvaResourceRouter,
 } from "@brewva/brewva-substrate/resources";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import {
+  type PatchFileChange,
+  type PatchSet,
+  resolveSessionPatchHistoryDirectory,
+  SOURCE_PATCH_PREPARED_EVENT_TYPE,
+  SOURCE_PATCH_STALE_RECOVERED_EVENT_TYPE,
+  SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
+  type SourceLineAnchor,
+  type SourcePatchApplyResult,
+  type SourcePatchConflict,
+  type SourcePatchIntent,
+  type SourcePatchPlan,
+  type SourcePatchPreflight,
+  type SourcePatchStaleRecoveryRecord,
+  type SourceSnapshot,
+} from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolRuntime } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

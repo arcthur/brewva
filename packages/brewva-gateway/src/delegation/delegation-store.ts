@@ -1,29 +1,29 @@
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/protocol";
+import {
+  projectSessionDelegationState,
+  type SessionIndex,
+  type SessionIndexDelegationRun,
+} from "@brewva/brewva-session-index";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
 import type {
   DelegationAdoptionRecord,
   DelegationLifecycleEventPayload,
   DelegationRunQuery,
   DelegationRunRecord,
   PendingDelegationOutcomeQuery,
-} from "@brewva/brewva-runtime/protocol";
-import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/delegation";
+import { isDelegationRunTerminalStatus } from "@brewva/brewva-vocabulary/delegation";
 import {
+  readDelegationLifecycleEventPayload,
+  readWorkerResultsAppliedEventPayload,
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
-  SUBAGENT_FAILED_EVENT_TYPE,
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
+  SUBAGENT_FAILED_EVENT_TYPE,
   SUBAGENT_RUNNING_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
-  readDelegationLifecycleEventPayload,
-  readWorkerResultsAppliedEventPayload,
-} from "@brewva/brewva-runtime/protocol";
-import {
-  projectSessionDelegationState,
-  type SessionIndex,
-  type SessionIndexDelegationRun,
-} from "@brewva/brewva-session-index";
+} from "@brewva/brewva-vocabulary/delegation";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { queryStructuredRuntimeEvents, subscribeRuntimeEvents } from "../hosted/api.js";
 import { buildDelegationLifecyclePayload } from "./lifecycle-payload.js";

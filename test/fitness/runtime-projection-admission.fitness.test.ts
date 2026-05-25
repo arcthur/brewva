@@ -155,39 +155,17 @@ describe("runtime projection admission", () => {
 });
 
 describe("runtime evidence admission", () => {
-  test("keeps protocol evidence independent from hosted, provider, tool, and runtime machinery", () => {
-    const evidenceFiles = listTypeScriptFiles("packages/brewva-runtime/src/protocol/evidence");
-    const forbiddenImports = [
-      /@brewva\/brewva-gateway/u,
-      /@brewva\/brewva-provider/u,
-      /@brewva\/brewva-tools/u,
-      /packages\/brewva-gateway\/src\/hosted/u,
-      /packages\/brewva-tools\/src\/families/u,
-      /BrewvaRuntimeInstance/u,
-      /BrewvaRuntimeRoot/u,
-      /BrewvaHostedRuntimePort/u,
-      /BrewvaToolRuntimePort/u,
-      /BrewvaOperatorRuntimePort/u,
-      /RuntimeOperatorPort/u,
-      /RuntimeSemanticSurfaces/u,
-      /\\.\\.\/\\.\\.\/runtime/u,
-      /\\.\\.\/\\.\\.\/\\.\\.\/runtime/u,
-    ];
-
+  test("runtime no longer owns product evidence vocabulary", () => {
     expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/evidence"))).toBe(false);
-    expect(evidenceFiles).toContain("packages/brewva-runtime/src/protocol/evidence/api.ts");
-    for (const file of evidenceFiles) {
-      const source = readRepoFile(file);
-      for (const forbidden of forbiddenImports) {
-        expect(source, `${file} must not match ${forbidden}`).not.toMatch(forbidden);
-      }
-    }
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol/evidence"))).toBe(
+      false,
+    );
   });
 
-  test("keeps evidence transitive dependencies out of hosted, provider, tool, and runtime machinery", () => {
+  test("vocabulary internals keep evidence helpers out of hosted, provider, tool, and runtime machinery", () => {
     expect(
       findForbiddenTransitiveDependencies(
-        listTypeScriptFiles("packages/brewva-runtime/src/protocol/evidence"),
+        listTypeScriptFiles("packages/brewva-vocabulary/src/internal"),
       ),
     ).toEqual([]);
   });

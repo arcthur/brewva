@@ -1,8 +1,8 @@
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
-import type { DelegationModelRouteRecord } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import type { BrewvaModelPreset, BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type { DelegationPacket, SubagentExecutionShape } from "@brewva/brewva-tools/contracts";
+import type { DelegationModelRouteRecord } from "@brewva/brewva-vocabulary/delegation";
 import { createHostedModelCatalog, resolvePresetRoleModel } from "../hosted/api.js";
 import { resolveBrewvaModelSelection } from "../policy/model-routing/api.js";
 import type { HostedDelegationTarget } from "./targets.js";

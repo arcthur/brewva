@@ -5,6 +5,11 @@ export type * from "./delegation.js";
 export type * from "./subagent.js";
 export type * from "./explorer.js";
 export type * from "./a2a.js";
+export {
+  BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES,
+  BREWVA_TOOL_RUNTIME_COMMAND_NAMESPACES,
+  BREWVA_TOOL_RUNTIME_QUERY_NAMESPACES,
+} from "./runtime.js";
 export type * from "./runtime.js";
 export type {
   BoxAcquisitionReason,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RecoveryWalStore } from "@brewva/brewva-gateway/daemon";
-import { ChannelTurnBridge, type ChannelAdapter } from "@brewva/brewva-runtime/protocol";
+import { type ChannelAdapter, ChannelTurnBridge } from "@brewva/brewva-vocabulary/wire";
 import { runChannelHostLifecycle } from "../../../packages/brewva-gateway/src/channels/channel-host-lifecycle.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 

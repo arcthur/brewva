@@ -1,15 +1,15 @@
-import { type BrewvaStructuredEvent } from "@brewva/brewva-runtime/protocol";
-import {
-  REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
-  ROLLBACK_EVENT_TYPE,
-  SESSION_REWIND_COMPLETED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaHostContext,
   BrewvaHostToolCallResult,
   InternalHostPluginApi,
 } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
+import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
+import { SESSION_REWIND_COMPLETED_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
+import {
+  REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
+  ROLLBACK_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/workbench";
 import {
   subscribeRuntimeEvents,
   type HostedRuntimeAdapterPort,

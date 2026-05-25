@@ -12,7 +12,7 @@
   - `docs/journeys/internal/context-and-compaction.md`
   - `docs/reference/gateway-control-plane-protocol.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/runtime/engine/turn.ts`
+  - `packages/brewva-runtime/src/runtime/turn/impl.ts`
   - `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts`
   - `packages/brewva-gateway/src/hosted/internal/turn-adapter/hosted-prompt-attempt.ts`
 

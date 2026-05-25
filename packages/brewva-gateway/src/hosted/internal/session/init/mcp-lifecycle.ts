@@ -1,4 +1,4 @@
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { HostedMcpOperationalEvent, HostedMcpToolBundle } from "./mcp-tools.js";
 import type { HostedSession } from "./session-assembly.js";

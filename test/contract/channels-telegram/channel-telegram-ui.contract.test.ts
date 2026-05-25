@@ -5,7 +5,7 @@ import {
   renderTurnToTelegramRequests,
   type TelegramUpdate,
 } from "@brewva/brewva-channels-telegram";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { requireArray, requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 
 describe("channel telegram telegram-ui rendering", () => {

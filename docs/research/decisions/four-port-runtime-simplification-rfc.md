@@ -16,10 +16,10 @@
 - Code anchors:
   - `packages/brewva-runtime/src/runtime/runtime.ts`
   - `packages/brewva-runtime/src/runtime/runtime-api.ts`
-  - `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-  - `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-  - `packages/brewva-runtime/src/runtime/model/model.ts`
-  - `packages/brewva-runtime/src/runtime/engine/turn.ts`
+  - `packages/brewva-runtime/src/runtime/tape/impl.ts`
+  - `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+  - `packages/brewva-runtime/src/runtime/model/impl.ts`
+  - `packages/brewva-runtime/src/runtime/turn/impl.ts`
   - `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts`
   - `test/fitness/runtime-promoted-architecture.fitness.test.ts`
   - `test/fitness/effect-runtime-boundary.fitness.test.ts`
@@ -32,6 +32,9 @@
 - Runtime owns the turn loop and physical constraints; Gateway hosted code is a
   transport/session adapter over `runtime.turn` and must not own transition
   truth, recovery policy, or canonical tape writes.
+- Runtime physics is explicit construction input through
+  `BrewvaRuntimeOptions.physics`; default provider fallbacks and implicit
+  `EMPTY_PROVIDER` turn paths stay deleted.
 - Tape owns committed truth through the canonical event vocabulary and derived
   projections; no public append method, global symbol escape hatch, old JSONL
   registry, or compatibility event writer is allowed.
@@ -63,6 +66,11 @@
 - Any runtime-shape decision record that now carries `Superseded by:
 four-port-runtime-simplification-rfc.md`; those records remain as historical
   provenance only and are not implementation guidance.
+
+## Follow-Up Decisions
+
+- `docs/research/active/runtime-axis-decoupling-and-vocabulary-boundary.md`
+  defines the physics/reality, observation, vocabulary, and topology contracts.
 
 ## Verification
 

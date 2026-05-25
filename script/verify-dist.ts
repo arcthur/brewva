@@ -293,7 +293,15 @@ function main(): void {
       "@brewva/brewva-tools/workflow",
       "@brewva/brewva-runtime/config",
       "@brewva/brewva-runtime/core",
-      "@brewva/brewva-runtime/protocol",
+      "@brewva/brewva-vocabulary/context",
+      "@brewva/brewva-vocabulary/delegation",
+      "@brewva/brewva-vocabulary/events",
+      "@brewva/brewva-vocabulary/iteration",
+      "@brewva/brewva-vocabulary/schedule",
+      "@brewva/brewva-vocabulary/session",
+      "@brewva/brewva-vocabulary/task",
+      "@brewva/brewva-vocabulary/wire",
+      "@brewva/brewva-vocabulary/workbench",
       "@brewva/brewva-runtime/security",
       "@brewva/brewva-gateway/channels",
       "@brewva/brewva-gateway/hosted",
@@ -461,11 +469,14 @@ function main(): void {
     const { createBrewvaRuntime } = runtimeRootModule;
     const { createHostedRuntimeAdapter } = hostModule;
     const runtimeConfigModule = await import("@brewva/brewva-runtime/config");
-    const runtimeProtocolModule = await import("@brewva/brewva-runtime/protocol");
+    const vocabularySessionModule = await import("@brewva/brewva-vocabulary/session");
     const { createOutputSearchTool, createSourceIntelligenceTools } = await import(
       "@brewva/brewva-tools/navigation"
     );
-    const runtime = createBrewvaRuntime({ cwd: isolatedWorkspace });
+    const runtime = createBrewvaRuntime({
+      cwd: isolatedWorkspace,
+      physics: { mode: "noop" },
+    });
     const hostedRuntime = createHostedRuntimeAdapter({ cwd: isolatedWorkspace });
     if (typeof createBrewvaRuntime !== "function") {
       throw new Error("runtime root dist entry missing createBrewvaRuntime export");
@@ -518,8 +529,8 @@ function main(): void {
     if (typeof runtimeConfigModule.loadBrewvaConfig !== "function") {
       throw new Error("runtime config subpath missing loadBrewvaConfig export");
     }
-    if (typeof runtimeProtocolModule.deriveSessionLineageState !== "function") {
-      throw new Error("runtime protocol subpath missing deriveSessionLineageState export");
+    if (typeof vocabularySessionModule.deriveSessionLineageState !== "function") {
+      throw new Error("vocabulary session subpath missing deriveSessionLineageState export");
     }
     const sessionId = "dist-output-search-cjk";
     const artifactRef = ".orchestrator/tool-output-artifacts/dist-cjk/100-exec-call.txt";

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createRuntimeChannelTurnBridge } from "@brewva/brewva-gateway/channels";
 import {
-  DEFAULT_CHANNEL_CAPABILITIES,
   type ChannelAdapter,
+  DEFAULT_CHANNEL_CAPABILITIES,
   type TurnEnvelope,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
 import { assertRejectsWithMessage } from "../../../helpers.js";
 import { createRuntimeFixture } from "../../../helpers/runtime.js";
 

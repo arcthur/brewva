@@ -71,10 +71,10 @@ describe("model-operated Phase A architecture guard", () => {
   });
 
   test("context status is numeric plus forced compaction, not exported pressure levels", () => {
-    const contextTypes = readRepoFile("packages/brewva-runtime/src/protocol.ts");
     const publicRuntime = readRepoFile("packages/brewva-runtime/src/public/index.ts");
+    const runtimeApi = readRepoFile("packages/brewva-runtime/src/runtime/runtime-api.ts");
 
-    for (const source of [contextTypes, publicRuntime]) {
+    for (const source of [publicRuntime, runtimeApi]) {
       expect(source).not.toContain("ContextPressureLevel");
       expect(source).not.toContain("ContextPressureStatus");
       expect(source).not.toContain("getPressureStatus");
@@ -121,7 +121,7 @@ describe("model-operated Phase A architecture guard", () => {
   test("replay paths consume stored compaction summaries without model regeneration", () => {
     const replaySources = [
       "packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.ts",
-      "packages/brewva-runtime/src/runtime/model/model.ts",
+      "packages/brewva-runtime/src/runtime/model/impl.ts",
     ]
       .map(readRepoFile)
       .join("\n");

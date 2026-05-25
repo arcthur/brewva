@@ -1,5 +1,5 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import { chunkArray, uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import {
   buildSessionIndexEventSearchText,

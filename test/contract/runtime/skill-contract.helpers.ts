@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { SkillCard } from "@brewva/brewva-runtime/protocol";
+import type { SkillCard } from "@brewva/brewva-vocabulary/session";
 
 export function repoRoot(): string {
   return process.cwd();

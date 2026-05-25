@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { loadBrewvaConfig } from "@brewva/brewva-runtime/config";
+import { getToolActionPolicy, type ToolActionPolicy } from "@brewva/brewva-runtime/security";
 import {
   BOX_ACQUIRED_EVENT_TYPE,
   BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
@@ -19,9 +20,7 @@ import {
   BOX_SNAPSHOT_CREATED_EVENT_TYPE,
   EXEC_FAILED_EVENT_TYPE,
   EXEC_STARTED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import { getToolActionPolicy } from "@brewva/brewva-runtime/protocol";
-import type { ToolActionPolicy } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/iteration";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("box runtime contract", () => {

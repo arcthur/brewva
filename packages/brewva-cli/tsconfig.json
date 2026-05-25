@@ -12,7 +12,8 @@
     { "path": "../brewva-channels-telegram" },
     { "path": "../brewva-ingress-telegram" },
     { "path": "../brewva-tools" },
-    { "path": "../brewva-gateway" }
+    { "path": "../brewva-gateway" },
+    { "path": "../brewva-vocabulary" }
   ],
   "include": ["src/**/*.ts"]
 }

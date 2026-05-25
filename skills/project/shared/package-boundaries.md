@@ -12,7 +12,8 @@ owner: runtime-maintainers
 
 | Package                            | Responsibility                                                                                                                                                                             | Must Not Own                                                                            |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `@brewva/brewva-runtime`           | four-port runtime root, canonical tape, kernel authority policy, model attention planning, config/security contracts, and small product vocabulary helpers                                 | CLI wiring, transport-specific behavior, or read-model truth                            |
+| `@brewva/brewva-runtime`           | four-port runtime root, canonical tape, kernel authority policy, model attention planning, and config/security contracts                                                                   | product vocabulary, CLI wiring, transport-specific behavior, or read-model truth        |
+| `@brewva/brewva-vocabulary`        | explicit product vocabulary subpaths for events, wire payloads, tasks, schedules, context, delegation, workbench, sessions, and iteration facts                                            | runtime authority, provider/tool mechanics, persistence authority, or root exports      |
 | `@brewva/brewva-capabilities`      | capability manifest parsing, registry versioning, deterministic selection, and authority receipt primitives                                                                                | tool execution or hosted policy wiring                                                  |
 | `@brewva/brewva-provider-core`     | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                                                                                                    | replay authority or credential ownership                                                |
 | `@brewva/brewva-substrate`         | contract root plus explicit session, turn, prompt/resource, provenance, execution, compaction, tools/tool-protocol, host-api, persistence, provider, and sdk subpaths                      | replay authority, credentials, hosted policy                                            |
@@ -55,17 +56,38 @@ owner: runtime-maintainers
   `ManagedExecProcessRegistryRuntime`; host, box, process-session, cleanup, and
   background-session APIs must not revive module-level default registry
   ownership
+- vocabulary is a leaf product-contract package. It has no root export, depends
+  only on `@brewva/brewva-std` among Brewva packages, and separates kernel/tape
+  payload vocabulary from substrate mechanism contracts.
 - runtime root exports stay narrow: `createBrewvaRuntime`, the four-port runtime
   contract types, `DEFAULT_BREWVA_CONFIG`, and the minimal config/deep-readonly
   types. Do not reintroduce the `BrewvaRuntime` class, root-reflective runtime
   port factories, or operator-selection helpers. Domain contracts are imported
-  through explicit owner subpaths such as
-  `@brewva/brewva-runtime/core`, `/config`, `/events`, `/session`,
-  `/governance`, `/task`, `/skills`, `/context`, and `/security`
+  through explicit owner subpaths such as `@brewva/brewva-runtime/core`,
+  `/config`, and `/security`, or through `@brewva/brewva-vocabulary/*` for
+  product vocabulary.
 - runtime subpath ownership is registered in
   `skills/project/shared/runtime-subpaths.json`; new runtime package exports must
   add an owner, stability, decision, and allowed-consumer entry before they can
   pass fitness
+- `runtime.physics` and `runtime.observation` are construction and harness seams
+  inside the runtime root/port contracts, not package subpaths. Do not add
+  `./physics` or `./observation` unless a later decision proves an independent
+  public import surface is needed.
+
+### Runtime Subpath Registry
+
+<!-- generated:runtime-subpaths start -->
+
+| Runtime subpath               | Owner                          | Stability | Decision | Allowed consumers      |
+| ----------------------------- | ------------------------------ | --------- | -------- | ---------------------- |
+| `./config`                    | runtime config contracts       | `stable`  | `keep`   | `workspace`            |
+| `./core`                      | runtime core vocabulary        | `stable`  | `keep`   | `workspace`            |
+| `./schema/brewva.schema.json` | runtime config schema artifact | `stable`  | `keep`   | `docs`, `cli`, `tests` |
+| `./security`                  | runtime security contracts     | `stable`  | `keep`   | `workspace`            |
+
+<!-- generated:runtime-subpaths end -->
+
 - skill outputs and runtime artifacts must stay explicit and auditable
 - DuckDB session indexes are rebuildable query state; event tape remains replay
   authority

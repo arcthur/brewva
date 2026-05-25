@@ -7,11 +7,6 @@ import type {
 } from "@brewva/brewva-provider-core/contracts";
 import { clearApiProviderSessions } from "@brewva/brewva-provider-core/registry";
 import {
-  STEER_APPLIED_EVENT_TYPE,
-  STEER_DROPPED_EVENT_TYPE,
-  STEER_QUEUED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import {
   type BrewvaAgentProtocolController,
   type BrewvaAgentProtocolEvent,
   type BrewvaAgentProtocolMessage,
@@ -71,6 +66,11 @@ import {
   BrewvaToolContext,
   BrewvaToolDefinition,
 } from "@brewva/brewva-substrate/tools";
+import {
+  STEER_APPLIED_EVENT_TYPE,
+  STEER_DROPPED_EVENT_TYPE,
+  STEER_QUEUED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/wire";
 import {
   ManagedSessionDeferredCompactionCoordinator,
   type DeferredCompactionSalvageMode,

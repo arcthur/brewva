@@ -5,7 +5,7 @@ import {
   type TelegramChannelTransport,
   type TelegramHttpTransportOptions,
 } from "@brewva/brewva-channels-telegram";
-import type { ChannelTurnBridge, TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { ChannelTurnBridge, TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../../../hosted/api.js";
 import { createRuntimeChannelTurnBridge } from "./turn-bridge.js";
 

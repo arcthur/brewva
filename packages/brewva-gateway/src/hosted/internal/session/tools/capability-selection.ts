@@ -6,11 +6,12 @@ import {
   type CapabilityRegistry,
   type CapabilitySelectionReceipt,
 } from "@brewva/brewva-capabilities";
-import type { ProtocolRecord, ToolActionClass } from "@brewva/brewva-runtime/protocol";
+import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import {
   buildBrewvaCapabilitySelectionPromptBlock,
   type BrewvaSystemPromptCapabilitySelection,
 } from "@brewva/brewva-substrate/prompt";
+import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import { recordRuntimeToolCapabilitySelection } from "../runtime-ports.js";
 
 export interface CapabilitySelectionRuntimeView {

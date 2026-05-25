@@ -3,11 +3,11 @@ import type {
   AdapterStartContext,
   ChannelAdapter,
   TurnEnvelope,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
 import {
-  resolveChannelCapabilities,
   type ChannelCapabilities,
-} from "@brewva/brewva-runtime/protocol";
+  resolveChannelCapabilities,
+} from "@brewva/brewva-vocabulary/wire";
 import { LRUCache } from "lru-cache";
 import {
   buildTelegramInboundDedupeKey,

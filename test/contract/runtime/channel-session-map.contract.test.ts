@@ -3,7 +3,7 @@ import {
   buildChannelDedupeKey,
   buildChannelSessionId,
   buildRawConversationKey,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
 
 describe("channel session mapping", () => {
   test("given raw channel and conversation id, when building raw conversation key, then channel is normalized and conversation id is preserved", () => {

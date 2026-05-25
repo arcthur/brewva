@@ -1,19 +1,26 @@
 import { resolve } from "node:path";
 import { resolveWorkspaceRootDir } from "../config/paths.js";
-import { createTurnRunner } from "./engine/turn.js";
-import { createKernelPort } from "./kernel/kernel.js";
-import { createModelPort } from "./model/model.js";
+import { resolveRuntimeConfigState } from "./config/state.js";
+import { createKernelPort } from "./kernel/impl.js";
+import { createModelPort } from "./model/impl.js";
 import type {
   BrewvaRuntime,
   BrewvaRuntimeOptions,
-  RuntimeProviderPort,
   RuntimeStartReceipt,
-  RuntimeToolExecutorPort,
+  SessionId,
+  TapeCommitPort,
   RuntimeToolAuthorityResolver,
 } from "./runtime-api.js";
 import { CANONICAL_EVENT_TYPES, RUNTIME_RECOVERY_CAUSES } from "./runtime-api.js";
-import { resolveRuntimeConfigState } from "./runtime-config-state.js";
-import { createRuntimeTape } from "./tape/memory-tape.js";
+import { createRuntimeTape } from "./tape/impl.js";
+import {
+  createRuntimePhysicsCommitPort,
+  createRuntimePhysicsTurnRunner,
+  normalizeRuntimePhysics,
+  recoveredSessionsForRuntimePhysics,
+  replayEventsForRuntimePhysics,
+  runtimePhysicsUsesDurableTape,
+} from "./turn/physics.js";
 
 export { CANONICAL_EVENT_TYPES, RUNTIME_RECOVERY_CAUSES };
 
@@ -44,7 +51,17 @@ export type {
   CustomEventPayload,
   EventId,
   KernelPort,
+  KernelInterceptPort,
+  KernelInterceptorRegistration,
+  KernelShadowEvidenceEntry,
+  KernelShadowEvidenceQuery,
+  KernelShadowToolAuthorityInput,
+  KernelShadowToolAuthorityPhysics,
+  KernelToolAuthorityDecisionEvidence,
   MaterializationInput,
+  ModelMaterializationObservation,
+  ModelMaterializationObservationQuery,
+  ModelObservePort,
   ModelPort,
   PromptBlock,
   PromptContent,
@@ -62,6 +79,9 @@ export type {
   RuntimeProviderPort,
   RuntimeProviderToolCall,
   RuntimeRecoveryCause,
+  RuntimePhysicsDeclaration,
+  RuntimeReplaySource,
+  RuntimeReplayTarget,
   RuntimeStartReceipt,
   RuntimeSuspendedPayload,
   RuntimeToolAuthorityResolver,
@@ -115,26 +135,28 @@ function resolveRuntimeIdentity(options: BrewvaRuntimeOptions): BrewvaRuntime["i
   return { cwd, workspaceRoot, agentId };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function createFourPortRuntimeAssembly(input: {
   readonly identity: BrewvaRuntime["identity"];
   readonly config: BrewvaRuntime["config"];
   readonly runtimeTape: ReturnType<typeof createRuntimeTape>;
-  readonly provider?: RuntimeProviderPort;
-  readonly toolExecutor?: RuntimeToolExecutorPort;
+  readonly commit: TapeCommitPort;
   readonly resolveToolAuthority?: RuntimeToolAuthorityResolver;
+  readonly recoveredSessions?: readonly SessionId[];
+  readonly createTurn: (ports: {
+    readonly kernel: BrewvaRuntime["kernel"];
+    readonly model: BrewvaRuntime["model"];
+  }) => BrewvaRuntime["turn"];
 }): BrewvaRuntime {
-  const kernel = createKernelPort(input.runtimeTape.commit, input.runtimeTape.tape, {
+  const kernel = createKernelPort(input.commit, input.runtimeTape.tape, {
     actionAdmissionOverrides: input.config.security.actionAdmissionOverrides,
     resolveToolAuthority: input.resolveToolAuthority,
   });
   const model = createModelPort(input.runtimeTape.tape);
-  const turn = createTurnRunner({
-    tape: input.runtimeTape.commit,
-    kernel,
-    model,
-    provider: input.provider,
-    toolExecutor: input.toolExecutor,
-  });
+  const turn = input.createTurn({ kernel, model });
   const runtime: BrewvaRuntime = {
     identity: input.identity,
     config: input.config,
@@ -142,7 +164,7 @@ function createFourPortRuntimeAssembly(input: {
     kernel,
     model,
     async start(): Promise<RuntimeStartReceipt> {
-      return { recoveredSessions: input.runtimeTape.loadFromDisk() };
+      return { recoveredSessions: input.recoveredSessions ?? input.runtimeTape.loadFromDisk() };
     },
     turn,
     async close(): Promise<void> {
@@ -152,23 +174,44 @@ function createFourPortRuntimeAssembly(input: {
   return freezePort(runtime);
 }
 
-export function createBrewvaRuntime(options: BrewvaRuntimeOptions = {}): BrewvaRuntime {
-  const identity = resolveRuntimeIdentity(options);
+export function createBrewvaRuntime(options: BrewvaRuntimeOptions): BrewvaRuntime {
+  if (!isRecord(options)) {
+    throw new Error("runtime_options_required");
+  }
+  const runtimeOptions = options;
+  const physics = normalizeRuntimePhysics(runtimeOptions.physics);
+  const identity = resolveRuntimeIdentity(runtimeOptions);
   const configState = resolveRuntimeConfigState({
     cwd: identity.cwd,
-    options,
+    options: runtimeOptions,
   });
+  const replayEvents = replayEventsForRuntimePhysics(physics);
   const runtimeTape = createRuntimeTape({
     cwd: identity.workspaceRoot,
     tapeDir: configState.config.tape.dir,
-    enabled: configState.config.tape.enabled,
+    enabled: runtimePhysicsUsesDurableTape(physics) ? configState.config.tape.enabled : false,
+    initialEvents: replayEvents,
   });
+  const commit = createRuntimePhysicsCommitPort({ physics, commit: runtimeTape.commit });
   return createFourPortRuntimeAssembly({
     identity,
     config: configState.readonlyConfig,
     runtimeTape,
-    provider: options.provider,
-    toolExecutor: options.toolExecutor,
-    resolveToolAuthority: options.resolveToolAuthority,
+    commit,
+    resolveToolAuthority:
+      physics.mode === "real" || physics.mode === "replay-then-real"
+        ? physics.resolveToolAuthority
+        : undefined,
+    recoveredSessions: recoveredSessionsForRuntimePhysics({ physics, replayEvents }),
+    createTurn({ kernel, model }) {
+      return createRuntimePhysicsTurnRunner({
+        physics,
+        replayEvents,
+        tape: runtimeTape.tape,
+        commit,
+        kernel,
+        model,
+      });
+    },
   });
 }

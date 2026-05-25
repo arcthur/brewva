@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import type {
-  BrewvaRuntimeOptions,
+  HostedRuntimeAdapterOptions,
   HostedRuntimeAdapterPort,
   RuntimeAdapterCapabilitiesPort,
   RuntimeAdapterOpsPort,
@@ -15,15 +15,16 @@ import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
 import { createManagedExecProcessRegistryRuntime } from "@brewva/brewva-tools/execution";
 
 export type {
-  BrewvaRuntimeOptions,
+  HostedRuntimeAdapterOptions,
   HostedRuntimeAdapterPort,
   RuntimeAdapterCapabilitiesPort,
   RuntimeAdapterOpsPort,
   ToolRuntimeAdapterPort,
 };
+export type BrewvaRuntimeOptions = HostedRuntimeAdapterOptions;
 
 export function createRuntimeInstanceFixture(
-  options: BrewvaRuntimeOptions = {},
+  options: HostedRuntimeAdapterOptions = {},
 ): HostedRuntimeAdapterPort {
   return createHostedRuntimeAdapter(options) as unknown as HostedRuntimeAdapterPort;
 }

@@ -6,7 +6,7 @@ Boundary contract sources:
 - Runtime facade: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Proposal admission: `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`
 - Effect-commitment admission: `packages/brewva-runtime/src/runtime/kernel/policy/effect-posture.ts`
-- Operator desk: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- Operator desk: `packages/brewva-runtime/src/runtime/kernel/impl.ts`
 
 The public proposal boundary is now intentionally small.
 

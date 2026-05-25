@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type PatchSet,
   SOURCE_PATCH_APPLIED_EVENT_TYPE,
   SOURCE_PATCH_PREPARED_EVENT_TYPE,
   SOURCE_PATCH_STALE_RECOVERED_EVENT_TYPE,
   SOURCE_RESOURCE_READ_EVENT_TYPE,
   SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
-  type PatchSet,
   type SourcePatchApplyResult,
   type SourcePatchPlan,
   type SourceSnapshot,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/workbench";
 
 describe("source patch protocol", () => {
   test("exposes source snapshot and source patch event constants", () => {

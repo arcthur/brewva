@@ -1,11 +1,11 @@
-import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-runtime/protocol";
+import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-vocabulary/wire";
 import type {
   AssistantTextSegmentView,
   SessionWireCommittedStatus,
   SessionWireFrame,
   SessionWireTurnTrigger,
   ToolOutputView,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
 
 export interface RuntimeSessionWireProjectionEvent {
   readonly id: string;

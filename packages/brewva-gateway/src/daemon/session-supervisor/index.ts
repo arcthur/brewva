@@ -23,17 +23,13 @@ import {
 } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId, asBrewvaWalId } from "@brewva/brewva-runtime/core";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
-import type { RecoveryWalRecord } from "@brewva/brewva-runtime/protocol";
-import type {
-  BrewvaStructuredEvent,
-  ContextStatusView,
-  ManagedToolMode,
-  SessionLifecycleSnapshot,
-  SessionWireFrame,
-  SessionWireTurnTrigger,
-} from "@brewva/brewva-runtime/protocol";
-import { compileSessionWireFrames } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
+import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
+import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
+import type { RecoveryWalRecord } from "@brewva/brewva-vocabulary/session";
+import type { ManagedToolMode, SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame, SessionWireTurnTrigger } from "@brewva/brewva-vocabulary/wire";
+import { compileSessionWireFrames } from "@brewva/brewva-vocabulary/wire";
 import type { WorkerToParentMessage } from "../../hosted/internal/turn-adapter/worker/api.js";
 import {
   FileGatewayStateStore,

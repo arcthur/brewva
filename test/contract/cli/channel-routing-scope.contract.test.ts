@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildAgentScopedConversationKey, buildRoutingScopeKey } from "@brewva/brewva-gateway";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 function createTurn(input: Partial<TurnEnvelope> = {}): TurnEnvelope {
   return {

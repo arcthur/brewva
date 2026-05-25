@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRuntimeTelegramChannelBridge } from "@brewva/brewva-gateway/channels";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { resolveRequestUrl } from "../../../helpers.js";
 import { createRuntimeFixture } from "../../../helpers/runtime.js";
 

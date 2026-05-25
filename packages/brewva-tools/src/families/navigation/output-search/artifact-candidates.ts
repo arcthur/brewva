@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { normalizeText, normalizeToolName } from "./params.js";
 import type { ArtifactCandidate } from "./types.js";
 

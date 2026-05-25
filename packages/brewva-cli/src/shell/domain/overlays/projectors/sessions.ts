@@ -1,6 +1,6 @@
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
-import { DEFAULT_SESSION_TITLE } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
+import { DEFAULT_SESSION_TITLE } from "@brewva/brewva-vocabulary/session";
 import type { OperatorSurfaceSnapshot } from "../../operator-snapshot.js";
 import { fuzzyScore, normalizeSearchQuery } from "../../search-scoring.js";
 import type { CliSessionsOverlayPayload } from "../payloads.js";

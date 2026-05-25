@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test";
-import { normalizeChannelId } from "@brewva/brewva-runtime/protocol";
+import { normalizeChannelId } from "@brewva/brewva-vocabulary/wire";
 import fc from "fast-check";
 import { propertyTest } from "../../helpers/property.js";
 

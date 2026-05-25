@@ -9,8 +9,8 @@ is either a canonical event payload or rebuildable local state.
 Implementation anchors:
 
 - `packages/brewva-runtime/src/runtime/runtime-api.ts`
-- `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- `packages/brewva-runtime/src/runtime/engine/turn.ts`
+- `packages/brewva-runtime/src/runtime/tape/impl.ts`
+- `packages/brewva-runtime/src/runtime/turn/impl.ts`
 
 ## Reading Path
 

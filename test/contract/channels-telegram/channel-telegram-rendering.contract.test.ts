@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderTurnToTelegramRequests } from "@brewva/brewva-channels-telegram";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 describe("channel telegram rendering", () => {
   test("renders turn to Telegram outbound requests with thread + media fallback", () => {

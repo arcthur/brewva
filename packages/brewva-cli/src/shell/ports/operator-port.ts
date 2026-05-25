@@ -1,4 +1,4 @@
-import type { DecideEffectCommitmentInput } from "@brewva/brewva-runtime/protocol";
+import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
 import type { OperatorSurfaceSnapshot } from "../domain/operator-snapshot.js";
 import type { CliShellSessionBundle } from "./session-port.js";
 

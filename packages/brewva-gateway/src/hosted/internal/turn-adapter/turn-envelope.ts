@@ -1,5 +1,5 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import {
   canResolveHostedRuntimeTurnRuntime,
@@ -37,7 +37,7 @@ type HostedTurnEnvelopeAdapter = (
 
 type HostedTurnEnvelopeRuntime = Pick<BrewvaRuntime, "identity" | "config"> & {
   readonly ops?: HostedRuntimeAdapterPort["ops"];
-  readonly bindTurnPorts?: HostedRuntimeAdapterPort["bindTurnPorts"];
+  readonly createRuntime?: HostedRuntimeAdapterPort["createRuntime"];
 };
 
 export interface HostedTurnEnvelopeActionSummary {

@@ -3,13 +3,13 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createQuestionsCommandExtension } from "@brewva/brewva-cli/extensions";
 import type { HostedExtensionApi } from "@brewva/brewva-gateway/extensions";
-import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterOptions as BrewvaRuntimeOptions } from "@brewva/brewva-gateway/hosted";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
 } from "@brewva/brewva-substrate/prompt";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-vocabulary/wire";
 import { requireDefined } from "../../helpers/assertions.js";
 import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";

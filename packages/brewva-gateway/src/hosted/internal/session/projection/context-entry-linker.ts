@@ -1,13 +1,13 @@
+import { sha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
+import { CONTEXT_ENTRY_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
+import type { ContextAdmission, ContextEntryPresentTo } from "@brewva/brewva-vocabulary/context";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
-  type BrewvaEventRecord,
-  CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
   MESSAGE_END_EVENT_TYPE,
   readSessionRewindCompletedEventPayload,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import type { ContextAdmission, ContextEntryPresentTo } from "@brewva/brewva-runtime/protocol";
-import { sha256Hex } from "@brewva/brewva-std/hash";
-import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
+} from "@brewva/brewva-vocabulary/session";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   readTranscriptMessageFromPayload,

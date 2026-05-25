@@ -5,6 +5,7 @@
     { "path": "./packages/brewva-token-estimation" },
     { "path": "./packages/brewva-mcp-adapter" },
     { "path": "./packages/brewva-std" },
+    { "path": "./packages/brewva-vocabulary" },
     { "path": "./packages/brewva-capabilities" },
     { "path": "./packages/brewva-effect" },
     { "path": "./packages/brewva-runtime" },

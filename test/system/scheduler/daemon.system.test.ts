@@ -4,12 +4,12 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
-  SCHEDULE_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
+  SCHEDULE_EVENT_TYPE,
   SCHEDULE_WAKEUP_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import { parseScheduleIntentEvent } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/schedule";
+import { parseScheduleIntentEvent } from "@brewva/brewva-vocabulary/schedule";
 import { writeMinimalConfig } from "../../helpers/config.js";
 import { buildGatewayWorkerHarnessEnv, startGatewayDaemonHarness } from "../../helpers/gateway.js";
 import { sleep, withTimeout } from "../../helpers/process.js";

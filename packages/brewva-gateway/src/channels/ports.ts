@@ -1,5 +1,5 @@
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import type { HostedExtensionPlugin } from "../extensions/api.js";
 import type { SubscribablePromptSession } from "../hosted/api.js";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";

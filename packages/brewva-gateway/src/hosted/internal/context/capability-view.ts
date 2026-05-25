@@ -4,7 +4,7 @@ import {
   getToolActionPolicy,
   resolveToolRecoveryPreparation,
   toolActionPolicyRequiresApproval,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-runtime/security";
 import type {
   EffectRecoverability,
   EffectVisibility,
@@ -16,7 +16,7 @@ import type {
   ToolRecoveryPolicy,
   ToolRecoveryPreparation,
   ToolRiskLevel,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-runtime/security";
 import type { BrewvaToolRequiredCapability } from "@brewva/brewva-tools/contracts";
 import {
   collectStringEnumContracts,

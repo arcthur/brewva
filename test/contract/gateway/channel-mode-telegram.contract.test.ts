@@ -15,8 +15,8 @@ import {
 import { createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
 import { createHostedSession } from "@brewva/brewva-gateway/hosted";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { type ChannelTurnBridge, type TurnEnvelope } from "@brewva/brewva-runtime/protocol";
-import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import type { ChannelTurnBridge, TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-vocabulary/wire";
 import { recordHostedDelegationOutcome } from "../../helpers/events.js";
 import { waitUntil } from "../../helpers/process.js";
 import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";

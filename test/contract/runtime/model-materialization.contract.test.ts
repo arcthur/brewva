@@ -2,12 +2,27 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  createBrewvaRuntime,
+  type RuntimeProviderPort,
+  type RuntimeToolExecutorPort,
+} from "@brewva/brewva-runtime";
+
+const SILENT_PROVIDER: RuntimeProviderPort = {
+  async *stream() {},
+};
+
+const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
+  async execute() {
+    return { ok: true, content: "" };
+  },
+};
 
 describe("model materialization", () => {
   test("materializes prompt state from tape and budget", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-model-materialization-")),
+      physics: { mode: "noop" },
     });
     await runtime.kernel.beginToolCall({
       sessionId: "s1",
@@ -31,9 +46,44 @@ describe("model materialization", () => {
     expect(overWindow.status).toBe("over_window");
   });
 
+  test("records materialization observation evidence without changing prompt ownership", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-model-materialization-observation-")),
+      physics: { mode: "noop" },
+    });
+    await runtime.kernel.beginToolCall({
+      sessionId: "s1",
+      toolCallId: "call-1",
+      toolName: "read_file",
+      args: { path: "README.md" },
+    });
+
+    expect(runtime.model.observe.materialization.list()).toEqual([]);
+    const prompt = await runtime.model.materialize({
+      sessionId: "s1",
+      budget: { maxInputTokens: 100_000 },
+    });
+
+    const observations = runtime.model.observe.materialization.list({ sessionId: "s1" });
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toMatchObject({
+      sequence: 0,
+      sessionId: "s1",
+      status: "ready",
+      sourceEventIds: prompt.admittedBlocks.map((block) => block.id),
+      admittedBlockIds: prompt.admittedBlocks.map((block) => block.id),
+      droppedAdvisoryBlockIds: [],
+      tokenEstimate: prompt.tokenEstimate,
+      cache: prompt.cache,
+      budget: { maxInputTokens: 100_000 },
+    });
+    expect(runtime.model.observe.materialization.list({ sessionId: "missing" })).toEqual([]);
+  });
+
   test("proposes checkpoint candidates without committing them", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-model-checkpoint-")),
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
     await Array.fromAsync(
       runtime.turn({
@@ -57,6 +107,7 @@ describe("model materialization", () => {
   test("derives conversational prompt messages from committed tape facts", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-model-materialization-messages-")),
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
 
     await Array.fromAsync(
@@ -113,6 +164,7 @@ describe("model materialization", () => {
   test("materializes empty tool results when call metadata is present", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-model-empty-tool-result-")),
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
 
     await Array.fromAsync(
@@ -206,7 +258,7 @@ describe("model materialization", () => {
         .join("\n") + "\n",
     );
 
-    const runtime = createBrewvaRuntime({ cwd });
+    const runtime = createBrewvaRuntime({ cwd, physics: { mode: "noop" } });
     await runtime.start();
 
     const prompt = await runtime.model.materialize({

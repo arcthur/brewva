@@ -3,7 +3,7 @@ import type {
   GuardResultQuery,
   MetricObservationInput,
   MetricObservationQuery,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/iteration";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
 export function recordMetricObservation(

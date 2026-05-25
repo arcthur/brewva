@@ -10,7 +10,7 @@ import type {
   BrewvaMcpIntegrationConfig,
   BrewvaMcpServerConfig,
 } from "@brewva/brewva-runtime/config";
-import type { ToolActionClass } from "@brewva/brewva-runtime/protocol";
+import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { ToolCatalog, ToolDescriptor } from "@brewva/brewva-substrate/tools";

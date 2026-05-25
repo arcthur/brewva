@@ -15,16 +15,13 @@ import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { BrewvaScheduleSelfImproveConfig } from "@brewva/brewva-runtime/config";
 import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { TaskSpec } from "@brewva/brewva-runtime/protocol";
-import { normalizeTaskSpec } from "@brewva/brewva-runtime/protocol";
-import type {
-  ContextStatusView,
-  SessionWireFrame,
-  SessionWireStatusState,
-  ManagedToolMode,
-} from "@brewva/brewva-runtime/protocol";
 import { createDeferred } from "@brewva/brewva-std/async";
 import { safeParseJson } from "@brewva/brewva-std/json";
+import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
+import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
+import { normalizeTaskSpec } from "@brewva/brewva-vocabulary/task";
+import type { SessionWireFrame, SessionWireStatusState } from "@brewva/brewva-vocabulary/wire";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { createHostedRuntimeAdapter } from "../hosted/api.js";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";

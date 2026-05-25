@@ -1,6 +1,6 @@
 import type { CapabilityManifest, CapabilitySelectionReceipt } from "@brewva/brewva-capabilities";
 import { carryCapabilitySelection } from "@brewva/brewva-capabilities";
-import type { ToolActionClass } from "@brewva/brewva-runtime/protocol";
+import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import type {
   BrewvaHostBeforeAgentStartResult,
   InternalHostPluginApi as ExtensionAPI,

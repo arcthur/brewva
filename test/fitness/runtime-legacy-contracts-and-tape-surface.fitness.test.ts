@@ -44,16 +44,17 @@ function readInterfaceBlock(source: string, name: string): string {
 }
 
 describe("runtime protocol and tape surface fitness", () => {
-  test("runtime package exports protocol data shapes without legacy contract subpaths", () => {
+  test("runtime package does not expose protocol or legacy contract subpaths", () => {
     const packageJson = JSON.parse(readRepoFile("packages/brewva-runtime/package.json")) as {
       exports?: Record<string, unknown>;
     };
     const exportKeys = Object.keys(packageJson.exports ?? {});
 
-    expect(exportKeys).toContain("./protocol");
+    expect(exportKeys).not.toContain("./protocol");
     expect(exportKeys).not.toContain("./legacy-contracts");
     expect(exportKeys).not.toContain("./contracts");
-    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol.ts"))).toBe(true);
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol.ts"))).toBe(false);
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol"))).toBe(false);
     expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/legacy-contracts.ts"))).toBe(
       false,
     );
@@ -85,21 +86,19 @@ describe("runtime protocol and tape surface fitness", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("protocol contracts do not use retired LooseRecord or LegacyUncheckedRecord names", () => {
-    const protocolRoot = readRepoFile("packages/brewva-runtime/src/protocol.ts");
-    const body = readRepoFile("packages/brewva-runtime/src/protocol/body.ts");
-    const looseRecordRefs =
-      (protocolRoot.match(/\bLooseRecord\b/gu)?.length ?? 0) +
-      (body.match(/\bLooseRecord\b/gu)?.length ?? 0);
-    const legacyUncheckedRefs =
-      (protocolRoot.match(/\bLegacyUncheckedRecord\b/gu)?.length ?? 0) +
-      (body.match(/\bLegacyUncheckedRecord\b/gu)?.length ?? 0);
+  test("runtime root exports class-A canonical contracts without a protocol alias", () => {
+    const publicIndex = readRepoFile("packages/brewva-runtime/src/public/index.ts");
+    const runtimeAssembly = readRepoFile("packages/brewva-runtime/src/runtime/runtime.ts");
 
-    expect(looseRecordRefs).toBe(0);
-    expect(legacyUncheckedRefs).toBe(0);
-    expect(body).not.toContain("type DynamicValue =");
-    expect(body).not.toContain("Record<string, any>");
-    expect(body).not.toMatch(/export type [A-Za-z0-9_]+ = ProtocolRecord;/u);
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol/body.ts"))).toBe(
+      false,
+    );
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol/types"))).toBe(false);
+    expect(publicIndex).toContain("CANONICAL_EVENT_TYPES");
+    expect(publicIndex).toContain("CanonicalEvent");
+    expect(runtimeAssembly).toContain("CANONICAL_EVENT_TYPES");
+    expect(publicIndex).not.toContain("./protocol");
+    expect(runtimeAssembly).not.toContain("./protocol");
   });
 
   test("gateway runtime ops port does not expose a dynamic control-plane index", () => {
@@ -143,8 +142,9 @@ describe("runtime protocol and tape surface fitness", () => {
 
   test("public TapePort no longer exposes search placeholders", () => {
     const runtimeApi = readRepoFile("packages/brewva-runtime/src/runtime/runtime-api.ts");
+    const tapePortSource = readRepoFile("packages/brewva-runtime/src/runtime/tape/port.ts");
     const publicIndex = readRepoFile("packages/brewva-runtime/src/public/index.ts");
-    const tapePort = readInterfaceBlock(runtimeApi, "TapePort");
+    const tapePort = readInterfaceBlock(tapePortSource, "TapePort");
 
     expect(tapePort).not.toContain("search(");
     expect(runtimeApi).not.toContain("interface TapeSearchQuery");

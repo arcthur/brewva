@@ -1,11 +1,14 @@
-import { EXEC_FAILED_EVENT_TYPE, EXEC_STARTED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
-import { getToolActionPolicy } from "@brewva/brewva-runtime/protocol";
+import { getToolActionPolicy } from "@brewva/brewva-runtime/security";
 import {
   analyzeVirtualReadonlyEligibility,
   classifyToolBoundaryRequest,
   evaluateBoundaryClassification,
 } from "@brewva/brewva-runtime/security";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import {
+  EXEC_FAILED_EVENT_TYPE,
+  EXEC_STARTED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { resolveToolRuntimeCredentialBindings } from "../../runtime-port/extensions.js";

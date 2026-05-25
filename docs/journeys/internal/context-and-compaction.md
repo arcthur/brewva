@@ -217,11 +217,11 @@ flowchart TD
 
 ## Code Pointers
 
-- Runtime context service: `packages/brewva-runtime/src/runtime/model/model.ts`
-- Status / gate logic: `packages/brewva-runtime/src/runtime/model/model.ts`
+- Runtime context service: `packages/brewva-runtime/src/runtime/model/impl.ts`
+- Status / gate logic: `packages/brewva-runtime/src/runtime/model/impl.ts`
 - Context-critical allowlist: `packages/brewva-runtime/src/security/control-plane-tools.ts`
-- Context budget policy: `packages/brewva-runtime/src/runtime/model/model.ts`
-- Compaction integrity: `packages/brewva-runtime/src/runtime/model/model.ts`
+- Context budget policy: `packages/brewva-runtime/src/runtime/model/impl.ts`
+- Compaction integrity: `packages/brewva-runtime/src/runtime/model/impl.ts`
 - Pure compaction policy: `packages/brewva-gateway/src/hosted/internal/compaction/policy.ts`
 - Hosted compaction controller: `packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.ts`
 - Hosted context shell: `packages/brewva-gateway/src/hosted/internal/context/context-transform.ts`
@@ -229,7 +229,7 @@ flowchart TD
 - Provider request reduction: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
 - Provider request recovery: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
 - Compaction telemetry: `packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.ts`
-- Turn resume path: owned by `packages/brewva-runtime/src/runtime/engine/turn.ts`
+- Turn resume path: owned by `packages/brewva-runtime/src/runtime/turn/impl.ts`
 
 ## Related Docs
 

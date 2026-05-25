@@ -86,8 +86,8 @@ flowchart TD
 
 ## Code Pointers
 
-- Projection engine: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- Projection extractor: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Projection engine: `packages/brewva-runtime/src/runtime/tape/impl.ts`
+- Projection extractor: `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - Runtime API: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Hosted dynamic context: `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 

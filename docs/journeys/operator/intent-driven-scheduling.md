@@ -118,7 +118,7 @@ flowchart TD
 - Tool contracts: `packages/brewva-tools/src/families/workflow/follow-up.ts`,
   `packages/brewva-tools/src/families/workflow/schedule-intent.ts`
 - Scheduler service: `packages/brewva-gateway/src/daemon/schedule-runner.ts`
-- Schedule events: `packages/brewva-runtime/src/protocol.ts`
+- Schedule events: `packages/brewva-vocabulary/src/schedule.ts`
 - Schedule projection: `packages/brewva-tools/src/runtime-port/schedule.ts`
 - Cron / timezone: `packages/brewva-gateway/src/daemon/schedule-runner.ts`
 - Scheduler daemon dispatch: `packages/brewva-cli/src/index.ts`

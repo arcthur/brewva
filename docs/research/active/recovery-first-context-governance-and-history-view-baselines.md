@@ -551,17 +551,17 @@ pipeline keeps its existing kernel entry point.
 - Recovery working set implementation:
   `packages/brewva-gateway/src/daemon/recovery.ts`
 - Session lifecycle hydration:
-  `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+  `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - Hydration-time tool lifecycle diagnosis:
-  `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+  `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - Compaction bookkeeping and sanitization:
-  `packages/brewva-runtime/src/runtime/model/model.ts`
+  `packages/brewva-runtime/src/runtime/model/impl.ts`
   `packages/brewva-gateway/src/hosted/internal/context/context-shared.ts`
 - Hosted compaction event handling and branch checkpoints:
   `packages/brewva-gateway/src/hosted/internal/context/evidence/event-stream.ts`
-  `packages/brewva-runtime/src/runtime/model/model.ts`
+  `packages/brewva-runtime/src/runtime/model/impl.ts`
 - History-view baseline and dynamic-tail rendering:
-  `packages/brewva-runtime/src/runtime/model/model.ts`
+  `packages/brewva-runtime/src/runtime/model/impl.ts`
   `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 
 ## Validation Signals

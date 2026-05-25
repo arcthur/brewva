@@ -1,5 +1,5 @@
-import type { ReasoningCheckpointBoundary } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { ReasoningCheckpointBoundary } from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

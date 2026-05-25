@@ -1,4 +1,4 @@
-import type { WorkbenchEntry } from "@brewva/brewva-runtime/protocol";
+import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
 export function noteWorkbench(

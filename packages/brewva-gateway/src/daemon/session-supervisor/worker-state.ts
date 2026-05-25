@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import type { BrewvaDeferred, BrewvaScope } from "@brewva/brewva-effect/primitives";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import type {
   ParentToWorkerMessage,
   WorkerResultErrorCode,

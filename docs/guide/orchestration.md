@@ -65,13 +65,13 @@ Platform-growth rule:
 
 ## Runtime Subsystems
 
-- Skills: `packages/brewva-runtime/src/runtime/model/model.ts`
-- Verification: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- Ledger projection: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- Context budget: `packages/brewva-runtime/src/runtime/model/model.ts`
-- Event records: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- Tape replay engine: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- Cost tracker: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Skills: `packages/brewva-runtime/src/runtime/model/impl.ts`
+- Verification: `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- Ledger projection: `packages/brewva-runtime/src/runtime/tape/impl.ts`
+- Context budget: `packages/brewva-runtime/src/runtime/model/impl.ts`
+- Event records: `packages/brewva-runtime/src/runtime/tape/impl.ts`
+- Tape replay engine: `packages/brewva-runtime/src/runtime/tape/impl.ts`
+- Cost tracker: `packages/brewva-runtime/src/runtime/tape/impl.ts`
 
 ## Custom Delegated Specialists
 

@@ -1,9 +1,9 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   buildSessionRewindProjection,
   listSessionRewindTargets,
-} from "@brewva/brewva-runtime/protocol";
-import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
+} from "@brewva/brewva-vocabulary/session";
 import type {
   SessionIndexBox,
   SessionIndexDigest,

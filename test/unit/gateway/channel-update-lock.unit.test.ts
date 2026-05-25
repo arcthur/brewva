@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { createChannelUpdateLockManager } from "../../../packages/brewva-gateway/src/channels/session/update-lock.js";
 
 function createUserTurn(text: string): TurnEnvelope {

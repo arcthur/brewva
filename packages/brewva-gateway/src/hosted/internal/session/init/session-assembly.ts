@@ -1,8 +1,8 @@
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions } from "@brewva/brewva-runtime/protocol";
 import { sha256Hex, stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
@@ -15,6 +15,7 @@ import type {
 } from "@brewva/brewva-tools/contracts";
 import { buildReadPathDiscoveryObservationPayload } from "@brewva/brewva-tools/navigation";
 import { attachBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
+import type { CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions } from "@brewva/brewva-vocabulary/session";
 import { type HostedDelegationBuiltinToolName } from "../../../../delegation/api.js";
 import { type HostedExtensionPlugin, type LocalHookPort } from "../../../../extensions/api.js";
 import { rememberHostedVisibleReadState } from "../../context/materialization.js";
@@ -85,7 +86,11 @@ export interface HostedSessionResult {
   orchestration?: BrewvaToolOrchestration;
 }
 
-export interface CreateHostedSessionOptions extends RuntimeCreateBrewvaSessionOptions {
+export interface CreateHostedSessionOptions extends Omit<
+  RuntimeCreateBrewvaSessionOptions,
+  "config"
+> {
+  config?: BrewvaConfig;
   runtime?: HostedRuntimeAdapterPort;
   modelRole?: BrewvaModelRoleAlias;
   extensions?: HostedExtensionPlugin[];

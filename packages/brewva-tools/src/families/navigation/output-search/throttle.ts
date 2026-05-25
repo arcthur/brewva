@@ -1,4 +1,4 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   SEARCH_THROTTLE_BLOCK_AFTER,
   SEARCH_THROTTLE_REDUCE_AFTER,

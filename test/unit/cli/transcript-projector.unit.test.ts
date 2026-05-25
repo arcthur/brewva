@@ -4,8 +4,8 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
+import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { CliShellAction } from "../../../packages/brewva-cli/src/shell/domain/state.js";
 import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 import { projectRuntimeTurnSessionWireFrames } from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";

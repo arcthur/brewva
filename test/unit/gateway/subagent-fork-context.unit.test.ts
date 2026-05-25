@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { MESSAGE_END_EVENT_TYPE, type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
-import type { ContextEntryRecord } from "@brewva/brewva-runtime/protocol";
+import type { ContextEntryRecord } from "@brewva/brewva-vocabulary/context";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import { MESSAGE_END_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import { buildInheritedSubagentContextBlock } from "../../../packages/brewva-gateway/src/delegation/fork-context.js";
 import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 

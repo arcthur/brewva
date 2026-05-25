@@ -1,5 +1,5 @@
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { ShellInput } from "./input.js";
 import type { BrewvaResolvedKeymapBindings, BrewvaTuiConfig } from "./tui.js";
 import type { ShellViewModel } from "./view-model.js";

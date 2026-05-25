@@ -1,10 +1,10 @@
+import { sha256Hex } from "@brewva/brewva-std/hash";
+import type { ContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
 import type {
-  ContextBudgetUsage,
   SessionCompactionCacheImpact,
   SessionCompactionCacheImpactSnapshot,
   SessionCompactionGenerationMetadata,
-} from "@brewva/brewva-runtime/protocol";
-import { sha256Hex } from "@brewva/brewva-std/hash";
+} from "@brewva/brewva-vocabulary/session";
 import { decideCompaction } from "../compaction/policy.js";
 import {
   commitRuntimeSessionCompaction,

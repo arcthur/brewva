@@ -1,5 +1,6 @@
-import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
+import { buildTurnEnvelope } from "../protocol/api.js";
 import { toErrorMessage } from "../utils/errors.js";
 
 export interface ChannelToolTurnOutput {

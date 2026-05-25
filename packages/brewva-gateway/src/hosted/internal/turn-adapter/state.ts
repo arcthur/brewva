@@ -1,4 +1,4 @@
-import type { ToolOutputView } from "@brewva/brewva-runtime/protocol";
+import type { ToolOutputView } from "@brewva/brewva-vocabulary/wire";
 
 export type HostedTurnAdapterProfileName =
   | "interactive"

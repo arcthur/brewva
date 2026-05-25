@@ -1,11 +1,7 @@
-import type {
-  ContextBudgetUsage,
-  ContextStatus,
-  TapeStatusState,
-  TapeSearchScope,
-} from "@brewva/brewva-runtime/protocol";
-import type { ActiveReasoningBranchState } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { ContextBudgetUsage, ContextStatus } from "@brewva/brewva-vocabulary/context";
+import type { ActiveReasoningBranchState } from "@brewva/brewva-vocabulary/iteration";
+import type { TapeSearchScope, TapeStatusState } from "@brewva/brewva-vocabulary/session";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "../../contracts/index.js";

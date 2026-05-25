@@ -15,14 +15,14 @@ import {
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import {
-  SCHEDULE_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_STARTED_EVENT_TYPE,
+  SCHEDULE_EVENT_TYPE,
   SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import { parseScheduleIntentEvent } from "@brewva/brewva-runtime/protocol";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/schedule";
+import { parseScheduleIntentEvent } from "@brewva/brewva-vocabulary/schedule";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import { differenceInSeconds, formatISO } from "date-fns";
 import {
   getCliRuntimeClaimState,

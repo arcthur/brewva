@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RecoveryWalStore } from "@brewva/brewva-gateway/daemon";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { createChannelTurnDispatcher } from "../../../packages/brewva-gateway/src/channels/channel-turn-dispatcher.js";
 import { CommandRouter } from "../../../packages/brewva-gateway/src/channels/command/parser.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";

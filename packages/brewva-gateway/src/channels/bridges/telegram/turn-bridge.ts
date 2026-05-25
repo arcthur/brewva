@@ -2,8 +2,8 @@ import type {
   ChannelAdapter,
   ChannelTurnBridge,
   TurnEnvelope,
-} from "@brewva/brewva-runtime/protocol";
-import { ChannelTurnBridge as RuntimeChannelTurnBridge } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
+import { ChannelTurnBridge as RuntimeChannelTurnBridge } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../../../hosted/api.js";
 
 export interface CreateRuntimeChannelTurnBridgeOptions {

@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
-import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterOptions as BrewvaRuntimeOptions } from "@brewva/brewva-gateway/hosted";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
 import {
   runCliInteractiveSession,

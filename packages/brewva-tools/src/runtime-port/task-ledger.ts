@@ -1,4 +1,4 @@
-import type { TaskItemStatus, TaskSpec } from "@brewva/brewva-runtime/protocol";
+import type { TaskItemStatus, TaskSpec } from "@brewva/brewva-vocabulary/task";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
 export function recordTaskSpec(

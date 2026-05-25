@@ -1,9 +1,9 @@
+import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
 import {
-  PATCH_RECORDED_EVENT_TYPE,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
+} from "@brewva/brewva-vocabulary/iteration";
+import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
 import type { BrewvaToolRuntime } from "../../../contracts/index.js";
 import {
   registerToolRuntimeClearStateListener,

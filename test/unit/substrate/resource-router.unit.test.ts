@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -8,11 +8,21 @@ import {
   createHostedResourceLoader,
 } from "@brewva/brewva-substrate/resources";
 
+function testAgentDir(workspace: string): string {
+  const agentDir = join(workspace, ".agent");
+  mkdirSync(agentDir, { recursive: true });
+  return agentDir;
+}
+
+function createTestResourceLoader(workspace: string) {
+  return createHostedResourceLoader({ cwd: workspace, agentDir: testAgentDir(workspace) });
+}
+
 describe("Brewva resource router", () => {
   test("reads file resources through brewva-resource URIs", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-file-"));
     writeFileSync(join(workspace, "note.md"), "# Note\n", "utf8");
-    const loader = await createHostedResourceLoader({ cwd: workspace, agentDir: workspace });
+    const loader = await createTestResourceLoader(workspace);
     const router = createBrewvaResourceRouter({ cwd: workspace, loader });
 
     const result = await router.read("brewva-resource:///file/note.md");
@@ -28,7 +38,7 @@ describe("Brewva resource router", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-file-url-"));
     const filePath = join(workspace, "note.md");
     writeFileSync(filePath, "# Note\n", "utf8");
-    const loader = await createHostedResourceLoader({ cwd: workspace, agentDir: workspace });
+    const loader = await createTestResourceLoader(workspace);
     const router = createBrewvaResourceRouter({ cwd: workspace, loader });
 
     const result = await router.read(pathToFileURL(filePath).toString());
@@ -40,7 +50,7 @@ describe("Brewva resource router", () => {
 
   test("supports agent JSON field-path sub-selection", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-agent-"));
-    const loader = await createHostedResourceLoader({ cwd: workspace, agentDir: workspace });
+    const loader = await createTestResourceLoader(workspace);
     const router = createBrewvaResourceRouter({
       cwd: workspace,
       loader,
@@ -73,7 +83,7 @@ describe("Brewva resource router", () => {
 
   test("dispatches loader-registered resource providers", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-loader-provider-"));
-    const loader = await createHostedResourceLoader({ cwd: workspace, agentDir: workspace });
+    const loader = await createTestResourceLoader(workspace);
     loader.registerResourceProvider({
       scheme: "conflict",
       read(uri) {
@@ -95,7 +105,7 @@ describe("Brewva resource router", () => {
 
   test("supports per-read scoped providers without rebuilding the router", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-scoped-provider-"));
-    const loader = await createHostedResourceLoader({ cwd: workspace, agentDir: workspace });
+    const loader = await createTestResourceLoader(workspace);
     const router = createBrewvaResourceRouter({ cwd: workspace, loader });
 
     const unavailable = await router.read("brewva-resource:///conflict/plan-1");
@@ -126,7 +136,7 @@ describe("Brewva resource router", () => {
       cwd: workspace,
       loader: async () => {
         loadCount += 1;
-        return await createHostedResourceLoader({ cwd: workspace, agentDir: workspace });
+        return await createTestResourceLoader(workspace);
       },
     });
 
@@ -152,7 +162,7 @@ describe("Brewva resource router", () => {
 
   test("fails closed for unavailable external providers", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-fail-closed-"));
-    const loader = await createHostedResourceLoader({ cwd: workspace, agentDir: workspace });
+    const loader = await createTestResourceLoader(workspace);
     const router = createBrewvaResourceRouter({ cwd: workspace, loader });
 
     const result = await router.read("brewva-resource:///pr/123");

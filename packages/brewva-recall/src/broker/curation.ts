@@ -1,7 +1,7 @@
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_UTILITY_OBSERVED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/iteration";
 import {
   RECALL_CURATION_HALFLIFE_DAYS,
   type RecallCurationAggregate,

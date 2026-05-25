@@ -30,10 +30,10 @@ function listSourceFiles(relativeDir: string): string[] {
 }
 
 describe("runtime workflow derivation ownership", () => {
-  test("runtime contracts subpath owns workflow helpers without restoring read models", () => {
+  test("vocabulary iteration subpath owns workflow helpers without restoring runtime read models", () => {
     const indexSource = readRepoFile("packages/brewva-runtime/src/index.ts");
     const publicIndexSource = readRepoFile("packages/brewva-runtime/src/public/index.ts");
-    const contractsSource = readRepoFile("packages/brewva-runtime/src/protocol/body.ts");
+    const iterationVocabularySource = readRepoFile("packages/brewva-vocabulary/src/iteration.ts");
     const packageManifestSource = readRepoFile("packages/brewva-runtime/package.json");
 
     expect(
@@ -46,10 +46,10 @@ describe("runtime workflow derivation ownership", () => {
     expect(publicIndexSource).not.toContain("./workflow/derivation.js");
     expect(publicIndexSource).not.toContain("../domain/projection/workflow/");
     expect(packageManifestSource).not.toContain('"./projection"');
-    expect(contractsSource).not.toContain("./read-models/");
-    expect(contractsSource).toContain("export function deriveWorkflowArtifacts");
-    expect(contractsSource).toContain("export function deriveWorkflowStatus");
-    expect(contractsSource).toContain("export function resolveWorkspaceRevision");
+    expect(iterationVocabularySource).not.toContain("./read-models/");
+    expect(iterationVocabularySource).toContain("deriveWorkflowArtifacts");
+    expect(iterationVocabularySource).toContain("deriveWorkflowStatus");
+    expect(iterationVocabularySource).toContain("resolveWorkspaceRevision");
     expect(publicIndexSource).not.toContain(
       'export * from "../../packages/brewva-runtime/src/domain/workflow/artifact-derivation.js"',
     );

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
-import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-vocabulary/delegation";
 import {
   createHostedSession,
   resolveSubagentSessionShutdownReason,

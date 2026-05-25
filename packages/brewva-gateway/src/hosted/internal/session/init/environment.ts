@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import { resolveBrewvaModelSelection } from "../../../../policy/model-routing/api.js";
 import { createHostedRuntimeAdapter } from "../runtime-ports.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";

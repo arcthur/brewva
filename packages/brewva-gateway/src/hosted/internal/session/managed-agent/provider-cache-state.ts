@@ -8,8 +8,8 @@ import type {
   ProviderCachePolicy,
   ProviderPayloadMetadata,
 } from "@brewva/brewva-provider-core/contracts";
-import type { ProviderCacheRenderState } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaAgentProtocolTransport } from "@brewva/brewva-substrate/agent-protocol";
+import type { ProviderCacheRenderState } from "@brewva/brewva-vocabulary/context";
 import { ProviderCacheStickyLatches } from "../../provider/cache/index.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
 

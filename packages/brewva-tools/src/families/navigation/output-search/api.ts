@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";

@@ -16,7 +16,7 @@ Implementation anchors:
 - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
 - `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`
 - `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
-- `packages/brewva-runtime/src/protocol.ts`
+- `packages/brewva-runtime/src/runtime/tape/impl.ts`
 
 ## Role
 

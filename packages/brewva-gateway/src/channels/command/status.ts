@@ -1,5 +1,5 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import { formatCostViewText } from "@brewva/brewva-tools/workflow";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { toErrorMessage } from "../../utils/errors.js";
 import type { ChannelReplyWriter } from "../channel-reply-writer.js";
 import type { HostedRuntimeAdapterPort } from "../ports.js";

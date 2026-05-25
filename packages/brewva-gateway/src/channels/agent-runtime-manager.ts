@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { parseJsonc } from "@brewva/brewva-runtime/config";
-import { normalizeAgentId } from "@brewva/brewva-runtime/protocol";
+import { normalizeAgentId } from "@brewva/brewva-vocabulary/session";
 import { createHostedRuntimeAdapter } from "../hosted/api.js";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 

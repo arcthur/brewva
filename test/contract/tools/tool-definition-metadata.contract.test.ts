@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import {
   TOOL_ACTION_POLICY_BY_NAME,
   getExactToolActionPolicy,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-runtime/security";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
 import { createA2ATools } from "@brewva/brewva-tools/delegation";
 import {

@@ -1,13 +1,14 @@
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
-import type { SessionCostSummary } from "@brewva/brewva-runtime/protocol";
-import type { ToolOutputView } from "@brewva/brewva-runtime/protocol";
-import type { PatchSet, WorkerResult } from "@brewva/brewva-runtime/protocol";
 import type {
   SubagentOutcome,
   SubagentOutcomeArtifactRef,
   SubagentOutcomeSuccess,
   SubagentRunRequest,
 } from "@brewva/brewva-tools/contracts";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import type { WorkerResult } from "@brewva/brewva-vocabulary/delegation";
+import type { SessionCostSummary } from "@brewva/brewva-vocabulary/session";
+import type { ToolOutputView } from "@brewva/brewva-vocabulary/wire";
+import type { PatchSet } from "@brewva/brewva-vocabulary/workbench";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { recordRuntimeAssistantCost, recordRuntimeWorkerResult } from "../hosted/api.js";
 import {

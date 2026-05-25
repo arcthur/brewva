@@ -3,7 +3,7 @@ import { runEdgeOperation } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 
 type CliValueResult<T> = RuntimeResult<{ value: T }>;
 

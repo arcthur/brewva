@@ -129,10 +129,10 @@ flowchart TD
 
 - Inspect / replay / undo CLI dispatch: `packages/brewva-cli/src/index.ts`
 - Inspect report implementation: `packages/brewva-cli/src/operator/inspect/report.ts`
-- Session lifecycle: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- Replay engine: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
-- Patch-set rollback: `packages/brewva-runtime/src/protocol.ts`
-- Receipt-aware rollback: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- Session lifecycle: `packages/brewva-runtime/src/runtime/tape/impl.ts`
+- Replay engine: `packages/brewva-runtime/src/runtime/tape/impl.ts`
+- Patch-set rollback: `packages/brewva-vocabulary/src/workbench.ts`
+- Receipt-aware rollback: `packages/brewva-runtime/src/runtime/kernel/impl.ts`
 - Rollback tool: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 
 ## Related Docs

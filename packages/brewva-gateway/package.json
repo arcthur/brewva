@@ -82,6 +82,7 @@
     "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
+    "@brewva/brewva-vocabulary": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.18.0",
     "lru-cache": "^11.3.5",

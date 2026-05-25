@@ -12,13 +12,15 @@ import type {
   BrewvaEventQuery,
   BrewvaEventRecord,
   ProtocolRecord,
+} from "@brewva/brewva-vocabulary/events";
+import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-vocabulary/schedule";
+import type {
   RecoveryWalRecord,
   RecoveryWalRecoveryResult,
   RecoveryWalSource,
   RecoveryWalStatus,
-  ScheduleIntentProjectionRecord,
-  TurnEnvelope,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/session";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 type WalRecord = Record<string, unknown>;
 export type RecoveryWalStoredRecord = RecoveryWalRecord & {
@@ -92,7 +94,7 @@ export type {
   RecoveryWalRecoveryResult,
   RecoveryWalSource,
   RecoveryWalStatus,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/session";
 
 export interface RecoveryWalAppendPendingOptions extends WalRecord {}
 export interface RecoveryWalCompactResult {

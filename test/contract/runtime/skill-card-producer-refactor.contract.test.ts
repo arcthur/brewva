@@ -7,7 +7,7 @@ import {
   listProducerOutputs,
   parseProducerContractFile,
   parseSkillDocument,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/session";
 
 function tempFile(name: string, content: string): string {
   const dir = mkdtempSync(join(tmpdir(), "brewva-skill-card-"));

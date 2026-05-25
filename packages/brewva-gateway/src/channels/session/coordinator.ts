@@ -1,9 +1,9 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import type {
   BrewvaPromptSessionEvent,
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
 import {
   getRuntimeCostSummary,

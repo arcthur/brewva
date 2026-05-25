@@ -1,4 +1,4 @@
-import type { ToolActionClass } from "@brewva/brewva-runtime/protocol";
+import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import type { BrewvaToolRequiredCapability, BrewvaToolSurface } from "../contracts/index.js";
 
 export interface ManagedBrewvaToolMetadataRegistryEntry {

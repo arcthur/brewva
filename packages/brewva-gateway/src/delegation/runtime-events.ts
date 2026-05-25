@@ -9,7 +9,7 @@ import {
   SUBAGENT_SPAWNED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/delegation";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 
 export type DelegationRuntimeEventType =

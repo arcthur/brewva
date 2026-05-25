@@ -13,7 +13,7 @@ reference.
 - Gateway control plane: `packages/brewva-gateway/src/index.ts`
 - Tool registry: `packages/brewva-tools/src/index.ts`
 - Model-operated workbench state: `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
-- Runtime model port: `packages/brewva-runtime/src/runtime/model/model.ts`
+- Runtime model port: `packages/brewva-runtime/src/runtime/model/impl.ts`
 - Legacy skill catalog contracts: `packages/brewva-runtime/src/runtime/model`
 - Extension wiring: `@brewva/brewva-gateway/extensions` (`packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`)
 - CLI entrypoint: `packages/brewva-cli/src/index.ts`

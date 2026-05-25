@@ -1,7 +1,14 @@
-import type { SkillCard, ToolAccessResult } from "../protocol.js";
 import type { ToolGovernanceDescriptor } from "../runtime/kernel/policy/public-contract.js";
 import { getToolGovernanceDescriptor } from "../runtime/kernel/policy/tool-decision.js";
 import { normalizeToolName } from "../utils/tool-name.js";
+
+export type ToolPolicyCard = Record<string, unknown>;
+
+export interface ToolAccessResult {
+  readonly allowed: boolean;
+  readonly warning?: string;
+  readonly reason?: string;
+}
 
 export interface ToolPolicyOptions {
   enforceDeniedEffects: boolean;
@@ -18,7 +25,7 @@ function normalizeToolList(tools: string[]): string[] {
 }
 
 export function checkToolAccess(
-  card: SkillCard | undefined,
+  card: ToolPolicyCard | undefined,
   toolName: string,
   options: ToolPolicyOptions,
   args?: Record<string, unknown>,

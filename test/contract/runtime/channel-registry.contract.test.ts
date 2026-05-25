@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type ChannelAdapter,
   ChannelAdapterRegistry,
   DEFAULT_CHANNEL_CAPABILITIES,
-  type ChannelAdapter,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
 
 function createAdapter(id: string): ChannelAdapter {
   return {

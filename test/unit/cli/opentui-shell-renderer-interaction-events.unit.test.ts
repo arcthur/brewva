@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { type BrewvaReplaySession, type SkillDocument } from "@brewva/brewva-runtime/protocol";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptSessionEvent,
@@ -8,6 +6,8 @@ import type {
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { BrewvaReplaySession, SkillDocument } from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { parseKeypress, type ParsedKey } from "@opentui/core";
 import {
   createOpenTuiSolidElement,

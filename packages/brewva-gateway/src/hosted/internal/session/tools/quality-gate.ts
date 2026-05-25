@@ -1,8 +1,5 @@
 import { accessSync, constants, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/protocol";
-import { classifyToolFailure } from "@brewva/brewva-runtime/protocol";
-import type { EffectCommitmentDiffPreview, ProtocolRecord } from "@brewva/brewva-runtime/protocol";
 import { truncateText } from "@brewva/brewva-std/text";
 import {
   BrewvaHostInputEventResult as InputEventResult,
@@ -21,6 +18,10 @@ import {
   getBrewvaToolMetadata,
   getBrewvaToolSurface,
 } from "@brewva/brewva-tools/registry";
+import { coerceContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
+import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
+import { classifyToolFailure } from "@brewva/brewva-vocabulary/iteration";
+import type { EffectCommitmentDiffPreview } from "@brewva/brewva-vocabulary/iteration";
 import {
   sanitizeRuntimeContextInput,
   startRuntimeToolInvocation,

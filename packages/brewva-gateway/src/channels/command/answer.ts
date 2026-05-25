@@ -1,4 +1,4 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import {
   buildOperatorQuestionAnswerPrompt,
   buildOperatorQuestionAnsweredPayload,

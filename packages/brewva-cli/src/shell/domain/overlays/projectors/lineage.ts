@@ -1,4 +1,4 @@
-import type { ForkPoint, SessionLineageTree } from "@brewva/brewva-runtime/protocol";
+import type { ForkPoint, SessionLineageTree } from "@brewva/brewva-vocabulary/session";
 import type { CliLineageOverlayPayload } from "../payloads.js";
 
 export function buildLineageOverlayPayload(input: {

@@ -3,12 +3,6 @@ import type {
   ProviderRequestFingerprint,
 } from "@brewva/brewva-provider-core/contracts";
 import type {
-  ExpectedProviderCacheBreak,
-  ProviderCacheRenderState,
-  SessionCompactionGenerationMetadata,
-} from "@brewva/brewva-runtime/protocol";
-import type { SessionLifecycleSnapshot, SessionWireFrame } from "@brewva/brewva-runtime/protocol";
-import type {
   BrewvaAgentProtocolThinkingBudgets,
   BrewvaAgentProtocolThinkingLevel,
   BrewvaAgentProtocolTransport,
@@ -36,6 +30,13 @@ import type {
   ContextState,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaCompactionRequest, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import type {
+  ExpectedProviderCacheBreak,
+  ProviderCacheRenderState,
+} from "@brewva/brewva-vocabulary/context";
+import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-vocabulary/session";
+import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { BrewvaCompactionSummaryGenerator } from "../../compaction/summary-generator.js";
 import type { GoogleCachedContentManager } from "../../provider/cache/index.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";

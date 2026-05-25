@@ -1,9 +1,9 @@
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
 import { createSessionIndex } from "@brewva/brewva-session-index";
 import type { BrewvaModelCatalog } from "@brewva/brewva-substrate/provider";
 import type { BrewvaModelPreset } from "@brewva/brewva-substrate/session";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
 import type { BrewvaToolOrchestration } from "@brewva/brewva-tools/contracts";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import {
   createDetachedSubagentBackgroundController,
   createDelegationModelRoutingContext,

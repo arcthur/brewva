@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
+import {
+  createBrewvaRuntime,
+  type RuntimeProviderPort,
+  type RuntimeToolExecutorPort,
+} from "@brewva/brewva-runtime";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { createHostedRuntimeAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 import {
   canResolveHostedRuntimeTurnRuntime,
@@ -14,10 +18,20 @@ import { runHostedRuntimeTurnAdapter } from "../../../packages/brewva-gateway/sr
 import { HOSTED_RUNTIME_TURN_PRELUDE } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-prelude.js";
 import { resolveHostedTurnAdapterProfile } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/state.js";
 
+const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
+  async execute() {
+    return { ok: true, content: "" };
+  },
+};
+
 describe("gateway runtime adapter", () => {
   test("hosted adapter delegates turn ownership to runtime.turn", async () => {
+    const provider: RuntimeProviderPort = {
+      async *stream() {},
+    };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-gateway-runtime-adapter-")),
+      physics: { mode: "real", provider, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
 
     const result = await runHostedRuntimeTurnAdapter({
@@ -94,7 +108,7 @@ describe("gateway runtime adapter", () => {
 
   test("hosted runtime adapter keeps canonical tape durability enabled", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-gateway-runtime-adapter-durable-"));
-    const runtime = createBrewvaRuntime({ cwd });
+    const runtime = createBrewvaRuntime({ cwd, physics: { mode: "noop" } });
     const session = {
       getRegisteredTools() {
         return [];
@@ -135,7 +149,7 @@ describe("gateway runtime adapter", () => {
     expect(existsSync(join(cwd, ".brewva/tape/durable-adapter-session.jsonl"))).toBe(true);
   });
 
-  test("hosted turn runtime binds session execution ports onto the adapter runtime tape", async () => {
+  test("hosted turn runtime creates explicit physics on the adapter runtime tape", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-gateway-runtime-shared-tape-"));
     const adapter = createHostedRuntimeAdapter({ cwd });
     const session = {

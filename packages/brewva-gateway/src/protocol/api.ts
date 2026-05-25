@@ -15,6 +15,8 @@ export {
   validateResponseFrame,
   validateSessionWireFramePayload,
 } from "./validate.js";
+export { buildTurnEnvelope } from "./turn-envelope.js";
+export type { BuildTurnEnvelopeInput } from "./turn-envelope.js";
 export type {
   ConnectParams,
   EventFrame,

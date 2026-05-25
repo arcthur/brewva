@@ -33,10 +33,10 @@
     }
   },
   "dependencies": {
-    "@brewva/brewva-runtime": "workspace:*",
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-session-index": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
+    "@brewva/brewva-vocabulary": "workspace:*",
     "fuse.js": "^7.3.0"
   },
   "engines": {

@@ -20,6 +20,7 @@ stable docs already carry the accepted contract, convert the note to
 - [`model-operated-working-memory-evaluation.md`](./model-operated-working-memory-evaluation.md)
 - [`prefix-stable-context-management-and-progressive-compaction.md`](./prefix-stable-context-management-and-progressive-compaction.md)
 - [`recovery-first-context-governance-and-history-view-baselines.md`](./recovery-first-context-governance-and-history-view-baselines.md)
+- [`runtime-axis-decoupling-and-vocabulary-boundary.md`](./runtime-axis-decoupling-and-vocabulary-boundary.md)
 
 ## Operator And Control Surfaces
 

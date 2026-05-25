@@ -61,6 +61,7 @@
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
+    "@brewva/brewva-vocabulary": "workspace:*",
     "@opentui/core": "0.2.14",
     "@opentui/keymap": "0.2.14",
     "@opentui/solid": "0.2.14",

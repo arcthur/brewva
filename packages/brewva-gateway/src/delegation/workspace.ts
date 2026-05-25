@@ -4,13 +4,13 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import type { PatchFileAction, PatchSet } from "@brewva/brewva-runtime/protocol";
+import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
+import type { PatchFileAction, PatchSet } from "@brewva/brewva-vocabulary/workbench";
 import {
-  PATCH_HISTORY_FILE,
   collectPersistedPatchPaths,
   listPersistedPatchSets,
-} from "@brewva/brewva-runtime/protocol";
-import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
+  PATCH_HISTORY_FILE,
+} from "@brewva/brewva-vocabulary/workbench";
 import { resolveDelegationContextBundleManifestPath } from "./context-manifest.js";
 
 const IGNORED_ROOT_SEGMENTS = new Set([".git", "node_modules", ".orchestrator"]);

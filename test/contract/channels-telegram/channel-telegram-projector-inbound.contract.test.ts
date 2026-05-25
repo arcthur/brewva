@@ -6,7 +6,7 @@ import {
   renderTurnToTelegramRequests,
   type TelegramUpdate,
 } from "@brewva/brewva-channels-telegram";
-import { buildChannelSessionId, type TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import { buildChannelSessionId, type TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 describe("channel telegram projector inbound", () => {
   test("projects Telegram message update to user turn", () => {

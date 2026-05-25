@@ -1,12 +1,12 @@
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { TaskPhase } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { ConvergencePredicate } from "@brewva/brewva-vocabulary/iteration";
 import type {
-  ConvergencePredicate,
   ScheduleContinuityMode,
   ScheduleIntentStatus,
   ScheduleIntentUpdateInput,
-} from "@brewva/brewva-runtime/protocol";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+} from "@brewva/brewva-vocabulary/schedule";
+import type { TaskPhase } from "@brewva/brewva-vocabulary/task";
 import { Type } from "@sinclair/typebox";
 import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "../../contracts/index.js";

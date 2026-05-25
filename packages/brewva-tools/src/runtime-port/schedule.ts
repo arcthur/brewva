@@ -3,7 +3,7 @@ import type {
   ScheduleIntentCreateInput,
   ScheduleIntentListQuery,
   ScheduleIntentUpdateInput,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/schedule";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
 export function createScheduleIntent(

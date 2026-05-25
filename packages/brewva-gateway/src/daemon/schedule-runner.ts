@@ -1,10 +1,10 @@
-import { type OperationalClaim } from "@brewva/brewva-runtime/protocol";
-import type { TaskSpec } from "@brewva/brewva-runtime/protocol";
+import type { OperationalClaim } from "@brewva/brewva-vocabulary/iteration";
 import type {
   ScheduleContinuityMode,
   ScheduleIntentProjectionRecord,
-} from "@brewva/brewva-runtime/protocol";
-import type { ManagedToolMode } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/schedule";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
+import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import {
   getRuntimeClaimState,

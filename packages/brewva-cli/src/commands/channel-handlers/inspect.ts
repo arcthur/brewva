@@ -2,7 +2,7 @@ import type {
   ChannelInspectCommandInput,
   ChannelInspectCommandResult,
 } from "@brewva/brewva-gateway";
-import type { EffectCommitmentRequestRecord } from "@brewva/brewva-runtime/protocol";
+import type { EffectCommitmentRequestRecord } from "@brewva/brewva-vocabulary/iteration";
 import { clampText, resolveInspectDirectory } from "../../operator/inspect-analysis.js";
 import { buildSessionInspectReport } from "../../operator/inspect.js";
 import { listCliRuntimeProposalRequests } from "../../runtime/runtime-ports.js";

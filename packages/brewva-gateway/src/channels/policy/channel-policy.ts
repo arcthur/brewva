@@ -1,4 +1,4 @@
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 export const DEFAULT_TELEGRAM_CHANNEL_NAME = "telegram";
 

@@ -37,8 +37,11 @@ describe("runtime turn provider tool continuation limit", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-limit-final-answer-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     const frames = await Array.fromAsync(
@@ -84,8 +87,11 @@ describe("runtime turn provider tool continuation limit", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-limit-reject-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     try {

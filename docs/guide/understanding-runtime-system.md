@@ -49,10 +49,10 @@ Some machinery is still real, but it is not the public runtime contract:
 - raw turn-WAL mutation outside recovery scheduler ports
 - service classes, stores, trackers, and replay engines
 
-Repo-owned code may still use semantic helpers in
-`@brewva/brewva-runtime/protocol`, policy helpers in
-`@brewva/brewva-runtime/security`, and package-owned infrastructure ports
-such as `@brewva/brewva-gateway/recovery`.
+Repo-owned code may still use product vocabulary in explicit
+`@brewva/brewva-vocabulary/*` subpaths, policy helpers in
+`@brewva/brewva-runtime/security`, and package-owned infrastructure ports such
+as `@brewva/brewva-gateway/recovery`.
 These subpaths are not alternate runtime roots.
 
 Those subpaths and extension ports are controlled, allowlisted TypeScript ports.
@@ -62,7 +62,7 @@ instance state.
 
 Inside `packages/brewva-runtime`, new implementation ownership follows the
 four-port folders under `runtime/tape`, `runtime/kernel`, `runtime/model`, and
-`runtime/engine`. Existing `domain/<name>/` slices were deleted and must not be
+`runtime/turn`. Existing `domain/<name>/` slices were deleted and must not be
 used as a pattern to extend.
 
 ## Replay And Durability

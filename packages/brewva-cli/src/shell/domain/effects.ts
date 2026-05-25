@@ -1,9 +1,9 @@
-import type { DecideEffectCommitmentInput } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaPromptOptions,
   BrewvaPromptSessionEvent,
 } from "@brewva/brewva-substrate/session";
+import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
 import type { CliShellInput } from "./input.js";
 
 export type ShellEffect =

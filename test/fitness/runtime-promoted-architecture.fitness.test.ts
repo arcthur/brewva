@@ -73,8 +73,12 @@ describe("four-port runtime architecture fitness", () => {
 
   test("four-port runtime API file does not import the legacy semantic surface lattice", () => {
     const runtimeApi = readRepoFile("packages/brewva-runtime/src/runtime/runtime-api.ts");
-    const kernel = readInterfaceBlock(runtimeApi, "KernelPort");
-    const customPayload = readInterfaceBlock(runtimeApi, "CustomEventPayload");
+    const kernelPortSource = readRepoFile("packages/brewva-runtime/src/runtime/kernel/port.ts");
+    const kernel = readInterfaceBlock(kernelPortSource, "KernelPort");
+    const customPayload = readInterfaceBlock(
+      readRepoFile("packages/brewva-runtime/src/runtime/tape/events.ts"),
+      "CustomEventPayload",
+    );
 
     expect(runtimeApi).not.toMatch(
       /RuntimeOps|BrewvaRuntimeExtensions|BrewvaToolRuntimeExtensions/u,
@@ -91,7 +95,7 @@ describe("four-port runtime architecture fitness", () => {
     expect(runtimeApi).not.toMatch(/interface CanonicalEvent<|CanonicalEvent<|payload\?: unknown/u);
     expect(runtimeApi).not.toContain("content: unknown");
     expect(runtimeApi).toContain('CanonicalEventBase<"tool.committed", ToolCommittedPayload>');
-    expect(runtimeApi).toContain(
+    expect(kernelPortSource).toContain(
       "export type ToolExecutionResultContent = string | readonly PromptContentPart[] | JsonValue;",
     );
   });
@@ -151,7 +155,7 @@ describe("four-port runtime architecture fitness", () => {
     expect(configTypes).not.toContain("events: {\n      enabled: boolean;\n      dir: string;");
     expect(normalizeInfrastructure).not.toContain("infrastructureEventsInput.dir");
     expect(runtime).toContain("tapeDir: configState.config.tape.dir");
-    expect(runtime).toContain("enabled: configState.config.tape.enabled");
+    expect(runtime).toContain("runtimePhysicsUsesDurableTape(physics)");
     expect(runtime).not.toContain("tapeDir: controller.config.infrastructure.events.dir");
     expect(runtime).not.toContain("enabled: controller.config.infrastructure.events.enabled");
   });
@@ -277,7 +281,7 @@ describe("four-port runtime architecture fitness", () => {
       exports?: Record<string, unknown>;
     };
     const exportKeys = Object.keys(packageJson.exports ?? {});
-    expect(exportKeys).toContain("./protocol");
+    expect(exportKeys).not.toContain("./protocol");
     expect(exportKeys).not.toContain("./governance");
     expect(exportKeys).not.toContain("./context");
     expect(exportKeys).not.toContain("./recovery");
@@ -293,7 +297,7 @@ describe("four-port runtime architecture fitness", () => {
 
     const offenders = collectSourceFiles("packages")
       .filter((file) =>
-        /@brewva\/brewva-runtime\/(?:events|compat\/|legacy-runtime|internal\/events|internal\/contracts|internal\/governance)(?:["'])/u.test(
+        /@brewva\/brewva-runtime\/(?:protocol|events|compat\/|legacy-runtime|internal\/events|internal\/contracts|internal\/governance)(?:["'])/u.test(
           readFileSync(file, "utf8"),
         ),
       )
@@ -303,19 +307,16 @@ describe("four-port runtime architecture fitness", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("runtime protocol module does not restore the retired contracts kitchen sink", () => {
+  test("runtime protocol module remains deleted instead of restoring a contracts kitchen sink", () => {
     const packageJson = JSON.parse(readRepoFile("packages/brewva-runtime/package.json")) as {
       exports?: Record<string, unknown>;
     };
-    const protocol = readRepoFile("packages/brewva-runtime/src/protocol.ts");
-    const foundation = readRepoFile("packages/brewva-runtime/src/protocol/types/foundation.ts");
 
+    expect(Object.keys(packageJson.exports ?? {})).not.toContain("./protocol");
     expect(Object.keys(packageJson.exports ?? {})).not.toContain("./contracts");
-    expect(protocol).not.toContain("LooseRecord");
-    expect(protocol).not.toContain("LegacyUncheckedRecord");
-    expect(foundation).not.toContain("LegacyUncheckedRecord");
-    expect(foundation).not.toContain("Record<string, any>");
-    expect(foundation).not.toContain("[key: string]: any");
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol.ts"))).toBe(false);
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol"))).toBe(false);
+    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/protocol/types"))).toBe(false);
   });
 
   test("four-port runtime path does not import read-model implementation modules", () => {
@@ -323,10 +324,10 @@ describe("four-port runtime architecture fitness", () => {
       "packages/brewva-runtime/src/public/index.ts",
       "packages/brewva-runtime/src/runtime/runtime.ts",
       "packages/brewva-runtime/src/runtime/runtime-api.ts",
-      "packages/brewva-runtime/src/runtime/tape/memory-tape.ts",
-      "packages/brewva-runtime/src/runtime/kernel/kernel.ts",
-      "packages/brewva-runtime/src/runtime/model/model.ts",
-      "packages/brewva-runtime/src/runtime/engine/turn.ts",
+      "packages/brewva-runtime/src/runtime/tape/impl.ts",
+      "packages/brewva-runtime/src/runtime/kernel/impl.ts",
+      "packages/brewva-runtime/src/runtime/model/impl.ts",
+      "packages/brewva-runtime/src/runtime/turn/impl.ts",
     ];
     const offenders = fourPortFiles.filter((file) => /read-models\//u.test(readRepoFile(file)));
 
@@ -334,10 +335,13 @@ describe("four-port runtime architecture fitness", () => {
   });
 
   test("four-port kernel owns action policy admission before tool execution", () => {
-    const kernel = readRepoFile("packages/brewva-runtime/src/runtime/kernel/kernel.ts");
-    const turnRunner = readRepoFile("packages/brewva-runtime/src/runtime/engine/turn.ts");
+    const kernel = readRepoFile("packages/brewva-runtime/src/runtime/kernel/impl.ts");
+    const turnRunner = readRepoFile("packages/brewva-runtime/src/runtime/turn/impl.ts");
     const hostedExecutionPorts = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts",
+    );
+    const hostedAuthority = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-authority.ts",
     );
     const hostedRuntimeTurn = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/runtime-turn-runtime.ts",
@@ -351,12 +355,10 @@ describe("four-port runtime architecture fitness", () => {
     expect(turnRunner).toContain("input.kernel.beginToolCall");
     expect(turnRunner).not.toMatch(/resolveToolAuthority|createActionPolicyRegistry/u);
     expect(hostedExecutionPorts).toContain("createHostedRuntimeToolAuthorityResolver");
-    expect(hostedExecutionPorts).toContain("getBrewvaToolMetadata");
-    expect(hostedExecutionPorts).toContain('base.source === "exact"');
+    expect(hostedAuthority).toContain("getBrewvaToolMetadata");
+    expect(hostedAuthority).toContain('base.source === "exact"');
     expect(hostedRuntimeTurn).toContain("resolveToolAuthority");
-    expect(hostedRuntimeTurn).toContain(
-      "bindTurnPorts?.({ provider, toolExecutor, resolveToolAuthority })",
-    );
+    expect(hostedRuntimeTurn).toContain("createRuntime?.({ physics })");
   });
 
   test("kernel policy primitives live in the four-port kernel, not legacy governance", () => {
@@ -454,13 +456,13 @@ describe("four-port runtime architecture fitness", () => {
     expect(offenders).toEqual([]);
   });
 
-  test("new runtime implementation lives under tape kernel model and engine", () => {
+  test("new runtime implementation lives under tape kernel model and turn", () => {
     const runtimeFiles = collectSourceFiles("packages/brewva-runtime/src/runtime");
     const required = [
-      "packages/brewva-runtime/src/runtime/tape/memory-tape.ts",
-      "packages/brewva-runtime/src/runtime/kernel/kernel.ts",
-      "packages/brewva-runtime/src/runtime/model/model.ts",
-      "packages/brewva-runtime/src/runtime/engine/turn.ts",
+      "packages/brewva-runtime/src/runtime/tape/impl.ts",
+      "packages/brewva-runtime/src/runtime/kernel/impl.ts",
+      "packages/brewva-runtime/src/runtime/model/impl.ts",
+      "packages/brewva-runtime/src/runtime/turn/impl.ts",
     ];
 
     for (const file of required) {
@@ -468,6 +470,7 @@ describe("four-port runtime architecture fitness", () => {
     }
 
     const removedLegacyRuntimeDirectories = [
+      "packages/brewva-runtime/src/runtime/engine",
       "packages/brewva-runtime/src/runtime/engine/lifecycle",
       "packages/brewva-runtime/src/runtime/engine/parallel",
       "packages/brewva-runtime/src/runtime/engine/recovery",
@@ -572,9 +575,16 @@ describe("four-port runtime architecture fitness", () => {
       "service.ts",
       "types.ts",
     ]);
+    const allowedPortEventFiles = new Set([
+      "packages/brewva-runtime/src/runtime/kernel/events.ts",
+      "packages/brewva-runtime/src/runtime/model/events.ts",
+      "packages/brewva-runtime/src/runtime/tape/events.ts",
+      "packages/brewva-runtime/src/runtime/turn/events.ts",
+    ]);
     const offenders = rehomedRoots
       .flatMap((root) => collectSourceFiles(root))
       .filter((file) => forbiddenBaseNames.has(file.split("/").at(-1) ?? ""))
+      .filter((file) => !allowedPortEventFiles.has(repoPath(file)))
       .map(repoPath)
       .toSorted();
 
@@ -663,11 +673,17 @@ describe("four-port runtime architecture fitness", () => {
     const runtimeOps = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/runtime-ops.ts",
     );
+    const skillsOps = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/skills.ts",
+    );
+    const toolsOps = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/tools.ts",
+    );
 
     expect(offenders).toEqual([]);
-    expect(runtimeOps).toContain('"skill.selection.recorded"');
-    expect(runtimeOps).toContain('"tool.capability.selected"');
-    expect(runtimeOps).toContain('"tool.surface.resolved"');
+    expect(skillsOps).toContain('"skill.selection.recorded"');
+    expect(toolsOps).toContain('"tool.capability.selected"');
+    expect(toolsOps).toContain('"tool.surface.resolved"');
     expect(runtimeOps).not.toContain("events.readModels.record");
     expect(runtimeOps).not.toContain("ops.events.records.record");
   });

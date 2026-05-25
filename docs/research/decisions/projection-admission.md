@@ -11,7 +11,7 @@
   - `skills/project/shared/package-boundaries.md`
 - Code anchors:
   - `packages/brewva-runtime/src/read-models/projection/`
-  - `packages/brewva-runtime/src/protocol/evidence/api.ts`
+  - `packages/brewva-vocabulary/src/iteration.ts`
   - `test/fitness/runtime-projection-admission.fitness.test.ts`
 
 ## Decision Summary
@@ -20,7 +20,7 @@
 - New projection files or subdirectories must update the runtime projection admission quality test.
 - Projection code and its relative TypeScript dependency closure must not import gateway hosted internals, provider packages, tool families, or runtime root/operator port contracts.
 - Workflow artifact, status, and workspace revision derivation stay deterministic and replay-derived.
-- `packages/brewva-runtime/src/protocol/evidence/` remains a curated evidence vocabulary owner, not a generic internal helper drawer.
+- Product evidence vocabulary moved out of runtime into curated `@brewva/brewva-vocabulary/*` subpaths.
 
 ## Superseded by
 

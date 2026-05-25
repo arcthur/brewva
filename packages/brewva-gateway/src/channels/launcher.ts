@@ -1,8 +1,8 @@
 import {
-  normalizeChannelId,
   type ChannelTurnBridge,
+  normalizeChannelId,
   type TurnEnvelope,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import type { TelegramChannelModeConfig } from "./bridges/telegram/webhook-config.js";
 

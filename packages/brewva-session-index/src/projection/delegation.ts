@@ -1,4 +1,4 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import { chunkArray } from "@brewva/brewva-std/collections";
 import {
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
@@ -8,9 +8,9 @@ import {
   SUBAGENT_RUNNING_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import { deriveParallelBudgetStateFromEvents } from "@brewva/brewva-runtime/protocol";
-import { chunkArray } from "@brewva/brewva-std/collections";
+} from "@brewva/brewva-vocabulary/delegation";
+import { deriveParallelBudgetStateFromEvents } from "@brewva/brewva-vocabulary/delegation";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type {
   SessionIndexDelegationProjection,
   SessionIndexDelegationRun,

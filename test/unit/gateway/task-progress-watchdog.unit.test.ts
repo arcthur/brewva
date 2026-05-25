@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import type { BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
+import type { HostedRuntimeAdapterOptions as BrewvaRuntimeOptions } from "@brewva/brewva-gateway/hosted";
 import {
   TASK_STALL_ADJUDICATED_EVENT_TYPE,
   TASK_STALL_ADJUDICATION_SCHEMA,
   TASK_STUCK_DETECTED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/task";
 import {
   TASK_PROGRESS_WATCHDOG_TEST_ONLY,
   TaskProgressWatchdog,

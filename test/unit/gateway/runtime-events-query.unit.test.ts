@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import type { RuntimeProviderPort, RuntimeToolExecutorPort } from "@brewva/brewva-runtime";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/protocol";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -183,8 +183,11 @@ describe("hosted runtime event query", () => {
     };
     const runtime = createRuntimeInstanceFixture({
       cwd: createTestWorkspace("runtime-events-query-session-wire"),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
     const sessionId = "session-wire-runtime-turn";
 
@@ -227,5 +230,26 @@ describe("hosted runtime event query", () => {
         },
       ],
     });
+  });
+
+  test("emits live session wire frames to active subscribers", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("runtime-events-query-session-wire-subscribe"),
+    });
+    const frames: unknown[] = [];
+    const unsubscribe = runtime.ops.sessionWire.subscribe("session-wire-live", (frame) => {
+      frames.push(frame);
+    });
+
+    runtime.ops.session.lifecycle.shutdown("session-wire-live", { reason: "test_shutdown" });
+
+    expect(frames).toMatchObject([
+      {
+        type: "session.closed",
+        sessionId: "session-wire-live",
+        reason: "test_shutdown",
+      },
+    ]);
+    expect(unsubscribe()).toBe(true);
   });
 });

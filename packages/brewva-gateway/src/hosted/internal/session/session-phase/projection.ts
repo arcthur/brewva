@@ -1,6 +1,6 @@
-import type { SessionLifecycleSnapshot } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { SessionPhase, SessionPhaseEvent } from "@brewva/brewva-substrate/session";
+import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { RuntimeFactSessionPhaseProjection } from "./runtime-facts.js";
 
 export function inferRecoveryCrashPoint(

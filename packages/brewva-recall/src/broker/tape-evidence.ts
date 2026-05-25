@@ -1,5 +1,5 @@
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
 import type { SessionIndexDigest, SessionIndexTapeEvidence } from "@brewva/brewva-session-index";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type { RecallSessionDigest } from "../types.js";
 import { compactText } from "./text.js";
 

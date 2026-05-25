@@ -6,12 +6,25 @@ import {
   CANONICAL_EVENT_TYPES,
   createBrewvaRuntime,
   DEFAULT_BREWVA_CONFIG,
+  type RuntimeProviderPort,
+  type RuntimeToolExecutorPort,
 } from "@brewva/brewva-runtime";
+
+const SILENT_PROVIDER: RuntimeProviderPort = {
+  async *stream() {},
+};
+
+const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
+  async execute() {
+    return { ok: true, content: "" };
+  },
+};
 
 describe("canonical tape", () => {
   test("records and projects canonical events without exposing a public append bus", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-canonical-tape-")),
+      physics: { mode: "noop" },
     });
 
     const decision = await runtime.kernel.beginToolCall({
@@ -58,7 +71,7 @@ describe("canonical tape", () => {
       })}\n`,
     );
 
-    const runtime = createBrewvaRuntime({ cwd, config });
+    const runtime = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
 
     try {
       await runtime.start();
@@ -87,7 +100,7 @@ describe("canonical tape", () => {
       })}\n`,
     );
 
-    const runtime = createBrewvaRuntime({ cwd, config });
+    const runtime = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
 
     try {
       await runtime.start();
@@ -122,7 +135,7 @@ describe("canonical tape", () => {
       })}\n`,
     );
 
-    const runtime = createBrewvaRuntime({ cwd, config });
+    const runtime = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
 
     try {
       await runtime.start();
@@ -151,7 +164,11 @@ describe("canonical tape", () => {
       })}\n`,
     );
 
-    const writer = createBrewvaRuntime({ cwd, config });
+    const writer = createBrewvaRuntime({
+      cwd,
+      config,
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
+    });
     for await (const _frame of writer.turn({ sessionId: "canonical-session", prompt: "hello" })) {
       // Drain the runtime-owned turn stream.
     }
@@ -159,7 +176,7 @@ describe("canonical tape", () => {
     expect(existsSync(join(cwd, ".brewva/canonical-tape/canonical-session.jsonl"))).toBe(true);
     expect(existsSync(join(cwd, ".legacy/events/canonical-session.jsonl"))).toBe(false);
 
-    const reader = createBrewvaRuntime({ cwd, config });
+    const reader = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
     expect(await reader.start()).toEqual({ recoveredSessions: ["canonical-session"] });
   });
 
@@ -170,13 +187,17 @@ describe("canonical tape", () => {
     config.tape.enabled = true;
     config.tape.dir = ".brewva/canonical-tape";
 
-    const writer = createBrewvaRuntime({ cwd, config });
+    const writer = createBrewvaRuntime({
+      cwd,
+      config,
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
+    });
     for await (const _frame of writer.turn({ sessionId: "durable-session", prompt: "hello" })) {
       // Drain the runtime-owned turn stream.
     }
 
     expect(existsSync(join(cwd, ".brewva/canonical-tape/durable-session.jsonl"))).toBe(true);
-    const reader = createBrewvaRuntime({ cwd, config });
+    const reader = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
     expect(await reader.start()).toEqual({ recoveredSessions: ["durable-session"] });
   });
 
@@ -186,12 +207,16 @@ describe("canonical tape", () => {
     config.infrastructure.events.enabled = true;
     config.tape.dir = ".brewva/tape";
 
-    const writer = createBrewvaRuntime({ cwd, config });
+    const writer = createBrewvaRuntime({
+      cwd,
+      config,
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
+    });
     for await (const _frame of writer.turn({ sessionId: "durable-session", prompt: "hello" })) {
       // Drain the runtime-owned turn stream.
     }
 
-    const reader = createBrewvaRuntime({ cwd, config });
+    const reader = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
     expect(await reader.start()).toEqual({ recoveredSessions: ["durable-session"] });
     expect(reader.tape.list("durable-session").map((event) => event.type)).toEqual([
       "turn.started",
@@ -202,6 +227,7 @@ describe("canonical tape", () => {
   test("lists canonical tape events for replay-side inspection without a public search port", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-canonical-tape-list-")),
+      physics: { mode: "noop" },
     });
 
     const firstDecision = await runtime.kernel.beginToolCall({

@@ -1,28 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type {
-  SessionCompactionCacheImpact,
-  SessionCompactionCacheImpactSnapshot,
-  SessionCompactionGenerationMetadata,
-} from "@brewva/brewva-runtime/protocol";
-import {
-  CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
-  MESSAGE_END_EVENT_TYPE,
-  MODEL_PRESET_SELECT_EVENT_TYPE,
-  MODEL_SELECT_EVENT_TYPE,
-  REASONING_REVERT_EVENT_TYPE,
-  readContextEntryRecordedEventPayload,
-  readReasoningRevertEventPayload,
-  readSessionRewindCompletedEventPayload,
-  SESSION_REWIND_COMPLETED_EVENT_TYPE,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-runtime/protocol";
-import {
-  SESSION_REWIND_DIVERGENCE_SCHEMA,
-  isLlmVisibleContextEntry,
-  type ContextEntryRecord,
-  type SessionLifecycleSnapshot,
-  type SessionWireFrame,
-} from "@brewva/brewva-runtime/protocol";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import {
@@ -40,6 +16,36 @@ import {
   type BrewvaThinkingLevelChangeEntry,
   type ContextState,
 } from "@brewva/brewva-substrate/session";
+import {
+  CONTEXT_ENTRY_RECORDED_EVENT_TYPE,
+  readContextEntryRecordedEventPayload,
+} from "@brewva/brewva-vocabulary/context";
+import {
+  type ContextEntryRecord,
+  isLlmVisibleContextEntry,
+} from "@brewva/brewva-vocabulary/context";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import {
+  MODEL_PRESET_SELECT_EVENT_TYPE,
+  MODEL_SELECT_EVENT_TYPE,
+  readReasoningRevertEventPayload,
+  REASONING_REVERT_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/iteration";
+import type {
+  SessionCompactionCacheImpact,
+  SessionCompactionCacheImpactSnapshot,
+  SessionCompactionGenerationMetadata,
+} from "@brewva/brewva-vocabulary/session";
+import {
+  MESSAGE_END_EVENT_TYPE,
+  readSessionRewindCompletedEventPayload,
+  SESSION_REWIND_COMPLETED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/session";
+import {
+  SESSION_REWIND_DIVERGENCE_SCHEMA,
+  type SessionLifecycleSnapshot,
+} from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   THINKING_LEVEL_SELECTED_EVENT_TYPE,

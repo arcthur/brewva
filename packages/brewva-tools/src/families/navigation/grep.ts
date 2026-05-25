@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
 import {
   formatSourceAnchor,

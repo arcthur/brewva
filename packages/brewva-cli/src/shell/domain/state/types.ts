@@ -1,5 +1,5 @@
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import type { TuiTheme } from "../../../internal/tui/index.js";
 import type { OverlayEntry } from "../../../internal/tui/index.js";
 import type { ShellCompletionCandidate, ShellCompletionRange } from "../completion-provider.js";

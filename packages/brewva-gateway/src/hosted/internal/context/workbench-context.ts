@@ -1,11 +1,11 @@
-import type {
-  ContextBudgetUsage,
-  ContextCompactionGateStatus,
-} from "@brewva/brewva-runtime/protocol";
-import type { DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import type {
+  ContextBudgetUsage,
+  ContextCompactionGateStatus,
+} from "@brewva/brewva-vocabulary/context";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import {
   buildContextBundle,
   renderContextBundle,

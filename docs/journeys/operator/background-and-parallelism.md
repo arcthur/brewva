@@ -188,7 +188,7 @@ Operator expectations:
 - Background protocol: `packages/brewva-gateway/src/delegation/background/protocol.ts`
 - Context bundle: `packages/brewva-gateway/src/context/context-bundle.ts`
 - Workspace isolation: `packages/brewva-gateway/src/delegation/workspace.ts`
-- Runtime parallel state: `packages/brewva-runtime/src/runtime/engine/turn.ts`
+- Runtime parallel state: `packages/brewva-runtime/src/runtime/turn/impl.ts`
 - Session-index read models: `packages/brewva-session-index/src/projection/delegation.ts`
 - Delegation store: `packages/brewva-gateway/src/delegation/delegation-store.ts`
 - Run / fan-out tools: `packages/brewva-tools/src/families/delegation/subagent-run/api.ts`

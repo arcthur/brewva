@@ -3,7 +3,7 @@ import {
   RECOVERY_WAL_COMPACTED_EVENT_TYPE,
   RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
   RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 
 export interface ChannelRecoveryWalEvent {

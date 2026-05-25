@@ -39,7 +39,7 @@ This note does not reopen:
 
 - Runtime core wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Event stream hook: `packages/brewva-gateway/src/hosted/internal/context/evidence/event-stream.ts`
-- Event record read model: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- Event record read model: `packages/brewva-runtime/src/runtime/tape/impl.ts`
 
 ## Validation Signals
 

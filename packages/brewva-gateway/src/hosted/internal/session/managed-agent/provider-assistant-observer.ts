@@ -1,10 +1,10 @@
 import type { ProviderRequestFingerprint } from "@brewva/brewva-provider-core/contracts";
+import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type {
   ExpectedProviderCacheBreak,
   ProviderCacheBreakObservation,
   ProviderCacheRenderState,
-} from "@brewva/brewva-runtime/protocol";
-import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
+} from "@brewva/brewva-vocabulary/context";
 import { observeHostedProviderCache } from "../../context/materialization.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import {

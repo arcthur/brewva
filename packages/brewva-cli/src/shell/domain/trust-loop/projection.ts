@@ -1,16 +1,16 @@
-import { getToolActionPolicy } from "@brewva/brewva-runtime/protocol";
-import type {
-  PendingEffectCommitmentRequest,
-  ToolActionClass,
-  ToolActionPolicy,
-  ToolAdmissionBehavior,
-  ToolEffectClass,
-  ToolReceiptPolicy,
-  ToolRecoveryPolicy,
-  ToolRiskLevel,
-} from "@brewva/brewva-runtime/protocol";
+import {
+  getToolActionPolicy,
+  type ToolActionClass,
+  type ToolActionPolicy,
+  type ToolAdmissionBehavior,
+  type ToolEffectClass,
+  type ToolReceiptPolicy,
+  type ToolRecoveryPolicy,
+  type ToolRiskLevel,
+} from "@brewva/brewva-runtime/security";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import { TOOL_EXECUTION_PHASES, type ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
+import type { PendingEffectCommitmentRequest } from "@brewva/brewva-vocabulary/iteration";
 
 export type TrustLoopPhase = "inspect" | "authorize" | "commit" | "record" | "recover";
 export type TrustLoopTone = "neutral" | "info" | "warning" | "success" | "error";

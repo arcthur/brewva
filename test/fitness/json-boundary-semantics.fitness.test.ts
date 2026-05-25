@@ -10,7 +10,7 @@ function readRepoFile(relativePath: string): string {
 
 describe("json boundary semantics", () => {
   test("runtime replay and codex continuation do not use JSON pseudo-deep-clone", () => {
-    const tape = readRepoFile("packages/brewva-runtime/src/runtime/tape/memory-tape.ts");
+    const tape = readRepoFile("packages/brewva-runtime/src/runtime/tape/impl.ts");
     const providerCodex = readRepoFile(
       "packages/brewva-provider-core/src/providers/openai-codex-responses/websocket.ts",
     );

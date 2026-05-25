@@ -12,11 +12,11 @@ import {
   getOrCreateRecallBroker,
   isRecallSessionIndexUnavailable,
 } from "@brewva/brewva-recall/broker";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+} from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

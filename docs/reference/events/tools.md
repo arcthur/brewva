@@ -74,8 +74,8 @@ target roots. Browser outputs remain workspace-root scoped.
 
 ## Implementation Anchors
 
-- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
-- `packages/brewva-runtime/src/runtime/kernel/kernel.ts`
+- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- `packages/brewva-runtime/src/runtime/kernel/impl.ts`
+- `packages/brewva-runtime/src/runtime/kernel/impl.ts`

@@ -1,6 +1,6 @@
-import { CHANNEL_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import { CHANNEL_SESSION_BOUND_EVENT_TYPE } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
 import {
   listRuntimeEventSessionIds,

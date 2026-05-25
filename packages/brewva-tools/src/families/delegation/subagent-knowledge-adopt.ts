@@ -1,5 +1,5 @@
-import { SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import { SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/delegation";
 import { Type, type Static } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

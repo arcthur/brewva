@@ -5,12 +5,6 @@
     "decision": "keep",
     "allowedConsumers": ["workspace"]
   },
-  "./protocol": {
-    "owner": "runtime product wire/data protocols",
-    "stability": "experimental",
-    "decision": "keep",
-    "allowedConsumers": ["workspace"]
-  },
   "./schema/brewva.schema.json": {
     "owner": "runtime config schema artifact",
     "stability": "stable",

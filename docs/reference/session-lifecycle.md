@@ -114,12 +114,12 @@ Multiple model-to-tool iterations inside that accepted turn stay inside the same
 runtime turn; each tool call still has its own single-tool-call Kernel
 transaction.
 
-| Concept                            | Granularity               | Durability                     | Primary reader                   |
-| ---------------------------------- | ------------------------- | ------------------------------ | -------------------------------- |
-| runtime turn projection            | per runtime turn          | canonical tape projection      | runtime and gateway adapters     |
-| `SessionLifecycleSnapshot.summary` | per session               | rebuildable runtime projection | host and gateway adapters        |
-| host `SessionPhase`                | per UI/controller session | process-local controller state | host UI and interaction controls |
-| canonical recovery cause           | per runtime turn          | canonical tape projection      | runtime engine and replay tools  |
+| Concept                            | Granularity               | Durability                     | Primary reader                               |
+| ---------------------------------- | ------------------------- | ------------------------------ | -------------------------------------------- |
+| runtime turn projection            | per runtime turn          | canonical tape projection      | runtime and gateway adapters                 |
+| `SessionLifecycleSnapshot.summary` | per session               | rebuildable runtime projection | host and gateway adapters                    |
+| host `SessionPhase`                | per UI/controller session | process-local controller state | host UI and interaction controls             |
+| canonical recovery cause           | per runtime turn          | canonical tape projection      | runtime turn implementation and replay tools |
 
 Stable turn gates:
 
@@ -385,7 +385,7 @@ permanent degradation.
   not a replacement for receipt-backed history rewrite authority.
 - Reasoning rewind is no longer a gateway-owned recovery branch. It is
   expressed as explicit model/kernel state and projected from tape-visible
-  receipts. The default turn engine recognizes only approval suspension,
+  receipts. The default turn implementation recognizes only approval suspension,
   compaction pressure, zero-frame provider retry, interrupt, and terminal
   commit.
 - Channel approval helper state is not part of recovery correctness.

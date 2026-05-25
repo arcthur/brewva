@@ -1,6 +1,6 @@
-import { coerceContextBudgetUsage } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import { coerceContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
 import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import {

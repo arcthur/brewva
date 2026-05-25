@@ -1,11 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
-import {
-  OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
-  SUBAGENT_COMPLETED_EVENT_TYPE,
-  readDelegationLifecycleEventPayload,
-} from "@brewva/brewva-runtime/protocol";
 import { safeParseJson } from "@brewva/brewva-std/json";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { hasOwn, isRecord } from "@brewva/brewva-std/unknown";
@@ -14,6 +8,12 @@ import {
   type BrewvaQuestionAnswerSpec,
 } from "@brewva/brewva-substrate/host-api";
 import type { SubagentOutcome } from "@brewva/brewva-tools/contracts";
+import {
+  readDelegationLifecycleEventPayload,
+  SUBAGENT_COMPLETED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/delegation";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
 import { queryRuntimeEvents } from "../../hosted/api.js";
 

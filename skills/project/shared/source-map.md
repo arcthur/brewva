@@ -11,10 +11,10 @@ retirement_sensitivity: auto_decay_allowed
 
 - Runtime API and contracts: `packages/brewva-runtime/src/runtime/runtime.ts`, `packages/brewva-runtime/src/public/index.ts`
 - Runtime subpath ownership registry: `skills/project/shared/runtime-subpaths.json`, enforced by `test/fitness/runtime-subpath-registry.fitness.test.ts`
-- Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/security/mode.ts`, `packages/brewva-runtime/src/runtime/runtime-config-state.ts`
-- Runtime tape and durability: `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`, `packages/brewva-runtime/src/runtime/runtime-api.ts`
-- Runtime model attention: `packages/brewva-runtime/src/runtime/model/model.ts`
-- Runtime authorization and tool commitments: `packages/brewva-runtime/src/runtime/kernel/kernel.ts`, `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`, `packages/brewva-runtime/src/runtime/kernel/policy/tool-decision.ts`
+- Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/security/mode.ts`, `packages/brewva-runtime/src/runtime/config/state.ts`
+- Runtime tape and durability: `packages/brewva-runtime/src/runtime/tape/impl.ts`, `packages/brewva-runtime/src/runtime/runtime-api.ts`
+- Runtime model attention: `packages/brewva-runtime/src/runtime/model/impl.ts`
+- Runtime authorization and tool commitments: `packages/brewva-runtime/src/runtime/kernel/impl.ts`, `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`, `packages/brewva-runtime/src/runtime/kernel/policy/tool-decision.ts`
 
 ## Recall and Session Query Plane
 
@@ -33,7 +33,7 @@ retirement_sensitivity: auto_decay_allowed
 
 - Managed-tool capability boundaries: `packages/brewva-tools/src/registry/capability-scope.ts`, `packages/brewva-tools/src/registry/managed-metadata.ts`, `packages/brewva-tools/src/registry/runtime-bound-tool.ts`
 - Tools package entrypoints: `packages/brewva-tools/src/index.ts`, `packages/brewva-tools/src/contracts/index.ts`, `packages/brewva-tools/src/registry/index.ts`, `packages/brewva-tools/src/runtime-port/index.ts`, `packages/brewva-tools/src/families/navigation/api.ts`, `packages/brewva-tools/src/families/execution/api.ts`, `packages/brewva-tools/src/families/memory/api.ts`, `packages/brewva-tools/src/families/delegation/api.ts`, `packages/brewva-tools/src/families/workflow/api.ts`
-- Source patch and real LSP: `packages/brewva-tools/src/families/navigation/source-patch.ts`, `packages/brewva-tools/src/internal/source-patch-gate.ts`, `packages/brewva-tools/src/families/navigation/lsp.ts`, `packages/brewva-tools/src/families/navigation/lsp-server/client.ts`, `packages/brewva-tools/src/families/navigation/lsp-server/manager.ts`, `packages/brewva-runtime/src/protocol/types/source-patch.ts`
+- Source patch and real LSP: `packages/brewva-tools/src/families/navigation/source-patch.ts`, `packages/brewva-tools/src/internal/source-patch-gate.ts`, `packages/brewva-tools/src/families/navigation/lsp.ts`, `packages/brewva-tools/src/families/navigation/lsp-server/client.ts`, `packages/brewva-tools/src/families/navigation/lsp-server/manager.ts`, `@brewva/brewva-vocabulary/workbench`
 - Resource URI routing: `packages/brewva-substrate/src/resources/resource-loader.ts`, `packages/brewva-substrate/src/resources/resource-router.ts`, `packages/brewva-substrate/src/resources/resource-types.ts`
 - Source intelligence: `packages/brewva-tools/src/families/navigation/source-intelligence/engine.ts`, `packages/brewva-tools/src/families/navigation/source-intelligence/ir.ts`, `packages/brewva-tools/src/families/navigation/source-intelligence/tools.ts`, `packages/brewva-tools/src/families/navigation/source-intelligence/adapters`, `packages/brewva-tools/src/families/navigation/source-intelligence/graph`, `packages/brewva-tools/src/families/navigation/source-intelligence/grammars/manifest.json`
 - Internal BoxLite execution plane: `packages/brewva-tools/src/internal/box/index.ts`, `packages/brewva-tools/src/internal/box/boxlite/plane.ts`, `packages/brewva-tools/src/families/execution/box-plane-runtime.ts`

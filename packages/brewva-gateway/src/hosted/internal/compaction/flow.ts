@@ -1,6 +1,6 @@
-import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaAgentProtocolToolResultMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaCompactionRequest } from "@brewva/brewva-substrate/tools";
+import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-vocabulary/session";
 import type {
   BrewvaCompactionSummaryGenerationResult,
   BrewvaCompactionSummaryStrategy,

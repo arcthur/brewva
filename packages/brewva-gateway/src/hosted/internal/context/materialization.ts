@@ -2,7 +2,7 @@ import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
   ProviderCacheObservationInput,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/context";
 import type { ContextBundle } from "../../../context/api.js";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
 import {

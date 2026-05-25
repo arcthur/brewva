@@ -1,11 +1,11 @@
-import {
-  type BrewvaEventRecord,
-  parseWorkbenchEvictionSpanRef,
-  type WorkbenchEntry,
-} from "@brewva/brewva-runtime/protocol";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaSessionEntry } from "@brewva/brewva-substrate/session";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import {
+  parseWorkbenchEvictionSpanRef,
+  type WorkbenchEntry,
+} from "@brewva/brewva-vocabulary/workbench";
 
 interface WorkbenchEvictionIndex {
   refs: Set<string>;

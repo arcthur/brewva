@@ -9,7 +9,7 @@ import {
   encodeTelegramApprovalCallback,
 } from "@brewva/brewva-channels-telegram";
 import type { TelegramOutboundRequest, TelegramUpdate } from "@brewva/brewva-channels-telegram";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { assertRejectsWithMessage } from "../../helpers.js";
 
 function createMessageUpdate(

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type ChannelCapabilities,
   prepareTurnForDelivery,
   resolveTurnDeliveryPlan,
-  type ChannelCapabilities,
   type TurnEnvelope,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/wire";
 
 const BASE_TURN: TurnEnvelope = {
   schema: "brewva.turn.v1",

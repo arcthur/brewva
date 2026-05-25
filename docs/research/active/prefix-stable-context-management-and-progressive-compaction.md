@@ -619,7 +619,7 @@ stay separate:
 1. **Durable iteration facts**
 
 - `packages/brewva-runtime/src/runtime/runtime.ts`
-- payload schema in `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+- payload schema in `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - appropriate only for selected normalized numeric facts worth retaining as
   replayable evidence
 
@@ -655,7 +655,7 @@ Brewva parser.
 Recommended placement:
 
 - runtime session-local state under
-  `packages/brewva-runtime/src/runtime/tape/memory-tape.ts` only
+  `packages/brewva-runtime/src/runtime/tape/impl.ts` only
   while a compatibility read model still needs it
 - exposed through a named Tape projection or compatibility read adapter, not a
   public `authority` / `inspect` root
@@ -869,12 +869,12 @@ Provider cache counters already enter Brewva through the normal Pi event flow:
 - receives upstream assistant `message_end`
 - forwards the message into `recordAssistantUsageFromMessage(...)`
 
-1. `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+1. `packages/brewva-runtime/src/runtime/tape/impl.ts`
 
 - copies `usage.input`, `usage.output`, `usage.cacheRead`,
   `usage.cacheWrite`, and `usage.totalTokens`
 
-1. `packages/brewva-runtime/src/runtime/tape/memory-tape.ts`
+1. `packages/brewva-runtime/src/runtime/tape/impl.ts`
 
 - normalizes those values
 - keeps Brewva budget semantics explicit: tracked tokens exclude

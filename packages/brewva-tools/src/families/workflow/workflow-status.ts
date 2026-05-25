@@ -1,15 +1,13 @@
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
-import {
-  TASK_STALL_ADJUDICATED_EVENT_TYPE,
-  deriveWorkflowStatus,
-} from "@brewva/brewva-runtime/protocol";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import { deriveWorkflowStatus } from "@brewva/brewva-vocabulary/iteration";
 import type {
   WorkflowArtifact,
   WorkflowFinishView,
   WorkflowLaneStatus,
-} from "@brewva/brewva-runtime/protocol";
-import { coerceTaskStallAdjudicatedPayload } from "@brewva/brewva-runtime/protocol";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+} from "@brewva/brewva-vocabulary/iteration";
+import { TASK_STALL_ADJUDICATED_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { coerceTaskStallAdjudicatedPayload } from "@brewva/brewva-vocabulary/task";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";

@@ -5,10 +5,20 @@ import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { RuntimeProviderPort, RuntimeToolExecutorPort } from "@brewva/brewva-runtime";
 
+const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
+  async execute() {
+    return { ok: true, content: "" };
+  },
+};
+
 describe("runtime turn loop", () => {
   test("owns the default turn lifecycle and commits canonical events", async () => {
+    const provider: RuntimeProviderPort = {
+      async *stream() {},
+    };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-")),
+      physics: { mode: "real", provider, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
 
     const frames = await Array.fromAsync(
@@ -39,7 +49,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-provider-")),
-      provider,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor: NOOP_TOOL_EXECUTOR,
+      },
     });
 
     const frames = await Array.fromAsync(
@@ -76,7 +90,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-structured-prompt-")),
-      provider,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor: NOOP_TOOL_EXECUTOR,
+      },
     });
     const prompt = [
       { type: "text" as const, text: "inspect " },
@@ -114,7 +132,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-reason-")),
-      provider,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor: NOOP_TOOL_EXECUTOR,
+      },
     });
 
     const frames = await Array.fromAsync(
@@ -206,8 +228,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-tool-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     const frames = await Array.fromAsync(
@@ -275,8 +300,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-pre-tool-text-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     await Array.fromAsync(
@@ -327,14 +355,17 @@ describe("runtime turn loop", () => {
       async execute() {
         return {
           ok: true,
-          content: "packages/brewva-runtime/src/runtime/engine/turn.ts",
+          content: "packages/brewva-runtime/src/runtime/turn/impl.ts",
         };
       },
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-post-tool-text-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     await Array.fromAsync(
@@ -358,71 +389,6 @@ describe("runtime turn loop", () => {
     ).toEqual([{ text: "Tool result is available." }, { text: "Final answer." }]);
   });
 
-  test("continues provider generation after aborted tool results", async () => {
-    let calls = 0;
-    const provider: RuntimeProviderPort = {
-      async *stream(input) {
-        calls += 1;
-        if (calls === 2) {
-          expect(input.prompt.messages).toEqual([
-            { role: "user", content: "read without executor" },
-            {
-              role: "assistant",
-              content: "",
-              toolCalls: [
-                {
-                  toolCallId: "call-no-executor",
-                  toolName: "read_file",
-                  args: { path: "README.md" },
-                },
-              ],
-            },
-            {
-              role: "tool",
-              content: "missing_tool_executor",
-              toolCallId: "call-no-executor",
-              toolName: "read_file",
-              isError: true,
-            },
-          ]);
-          yield { type: "text", delta: "tool failed cleanly" };
-          return;
-        }
-        yield {
-          type: "tool",
-          call: {
-            toolCallId: "call-no-executor",
-            toolName: "read_file",
-            args: { path: "README.md" },
-          },
-        };
-      },
-    };
-    const runtime = createBrewvaRuntime({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-aborted-tool-")),
-      provider,
-    });
-
-    await Array.fromAsync(
-      runtime.turn({
-        sessionId: "s1",
-        prompt: "read without executor",
-      }),
-    );
-
-    expect(calls).toBe(2);
-    expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
-      "turn.started",
-      "tool.proposed",
-      "tool.aborted",
-      "msg.committed",
-      "turn.ended",
-    ]);
-    expect(runtime.tape.list("s1", { type: "tool.aborted" })[0]?.payload).toMatchObject({
-      reason: "missing_tool_executor",
-    });
-  });
-
   test("suspends approval-required tool calls after recording the proposed call", async () => {
     const provider: RuntimeProviderPort = {
       async *stream() {
@@ -441,7 +407,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-approval-")),
-      provider,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor: NOOP_TOOL_EXECUTOR,
+      },
     });
 
     const frames = await Array.fromAsync(
@@ -491,8 +461,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-policy-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     const frames = await Array.fromAsync(
@@ -538,7 +511,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-provider-retry-")),
-      provider,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor: NOOP_TOOL_EXECUTOR,
+      },
     });
 
     const frames = await Array.fromAsync(
@@ -593,8 +570,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-no-retry-after-tool-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     try {
@@ -652,8 +632,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-no-retry-continuation-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     try {
@@ -710,8 +693,11 @@ describe("runtime turn loop", () => {
     };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-tool-limit-")),
-      provider,
-      toolExecutor,
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
     });
 
     try {
@@ -747,8 +733,12 @@ describe("runtime turn loop", () => {
   });
 
   test("checkpoints and retries materialization when context is over budget", async () => {
+    const provider: RuntimeProviderPort = {
+      async *stream() {},
+    };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-compaction-")),
+      physics: { mode: "real", provider, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
     await runtime.kernel.beginToolCall({
       sessionId: "s1",
@@ -788,8 +778,12 @@ describe("runtime turn loop", () => {
   });
 
   test("records interrupt suspension without committing terminal output", async () => {
+    const provider: RuntimeProviderPort = {
+      async *stream() {},
+    };
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-interrupt-")),
+      physics: { mode: "real", provider, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
     const controller = new AbortController();
     controller.abort();

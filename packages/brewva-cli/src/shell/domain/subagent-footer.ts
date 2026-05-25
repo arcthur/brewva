@@ -1,4 +1,5 @@
-import type { DelegationRunRecord, SessionWireFrame } from "@brewva/brewva-runtime/protocol";
+import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { CliShellSubagentFooterState } from "./state/types.js";
 import { selectSubagentActivityItems, type SubagentActivityItem } from "./subagent-activity.js";
 

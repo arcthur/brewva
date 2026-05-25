@@ -5,7 +5,7 @@ import type {
   PromptStabilityState,
   ProviderCacheObservationState,
   TransientReductionState,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/context";
 import {
   CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
   type ContextEvidenceArtifactRef,

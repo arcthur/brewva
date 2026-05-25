@@ -1,26 +1,28 @@
-import type { TapePressureLevel } from "@brewva/brewva-runtime/protocol";
-import { type BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
-  readTaskStallAdjudicatedEventPayload,
-  readTaskStuckDetectedEventPayload,
   readToolResultRecordedEventPayload,
   readVerificationOutcomeRecordedEventPayload,
-  TASK_STALL_ADJUDICATED_EVENT_TYPE,
-  TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
-  TASK_STUCK_DETECTED_EVENT_TYPE,
   TOOL_CALL_BLOCKED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/iteration";
+import type { TapePressureLevel } from "@brewva/brewva-vocabulary/session";
+import {
+  readTaskStallAdjudicatedEventPayload,
+  readTaskStuckDetectedEventPayload,
+  TASK_STALL_ADJUDICATED_EVENT_TYPE,
+  TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
+  TASK_STUCK_DETECTED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/task";
 import {
   buildTaskStallAdjudicatedPayload,
   toTaskWatchdogEventPayload,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/task";
 import type {
   TaskStallAdjudicatedPayload,
   TaskStallAdjudicationDecision,
   TaskStuckDetectedPayload,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/task";
 import {
   getRuntimeTapeStatus,
   getRuntimeTaskState,

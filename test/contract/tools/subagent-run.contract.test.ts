@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/protocol";
 import type { SubagentForkRequest, SubagentRunRequest } from "@brewva/brewva-tools/contracts";
 import {
   createSubagentFanoutTool,
@@ -7,6 +6,7 @@ import {
   createSubagentRunDiagnosticTool,
   createSubagentRunTool,
 } from "@brewva/brewva-tools/delegation";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
 
 function fakeContext(sessionId: string): any {
   return {

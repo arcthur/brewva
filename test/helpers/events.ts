@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-runtime/protocol";
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type { HostedRuntimeAdapterPort } from "./runtime.js";
 
 export type RuntimeEventLike = {

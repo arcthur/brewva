@@ -1,4 +1,4 @@
-import type { BrewvaEventRecord } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 
 export function recordRuntimeTapeHandoff(

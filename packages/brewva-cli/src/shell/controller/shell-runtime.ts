@@ -8,17 +8,17 @@ import {
   type BoundaryIntervalHandle,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
-import {
-  listPersistedPatchSets,
-  resolveSessionPatchHistoryPath,
-} from "@brewva/brewva-runtime/protocol";
-import type { PersistedPatchSet } from "@brewva/brewva-runtime/protocol";
 import { safeParseJson, type JsonObject } from "@brewva/brewva-std/json";
 import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptSessionEvent,
   BrewvaQueuedPromptView,
 } from "@brewva/brewva-substrate/session";
+import {
+  listPersistedPatchSets,
+  resolveSessionPatchHistoryPath,
+} from "@brewva/brewva-vocabulary/workbench";
+import type { PersistedPatchSet } from "@brewva/brewva-vocabulary/workbench";
 import { type OverlayPriority } from "../../internal/tui/index.js";
 import {
   buildSessionInspectReport,

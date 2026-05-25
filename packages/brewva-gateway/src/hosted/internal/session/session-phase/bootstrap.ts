@@ -1,5 +1,6 @@
-import type { SessionLifecycleSnapshot, SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
+import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { deriveSessionPhaseFromLifecycleSnapshot, inferRecoveryCrashPoint } from "./projection.js";
 import {
   deriveSessionPhaseFromRuntimeFactFrame,

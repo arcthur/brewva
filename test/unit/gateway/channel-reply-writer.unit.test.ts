@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { createChannelReplyWriter } from "../../../packages/brewva-gateway/src/channels/channel-reply-writer.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import type { BrewvaRuntimeOptions } from "../../helpers/runtime.js";

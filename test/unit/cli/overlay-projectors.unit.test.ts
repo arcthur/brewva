@@ -4,8 +4,8 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import type { BrewvaReplaySession } from "@brewva/brewva-runtime/protocol";
-import type { SessionLineageTree } from "@brewva/brewva-runtime/protocol";
+import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
+import type { SessionLineageTree } from "@brewva/brewva-vocabulary/session";
 import type { OperatorSurfaceSnapshot } from "../../../packages/brewva-cli/src/shell/domain/operator-snapshot.js";
 import {
   buildAuthorityOverlayPayload,

@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { asBrewvaWalId } from "@brewva/brewva-runtime/core";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 

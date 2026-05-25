@@ -1,4 +1,4 @@
-import type { ContextBudgetUsage } from "@brewva/brewva-runtime/protocol";
+import type { ContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
 export function recordTapeHandoff(

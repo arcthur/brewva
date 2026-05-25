@@ -13,15 +13,31 @@ function tempCwd(label: string): string {
   return mkdtempSync(join(tmpdir(), `${label}-`));
 }
 
+const SILENT_PROVIDER: RuntimeProviderPort = {
+  async *stream() {},
+};
+
+const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
+  async execute() {
+    return { ok: true, content: "" };
+  },
+};
+
 async function runScenario(cause: RuntimeRecoveryCause): Promise<readonly RuntimeRecoveryCause[]> {
   if (cause === "terminal_commit") {
-    const runtime = createBrewvaRuntime({ cwd: tempCwd("runtime-terminal-commit") });
+    const runtime = createBrewvaRuntime({
+      cwd: tempCwd("runtime-terminal-commit"),
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
+    });
     await Array.fromAsync(runtime.turn({ sessionId: "s1", prompt: "hello" }));
     return runtime.tape.project("s1", "recovery_history").causes;
   }
 
   if (cause === "interrupt") {
-    const runtime = createBrewvaRuntime({ cwd: tempCwd("runtime-interrupt") });
+    const runtime = createBrewvaRuntime({
+      cwd: tempCwd("runtime-interrupt"),
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
+    });
     const controller = new AbortController();
     controller.abort();
     await Array.fromAsync(
@@ -41,7 +57,14 @@ async function runScenario(cause: RuntimeRecoveryCause): Promise<readonly Runtim
         yield { type: "text", delta: "recovered" };
       },
     };
-    const runtime = createBrewvaRuntime({ cwd: tempCwd("runtime-provider-retry"), provider });
+    const runtime = createBrewvaRuntime({
+      cwd: tempCwd("runtime-provider-retry"),
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor: NOOP_TOOL_EXECUTOR,
+      },
+    });
     await Array.fromAsync(runtime.turn({ sessionId: "s1", prompt: "hello" }));
     return runtime.tape.project("s1", "recovery_history").causes;
   }
@@ -62,7 +85,14 @@ async function runScenario(cause: RuntimeRecoveryCause): Promise<readonly Runtim
         };
       },
     };
-    const runtime = createBrewvaRuntime({ cwd: tempCwd("runtime-approval-pending"), provider });
+    const runtime = createBrewvaRuntime({
+      cwd: tempCwd("runtime-approval-pending"),
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor: NOOP_TOOL_EXECUTOR,
+      },
+    });
     await Array.fromAsync(runtime.turn({ sessionId: "s1", prompt: "write" }));
     return runtime.tape.project("s1", "recovery_history").causes;
   }
@@ -95,8 +125,11 @@ async function runScenario(cause: RuntimeRecoveryCause): Promise<readonly Runtim
   };
   const runtime = createBrewvaRuntime({
     cwd: tempCwd("runtime-compaction-required"),
-    provider,
-    toolExecutor,
+    physics: {
+      mode: "real",
+      provider,
+      toolExecutor,
+    },
   });
   await Array.fromAsync(runtime.turn({ sessionId: "s1", prompt: "seed" }));
   await Array.fromAsync(

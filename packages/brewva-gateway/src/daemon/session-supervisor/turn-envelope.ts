@@ -1,7 +1,8 @@
-import { buildTurnEnvelope, type TurnEnvelope } from "@brewva/brewva-runtime/protocol";
-import type { OperationalClaim } from "@brewva/brewva-runtime/protocol";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import type { OperationalClaim } from "@brewva/brewva-vocabulary/iteration";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
+import { buildTurnEnvelope } from "../../protocol/api.js";
 import type {
   SchedulePromptAnchor,
   SchedulePromptTrigger,

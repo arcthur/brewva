@@ -2,15 +2,15 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-runtime/protocol";
-import { isDelegationRunTerminalStatus } from "@brewva/brewva-runtime/protocol";
-import type { BrewvaStructuredEvent } from "@brewva/brewva-runtime/protocol";
-import { readWorkerResultsAppliedEventPayload } from "@brewva/brewva-runtime/protocol";
 import type {
   DelegationPacket,
   SubagentCancelResult,
   SubagentRunRequest,
 } from "@brewva/brewva-tools/contracts";
+import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import { isDelegationRunTerminalStatus } from "@brewva/brewva-vocabulary/delegation";
+import { readWorkerResultsAppliedEventPayload } from "@brewva/brewva-vocabulary/delegation";
+import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
 import { isProcessAlive } from "../../daemon/api.js";
 import type { HostedRuntimeAdapterPort } from "../../hosted/api.js";
 import {

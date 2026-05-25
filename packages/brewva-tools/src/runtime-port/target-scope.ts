@@ -1,6 +1,6 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
-import { TURN_INPUT_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import { TURN_INPUT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 import { resolveToolRuntimeEventPort, resolveToolRuntimeTaskPort } from "./extensions.js";
 import { getToolSessionId } from "./parallel-read.js";

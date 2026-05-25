@@ -37,7 +37,7 @@ This note does not reopen:
 
 ## Source Anchors
 
-- Rollback tracking contracts: `packages/brewva-runtime/src/protocol.ts`
+- Rollback tracking contracts: `packages/brewva-vocabulary/src/workbench.ts`
 - Runtime rollback wiring: `packages/brewva-runtime/src/runtime/runtime.ts`
 - Rollback tool contract: `packages/brewva-tools/src/families/workflow/rollback-last-patch.ts`
 

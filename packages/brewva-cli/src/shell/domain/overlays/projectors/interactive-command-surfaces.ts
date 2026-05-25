@@ -4,9 +4,9 @@ import type {
   ContextCompactionReason,
   ContextEvidenceSample,
   ContextStatus,
-  HistoryViewBaselineSnapshot,
-} from "@brewva/brewva-runtime/protocol";
-import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/context";
+import type { HistoryViewBaselineSnapshot } from "@brewva/brewva-vocabulary/session";
+import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-vocabulary/session";
 import type { OperatorSurfaceSnapshot } from "../../operator-snapshot.js";
 import { fuzzyScore } from "../../search-scoring.js";
 import type {

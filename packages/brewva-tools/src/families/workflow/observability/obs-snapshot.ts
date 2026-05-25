@@ -1,5 +1,5 @@
-import { formatTaskVerificationLevelForSurface } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import { formatTaskVerificationLevelForSurface } from "@brewva/brewva-vocabulary/task";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";

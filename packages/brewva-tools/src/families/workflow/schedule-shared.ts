@@ -1,4 +1,4 @@
-import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-runtime/protocol";
+import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-vocabulary/schedule";
 import { addMilliseconds, formatISO } from "date-fns";
 
 export function normalizeOptionalString(value: unknown): string | undefined {

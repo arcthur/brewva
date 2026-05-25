@@ -1,4 +1,4 @@
-import type { ToolActionClass } from "@brewva/brewva-runtime/protocol";
+import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type {
   ToolDescriptor as CanonicalToolDescriptor,

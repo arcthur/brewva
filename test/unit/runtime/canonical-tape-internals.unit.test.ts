@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRuntimeTape } from "../../../packages/brewva-runtime/src/runtime/tape/memory-tape.js";
+import { createRuntimeTape } from "../../../packages/brewva-runtime/src/runtime/tape/impl.js";
 
 describe("canonical tape internals", () => {
   test("deduplicates repeated event ids in memory and durable jsonl", () => {

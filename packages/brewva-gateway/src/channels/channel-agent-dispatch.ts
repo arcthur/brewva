@@ -1,5 +1,5 @@
-import type { TurnEnvelope, TurnPart } from "@brewva/brewva-runtime/protocol";
-import type { ToolOutputView } from "@brewva/brewva-runtime/protocol";
+import type { TurnEnvelope, TurnPart } from "@brewva/brewva-vocabulary/wire";
+import type { ToolOutputView } from "@brewva/brewva-vocabulary/wire";
 import { runHostedTurnEnvelope } from "../hosted/api.js";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { toErrorMessage } from "../utils/errors.js";

@@ -14,8 +14,7 @@
   - `docs/architecture/system-architecture.md`
   - `skills/project/shared/source-map.md`
 - Code anchors:
-  - `packages/brewva-runtime/src/protocol/types/source-patch.ts`
-  - `packages/brewva-runtime/src/protocol/types/patch.ts`
+  - `packages/brewva-vocabulary/src/workbench.ts`
   - `packages/brewva-substrate/src/resources/resource-loader.ts`
   - `packages/brewva-substrate/src/resources/resource-router.ts`
   - `packages/brewva-tools/src/families/navigation/source-patch.ts`

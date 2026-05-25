@@ -3,8 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime, type BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { TurnEnvelope } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUpdateHandler } from "@brewva/brewva-substrate/tools";
+import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { Type } from "@sinclair/typebox";
 import {
   createChannelAgentDispatch,
@@ -67,6 +67,7 @@ function createRuntimeTurnFixture(input: {
 } {
   const runtime = createBrewvaRuntime({
     cwd: mkdtempSync(join(tmpdir(), `${input.providerName}-`)),
+    physics: { mode: "noop" },
   });
   const provider = registerFauxProvider({
     provider: input.providerName,

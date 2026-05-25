@@ -1,6 +1,6 @@
-import type { ToolOutputView } from "@brewva/brewva-runtime/protocol";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+import type { ToolOutputView } from "@brewva/brewva-vocabulary/wire";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
 import { runHostedTurnEnvelope } from "./turn-envelope.js";

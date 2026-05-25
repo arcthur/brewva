@@ -1,4 +1,4 @@
-import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
 export function readObservabilitySnapshotState(runtime: BrewvaToolRuntime, sessionId: string) {

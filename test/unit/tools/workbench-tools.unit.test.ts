@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkbenchEntry } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolRuntime } from "@brewva/brewva-tools/contracts";
 import {
   createWorkbenchEvictTool,
@@ -7,6 +6,7 @@ import {
   createWorkbenchUndoEvictTool,
 } from "@brewva/brewva-tools/memory";
 import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
+import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 
 function createToolContext(sessionId = "session-workbench") {
   return {

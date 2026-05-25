@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntime, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
-import type { SessionWireFrame } from "@brewva/brewva-runtime/protocol";
 import type { BrewvaToolUpdateHandler } from "@brewva/brewva-substrate/tools";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { Type } from "@sinclair/typebox";
 import { NOOP_UI } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/noop-ui.js";
 import {
@@ -18,10 +18,15 @@ import {
   registerFauxProvider,
 } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 
-function createRuntime(prefix: string, options: BrewvaRuntimeOptions = {}): BrewvaRuntime {
+type TestRuntimeOptions = Omit<BrewvaRuntimeOptions, "physics"> & {
+  readonly physics?: BrewvaRuntimeOptions["physics"];
+};
+
+function createRuntime(prefix: string, options: TestRuntimeOptions = {}): BrewvaRuntime {
   return createBrewvaRuntime({
     ...options,
     cwd: options.cwd ?? mkdtempSync(join(tmpdir(), prefix)),
+    physics: options.physics ?? { mode: "noop" },
   });
 }
 

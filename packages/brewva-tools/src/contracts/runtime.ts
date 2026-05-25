@@ -1,49 +1,43 @@
 import type { BrewvaConfig, BrewvaRuntimeIdentity, DeepReadonly } from "@brewva/brewva-runtime";
+import type { ToolActionPolicy } from "@brewva/brewva-runtime/security";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
   ContextEvidenceSample,
   ContextStatus,
-  HistoryViewBaselineSnapshot,
-  RenderTurnConsequenceDigestOptions,
-  ResourceLeaseRecord,
-  TapeHandoffResult,
-  TapeSearchResult,
-  TapeStatusState,
-  ToolActionPolicy,
-  ToolInvocationStartInput,
-  ToolInvocationStartReceipt,
-  TurnEffectCommitmentProjection,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/context";
+import type { WorkerMergeReport, WorkerResult } from "@brewva/brewva-vocabulary/delegation";
 import type {
   BrewvaEventQuery,
   BrewvaEventRecord,
   BrewvaStructuredEvent,
+} from "@brewva/brewva-vocabulary/events";
+import type {
+  RenderTurnConsequenceDigestOptions,
+  ResourceLeaseRecord,
+  ToolInvocationStartInput,
+  ToolInvocationStartReceipt,
+  TurnEffectCommitmentProjection,
+} from "@brewva/brewva-vocabulary/iteration";
+import type {
+  ActiveReasoningBranchState,
   GuardResultInput,
   GuardResultQuery,
   GuardResultRecord,
   MetricObservationInput,
   MetricObservationQuery,
   MetricObservationRecord,
-  ActiveReasoningBranchState,
   ReasoningCheckpointRecord,
   ReasoningRevertInput,
   ReasoningRevertRecord,
   RecordReasoningCheckpointInput,
-  SessionCostSummary,
-  WorkbenchEntry,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/iteration";
 import type {
-  TaskAcceptanceRecordResult,
-  TaskBlockerRecordResult,
-  TaskBlockerResolveResult,
-  TaskItemAddResult,
-  TaskItemStatus,
-  TaskItemUpdateResult,
-  TaskSpec,
-  TaskState,
-  TaskTargetDescriptor,
-} from "@brewva/brewva-runtime/protocol";
+  DecideEffectCommitmentInput,
+  DecideEffectCommitmentResult,
+  DecisionReceipt,
+  EffectCommitmentProposal,
+} from "@brewva/brewva-vocabulary/iteration";
 import type {
   ScheduleIntentCancelInput,
   ScheduleIntentCancelResult,
@@ -54,26 +48,38 @@ import type {
   ScheduleIntentUpdateInput,
   ScheduleIntentUpdateResult,
   ScheduleProjectionSnapshot,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/schedule";
+import type {
+  HistoryViewBaselineSnapshot,
+  TapeHandoffResult,
+  TapeSearchResult,
+  TapeStatusState,
+} from "@brewva/brewva-vocabulary/session";
+import type { SessionCostSummary } from "@brewva/brewva-vocabulary/session";
 import type {
   OpenToolCallRecord,
   SessionUncleanShutdownDiagnostic,
-} from "@brewva/brewva-runtime/protocol";
-import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/session";
+import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-vocabulary/session";
 import type {
-  DecideEffectCommitmentInput,
-  DecideEffectCommitmentResult,
-  DecisionReceipt,
-  EffectCommitmentProposal,
-} from "@brewva/brewva-runtime/protocol";
-import type { WorkerMergeReport, WorkerResult } from "@brewva/brewva-runtime/protocol";
+  TaskAcceptanceRecordResult,
+  TaskBlockerRecordResult,
+  TaskBlockerResolveResult,
+  TaskItemAddResult,
+  TaskItemStatus,
+  TaskItemUpdateResult,
+  TaskSpec,
+  TaskState,
+  TaskTargetDescriptor,
+} from "@brewva/brewva-vocabulary/task";
+import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import type {
   SourcePatchApplyResult,
   SourcePatchPlan,
   SourcePatchStaleRecoveryRecord,
   SourceResourceDescriptor,
   SourceSnapshot,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/workbench";
 import type { ManagedExecProcessRegistryRuntime } from "../families/execution/exec-process-registry/runtime.js";
 import type { BoxPlane } from "../internal/box/index.js";
 import type { BrewvaToolDelegationQuery, BrewvaToolOrchestration } from "./delegation.js";
@@ -85,6 +91,67 @@ interface RuntimeResult {
 }
 
 type RuntimeMutationResult = RuntimeResult;
+
+export const BREWVA_TOOL_RUNTIME_COMMAND_NAMESPACES = [
+  "claim",
+  "cost",
+  "delegation",
+  "events",
+  "proposals",
+  "reasoning",
+  "schedule",
+  "session",
+  "tape",
+  "task",
+  "tools",
+  "verification",
+  "workbench",
+] as const;
+
+export const BREWVA_TOOL_RUNTIME_QUERY_NAMESPACES = [
+  "claim",
+  "context",
+  "cost",
+  "events",
+  "ledger",
+  "lifecycle",
+  "proposals",
+  "reasoning",
+  "recovery",
+  "schedule",
+  "session",
+  "sessionWire",
+  "skills",
+  "tape",
+  "task",
+  "tools",
+  "workbench",
+] as const;
+
+export const BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES = [
+  "claim",
+  "context",
+  "cost",
+  "delegation",
+  "events",
+  "ledger",
+  "lifecycle",
+  "proposals",
+  "reasoning",
+  "recovery",
+  "schedule",
+  "session",
+  "sessionWire",
+  "skills",
+  "tape",
+  "task",
+  "tools",
+  "verification",
+  "workbench",
+] as const;
+
+export type BrewvaToolRuntimeCapabilityNamespace =
+  (typeof BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES)[number];
 
 export interface BrewvaToolRuntimeCommandPort {
   readonly claim: {

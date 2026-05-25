@@ -1,4 +1,3 @@
-import { MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
 import type { InternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaMutableModelCatalog } from "@brewva/brewva-substrate/provider";
 import { createHostedResourceLoader } from "@brewva/brewva-substrate/resources";
@@ -9,6 +8,7 @@ import {
   type BrewvaModelPresetState,
   type BrewvaPromptThinkingLevel,
 } from "@brewva/brewva-substrate/session";
+import { MODEL_PRESET_SELECT_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import { resolveBrewvaModelSelection } from "../../../policy/model-routing/api.js";
 import { createBrewvaManagedAgentSession } from "./managed-agent/session.js";
 import { HostedRuntimeTapeSessionStore } from "./projection/runtime-projection-session-store.js";

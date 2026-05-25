@@ -1,4 +1,4 @@
-import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-runtime/protocol";
+import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
 import { recordToolRuntimeEvent } from "../../../runtime-port/extensions.js";
 import { buildReadPathDiscoveryObservationPayload } from "../read-path-discovery.js";

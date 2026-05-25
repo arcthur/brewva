@@ -1,14 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
+import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type {
+  WorkerApplyReport,
+  WorkerMergeReport,
+  WorkerResult,
+} from "@brewva/brewva-vocabulary/delegation";
 import type {
   PatchConflict,
   PatchFileChange,
   PatchSet,
   SourcePatchIntent,
-  WorkerApplyReport,
-  WorkerMergeReport,
-  WorkerResult,
-} from "@brewva/brewva-runtime/protocol";
-import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+} from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import {

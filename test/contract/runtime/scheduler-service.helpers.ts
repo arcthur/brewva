@@ -8,7 +8,7 @@ import {
   getNextCronRunAt,
   normalizeTimeZone,
   parseCronExpression,
-} from "@brewva/brewva-runtime/protocol";
+} from "@brewva/brewva-vocabulary/schedule";
 import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
 
 export function createWorkspace(name: string): string {

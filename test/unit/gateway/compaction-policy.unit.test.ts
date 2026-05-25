@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-runtime/protocol";
+import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-vocabulary/context";
 import { decideCompaction } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/policy.js";
 
 const baseStatus: ContextStatus = {

@@ -138,7 +138,7 @@ capability-scoped runtime facade derived from declared `ops.*` and
 `extensions.tools.*` paths.
 
 Runtime implementation ownership now lives under four semantic roots:
-`runtime/tape`, `runtime/kernel`, `runtime/model`, and `runtime/engine`, with
+`runtime/tape`, `runtime/kernel`, `runtime/model`, and `runtime/turn`, with
 read-only projections under `tape-views`. The former `domain/<name>/` seven-file
 lattice is not a valid pattern for new runtime work.
 
@@ -208,7 +208,7 @@ compatibility story.
 ## Package Map
 
 - `@brewva/brewva-runtime`: the four-port runtime root, canonical tape, kernel
-  tool transactions, model materialization, runtime turn engine, deterministic
+  tool transactions, model materialization, runtime turn implementation, deterministic
   tape projections, and internal infrastructure needed to preserve old hosted
   adapter behavior during cutover.
 - `@brewva/brewva-effect`: internal Effect foundation package. It owns Effect

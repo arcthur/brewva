@@ -1,12 +1,12 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ProviderRequestFingerprint } from "@brewva/brewva-provider-core/contracts";
+import { redactedStableJsonSha256Hex, redactedStableJsonStringify } from "@brewva/brewva-std/hash";
 import type {
   ExpectedProviderCacheBreak,
   ProviderCacheBreakObservation,
   ProviderCacheRenderState,
-} from "@brewva/brewva-runtime/protocol";
-import { redactedStableJsonSha256Hex, redactedStableJsonStringify } from "@brewva/brewva-std/hash";
+} from "@brewva/brewva-vocabulary/context";
 import { SourceTracker } from "./source-tracker.js";
 
 export const DEFAULT_PROVIDER_CACHE_DETECTOR_THRESHOLDS = {
