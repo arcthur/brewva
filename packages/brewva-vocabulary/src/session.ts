@@ -12,6 +12,7 @@ export {
   RECOVERY_WAL_COMPACTED_EVENT_TYPE,
   RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
   RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
+  SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
   SESSION_COMPACT_EVENT_TYPE,
   SESSION_COMPACT_FAILED_EVENT_TYPE,
   SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE,
@@ -29,9 +30,12 @@ export {
 export {
   getProducerOutputContracts,
   getProducerSemanticBindings,
+  listSkillResourceRefs,
+  listSurfacedSkillResourceRefs,
   listProducerOutputs,
   parseProducerContractFile,
   parseSkillDocument,
+  SKILLCARD_PROJECTION_LIMITS,
 } from "./internal/skills.js";
 
 export type {
@@ -49,6 +53,11 @@ export type {
   SessionCompactionCacheImpact,
   SessionCompactionCacheImpactSnapshot,
   SessionCompactionGenerationMetadata,
+  SessionCompactionInputProvenance,
+  SessionCompactionRecallResultRef,
+  SessionCompactionRecallSessionScope,
+  SessionCompactionRecallSourceFamily,
+  SessionCompactionResourceRef,
   SessionCostSummary,
   SessionLifecycleSnapshot,
   SessionLineageNodeRecord,
@@ -81,6 +90,10 @@ export type {
   SkillCard,
   SkillCategory,
   SkillDocument,
+  SkillInvocationMode,
+  SkillInvocationRecord,
+  SkillInvocationSelectionTrigger,
   SkillOutputContract,
   SkillRegistryLoadReport,
+  SkillResourceRef,
 } from "./internal/skills.js";

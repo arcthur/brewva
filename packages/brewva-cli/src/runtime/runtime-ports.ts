@@ -263,6 +263,13 @@ export function getCliRuntimeHistoryViewBaseline(
   return runtime.ops.context.prompt.getHistoryViewBaseline(sessionId);
 }
 
+export function listCliRuntimeWorkbenchEntries(
+  runtime: InspectRuntime,
+  sessionId: string,
+): ReturnType<InspectRuntime["ops"]["workbench"]["list"]> {
+  return runtime.ops.workbench.list(sessionId);
+}
+
 export function explainCliRuntimeToolAccess(
   runtime: InspectRuntime,
   input: Parameters<InspectRuntime["ops"]["tools"]["access"]["explain"]>[0],
@@ -280,6 +287,20 @@ export function listCliRuntimeSkills(
   runtime: InspectRuntime,
 ): ReturnType<InspectRuntime["ops"]["skills"]["catalog"]["list"]> {
   return runtime.ops.skills.catalog.list();
+}
+
+export function getCliRuntimeLatestSkillSelection(
+  runtime: InspectRuntime,
+  sessionId: string,
+): ReturnType<InspectRuntime["ops"]["skills"]["selection"]["latest"]> {
+  return runtime.ops.skills.selection.latest(sessionId);
+}
+
+export function getCliRuntimeLatestCapabilitySelection(
+  runtime: InspectRuntime,
+  sessionId: string,
+): ReturnType<InspectRuntime["ops"]["tools"]["capabilitySelection"]["latest"]> {
+  return runtime.ops.tools.capabilitySelection.latest(sessionId);
 }
 
 export function listCliRuntimeSkillProducers(

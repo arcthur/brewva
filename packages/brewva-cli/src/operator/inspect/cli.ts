@@ -4,9 +4,11 @@ import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config
 import { resolveInspectDirectory, type InspectDirectory } from "../inspect-analysis.js";
 import { printInspectText, formatInspectText } from "./output.js";
 import {
+  buildContextCockpitReport,
   buildInspectReport,
   buildSessionInspectReport,
   resolveTargetSession,
+  type ContextCockpitReport,
   type InspectReport,
   type SessionInspectReport,
 } from "./report.js";
@@ -121,10 +123,11 @@ export async function runInspectCli(argv: string[]): Promise<number> {
 }
 
 export {
+  buildContextCockpitReport,
   buildInspectReport,
   buildSessionInspectReport,
   formatInspectText,
   resolveInspectDirectory,
   resolveTargetSession,
 };
-export type { InspectReport, SessionInspectReport };
+export type { ContextCockpitReport, InspectReport, SessionInspectReport };

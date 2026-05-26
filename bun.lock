@@ -108,6 +108,7 @@
         "@brewva/brewva-session-index": "workspace:*",
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-substrate": "workspace:*",
+        "@brewva/brewva-token-estimation": "workspace:*",
         "@brewva/brewva-tools": "workspace:*",
         "@brewva/brewva-vocabulary": "workspace:*",
         "@opentui/core": "0.2.14",
@@ -289,7 +290,6 @@
       "name": "@brewva/brewva-vocabulary",
       "version": "0.1.0",
       "dependencies": {
-        "@brewva/brewva-std": "workspace:*",
         "yaml": "^2.8.3",
       },
     },

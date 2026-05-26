@@ -1,5 +1,12 @@
 import { formatInspectAnalysisText } from "../../../../operator/inspect-analysis.js";
 import type { buildSessionInspectReport } from "../../../../operator/inspect.js";
+import {
+  formatCockpitCompactionBaseline,
+  formatCockpitCompactionProvenance,
+  formatCockpitRecallResults,
+  formatCockpitResourceRefs,
+  formatCockpitSkillInvocations,
+} from "../../../../operator/inspect/context-cockpit.js";
 import type { CliInspectOverlayPayload, CliOverlaySection } from "../payloads.js";
 
 type SessionInspectReport = ReturnType<typeof buildSessionInspectReport>;
@@ -104,6 +111,20 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
         `Missing checks: ${renderListValue(base.verification.missingChecks)}`,
         `Missing evidence: ${renderListValue(base.verification.missingEvidence)}`,
         `Verification reason: ${base.verification.reason ?? "n/a"}`,
+      ],
+    },
+    {
+      id: "context-cockpit",
+      title: "Context Cockpit",
+      lines: [
+        `Policy: ${base.contextCockpit.sideEffectPolicy}`,
+        `Workbench: active=${base.contextCockpit.workbench.activeCount}`,
+        `Skills: invocations=${formatCockpitSkillInvocations(base.contextCockpit.skills.invocationRecords, { separator: ", " })}`,
+        `Resources: ${formatCockpitResourceRefs(base.contextCockpit.skills.resourceRefs, { separator: ", " })}`,
+        `Capabilities: receipts=${renderListValue(base.contextCockpit.capabilities.receiptRefs)}`,
+        `Recall: results=${formatCockpitRecallResults(base.contextCockpit.recall.results, { separator: ", " })}`,
+        `Compaction: baseline=${formatCockpitCompactionBaseline(base.contextCockpit.compaction.latestBaseline)} provenance=${formatCockpitCompactionProvenance(base.contextCockpit.compaction.inputProvenance)}`,
+        `Cache: status=${base.contextCockpit.cachePosture.status} read=${base.contextCockpit.cachePosture.cacheReadTokens} write=${base.contextCockpit.cachePosture.cacheWriteTokens}`,
       ],
     },
     {

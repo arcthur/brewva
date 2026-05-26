@@ -1,8 +1,18 @@
 # Tool Family: Memory And Recall
 
+Implementation anchors:
+
+- `packages/brewva-recall/src/types.ts`
+- `packages/brewva-recall/src/broker/source-mappers.ts`
+- `packages/brewva-recall/src/broker/broker.ts`
+- `packages/brewva-tools/src/families/memory/recall.ts`
+- `packages/brewva-tools/src/families/memory/workbench.ts`
+- `packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.ts`
+
 Memory and recall tools inspect or curate durable evidence across current
 session tape, repository precedent, model-authored workbench notes, and prior
-solutions.
+solutions. Brewva does not maintain a hidden global memory store or
+`.brewva/memory/**` hierarchy.
 
 ## Boundary
 
@@ -41,6 +51,18 @@ Repository-scoped retrieval filters repository artifacts to the current task
 target roots. Session-local tape search remains scoped to the requested
 session. Cross-session recall must surface provenance instead of merging all
 evidence into one undifferentiated answer.
+
+Recall source families are fixed to `tape_evidence` and
+`repository_precedent`. Session/root visibility is orthogonal metadata:
+surfaced results carry `sourceFamily`, `sessionScope`, `rootRef`, and
+`stableId`. Current-session tape evidence is `current_session`, other tape
+evidence is `prior_session`, and repository precedent is `cross_workspace`.
+`docs/solutions/**` is cold repository memory; workbench entries are warm
+model-authored memory.
+
+Inspecting recall results does not admit them to model-visible context. A
+result enters the answer path only when the model explicitly consumes,
+injects, cites, or preserves it in workbench state.
 
 Session-index query APIs accept raw query text and apply shared query
 tokenization internally. Indexed session and event materialization uses shared

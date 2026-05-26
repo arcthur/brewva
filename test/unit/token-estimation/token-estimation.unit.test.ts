@@ -4,6 +4,7 @@ import {
   estimateProviderPayloadTextTokens,
   estimateStructuredTokenCount,
   estimateTokenCount,
+  resolveCachePosture,
   normalizePercent,
   resolveContextUsageRatio,
   resolveContextUsageTokens,
@@ -161,5 +162,51 @@ describe("token estimation", () => {
         modelId: "gpt-5.4",
       }) + 20,
     );
+  });
+
+  test("normalizes provider cache posture without gateway policy", () => {
+    expect(
+      resolveCachePosture({
+        status: "warm",
+        bucketKey: "openai:gpt-5.4:bucket",
+        stablePrefixHash: "stable-prefix-digest",
+        dynamicTailHash: "dynamic-tail-digest",
+        cacheReadTokens: 1200,
+        cacheWriteTokens: 0,
+      }),
+    ).toEqual({
+      status: "warm",
+      bucketKey: "openai:gpt-5.4:bucket",
+      stablePrefixHash: "stable-prefix-digest",
+      dynamicTailHash: "dynamic-tail-digest",
+      cacheReadTokens: 1200,
+      cacheWriteTokens: 0,
+      supported: true,
+      reason: null,
+    });
+
+    expect(
+      resolveCachePosture({
+        status: "WARM",
+        cacheReadTokens: 1.9,
+        cacheWriteTokens: -4,
+      }),
+    ).toMatchObject({
+      status: "warm",
+      cacheReadTokens: 1,
+      cacheWriteTokens: 0,
+      supported: true,
+    });
+
+    expect(resolveCachePosture(undefined)).toEqual({
+      status: "unknown",
+      bucketKey: null,
+      stablePrefixHash: null,
+      dynamicTailHash: null,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      supported: false,
+      reason: "missing_observation",
+    });
   });
 });

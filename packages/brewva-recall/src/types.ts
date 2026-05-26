@@ -46,6 +46,7 @@ export type RecallEvidenceStrength = (typeof RECALL_EVIDENCE_STRENGTH_VALUES)[nu
 export type RecallSearchIntent = (typeof RECALL_SEARCH_INTENT_VALUES)[number];
 export type RecallCurationSignal = (typeof RECALL_CURATION_SIGNAL_VALUES)[number];
 export type RecallFreshness = (typeof RECALL_FRESHNESS_VALUES)[number];
+export type RecallSessionScope = "current_session" | "prior_session" | "cross_workspace";
 
 export type RecallSessionDigest = Omit<SessionIndexDigest, "tokenScore">;
 
@@ -100,6 +101,8 @@ export interface RecallBrokerState {
 export interface RecallSearchEntry {
   stableId: string;
   sourceFamily: RecallSourceFamily;
+  sessionScope: RecallSessionScope;
+  rootRef: string;
   trustLabel: RecallTrustLabel;
   evidenceStrength: RecallEvidenceStrength;
   scope: RecallScope;
@@ -117,6 +120,13 @@ export interface RecallSearchEntry {
   curation?: RecallCurationSnapshot;
 }
 
+export interface RecallResultProvenanceProjection {
+  stableId: string;
+  sourceFamily: RecallSourceFamily;
+  sessionScope: RecallSessionScope;
+  rootRef: string;
+}
+
 export interface RecallSearchResult {
   query: string;
   scope: RecallScope;
@@ -129,4 +139,38 @@ export interface RecallInspectResult {
   requestedStableIds: string[];
   unresolvedStableIds: string[];
   results: RecallSearchEntry[];
+}
+
+function firstRootRef(entry: Pick<RecallSearchEntry, "rootRef" | "targetRoots">): string {
+  const rootRef = typeof entry.rootRef === "string" ? entry.rootRef.trim() : "";
+  if (rootRef.length > 0) {
+    return rootRef;
+  }
+  const targetRoot = entry.targetRoots?.find((candidate) => candidate.trim().length > 0);
+  return targetRoot ?? "";
+}
+
+function resolveRecallSessionScope(
+  entry: Pick<RecallSearchEntry, "sourceFamily" | "sessionId" | "sessionScope">,
+  currentSessionId: string,
+): RecallSessionScope {
+  if (entry.sessionScope) {
+    return entry.sessionScope;
+  }
+  if (entry.sourceFamily === "repository_precedent") {
+    return "cross_workspace";
+  }
+  return entry.sessionId === currentSessionId ? "current_session" : "prior_session";
+}
+
+export function projectRecallResultProvenance(
+  entry: RecallSearchEntry,
+  input: { readonly currentSessionId: string; readonly defaultRootRef: string },
+): RecallResultProvenanceProjection {
+  return {
+    stableId: entry.stableId,
+    sourceFamily: entry.sourceFamily,
+    sessionScope: resolveRecallSessionScope(entry, input.currentSessionId),
+    rootRef: firstRootRef(entry) || input.defaultRootRef,
+  };
 }

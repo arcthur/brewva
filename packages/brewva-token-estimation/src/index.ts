@@ -41,6 +41,37 @@ export interface BrewvaTokenEstimate {
   modelId?: string;
 }
 
+export type CachePostureStatus =
+  | "unknown"
+  | "cold"
+  | "warm"
+  | "break"
+  | "limited"
+  | "unsupported"
+  | "degraded";
+
+export interface CachePostureInput {
+  readonly status?: string | null;
+  readonly bucketKey?: string | null;
+  readonly stablePrefixHash?: string | null;
+  readonly dynamicTailHash?: string | null;
+  readonly cacheReadTokens?: number | null;
+  readonly cacheWriteTokens?: number | null;
+  readonly supported?: boolean | null;
+  readonly reason?: string | null;
+}
+
+export interface CachePosture {
+  readonly status: CachePostureStatus;
+  readonly bucketKey: string | null;
+  readonly stablePrefixHash: string | null;
+  readonly dynamicTailHash: string | null;
+  readonly cacheReadTokens: number;
+  readonly cacheWriteTokens: number;
+  readonly supported: boolean;
+  readonly reason: string | null;
+}
+
 interface TokenCodec {
   countTokens(text: string): number;
   encode(text: string): number[];
@@ -124,6 +155,56 @@ export function resolveModelTokenEstimator(
 function optionalMetadata(value: string | null | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function optionalPostureString(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized && normalized.length > 0 ? normalized : null;
+}
+
+function normalizeCachePostureStatus(value: string | null | undefined): CachePostureStatus {
+  switch (value?.trim().toLowerCase()) {
+    case "cold":
+    case "warm":
+    case "break":
+    case "limited":
+    case "unsupported":
+    case "degraded":
+      return value.trim().toLowerCase() as CachePostureStatus;
+    default:
+      return "unknown";
+  }
+}
+
+function nonNegativeInteger(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+}
+
+export function resolveCachePosture(input: CachePostureInput | null | undefined): CachePosture {
+  if (!input) {
+    return {
+      status: "unknown",
+      bucketKey: null,
+      stablePrefixHash: null,
+      dynamicTailHash: null,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      supported: false,
+      reason: "missing_observation",
+    };
+  }
+
+  const status = normalizeCachePostureStatus(input.status);
+  return {
+    status,
+    bucketKey: optionalPostureString(input.bucketKey),
+    stablePrefixHash: optionalPostureString(input.stablePrefixHash),
+    dynamicTailHash: optionalPostureString(input.dynamicTailHash),
+    cacheReadTokens: nonNegativeInteger(input.cacheReadTokens),
+    cacheWriteTokens: nonNegativeInteger(input.cacheWriteTokens),
+    supported: input.supported ?? (status !== "unknown" && status !== "unsupported"),
+    reason: optionalPostureString(input.reason),
+  };
 }
 
 export function estimateModelTokens(

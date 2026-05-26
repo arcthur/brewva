@@ -1,7 +1,8 @@
 # Reference: Glossary
 
-- Skill: an executable semantic unit loaded from `skills/**/SKILL.md`
-- Contract: a skill policy defining intent outputs, effect boundaries, and resource ceilings
+- Skill: a model-readable advisory instruction document loaded from `skills/**/SKILL.md`; it does not grant tool authority, budgets, model routes, or completion gates
+- SkillInvocationRecord: advisory provenance for a prompt-visible or inspect-only SkillCard projection, including source, trigger, mode, surfaced resource refs, token estimate, capability refs, output artifacts, and argument hints
+- Contract: an explicit runtime or substrate policy surface; SkillCards are advisory context, not authority contracts
 - Ledger: append-only evidence stream for tool outcomes
 - Verification Gate: completion policy that checks required evidence
 - Checkpoint: machine-generated tape baseline event used to accelerate replay
@@ -10,6 +11,7 @@
 - PatchSet: tracked file change set used for rollback and worker-result adoption
 - Invocation Spine: the shared runtime-owned tool invocation path for admission, usage tracking, ledger linkage, and rollback/approval wiring
 - Context Budget: policy for dynamic-tail rendering, request reduction, and compaction
+- Context Cockpit: read-only inspect projection for context status, workbench, selected SkillCards, recall provenance, compaction provenance, capability receipts, and cache posture; it is operator-visible and not model-visible admission
 - Context Compaction Gate: the policy check that blocks further tool execution when compaction must happen first
 - Cost Budget: threshold policy for session-level USD spend
 - Channel Gateway: external channel ingress/egress gateway used by `--channel` mode
@@ -19,6 +21,8 @@
 - Proposal: the public approval-bearing authorization envelope; current stable public shape is `EffectCommitmentProposal`
 - DecisionReceipt: the durable kernel decision record for a public `EffectCommitmentProposal`; captures the decision, policy basis, reasons, committed effects, evidence references, turn, and timestamp
 - Workbench: model-authored working-memory notebook exposed through `workbench_note` and `workbench_evict`
+- Recall Result Provenance: surfaced recall projection with `sourceFamily`, `sessionScope`, `rootRef`, and `stableId`; source families are limited to `tape_evidence` and `repository_precedent`
+- Compaction Active Set: bounded provenance set used by compaction, limited to active workbench entries, selected skill invocation records, surfaced resource refs, capability receipts, pinned or latest-used recall refs, and compact baseline metadata
 - Recovery WAL: write-ahead log for turn durability; enables crash recovery and replay of in-flight turns
 - Effect Boundary: the runtime execution class for a tool invocation: `safe` or `effectful`
 - Working State: non-authoritative session-local working surfaces such as the workbench, active tool surface, and derived workflow posture
@@ -33,5 +37,5 @@
 - CapabilityView: the model-facing capability disclosure surface built from exact governance metadata
 - PersonaProfile: the rendered identity/workstyle context block built from `.brewva/agents/<agent-id>/identity.md`
 - Kernel Ring: the authority-bearing architecture ring that owns policy, verification, replay, and commitment decisions
-- Deliberation Ring: the advisory architecture ring that folds evidence-backed artifacts such as recall results, workbench notes, and promotion drafts
+- Deliberation Ring: the advisory architecture ring that folds evidence-backed artifacts such as recall results, workbench notes, and repository precedents
 - Experience Ring: the outer architecture ring for CLI, gateway, channels, and operator UX

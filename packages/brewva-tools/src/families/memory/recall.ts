@@ -3,6 +3,7 @@ import {
   RECALL_CURATION_SIGNAL_VALUES,
   RECALL_SCOPE_VALUES,
   RECALL_SEARCH_INTENT_VALUES,
+  projectRecallResultProvenance,
   type RecallCurationSignal,
   type RecallScope,
   type RecallSearchIntent,
@@ -92,6 +93,8 @@ function renderRecallEntry(entry: RecallSearchEntry): string {
     `- ranking_score=${entry.rankingScore.toFixed(3)}`,
     `semantic_score=${entry.semanticScore.toFixed(3)}`,
     `source_family=${entry.sourceFamily}`,
+    `session_scope=${entry.sessionScope}`,
+    `root_ref=${entry.rootRef}`,
     `trust_label=${entry.trustLabel}`,
     `evidence_strength=${entry.evidenceStrength}`,
     `scope=${entry.scope}`,
@@ -137,15 +140,14 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
   return define({
     name: "recall_search",
     label: "Recall Search",
-    description:
-      "Search cross-session recall across tape evidence, typed memory products, promotion drafts, and repository precedents.",
+    description: "Search on-demand recall across tape evidence and repository precedents.",
     promptSnippet:
       "Use this as the default prior-work recall surface before replaying from scratch. It returns typed provenance, freshness, scope, and source-family signals.",
     promptGuidelines: [
       "Use session_local only for current-session tape forensics; prefer user_repository_root for normal prior-work recall.",
       "Treat prior_work as the neutral default intent; it does not add a ranking boost beyond the normal source, strength, semantic, freshness, and curation weights.",
       "Use output_search, not recall_search intent, when the information need is raw recent command or tool output.",
-      "Treat repository_precedent and typed memory results as advisory recall, not authority. Follow the cited source family.",
+      "Treat tape_evidence and repository_precedent results as advisory recall, not authority. Follow the cited source family and verify stale claims with ordinary tools.",
       "Use stable_ids to inspect already-surfaced recall items and their curation state without widening to a different tool.",
     ],
     parameters: Type.Object({
@@ -207,7 +209,12 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
               source: "recall_search",
               scope: search.scope,
               intent: search.intent ?? null,
-              stableIds: search.results.map((entry) => entry.stableId),
+              results: search.results.map((entry) =>
+                projectRecallResultProvenance(entry, {
+                  currentSessionId: sessionId,
+                  defaultRootRef: scope.allowedRoots[0] ?? "",
+                }),
+              ),
               allowedRoots: scope.allowedRoots,
             },
           });
@@ -236,6 +243,8 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
             results: search.results.map((entry) => ({
               stableId: entry.stableId,
               sourceFamily: entry.sourceFamily,
+              sessionScope: entry.sessionScope,
+              rootRef: entry.rootRef,
               trustLabel: entry.trustLabel,
               evidenceStrength: entry.evidenceStrength,
               scope: entry.scope,
@@ -279,7 +288,12 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
           payload: {
             source: "recall_search",
             scope: inspection.scope,
-            stableIds: inspection.results.map((entry) => entry.stableId),
+            results: inspection.results.map((entry) =>
+              projectRecallResultProvenance(entry, {
+                currentSessionId: sessionId,
+                defaultRootRef: scope.allowedRoots[0] ?? "",
+              }),
+            ),
             allowedRoots: scope.allowedRoots,
           },
         });
@@ -312,6 +326,8 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
           results: inspection.results.map((entry) => ({
             stableId: entry.stableId,
             sourceFamily: entry.sourceFamily,
+            sessionScope: entry.sessionScope,
+            rootRef: entry.rootRef,
             trustLabel: entry.trustLabel,
             evidenceStrength: entry.evidenceStrength,
             scope: entry.scope,
@@ -340,7 +356,7 @@ export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefiniti
     name: "recall_curate",
     label: "Recall Curate",
     description:
-      "Record explicit operator feedback for surfaced recall items without mutating claim or typed materialization directly.",
+      "Record explicit operator feedback for surfaced recall items without mutating claims, workbench entries, or repository solution records directly.",
     parameters: Type.Object({
       stable_ids: Type.Array(Type.String({ minLength: 1, maxLength: 256 }), {
         minItems: 1,

@@ -20,14 +20,16 @@ const FRESHNESS_WEIGHT: Record<RecallFreshness, number> = {
 
 export interface RecallRankingContext {
   currentSessionId: string;
+  workspaceRoot: string;
   intent?: RecallSearchIntent;
 }
 
 export function createRankingContext(
   currentSessionId: string,
   intent: RecallSearchIntent | undefined,
+  workspaceRoot = "",
 ): RecallRankingContext {
-  return intent ? { currentSessionId, intent } : { currentSessionId };
+  return intent ? { currentSessionId, workspaceRoot, intent } : { currentSessionId, workspaceRoot };
 }
 
 function isCurrentSessionTapeEntry(

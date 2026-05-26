@@ -1,4 +1,5 @@
 export {
+  buildContextCockpitReport,
   buildInspectReport,
   buildSessionInspectReport,
   formatInspectText,
@@ -6,4 +7,4 @@ export {
   resolveTargetSession,
   runInspectCli,
 } from "./inspect/cli.js";
-export type { InspectReport, SessionInspectReport } from "./inspect/cli.js";
+export type { ContextCockpitReport, InspectReport, SessionInspectReport } from "./inspect/cli.js";

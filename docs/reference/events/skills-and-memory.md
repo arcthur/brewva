@@ -9,9 +9,10 @@ Skills are catalog documents. Runtime events may record catalog refresh,
 inventory maintenance, and advisory prompt-context selection, but there is no
 activation, completion, repair, or active-skill lifecycle state.
 
-`skill_selection_recorded` records the prompt-visible SkillCard shortlist:
-available count, candidate count, rendered count, omitted count, selection
-mode, explicit `$skill` mentions, rendered reasons, and rendered context size.
+`skill_selection_recorded` records prompt-visible SkillCard shortlists and
+`discover_skills` discover-only projections: available count, candidate count,
+rendered count, omitted count, selection mode, explicit `$skill` mentions,
+rendered reasons, advisory `skillInvocationRecords`, and rendered context size.
 The hosted turn also carries a hidden, context-excluded
 `brewva-skill-selection` custom message with the explicit mention names,
 selection id, counts, and selection mode for active-turn traceability. Both are
@@ -28,12 +29,20 @@ Recall and workbench events expose semantic memory as inspectable evidence:
 
 - recall curation records operator or runtime curation actions
 - recall utility observations describe usefulness signals
-- recall surfaced events connect query intent to returned evidence
+- recall surfaced events connect query intent to returned evidence through
+  projected `sourceFamily`, `sessionScope`, `rootRef`, and `stableId`
 - workbench events track model-authored notes, reversible evictions, and
   committed baselines
 
 Workbench memory is advisory unless a downstream runtime surface explicitly
 uses it as evidence. It is not kernel truth.
+
+`session.compaction.committed` carries `inputProvenance` for compacted active
+sets. The provenance records active workbench entry ids, selected skill
+invocation ids, surfaced resource refs, capability receipt refs, bounded used
+recall refs, pinned workbench recall refs, compact baseline metadata, and
+`hiddenRecallSearch=false`.
+Compaction does not run recall search behind the model.
 
 ## Deliberation And Semantic Extraction
 

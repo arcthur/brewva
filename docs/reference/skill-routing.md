@@ -66,16 +66,28 @@ Skill routing is model-native and bounded by prompt context:
 - SkillCard binding is current-turn only and must be selected again on later
   turns
 - `discover_skills` provides optional TF-IDF catalog search through
-  `@brewva/brewva-search`
+  `@brewva/brewva-search`; returned SkillCards are recorded as
+  `discover_only` / `inspect_only` invocation records on the same
+  `skill.selection.recorded` event family
 
 The event payload records `selectionId`, `trigger`, `explicitSkillMentions`,
 `availableSkillCount`, `candidateSkillCount`, `renderedSkillCount`,
-`omittedSkillCount`, `selectionMode`, `renderedSkillReasons`, and
-`promptPaths`, and `renderedSkillContext`. `selectionMode` is one of
+`omittedSkillCount`, `selectionMode`, `renderedSkillReasons`,
+`skillInvocationRecords`, `promptPaths`, and `renderedSkillContext`.
+`selectionMode` is one of
 `shortlist_prompt_context`, `explicit_over_budget_prompt_context`, or
-`discover_guidance_receipt_only`. `renderedSkillContext` contains the
-rendered character count and token estimate for the SkillCard prompt block so
-traces can explain the context-budget impact.
+`discover_guidance_receipt_only` for prompt shortlisting, and
+`discover_only_projection` for `discover_skills` tool results.
+`renderedSkillContext` contains the rendered character count and token estimate
+for the SkillCard prompt block or discover projection so traces can explain
+the context-budget impact without making the catalog an admission source.
+
+Each prompt-visible or discover-returned SkillCard also produces a
+`SkillInvocationRecord`. That record is advisory provenance only: skill name,
+source path/package, selection trigger, invocation mode, surfaced resource refs,
+token estimate, capability refs, requested output artifacts, and argument
+hints. Capability refs stay empty unless a separate capability receipt exists;
+a SkillCard never grants authority by being selected.
 
 The context-excluded custom message carries explicit mention names, selection
 id, selection mode, rendered reasons, counts, and render metadata. It is visible

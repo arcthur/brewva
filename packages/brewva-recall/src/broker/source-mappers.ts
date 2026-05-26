@@ -14,6 +14,8 @@ export function mapKnowledgeDoc(
     {
       stableId: `precedent:${doc.relativePath}`,
       sourceFamily: "repository_precedent",
+      sessionScope: "cross_workspace",
+      rootRef: context.workspaceRoot,
       trustLabel: "Repository precedent",
       evidenceStrength: "moderate",
       scope,

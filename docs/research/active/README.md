@@ -28,6 +28,10 @@ stable docs already carry the accepted contract, convert the note to
 - [`convention-projectors-and-substrate-review.md`](./convention-projectors-and-substrate-review.md)
 - [`context-control-plane-simplification.md`](./context-control-plane-simplification.md)
 
+## Model-Operated Product Ergonomics
+
+- [`model-operated-context-skills-and-memory-ergonomics.md`](./model-operated-context-skills-and-memory-ergonomics.md)
+
 ## Tooling And Source Intelligence
 
 - [`multi-language-source-intelligence.md`](./multi-language-source-intelligence.md)

@@ -95,3 +95,11 @@ compaction-scoped policies on top of the recent-window protection:
 Outbound reduction is non-durable and does not change the replay record; the
 durable transcript and `session_compact` receipts remain the authoritative
 sources.
+
+Compaction active-set provenance is recorded on
+`session.compaction.committed.inputProvenance`. It is an observability receipt,
+not a new budget authority: the active set is limited to current workbench
+entries, selected skill invocation records, surfaced SkillCard resource refs,
+capability receipts, pinned or latest-used recall refs, and the previous
+compact baseline. The receipt records `hiddenRecallSearch=false` so compacting
+cannot silently widen recall.

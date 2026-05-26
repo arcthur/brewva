@@ -10,6 +10,8 @@ Implementation anchors:
 - `packages/brewva-gateway/src/hosted/internal/context/hosted-context-support.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/context-contract.ts`
 - `packages/brewva-gateway/src/hosted/internal/context/context-transform.ts` (lifecycle shell only)
+- `packages/brewva-cli/src/operator/inspect/context-cockpit.ts`
+- `packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.ts`
 
 ## Role
 
@@ -137,6 +139,20 @@ summary by digest; replay never regenerates the summary with a newer model.
 Recall results enter the request only when the model calls `recall_search` and
 then chooses to use them in the answer path or preserve them in the workbench.
 Recall is not a per-turn admission source.
+
+## Context Cockpit
+
+`brewva inspect`, the shell inspect overlay, and slash `/inspect` expose a
+context cockpit projection for operators. The cockpit is read-only and
+operator-visible: it reads runtime ports, event receipts, latest evidence, and
+existing projections, but it does not call context materialization, recall
+search, capability selection, provider routing, or workbench mutation.
+
+The cockpit shows context status, active workbench entries, advisory skill
+invocation records, surfaced SkillCard resource refs, capability receipts,
+surfaced recall result provenance, compact baseline provenance, and normalized
+provider cache posture. Opening it must not change event counts or the next
+model attention input for the same session evidence.
 
 ## Token-Cache Boundary
 

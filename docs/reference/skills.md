@@ -3,7 +3,10 @@
 Skill parsing, merge, and inventory anchors:
 
 - `packages/brewva-vocabulary/src/session.ts`
+- `packages/brewva-vocabulary/src/internal/skills.ts`
 - `packages/brewva-runtime/src/runtime/model/impl.ts`
+- `packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.ts`
+- `packages/brewva-tools/src/families/skills/discover-skills.ts`
 
 This page owns skill taxonomy, SkillCard metadata, ProducerContract metadata,
 and the generated skill inventory. Hosted turns may select skills as bounded
@@ -93,6 +96,8 @@ Skill frontmatter is intentionally small. The accepted SkillCard fields are:
 - `references`
 - `scripts`
 - `invariants`
+- `argument_hints`
+- `output_artifacts`
 
 The following old authority fields are rejected at load time in every skill
 root: `routing`, `intent`, `effects`, `resources`, `execution_hints`,
@@ -102,6 +107,11 @@ root: `routing`, `intent`, `effects`, `resources`, `execution_hints`,
 Authored markdown remains advisory model context. It can describe workflow and
 reasoning expectations, but it cannot grant tool authority, accounts, budgets,
 side effects, or structured output obligations.
+
+`argument_hints` and `output_artifacts` are surfaced in advisory
+`SkillInvocationRecord` receipts so inspect and compaction can explain what
+the model saw. They are not schemas, routing directives, budget grants, or
+completion contracts.
 
 ## Producer Contracts
 
@@ -146,8 +156,13 @@ turn message. Explicit `$skill` mentions are mirrored as
 `tool_surface_resolved.explicitSkillMentionNames`; `skillSelectionId` and
 `skillSelectionMode` remain trace correlation fields. The event also records
 `candidateSkillCount`, `renderedSkillCount`, `omittedSkillCount`,
-`promptPaths`, `renderedSkillReasons`, and `renderedSkillContext` with
-character and token-estimate metadata for any prompt block that was injected.
+`promptPaths`, `renderedSkillReasons`, `skillInvocationRecords`, and
+`renderedSkillContext` with character and token-estimate metadata for any
+prompt block that was injected.
+`discover_skills` reuses the same event family for discover-only projections:
+returned SkillCards record `selectionTrigger=discover_only` and
+`invocationMode=inspect_only` without creating authority or automatic context
+admission.
 
 Hosted shortlist selection is deterministic: explicit mention, path glob, name
 match, then shared-search-tokenized description or `selection.when_to_use` text

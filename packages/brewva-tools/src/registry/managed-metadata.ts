@@ -82,7 +82,10 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.observed",
     "capabilities.tools.readPath.discoveryObserved",
   ]),
-  discover_skills: metadata("base", "runtime_observe", ["capabilities.skills.catalog.list"]),
+  discover_skills: metadata("base", "runtime_observe", [
+    "capabilities.skills.catalog.list",
+    "capabilities.skills.selection.record",
+  ]),
   code_outline: metadata("base", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",

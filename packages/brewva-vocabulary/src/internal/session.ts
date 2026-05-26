@@ -122,6 +122,48 @@ export interface SessionCompactionCacheImpactSnapshot extends ProtocolRecord {}
 
 export interface SessionCompactionGenerationMetadata extends ProtocolRecord {}
 
+export type SessionCompactionRecallSourceFamily = "tape_evidence" | "repository_precedent";
+
+export type SessionCompactionRecallSessionScope =
+  | "current_session"
+  | "prior_session"
+  | "cross_workspace";
+
+export interface SessionCompactionRecallResultRef extends ProtocolRecord {
+  readonly stableId: string;
+  readonly sourceFamily: SessionCompactionRecallSourceFamily;
+  readonly sessionScope: SessionCompactionRecallSessionScope;
+  readonly rootRef: string;
+}
+
+export interface SessionCompactionResourceRef extends ProtocolRecord {
+  readonly kind: "reference" | "script" | "invariant";
+  readonly path: string;
+}
+
+/**
+ * Persisted compaction provenance schema discriminator. Future revisions should widen
+ * the reader type to a version union and keep a v1 compatibility reader instead of
+ * rewriting historical receipts.
+ */
+export const SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1 =
+  "brewva.compaction.input-provenance.v1" as const;
+
+export interface SessionCompactionInputProvenance extends ProtocolRecord {
+  readonly schema: typeof SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1;
+  readonly hiddenRecallSearch: false;
+  readonly activeWorkbenchEntryIds: readonly string[];
+  readonly selectedSkillInvocationIds: readonly string[];
+  readonly surfacedResourceRefs: readonly SessionCompactionResourceRef[];
+  readonly capabilityReceiptRefs: readonly string[];
+  readonly recallResultRefs: readonly SessionCompactionRecallResultRef[];
+  readonly compactBaseline: unknown;
+  readonly usedRecallSelection: {
+    readonly maxResults: number;
+    readonly selectedStableIds: readonly string[];
+  };
+}
+
 export type TapeHandoffResult =
   | {
       readonly ok: true;

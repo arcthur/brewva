@@ -170,7 +170,11 @@ export class RecallBroker {
     const limit = Math.max(1, input.limit ?? DEFAULT_MAX_RESULTS);
     const scope = input.scope ?? DEFAULT_SCOPE;
     const intent = input.intent;
-    const rankingContext = createRankingContext(input.sessionId, intent);
+    const rankingContext = createRankingContext(
+      input.sessionId,
+      intent,
+      this.runtime.identity.workspaceRoot,
+    );
     const state = await this.sync();
     const queryTokens = tokenizeSearchQuery(query);
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
@@ -228,7 +232,11 @@ export class RecallBroker {
 
   async inspectStableIds(input: RecallBrokerInspectInput): Promise<RecallInspectResult> {
     const scope = input.scope ?? DEFAULT_SCOPE;
-    const rankingContext = createRankingContext(input.sessionId, undefined);
+    const rankingContext = createRankingContext(
+      input.sessionId,
+      undefined,
+      this.runtime.identity.workspaceRoot,
+    );
     const state = await this.sync();
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
     const currentTarget = this.runtime.task.target.getDescriptor(input.sessionId);
@@ -301,6 +309,10 @@ export class RecallBroker {
           {
             stableId: `tape:${digest.sessionId}:${event.id}`,
             sourceFamily: "tape_evidence",
+            sessionScope:
+              digest.sessionId === currentSessionId ? "current_session" : "prior_session",
+            rootRef:
+              digest.primaryRoot || digest.targetRoots[0] || this.runtime.identity.workspaceRoot,
             trustLabel: classification.trustLabel,
             evidenceStrength: classification.evidenceStrength,
             scope,
@@ -447,6 +459,11 @@ export class RecallBroker {
       {
         stableId,
         sourceFamily: "tape_evidence",
+        sessionScope:
+          digest.sessionId === rankingContext.currentSessionId
+            ? "current_session"
+            : "prior_session",
+        rootRef: digest.primaryRoot || digest.targetRoots[0] || this.runtime.identity.workspaceRoot,
         trustLabel: classification.trustLabel,
         evidenceStrength: classification.evidenceStrength,
         scope,

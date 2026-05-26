@@ -12,6 +12,11 @@ function skill(input: {
   description: string;
   whenToUse?: string;
   pathGlobs?: readonly string[];
+  references?: readonly string[];
+  scripts?: readonly string[];
+  invariants?: readonly string[];
+  argumentHints?: readonly string[];
+  outputArtifacts?: readonly string[];
   markdown?: string;
 }): SkillDocument {
   const category = input.category ?? "core";
@@ -36,9 +41,19 @@ function skill(input: {
             },
           }
         : {}),
+      ...(input.argumentHints ? { argumentHints: input.argumentHints } : {}),
+      ...(input.outputArtifacts ? { outputArtifacts: input.outputArtifacts } : {}),
     },
-    resources: { references: [], scripts: [], invariants: [] },
-    authoredResources: { references: [], scripts: [], invariants: [] },
+    resources: {
+      references: input.references ?? [],
+      scripts: input.scripts ?? [],
+      invariants: input.invariants ?? [],
+    },
+    authoredResources: {
+      references: input.references ?? [],
+      scripts: input.scripts ?? [],
+      invariants: input.invariants ?? [],
+    },
     inheritedResources: { references: [], scripts: [], invariants: [] },
     projectGuidance: [],
     overlayFiles: [],
@@ -468,6 +483,90 @@ describe("hosted advisory skill shortlist context", () => {
     });
     expect(renderedSkillContext.charCount).toBeGreaterThan(0);
     expect(renderedSkillContext.estimatedTokens).toBeGreaterThan(0);
+  });
+
+  test("records advisory skill invocation metadata for prompt-visible SkillCards", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "memory-audit",
+        category: "docs",
+        description: "Inspect repository memory and recall ergonomics.",
+        whenToUse: "Use when work touches recall or memory behavior.",
+        references: ["references/memory.md"],
+        scripts: ["scripts/audit-memory.ts"],
+        invariants: ["invariants/no-hidden-recall.md"],
+        argumentHints: ["query", "target_root"],
+        outputArtifacts: ["audit_report"],
+      }),
+    ]);
+
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "Use $memory-audit for recall behavior.",
+    });
+
+    expect(result.receipt.skillInvocationRecords).toEqual([
+      {
+        invocationId: `${result.receipt.selectionId}:memory-audit`,
+        skillName: "memory-audit",
+        category: "docs",
+        sourcePath: "/skills/memory-audit/SKILL.md",
+        sourcePackage: null,
+        selectionTrigger: "explicit_command",
+        invocationMode: "prompt_visible",
+        resourceRefs: [
+          { kind: "reference", path: "references/memory.md" },
+          { kind: "script", path: "scripts/audit-memory.ts" },
+          { kind: "invariant", path: "invariants/no-hidden-recall.md" },
+        ],
+        estimatedTokens: expect.any(Number),
+        tokenEncoding: "o200k_base",
+        tokenEstimateMethod: "gpt_bpe_approximation",
+        tokenEstimateApproximation: true,
+        capabilityRefs: [],
+        requestedOutputArtifacts: ["audit_report"],
+        argumentHints: ["query", "target_root"],
+      },
+    ]);
+    expect(result.receipt.skillInvocationRecords[0]?.estimatedTokens).toBeGreaterThan(0);
+  });
+
+  test("bounds prompt-visible SkillCard projection and records only surfaced resource refs", () => {
+    const references = Array.from({ length: 30 }, (_, index) => `references/ref-${index}.md`);
+    const { runtime } = createRuntime([
+      skill({
+        name: "large-card",
+        category: "core",
+        description: `Large projection ${"description ".repeat(400)}tail-description`,
+        whenToUse: `Use for large metadata ${"when ".repeat(400)}tail-when`,
+        references,
+        argumentHints: Array.from({ length: 20 }, (_, index) => `arg-${index}`),
+        outputArtifacts: Array.from({ length: 20 }, (_, index) => `artifact-${index}`),
+      }),
+    ]);
+
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "Use $large-card.",
+    });
+    const record = result.receipt.skillInvocationRecords[0];
+
+    expect(result.renderedSection).toContain("description: Large projection");
+    expect(result.renderedSection).toContain("...");
+    expect(result.renderedSection).toContain("(+6 omitted)");
+    expect(result.renderedSection).toContain("(+4 omitted)");
+    expect(result.renderedSection).not.toContain("tail-description");
+    expect(result.renderedSection).not.toContain("tail-when");
+    expect(record?.resourceRefs).toHaveLength(24);
+    expect(record?.resourceRefs.at(-1)).toEqual({
+      kind: "reference",
+      path: "references/ref-23.md",
+    });
+    expect(result.receipt.renderedSkillContext).toMatchObject({
+      textFieldMaxChars: 1536,
+      listItemMaxCount: 16,
+      resourceRefMaxCount: 24,
+    });
   });
 
   test("records no-candidate receipts without injecting empty SkillCard prompt context", () => {

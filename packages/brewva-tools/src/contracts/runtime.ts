@@ -643,6 +643,9 @@ export interface BrewvaToolRuntimeQueryPort {
       list(): SkillDocument[];
       listProducers(): ProtocolRecord[];
     };
+    readonly selection: {
+      record(sessionId: string, receipt: object): unknown;
+    };
   };
   readonly tape: {
     readonly search: {

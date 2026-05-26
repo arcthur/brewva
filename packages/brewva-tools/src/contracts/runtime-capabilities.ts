@@ -95,6 +95,7 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "capabilities.skills.catalog.getProducer",
   "capabilities.skills.catalog.list",
   "capabilities.skills.catalog.listProducers",
+  "capabilities.skills.selection.record",
   "capabilities.tape.handoff.record",
   "capabilities.tape.search.search",
   "capabilities.tape.status.get",

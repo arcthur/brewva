@@ -39,6 +39,7 @@ import type {
 import {
   MESSAGE_END_EVENT_TYPE,
   readSessionRewindCompletedEventPayload,
+  SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
 import {
@@ -154,6 +155,14 @@ function readCompactionGenerationMetadata(
     return undefined;
   }
   return value as unknown as SessionCompactionGenerationMetadata;
+}
+
+function readCompactionInputProvenance(value: unknown): unknown {
+  return isRecord(value) &&
+    value.schema === SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1 &&
+    value.hiddenRecallSearch === false
+    ? value
+    : undefined;
 }
 
 const MODEL_ROLE_ALIASES = new Set<BrewvaModelRoleAlias>([
@@ -687,6 +696,7 @@ export class HostedRuntimeTapeSessionStore {
         ? (details as Record<string, unknown>)
         : undefined;
     const summaryGeneration = readCompactionGenerationMetadata(detailRecord?.summaryGeneration);
+    const inputProvenance = readCompactionInputProvenance(detailRecord?.inputProvenance);
     const event = commitRuntimeSessionCompaction(this.runtime, this.sessionId, {
       compactId: readOptionalString(detailRecord?.compactId) ?? randomUUID(),
       sanitizedSummary: summary,
@@ -707,6 +717,7 @@ export class HostedRuntimeTapeSessionStore {
           | "hosted_recovery"
           | undefined) ?? (fromHook ? "extension_api" : "hosted_recovery"),
       ...(summaryGeneration ? { summaryGeneration } : {}),
+      ...(inputProvenance ? { inputProvenance } : {}),
       cacheImpact: readCacheImpact(detailRecord?.cacheImpact),
     });
     if (!event) {

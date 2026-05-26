@@ -60,6 +60,7 @@
     "@brewva/brewva-session-index": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-substrate": "workspace:*",
+    "@brewva/brewva-token-estimation": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
     "@brewva/brewva-vocabulary": "workspace:*",
     "@opentui/core": "0.2.14",

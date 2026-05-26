@@ -27,6 +27,39 @@ export interface SkillCard extends ProtocolRecord {
   readonly category: string;
   readonly description: string;
   readonly selection?: SkillSelectionPolicy;
+  readonly argumentHints?: readonly string[];
+  readonly outputArtifacts?: readonly string[];
+}
+
+export type SkillInvocationSelectionTrigger =
+  | "explicit_command"
+  | "suggested"
+  | "delegated"
+  | "discover_only";
+
+export type SkillInvocationMode = "prompt_visible" | "delegated" | "inspect_only";
+
+export interface SkillResourceRef extends ProtocolRecord {
+  readonly kind: "reference" | "script" | "invariant";
+  readonly path: string;
+}
+
+export interface SkillInvocationRecord extends ProtocolRecord {
+  readonly invocationId: string;
+  readonly skillName: string;
+  readonly category: string;
+  readonly sourcePath: string;
+  readonly sourcePackage: string | null;
+  readonly selectionTrigger: SkillInvocationSelectionTrigger;
+  readonly invocationMode: SkillInvocationMode;
+  readonly resourceRefs: readonly SkillResourceRef[];
+  readonly estimatedTokens: number;
+  readonly tokenEncoding: string;
+  readonly tokenEstimateMethod: string;
+  readonly tokenEstimateApproximation: boolean;
+  readonly capabilityRefs: readonly string[];
+  readonly requestedOutputArtifacts: readonly string[];
+  readonly argumentHints: readonly string[];
 }
 
 export type SkillOutputContract =
@@ -54,6 +87,28 @@ export interface SkillResourceSet extends ProtocolRecord {
   readonly references: readonly string[];
   readonly scripts: readonly string[];
   readonly invariants: readonly string[];
+}
+
+export const SKILLCARD_PROJECTION_LIMITS = {
+  textFieldMaxChars: 1_536,
+  listItemMaxCount: 16,
+  resourceRefMaxCount: 24,
+} as const;
+
+interface SkillResourceRefSource {
+  readonly resources: SkillResourceSet;
+}
+
+export function listSkillResourceRefs(skill: SkillResourceRefSource): SkillResourceRef[] {
+  return [
+    ...skill.resources.references.map((path): SkillResourceRef => ({ kind: "reference", path })),
+    ...skill.resources.scripts.map((path): SkillResourceRef => ({ kind: "script", path })),
+    ...skill.resources.invariants.map((path): SkillResourceRef => ({ kind: "invariant", path })),
+  ];
+}
+
+export function listSurfacedSkillResourceRefs(skill: SkillResourceRefSource): SkillResourceRef[] {
+  return listSkillResourceRefs(skill).slice(0, SKILLCARD_PROJECTION_LIMITS.resourceRefMaxCount);
 }
 
 export interface SkillSelectionPolicy extends ProtocolRecord {
@@ -143,9 +198,16 @@ export function parseSkillDocument(
   const description =
     typeof frontmatter.description === "string" ? frontmatter.description : `${title}.`;
   const selection = readSkillSelection(frontmatter.selection);
-  const card: SkillCard = selection
-    ? { name, category, description, selection }
-    : { name, category, description };
+  const argumentHints = readStringArray(frontmatter.argument_hints);
+  const outputArtifacts = readStringArray(frontmatter.output_artifacts);
+  const card: SkillCard = {
+    name,
+    category,
+    description,
+    ...(selection ? { selection } : {}),
+    ...(argumentHints.length > 0 ? { argumentHints } : {}),
+    ...(outputArtifacts.length > 0 ? { outputArtifacts } : {}),
+  };
   return {
     name,
     title,

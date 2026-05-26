@@ -1,4 +1,11 @@
 import { formatInspectAnalysisText } from "../inspect-analysis.js";
+import {
+  formatCockpitCompactionBaseline,
+  formatCockpitCompactionProvenance,
+  formatCockpitRecallResults,
+  formatCockpitResourceRefs,
+  formatCockpitSkillInvocations,
+} from "./context-cockpit.js";
 import type { InspectReport } from "./report.js";
 
 export function formatInspectText(report: InspectReport): string {
@@ -27,6 +34,13 @@ export function formatInspectText(report: InspectReport): string {
     `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing_checks=${renderList(report.verification.missingChecks)} missing_evidence=${renderList(report.verification.missingEvidence)}`,
     "Hosted transitions: removed source=canonical_tape",
     `Context evidence: ready=${report.contextEvidence.promotionReady ? "yes" : "no"} gaps=${renderList(report.contextEvidence.promotionGaps)} compactions=${report.contextEvidence.totalCompactionEvents} generation=${report.contextEvidence.totalCompactionGenerationEvents} llmPrimary=${report.contextEvidence.totalLlmPrimaryCompactionEvents} deterministicEmergency=${report.contextEvidence.totalDeterministicEmergencyCompactionEvents} genTokens=${report.contextEvidence.totalCompactionGenerationTokens} genCacheRead=${report.contextEvidence.totalCompactionGenerationCacheReadTokens} genCacheWrite=${report.contextEvidence.totalCompactionGenerationCacheWriteTokens} genCost=$${report.contextEvidence.totalCompactionGenerationCostUsd.toFixed(6)}`,
+    `Context cockpit: policy=${report.contextCockpit.sideEffectPolicy} workbench=${report.contextCockpit.workbench.activeCount} visibleReadEpoch=${report.contextCockpit.context.visibleReadEpoch}`,
+    `Context cockpit skills: invocations=${formatCockpitSkillInvocations(report.contextCockpit.skills.invocationRecords)}`,
+    `Context cockpit resources: refs=${formatCockpitResourceRefs(report.contextCockpit.skills.resourceRefs)}`,
+    `Context cockpit capabilities: receipts=${renderList([...report.contextCockpit.capabilities.receiptRefs])}`,
+    `Context cockpit recall: results=${formatCockpitRecallResults(report.contextCockpit.recall.results)}`,
+    `Context cockpit compaction: baseline=${formatCockpitCompactionBaseline(report.contextCockpit.compaction.latestBaseline)} provenance=${formatCockpitCompactionProvenance(report.contextCockpit.compaction.inputProvenance)}`,
+    `Context cockpit cache: status=${report.contextCockpit.cachePosture.status} read=${report.contextCockpit.cachePosture.cacheReadTokens} write=${report.contextCockpit.cachePosture.cacheWriteTokens}`,
     `Ledger: rows=${report.ledger.rows} integrity=${report.ledger.integrityValid ? "valid" : "invalid"} path=${report.ledger.path}`,
     `Projection: enabled=${report.projection.enabled ? "yes" : "no"} working=${report.projection.workingExists ? "present" : "missing"} path=${report.projection.workingPath}`,
     `Recovery WAL: enabled=${report.recoveryWal.enabled ? "yes" : "no"} pending=${report.recoveryWal.pendingCount} sessionPending=${report.recoveryWal.pendingSessionCount} file=${report.recoveryWal.filePath}`,

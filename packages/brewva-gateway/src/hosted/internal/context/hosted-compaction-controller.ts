@@ -1,9 +1,11 @@
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { ContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
+import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type {
   SessionCompactionCacheImpact,
   SessionCompactionCacheImpactSnapshot,
   SessionCompactionGenerationMetadata,
+  SessionCompactionInputProvenance,
 } from "@brewva/brewva-vocabulary/session";
 import { decideCompaction } from "../compaction/policy.js";
 import {
@@ -11,15 +13,22 @@ import {
   getRuntimeCompactionGateStatus,
   getRuntimeContextCompactionInstructions,
   getRuntimeContextEvidenceLatest,
+  getRuntimeContextPromptHistoryViewBaseline,
   getRuntimeContextUsage,
   getRuntimeContextUsageRatio,
   getRuntimePendingCompactionReason,
+  listRuntimeWorkbenchEntries,
+  queryRuntimeEvents,
   type HostedRuntimeAdapterPort,
 } from "../session/runtime-ports.js";
 import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
 } from "../turn-adapter/lifecycle/runtime-turn-clock.js";
+import {
+  buildCompactionInputProvenance,
+  RECALL_USAGE_EVENT_TYPES,
+} from "./compaction-input-provenance.js";
 import {
   extractCompactionEntryId,
   extractCompactionSummary,
@@ -166,6 +175,79 @@ function buildCompactionCacheImpact(
     prefixBytesChanged: null,
     degradedReason: null,
   };
+}
+
+function resolveRecallTokenBudget(usage: ContextBudgetUsage | undefined): number | null {
+  const tokens =
+    typeof usage?.tokens === "number" && Number.isFinite(usage.tokens) && usage.tokens >= 0
+      ? usage.tokens
+      : null;
+  const contextWindow =
+    typeof usage?.contextWindow === "number" &&
+    Number.isFinite(usage.contextWindow) &&
+    usage.contextWindow > 0
+      ? usage.contextWindow
+      : null;
+  if (tokens === null || contextWindow === null) {
+    return null;
+  }
+  return Math.max(0, Math.trunc(contextWindow - tokens));
+}
+
+function readEventTimestamp(event: { readonly timestamp?: unknown }): number {
+  return typeof event.timestamp === "number" && Number.isFinite(event.timestamp)
+    ? event.timestamp
+    : 0;
+}
+
+function readEventId(event: { readonly id?: unknown }): string {
+  return typeof event.id === "string" ? event.id : "";
+}
+
+function queryRecallUsageEvents(input: {
+  readonly runtime: HostedRuntimeAdapterPort;
+  readonly sessionId: string;
+  readonly compactBaseline?: { readonly timestamp?: unknown } | null;
+}): ReturnType<typeof queryRuntimeEvents> {
+  const baselineTimestamp = input.compactBaseline?.timestamp;
+  const since =
+    typeof baselineTimestamp === "number" && Number.isFinite(baselineTimestamp)
+      ? baselineTimestamp
+      : undefined;
+  return RECALL_USAGE_EVENT_TYPES.flatMap((type) =>
+    queryRuntimeEvents(input.runtime, input.sessionId, {
+      type,
+      ...(since === undefined ? {} : { since }),
+    }),
+  ).toSorted(
+    (left, right) =>
+      readEventTimestamp(left) - readEventTimestamp(right) ||
+      readEventId(left).localeCompare(readEventId(right)),
+  );
+}
+
+function buildRuntimeCompactionInputProvenance(input: {
+  readonly runtime: HostedRuntimeAdapterPort;
+  readonly sessionId: string;
+  readonly usage?: ContextBudgetUsage;
+}): SessionCompactionInputProvenance {
+  const compactBaseline =
+    getRuntimeContextPromptHistoryViewBaseline(input.runtime, input.sessionId) ?? null;
+  return buildCompactionInputProvenance({
+    workbenchEntries: listRuntimeWorkbenchEntries(input.runtime, input.sessionId),
+    skillSelection: input.runtime.ops.skills.selection.latest(input.sessionId),
+    capabilitySelection: input.runtime.ops.tools.capabilitySelection.latest(input.sessionId),
+    recallEvents: queryRuntimeEvents(input.runtime, input.sessionId, {
+      type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
+    }),
+    usageEvents: queryRecallUsageEvents({
+      runtime: input.runtime,
+      sessionId: input.sessionId,
+      compactBaseline,
+    }),
+    compactBaseline,
+    recallTokenBudget: resolveRecallTokenBudget(input.usage),
+  });
 }
 
 function getOrCreateGateState(
@@ -406,6 +488,11 @@ export function createHostedCompactionController(
         toTokens,
         origin: input.fromExtension === true ? "extension_api" : "auto_compaction",
         ...(summaryGeneration ? { summaryGeneration } : {}),
+        inputProvenance: buildRuntimeCompactionInputProvenance({
+          runtime,
+          sessionId: input.sessionId,
+          usage: input.usage,
+        }),
         cacheImpact: buildCompactionCacheImpact(runtime, input.sessionId),
       });
 

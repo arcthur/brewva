@@ -235,10 +235,9 @@ compatibility story.
 - `@brewva/brewva-session-index`: rebuildable DuckDB read model over session
   event tapes. It owns indexed evidence projection and typed query rows, while
   event tape remains runtime replay authority.
-- `@brewva/brewva-recall`: source-typed recall products over session-index
-  evidence, workbench-admitted memory, promotion drafts, and repository
-  precedent. Recall is an on-demand tool substrate, not a per-turn context
-  admission pipeline.
+- `@brewva/brewva-recall`: source-typed recall over session-index tape evidence
+  and repository precedent. Recall is an on-demand tool substrate, not a
+  per-turn context admission pipeline.
 - `@brewva/brewva-tools`: family-sliced managed tool adapters, centralized
   managed-tool capability registry, capability-scoped runtime facades,
   controlled runtime-port helpers, source snapshot and patch-plan gates, real

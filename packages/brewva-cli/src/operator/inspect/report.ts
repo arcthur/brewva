@@ -44,6 +44,7 @@ import {
   type InspectAnalysisReport,
   type InspectDirectory,
 } from "../inspect-analysis.js";
+import { buildContextCockpitReport, type ContextCockpitReport } from "./context-cockpit.js";
 
 interface SessionTransitionSnapshot {
   readonly sequence: number;
@@ -224,6 +225,7 @@ interface InspectReport {
     promotionReady: boolean;
     promotionGaps: string[];
   };
+  contextCockpit: ContextCockpitReport;
   ledger: {
     path: string;
     rows: number;
@@ -819,6 +821,7 @@ function buildInspectReport(
       promotionReady: contextEvidenceReport.promotionReadiness.ready,
       promotionGaps: contextEvidenceReport.promotionReadiness.gaps,
     },
+    contextCockpit: buildContextCockpitReport(runtime, sessionId),
     ledger: {
       path: getCliRuntimeLedgerPath(runtime),
       rows: ledgerRows.length,
@@ -881,9 +884,10 @@ function buildSessionInspectReport(input: {
 }
 
 export {
+  buildContextCockpitReport,
   buildInspectReport,
   buildSessionInspectReport,
   resolveInspectDirectory,
   resolveTargetSession,
 };
-export type { InspectReport, SessionInspectReport };
+export type { ContextCockpitReport, InspectReport, SessionInspectReport };

@@ -8,6 +8,7 @@ export {
   RECALL_SEARCH_INTENT_VALUES,
   RECALL_SOURCE_FAMILIES,
   RECALL_TRUST_LABELS,
+  projectRecallResultProvenance,
 } from "../types.js";
 export type {
   RecallBrokerState,
@@ -23,6 +24,8 @@ export type {
   RecallSearchIntent,
   RecallSearchResult,
   RecallSessionDigest,
+  RecallSessionScope,
   RecallSourceFamily,
+  RecallResultProvenanceProjection,
   RecallTrustLabel,
 } from "../types.js";
