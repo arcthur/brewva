@@ -106,6 +106,17 @@ function extractMessageText(message: unknown): string {
   return out;
 }
 
+function messageModelLabel(message: unknown): string | undefined {
+  if (!message || typeof message !== "object" || Array.isArray(message)) {
+    return undefined;
+  }
+  const record = message as { readonly provider?: unknown; readonly model?: unknown };
+  if (typeof record.provider === "string" && typeof record.model === "string") {
+    return `${record.provider}/${record.model}`;
+  }
+  return typeof record.model === "string" ? record.model : undefined;
+}
+
 function extractDeltaFromText(current: string, previous: string): string {
   if (!previous) return current;
   if (current.startsWith(previous)) return current.slice(previous.length);
@@ -592,9 +603,15 @@ export function registerEventStream(
         health: computeMessageHealth(healthWindow, healthWindow.length),
       },
     });
+    const model = messageModelLabel(event.message);
     recordAssistantUsageFromMessage(
       {
-        recordAssistantUsage: (usage) => recordRuntimeAssistantCost(runtime, usage),
+        recordAssistantUsage: (usage) =>
+          recordRuntimeAssistantCost(runtime, {
+            sessionId,
+            ...usage,
+            ...(model ? { model } : {}),
+          }),
       },
       sessionId,
       event.message,

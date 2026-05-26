@@ -150,8 +150,9 @@ owner: runtime-maintainers
 - tools managed capability policy is centralized in
   `@brewva/brewva-tools/registry`; family adapters receive scoped runtime
   facades and must fail closed when an undeclared capability is accessed. The
-  static capability inventory is generated from the runtime capability type
-  union by `bun run tools:capability-inventory`
+  static capability inventory is generated from
+  `BrewvaToolRuntimeCapabilitiesPort` and explicit tools extensions by
+  `bun run tools:capability-inventory`
 - runtime projection admission is explicit: canonical projection code belongs in
   `packages/brewva-runtime/src/runtime/tape/` and must not import gateway hosted
   internals, provider packages, tool families, or removed runtime port contracts

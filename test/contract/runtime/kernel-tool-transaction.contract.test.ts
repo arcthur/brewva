@@ -232,7 +232,7 @@ describe("kernel tool transaction", () => {
 
     const receipt = runtime.kernel.recordAdvisoryEvent({
       sessionId: "kernel-session",
-      namespace: "gateway.ops",
+      namespace: "runtime.ops",
       kind: "session_shutdown",
       version: 1,
       payload: { reason: "test_shutdown" },
@@ -242,7 +242,7 @@ describe("kernel tool transaction", () => {
       sessionId: "kernel-session",
       type: "custom",
       payload: {
-        namespace: "gateway.ops",
+        namespace: "runtime.ops",
         kind: "session_shutdown",
         version: 1,
         authority: "advisory",

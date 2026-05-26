@@ -97,7 +97,7 @@ function toOperationalEvent(event: RuntimeEventLike): RuntimeEventLike | null {
   }
   const custom = event.payload;
   if (
-    custom.namespace !== "gateway.ops" ||
+    custom.namespace !== "runtime.ops" ||
     typeof custom.kind !== "string" ||
     custom.version !== 1 ||
     !("payload" in custom)

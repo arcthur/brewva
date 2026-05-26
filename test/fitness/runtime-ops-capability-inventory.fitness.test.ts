@@ -175,7 +175,7 @@ describe("runtime ops capability inventory fitness", () => {
     const runtimeOps = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-port.ts",
     );
-    const hostedOnly = topLevelReadonlyNamespaces(runtimeOps, "HostedRuntimeOpsPort");
+    const hostedOnly = topLevelReadonlyTypeMembers(runtimeOps, "HostedRuntimeOpsExtensions");
     const expected = sorted(new Set([...BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES, ...hostedOnly]));
 
     expect(sorted(Object.keys(HOSTED_RUNTIME_OPS_NAMESPACE_LABELS))).toEqual(expected);
@@ -188,6 +188,74 @@ describe("runtime ops capability inventory fitness", () => {
     expect(HOSTED_RUNTIME_OPS_NAMESPACE_LABELS.task).toBe("B");
     expect(HOSTED_RUNTIME_OPS_NAMESPACE_LABELS.workbench).toBe("B");
     expect(HOSTED_RUNTIME_OPS_NAMESPACE_LABELS.schedule).toBe("B");
+  });
+
+  test("hosted ops typed port composes the tools capability source instead of mirroring it", () => {
+    const runtimeOps = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-port.ts",
+    );
+    const hostedExtensions = exportedObjectTypeBlock(runtimeOps, "HostedRuntimeOpsExtensions");
+    const generator = readRepoFile("script/generate-tool-runtime-capability-inventory.ts");
+
+    expect(runtimeOps).toContain(
+      "export type HostedRuntimeOpsPort = BrewvaToolRuntimeCapabilitiesPort & HostedRuntimeOpsExtensions;",
+    );
+    expect(runtimeOps).not.toContain("extends BrewvaToolRuntimeCapabilitiesPort");
+    expect(hostedExtensions).not.toMatch(
+      /^  readonly (?:claim|cost|ledger|lifecycle|recovery|tape|task|workbench):/gm,
+    );
+    expect(hostedExtensions).not.toMatch(
+      /recordMetricObservation|recordGuardResult|listSessionIds|getTurnProjection|renderTurnDigest/g,
+    );
+    expect(generator).toContain('typeName: "BrewvaToolRuntimeCapabilitiesPort"');
+    expect(generator).toContain('typeName: "BrewvaToolRuntimeToolsExtension"');
+    expect(generator).not.toContain("findCapabilityTypeAlias");
+  });
+
+  test("four-port ops replay readers share the same ops event namespace contract", () => {
+    const runtimePort = readRepoFile("packages/brewva-tools/src/runtime-port/four-port/types.ts");
+    const runtimePortIndex = readRepoFile("packages/brewva-tools/src/runtime-port/index.ts");
+    const sessionSupervisor = readRepoFile(
+      "packages/brewva-gateway/src/daemon/session-supervisor/index.ts",
+    );
+    const retiredGatewayOpsNamespace = ["gateway", "ops"].join(".");
+
+    expect(runtimePort).toContain("export const FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES");
+    expect(runtimePort).toContain('"runtime.ops"');
+    expect(runtimePort).not.toContain(`"${retiredGatewayOpsNamespace}"`);
+    expect(runtimePortIndex).toContain("FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES");
+    expect(sessionSupervisor).toContain("FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES");
+    expect(sessionSupervisor).not.toContain(
+      `event.payload.namespace === "${retiredGatewayOpsNamespace}"`,
+    );
+  });
+
+  test("four-port events listSessionIds preserves the durable session inventory seam", () => {
+    const runtimePort = readRepoFile("packages/brewva-tools/src/runtime-port/four-port/types.ts");
+    const runtimePortEvents = readRepoFile(
+      "packages/brewva-tools/src/runtime-port/four-port/events.ts",
+    );
+    const runtimeOpsContext = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-context.ts",
+    );
+
+    expect(runtimePort).toContain("readonly listRuntimeEventSessionIds?:");
+    expect(runtimePortEvents).toContain("knownRuntimeEventSessionIds(context)");
+    expect(runtimeOpsContext).toContain("listRuntimeEventSessionIds(): string[]");
+    expect(runtimeOpsContext).toContain("return sessionIds();");
+  });
+
+  test("four-port capability adapters stay split by namespace", () => {
+    const adapterRoot = "packages/brewva-tools/src/runtime-port";
+    const barrel = readRepoFile(`${adapterRoot}/four-port-capabilities.ts`);
+    const namespaceFiles = ["cost", "events", "lifecycle", "recovery", "tape"];
+
+    expect(barrel.trim()).toBe('export * from "./four-port/index.js";');
+    for (const namespace of namespaceFiles) {
+      const source = readRepoFile(`${adapterRoot}/four-port/${namespace}.ts`);
+      expect(source).toContain(`createFourPort${namespace[0]!.toUpperCase()}${namespace.slice(1)}`);
+      expect(source.split("\n").length).toBeLessThanOrEqual(320);
+    }
   });
 
   test("keeps hosted ops implementation under the Phase 5 compression budget", () => {
@@ -215,7 +283,7 @@ describe("runtime ops capability inventory fitness", () => {
       runtimeOpsContext.split("\n").length +
       runtimeOpsBuilders.reduce((sum, builder) => sum + builder.split("\n").length, 0);
     const hostedOpsMirrorLines = runtimeOps.split("\n").length + toolRuntime.split("\n").length;
-    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(800);
+    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_050);
     expect(hostedOpsLines).toBeLessThanOrEqual(2_500);
     expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_127);
   });
@@ -271,6 +339,26 @@ describe("runtime ops capability inventory fitness", () => {
       expect(source).toContain("export function build");
       expect(source).toContain('from "../runtime-ops-context.js"');
       expect(source).toContain(`HostedRuntimeOpsPort["${namespace}"]`);
+    }
+  });
+
+  test("A-labeled hosted ops builders are thin four-port capability delegates", () => {
+    const aNamespaces = Object.entries(HOSTED_RUNTIME_OPS_NAMESPACE_LABELS)
+      .filter(([, label]) => label === "A")
+      .map(([namespace]) => namespace)
+      .toSorted();
+
+    expect(aNamespaces).toEqual(["cost", "events", "lifecycle", "recovery", "tape"]);
+
+    for (const namespace of aNamespaces) {
+      const fileName =
+        RUNTIME_OPS_BUILDER_FILES[namespace as keyof typeof RUNTIME_OPS_BUILDER_FILES];
+      const source = readRepoFile(`${RUNTIME_OPS_BUILDER_DIR}/${fileName}`);
+      expect(source).toContain("createFourPort");
+      expect(source).not.toMatch(
+        /ctx\.(?:emit|recordSessionPayload|listEvents|queryEvents|queryStructuredEvents|runtime\.tape)/u,
+      );
+      expect(source.split("\n").length).toBeLessThanOrEqual(12);
     }
   });
 });

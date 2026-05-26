@@ -258,7 +258,7 @@ function parseEvents(eventFile: string): RuntimeEvent[] {
         }
         const custom = event.payload;
         if (
-          custom.namespace !== "gateway.ops" ||
+          custom.namespace !== "runtime.ops" ||
           typeof custom.kind !== "string" ||
           custom.version !== 1
         ) {

@@ -69,8 +69,8 @@ four-port-runtime-simplification-rfc.md`; those records remain as historical
 
 ## Follow-Up Decisions
 
-- `docs/research/active/runtime-axis-decoupling-and-vocabulary-boundary.md`
-  defines the physics/reality, observation, vocabulary, and topology contracts.
+- `docs/research/decisions/runtime-axis-decoupling-and-vocabulary-boundary.md`
+  accepts the physics, observation, vocabulary, topology, and hosted ops capability contracts.
 
 ## Verification
 

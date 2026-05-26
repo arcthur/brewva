@@ -24,6 +24,7 @@ import {
 import { asBrewvaSessionId, asBrewvaWalId } from "@brewva/brewva-runtime/core";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
+import { FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES } from "@brewva/brewva-tools/runtime-port";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
 import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
 import type { RecoveryWalRecord } from "@brewva/brewva-vocabulary/session";
@@ -186,7 +187,11 @@ function readCanonicalEventRecord(event: CanonicalEvent): BrewvaStructuredEvent 
   if (typeof event.payload.kind !== "string" || event.payload.version !== 1) {
     return null;
   }
-  if (event.payload.namespace === "gateway.ops") {
+  if (
+    FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES.includes(
+      event.payload.namespace as (typeof FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES)[number],
+    )
+  ) {
     const payload = isRecord(event.payload.payload)
       ? (event.payload.payload as Record<string, never>)
       : undefined;

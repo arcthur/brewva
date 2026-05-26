@@ -40,7 +40,7 @@ shape (`projection.dir=.orchestrator/projection`,
   - configured by `tape.enabled` and `tape.dir`
   - stores only compact canonical event types such as `turn.started`,
     `tool.proposed`, `tool.committed`, and `checkpoint.committed`
-  - canonical `custom` records may carry advisory `gateway.ops` rows, but they
+  - canonical `custom` records may carry advisory `runtime.ops` rows, but they
     cannot carry commitment authority
   - startup validates this directory and fails fast on non-canonical rows
 - Projection units cache (`rebuildable state`): `.orchestrator/projection/units.jsonl`

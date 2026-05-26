@@ -1,13 +1,16 @@
-import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { BrewvaRuntime, CanonicalEvent } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   classifyToolBoundaryRequest,
   evaluateBoundaryClassification,
   resolveBoundaryPolicy,
 } from "@brewva/brewva-runtime/security";
-import { toJsonValue } from "@brewva/brewva-std/json";
+import {
+  listFourPortRuntimeEvents,
+  recordFourPortRuntimeOpsEvent,
+  structureFourPortRuntimeEvent,
+} from "@brewva/brewva-tools/runtime-port";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
@@ -81,6 +84,9 @@ export type HostedRuntimeOpsContext = {
     options?: { readonly timestamp?: number; readonly turn?: number },
   ): RuntimeEventRecord;
   emitInput(type: string, input: RuntimeEventInput): RuntimeEventRecord;
+  publishEvent(event: RuntimeEventRecord): void;
+  rememberSessionId(sessionId: string): void;
+  subscribeEvents(listener: RuntimeListener): () => boolean;
   recordProgress(sessionId: string, at?: number): void;
   clearStallIfProgressResumed(sessionId: string, clearedAt?: number): void;
   listEvents(sessionId: string, query?: BrewvaEventQuery): RuntimeEventRecord[];
@@ -88,6 +94,7 @@ export type HostedRuntimeOpsContext = {
   structuredEvent(event: RuntimeEventRecord): RuntimeEventRecord;
   queryStructuredEvents(sessionId: string, query?: BrewvaEventQuery): RuntimeEventRecord[];
   sessionIds(): string[];
+  listRuntimeEventSessionIds(): string[];
   listReplaySessions(limit?: number): BrewvaReplaySession[];
   toRuntimeEventInput(args: readonly unknown[]): RuntimeEventInput;
   recordSemanticEvent(type: string): RuntimeSemanticRecorder;
@@ -154,65 +161,6 @@ const EMPTY_COMPACTION_GATE_STATUS: ContextCompactionGateStatus = Object.freeze(
   turnsSinceCompaction: null,
 });
 
-function canonicalToOperationalEvent(event: CanonicalEvent): RuntimeEventRecord {
-  if (event.type === "custom") {
-    const payload = event.payload;
-    if (
-      payload &&
-      typeof payload === "object" &&
-      "namespace" in payload &&
-      "kind" in payload &&
-      (payload as { namespace?: unknown }).namespace === "gateway.ops" &&
-      typeof (payload as { kind?: unknown }).kind === "string"
-    ) {
-      return {
-        schema: "brewva.event.v1",
-        id: event.id,
-        sessionId: event.sessionId,
-        type: (payload as { kind: string }).kind,
-        category: eventCategory((payload as { kind: string }).kind),
-        timestamp: event.timestamp,
-        isoTime: new Date(event.timestamp).toISOString(),
-        ...turnFields(event.turnId),
-        payload: (payload as { payload?: RuntimeEventRecord["payload"] }).payload,
-      } as RuntimeEventRecord;
-    }
-  }
-  return {
-    schema: "brewva.event.v1",
-    id: event.id,
-    sessionId: event.sessionId,
-    type: event.type,
-    category: eventCategory(event.type),
-    timestamp: event.timestamp,
-    isoTime: new Date(event.timestamp).toISOString(),
-    ...turnFields(event.turnId),
-    payload: event.payload as RuntimeEventRecord["payload"],
-  } as RuntimeEventRecord;
-}
-
-function eventCategory(type: string): string {
-  if (type.startsWith("session_") || type.startsWith("channel_session_")) return "session";
-  if (type.startsWith("tool_") || type.startsWith("tool.")) return "tool";
-  if (type.startsWith("task_") || type.startsWith("task.")) return "task";
-  if (type.startsWith("cost.") || type === "cost_update") return "cost";
-  return "other";
-}
-
-function turnFields(turnId: string | undefined): {
-  readonly turnId?: string;
-  readonly turn?: number;
-} {
-  if (!turnId) {
-    return {};
-  }
-  const numericTurn = Number(turnId);
-  return {
-    turnId,
-    ...(Number.isFinite(numericTurn) ? { turn: numericTurn } : {}),
-  };
-}
-
 function listDurableTapeSessionIds(runtime: BrewvaRuntime): string[] {
   if (!runtime.config.tape.enabled) {
     return [];
@@ -238,17 +186,6 @@ function readObjectPayload(value: unknown): ProtocolRecord {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as ProtocolRecord)
     : {};
-}
-
-function sliceWindow<T>(values: T[], offset: number | null, limit: number | null): T[] {
-  let window = values;
-  if (offset !== null && offset > 0) {
-    window = window.slice(offset);
-  }
-  if (limit !== null) {
-    window = window.slice(0, limit);
-  }
-  return window;
 }
 
 export function createHostedRuntimeOpsContext(options: {
@@ -316,24 +253,36 @@ export function createHostedRuntimeOpsContext(options: {
     payload?: object,
     emitOptions: { readonly timestamp?: number; readonly turn?: number } = {},
   ): RuntimeEventRecord {
-    const timestamp = emitOptions.timestamp ?? Date.now();
-    const eventId = `ops:${sessionId}:${randomUUID()}`;
-    const { event: canonicalEvent } = options.runtime.kernel.recordAdvisoryEvent({
-      id: eventId,
-      sessionId,
-      ...(typeof emitOptions.turn === "number" ? { turnId: String(emitOptions.turn) } : {}),
-      timestamp,
-      namespace: "gateway.ops",
-      kind: type,
-      version: 1,
-      payload: toJsonValue(payload ?? {}),
-    });
-    const event = canonicalToOperationalEvent(canonicalEvent);
-    state.operationalSessionIds.add(sessionId);
+    const event = recordFourPortRuntimeOpsEvent(
+      {
+        runtime: options.runtime,
+        publishEvent,
+        rememberSessionId,
+      },
+      {
+        sessionId,
+        kind: type,
+        payload,
+        timestamp: emitOptions.timestamp,
+        turn: emitOptions.turn,
+      },
+    );
+    return event;
+  }
+
+  function publishEvent(event: RuntimeEventRecord): void {
     for (const subscriber of state.subscribers) {
       subscriber(event);
     }
-    return event;
+  }
+
+  function rememberSessionId(sessionId: string): void {
+    state.operationalSessionIds.add(sessionId);
+  }
+
+  function subscribeEvents(listener: RuntimeListener): () => boolean {
+    state.subscribers.add(listener);
+    return () => state.subscribers.delete(listener);
   }
 
   function emitInput(type: string, inputValue: RuntimeEventInput): RuntimeEventRecord {
@@ -348,63 +297,7 @@ export function createHostedRuntimeOpsContext(options: {
   }
 
   function listEvents(sessionId: string, query?: BrewvaEventQuery): RuntimeEventRecord[] {
-    const sourceEvents = options.runtime.tape.list(sessionId);
-    let orderedEvents = sourceEvents;
-    for (let index = 1; index < sourceEvents.length; index += 1) {
-      const previous = sourceEvents[index - 1];
-      const current = sourceEvents[index];
-      if (previous && current && previous.timestamp > current.timestamp) {
-        orderedEvents = [...sourceEvents].toSorted(
-          (left, right) => left.timestamp - right.timestamp,
-        );
-        break;
-      }
-    }
-    const after =
-      typeof query?.after === "number" && Number.isFinite(query.after)
-        ? query.after
-        : typeof query?.since === "number" && Number.isFinite(query.since)
-          ? query.since
-          : null;
-    const before =
-      typeof query?.before === "number" && Number.isFinite(query.before) ? query.before : null;
-    const offset =
-      typeof query?.offset === "number" && Number.isFinite(query.offset)
-        ? Math.max(0, Math.trunc(query.offset))
-        : null;
-    const limit =
-      typeof query?.limit === "number" && Number.isFinite(query.limit)
-        ? Math.max(0, Math.trunc(query.limit))
-        : null;
-    const last =
-      typeof query?.last === "number" && Number.isFinite(query.last)
-        ? Math.max(0, Math.trunc(query.last))
-        : null;
-    const matchesQuery = (event: RuntimeEventRecord): boolean => {
-      if (query?.type && event.type !== query.type) return false;
-      if (query?.category && event.category !== query.category) return false;
-      if (after !== null && event.timestamp <= after) return false;
-      if (before !== null && event.timestamp >= before) return false;
-      return true;
-    };
-    if (last !== null) {
-      if (last === 0) return [];
-      const tail: RuntimeEventRecord[] = [];
-      for (let index = orderedEvents.length - 1; index >= 0; index -= 1) {
-        const event = orderedEvents[index];
-        if (!event) continue;
-        const operationalEvent = canonicalToOperationalEvent(event);
-        if (!matchesQuery(operationalEvent)) continue;
-        tail.push(operationalEvent);
-        if (tail.length >= last) break;
-      }
-      tail.reverse();
-      return sliceWindow(tail, offset, limit);
-    }
-    const matches = orderedEvents
-      .map(canonicalToOperationalEvent)
-      .filter((event) => matchesQuery(event));
-    return sliceWindow(matches, offset, limit);
+    return listFourPortRuntimeEvents(options.runtime, sessionId, query);
   }
 
   function queryEvents(sessionId: string, query?: BrewvaEventQuery): RuntimeEventRecord[] {
@@ -412,12 +305,7 @@ export function createHostedRuntimeOpsContext(options: {
   }
 
   function structuredEvent(event: RuntimeEventRecord): RuntimeEventRecord {
-    return {
-      ...event,
-      schema: "brewva.event.v1",
-      category: eventCategory(event.type),
-      isoTime: new Date(event.timestamp ?? Date.now()).toISOString(),
-    } as RuntimeEventRecord;
+    return structureFourPortRuntimeEvent(event);
   }
 
   function queryStructuredEvents(
@@ -449,6 +337,10 @@ export function createHostedRuntimeOpsContext(options: {
       ...state.operationalSessionIds,
     ]);
     return [...sessions].toSorted();
+  }
+
+  function listRuntimeEventSessionIds(): string[] {
+    return sessionIds();
   }
 
   function listReplaySessions(limit?: number): BrewvaReplaySession[] {
@@ -531,6 +423,9 @@ export function createHostedRuntimeOpsContext(options: {
     explainRuntimeToolAccess,
     emit,
     emitInput,
+    publishEvent,
+    rememberSessionId,
+    subscribeEvents,
     recordProgress,
     clearStallIfProgressResumed,
     listEvents,
@@ -538,6 +433,7 @@ export function createHostedRuntimeOpsContext(options: {
     structuredEvent,
     queryStructuredEvents,
     sessionIds,
+    listRuntimeEventSessionIds,
     listReplaySessions,
     toRuntimeEventInput,
     recordSemanticEvent,

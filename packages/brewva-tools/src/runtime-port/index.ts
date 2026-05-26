@@ -1,4 +1,21 @@
 export {
+  canonicalEventToFourPortRuntimeEvent,
+  createFourPortCostRuntimeOps,
+  createFourPortEventsRuntimeOps,
+  createFourPortLifecycleRuntimeOps,
+  createFourPortRecoveryRuntimeOps,
+  createFourPortTapeRuntimeOps,
+  deriveTurnEffectCommitmentProjection,
+  FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES,
+  listFourPortRuntimeEvents,
+  recordFourPortRuntimeOpsEvent,
+  renderTurnConsequenceDigest,
+  structureFourPortRuntimeEvent,
+  type FourPortRuntimeCapabilityContext,
+  type FourPortRuntimeEventListener,
+  type FourPortRuntimeEventRecord,
+} from "./four-port-capabilities.js";
+export {
   recordToolRuntimeEvent,
   registerToolRuntimeClearStateListener,
   resolveToolRuntimeCapabilitiesTools,

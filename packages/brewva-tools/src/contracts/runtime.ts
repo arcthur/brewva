@@ -3,6 +3,7 @@ import type { ToolActionPolicy } from "@brewva/brewva-runtime/security";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
+  ContextEntryRecord,
   ContextEvidenceSample,
   ContextStatus,
 } from "@brewva/brewva-vocabulary/context";
@@ -10,9 +11,11 @@ import type { WorkerMergeReport, WorkerResult } from "@brewva/brewva-vocabulary/
 import type {
   BrewvaEventQuery,
   BrewvaEventRecord,
+  ProtocolRecord,
   BrewvaStructuredEvent,
 } from "@brewva/brewva-vocabulary/events";
 import type {
+  ClaimState,
   RenderTurnConsequenceDigestOptions,
   ResourceLeaseRecord,
   ToolInvocationStartInput,
@@ -36,7 +39,9 @@ import type {
   DecideEffectCommitmentInput,
   DecideEffectCommitmentResult,
   DecisionReceipt,
+  EffectCommitmentRequestRecord,
   EffectCommitmentProposal,
+  PendingEffectCommitmentRequest,
 } from "@brewva/brewva-vocabulary/iteration";
 import type {
   ScheduleIntentCancelInput,
@@ -51,6 +56,18 @@ import type {
 } from "@brewva/brewva-vocabulary/schedule";
 import type {
   HistoryViewBaselineSnapshot,
+  ProducerContract,
+  RecordSessionRewindCheckpointInput,
+  SessionLifecycleSnapshot,
+  SessionLineageNodeRecord,
+  SessionLineageTree,
+  SessionRedoInput,
+  SessionRedoResult,
+  SessionRewindInput,
+  SessionRewindResult,
+  SessionRewindState,
+  SessionRewindTargetView,
+  TapeLedgerRow,
   TapeHandoffResult,
   TapeSearchResult,
   TapeStatusState,
@@ -72,6 +89,7 @@ import type {
   TaskState,
   TaskTargetDescriptor,
 } from "@brewva/brewva-vocabulary/task";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import type {
   SourcePatchApplyResult,
@@ -91,6 +109,42 @@ interface RuntimeResult {
 }
 
 type RuntimeMutationResult = RuntimeResult;
+
+export type RuntimeSessionHydration = {
+  readonly status: "cold" | "ready" | "degraded";
+  readonly hydratedAt: number;
+  readonly latestEventId: string | null;
+  readonly issues: ReadonlyArray<{
+    readonly eventId?: string;
+    readonly eventType?: string;
+    readonly index?: number;
+    readonly reason: string;
+  }>;
+};
+
+export type RuntimeSessionIntegrity = {
+  readonly status: "healthy" | "degraded" | "unavailable";
+  readonly issues: ReadonlyArray<{
+    readonly domain: string;
+    readonly severity: string;
+    readonly sessionId?: string;
+    readonly eventId?: string;
+    readonly eventType?: string;
+    readonly index?: number;
+    readonly reason: string;
+  }>;
+};
+
+export type RuntimeRecoveryPendingRecord = {
+  readonly walId: string;
+  readonly source: string;
+  readonly status: string;
+  readonly sessionId: string;
+  readonly turnId?: string;
+  readonly channel?: string;
+  readonly updatedAt: number;
+  readonly envelope: { readonly meta?: Record<string, unknown> | null };
+};
 
 export const BREWVA_TOOL_RUNTIME_COMMAND_NAMESPACES = [
   "claim",
@@ -214,10 +268,36 @@ export interface BrewvaToolRuntimeCommandPort {
     };
   };
   readonly session: {
+    readonly compaction: {
+      commit(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+    };
     readonly lifecycle: {
       compactFailed(input: unknown): unknown;
       compactRequestFailed(input: unknown): unknown;
       compactRequested(input: unknown): unknown;
+    };
+    readonly lineage: {
+      adoptOutcome(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+      createNode(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+      recordCapabilityState(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+      recordContextEntry(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+      recordOutcome(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+      recordSelection(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+      recordSummary(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+    };
+    readonly rewind: {
+      recordCheckpoint(
+        sessionId: string,
+        input: RecordSessionRewindCheckpointInput,
+      ): BrewvaEventRecord;
+      redo(sessionId: string, input?: SessionRedoInput): SessionRedoResult;
+      rewind(sessionId: string, input: SessionRewindInput): SessionRewindResult;
+    };
+    readonly title: {
+      recordGenerated(sessionId: string, input: ProtocolRecord): BrewvaEventRecord;
+    };
+    readonly workerResults: {
+      record(sessionId: string, input: WorkerResult): BrewvaEventRecord;
     };
   };
   readonly tape: {
@@ -245,11 +325,23 @@ export interface BrewvaToolRuntimeCommandPort {
     readonly items: {
       add(
         sessionId: string,
-        input: { id?: string; text: string; status?: TaskItemStatus },
+        input: {
+          id?: string;
+          text: string;
+          status?: TaskItemStatus;
+          timestamp?: number;
+          turn?: number;
+        },
       ): TaskItemAddResult;
       update(
         sessionId: string,
-        input: { id: string; text?: string; status?: TaskItemStatus },
+        input: {
+          id: string;
+          text?: string;
+          status?: TaskItemStatus;
+          timestamp?: number;
+          turn?: number;
+        },
       ): TaskItemUpdateResult;
     };
     readonly spec: {
@@ -268,6 +360,9 @@ export interface BrewvaToolRuntimeCommandPort {
     readonly lifecycle: {
       boxReleased(input: unknown): unknown;
       callBlocked(input: unknown): unknown;
+      callObserved(input: unknown): unknown;
+      executionEnded(input: unknown): unknown;
+      executionStarted(input: unknown): unknown;
       parallelRead(input: unknown): unknown;
     };
     readonly observability: {
@@ -276,6 +371,8 @@ export interface BrewvaToolRuntimeCommandPort {
     };
     readonly outputs: {
       artifactPersisted(input: unknown): unknown;
+      artifactPersistFailed(input: unknown): unknown;
+      distilled(input: unknown): unknown;
       observed(input: unknown): unknown;
       search(input: unknown): unknown;
       sourceIntelligenceQuery(input: unknown): unknown;
@@ -396,7 +493,7 @@ export interface BrewvaToolRuntimeCommandPort {
 export interface BrewvaToolRuntimeQueryPort {
   readonly claim: {
     readonly state: {
-      get(sessionId: string): unknown;
+      get(sessionId: string): ClaimState;
     };
   };
   readonly context: {
@@ -433,7 +530,6 @@ export interface BrewvaToolRuntimeQueryPort {
     readonly visibleRead: {
       getEpoch(sessionId: string): number;
       isCurrent(sessionId: string, state: unknown): boolean;
-      rememberState(sessionId: string, state: unknown): unknown;
     };
   };
   readonly cost: {
@@ -462,28 +558,28 @@ export interface BrewvaToolRuntimeQueryPort {
       query(sessionId: string, query?: BrewvaEventQuery): BrewvaEventRecord[];
       queryStructured(sessionId: string, query?: BrewvaEventQuery): BrewvaStructuredEvent[];
       subscribe(listener: (event: BrewvaEventRecord) => void): () => void;
-      toStructured(event: BrewvaEventRecord): BrewvaStructuredEvent | undefined;
+      toStructured(event: BrewvaEventRecord): BrewvaStructuredEvent;
     };
   };
   readonly ledger: {
     readonly store: {
       getDigest(sessionId: string): { readonly digest?: string } | undefined;
       getPath(): string;
-      listRows(sessionId: string): unknown[];
+      listRows(sessionId: string): TapeLedgerRow[];
       query(sessionId: string, query?: unknown): string;
-      verifyIntegrity(sessionId: string): unknown;
+      verifyIntegrity(sessionId: string): { valid: boolean; reason?: string; ok?: boolean };
     };
   };
   readonly lifecycle: {
-    getSnapshot(sessionId: string): unknown;
+    getSnapshot(sessionId: string): SessionLifecycleSnapshot;
   };
   readonly proposals: {
     readonly proposals: {
-      list(sessionId: string, query?: unknown): unknown[];
+      list(sessionId: string, query?: unknown): ProtocolRecord[];
     };
     readonly requests: {
-      list(sessionId: string, query?: unknown): unknown[];
-      listPending(sessionId?: string): unknown[];
+      list(sessionId: string, query?: unknown): EffectCommitmentRequestRecord[];
+      listPending(sessionId?: string, query?: unknown): PendingEffectCommitmentRequest[];
     };
   };
   readonly reasoning: {
@@ -502,7 +598,7 @@ export interface BrewvaToolRuntimeQueryPort {
   readonly recovery: {
     getPosture(sessionId: string): unknown;
     getWorkingSet(sessionId: string): unknown;
-    listPending(): unknown[];
+    listPending(): RuntimeRecoveryPendingRecord[];
   };
   readonly schedule: {
     readonly intents: {
@@ -512,27 +608,40 @@ export interface BrewvaToolRuntimeQueryPort {
   };
   readonly session: {
     readonly lifecycle: {
-      getHydration(sessionId: string): unknown;
-      getIntegrity(sessionId: string): unknown;
+      getHydration(sessionId: string): RuntimeSessionHydration;
+      getIntegrity(sessionId: string): RuntimeSessionIntegrity;
       getOpenToolCalls(sessionId: string): OpenToolCallRecord[];
       getUncleanShutdownDiagnostic(sessionId: string): SessionUncleanShutdownDiagnostic | undefined;
     };
+    readonly lineage: {
+      getContextEntryPath(sessionId: string, query?: unknown): ContextEntryRecord[];
+      getNode(sessionId: string, lineageNodeId: string): SessionLineageNodeRecord | undefined;
+      getTree(sessionId: string, query?: unknown): SessionLineageTree;
+      listChildren(sessionId: string, lineageNodeId: string): SessionLineageNodeRecord[];
+    };
+    readonly rewind: {
+      getState(sessionId: string): SessionRewindState;
+      listTargets(sessionId: string): SessionRewindTargetView[];
+    };
+    readonly title: {
+      get(sessionId: string): string | undefined;
+    };
     readonly workerResults: {
       list(sessionId: string): WorkerResult[];
-      merge(sessionId: string): WorkerMergeReport;
+      merge(sessionId: string, input?: unknown): WorkerMergeReport;
     };
   };
   readonly sessionWire: {
-    query(sessionId: string, query?: unknown): unknown[];
-    subscribe(sessionId: string, listener: (event: unknown) => void): () => void;
+    query(sessionId: string, query?: unknown): SessionWireFrame[];
+    subscribe(sessionId: string, listener: (event: SessionWireFrame) => void): () => boolean;
   };
   readonly skills: {
     readonly catalog: {
       get(name: string): SkillDocument | undefined;
       getLoadReport(): SkillRegistryLoadReport;
-      getProducer(name: string): unknown;
+      getProducer(name: string): ProducerContract | undefined;
       list(): SkillDocument[];
-      listProducers(): unknown[];
+      listProducers(): ProtocolRecord[];
     };
   };
   readonly tape: {

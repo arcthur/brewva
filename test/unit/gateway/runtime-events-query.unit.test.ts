@@ -79,6 +79,61 @@ describe("hosted runtime event query", () => {
     });
   });
 
+  test("rebuilds assistant cost summary from durable runtime ops events", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("runtime-events-query-cost-summary"),
+    });
+    const sessionId = "cost-summary-replay";
+
+    runtime.ops.cost.usage.recordAssistant({
+      sessionId,
+      model: "openai/gpt-5",
+      inputTokens: 10,
+      outputTokens: 20,
+      cacheReadTokens: 5,
+      cacheWriteTokens: 2,
+      totalTokens: 37,
+      costUsd: 0.12,
+    });
+    runtime.ops.cost.usage.recordAssistant({
+      sessionId,
+      model: "anthropic/claude",
+      input: 3,
+      output: 4,
+      cacheRead: 1,
+      cacheWrite: 2,
+      totalTokens: 10,
+      cost: { total: 0.05 },
+    });
+
+    const summary = runtime.ops.cost.summary.get(sessionId);
+
+    expect(summary).toMatchObject({
+      inputTokens: 13,
+      outputTokens: 24,
+      cacheReadTokens: 6,
+      cacheWriteTokens: 4,
+      totalTokens: 47,
+    });
+    expect(summary.totalCostUsd).toBeCloseTo(0.17);
+    expect(summary.models["openai/gpt-5"]).toMatchObject({
+      inputTokens: 10,
+      outputTokens: 20,
+      cacheReadTokens: 5,
+      cacheWriteTokens: 2,
+      totalTokens: 37,
+      totalCostUsd: 0.12,
+    });
+    expect(summary.models["anthropic/claude"]).toMatchObject({
+      inputTokens: 3,
+      outputTokens: 4,
+      cacheReadTokens: 1,
+      cacheWriteTokens: 2,
+      totalTokens: 10,
+      totalCostUsd: 0.05,
+    });
+  });
+
   test("rebuilds subagent activity records from durable lifecycle events", async () => {
     const runtime = createRuntimeInstanceFixture({
       cwd: createTestWorkspace("runtime-events-query-subagent-replay"),

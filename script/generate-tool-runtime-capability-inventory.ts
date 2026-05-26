@@ -5,13 +5,21 @@ import { parseArgs } from "node:util";
 import * as ts from "typescript";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const capabilityTypeSourcePath = resolve(
+const runtimeCapabilityTypeSourcePath = resolve(
   repoRoot,
-  "packages/brewva-tools/src/contracts/runtime-capabilities.ts",
+  "packages/brewva-tools/src/contracts/runtime.ts",
+);
+const runtimeExtensionTypeSourcePath = resolve(
+  repoRoot,
+  "packages/brewva-tools/src/contracts/metadata.ts",
 );
 const inventoryPath = resolve(
   repoRoot,
   "packages/brewva-tools/src/registry/runtime-capability-inventory.ts",
+);
+const capabilityContractPath = resolve(
+  repoRoot,
+  "packages/brewva-tools/src/contracts/runtime-capabilities.ts",
 );
 
 type PackageJson = {
@@ -109,66 +117,111 @@ function loadCompilerOptions(): ts.CompilerOptions {
   };
 }
 
-function findCapabilityTypeAlias(sourceFile: ts.SourceFile): ts.TypeAliasDeclaration {
-  let alias: ts.TypeAliasDeclaration | undefined;
+function findExportedTypeDeclaration(
+  sourceFile: ts.SourceFile,
+  name: string,
+): ts.InterfaceDeclaration | ts.TypeAliasDeclaration {
+  let declaration: ts.InterfaceDeclaration | ts.TypeAliasDeclaration | undefined;
   ts.forEachChild(sourceFile, (node) => {
-    if (ts.isTypeAliasDeclaration(node) && node.name.text === "BrewvaToolRequiredCapability") {
-      alias = node;
+    if (
+      (ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node)) &&
+      node.name.text === name
+    ) {
+      declaration = node;
     }
   });
 
-  if (!alias) {
-    throw new Error("Unable to find BrewvaToolRequiredCapability type alias");
+  if (!declaration) {
+    throw new Error(`Unable to find ${name} type declaration`);
   }
-  return alias;
+  return declaration;
 }
 
-function collectStringLiteralUnionValues(checker: ts.TypeChecker, type: ts.Type): string[] {
-  const values = new Set<string>();
-  const unexpectedTypes: string[] = [];
+function removeNullable(type: ts.Type): ts.Type[] {
+  if (!type.isUnion()) {
+    return [type];
+  }
+  return type.types.filter(
+    (member) =>
+      (member.flags & ts.TypeFlags.Undefined) === 0 && (member.flags & ts.TypeFlags.Null) === 0,
+  );
+}
 
-  function visit(current: ts.Type): void {
-    if (current.isUnion()) {
-      for (const member of current.types) {
-        visit(member);
+function collectCallablePropertyPaths(
+  checker: ts.TypeChecker,
+  sourceFile: ts.SourceFile,
+  type: ts.Type,
+  prefix: string,
+  paths: Set<string>,
+  visited: Set<string>,
+): void {
+  const stableTypeId = `${prefix}:${checker.typeToString(type)}`;
+  if (visited.has(stableTypeId)) {
+    return;
+  }
+  visited.add(stableTypeId);
+
+  for (const property of checker.getPropertiesOfType(type)) {
+    const name = property.getName();
+    if (!/^[A-Za-z][A-Za-z0-9]*$/u.test(name)) {
+      continue;
+    }
+    const declaration = property.valueDeclaration ?? property.declarations?.[0] ?? sourceFile;
+    const propertyPath = `${prefix}.${name}`;
+    const propertyTypes = removeNullable(checker.getTypeOfSymbolAtLocation(property, declaration));
+
+    if (propertyTypes.some((propertyType) => propertyType.getCallSignatures().length > 0)) {
+      paths.add(propertyPath);
+      continue;
+    }
+
+    for (const propertyType of propertyTypes) {
+      if (checker.getPropertiesOfType(propertyType).length > 0) {
+        collectCallablePropertyPaths(
+          checker,
+          sourceFile,
+          propertyType,
+          propertyPath,
+          paths,
+          visited,
+        );
       }
-      return;
     }
-
-    if (current.isStringLiteral()) {
-      values.add(current.value);
-      return;
-    }
-
-    unexpectedTypes.push(checker.typeToString(current));
   }
-
-  visit(type);
-
-  if (unexpectedTypes.length > 0) {
-    throw new Error(
-      `BrewvaToolRequiredCapability must resolve to string literals only; got ${unexpectedTypes.join(", ")}`,
-    );
-  }
-
-  return [...values].toSorted((left, right) => left.localeCompare(right));
 }
 
-export function collectCapabilityPaths(): string[] {
-  const program = ts.createProgram({
-    rootNames: [capabilityTypeSourcePath],
+function collectPathsFromType(input: {
+  readonly program: ts.Program;
+  readonly sourcePath: string;
+  readonly typeName: string;
+  readonly prefix: string;
+}): string[] {
+  const checker = input.program.getTypeChecker();
+  const sourceFile = input.program.getSourceFile(input.sourcePath);
+  if (!sourceFile) {
+    throw new Error(`Unable to load ${toRepoPath(input.sourcePath)}`);
+  }
+
+  const declaration = findExportedTypeDeclaration(sourceFile, input.typeName);
+  const type =
+    ts.isInterfaceDeclaration(declaration) || ts.isTypeAliasDeclaration(declaration)
+      ? checker.getTypeAtLocation(declaration.name)
+      : checker.getTypeAtLocation(declaration);
+  const paths = new Set<string>();
+  collectCallablePropertyPaths(checker, sourceFile, type, input.prefix, paths, new Set<string>());
+  return [...paths].toSorted((left, right) => left.localeCompare(right));
+}
+
+function createCapabilityProgram(): ts.Program {
+  return ts.createProgram({
+    rootNames: [runtimeCapabilityTypeSourcePath, runtimeExtensionTypeSourcePath],
     options: loadCompilerOptions(),
   });
-  const checker = program.getTypeChecker();
-  const sourceFile = program.getSourceFile(capabilityTypeSourcePath);
-  if (!sourceFile) {
-    throw new Error("Unable to load Brewva tool metadata source file");
-  }
+}
 
-  const alias = findCapabilityTypeAlias(sourceFile);
-  const values = collectStringLiteralUnionValues(checker, checker.getTypeFromTypeNode(alias.type));
+function validateCapabilityPaths(values: readonly string[]): void {
   if (values.length === 0) {
-    throw new Error("BrewvaToolRequiredCapability resolved to an empty inventory");
+    throw new Error("Brewva tool runtime capabilities resolved to an empty inventory");
   }
 
   const invalidPaths = values.filter(
@@ -191,7 +244,25 @@ export function collectCapabilityPaths(): string[] {
       `Brewva tool runtime capabilities must not include removed root paths: ${operatorPaths.join(", ")}`,
     );
   }
+}
 
+export function collectCapabilityPaths(): string[] {
+  const program = createCapabilityProgram();
+  const values = [
+    ...collectPathsFromType({
+      program,
+      sourcePath: runtimeCapabilityTypeSourcePath,
+      typeName: "BrewvaToolRuntimeCapabilitiesPort",
+      prefix: "capabilities",
+    }),
+    ...collectPathsFromType({
+      program,
+      sourcePath: runtimeExtensionTypeSourcePath,
+      typeName: "BrewvaToolRuntimeToolsExtension",
+      prefix: "extensions.tools",
+    }),
+  ].toSorted((left, right) => left.localeCompare(right));
+  validateCapabilityPaths(values);
   return values;
 }
 
@@ -218,6 +289,18 @@ function renderInventory(capabilities: readonly string[]): string {
   ].join("\n");
 }
 
+function renderCapabilityContract(capabilities: readonly string[]): string {
+  return [
+    "export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([",
+    ...capabilities.map((capability) => `  ${JSON.stringify(capability)},`),
+    "] as const);",
+    "",
+    "// Generated by `bun run tools:capability-inventory` from `BrewvaToolRuntimeCapabilitiesPort` and explicit tools extensions.",
+    "export type BrewvaToolRequiredCapability = (typeof BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS)[number];",
+    "",
+  ].join("\n");
+}
+
 function main(): void {
   const { values } = parseArgs({
     options: {
@@ -230,10 +313,13 @@ function main(): void {
     throw new Error("Use exactly one mode: --write or --check.");
   }
 
-  const generated = renderInventory(collectCapabilityPaths());
+  const capabilities = collectCapabilityPaths();
+  const generated = renderInventory(capabilities);
+  const generatedCapabilityContract = renderCapabilityContract(capabilities);
   const existing = readFileSync(inventoryPath, "utf-8");
+  const existingCapabilityContract = readFileSync(capabilityContractPath, "utf-8");
 
-  if (existing === generated) {
+  if (existing === generated && existingCapabilityContract === generatedCapabilityContract) {
     if (values.write) {
       console.log("Tool runtime capability inventory is already up to date.");
     }
@@ -241,18 +327,23 @@ function main(): void {
   }
 
   if (values.check) {
+    const stalePaths = [
+      ...(existing === generated ? [] : [inventoryPath]),
+      ...(existingCapabilityContract === generatedCapabilityContract
+        ? []
+        : [capabilityContractPath]),
+    ];
     console.error(
-      [
-        "Tool runtime capability inventory is stale.",
-        "Run `bun run tools:capability-inventory`.",
-        `- ${inventoryPath}`,
-      ].join("\n"),
+      ["Tool runtime capability inventory is stale.", "Run `bun run tools:capability-inventory`."]
+        .concat(stalePaths.map((path) => `- ${path}`))
+        .join("\n"),
     );
     process.exitCode = 1;
     return;
   }
 
   writeFileSync(inventoryPath, generated);
+  writeFileSync(capabilityContractPath, generatedCapabilityContract);
   console.log("Updated tool runtime capability inventory.");
 }
 

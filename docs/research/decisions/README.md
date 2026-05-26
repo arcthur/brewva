@@ -40,6 +40,7 @@ Every accepted decision inherits these rules:
 - [repository-fitness-plane-and-runtime-boundary](./repository-fitness-plane-and-runtime-boundary.md)
 - [runtime-domain-admission-and-deletion](./runtime-domain-admission-and-deletion.md)
 - [runtime-boundary-subtraction-and-effect-clarity](./runtime-boundary-subtraction-and-effect-clarity.md)
+- [runtime-axis-decoupling-and-vocabulary-boundary](./runtime-axis-decoupling-and-vocabulary-boundary.md)
 - [runtime-domain-slicing-and-controlled-extension-ports](./runtime-domain-slicing-and-controlled-extension-ports.md)
 - [rfc-package-boundary-architecture-vnext](./rfc-package-boundary-architecture-vnext.md)
 - [rfc-narrow-and-provable-runtime-boundaries](./rfc-narrow-and-provable-runtime-boundaries.md)
