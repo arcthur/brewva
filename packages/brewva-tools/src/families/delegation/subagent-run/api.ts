@@ -43,6 +43,8 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
         "For consult-style skills, provide brief with the decision and success criteria.",
         "Delegate when the task needs cross-3+-file investigation, diagnosis, a second-opinion review pass, or parallel slice analysis.",
         "Keep objectives specific, pass only the context references the child needs, and avoid broad parent-context dumps.",
+        "For waitMode=start, do not predict or race background results; inspect them later with subagent_status or inbox_query.",
+        "Worker patches, librarian knowledge, and verifier evidence stay non-authoritative until the parent explicitly applies, adopts, rejects, or consults them.",
       ],
       parameters: Type.Object({
         ...SubagentRunParamsSchema.properties,
@@ -113,6 +115,8 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
         "For consult-style fan-out, provide one shared brief unless the parent can safely complete without advisory framing.",
         "Use this when tasks are independent and a shared packet plus per-task objectives is clearer than one large delegated run.",
         "Keep each task label and objective specific so the parent can inspect outcomes separately.",
+        "For waitMode=start, do not infer completion from launch success; inspect later with subagent_status or inbox_query.",
+        "Fan-out results are advisory or pending-adoption inputs until the parent explicitly applies, adopts, rejects, or consults each result.",
       ],
       parameters: Type.Object({
         ...SubagentFanoutParamsSchema.properties,
@@ -170,7 +174,8 @@ export function createSubagentRunDiagnosticTool(options: BrewvaToolOptions): Too
     {
       name: "subagent_run_diagnostic",
       label: "Subagent Run Diagnostic",
-      description: "Maintainer-only delegated run with explicit v3 target and envelope fields.",
+      description:
+        "Maintainer-only delegated run with explicit current-contract target and envelope fields.",
       promptSnippet:
         "Use only for maintainer diagnostics when the public role-first delegation interface cannot express the routing probe.",
       promptGuidelines: [

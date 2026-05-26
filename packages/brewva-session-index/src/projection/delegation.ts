@@ -4,13 +4,36 @@ import {
   SUBAGENT_COMPLETED_EVENT_TYPE,
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
   SUBAGENT_FAILED_EVENT_TYPE,
+  SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE,
   SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
   SUBAGENT_RUNNING_EVENT_TYPE,
   SUBAGENT_SPAWNED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
+  WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
+  WORKER_RESULTS_REJECTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/delegation";
 import { deriveParallelBudgetStateFromEvents } from "@brewva/brewva-vocabulary/delegation";
+import type {
+  DelegationAdoptionRequirement,
+  DelegationInboxItem,
+  DelegationInspectionProjection,
+  DelegationIsolationStrategy,
+  DelegationLifecycleReason,
+  DelegationReplayTimeline,
+  DelegationResultMode,
+  DelegationRunCard,
+  DelegationRunDisposition,
+  DelegationRunStatus,
+  DelegationTimelineGroupKind,
+  PublicSubagentRole,
+  RecoveryPreview,
+  RecoveryPrimitive,
+} from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import {
+  SOURCE_PATCH_APPLIED_EVENT_TYPE,
+  SOURCE_PATCH_PREPARED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/workbench";
 import type {
   SessionIndexDelegationProjection,
   SessionIndexDelegationRun,
@@ -33,8 +56,24 @@ const DELEGATION_LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   SUBAGENT_DELIVERY_SURFACED_EVENT_TYPE,
 ]);
 
-const TERMINAL_STATUSES = new Set(["completed", "failed", "timeout", "cancelled", "merged"]);
-const PENDING_OUTCOME_STATUSES = new Set(["completed", "failed", "timeout", "cancelled"]);
+const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
+const PENDING_OUTCOME_STATUSES = new Set(["completed", "failed", "cancelled"]);
+const ACTIVE_TRUST_TOOL_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "tool_call",
+  "tool_execution_start",
+  "tool_execution_update",
+  "tool_execution_phase_change",
+  "tool_execution_end",
+  "tool_call_ended",
+  "tool_result",
+]);
+const ACTIVE_TRUST_APPROVAL_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "approval.requested",
+  "approval.decided",
+]);
+const ACTIVE_TRUST_MUTATION_EVENT_TYPES: ReadonlySet<string> = new Set([
+  SOURCE_PATCH_APPLIED_EVENT_TYPE,
+]);
 
 interface DelegationRunRow {
   session_id: string;
@@ -77,7 +116,7 @@ interface ProjectionCursorRow {
 
 type DelegationProjectionEvent = Pick<
   BrewvaEventRecord,
-  "id" | "sessionId" | "type" | "timestamp" | "payload"
+  "id" | "sessionId" | "turn" | "type" | "timestamp" | "payload"
 >;
 
 interface RunProjection {
@@ -137,19 +176,62 @@ function statusForDelegationEvent(eventType: string): string | undefined {
   return undefined;
 }
 
-function withRunStatus(
-  run: RunProjection,
-  event: BrewvaEventRecord,
-  status: string,
-): RunProjection {
-  const record = parsePayload(run.recordJson);
-  return {
-    ...run,
-    status,
-    recordJson: JSON.stringify({ ...record, status }),
-    updatedAt: event.timestamp,
-    eventId: event.id,
-  };
+function lifecycleReasonOf(payload: Record<string, unknown>): DelegationLifecycleReason {
+  const explicit = readString(payload.lifecycleReason) ?? readString(payload.reason);
+  if (
+    explicit === "timeout" ||
+    explicit === "user" ||
+    explicit === "policy" ||
+    explicit === "crash" ||
+    explicit === "missing_evidence" ||
+    explicit === "approval_wait"
+  ) {
+    return explicit;
+  }
+  if (readString(payload.status) === "timeout") {
+    return "timeout";
+  }
+  return "none";
+}
+
+function normalizeLifecycleStatus(input: {
+  readonly payload: Record<string, unknown>;
+  readonly eventType: string;
+  readonly existingStatus?: string;
+}): DelegationRunStatus {
+  const rawStatus = readString(input.payload.status);
+  if (rawStatus === "pending" || rawStatus === "running" || rawStatus === "blocked") {
+    return rawStatus;
+  }
+  if (rawStatus === "completed" || rawStatus === "failed" || rawStatus === "cancelled") {
+    return rawStatus;
+  }
+  if (rawStatus === "timeout") {
+    return "failed";
+  }
+  if (rawStatus === "merged") {
+    return input.existingStatus === "pending" || input.existingStatus === "running"
+      ? "completed"
+      : (normalizeExistingLifecycleStatus(input.existingStatus) ?? "completed");
+  }
+  const eventStatus = statusForDelegationEvent(input.eventType);
+  return normalizeExistingLifecycleStatus(eventStatus) ?? "pending";
+}
+
+function normalizeExistingLifecycleStatus(
+  status: string | undefined,
+): DelegationRunStatus | undefined {
+  if (
+    status === "pending" ||
+    status === "running" ||
+    status === "blocked" ||
+    status === "completed" ||
+    status === "failed" ||
+    status === "cancelled"
+  ) {
+    return status;
+  }
+  return undefined;
 }
 
 function buildWorkerRecord(payload: Record<string, unknown>, event: DelegationProjectionEvent) {
@@ -217,17 +299,16 @@ function projectDelegationRows(records: readonly DelegationProjectionEvent[]): {
 
   for (const event of records) {
     latestEventId = event.id;
-    if (event.type === WORKER_RESULTS_APPLIED_EVENT_TYPE) {
+    if (
+      event.type === WORKER_RESULTS_APPLIED_EVENT_TYPE ||
+      event.type === WORKER_RESULTS_REJECTED_EVENT_TYPE
+    ) {
       const payload = payloadRecord(event);
       const workerIds = Array.isArray(payload.workerIds)
         ? payload.workerIds.map((id) => readString(id)).filter((id): id is string => Boolean(id))
         : [];
       for (const workerId of workerIds) {
         workerResults.delete(workerId);
-        const run = runs.get(workerId);
-        if (run) {
-          runs.set(workerId, withRunStatus(run, event, "merged"));
-        }
       }
       continue;
     }
@@ -280,6 +361,556 @@ export function projectSessionDelegationState(input: {
   };
 }
 
+export function projectDelegationInspectionState(input: {
+  sessionId: string;
+  records: readonly DelegationProjectionEvent[];
+}): DelegationInspectionProjection {
+  const records = input.records.filter((event) => event.sessionId === input.sessionId);
+  const replay = projectSessionDelegationState({ sessionId: input.sessionId, records });
+  const dispositionState = buildDispositionState(records);
+  const runCards = markSupersededVerifierCards(
+    replay.runs.map((run) => buildRunCard(run, dispositionState)),
+  ).toSorted((left, right) => {
+    if (right.updatedAt !== left.updatedAt) {
+      return right.updatedAt - left.updatedAt;
+    }
+    return left.runId.localeCompare(right.runId);
+  });
+  return {
+    sessionId: input.sessionId,
+    runCards,
+    workboard: buildWorkboard(runCards),
+    inbox: buildInbox(runCards),
+    timeline: buildTimeline(records),
+    recoveryPreview: buildRecoveryPreview(input.sessionId, records, runCards),
+  };
+}
+
+function markSupersededVerifierCards(
+  cards: readonly DelegationRunCard[],
+): readonly DelegationRunCard[] {
+  const latestVerifierByPath = new Map<string, DelegationRunCard>();
+  for (const card of cards) {
+    if (card.resultMode !== "verifier" || !card.taskPath) {
+      continue;
+    }
+    const latest = latestVerifierByPath.get(card.taskPath);
+    if (!latest || card.updatedAt > latest.updatedAt) {
+      latestVerifierByPath.set(card.taskPath, card);
+    }
+  }
+  return cards.map((card) => {
+    if (card.resultMode !== "verifier" || !card.taskPath || card.disposition !== "unread") {
+      return card;
+    }
+    const latest = latestVerifierByPath.get(card.taskPath);
+    return latest && latest.runId !== card.runId
+      ? { ...card, disposition: "superseded" as const }
+      : card;
+  });
+}
+
+interface DispositionState {
+  readonly preparedWorkerIds: ReadonlySet<string>;
+  readonly appliedWorkerIds: ReadonlySet<string>;
+  readonly applyFailedWorkerIds: ReadonlySet<string>;
+  readonly rejectedWorkerIds: ReadonlySet<string>;
+  readonly knowledgeDecisions: ReadonlyMap<string, string>;
+  readonly latestMutationAt: number;
+}
+
+function buildDispositionState(records: readonly DelegationProjectionEvent[]): DispositionState {
+  const preparedWorkerIds = new Set<string>();
+  const appliedWorkerIds = new Set<string>();
+  const applyFailedWorkerIds = new Set<string>();
+  const rejectedWorkerIds = new Set<string>();
+  const knowledgeDecisions = new Map<string, string>();
+  let latestMutationAt = 0;
+
+  for (const event of records) {
+    const payload = payloadRecord(event);
+    if (event.type === SOURCE_PATCH_PREPARED_EVENT_TYPE) {
+      for (const workerId of workerIdsFromSourcePatchPlan(payload)) {
+        preparedWorkerIds.add(workerId);
+      }
+      continue;
+    }
+    if (event.type === WORKER_RESULTS_APPLIED_EVENT_TYPE) {
+      for (const workerId of workerIdsFromPayload(payload)) {
+        appliedWorkerIds.add(workerId);
+      }
+      latestMutationAt = Math.max(latestMutationAt, event.timestamp);
+      continue;
+    }
+    if (
+      event.type === WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE ||
+      event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE
+    ) {
+      const failed = event.type === WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE || payload.ok === false;
+      if (failed) {
+        for (const workerId of workerIdsFromPayload(payload)) {
+          applyFailedWorkerIds.add(workerId);
+        }
+      }
+      if (payload.ok !== false) {
+        latestMutationAt = Math.max(latestMutationAt, event.timestamp);
+      }
+      continue;
+    }
+    if (event.type === WORKER_RESULTS_REJECTED_EVENT_TYPE) {
+      for (const workerId of workerIdsFromPayload(payload)) {
+        rejectedWorkerIds.add(workerId);
+      }
+      continue;
+    }
+    if (event.type === SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE) {
+      const runId = readString(payload.runId);
+      const decision = readString(payload.decision);
+      if (runId && decision) {
+        knowledgeDecisions.set(runId, decision);
+      }
+    }
+  }
+
+  return {
+    preparedWorkerIds,
+    appliedWorkerIds,
+    applyFailedWorkerIds,
+    rejectedWorkerIds,
+    knowledgeDecisions,
+    latestMutationAt,
+  };
+}
+
+function workerIdsFromSourcePatchPlan(payload: Record<string, unknown>): string[] {
+  const metadata = isRecord(payload.metadata) ? payload.metadata : undefined;
+  return metadata ? workerIdsFromPayload(metadata) : [];
+}
+
+function workerIdsFromPayload(payload: Record<string, unknown>): string[] {
+  if (!Array.isArray(payload.workerIds)) {
+    return [];
+  }
+  return payload.workerIds.map((id) => readString(id)).filter((id): id is string => Boolean(id));
+}
+
+function buildRunCard(
+  run: SessionIndexDelegationRun,
+  dispositionState: DispositionState,
+): DelegationRunCard {
+  const record = run.record;
+  const role = roleOf(record.agent ?? run.agent);
+  const resultMode = resultModeOf(record.kind ?? run.kind, role);
+  const lifecycle = normalizeExistingLifecycleStatus(run.status) ?? "failed";
+  const lifecycleReason = lifecycleReasonOf(record);
+  const title =
+    readString(record.label) ??
+    readString(record.nickname) ??
+    readString(record.taskName) ??
+    run.nickname ??
+    run.runId;
+  return {
+    runId: run.runId,
+    role,
+    resultMode,
+    lifecycle,
+    lifecycleReason,
+    retention: readString(record.retention) === "archived" ? "archived" : "live",
+    disposition: dispositionOf({
+      run,
+      role,
+      resultMode,
+      lifecycle,
+      dispositionState,
+    }),
+    adoptionRequirement: adoptionRequirementFor(resultMode),
+    title,
+    ...(run.taskPath ? { taskPath: run.taskPath } : {}),
+    ...(run.summary ? { summary: run.summary } : {}),
+    ...(run.error ? { error: run.error } : {}),
+    isolation: isolationOf(record.isolationStrategy),
+    createdAt: typeof record.createdAt === "number" ? record.createdAt : run.updatedAt,
+    updatedAt: run.updatedAt,
+    eventId: run.eventId,
+    canonicalRefs: [`event:${run.eventId}`, `delegation:${run.runId}`],
+  };
+}
+
+function roleOf(value: unknown): PublicSubagentRole {
+  if (
+    value === "navigator" ||
+    value === "explorer" ||
+    value === "worker" ||
+    value === "verifier" ||
+    value === "librarian"
+  ) {
+    return value;
+  }
+  return "explorer";
+}
+
+function resultModeOf(value: unknown, role: PublicSubagentRole): DelegationResultMode {
+  if (
+    value === "evidence" ||
+    value === "consult" ||
+    value === "patch" ||
+    value === "verifier" ||
+    value === "knowledge"
+  ) {
+    return value;
+  }
+  if (role === "navigator") return "evidence";
+  if (role === "worker") return "patch";
+  if (role === "verifier") return "verifier";
+  if (role === "librarian") return "knowledge";
+  return "consult";
+}
+
+function adoptionRequirementFor(resultMode: DelegationResultMode): DelegationAdoptionRequirement {
+  if (resultMode === "patch") return "patch_apply";
+  if (resultMode === "knowledge") return "knowledge_adopt";
+  return "none";
+}
+
+function isolationOf(value: unknown): DelegationIsolationStrategy {
+  if (
+    value === "shared" ||
+    value === "snapshot" ||
+    value === "worktree" ||
+    value === "ephemeral_exec" ||
+    value === "a2a_channel"
+  ) {
+    return value;
+  }
+  return "shared";
+}
+
+function dispositionOf(input: {
+  readonly run: SessionIndexDelegationRun;
+  readonly role: PublicSubagentRole;
+  readonly resultMode: DelegationResultMode;
+  readonly lifecycle: DelegationRunStatus;
+  readonly dispositionState: DispositionState;
+}): DelegationRunDisposition {
+  if (input.resultMode === "patch" || input.role === "worker") {
+    if (input.dispositionState.appliedWorkerIds.has(input.run.runId)) return "applied";
+    if (input.dispositionState.applyFailedWorkerIds.has(input.run.runId)) return "apply_failed";
+    if (input.dispositionState.rejectedWorkerIds.has(input.run.runId)) return "rejected";
+    if (input.dispositionState.preparedWorkerIds.has(input.run.runId)) return "prepared";
+    return "pending_apply";
+  }
+  if (input.resultMode === "knowledge" || input.role === "librarian") {
+    const decision = input.dispositionState.knowledgeDecisions.get(input.run.runId);
+    if (decision === "accept") return "adopted";
+    if (decision === "reject") return "rejected";
+    if (decision === "defer") return "deferred";
+    return "pending_knowledge_adopt";
+  }
+  if (input.resultMode === "verifier" || input.role === "verifier") {
+    if (
+      input.lifecycle === "completed" &&
+      input.dispositionState.latestMutationAt > input.run.updatedAt
+    ) {
+      return "stale";
+    }
+    return "unread";
+  }
+  const delivery = isRecord(input.run.record.delivery) ? input.run.record.delivery : {};
+  return readString(delivery.handoffState) === "surfaced" ? "consumed" : "unread";
+}
+
+function buildWorkboard(runCards: readonly DelegationRunCard[]) {
+  return {
+    pendingWorkerPatches: runCards.filter(isActionableWorkerPatch),
+    pendingKnowledgeAdoptions: runCards.filter(
+      (card) =>
+        card.adoptionRequirement === "knowledge_adopt" &&
+        card.disposition === "pending_knowledge_adopt",
+    ),
+    unreadEvidence: runCards.filter(
+      (card) =>
+        (card.resultMode === "evidence" ||
+          card.resultMode === "consult" ||
+          card.resultMode === "verifier") &&
+        card.disposition === "unread",
+    ),
+    verificationDebt: runCards.filter(
+      (card) =>
+        card.resultMode === "verifier" &&
+        (card.disposition === "stale" ||
+          card.disposition === "superseded" ||
+          card.lifecycle === "failed" ||
+          card.lifecycleReason === "missing_evidence"),
+    ),
+    blockedOrFailedRuns: runCards.filter(
+      (card) => card.lifecycle === "blocked" || card.lifecycle === "failed",
+    ),
+  };
+}
+
+function buildInbox(runCards: readonly DelegationRunCard[]) {
+  const items: DelegationInboxItem[] = [];
+  for (const card of runCards) {
+    if (isActionableWorkerPatch(card)) {
+      items.push(inboxItem(card, "worker_patch"));
+      continue;
+    }
+    if (
+      card.adoptionRequirement === "knowledge_adopt" &&
+      card.disposition === "pending_knowledge_adopt"
+    ) {
+      items.push(inboxItem(card, "librarian_knowledge"));
+      continue;
+    }
+    if (
+      card.resultMode === "verifier" &&
+      (card.disposition === "stale" || card.disposition === "superseded")
+    ) {
+      items.push(inboxItem(card, "verification_debt"));
+      continue;
+    }
+    if (card.lifecycle === "failed" || card.lifecycle === "blocked") {
+      items.push(inboxItem(card, "failed_run"));
+      continue;
+    }
+    if (
+      (card.resultMode === "evidence" ||
+        card.resultMode === "consult" ||
+        card.resultMode === "verifier") &&
+      card.disposition === "unread"
+    ) {
+      items.push(inboxItem(card, "delegation_evidence"));
+    }
+  }
+  return { items, explicitPull: true as const };
+}
+
+function inboxItem(
+  card: DelegationRunCard,
+  kind: DelegationInboxItem["kind"],
+): DelegationInboxItem {
+  return {
+    itemId: `${kind}:${card.runId}`,
+    kind,
+    runId: card.runId,
+    title: card.title,
+    ...(card.summary ? { summary: card.summary } : {}),
+    disposition: card.disposition,
+    adoptionRequirement: card.adoptionRequirement,
+    eventId: card.eventId,
+    canonicalRefs: card.canonicalRefs,
+  };
+}
+
+function isActionableWorkerPatch(card: DelegationRunCard): boolean {
+  return (
+    card.adoptionRequirement === "patch_apply" &&
+    card.lifecycle === "completed" &&
+    (card.disposition === "pending_apply" ||
+      card.disposition === "prepared" ||
+      card.disposition === "apply_failed")
+  );
+}
+
+function buildTimeline(records: readonly DelegationProjectionEvent[]): DelegationReplayTimeline {
+  const groups = new Map<
+    string,
+    {
+      groupId: string;
+      kind: DelegationTimelineGroupKind;
+      timestamp: number;
+      turn?: number;
+      titles: Set<string>;
+      summaries: string[];
+      eventIds: string[];
+      canonicalRefs: Set<string>;
+    }
+  >();
+  for (const event of records) {
+    const payload = payloadRecord(event);
+    const kind = timelineKind(event, payload);
+    const key = typeof event.turn === "number" ? `turn:${event.turn}:${kind}` : `event:${event.id}`;
+    const group = groups.get(key);
+    const title = timelineTitle(event, payload, kind);
+    const refs = timelineCanonicalRefs(event, payload);
+    if (group) {
+      group.timestamp = Math.min(group.timestamp, event.timestamp);
+      group.titles.add(title);
+      group.summaries.push(timelineSummary(event, payload, kind));
+      group.eventIds.push(event.id);
+      for (const ref of refs) {
+        group.canonicalRefs.add(ref);
+      }
+      continue;
+    }
+    groups.set(key, {
+      groupId: `timeline:${event.id}`,
+      kind,
+      timestamp: event.timestamp,
+      ...(typeof event.turn === "number" ? { turn: event.turn } : {}),
+      titles: new Set([title]),
+      summaries: [timelineSummary(event, payload, kind)],
+      eventIds: [event.id],
+      canonicalRefs: new Set(refs),
+    });
+  }
+  return {
+    explicitPull: true,
+    groups: [...groups.values()].map((group) => {
+      const projected = {
+        groupId: group.groupId,
+        kind: group.kind,
+        timestamp: group.timestamp,
+        title:
+          group.titles.size === 1
+            ? [...group.titles][0]!
+            : `${group.kind}:turn:${group.turn ?? "unknown"}`,
+        summary: group.summaries.join(" | "),
+        eventIds: group.eventIds,
+        canonicalRefs: [...group.canonicalRefs],
+      };
+      return typeof group.turn === "number"
+        ? Object.assign(projected, { turn: group.turn })
+        : projected;
+    }),
+  };
+}
+
+function timelineCanonicalRefs(
+  event: DelegationProjectionEvent,
+  payload: Record<string, unknown>,
+): string[] {
+  const runId = readString(payload.runId);
+  return runId ? [`event:${event.id}`, `delegation:${runId}`] : [`event:${event.id}`];
+}
+
+function timelineKind(
+  event: DelegationProjectionEvent,
+  payload: Record<string, unknown>,
+): DelegationTimelineGroupKind {
+  if (DELEGATION_LIFECYCLE_EVENTS.has(event.type)) {
+    return readString(payload.kind) === "verifier" || readString(payload.agent) === "verifier"
+      ? "verification"
+      : "delegation";
+  }
+  if (
+    event.type === WORKER_RESULTS_APPLIED_EVENT_TYPE ||
+    event.type === WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE ||
+    event.type === SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE ||
+    event.type === SOURCE_PATCH_PREPARED_EVENT_TYPE ||
+    event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE
+  ) {
+    return "adoption";
+  }
+  if (event.type.startsWith("tool_")) {
+    return "tool";
+  }
+  if (event.type.includes("rewind") || event.type.includes("rollback")) {
+    return "recovery";
+  }
+  if (event.type.startsWith("turn_") || event.type === "message.end") {
+    return "turn";
+  }
+  return "other";
+}
+
+function timelineTitle(
+  event: DelegationProjectionEvent,
+  payload: Record<string, unknown>,
+  kind: DelegationTimelineGroupKind,
+): string {
+  if (kind === "tool") {
+    return `tool:${readString(payload.toolName) ?? "unknown"}`;
+  }
+  const runId = readString(payload.runId);
+  if (runId) {
+    return `${kind}:${runId}`;
+  }
+  return event.type;
+}
+
+function timelineSummary(
+  event: DelegationProjectionEvent,
+  payload: Record<string, unknown>,
+  kind: DelegationTimelineGroupKind,
+): string {
+  if (kind === "tool") {
+    return `tool event ${event.type} redacted`;
+  }
+  const summary =
+    readString(payload.summary) ?? readString(payload.error) ?? readString(payload.reason);
+  return summary ? redactSummary(summary) : `event ${event.type}`;
+}
+
+function redactSummary(value: string): string {
+  return value
+    .replace(/SECRET[_A-Z0-9]*=\S+/gu, "[REDACTED_SECRET]")
+    .replace(/printenv\s+SECRET[_A-Z0-9]*/giu, "[REDACTED_COMMAND]");
+}
+
+function buildRecoveryPreview(
+  sessionId: string,
+  records: readonly DelegationProjectionEvent[],
+  runCards: readonly DelegationRunCard[],
+): RecoveryPreview {
+  const primitives: RecoveryPrimitive[] = [
+    { kind: "resume" },
+    { kind: "session_rewind", scope: "both" },
+  ];
+  if (records.some((event) => event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE)) {
+    primitives.push({ kind: "rollback_last_patch" });
+  }
+  for (const card of runCards) {
+    if (isActionableWorkerPatch(card)) {
+      primitives.push({
+        kind: "reject_adoption",
+        target: "worker_patch",
+        runId: card.runId,
+      });
+    }
+    if (
+      card.adoptionRequirement === "knowledge_adopt" &&
+      card.disposition === "pending_knowledge_adopt"
+    ) {
+      primitives.push({
+        kind: "reject_adoption",
+        target: "librarian_knowledge",
+        runId: card.runId,
+      });
+    }
+  }
+  return {
+    continuationAnchor: records.at(-1)
+      ? { kind: "event", id: records.at(-1)!.id }
+      : { kind: "baseline", id: `session:${sessionId}` },
+    activeTrust: {
+      toolCalls: records.filter((event) => ACTIVE_TRUST_TOOL_EVENT_TYPES.has(event.type)).length,
+      approvals: records.filter((event) => ACTIVE_TRUST_APPROVAL_EVENT_TYPES.has(event.type))
+        .length,
+      mutations: records.filter((event) => ACTIVE_TRUST_MUTATION_EVENT_TYPES.has(event.type))
+        .length,
+      workerResults: runCards.filter((card) => card.adoptionRequirement === "patch_apply").length,
+      verifierEvidence: runCards.filter((card) => card.resultMode === "verifier").length,
+    },
+    primitives: dedupeRecoveryPrimitives(primitives),
+    nextReceiptOwner: "parent",
+  };
+}
+
+function dedupeRecoveryPrimitives(primitives: readonly RecoveryPrimitive[]): RecoveryPrimitive[] {
+  const seen = new Set<string>();
+  const result: RecoveryPrimitive[] = [];
+  for (const primitive of primitives) {
+    const key = JSON.stringify(primitive);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(primitive);
+  }
+  return result;
+}
+
 function buildRunProjection(
   payload: Record<string, unknown>,
   event: DelegationProjectionEvent,
@@ -294,11 +925,12 @@ function buildRunProjection(
     createdAt:
       typeof previousRecord.createdAt === "number" ? previousRecord.createdAt : event.timestamp,
   };
-  const status =
-    readString(payload.status) ??
-    statusForDelegationEvent(event.type) ??
-    existing?.status ??
-    "pending";
+  const status = normalizeLifecycleStatus({
+    payload,
+    eventType: event.type,
+    existingStatus: existing?.status,
+  });
+  const lifecycleReason = lifecycleReasonOf(payload);
   return {
     sessionId: event.sessionId,
     runId,
@@ -312,7 +944,12 @@ function buildRunProjection(
     summary: nullableString(mergedRecord.summary),
     error: nullableString(mergedRecord.error),
     deliveryHandoffState: deliveryHandoffState(mergedRecord),
-    recordJson: JSON.stringify({ ...mergedRecord, status }),
+    recordJson: JSON.stringify({
+      ...mergedRecord,
+      status,
+      lifecycleReason,
+      retention: readString(mergedRecord.retention) ?? "live",
+    }),
     updatedAt: event.timestamp,
     eventId: event.id,
   };

@@ -99,7 +99,7 @@ describe("subagent delegation catalog", () => {
     });
     expect(catalog.envelopes.get("verifier-runner")).toMatchObject({
       boundary: "effectful",
-      isolationStrategy: "ephemeral",
+      isolationStrategy: "ephemeral_exec",
       producesPatches: false,
     });
     expect(catalog.envelopes.get("worker")).toMatchObject({

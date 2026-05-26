@@ -1,4 +1,5 @@
 export { createA2ATools, type CreateA2AToolsOptions } from "./a2a.js";
+export { createDelegationInboxQueryTool } from "./delegation-inbox-query.js";
 export { createQuestionTool } from "./question.js";
 export {
   ALL_REVIEW_LANES,

@@ -32,7 +32,7 @@ async function listPendingDelegationOutcomes(
   const result = await adapter.status({
     fromSessionId: sessionId,
     query: {
-      statuses: ["completed", "failed", "timeout", "cancelled"],
+      statuses: ["completed", "failed", "cancelled"],
       includeTerminal: true,
       limit: 6,
     },

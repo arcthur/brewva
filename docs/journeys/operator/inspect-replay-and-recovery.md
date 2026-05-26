@@ -46,7 +46,8 @@ flowchart TD
   D --> E["Aggregate integrity from tape, WAL, artifacts"]
   E --> F{"Operator action"}
   F -->|Inspect| G["Read hydration, blockers, evidence, diagnostics"]
-  F -->|Replay| H["Print structured event timeline"]
+  F -->|Replay| H["Print raw structured events"]
+  F -->|Replay timeline| I["Print redacted timeline projection"]
   F -->|Undo| I["Resolve latest active checkpoint and rewind its patch window"]
   I --> J["Revert reasoning state or record divergence, then reset verification evidence"]
   F -->|Redo| L["Reapply undone rewind window and branch to redo leaf"]
@@ -64,21 +65,24 @@ flowchart TD
    restores task, truth, cost, verification, and related fold slices.
 3. `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` aggregates tape, Recovery WAL, and artifact
    persistence issues into one health surface.
-4. `--replay` prints a replay-visible timeline from the durable tape rather
-   than from the live hosted stream.
-5. `--undo` resolves the target session, rewinds the latest active checkpoint,
+4. `--replay` 从 durable tape 打印 raw structured event dump；依赖原始
+   payload 的脚本继续使用这条兼容路径。
+5. `--replay-timeline` 从同一 durable tape 打印 redacted replay timeline；
+   timeline group 必须带 canonical event/receipt refs，且不读取 live hosted
+   stream。
+6. `--undo` resolves the target session, rewinds the latest active checkpoint,
    carries branch summary by default, resets verification state, and restores
    the original prompt.
-6. `/rewind` or `HostedRuntimeAdapterPort.ops.session.rewind.rewind(...)` can target any active
+7. `/rewind` or `HostedRuntimeAdapterPort.ops.session.rewind.rewind(...)` can target any active
    checkpoint with `conversation`, `code`, or `both` semantics. Runtime
    governance is mode-aware, and the runtime records divergence notes when only
    one side rewinds.
-7. `--redo` reapplies the latest undone rewind window and re-anchors the
+8. `--redo` reapplies the latest undone rewind window and re-anchors the
    reasoning leaf selected before rewind when the prior operation changed
    conversation state.
-8. Delegated inspect surfaces now reflect the canonical specialist cutover:
-   public delegated outcomes are `consult`, `verifier`, or `patch`, while kernel
-   `HostedRuntimeAdapterPort.ops.verification.*` remains a separate replayed authority.
+9. Delegated inspect surfaces expose workboard、run cards、explicit-pull
+   inbox、timeline preview 和 recovery preview；worker patch 与 librarian
+   knowledge 只有在显式 apply/adopt 后才进入父 truth。
 
 ## Execution Semantics
 
@@ -91,9 +95,11 @@ flowchart TD
 - `inspect` layers deterministic directory-scoped analysis on top of replayed
   state, so it serves both as a recovery entrypoint and as a code-review
   entrypoint
-- replay preserves historical delegated outcome vocabulary where necessary for
-  correctness; new-request contract cleanup does not retroactively rewrite old
-  child-run evidence
+- replay 使用 V2 delegation vocabulary：public lifecycle 不再产生
+  `timeout` 或 `merged`，这些语义分别进入 lifecycle reason 与 role
+  disposition
+- verifier evidence 是 advisory debt；它可以进入 inspect/workboard，但不能进入
+  worker merge/apply authority
 - hydration and integrity are distinct views:
   - hydration reports whether replay successfully rebuilt session-local state
   - integrity reports unified durability health across tape, WAL, and artifacts

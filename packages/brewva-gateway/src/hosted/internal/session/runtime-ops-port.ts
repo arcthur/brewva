@@ -1,6 +1,10 @@
-import type { BrewvaToolRuntimeCapabilitiesPort } from "@brewva/brewva-tools/contracts";
+import type {
+  BrewvaToolRuntimeCapabilitiesPort,
+  WorkerResultsClearInput,
+} from "@brewva/brewva-tools/contracts";
 import type { FourPortRuntimeEventRecord } from "@brewva/brewva-tools/runtime-port";
 import type { ContextBudgetUsage, ContextStatus } from "@brewva/brewva-vocabulary/context";
+import type { WorkerMergeReport, WorkerResult } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventRecord, ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type {
   BrewvaReplaySession,
@@ -96,6 +100,7 @@ export type HostedRuntimeOpsExtensions = {
       completed(input: unknown): BrewvaEventRecord | undefined;
       deliverySurfaced(input: unknown): unknown;
       failed(input: unknown): unknown;
+      knowledgeAdoptionRecorded(input: unknown): unknown;
       outcomeParseFailed(input: unknown): unknown;
       running(input: unknown): unknown;
       spawned(input: unknown): unknown;
@@ -103,6 +108,7 @@ export type HostedRuntimeOpsExtensions = {
     readonly workerResults: {
       applied(input: unknown): unknown;
       applyFailed(input: unknown): unknown;
+      rejected(input: unknown): unknown;
     };
   };
   readonly session: {
@@ -132,7 +138,17 @@ export type HostedRuntimeOpsExtensions = {
       turnEnded: RuntimeSemanticRecorder;
     };
     readonly workerResults: {
-      clear(sessionId: string): RuntimeEventRecord;
+      list(sessionId: string): WorkerResult[];
+      record(sessionId: string, input: WorkerResult): RuntimeEventRecord;
+      clear(sessionId: string, input?: WorkerResultsClearInput): RuntimeEventRecord;
+      merge(sessionId: string, input?: unknown): WorkerMergeReport;
+    };
+    readonly title: {
+      get(sessionId: string): string | undefined;
+      recordGenerated(sessionId: string, payload: RuntimeLineageRecordInput): RuntimeEventRecord;
+    };
+    readonly compaction: {
+      commit(sessionId: string, payload: RuntimeLineageRecordInput): RuntimeEventRecord;
     };
     readonly mcp: {
       serverConnected: RuntimeInputRecorder;

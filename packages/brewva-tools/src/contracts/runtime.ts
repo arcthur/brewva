@@ -15,33 +15,29 @@ import type {
   BrewvaStructuredEvent,
 } from "@brewva/brewva-vocabulary/events";
 import type {
-  ClaimState,
-  RenderTurnConsequenceDigestOptions,
-  ResourceLeaseRecord,
-  ToolInvocationStartInput,
-  ToolInvocationStartReceipt,
-  TurnEffectCommitmentProjection,
-} from "@brewva/brewva-vocabulary/iteration";
-import type {
   ActiveReasoningBranchState,
+  ClaimState,
+  DecideEffectCommitmentInput,
+  DecideEffectCommitmentResult,
+  DecisionReceipt,
+  EffectCommitmentRequestRecord,
+  EffectCommitmentProposal,
   GuardResultInput,
   GuardResultQuery,
   GuardResultRecord,
   MetricObservationInput,
   MetricObservationQuery,
   MetricObservationRecord,
+  PendingEffectCommitmentRequest,
   ReasoningCheckpointRecord,
   ReasoningRevertInput,
   ReasoningRevertRecord,
   RecordReasoningCheckpointInput,
-} from "@brewva/brewva-vocabulary/iteration";
-import type {
-  DecideEffectCommitmentInput,
-  DecideEffectCommitmentResult,
-  DecisionReceipt,
-  EffectCommitmentRequestRecord,
-  EffectCommitmentProposal,
-  PendingEffectCommitmentRequest,
+  RenderTurnConsequenceDigestOptions,
+  ResourceLeaseRecord,
+  ToolInvocationStartInput,
+  ToolInvocationStartReceipt,
+  TurnEffectCommitmentProjection,
 } from "@brewva/brewva-vocabulary/iteration";
 import type {
   ScheduleIntentCancelInput,
@@ -56,8 +52,10 @@ import type {
 } from "@brewva/brewva-vocabulary/schedule";
 import type {
   HistoryViewBaselineSnapshot,
+  OpenToolCallRecord,
   ProducerContract,
   RecordSessionRewindCheckpointInput,
+  SessionCostSummary,
   SessionLifecycleSnapshot,
   SessionLineageNodeRecord,
   SessionLineageTree,
@@ -67,17 +65,14 @@ import type {
   SessionRewindResult,
   SessionRewindState,
   SessionRewindTargetView,
+  SessionUncleanShutdownDiagnostic,
+  SkillDocument,
+  SkillRegistryLoadReport,
   TapeLedgerRow,
   TapeHandoffResult,
   TapeSearchResult,
   TapeStatusState,
 } from "@brewva/brewva-vocabulary/session";
-import type { SessionCostSummary } from "@brewva/brewva-vocabulary/session";
-import type {
-  OpenToolCallRecord,
-  SessionUncleanShutdownDiagnostic,
-} from "@brewva/brewva-vocabulary/session";
-import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-vocabulary/session";
 import type {
   TaskAcceptanceRecordResult,
   TaskBlockerRecordResult,
@@ -90,13 +85,13 @@ import type {
   TaskTargetDescriptor,
 } from "@brewva/brewva-vocabulary/task";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
-import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import type {
   SourcePatchApplyResult,
   SourcePatchPlan,
   SourcePatchStaleRecoveryRecord,
   SourceResourceDescriptor,
   SourceSnapshot,
+  WorkbenchEntry,
 } from "@brewva/brewva-vocabulary/workbench";
 import type { ManagedExecProcessRegistryRuntime } from "../families/execution/exec-process-registry/runtime.js";
 import type { BoxPlane } from "../internal/box/index.js";
@@ -207,6 +202,12 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES = [
 export type BrewvaToolRuntimeCapabilityNamespace =
   (typeof BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES)[number];
 
+export interface WorkerResultsClearInput {
+  readonly workerIds?: readonly string[];
+  readonly decision?: "applied" | "reject";
+  readonly reason?: string;
+}
+
 export interface BrewvaToolRuntimeCommandPort {
   readonly claim: {
     readonly facts: {
@@ -222,6 +223,11 @@ export interface BrewvaToolRuntimeCommandPort {
   readonly delegation: {
     readonly lifecycle: {
       knowledgeAdoptionRecorded(input: unknown): unknown;
+    };
+    readonly workerResults: {
+      applied(input: unknown): unknown;
+      applyFailed(input: unknown): unknown;
+      rejected(input: unknown): unknown;
     };
   };
   readonly events: {
@@ -628,6 +634,7 @@ export interface BrewvaToolRuntimeQueryPort {
     };
     readonly workerResults: {
       list(sessionId: string): WorkerResult[];
+      clear(sessionId: string, input?: WorkerResultsClearInput): unknown;
       merge(sessionId: string, input?: unknown): WorkerMergeReport;
     };
   };

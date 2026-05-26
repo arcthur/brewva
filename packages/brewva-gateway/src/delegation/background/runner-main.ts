@@ -401,10 +401,8 @@ async function main(): Promise<void> {
               : undefined,
         }).catch(() => undefined)
       : undefined;
-    const terminalStatus: Extract<
-      DelegationRunRecord["status"],
-      "failed" | "cancelled" | "timeout"
-    > = timeoutTriggered ? "timeout" : cancellationReason ? "cancelled" : "failed";
+    const terminalStatus: Extract<DelegationRunRecord["status"], "failed" | "cancelled"> =
+      timeoutTriggered ? "failed" : cancellationReason ? "cancelled" : "failed";
     const terminalCostSummary =
       childSession && childSessionId
         ? getRuntimeCostSummary(childSession.runtime, childSessionId)

@@ -82,6 +82,20 @@ describe("subagent activity projection", () => {
     ]);
   });
 
+  test("does not expose model routing internals in compact UI rows", () => {
+    const items = selectSubagentActivityItems([
+      run({
+        runId: "worker-1",
+        summary: undefined,
+        modelRoute: { selectedModel: "provider/private-model" },
+        workerSessionId: asBrewvaSessionId("worker-session"),
+      }),
+    ]);
+
+    expect(items[0]?.detail).toBe("worker-session");
+    expect(JSON.stringify(items)).not.toContain("private-model");
+  });
+
   test("honors the visible activity limit", () => {
     const items = selectSubagentActivityItems(
       [

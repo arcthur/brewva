@@ -24,7 +24,7 @@ knowledge authority.
 
 `agent` is the public trigger. `skillName` is an optional semantic contract and
 must be compatible with the selected role. Maintainer diagnostics use
-`targetName` plus v3 routing fields; public tools do not accept legacy
+`targetName` plus current-contract routing fields; public tools do not accept legacy
 `agentSpec`, envelope, fallback-result, or raw model override fields.
 
 ## Roles
@@ -74,6 +74,23 @@ state-only by default; parent-visible model context requires an explicit
 lineage outcome adoption event. Adoption may admit a summary or artifact
 reference, but it does not import the child branch's raw transcript.
 
+## Inspection Projections
+
+Delegation inspection is explicit pull over tape and rebuildable read-model
+state. `subagent_status`, `inbox_query`, `brewva inspect`, and `/inspect` may
+render run cards, a workboard, an inbox, a replay timeline, and a recovery
+preview, but reading those views does not consume evidence, change parent
+context, or mutate adoption state.
+
+Public run cards expose role, result mode, lifecycle, lifecycle reason,
+retention, isolation posture, adoption requirement, and role disposition.
+Default public cards hide model route, agent spec, envelope, tool scope, and
+capability internals; those fields belong to maintainer diagnostics.
+
+Worker adoption status is disposition, not lifecycle. Timeout is lifecycle
+reason, not a lifecycle status. Verifier evidence can appear as advisory debt
+in the workboard or inbox, but it never grants merge/apply authority.
+
 ## Context And A2A
 
 `forkTurns` controls context inheritance: `none`, a positive integer for recent
@@ -93,15 +110,15 @@ They do not target subagents. Subagent status, cancellation, results, and
 adoption flow through delegation receipts and read models instead of
 subagent messaging tools.
 
-`subagent_fork` is represented in v3 records as
+`subagent_fork` is represented in v4 records as
 `explorer` / `make_judgment` / `deep-reasoning` and uses the
 `explorer-readonly` envelope.
 
 ## Transaction Boundary
 
 Delegation does not create cross-agent saga behavior or automatic
-partial-failure repair. Parent-owned merge/apply actions create the receipt
-that matters.
+partial-failure repair. Parent-owned prepare, apply, or reject actions create
+the receipt that matters.
 
 Run completion has one finalization path. `DelegationRunPlan` is the immutable
 resolved input for a run; `buildDelegationFinalizationReceipt(...)` describes

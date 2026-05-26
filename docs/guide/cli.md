@@ -92,6 +92,7 @@ bun run start -- insights --limit 50
 bun run start -- --undo --session <session-id>
 bun run start -- --redo --session <session-id>
 bun run start -- --replay --mode json --session <session-id>
+bun run start -- --replay-timeline --session <session-id>
 bun run start -- onboard --install-daemon
 bun run start -- gateway status --deep
 bun run start -- --channel telegram --telegram-token <bot-token>

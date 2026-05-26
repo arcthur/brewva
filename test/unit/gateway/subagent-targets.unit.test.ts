@@ -175,7 +175,7 @@ describe("delegation prompt and catalog composition", () => {
         agentSpecName: "verifier",
         envelopeName: "verifier-runner",
         producesPatches: false,
-        isolationStrategy: "ephemeral",
+        isolationStrategy: "ephemeral_exec",
       },
       packet: {
         objective: "Try to break the delegated change and preserve the evidence.",

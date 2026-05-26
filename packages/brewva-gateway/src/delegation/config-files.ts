@@ -81,10 +81,10 @@ export function asBoolean(value: unknown): boolean | undefined {
 
 export function asIsolationStrategy(value: unknown): DelegationIsolationStrategy | undefined {
   return value === "shared" ||
-    value === "ephemeral" ||
+    value === "ephemeral_exec" ||
     value === "snapshot" ||
     value === "worktree" ||
-    value === "container"
+    value === "a2a_channel"
     ? value
     : undefined;
 }

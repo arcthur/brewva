@@ -7,6 +7,8 @@ import {
 } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import type { BrewvaForensicConfigWarning } from "@brewva/brewva-runtime/config";
+import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
+import type { DelegationInspectionProjection } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   CLAIM_EVENT_TYPE,
@@ -220,6 +222,7 @@ interface InspectReport {
     updatedAt: string | null;
   };
   verification: InspectVerification;
+  delegation: DelegationInspectionProjection;
   hostedTransitions: SessionTransitionSnapshot;
   contextEvidence: ContextEvidenceAggregateReport & {
     promotionReady: boolean;
@@ -815,6 +818,7 @@ function buildInspectReport(
       updatedAt: toIso(claimState.updatedAt),
     },
     verification,
+    delegation: projectDelegationInspectionState({ sessionId, records: events }),
     hostedTransitions: createEmptySessionTransitionSnapshot(),
     contextEvidence: {
       ...contextEvidenceReport.aggregate,

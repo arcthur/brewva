@@ -1,6 +1,7 @@
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { BrewvaBundledToolRuntime } from "../contracts/index.js";
 import {
+  createDelegationInboxQueryTool,
   createQuestionTool,
   createSubagentCancelTool,
   createSubagentFanoutTool,
@@ -55,6 +56,7 @@ import {
   createTaskLedgerTools,
   createWorkerResultsApplyTool,
   createWorkerResultsMergeTool,
+  createWorkerResultsRejectTool,
   createWorkflowStatusTool,
 } from "../families/workflow/api.js";
 import { validateBrewvaToolRequiredCapabilities } from "../registry/tool.js";
@@ -105,10 +107,12 @@ export function buildDefaultBundledBrewvaTools(
     createRollbackLastPatchTool({ runtime }),
     createWorkerResultsMergeTool({ runtime }),
     createWorkerResultsApplyTool({ runtime }),
+    createWorkerResultsRejectTool({ runtime }),
     createSubagentRunTool({ runtime }),
     createSubagentFanoutTool({ runtime }),
     createSubagentForkTool({ runtime }),
     createSubagentKnowledgeAdoptTool({ runtime }),
+    createDelegationInboxQueryTool({ runtime }),
     createSubagentRunDiagnosticTool({ runtime }),
     createSubagentStatusTool({ runtime }),
     createSubagentCancelTool({ runtime }),

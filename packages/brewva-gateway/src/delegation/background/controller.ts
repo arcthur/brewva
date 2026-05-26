@@ -343,10 +343,7 @@ export function createDetachedSubagentBackgroundController(
     failurePrefix: "already_terminal" | "cancel_not_observed",
   ): SubagentCancelResult => {
     const run = toDetachedRunView(record, { live: false, cancelable: false });
-    if (
-      failurePrefix === "cancel_not_observed" &&
-      (record.status === "cancelled" || record.status === "timeout")
-    ) {
+    if (failurePrefix === "cancel_not_observed" && record.status === "cancelled") {
       return {
         ok: true,
         run,

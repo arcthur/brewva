@@ -39,8 +39,9 @@
   `evidence`, `consult`, `patch`, `verifier`, and `knowledge`.
 - Delegation Gate guidance is prompt-visible and resolver-auditable. It records
   role, gate reason, task identity, `forkTurns`, model category, and model route
-  facts in v3 records, but it is not a hidden scheduler or team-mode trigger.
-- Current-version records must carry the v3 identity, execution, and adoption
+  facts in current-version records, but it is not a hidden scheduler or
+  team-mode trigger.
+- Current-version records must carry the v4 identity, execution, and adoption
   fields; legacy delegation contract normalization is no longer part of the
   read model.
 - A2A delivery belongs to channel agents. Subagents expose status, outcome,

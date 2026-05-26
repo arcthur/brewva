@@ -52,6 +52,7 @@ function createDelegationQuery(delegationStore: HostedDelegationStore | undefine
           sessionId: string,
           query?: Parameters<HostedDelegationStore["listPendingOutcomes"]>[1],
         ) => delegationStore.listPendingOutcomesFromReadModel(sessionId, query),
+        inspect: (sessionId: string) => delegationStore.inspect(sessionId),
       }
     : undefined;
 }

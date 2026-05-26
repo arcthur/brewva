@@ -1,4 +1,9 @@
-import { SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/delegation";
+import {
+  SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE,
+  WORKER_RESULTS_APPLIED_EVENT_TYPE,
+  WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
+  WORKER_RESULTS_REJECTED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/delegation";
 import {
   BOX_RELEASED_EVENT_TYPE,
   OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE,
@@ -105,6 +110,12 @@ export function recordToolRuntimeEvent(
     runtime?.capabilities?.tools?.observability?.assertionRecorded(event);
   } else if (input.type === SUBAGENT_KNOWLEDGE_ADOPTION_RECORDED_EVENT_TYPE) {
     runtime?.capabilities?.delegation?.lifecycle?.knowledgeAdoptionRecorded(event);
+  } else if (input.type === WORKER_RESULTS_APPLIED_EVENT_TYPE) {
+    runtime?.capabilities?.delegation?.workerResults?.applied(event);
+  } else if (input.type === WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE) {
+    runtime?.capabilities?.delegation?.workerResults?.applyFailed(event);
+  } else if (input.type === WORKER_RESULTS_REJECTED_EVENT_TYPE) {
+    runtime?.capabilities?.delegation?.workerResults?.rejected(event);
   } else if (input.type.startsWith("exec.") || input.type.startsWith("box.")) {
     runtime?.capabilities?.tools?.execution?.recordAudit({ ...event, type: input.type });
   }

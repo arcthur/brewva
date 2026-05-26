@@ -1,7 +1,7 @@
 import type { BrewvaEventQuery, BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type { SESSION_INDEX_UNAVAILABLE } from "./unavailable.js";
 
-export const SESSION_INDEX_SCHEMA_VERSION = 5;
+export const SESSION_INDEX_SCHEMA_VERSION = 6;
 
 export type SessionIndexScope = "session_local" | "user_repository_root" | "workspace_wide";
 

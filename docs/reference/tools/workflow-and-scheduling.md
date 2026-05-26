@@ -12,12 +12,18 @@ runtime transaction boundary beyond the current authoritative action.
 Worker-result patch adoption prepares or applies `SourcePatchPlan` data and
 must not write source files around `source_patch_apply`.
 
+Worker adoption state is role disposition, not run lifecycle. A completed worker
+run stays `completed`; `worker_results_apply` moves its card to `prepared`,
+`applied`, or `apply_failed`, while `worker_results_reject` moves it to
+`rejected`.
+
 ## Surfaces
 
 - follow-up and schedule intent
 - resource lease request and cancellation
 - session compaction
 - worker result merge and SourcePatchPlan-backed apply
+- worker result rejection through explicit parent receipt
 - task spec, item, blocker, acceptance, and state views
 - tape handoff, information, and search
 - ledger, observability, cost, and iteration-fact inspection

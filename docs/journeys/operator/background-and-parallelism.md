@@ -13,9 +13,11 @@
 - `subagent_fanout`
 - `subagent_fork`
 - `subagent_status`
+- `inbox_query`
 - `subagent_cancel`
 - `worker_results_merge`
 - `worker_results_apply`
+- `worker_results_reject`
 
 ## Objective
 
@@ -83,8 +85,9 @@ flowchart TD
    and emits `WorkerResult` plus `PatchSet` artifacts instead of mutating the
    parent
    workspace directly.
-6. The parent session must explicitly call `worker_results_merge` and
-   `worker_results_apply` before any child patch is adopted.
+6. 父会话必须显式调用 `worker_results_merge` 和 `worker_results_apply`
+   才能采纳 worker patch；如果决定不采纳，必须调用
+   `worker_results_reject` 记录拒绝 receipt。
 7. Pending worker outcomes flow into `workflow_status` until the parent
    resolves the adoption step; Verifier outcomes surface as delegation outcomes and
    `workflow.verifier`, not as pending patch adoption work.
@@ -100,8 +103,13 @@ flowchart TD
   compatible `skillName`, not through public `agentSpec` or envelope fields
 - the stable public delegated surface is `navigator`, `explorer`, `worker`,
   `verifier`, and `librarian`
+- run lifecycle 只使用 `pending`, `running`, `blocked`, `completed`,
+  `failed`, 和 `cancelled`；timeout 是 lifecycle reason，不是 public
+  status，worker apply 是 role disposition，不是 `merged` lifecycle
 - `navigator`, `explorer`, and `librarian` are separate read-only roles with
   distinct result contracts and managed-tool sets
+- `inbox_query` 是 explicit-pull read model：读取 inbox 不会把内容注入父
+  prompt，也不会把 evidence 标记为 consumed
 - consult kind is derived by the resolver for public explorer skills;
   diagnostic tools may still select it explicitly for maintainer probes
 - when `skillName` is present, the child prompt is assembled from authored

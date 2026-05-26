@@ -1,5 +1,6 @@
 import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/security";
 import type {
+  DelegationInspectionProjection,
   DelegationRunQuery,
   DelegationRunRecord as RuntimeDelegationRunRecord,
 } from "@brewva/brewva-vocabulary/delegation";
@@ -163,4 +164,7 @@ export interface BrewvaToolDelegationQuery {
     sessionId: string,
     query?: { limit?: number },
   ): DelegationRunRecord[] | Promise<DelegationRunRecord[]>;
+  inspect?(
+    sessionId: string,
+  ): DelegationInspectionProjection | Promise<DelegationInspectionProjection>;
 }

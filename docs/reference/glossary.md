@@ -33,7 +33,8 @@
 - Governance Port: the external authorization interface that the runtime calls for tool authorization and effect-commitment decisions
 - Subagent: the model/operator-facing tool surface (`subagent_*`) for starting, inspecting, and cancelling delegated child runs
 - Delegation: the runtime/session ledger layer that stores delegated child-run state, delivery handoff, and replay-visible outcomes
-- WorkerResult: a child-produced patch/outcome artifact emitted by a patch-producing delegated run; merged and applied explicitly by the parent
+- WorkerResult: a child-produced patch/outcome artifact emitted by a patch-producing delegated run; prepared, applied, or rejected explicitly by the parent
+- Delegation Inspection: explicit-pull run-card, workboard, inbox, timeline, and recovery-preview projections over delegation receipts and rebuildable session-index state
 - CapabilityView: the model-facing capability disclosure surface built from exact governance metadata
 - PersonaProfile: the rendered identity/workstyle context block built from `.brewva/agents/<agent-id>/identity.md`
 - Kernel Ring: the authority-bearing architecture ring that owns policy, verification, replay, and commitment decisions

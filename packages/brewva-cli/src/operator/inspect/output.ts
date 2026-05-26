@@ -32,6 +32,10 @@ export function formatInspectText(report: InspectReport): string {
     `Task: goal=${report.task.goal ?? "n/a"}`,
     `Claim: active=${report.claim.activeClaims}/${report.claim.totalClaims} updatedAt=${report.claim.updatedAt ?? "n/a"}`,
     `Verification: outcome=${report.verification.outcome ?? "n/a"} level=${report.verification.level ?? "n/a"} failed=${renderList(report.verification.failedChecks)} missing_checks=${renderList(report.verification.missingChecks)} missing_evidence=${renderList(report.verification.missingEvidence)}`,
+    `Delegation workboard: workerPatches=${report.delegation.workboard.pendingWorkerPatches.length} knowledge=${report.delegation.workboard.pendingKnowledgeAdoptions.length} unreadEvidence=${report.delegation.workboard.unreadEvidence.length} verificationDebt=${report.delegation.workboard.verificationDebt.length} blockedOrFailed=${report.delegation.workboard.blockedOrFailedRuns.length}`,
+    `Delegation inbox: items=${report.delegation.inbox.items.length} explicitPull=${report.delegation.inbox.explicitPull ? "yes" : "no"}`,
+    `Delegation timeline: groups=${report.delegation.timeline.groups.length}`,
+    `Recovery preview: nextReceiptOwner=${report.delegation.recoveryPreview.nextReceiptOwner} primitives=${report.delegation.recoveryPreview.primitives.map((primitive) => primitive.kind).join(",") || "none"}`,
     "Hosted transitions: removed source=canonical_tape",
     `Context evidence: ready=${report.contextEvidence.promotionReady ? "yes" : "no"} gaps=${renderList(report.contextEvidence.promotionGaps)} compactions=${report.contextEvidence.totalCompactionEvents} generation=${report.contextEvidence.totalCompactionGenerationEvents} llmPrimary=${report.contextEvidence.totalLlmPrimaryCompactionEvents} deterministicEmergency=${report.contextEvidence.totalDeterministicEmergencyCompactionEvents} genTokens=${report.contextEvidence.totalCompactionGenerationTokens} genCacheRead=${report.contextEvidence.totalCompactionGenerationCacheReadTokens} genCacheWrite=${report.contextEvidence.totalCompactionGenerationCacheWriteTokens} genCost=$${report.contextEvidence.totalCompactionGenerationCostUsd.toFixed(6)}`,
     `Context cockpit: policy=${report.contextCockpit.sideEffectPolicy} workbench=${report.contextCockpit.workbench.activeCount} visibleReadEpoch=${report.contextCockpit.context.visibleReadEpoch}`,
@@ -104,6 +108,16 @@ export function formatInspectText(report: InspectReport): string {
   }
   if (report.verification.reason) {
     lines.push(`Verification reason: ${report.verification.reason}`);
+  }
+  for (const card of report.delegation.runCards.slice(0, 8)) {
+    lines.push(
+      `Delegation run: ${card.role} ${card.runId} lifecycle=${card.lifecycle} disposition=${card.disposition} adoption=${card.adoptionRequirement} title=${card.title}`,
+    );
+  }
+  for (const group of report.delegation.timeline.groups.slice(0, 8)) {
+    lines.push(
+      `Delegation timeline group: kind=${group.kind} events=${group.eventIds.join(",")} refs=${group.canonicalRefs.join(",")} summary=${group.summary}`,
+    );
   }
   if (report.recoveryWal.pendingRows.length > 0) {
     for (const row of report.recoveryWal.pendingRows.slice(0, 5)) {

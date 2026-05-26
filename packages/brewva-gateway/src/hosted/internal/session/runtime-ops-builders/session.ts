@@ -74,9 +74,27 @@ export function buildSessionRuntimeOps(
         ctx.state.workerResults.set(sessionId, next);
         return ctx.emit(sessionId, "worker.result.recorded", { value });
       },
-      clear(sessionId) {
-        ctx.state.workerResults.delete(sessionId);
-        return ctx.emit(sessionId, "worker.results.cleared", {});
+      clear(sessionId, input) {
+        const workerIds = readStringArrayRecord(input, "workerIds");
+        const selected = new Set(workerIds);
+        const retained =
+          selected.size === 0
+            ? []
+            : (ctx.state.workerResults.get(sessionId) ?? []).filter((result, index) => {
+                const record = result && typeof result === "object" ? result : {};
+                const workerId =
+                  typeof record.workerId === "string" ? record.workerId : `worker_${index + 1}`;
+                return !selected.has(workerId);
+              });
+        if (retained.length === 0) ctx.state.workerResults.delete(sessionId);
+        else ctx.state.workerResults.set(sessionId, retained);
+        return ctx.emit(sessionId, "worker.results.cleared", {
+          workerIds,
+          decision:
+            input && typeof input === "object" && "decision" in input ? input.decision : undefined,
+          reason:
+            input && typeof input === "object" && "reason" in input ? input.reason : undefined,
+        });
       },
       merge(sessionId, value) {
         const workerIds = readStringArrayRecord(value, "workerIds");
@@ -84,7 +102,7 @@ export function buildSessionRuntimeOps(
         const report: WorkerMergeReport =
           stored.length === 0
             ? { status: "empty", workerIds }
-            : { status: "merged", workerIds, mergedPatchSet: undefined };
+            : { status: "ready", workerIds, mergedPatchSet: undefined };
         ctx.emit(sessionId, "worker.results.merged", report);
         return report;
       },

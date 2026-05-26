@@ -50,7 +50,12 @@ function firstNonEmpty(...values: Array<string | undefined>): string | undefined
 }
 
 function isActiveRun(run: DelegationRunRecord & { live?: boolean }): boolean {
-  return run.status === "pending" || run.status === "running" || run.live === true;
+  return (
+    run.status === "pending" ||
+    run.status === "running" ||
+    run.status === "blocked" ||
+    run.live === true
+  );
 }
 
 function statusTone(status: DelegationRunStatus): SubagentActivityTone {
@@ -58,12 +63,12 @@ function statusTone(status: DelegationRunStatus): SubagentActivityTone {
     case "pending":
     case "running":
       return "running";
+    case "blocked":
+      return "warning";
     case "completed":
-    case "merged":
       return "success";
     case "failed":
       return "error";
-    case "timeout":
     case "cancelled":
       return "warning";
     default:
@@ -77,13 +82,12 @@ function statusIcon(status: DelegationRunStatus): string {
       return "◌";
     case "running":
       return "◔";
+    case "blocked":
+      return "◒";
     case "completed":
-    case "merged":
       return "●";
     case "failed":
       return "◍";
-    case "timeout":
-      return "◷";
     case "cancelled":
       return "○";
     default:
@@ -114,7 +118,7 @@ function projectRun(
   );
   const title =
     firstNonEmpty(run.label, run.nickname, run.taskName, run.summary, run.delegate) ?? run.runId;
-  const detail = firstNonEmpty(run.summary, run.modelRoute?.selectedModel, run.workerSessionId);
+  const detail = firstNonEmpty(run.summary, run.workerSessionId);
   return {
     runId: run.runId,
     status: run.status,

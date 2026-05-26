@@ -222,7 +222,9 @@ canonical runtime events and tape projections directly.
 
 ## Mode-Specific Paths
 
-- Replay (`--replay`): query structured events and print text/JSON timeline
+- Replay (`--replay`): query structured events and print raw text/JSON records
+- Replay timeline (`--replay-timeline`): query structured events and print a
+  redacted timeline projection
 - Undo (`--undo`): resolve target session and rewind the latest active session
   checkpoint, including reasoning state and patch receipts
 - Rewind (`/rewind`): target an active-lineage checkpoint from the interactive

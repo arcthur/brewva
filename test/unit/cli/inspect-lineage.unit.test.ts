@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  CURRENT_DELEGATION_CONTRACT_VERSION,
+  SUBAGENT_COMPLETED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/delegation";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   buildInspectReport,
@@ -171,5 +175,51 @@ describe("cli inspect lineage reporting", () => {
       "Context cockpit compaction: baseline=compact-1 provenance=brewva.compaction.input-provenance.v1:hiddenRecallSearch=false",
     );
     expect(text).toContain("Context cockpit cache: status=warm read=42 write=0");
+  });
+
+  test("prints delegation workboard, timeline, and recovery preview", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-delegation-")),
+    });
+    const sessionId = "inspect-delegation-session";
+    runtime.ops.delegation.lifecycle.completed({
+      sessionId,
+      timestamp: 1_000,
+      payload: {
+        contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+        runId: "worker-inspect-1",
+        agent: "worker",
+        targetName: "worker",
+        delegate: "worker",
+        taskName: "Implement inspect",
+        taskPath: "/inspect",
+        nickname: "Implement inspect",
+        depth: 1,
+        forkTurns: "none",
+        gateReason: "implement_isolated",
+        modelCategory: "isolated-execution",
+        executionPrimitive: "named",
+        visibility: "public",
+        isolationStrategy: "snapshot",
+        adoption: { decision: "patch_apply" },
+        status: "completed",
+        lifecycleReason: "none",
+        retention: "live",
+        createdAt: 900,
+        updatedAt: 1_000,
+        kind: "patch",
+        summary: "Worker produced a patch.",
+      },
+      type: SUBAGENT_COMPLETED_EVENT_TYPE,
+    });
+
+    const text = formatInspectText(buildInspectReport(runtime, sessionId));
+
+    expect(text).toContain("Delegation workboard: workerPatches=1");
+    expect(text).toContain(
+      "Delegation run: worker worker-inspect-1 lifecycle=completed disposition=pending_apply",
+    );
+    expect(text).toContain("Delegation timeline: groups=1");
+    expect(text).toContain("Recovery preview: nextReceiptOwner=parent");
   });
 });

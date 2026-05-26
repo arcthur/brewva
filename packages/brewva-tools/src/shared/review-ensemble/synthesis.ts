@@ -217,6 +217,19 @@ function summarizeReviewDecision(input: {
   return `Review ensemble cleared the activated lanes without material findings or blocking evidence gaps.`;
 }
 
+function coercePublicAgent(agent: string): NonNullable<SubagentOutcome["agent"]> {
+  if (
+    agent === "navigator" ||
+    agent === "explorer" ||
+    agent === "worker" ||
+    agent === "verifier" ||
+    agent === "librarian"
+  ) {
+    return agent;
+  }
+  return "explorer";
+}
+
 export function materializeReviewLaneOutcomes(
   runs: readonly DelegationRunRecord[],
 ): SubagentOutcome[] {
@@ -233,12 +246,13 @@ export function materializeReviewLaneOutcomes(
         ...(typeof run.totalTokens === "number" ? { totalTokens: run.totalTokens } : {}),
         ...(typeof run.costUsd === "number" ? { costUsd: run.costUsd } : {}),
       };
+      const agent = coercePublicAgent(run.agent);
 
       if (run.status === "completed") {
         return {
           ok: true,
           runId: run.runId,
-          agent: run.agent,
+          agent,
           taskName: run.taskName,
           taskPath: run.taskPath,
           nickname: run.nickname ?? run.label ?? run.runId,
@@ -259,11 +273,11 @@ export function materializeReviewLaneOutcomes(
         } satisfies SubagentOutcome;
       }
 
-      const status = run.status === "cancelled" || run.status === "timeout" ? run.status : "error";
+      const status = run.status === "cancelled" ? run.status : "error";
       return {
         ok: false,
         runId: run.runId,
-        agent: run.agent,
+        agent,
         taskName: run.taskName,
         taskPath: run.taskPath,
         nickname: run.nickname ?? run.label ?? run.runId,

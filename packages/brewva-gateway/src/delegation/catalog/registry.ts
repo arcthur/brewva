@@ -100,10 +100,10 @@ const BOUNDARY_RANK: Record<SubagentExecutionBoundary, number> = {
 
 const ISOLATION_STRATEGY_RANK: Record<DelegationIsolationStrategy, number> = {
   shared: 0,
-  ephemeral: 1,
+  ephemeral_exec: 1,
   snapshot: 2,
   worktree: 3,
-  container: 4,
+  a2a_channel: 4,
 };
 
 const PUBLIC_AGENT_SPEC_NAMES = new Set([
@@ -421,7 +421,7 @@ export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutio
     description:
       "Effectful but non-patch-producing verifier envelope for executable checks and adversarial probes.",
     boundary: "effectful",
-    isolationStrategy: "ephemeral",
+    isolationStrategy: "ephemeral_exec",
     builtinToolNames: ["read"],
     managedToolNames: [...VERIFIER_MANAGED_TOOLS],
     defaultContextBudget: {

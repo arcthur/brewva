@@ -797,10 +797,8 @@ export function createHostedSubagentAdapter(
         return finalizationReceipt.outcome;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const terminalStatus: Extract<
-          DelegationRunRecord["status"],
-          "failed" | "cancelled" | "timeout"
-        > = timeoutTriggered ? "timeout" : cancellationReason ? "cancelled" : "failed";
+        const terminalStatus: Extract<DelegationRunRecord["status"], "failed" | "cancelled"> =
+          timeoutTriggered ? "failed" : cancellationReason ? "cancelled" : "failed";
         const terminalCostSummary =
           child && childSessionId
             ? getRuntimeCostSummary(child.runtime, childSessionId)
@@ -1078,7 +1076,8 @@ export function createHostedSubagentAdapter(
           : String(error);
       const failedRecord: DelegationRunRecord = {
         ...(delegationStore.getRun(input.fromSessionId, runId) ?? initialRecord),
-        status: timeoutTriggered ? "timeout" : "failed",
+        status: "failed",
+        lifecycleReason: timeoutTriggered ? "timeout" : "none",
         updatedAt: Date.now(),
         workerSessionId: childSessionId,
         summary: message,
@@ -1338,7 +1337,7 @@ export function createHostedSubagentAdapter(
         live: false,
         cancelable: false,
       };
-      if (record.status === "cancelled" || record.status === "timeout") {
+      if (record.status === "cancelled") {
         return {
           ok: true,
           run,

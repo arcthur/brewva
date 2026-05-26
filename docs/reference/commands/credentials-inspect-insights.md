@@ -22,8 +22,13 @@ the credentials subcommand is the lower-level operational surface.
 
 `brewva inspect` is the canonical replay-first operator view for a persisted
 session. It summarizes hydration, degraded replay issues, tape volume, task and
-claim state, verification posture, hosted transition snapshot, active model
-preset, ledger paths, and evidence gaps.
+claim state, verification posture, delegation workboard/run cards/inbox,
+timeline preview, recovery preview, active model preset, ledger paths, and
+evidence gaps.
+
+`brewva --replay` prints raw replay records for scripts that depend on event
+payloads. `brewva --replay-timeline` prints the redacted timeline projection with
+canonical event refs.
 
 Directory-scoped inspect requests should remain deterministic and should not
 create new runtime authority.

@@ -5,6 +5,11 @@ import type {
   WorkerMergeReport,
   WorkerResult,
 } from "@brewva/brewva-vocabulary/delegation";
+import {
+  WORKER_RESULTS_APPLIED_EVENT_TYPE,
+  WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
+  WORKER_RESULTS_REJECTED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/delegation";
 import type {
   PatchConflict,
   PatchFileChange,
@@ -21,6 +26,7 @@ import {
   toSourceFileResourceUri,
 } from "../../internal/source-patch-gate.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
+import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { resolveScopedPath, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { mergeWorkerResults } from "../../runtime-port/worker-results.js";
 import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
@@ -50,7 +56,7 @@ function formatMergeReport(report: WorkerMergeReport): string {
   const changeCount = report.mergedPatchSet?.changes.length ?? 0;
   return [
     "# Worker Results",
-    "Merge status: merged",
+    "Merge status: ready",
     `Workers: ${report.workerIds.join(", ")}`,
     `Patch set: ${report.mergedPatchSet?.id ?? "unknown"}`,
     `Changes: ${changeCount}`,
@@ -107,6 +113,14 @@ function workerIdOf(result: WorkerResult, index: number): string {
   return typeof record?.workerId === "string" ? record.workerId : `worker_${index + 1}`;
 }
 
+function readWorkerIdsFromMetadata(value: unknown): string[] {
+  const metadata = asRecord(value);
+  if (!metadata || !Array.isArray(metadata.workerIds)) {
+    return [];
+  }
+  return metadata.workerIds.filter((workerId): workerId is string => typeof workerId === "string");
+}
+
 function collectMergeFromWorkerResults(results: readonly WorkerResult[]): WorkerMergeReport {
   const patchEntries = results.flatMap((result, index) => {
     const patches = result.patches;
@@ -151,7 +165,7 @@ function collectMergeFromWorkerResults(results: readonly WorkerResult[]): Worker
     summary: `Merged ${patchEntries.length} worker patch set(s)`,
     changes,
   };
-  return { status: "merged", workerIds, mergedPatchSet };
+  return { status: "ready", workerIds, mergedPatchSet };
 }
 
 function readArtifactContent(
@@ -345,15 +359,36 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
             runtime,
             scope,
           });
+          const workerIds = readWorkerIdsFromMetadata(receipt.plan?.metadata);
           const report: WorkerApplyReport = {
             status: receipt.ok ? "applied" : "apply_failed",
-            workerIds: [],
+            workerIds,
             mergedPatchSet: receipt.patchSet,
             appliedPatchSetId: receipt.patchSet?.id,
             appliedPaths: receipt.result.appliedPaths,
             failedPaths: receipt.result.failedPaths,
             reason: receipt.result.reason,
           };
+          recordToolRuntimeEvent(runtime, {
+            sessionId,
+            type: receipt.ok
+              ? WORKER_RESULTS_APPLIED_EVENT_TYPE
+              : WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
+            payload: {
+              workerIds,
+              planId: params.plan_id,
+              appliedPatchSetId: report.appliedPatchSetId ?? null,
+              failedPaths: report.failedPaths,
+              reason: report.reason ?? null,
+            },
+          });
+          if (receipt.ok && workerIds.length > 0) {
+            runtime.capabilities.session.workerResults.clear(sessionId, {
+              workerIds,
+              decision: "applied",
+              reason: "worker_results_apply",
+            });
+          }
           if (!receipt.ok) {
             return failTextResult(formatApplyReport(report), {
               ok: false,
@@ -434,6 +469,11 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
           runtime,
           sessionId,
           summary: report.mergedPatchSet.summary,
+          metadata: {
+            source: "worker_results_apply",
+            workerIds: report.workerIds,
+            mergedPatchSetId: report.mergedPatchSet.id,
+          },
         });
         if (!prepared.plan.preflight.ok) {
           return failTextResult(
@@ -482,4 +522,81 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
     },
     {},
   );
+}
+
+export function createWorkerResultsRejectTool(options: BrewvaToolOptions): ToolDefinition {
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(
+    options.runtime,
+    "worker_results_reject",
+  );
+  return define({
+    name: "worker_results_reject",
+    label: "Worker Results Reject",
+    description:
+      "Reject recorded worker patch results without applying them and record an explicit parent receipt.",
+    promptSnippet:
+      "Use this when a worker patch should not be adopted. Rejection is explicit and does not mutate source files.",
+    promptGuidelines: [
+      "Inspect worker_results_merge or subagent_status before rejecting non-trivial worker patches.",
+      "Pass worker_ids to reject selected workers, or omit it to reject all currently recorded worker results.",
+      "Rejection records a durable parent receipt and removes the selected worker results from future apply candidates.",
+    ],
+    parameters: Type.Object(
+      {
+        worker_ids: Type.Optional(
+          Type.Array(Type.String({ minLength: 1, maxLength: 240 }), {
+            minItems: 1,
+            maxItems: 50,
+          }),
+        ),
+        reason: Type.String({ minLength: 1, maxLength: 1000 }),
+      },
+      { additionalProperties: false },
+    ),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const sessionId = getSessionId(ctx);
+      const stored = runtime.capabilities.session.workerResults.list(sessionId);
+      const availableWorkerIds = stored.map(workerIdOf);
+      const requestedWorkerIds = Array.isArray(params.worker_ids)
+        ? params.worker_ids.filter((workerId): workerId is string => typeof workerId === "string")
+        : availableWorkerIds;
+      const selected = new Set(requestedWorkerIds);
+      const workerIds = availableWorkerIds.filter((workerId) => selected.has(workerId));
+      if (workerIds.length === 0) {
+        return inconclusiveTextResult("# Worker Results Reject\nNo matching worker results.", {
+          ok: false,
+          status: "empty",
+          workerIds: [],
+        });
+      }
+
+      recordToolRuntimeEvent(runtime, {
+        sessionId,
+        type: WORKER_RESULTS_REJECTED_EVENT_TYPE,
+        payload: {
+          workerIds,
+          reason: params.reason,
+        },
+      });
+      runtime.capabilities.session.workerResults.clear(sessionId, {
+        workerIds,
+        decision: "reject",
+        reason: params.reason,
+      });
+      return textResult(
+        [
+          "# Worker Results Reject",
+          "Rejected worker results",
+          `Workers: ${workerIds.join(", ")}`,
+          `Reason: ${params.reason}`,
+        ].join("\n"),
+        {
+          ok: true,
+          status: "rejected",
+          workerIds,
+          reason: params.reason,
+        },
+      );
+    },
+  });
 }

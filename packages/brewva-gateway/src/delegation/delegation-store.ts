@@ -1,9 +1,11 @@
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import {
+  projectDelegationInspectionState,
   projectSessionDelegationState,
   type SessionIndex,
   type SessionIndexDelegationRun,
 } from "@brewva/brewva-session-index";
+import type { DelegationInspectionProjection } from "@brewva/brewva-vocabulary/delegation";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
 import type {
   DelegationAdoptionRecord,
@@ -34,11 +36,10 @@ type IndexedDelegationStatus = DelegationRunRecord["status"];
 const INDEXED_DELEGATION_STATUSES = new Set<IndexedDelegationStatus>([
   "pending",
   "running",
+  "blocked",
   "completed",
   "failed",
-  "timeout",
   "cancelled",
-  "merged",
 ]);
 
 function isIndexedDelegationStatus(value: string): value is IndexedDelegationStatus {
@@ -49,7 +50,7 @@ function eventTypeForIndexedDelegationStatus(status: IndexedDelegationStatus): s
   if (status === "pending") return SUBAGENT_SPAWNED_EVENT_TYPE;
   if (status === "running") return SUBAGENT_RUNNING_EVENT_TYPE;
   if (status === "cancelled") return SUBAGENT_CANCELLED_EVENT_TYPE;
-  if (status === "failed" || status === "timeout") return SUBAGENT_FAILED_EVENT_TYPE;
+  if (status === "failed" || status === "blocked") return SUBAGENT_FAILED_EVENT_TYPE;
   return SUBAGENT_COMPLETED_EVENT_TYPE;
 }
 
@@ -157,7 +158,7 @@ function requireCurrentIdentityFields(
     !gateReason ||
     !modelCategory
   ) {
-    throw new Error(`invalid_delegation_contract:${runId}:missing_v3_identity`);
+    throw new Error(`invalid_delegation_contract:${runId}:missing_v4_identity`);
   }
   return {
     agent,
@@ -338,7 +339,6 @@ export class HostedDelegationStore {
         (record) =>
           (record.status === "completed" ||
             record.status === "failed" ||
-            record.status === "timeout" ||
             record.status === "cancelled") &&
           record.delivery?.handoffState === "pending_parent_turn",
       )
@@ -361,6 +361,13 @@ export class HostedDelegationStore {
   ): Promise<DelegationRunRecord[]> {
     const indexed = await this.tryListIndexedPendingOutcomes(sessionId, query);
     return indexed ?? this.listPendingOutcomes(sessionId, query);
+  }
+
+  inspect(sessionId: string): DelegationInspectionProjection {
+    return projectDelegationInspectionState({
+      sessionId,
+      records: queryStructuredRuntimeEvents(this.runtime, sessionId),
+    });
   }
 
   markSurfaced(input: { sessionId: string; turn: number; runIds: readonly string[] }): void {
@@ -450,7 +457,7 @@ export class HostedDelegationStore {
         .map(delegationRunRecordFromIndexRow)
         .filter((record): record is DelegationRunRecord => Boolean(record));
       return filterDelegationRuns(records, {
-        statuses: ["completed", "failed", "timeout", "cancelled"],
+        statuses: ["completed", "failed", "cancelled"],
         includeTerminal: true,
         limit: query.limit,
       });

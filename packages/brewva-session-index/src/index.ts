@@ -3,6 +3,7 @@ export {
   SESSION_INDEX_UNAVAILABLE,
   SessionIndexUnavailableError,
   createSessionIndex,
+  projectDelegationInspectionState,
   projectSessionDelegationState,
 } from "./public/index.js";
 export type {

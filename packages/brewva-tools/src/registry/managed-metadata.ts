@@ -348,12 +348,20 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.session.workerResults.merge",
   ]),
   worker_results_apply: metadata("skill", "workspace_patch", [
+    "capabilities.delegation.workerResults.applied",
+    "capabilities.delegation.workerResults.applyFailed",
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "capabilities.session.workerResults.list",
+    "capabilities.session.workerResults.clear",
     "capabilities.tools.sourcePatch.snapshots.record",
     "capabilities.tools.sourcePatch.plans.prepare",
     "capabilities.tools.sourcePatch.plans.apply",
+  ]),
+  worker_results_reject: metadata("skill", "control_state_mutation", [
+    "capabilities.delegation.workerResults.rejected",
+    "capabilities.session.workerResults.list",
+    "capabilities.session.workerResults.clear",
   ]),
   schedule_intent: metadata("skill", "schedule_mutation", [
     "capabilities.schedule.intents.getProjectionSnapshot",
@@ -367,6 +375,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   subagent_fork: metadata("skill", "delegation"),
   subagent_run_diagnostic: metadata("control_plane", "delegation"),
   subagent_status: metadata("skill", "delegation"),
+  inbox_query: metadata("skill", "runtime_observe", ["capabilities.events.records.query"]),
   subagent_cancel: metadata("skill", "delegation"),
   subagent_knowledge_adopt: metadata("skill", "delegation", [
     "capabilities.delegation.lifecycle.knowledgeAdoptionRecorded",

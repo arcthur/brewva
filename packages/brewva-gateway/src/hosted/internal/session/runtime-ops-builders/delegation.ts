@@ -1,3 +1,4 @@
+import * as DelegationEvents from "@brewva/brewva-vocabulary/delegation";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 
@@ -16,8 +17,9 @@ export function buildDelegationRuntimeOps(
       spawned: ctx.recordInputPayload("subagent_spawned"),
     },
     workerResults: {
-      applied: ctx.recordInputPayload("delegation_worker_results_applied"),
-      applyFailed: ctx.recordInputPayload("delegation_worker_results_apply_failed"),
+      applied: ctx.recordInputPayload(DelegationEvents.WORKER_RESULTS_APPLIED_EVENT_TYPE),
+      applyFailed: ctx.recordInputPayload(DelegationEvents.WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE),
+      rejected: ctx.recordInputPayload(DelegationEvents.WORKER_RESULTS_REJECTED_EVENT_TYPE),
     },
   };
 }

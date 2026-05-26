@@ -281,7 +281,7 @@ export function buildDelegationFailureOutcome(input: {
   label?: string;
   childSessionId?: DelegationRunRecord["workerSessionId"];
   message: string;
-  status: "error" | "cancelled" | "timeout";
+  status: "error" | "cancelled";
   startedAt: number;
   finishedAt: number;
   artifactRefs?: SubagentOutcomeArtifactRef[];
@@ -477,7 +477,7 @@ export function buildDelegationFailureFinalizationReceipt(input: {
   startedAt: number;
   finishedAt: number;
   message: string;
-  terminalStatus: Extract<DelegationRunRecord["status"], "failed" | "cancelled" | "timeout">;
+  terminalStatus: Extract<DelegationRunRecord["status"], "failed" | "cancelled">;
   patches?: PatchSet;
   delivery?: DelegationRunRecord["delivery"];
   terminalCostSummary?: SessionCostSummary;
@@ -514,6 +514,11 @@ export function buildDelegationFailureFinalizationReceipt(input: {
       delegatedSkillName: input.target.skillName,
     }),
     status: input.terminalStatus,
+    lifecycleReason: input.cancellationReason?.startsWith("timeout:")
+      ? "timeout"
+      : input.terminalStatus === "cancelled"
+        ? "user"
+        : "none",
     updatedAt: input.finishedAt,
     workerSessionId: input.childSessionId,
     modelRoute: input.executionPlan.modelRoute,

@@ -3,8 +3,10 @@ import type { SubagentForkRequest, SubagentRunRequest } from "@brewva/brewva-too
 import {
   createSubagentFanoutTool,
   createSubagentForkTool,
+  createDelegationInboxQueryTool,
   createSubagentRunDiagnosticTool,
   createSubagentRunTool,
+  createSubagentStatusTool,
 } from "@brewva/brewva-tools/delegation";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
 
@@ -321,6 +323,240 @@ describe("subagent_run public surface", () => {
     expect(detailsText).not.toContain("explorer-readonly");
     expect(detailsText).not.toContain("consultKind");
     expect(detailsText).not.toContain("worker-background-1");
+  });
+});
+
+describe("delegation inbox query public surface", () => {
+  test("returns explicit-pull inbox items without injecting them into parent context", async () => {
+    const tool = createDelegationInboxQueryTool({
+      runtime: {
+        delegation: {
+          inspect: async () => ({
+            sessionId: "session-inbox",
+            runCards: [],
+            workboard: {
+              pendingWorkerPatches: [],
+              pendingKnowledgeAdoptions: [],
+              unreadEvidence: [],
+              verificationDebt: [],
+              blockedOrFailedRuns: [],
+            },
+            inbox: {
+              explicitPull: true,
+              items: [
+                {
+                  itemId: "worker_patch:worker-1",
+                  kind: "worker_patch",
+                  runId: "worker-1",
+                  title: "Apply worker patch",
+                  summary: "Worker produced a patch.",
+                  disposition: "pending_apply",
+                  adoptionRequirement: "patch_apply",
+                  eventId: "evt-worker-1",
+                  canonicalRefs: ["event:evt-worker-1", "delegation:worker-1"],
+                },
+              ],
+            },
+            timeline: { explicitPull: true, groups: [] },
+            recoveryPreview: {
+              continuationAnchor: { kind: "event", id: "evt-worker-1" },
+              activeTrust: {
+                toolCalls: 0,
+                approvals: 0,
+                mutations: 0,
+                workerResults: 1,
+                verifierEvidence: 0,
+              },
+              primitives: [
+                { kind: "resume" },
+                { kind: "reject_adoption", target: "worker_patch", runId: "worker-1" },
+              ],
+              nextReceiptOwner: "parent",
+            },
+          }),
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-inbox",
+      { limit: 10 },
+      undefined,
+      undefined,
+      fakeContext("session-inbox"),
+    );
+
+    expect(extractText(result)).toContain("# Delegation Inbox");
+    expect(extractText(result)).toContain("worker_patch worker-1");
+    expect(result.details).toMatchObject({
+      ok: true,
+      explicitPull: true,
+      injectedIntoParentContext: false,
+      items: [
+        {
+          itemId: "worker_patch:worker-1",
+          canonicalRefs: ["event:evt-worker-1", "delegation:worker-1"],
+        },
+      ],
+    });
+  });
+});
+
+describe("subagent_status V2 run-card surface", () => {
+  test("public mode returns run cards without routing or capability internals", async () => {
+    const tool = createSubagentStatusTool({
+      runtime: {
+        delegation: {
+          listRuns: async () => [
+            {
+              contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+              runId: "worker-card-1",
+              parentSessionId: "session-status",
+              agent: "worker",
+              targetName: "worker",
+              delegate: "worker",
+              taskName: "Implement cards",
+              taskPath: "/cards",
+              nickname: "Implement cards",
+              depth: 1,
+              forkTurns: "none",
+              gateReason: "implement_isolated",
+              modelCategory: "isolated-execution",
+              executionPrimitive: "named",
+              visibility: "public",
+              isolationStrategy: "snapshot",
+              adoption: { decision: "patch_apply" },
+              status: "completed",
+              createdAt: 1,
+              updatedAt: 2,
+              kind: "patch",
+              agentSpec: "worker",
+              envelope: "worker",
+              modelRoute: { selectedModel: "provider/model" },
+            },
+          ],
+          inspect: async () => ({
+            sessionId: "session-status",
+            runCards: [
+              {
+                runId: "worker-card-1",
+                role: "worker",
+                resultMode: "patch",
+                lifecycle: "completed",
+                lifecycleReason: "none",
+                retention: "live",
+                disposition: "pending_apply",
+                adoptionRequirement: "patch_apply",
+                title: "Implement cards",
+                taskPath: "/cards",
+                isolation: "snapshot",
+                createdAt: 1,
+                updatedAt: 2,
+                eventId: "evt-worker-card-1",
+                canonicalRefs: ["event:evt-worker-card-1", "delegation:worker-card-1"],
+              },
+            ],
+            workboard: {
+              pendingWorkerPatches: [],
+              pendingKnowledgeAdoptions: [],
+              unreadEvidence: [],
+              verificationDebt: [],
+              blockedOrFailedRuns: [],
+            },
+            inbox: { explicitPull: true, items: [] },
+            timeline: { explicitPull: true, groups: [] },
+            recoveryPreview: {
+              continuationAnchor: { kind: "event", id: "evt-worker-card-1" },
+              activeTrust: {
+                toolCalls: 0,
+                approvals: 0,
+                mutations: 0,
+                workerResults: 1,
+                verifierEvidence: 0,
+              },
+              primitives: [{ kind: "resume" }],
+              nextReceiptOwner: "parent",
+            },
+          }),
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-status",
+      { detailMode: "public" },
+      undefined,
+      undefined,
+      fakeContext("session-status"),
+    );
+
+    expect(result.details).toMatchObject({
+      detailMode: "public",
+      runCards: [
+        {
+          runId: "worker-card-1",
+          role: "worker",
+          disposition: "pending_apply",
+        },
+      ],
+    });
+    const detailsText = JSON.stringify(result.details);
+    expect(detailsText).not.toContain("agentSpec");
+    expect(detailsText).not.toContain("envelope");
+    expect(detailsText).not.toContain("modelRoute");
+    expect(detailsText).not.toContain("provider/model");
+  });
+
+  test("public mode fails closed when inspection projection is unavailable", async () => {
+    const tool = createSubagentStatusTool({
+      runtime: {
+        delegation: {
+          listRuns: async () => [
+            {
+              contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
+              runId: "worker-card-1",
+              parentSessionId: "session-status",
+              agent: "worker",
+              targetName: "worker",
+              delegate: "worker",
+              taskName: "Implement cards",
+              taskPath: "/cards",
+              nickname: "Implement cards",
+              depth: 1,
+              forkTurns: "none",
+              gateReason: "implement_isolated",
+              modelCategory: "isolated-execution",
+              executionPrimitive: "named",
+              visibility: "public",
+              isolationStrategy: "snapshot",
+              adoption: { decision: "patch_apply" },
+              status: "completed",
+              createdAt: 1,
+              updatedAt: 2,
+              kind: "patch",
+              agentSpec: "worker",
+              envelope: "worker",
+              modelRoute: { selectedModel: "provider/model" },
+            },
+          ],
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-status-no-inspection",
+      { detailMode: "public" },
+      undefined,
+      undefined,
+      fakeContext("session-status"),
+    );
+
+    expect(extractText(result)).toContain("delegation inspection projection is unavailable");
+    const detailsText = JSON.stringify(result.details);
+    expect(detailsText).not.toContain("agentSpec");
+    expect(detailsText).not.toContain("envelope");
+    expect(detailsText).not.toContain("modelRoute");
+    expect(detailsText).not.toContain("provider/model");
   });
 });
 

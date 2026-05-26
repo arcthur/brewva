@@ -13,6 +13,8 @@ import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
+import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { normalizeTaskSpec } from "@brewva/brewva-vocabulary/task";
 import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
 import { formatISO } from "date-fns";
@@ -182,20 +184,77 @@ async function readPipedStdin(): Promise<string | undefined> {
   });
 }
 
-function printReplayText(
-  events: readonly {
-    timestamp: number;
-    turn?: number;
-    type: string;
-    payload?: unknown;
-  }[],
-): void {
-  for (const event of events) {
-    const iso = formatISO(event.timestamp);
-    const turnText = typeof event.turn === "number" ? `turn=${event.turn}` : "turn=-";
-    const payload = event.payload ? JSON.stringify(event.payload) : "{}";
-    console.log(`${iso} ${turnText} ${event.type} ${payload}`);
+export function formatReplayTimelineText(
+  sessionId: string,
+  events: readonly BrewvaEventRecord[],
+): string {
+  const timeline = projectDelegationInspectionState({ sessionId, records: events }).timeline;
+  return timeline.groups
+    .map((group) => {
+      const iso = formatISO(group.timestamp);
+      const turnText = typeof group.turn === "number" ? `turn=${group.turn}` : "turn=-";
+      return `${iso} ${turnText} kind=${group.kind} events=${group.eventIds.join(",")} refs=${group.canonicalRefs.join(",")} ${group.summary}`;
+    })
+    .join("\n");
+}
+
+export function formatReplayRawText(events: readonly BrewvaEventRecord[]): string {
+  return events
+    .map((event) => {
+      const iso = event.isoTime ?? formatISO(event.timestamp);
+      const turnText = typeof event.turn === "number" ? `turn=${event.turn}` : "turn=-";
+      return `${iso} ${turnText} type=${event.type} payload=${JSON.stringify(event.payload ?? {})}`;
+    })
+    .join("\n");
+}
+
+function printReplayText(events: readonly BrewvaEventRecord[]): void {
+  const text = formatReplayRawText(events);
+  if (text.length > 0) {
+    console.log(text);
   }
+}
+
+function printReplayTimelineText(sessionId: string, events: readonly BrewvaEventRecord[]): void {
+  const text = formatReplayTimelineText(sessionId, events);
+  if (text.length > 0) {
+    console.log(text);
+  }
+}
+
+function toReplayEventRecords(
+  sessionId: string,
+  events: readonly {
+    readonly id?: string;
+    readonly sessionId?: string;
+    readonly schema?: string;
+    readonly turnId?: string;
+    readonly turn?: number;
+    readonly category?: string;
+    readonly type: string;
+    readonly timestamp: number;
+    readonly isoTime?: string;
+    readonly source?: string;
+    readonly payload?: unknown;
+  }[],
+): BrewvaEventRecord[] {
+  return events.map((event, index) => ({
+    id: event.id ?? `event_${index + 1}`,
+    sessionId: event.sessionId ?? sessionId,
+    schema: typeof event.schema === "string" ? event.schema : "brewva.event.v1",
+    ...(typeof event.turnId === "string" ? { turnId: event.turnId } : {}),
+    ...(typeof event.turn === "number" ? { turn: event.turn } : {}),
+    ...(typeof event.category === "string" ? { category: event.category } : {}),
+    type: event.type,
+    timestamp: event.timestamp,
+    isoTime:
+      typeof event.isoTime === "string" ? event.isoTime : new Date(event.timestamp).toISOString(),
+    ...(typeof event.source === "string" ? { source: event.source } : {}),
+    payload:
+      event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
+        ? (event.payload as Record<string, unknown>)
+        : {},
+  }));
 }
 
 function printCostSummary(sessionId: string, runtime: HostedRuntimeAdapterPort): void {
@@ -427,12 +486,27 @@ export async function runCliRootOperation(): Promise<void> {
       canonicalEvents.length > 0
         ? canonicalEvents
         : queryCliStructuredRuntimeEvents(runtime, targetSessionId);
+    const replayEvents = toReplayEventRecords(targetSessionId, events);
+    const timeline = parsed.replayTimeline
+      ? projectDelegationInspectionState({
+          sessionId: targetSessionId,
+          records: replayEvents,
+        }).timeline
+      : undefined;
     if (replayMode === "print-json") {
-      for (const event of events) {
-        await writeJsonLine(event);
+      if (parsed.replayTimeline) {
+        for (const group of timeline?.groups ?? []) {
+          await writeJsonLine(group);
+        }
+      } else {
+        for (const event of replayEvents) {
+          await writeJsonLine(event);
+        }
       }
+    } else if (parsed.replayTimeline) {
+      printReplayTimelineText(targetSessionId, replayEvents);
     } else {
-      printReplayText(events);
+      printReplayText(replayEvents);
     }
     return;
   }

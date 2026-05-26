@@ -138,7 +138,7 @@ export interface SubagentOutcomeBase {
   label?: string;
   kind: SubagentResultMode;
   consultKind?: ExplorerConsultKind;
-  status: "ok" | "error" | "cancelled" | "timeout";
+  status: "ok" | "error" | "cancelled";
   workerSessionId?: string | null;
   summary: string;
   assistantText?: string;
@@ -168,7 +168,7 @@ export interface SubagentOutcomeFailure {
   skillName?: string;
   label?: string;
   consultKind?: ExplorerConsultKind;
-  status: "error" | "cancelled" | "timeout";
+  status: "error" | "cancelled";
   workerSessionId?: string | null;
   error: string;
   metrics: SubagentOutcomeMetricSummary;

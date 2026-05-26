@@ -1,3 +1,4 @@
+import type { ProtocolRecord } from "./foundation.js";
 import type { PatchFileChange } from "./patch.js";
 
 export interface SourceResourceDescriptor {
@@ -85,6 +86,7 @@ export interface SourcePatchPlan {
   readonly conflicts: readonly SourcePatchConflict[];
   readonly preflight: SourcePatchPreflight;
   readonly preview: string;
+  readonly metadata?: ProtocolRecord;
 }
 
 export interface SourcePatchApplyResult {

@@ -9,6 +9,7 @@ import {
   SUBAGENT_SPAWNED_EVENT_TYPE,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
+  WORKER_RESULTS_REJECTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/delegation";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 
@@ -22,7 +23,8 @@ export type DelegationRuntimeEventType =
   | typeof SUBAGENT_RUNNING_EVENT_TYPE
   | typeof SUBAGENT_SPAWNED_EVENT_TYPE
   | typeof WORKER_RESULTS_APPLIED_EVENT_TYPE
-  | typeof WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE;
+  | typeof WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE
+  | typeof WORKER_RESULTS_REJECTED_EVENT_TYPE;
 
 export function recordDelegationRuntimeEvent(input: {
   runtime: Pick<HostedRuntimeAdapterPort, "ops">;
@@ -66,6 +68,9 @@ export function recordDelegationRuntimeEvent(input: {
       return;
     case WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE:
       input.runtime.ops.delegation.workerResults.applyFailed(event);
+      return;
+    case WORKER_RESULTS_REJECTED_EVENT_TYPE:
+      input.runtime.ops.delegation.workerResults.rejected(event);
       return;
   }
 }

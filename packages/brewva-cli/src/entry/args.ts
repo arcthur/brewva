@@ -42,6 +42,7 @@ export interface CliArgs {
   undo: boolean;
   redo: boolean;
   replay: boolean;
+  replayTimeline: boolean;
   daemon: boolean;
   sessionId?: string;
   mode: CliMode;
@@ -75,6 +76,7 @@ const CLI_PARSE_OPTIONS = {
   undo: { type: "boolean" },
   redo: { type: "boolean" },
   replay: { type: "boolean" },
+  "replay-timeline": { type: "boolean" },
   daemon: { type: "boolean" },
   channel: { type: "string" },
   "telegram-token": { type: "string" },
@@ -333,7 +335,8 @@ export function parseCliArgs(argv: string[]): CliParseResult {
     managedToolMode: managedToolMode.value,
     undo: parsed.values.undo === true,
     redo: parsed.values.redo === true,
-    replay: parsed.values.replay === true,
+    replay: parsed.values.replay === true || parsed.values["replay-timeline"] === true,
+    replayTimeline: parsed.values["replay-timeline"] === true,
     daemon: parsed.values.daemon === true,
     sessionId: typeof parsed.values.session === "string" ? parsed.values.session : undefined,
     mode,

@@ -110,8 +110,17 @@ describe("brewva cli args", () => {
     const parsed = parseArgs(["--replay", "--mode", "json", "--session", "session-123"]);
     expect(parsed).not.toBeNull();
     expect(parsed!.replay).toBe(true);
+    expect(parsed!.replayTimeline).toBe(false);
     expect(parsed!.sessionId).toBe("session-123");
     expect(parsed!.mode).toBe("print-json");
+  });
+
+  test("given --replay-timeline, when parsing args, then replay uses timeline projection", () => {
+    const parsed = parseArgs(["--replay-timeline", "--session", "session-123"]);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.replay).toBe(true);
+    expect(parsed!.replayTimeline).toBe(true);
+    expect(parsed!.sessionId).toBe("session-123");
   });
 
   test("given --undo and --replay together, when parsing args, then parser rejects conflicting flags", () => {

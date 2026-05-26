@@ -45,7 +45,7 @@ export interface PatchApplyResult {
   readonly reason?: PatchApplyFailureReason;
 }
 
-export type WorkerMergeStatus = "empty" | "merged" | "conflicts";
+export type WorkerMergeStatus = "empty" | "ready" | "conflicts";
 export type WorkerApplyStatus = "empty" | "applied" | "conflicts" | "apply_failed";
 
 export interface WorkerMergeReport {

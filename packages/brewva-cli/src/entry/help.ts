@@ -35,7 +35,8 @@ Options:
   --json                Alias for --mode json
   --undo                Undo the latest session rewind checkpoint in this session
   --redo                Redo the latest undone session rewind checkpoint in this session
-  --replay              Replay persisted runtime events
+  --replay              Inspect persisted runtime events as raw replay records
+  --replay-timeline     Inspect persisted runtime events as a redacted replay timeline
   --daemon              Run scheduler daemon (no interactive session)
   --channel <name>      Run channel host mode (currently: telegram)
   --telegram-token <t>  Telegram bot token for --channel telegram
@@ -67,6 +68,7 @@ Examples:
   brewva --undo --session <session-id>
   brewva --redo --session <session-id>
   brewva --replay --mode json --session <session-id>
+  brewva --replay-timeline --session <session-id>
   brewva onboard --install-daemon
   brewva --channel telegram --telegram-token <bot-token>
   brewva --daemon`);

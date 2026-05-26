@@ -97,6 +97,7 @@ export interface StoredSourcePatchPlanReceipt {
 export interface SourcePatchApplyReceipt {
   readonly ok: boolean;
   readonly result: SourcePatchApplyResult;
+  readonly plan?: SourcePatchPlan;
   readonly patchSet?: PatchSet;
 }
 
@@ -999,6 +1000,7 @@ function preparePlan(input: {
   readonly sessionId: string | undefined;
   readonly runtime: BrewvaBundledToolRuntime | undefined;
   readonly summary?: string;
+  readonly metadata?: Record<string, unknown>;
   readonly planId?: string;
   readonly createdAt?: number;
 }): StoredSourcePatchPlan {
@@ -1217,6 +1219,7 @@ function preparePlan(input: {
     conflicts,
     preflight,
     preview: buildPreview(mutations),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
   };
   return { plan, mutations };
 }
@@ -1290,6 +1293,7 @@ export function prepareAndStoreSourcePatchPlan(input: {
   readonly sessionId?: string;
   readonly runtime?: BrewvaBundledToolRuntime;
   readonly summary?: string;
+  readonly metadata?: Record<string, unknown>;
 }): StoredSourcePatchPlanReceipt {
   const prepared = preparePlan({
     edits: input.edits,
@@ -1297,6 +1301,7 @@ export function prepareAndStoreSourcePatchPlan(input: {
     sessionId: input.sessionId,
     runtime: input.runtime,
     summary: input.summary,
+    metadata: input.metadata,
   });
   PLANS.set(prepared.plan.id, prepared);
   recordPlan({ runtime: input.runtime, sessionId: input.sessionId, plan: prepared.plan });
@@ -1323,6 +1328,7 @@ function replayStoredSourcePatchPlan(input: {
     sessionId: input.sessionId,
     runtime: input.runtime,
     summary: input.plan.summary,
+    metadata: input.plan.metadata,
     planId: input.plan.id,
     createdAt: input.plan.createdAt,
   });
@@ -1410,7 +1416,7 @@ export function applyStoredSourcePatchPlan(input: {
     if (input.sessionId) {
       input.runtime?.capabilities.tools.sourcePatch.plans.apply(input.sessionId, result);
     }
-    return { ok: false, result };
+    return { ok: false, result, plan: stored.plan };
   }
   if (stored.plan.status !== "prepared") {
     const result: SourcePatchApplyResult = {
@@ -1423,7 +1429,7 @@ export function applyStoredSourcePatchPlan(input: {
     if (input.sessionId) {
       input.runtime?.capabilities.tools.sourcePatch.plans.apply(input.sessionId, result);
     }
-    return { ok: false, result };
+    return { ok: false, result, plan: stored.plan };
   }
 
   const failedPaths: string[] = [];
@@ -1465,7 +1471,7 @@ export function applyStoredSourcePatchPlan(input: {
     if (input.sessionId) {
       input.runtime?.capabilities.tools.sourcePatch.plans.apply(input.sessionId, result);
     }
-    return { ok: false, result };
+    return { ok: false, result, plan: stored.plan };
   }
 
   let rollbackArtifactRef: string | undefined;
@@ -1488,7 +1494,7 @@ export function applyStoredSourcePatchPlan(input: {
     if (input.sessionId) {
       input.runtime?.capabilities.tools.sourcePatch.plans.apply(input.sessionId, failedResult);
     }
-    return { ok: false, result: failedResult };
+    return { ok: false, result: failedResult, plan: stored.plan };
   }
 
   const appliedPaths: string[] = [];
@@ -1541,6 +1547,7 @@ export function applyStoredSourcePatchPlan(input: {
   return {
     ok: true,
     result: appliedResult,
+    plan: stored.plan,
     patchSet,
   };
 }

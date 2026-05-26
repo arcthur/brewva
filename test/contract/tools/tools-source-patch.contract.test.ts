@@ -10,8 +10,16 @@ import {
   createSourceReadTool,
   type SourceReadToolDetails,
 } from "@brewva/brewva-tools/navigation";
-import { createWorkerResultsApplyTool } from "@brewva/brewva-tools/workflow";
-import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import {
+  createWorkerResultsApplyTool,
+  createWorkerResultsRejectTool,
+} from "@brewva/brewva-tools/workflow";
+import {
+  CURRENT_DELEGATION_CONTRACT_VERSION,
+  WORKER_RESULTS_APPLIED_EVENT_TYPE,
+  WORKER_RESULTS_REJECTED_EVENT_TYPE,
+  type DelegationRunRecord,
+} from "@brewva/brewva-vocabulary/delegation";
 import type { SourcePatchPlan, SourceSnapshot } from "@brewva/brewva-vocabulary/workbench";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
@@ -637,6 +645,7 @@ describe("source_read and source_patch tools", () => {
           return {
             listRuns: (): DelegationRunRecord[] => [
               {
+                contractVersion: CURRENT_DELEGATION_CONTRACT_VERSION,
                 runId: "agent-1",
                 parentSessionId: "tc-resource-agent",
                 agent: "worker",
@@ -725,6 +734,82 @@ describe("source_read and source_patch tools", () => {
       fakeContext("tc-worker-results"),
     );
     expect(readFileSync(sourcePath, "utf8")).toContain("value = 2");
+    expect(runtime.ops.session.workerResults.list("tc-worker-results")).toEqual([]);
+    expect(
+      runtime.ops.events.records.query("tc-worker-results", {
+        type: WORKER_RESULTS_APPLIED_EVENT_TYPE,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          workerIds: ["worker-a"],
+          planId,
+        }),
+      }),
+    ]);
+  });
+
+  test("worker_results_reject records explicit rejection and clears selected workers", async () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-worker-reject-")),
+    });
+    runtime.ops.session.workerResults.record("tc-worker-reject", {
+      workerId: "worker-a",
+      status: "ok",
+      patches: {
+        id: "patch-a",
+        changes: [],
+      },
+    });
+    runtime.ops.session.workerResults.record("tc-worker-reject", {
+      workerId: "worker-b",
+      status: "ok",
+      patches: {
+        id: "patch-b",
+        changes: [],
+      },
+    });
+    const tool = createWorkerResultsRejectTool({ runtime });
+
+    const rejected = await tool.execute(
+      "tc-worker-reject",
+      { worker_ids: ["worker-a"], reason: "Superseded by parent implementation." },
+      undefined,
+      undefined,
+      fakeContext("tc-worker-reject"),
+    );
+
+    expect(
+      extractTextContent(rejected as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("Rejected worker results");
+    expect(
+      runtime.ops.session.workerResults.list("tc-worker-reject").map((result) => result.workerId),
+    ).toEqual(["worker-b"]);
+    expect(
+      runtime.ops.events.records
+        .query("tc-worker-reject", {
+          type: WORKER_RESULTS_REJECTED_EVENT_TYPE,
+        })
+        .at(-1),
+    ).toMatchObject({
+      payload: {
+        workerIds: ["worker-a"],
+        reason: "Superseded by parent implementation.",
+      },
+    });
+    expect(
+      runtime.ops.events.records
+        .query("tc-worker-reject", {
+          type: "worker.results.cleared",
+        })
+        .at(-1),
+    ).toMatchObject({
+      payload: {
+        workerIds: ["worker-a"],
+        decision: "reject",
+        reason: "Superseded by parent implementation.",
+      },
+    });
   });
 
   test("worker_results_apply reports SourcePatchPlan conflicts during prepare", async () => {

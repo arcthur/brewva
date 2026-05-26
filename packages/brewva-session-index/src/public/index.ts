@@ -1,7 +1,10 @@
 export { SESSION_INDEX_SCHEMA_VERSION } from "../api.js";
 export { SESSION_INDEX_UNAVAILABLE, SessionIndexUnavailableError } from "../unavailable.js";
 export { createSessionIndex } from "../factory.js";
-export { projectSessionDelegationState } from "../projection/delegation.js";
+export {
+  projectDelegationInspectionState,
+  projectSessionDelegationState,
+} from "../projection/delegation.js";
 export type {
   CreateSessionIndexInput,
   FilterSessionIdsByScopeInput,

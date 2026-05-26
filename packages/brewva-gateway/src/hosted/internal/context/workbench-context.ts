@@ -140,7 +140,7 @@ async function listPendingDelegationOutcomes(
     return sortDelegationRuns(pending);
   }
   const runs = await delegationStore?.listRunsFromReadModel(sessionId, {
-    statuses: ["completed", "failed", "timeout", "cancelled"],
+    statuses: ["completed", "failed", "cancelled"],
     includeTerminal: true,
     limit: 6,
   });

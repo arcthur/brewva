@@ -39,6 +39,16 @@ Source patch events add the read-before-write evidence chain for source edits:
 - `source_patch_applied` records the apply receipt after the mutation gate
   rechecks current file hashes
 
+Worker patch adoption is a separate delegation receipt chain:
+
+- `worker.results.applied` records that the parent accepted worker patch output
+  through `worker_results_apply`
+- `worker.results.apply_failed` records failed adoption attempts without changing
+  the worker run lifecycle
+- `worker.results.rejected` records an explicit parent rejection receipt
+- `worker.results.cleared` removes selected worker results from the pending
+  apply queue after an explicit apply or reject receipt
+
 Commitment posture has two orthogonal axes:
 
 - recoverability: `observe_only`, `reversible`, `compensatable`,

@@ -1,5 +1,6 @@
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type {
+  DelegationRunCard,
   DelegationRunRecord,
   DelegationRunStatus,
 } from "@brewva/brewva-vocabulary/delegation";
@@ -13,18 +14,17 @@ import { getSessionId } from "../../utils/session.js";
 const SUBAGENT_STATUS_VALUES = [
   "pending",
   "running",
+  "blocked",
   "completed",
   "failed",
-  "timeout",
   "cancelled",
-  "merged",
 ] as const;
 const SUBAGENT_DETAIL_MODE_VALUES = ["public", "internal", "diagnostic"] as const;
 type SubagentDetailMode = (typeof SUBAGENT_DETAIL_MODE_VALUES)[number];
 
 const StatusSchema = buildStringEnumSchema(SUBAGENT_STATUS_VALUES, {
   guidance:
-    "Use pending or running for active delegation only. Include completed, failed, timeout, cancelled, or merged when inspecting terminal history.",
+    "Use pending, running, or blocked for active delegation. Include completed, failed, or cancelled when inspecting terminal history.",
 });
 
 const DetailModeSchema = buildStringEnumSchema(SUBAGENT_DETAIL_MODE_VALUES, {
@@ -40,11 +40,10 @@ function normalizeStatuses(value: unknown): DelegationRunStatus[] | undefined {
     (entry): entry is DelegationRunStatus =>
       entry === "pending" ||
       entry === "running" ||
+      entry === "blocked" ||
       entry === "completed" ||
       entry === "failed" ||
-      entry === "timeout" ||
-      entry === "cancelled" ||
-      entry === "merged",
+      entry === "cancelled",
   );
   return statuses.length > 0 ? statuses : undefined;
 }
@@ -124,6 +123,17 @@ function summarizeRun(
     }
   }
   return lines.join("\n");
+}
+
+function summarizeRunCard(card: DelegationRunCard): string {
+  return [
+    `- ${card.title} (${card.role}): lifecycle=${card.lifecycle} reason=${card.lifecycleReason}`,
+    `result=${card.resultMode} disposition=${card.disposition}`,
+    `adoption=${card.adoptionRequirement} isolation=${card.isolation}`,
+    card.taskPath ? `path=${card.taskPath}` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function shouldIncludeRunForDetailMode(
@@ -206,11 +216,13 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
     label: "Subagent Status",
     description: "Inspect active and recent delegated subagent runs for the current session.",
     promptSnippet:
-      "Use this to inspect running, completed, failed, or merged subagent runs without replaying the whole event tape.",
+      "Use this to inspect running, completed, failed, or cancelled subagent runs without replaying the whole event tape.",
     promptGuidelines: [
       "Prefer filtering to pending/running when checking live delegation progress.",
       "Use runId or taskPath when you need the exact status of a known delegated run.",
       "Use nickname for display aliases; nicknames may return multiple matching live runs.",
+      "Status inspection is read-only; use inbox_query for pullable evidence, debt, or adoption items.",
+      "Do not treat a completed worker or librarian run as parent truth until the matching apply, reject, or adopt receipt exists.",
     ],
     parameters: Type.Object({
       runId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
@@ -301,6 +313,55 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
         shouldIncludeRunForDetailMode(run, detailMode),
       );
       const hiddenCount = resolved.runs.length - visibleRuns.length;
+      if (detailMode !== "diagnostic") {
+        const inspection = await runtime.delegation?.inspect?.(sessionId);
+        if (!inspection) {
+          return failTextResult(
+            "subagent_status failed: delegation inspection projection is unavailable.",
+            toolDetails({
+              ok: false,
+              detailMode,
+              hiddenCount,
+            }),
+          );
+        }
+        const visibleRunIds = new Set(visibleRuns.map((run) => run.runId));
+        const runCards = inspection.runCards.filter((card) => visibleRunIds.has(card.runId));
+        if (runCards.length === 0) {
+          const hiddenSuffix =
+            hiddenCount > 0
+              ? ` ${hiddenCount} internal/diagnostic run(s) hidden by detailMode=${detailMode}.`
+              : "";
+          return textResult(
+            `No matching subagent runs.${hiddenSuffix}`,
+            toolDetails({
+              ok: true,
+              detailMode,
+              hiddenCount,
+              runCards,
+              workboard: inspection.workboard,
+              inbox: inspection.inbox,
+            }),
+          );
+        }
+        return textResult(
+          [
+            "# Subagent Status",
+            hiddenCount > 0
+              ? `detailMode=${detailMode}; hidden internal/diagnostic runs=${hiddenCount}`
+              : `detailMode=${detailMode}`,
+            ...runCards.map(summarizeRunCard),
+          ].join("\n"),
+          toolDetails({
+            ok: true,
+            detailMode,
+            hiddenCount,
+            runCards,
+            workboard: inspection.workboard,
+            inbox: inspection.inbox,
+          }),
+        );
+      }
       if (visibleRuns.length === 0) {
         const hiddenSuffix =
           hiddenCount > 0
@@ -391,7 +452,7 @@ export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefini
 
       return textResult(
         ["Subagent cancelled.", summarizeRun(cancelled.run, "public")].join("\n"),
-        cancelled.run.status === "cancelled" || cancelled.run.status === "timeout"
+        cancelled.run.status === "cancelled"
           ? toolDetails({
               ...cancelled,
               run: projectRunForDetailMode(cancelled.run, "public"),
