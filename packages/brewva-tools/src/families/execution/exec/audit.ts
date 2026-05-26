@@ -81,6 +81,44 @@ export function buildCommandAuditPayload(command: string): Record<string, unknow
   };
 }
 
+export type ExecSandboxProfile =
+  | {
+      readonly backend: "virtual_readonly";
+      readonly isolation: "materialized_workspace_subset";
+    }
+  | {
+      readonly backend: "box";
+      readonly isolation: "boxlite";
+    }
+  | {
+      readonly backend: "host";
+      readonly isolation: "host";
+    };
+
+export interface ExecFailureBasis {
+  readonly kind:
+    | "policy_block"
+    | "backend_unavailable"
+    | "boundary_violation"
+    | "execution_failure";
+  readonly code: string;
+}
+
+export const EXEC_SANDBOX_PROFILES = {
+  virtualReadonly: {
+    backend: "virtual_readonly",
+    isolation: "materialized_workspace_subset",
+  },
+  box: {
+    backend: "box",
+    isolation: "boxlite",
+  },
+  host: {
+    backend: "host",
+    isolation: "host",
+  },
+} as const satisfies Record<string, ExecSandboxProfile>;
+
 export function buildCommandPolicyAuditPayload(commandPolicy: ShellCommandAnalysis | undefined): {
   commandPolicy?: CommandPolicySummary;
 } {
@@ -101,6 +139,8 @@ export function buildExecAuditPayload(input: {
   toolCallId: string;
   policy: ResolvedExecutionPolicy;
   command: string;
+  sandboxProfile?: ExecSandboxProfile;
+  failureBasis?: ExecFailureBasis;
   payload?: object;
 }): Record<string, unknown> {
   return {
@@ -110,6 +150,8 @@ export function buildExecAuditPayload(input: {
     configuredBackend: input.policy.configuredBackend,
     denyListBestEffort: input.policy.denyListBestEffort,
     ...buildCommandAuditPayload(input.command),
+    ...(input.sandboxProfile ? { sandboxProfile: input.sandboxProfile } : {}),
+    ...(input.failureBasis ? { failureBasis: input.failureBasis } : {}),
     ...input.payload,
   };
 }

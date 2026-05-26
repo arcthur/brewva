@@ -1,5 +1,5 @@
 import { DEFAULT_TUI_THEME } from "../../../internal/tui/index.js";
-import { buildTrustLoopIdleProjection } from "../trust-loop/projection.js";
+import { buildOperatorSafetyShellIdleView } from "../operator-safety/shell-view.js";
 import type { CliShellViewState } from "./types.js";
 
 export function createCliShellState(): CliShellViewState {
@@ -36,7 +36,7 @@ export function createCliShellState(): CliShellViewState {
     },
     status: {
       entries: {},
-      trust: buildTrustLoopIdleProjection(),
+      safety: buildOperatorSafetyShellIdleView(),
     },
     diff: {
       style: "auto",

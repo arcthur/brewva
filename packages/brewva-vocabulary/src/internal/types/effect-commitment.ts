@@ -52,14 +52,14 @@ export interface DecisionReceipt {
 }
 
 export interface DecideEffectCommitmentInput {
-  readonly decision: "accept" | "reject";
+  readonly decision: "accept" | "deny" | "cancel";
   readonly actor: string;
   readonly reason?: string;
 }
 
 export interface DecideEffectCommitmentResult {
   readonly requestId: string;
-  readonly decision: "accept" | "reject";
+  readonly decision: "accept" | "deny" | "cancel";
   readonly receipt?: DecisionReceipt;
 }
 
@@ -72,7 +72,7 @@ export interface EffectCommitmentApprovalRequestedEventPayload {
 export interface EffectCommitmentApprovalResolutionEventPayload {
   readonly requestId: string;
   readonly proposalId: string;
-  readonly decision: "accept" | "reject";
+  readonly decision: "accept" | "deny" | "cancel";
   readonly actor: string;
   readonly reason?: string;
 }
@@ -116,11 +116,15 @@ export interface EffectCommitmentListQuery {
 
 export interface EffectCommitmentRequestListQuery {
   readonly sessionId?: string;
-  readonly status?: string;
-  readonly limit?: number;
+  readonly state?: EffectCommitmentRequestState;
 }
 
-export type EffectCommitmentRequestState = "pending" | "accepted" | "resolved" | "consumed";
+export type EffectCommitmentRequestState =
+  | "pending"
+  | "accepted"
+  | "denied"
+  | "cancelled"
+  | "consumed";
 
 export interface EffectCommitmentProposalPayload {
   readonly proposal: EffectCommitmentProposal;

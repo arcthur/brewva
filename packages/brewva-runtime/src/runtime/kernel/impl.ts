@@ -119,6 +119,7 @@ function authorityDecisionPayload(authority: ResolvedToolAuthority): ToolAuthori
     ...(authority.receiptPolicy ? { receiptPolicy: authority.receiptPolicy } : {}),
     ...(authority.recoveryPolicy ? { recoveryPolicy: authority.recoveryPolicy } : {}),
     policyBasis: authority.policyBasis ?? [],
+    manifestBasis: authority.manifestBasis,
   });
 }
 

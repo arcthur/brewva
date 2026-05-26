@@ -3,15 +3,15 @@
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { JSX } from "solid-js";
 import { For, Index, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
+import {
+  formatOperatorSafetyShellTitle,
+  type OperatorSafetyShellTone,
+} from "../../src/shell/domain/operator-safety/shell-view.js";
 import type {
   CliShellTranscriptMessage,
   CliShellTranscriptPart,
   CliShellTranscriptToolPart,
 } from "../../src/shell/domain/transcript.js";
-import {
-  formatTrustLoopTitle,
-  type TrustLoopTone,
-} from "../../src/shell/domain/trust-loop/projection.js";
 import { useRenderer } from "../opentui/index.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
 import { MarkdownTranscriptBlock } from "./markdown-transcript-block.js";
@@ -61,7 +61,7 @@ export function TextLineBlock(input: {
   );
 }
 
-function trustToneColor(theme: SessionPalette, tone: TrustLoopTone): string {
+function safetyToneColor(theme: SessionPalette, tone: OperatorSafetyShellTone): string {
   switch (tone) {
     case "error":
       return theme.error;
@@ -74,7 +74,7 @@ function trustToneColor(theme: SessionPalette, tone: TrustLoopTone): string {
     case "neutral":
       return theme.textMuted;
     default:
-      throw new Error(`Unsupported trust loop tone: ${String(tone)}`);
+      throw new Error(`Unsupported operator safety tone: ${String(tone)}`);
   }
 }
 
@@ -149,7 +149,7 @@ function InlineTool(input: {
     if (hovered() && actionable()) {
       return input.theme.accent;
     }
-    return trustToneColor(input.theme, input.part.trust.tone);
+    return safetyToneColor(input.theme, input.part.safety.tone);
   });
   return (
     <box
@@ -232,7 +232,7 @@ function BlockTool(input: {
       onMouseUp={handleSelect}
     >
       <box flexDirection="row" justifyContent="space-between" paddingRight={3}>
-        <text fg={input.titleColor ?? trustToneColor(input.theme, input.part.trust.tone)}>
+        <text fg={input.titleColor ?? safetyToneColor(input.theme, input.part.safety.tone)}>
           {input.title}
         </text>
         <Show when={hovered() && input.hint}>
@@ -339,9 +339,9 @@ function ReadToolView(input: { part: CliShellTranscriptToolPart; theme: SessionP
   return (
     <InlineTool
       icon="→"
-      pending={input.part.trust.statusText}
+      pending={input.part.safety.statusText}
       complete={input.part.status !== "pending"}
-      text={formatTrustLoopTitle(input.part.trust, text())}
+      text={formatOperatorSafetyShellTitle(input.part.safety, text())}
       part={input.part}
       theme={input.theme}
       errorText={readToolErrorText(input.part)}
@@ -356,7 +356,7 @@ function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: Session
     <Switch>
       <Match when={content().length > 0 && input.part.status === "completed"}>
         <BlockTool
-          title={formatTrustLoopTitle(input.part.trust, `Wrote ${path()}`)}
+          title={formatOperatorSafetyShellTitle(input.part.safety, `Wrote ${path()}`)}
           part={input.part}
           theme={input.theme}
         >
@@ -373,9 +373,9 @@ function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: Session
       <Match when={true}>
         <InlineTool
           icon="←"
-          pending={input.part.trust.statusText}
+          pending={input.part.safety.statusText}
           complete={Boolean(readToolPath(input.part))}
-          text={formatTrustLoopTitle(input.part.trust, `Write ${path()}`)}
+          text={formatOperatorSafetyShellTitle(input.part.safety, `Write ${path()}`)}
           part={input.part}
           theme={input.theme}
           errorText={readToolErrorText(input.part)}
@@ -387,12 +387,12 @@ function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: Session
 
 function formatDiffToolTitle(part: CliShellTranscriptToolPart, path: string): string {
   if (part.toolName === "edit") {
-    return formatTrustLoopTitle(part.trust, `Edit ${path}`);
+    return formatOperatorSafetyShellTitle(part.safety, `Edit ${path}`);
   }
   if (part.toolName === "apply_patch") {
-    return formatTrustLoopTitle(part.trust, `Patch ${path}`);
+    return formatOperatorSafetyShellTitle(part.safety, `Patch ${path}`);
   }
-  return formatTrustLoopTitle(part.trust, `${part.toolName} ${path}`.trim());
+  return formatOperatorSafetyShellTitle(part.safety, `${part.toolName} ${path}`.trim());
 }
 
 function DiffToolView(input: {
@@ -434,7 +434,7 @@ function DiffToolView(input: {
           <For each={diffFiles()}>
             {(file, index) => (
               <BlockTool
-                title={formatTrustLoopTitle(input.part.trust, formatDiffFileTitle(file))}
+                title={formatOperatorSafetyShellTitle(input.part.safety, formatDiffFileTitle(file))}
                 part={input.part}
                 theme={input.theme}
                 idSuffix={`file:${index()}`}
@@ -464,10 +464,10 @@ function DiffToolView(input: {
       <Match when={true}>
         <InlineTool
           icon="←"
-          pending={input.part.trust.statusText}
+          pending={input.part.safety.statusText}
           complete={Boolean(readToolPath(input.part))}
-          text={formatTrustLoopTitle(
-            input.part.trust,
+          text={formatOperatorSafetyShellTitle(
+            input.part.safety,
             `${input.part.toolName === "apply_patch" ? "Patch" : "Edit"} ${path()} ${summarizeInput(input.part.args, ["path", "filePath", "file_path"])}`.trim(),
           )}
           part={input.part}
@@ -594,9 +594,9 @@ function ExecToolView(input: {
         ? ((args.workdir as string | undefined) ?? (args.cwd as string | undefined))
         : undefined;
     if (!workdir || description.includes(workdir)) {
-      return formatTrustLoopTitle(input.part.trust, description);
+      return formatOperatorSafetyShellTitle(input.part.safety, description);
     }
-    return formatTrustLoopTitle(input.part.trust, `${description} in ${workdir}`);
+    return formatOperatorSafetyShellTitle(input.part.safety, `${description} in ${workdir}`);
   });
   return (
     <Switch>
@@ -629,9 +629,9 @@ function ExecToolView(input: {
       <Match when={true}>
         <InlineTool
           icon="$"
-          pending={input.part.trust.statusText}
+          pending={input.part.safety.statusText}
           complete={command().length > 0}
-          text={formatTrustLoopTitle(input.part.trust, command())}
+          text={formatOperatorSafetyShellTitle(input.part.safety, command())}
           part={input.part}
           theme={input.theme}
           errorText={readToolErrorText(input.part)}
@@ -683,13 +683,13 @@ function GenericToolView(input: {
   const inlineText = createMemo(() => {
     const summary = readToolDisplaySummaryText(input.part);
     if (summary) {
-      return formatTrustLoopTitle(
-        input.part.trust,
+      return formatOperatorSafetyShellTitle(
+        input.part.safety,
         firstNonEmptyLine(summary) ?? input.part.toolName,
       );
     }
-    return formatTrustLoopTitle(
-      input.part.trust,
+    return formatOperatorSafetyShellTitle(
+      input.part.safety,
       `${input.part.toolName} ${summarizeInput(input.part.args)}`.trim(),
     );
   });
@@ -806,7 +806,7 @@ function GenericToolView(input: {
       <Match when={!input.showDetails && input.part.status === "completed"}>
         <InlineTool
           icon="⚙"
-          pending={input.part.trust.statusText}
+          pending={input.part.safety.statusText}
           complete={true}
           text={inlineText()}
           part={input.part}
@@ -820,7 +820,7 @@ function GenericToolView(input: {
         when={resultText().trim().length > 0 || fallbackCallLines().length > 0 || hasDiffPayload()}
       >
         <BlockTool
-          title={input.part.trust.title}
+          title={input.part.safety.title}
           part={input.part}
           theme={input.theme}
           hint={selectHint()}
@@ -890,7 +890,7 @@ function GenericToolView(input: {
       <Match when={true}>
         <InlineTool
           icon="⚙"
-          pending={input.part.trust.statusText}
+          pending={input.part.safety.statusText}
           complete={input.part.status === "completed"}
           text={inlineText()}
           part={input.part}

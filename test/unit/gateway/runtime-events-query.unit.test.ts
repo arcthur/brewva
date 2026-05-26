@@ -134,6 +134,119 @@ describe("hosted runtime event query", () => {
     });
   });
 
+  test("rebuilds pending approval requests and request-local decisions from durable tape", async () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("runtime-events-query-approval-requests"),
+    });
+    const sessionId = "approval-request-replay";
+
+    const decision = await runtime.runtime.kernel.beginToolCall({
+      sessionId,
+      toolCallId: "call-exec",
+      toolName: "exec",
+      args: { command: "echo hello" },
+    });
+
+    expect(decision).toMatchObject({
+      kind: "defer",
+      request: {
+        id: "approval:approval-request-replay:call-exec",
+      },
+    });
+    expect(runtime.ops.proposals.requests.listPending(sessionId)).toMatchObject([
+      {
+        requestId: "approval:approval-request-replay:call-exec",
+        id: "approval:approval-request-replay:call-exec",
+        proposalId: "tool:approval-request-replay:call-exec",
+        state: "pending",
+        subject: "exec",
+        toolName: "exec",
+        toolCallId: "call-exec",
+        boundary: "effectful",
+        effects: ["local_exec"],
+      },
+    ]);
+
+    expect(
+      runtime.ops.proposals.requests.decide(
+        sessionId,
+        "approval:approval-request-replay:call-exec",
+        {
+          decision: "deny",
+          actor: "arthur",
+          reason: "not now",
+        },
+      ),
+    ).toEqual({
+      requestId: "approval:approval-request-replay:call-exec",
+      decision: "deny",
+    });
+
+    expect(runtime.ops.proposals.requests.listPending(sessionId)).toEqual([]);
+    expect(runtime.ops.proposals.requests.list(sessionId)).toMatchObject([
+      {
+        requestId: "approval:approval-request-replay:call-exec",
+        state: "denied",
+        actor: "arthur",
+        reason: "not now",
+      },
+    ]);
+    expect(runtime.ops.proposals.requests.list(sessionId, { state: "pending" })).toEqual([]);
+    expect(runtime.ops.proposals.requests.list(sessionId, { state: "denied" })).toMatchObject([
+      {
+        requestId: "approval:approval-request-replay:call-exec",
+        state: "denied",
+      },
+    ]);
+    expect(() =>
+      runtime.ops.proposals.requests.decide(
+        sessionId,
+        "approval:approval-request-replay:call-exec",
+        {
+          decision: "accept",
+          actor: "arthur",
+        },
+      ),
+    ).toThrow("approval_request_not_pending:approval:approval-request-replay:call-exec:denied");
+  });
+
+  test("does not consume denied approval requests from later commitment records", async () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("runtime-events-query-denied-not-consumed"),
+    });
+    const sessionId = "approval-denied-not-consumed";
+
+    const decision = await runtime.runtime.kernel.beginToolCall({
+      sessionId,
+      toolCallId: "call-exec",
+      toolName: "exec",
+      args: { command: "echo hello" },
+    });
+    expect(decision).toMatchObject({
+      kind: "defer",
+      commitmentId: "tool:approval-denied-not-consumed:call-exec",
+    });
+    runtime.ops.proposals.requests.decide(
+      sessionId,
+      "approval:approval-denied-not-consumed:call-exec",
+      {
+        decision: "deny",
+        actor: "arthur",
+      },
+    );
+    await runtime.runtime.kernel.commitToolResult({
+      commitmentId: "tool:approval-denied-not-consumed:call-exec",
+      result: { ok: true, content: "unexpected commit" },
+    });
+
+    expect(runtime.ops.proposals.requests.list(sessionId)).toMatchObject([
+      {
+        requestId: "approval:approval-denied-not-consumed:call-exec",
+        state: "denied",
+      },
+    ]);
+  });
+
   test("rebuilds subagent activity records from durable lifecycle events", async () => {
     const runtime = createRuntimeInstanceFixture({
       cwd: createTestWorkspace("runtime-events-query-subagent-replay"),

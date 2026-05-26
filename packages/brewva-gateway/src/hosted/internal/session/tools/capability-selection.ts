@@ -55,6 +55,9 @@ export interface CapabilitySelectionEventQuery {
 export interface CapabilityAuthorityAccessFact extends ProtocolRecord {
   allowed: boolean;
   basis: string;
+  receiptId?: string;
+  source?: string;
+  selectedCapabilityNames?: readonly string[];
   reason?: string;
   advisory?: string;
 }
@@ -254,6 +257,16 @@ function selectedManifests(input: {
   return input.manifests.filter((manifest) => selectedNames.has(manifest.name));
 }
 
+function selectedCapabilityNames(receipt: CapabilitySelectionReceipt | undefined): string[] {
+  return [
+    ...new Set(
+      receipt?.selected_capabilities
+        .map((candidate) => candidate.name.trim())
+        .filter((name) => name.length > 0) ?? [],
+    ),
+  ].toSorted((left, right) => left.localeCompare(right));
+}
+
 function manifestAuthorityNames(manifest: CapabilityManifest): Set<string> {
   return new Set(
     [manifest.name, manifest.provider, manifest.domain, manifest.action, ...manifest.toolNames]
@@ -309,8 +322,17 @@ export function resolveCapabilityAuthorityAccess(input: {
     normalizeName(input.toolName) === "exec"
       ? extractExternalCliCommandName(input.args)
       : undefined;
+  const receiptId = input.receipt?.selection_id;
+  const source = "capability_selection";
+  const selectedCapabilityNamesValue = selectedCapabilityNames(input.receipt);
   if (!isCapabilityAuthorityGated(input)) {
-    return { allowed: true, basis: "capability_selection_scope" };
+    return {
+      allowed: true,
+      basis: "capability_selection_scope",
+      ...(receiptId ? { receiptId } : {}),
+      source,
+      selectedCapabilityNames: selectedCapabilityNamesValue,
+    };
   }
 
   if (
@@ -324,6 +346,9 @@ export function resolveCapabilityAuthorityAccess(input: {
     return {
       allowed: true,
       basis: "capability_selection_scope",
+      ...(receiptId ? { receiptId } : {}),
+      source,
+      selectedCapabilityNames: selectedCapabilityNamesValue,
       advisory: `selected_capability_authorized:${input.receipt?.selection_id ?? "unknown"}`,
     };
   }
@@ -332,7 +357,11 @@ export function resolveCapabilityAuthorityAccess(input: {
   return {
     allowed: false,
     basis: "capability_selection_scope",
-    reason: `${target} requires an explicit selected capability receipt.`,
+    ...(receiptId ? { receiptId } : {}),
+    source,
+    selectedCapabilityNames: selectedCapabilityNamesValue,
+    reason: "missing_selected_capability",
+    advisory: `${target} requires an explicit selected capability receipt.`,
   };
 }
 

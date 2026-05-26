@@ -104,7 +104,7 @@ Use ordinary advisory and authority surfaces:
 - advisory skill catalog context for first-turn prompt context
 - file/search tools to inspect more skill markdown when needed
 - capability manifests for SaaS, CLI, and MCP authority
-- durable `capability_selection_recorded` events for selection evidence
+- durable `tool.capability.selected` events for selection evidence
 - durable `skill_selection_recorded` events for advisory context evidence
 - `workbench_note` for model-authored durable working notes
 - `workbench_evict` to evict stale context with optional replacement notes

@@ -464,7 +464,16 @@ describe("shell command provider", () => {
 
     const slashNames = provider.slashCommands().map((command) => command.slashName);
     expect(slashNames).toEqual(
-      expect.arrayContaining(["context", "authority", "diff", "copy", "export", "skills", "init"]),
+      expect.arrayContaining([
+        "context",
+        "authority",
+        "safety",
+        "diff",
+        "copy",
+        "export",
+        "skills",
+        "init",
+      ]),
     );
 
     for (const rejected of ["compact", "permissions", "review", "security-review"]) {
@@ -515,7 +524,7 @@ describe("shell command provider", () => {
     expect(provider.lookupSlashName("permissions")).toMatchObject({
       kind: "reserved",
       reservation: {
-        message: expect.stringContaining("/authority"),
+        message: expect.stringContaining("/safety"),
         redirectCommandId: "operator.authority",
       },
     });

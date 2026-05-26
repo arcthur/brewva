@@ -3,10 +3,10 @@ import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import type { TuiTheme } from "../../../internal/tui/index.js";
 import type { OverlayEntry } from "../../../internal/tui/index.js";
 import type { ShellCompletionCandidate, ShellCompletionRange } from "../completion-provider.js";
+import type { OperatorSafetyShellSessionView } from "../operator-safety/shell-view.js";
 import type { CliShellOverlayPayload } from "../overlays/payloads.js";
 import type { CliShellPromptPart } from "../prompt.js";
 import type { CliShellTranscriptMessage } from "../transcript.js";
-import type { TrustLoopSessionProjection } from "../trust-loop/projection.js";
 
 export type ShellFocusOwner =
   | "composer"
@@ -32,7 +32,7 @@ export interface CliShellNotification {
 
 export interface CliShellStatusState {
   entries: Record<string, string>;
-  trust?: TrustLoopSessionProjection;
+  safety?: OperatorSafetyShellSessionView;
   workingMessage?: string;
   hiddenThinkingLabel?: string;
 }
@@ -226,8 +226,8 @@ export type CliShellAction =
       text: string | undefined;
     }
   | {
-      type: "status.setTrust";
-      trust: TrustLoopSessionProjection | undefined;
+      type: "status.setSafety";
+      safety: OperatorSafetyShellSessionView | undefined;
     }
   | {
       type: "status.working";

@@ -525,7 +525,7 @@ export function validateSessionWireFramePayload(
       if (
         typeof value.turnId !== "string" ||
         typeof value.requestId !== "string" ||
-        (value.decision !== "approved" && value.decision !== "rejected") ||
+        (value.decision !== "accept" && value.decision !== "deny" && value.decision !== "cancel") ||
         !isOptionalString(value.actor) ||
         !isOptionalString(value.reason)
       ) {

@@ -153,7 +153,7 @@ describe("cli shell import graph", () => {
       "packages/brewva-cli/src/shell/task-details.ts",
       "packages/brewva-cli/src/shell/prompt-parts.ts",
       "packages/brewva-cli/src/shell/question-utils.ts",
-      "packages/brewva-cli/src/shell/trust-loop/projection.ts",
+      "packages/brewva-cli/src/shell/operator-safety/shell-view.ts",
       "packages/brewva-cli/src/shell/overlays/payloads.ts",
       "packages/brewva-cli/runtime/shell/overlay.tsx",
     ]) {

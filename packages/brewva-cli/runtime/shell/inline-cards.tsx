@@ -2,6 +2,11 @@
 
 import type { JSX } from "solid-js";
 import { For, Show, createEffect, createMemo } from "solid-js";
+import {
+  buildOperatorSafetyShellAskEmptyView,
+  buildOperatorSafetyShellAskView,
+  type OperatorSafetyShellDetailKey,
+} from "../../src/shell/domain/operator-safety/shell-view.js";
 import type {
   CliApprovalOverlayPayload,
   CliQuestionOverlayPayload,
@@ -15,11 +20,6 @@ import {
   questionTabCount,
 } from "../../src/shell/domain/question-utils.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
-import {
-  buildTrustLoopApprovalEmptyProjection,
-  buildTrustLoopApprovalProjection,
-  type TrustLoopDetailKey,
-} from "../../src/shell/domain/trust-loop/projection.js";
 import type { OpenTuiScrollBoxHandle } from "../internal-opentui-runtime.js";
 import { useTerminalDimensions } from "../opentui/index.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
@@ -264,24 +264,22 @@ export function InlineApprovalPrompt(input: {
   const shellContext = useShellRenderContext();
   const dimensions = useTerminalDimensions();
   const request = createMemo(() => input.payload.snapshot.approvals[input.payload.selectedIndex]);
-  const emptyTrust = buildTrustLoopApprovalEmptyProjection();
-  const trust = createMemo(() => {
+  const emptySafety = buildOperatorSafetyShellAskEmptyView();
+  const safety = createMemo(() => {
     const current = request();
-    return current ? buildTrustLoopApprovalProjection({ request: current }) : undefined;
+    return current ? buildOperatorSafetyShellAskView({ request: current }) : undefined;
   });
-  const approvalSubject = createMemo(() => trust()?.subject ?? "effect");
+  const approvalSubject = createMemo(() => safety()?.subject ?? "effect");
   const approvalActionText = createMemo(
     () =>
-      `${trust()?.primaryActionLabel ?? "Authorize once"} · ${
-        trust()?.rejectActionLabel ?? "Reject"
-      }`,
+      `${safety()?.primaryActionLabel ?? "Allow once"} · ${safety()?.denyActionLabel ?? "Deny"}`,
   );
-  const detailValue = (key: TrustLoopDetailKey): string | undefined =>
-    trust()?.details.find((row) => row.key === key)?.value;
+  const detailValue = (key: OperatorSafetyShellDetailKey): string | undefined =>
+    safety()?.details.find((row) => row.key === key)?.value;
   const approvalDetailLines = createMemo(() => {
-    const currentTrust = trust();
-    const tool = currentTrust?.toolName;
-    const boundary = currentTrust?.boundary;
+    const currentSafety = safety();
+    const tool = currentSafety?.toolName;
+    const boundary = currentSafety?.boundary;
     const summary = detailValue("summary");
     const effects = detailValue("effects");
     const receipt = detailValue("receipt");
@@ -355,13 +353,13 @@ export function InlineApprovalPrompt(input: {
       when={request()}
       fallback={
         <InlinePromptCard
-          title={emptyTrust.title}
+          title={emptySafety.title}
           theme={input.theme}
           accentColor={input.theme.borderActive}
           body={
             <box paddingLeft={1} flexDirection="column" gap={1}>
-              <text fg={input.theme.text}>{emptyTrust.headline}</text>
-              <text fg={input.theme.textMuted}>{emptyTrust.subline}</text>
+              <text fg={input.theme.text}>{emptySafety.headline}</text>
+              <text fg={input.theme.textMuted}>{emptySafety.subline}</text>
             </box>
           }
           actions={[]}
@@ -373,7 +371,7 @@ export function InlineApprovalPrompt(input: {
         void entry;
         return (
           <InlinePromptCard
-            title={trust()?.title ?? "Authorize effect"}
+            title={safety()?.title ?? "Operator safety"}
             theme={input.theme}
             accentColor={input.theme.warning}
             expanded={input.payload.previewExpanded}
@@ -381,16 +379,16 @@ export function InlineApprovalPrompt(input: {
               <box flexDirection="column" gap={0}>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <text fg={input.theme.warning}>△</text>
-                  <text fg={input.theme.text}>{trust()?.title ?? "Authorize effect"}</text>
+                  <text fg={input.theme.text}>{safety()?.title ?? "Operator safety"}</text>
                 </box>
-                <Show when={trust()?.headline}>
+                <Show when={safety()?.headline}>
                   {(headline) => (
                     <text fg={input.theme.text} paddingLeft={2}>
                       {headline()}
                     </text>
                   )}
                 </Show>
-                <Show when={trust()?.subline}>
+                <Show when={safety()?.subline}>
                   {(subline) => (
                     <text fg={input.theme.textMuted} paddingLeft={2}>
                       {subline()}
@@ -482,7 +480,7 @@ export function InlineApprovalPrompt(input: {
             }
             actions={[
               {
-                label: trust()?.primaryActionLabel ?? "Authorize once",
+                label: safety()?.primaryActionLabel ?? "Allow once",
                 active: true,
                 onSelect: () => {
                   void input.runtime.handleInput({
@@ -494,7 +492,7 @@ export function InlineApprovalPrompt(input: {
                 },
               },
               {
-                label: trust()?.rejectActionLabel ?? "Reject",
+                label: safety()?.denyActionLabel ?? "Deny",
                 onSelect: () => {
                   void input.runtime.handleInput({
                     key: "character",

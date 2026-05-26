@@ -13,6 +13,12 @@ import {
   readToolResultMessage,
 } from "../../io/message-content.js";
 import type { ShellCommitOptions } from "../domain/actions.js";
+import {
+  buildOperatorSafetyShellSessionView,
+  buildOperatorSafetyShellToolView,
+  isOperatorSafetyShellToolExecutionPhase,
+  type OperatorSafetyShellToolView,
+} from "../domain/operator-safety/shell-view.js";
 import type { CliShellAction } from "../domain/state.js";
 import {
   buildSeedTranscriptMessages,
@@ -22,12 +28,6 @@ import {
   type CliShellTranscriptMessage,
   type CliShellTranscriptToolStatus,
 } from "../domain/transcript.js";
-import {
-  buildTrustLoopSessionProjection,
-  buildTrustLoopToolProjection,
-  isTrustLoopToolExecutionPhase,
-  type TrustLoopToolProjection,
-} from "../domain/trust-loop/projection.js";
 import type { CliShellUiPort } from "../ports/ui-port.js";
 
 export interface ShellTranscriptProjectorContext {
@@ -108,7 +108,7 @@ export class ShellTranscriptProjector {
   #rewindTranscriptMarkerSequence = 0;
   readonly #rewindTranscriptMarkersBySessionId = new Map<string, CliShellTranscriptMessage>();
   readonly #toolProjectionInputByCallId = new Map<string, ToolProjectionInputState>();
-  readonly #toolTrustByCallId = new Map<string, TrustLoopToolProjection>();
+  readonly #toolSafetyByCallId = new Map<string, OperatorSafetyShellToolView>();
 
   constructor(private readonly context: ShellTranscriptProjectorContext) {}
 
@@ -143,7 +143,7 @@ export class ShellTranscriptProjector {
   }
 
   /**
-   * Build seed transcript messages and rebuild derived projector caches (tool trust) in one pass.
+   * Build seed transcript messages and rebuild derived projector caches (tool safety) in one pass.
    * Shared by the initial state composition (runtime.initializeState) and live re-seeding
    * (refreshFromSession) so cache hydration cannot drift from message hydration. Returns the
    * messages so callers can route them through the appropriate sink (action pipeline or
@@ -151,7 +151,7 @@ export class ShellTranscriptProjector {
    */
   composeSeedTranscript(): CliShellTranscriptMessage[] {
     const messages = this.buildMessagesFromSession();
-    this.rebuildToolTrustCache(messages);
+    this.rebuildToolSafetyCache(messages);
     return messages;
   }
 
@@ -305,7 +305,7 @@ export class ShellTranscriptProjector {
         toolCallId,
         toolName,
         args: event.args,
-        phase: isTrustLoopToolExecutionPhase(event.phase) ? event.phase : undefined,
+        phase: isOperatorSafetyShellToolExecutionPhase(event.phase) ? event.phase : undefined,
         status: event.phase === "cleanup" ? "completed" : "running",
         renderMode: "streaming",
       });
@@ -321,10 +321,10 @@ export class ShellTranscriptProjector {
       });
       if (isSessionPhase(event.phase)) {
         this.context.commit({
-          type: "status.setTrust",
-          trust: buildTrustLoopSessionProjection({
+          type: "status.setSafety",
+          safety: buildOperatorSafetyShellSessionView({
             phase: event.phase,
-            activeTool: this.findToolTrustProjection(
+            activeTool: this.findToolSafetyProjection(
               typeof phase?.toolCallId === "string" ? phase.toolCallId : undefined,
             ),
           }),
@@ -424,7 +424,7 @@ export class ShellTranscriptProjector {
     if (typeof toolCallId !== "string" || toolCallId.length === 0) {
       return;
     }
-    this.updateToolTrustCache({ ...update, toolCallId });
+    this.updateToolSafetyCache({ ...update, toolCallId });
     this.replaceMessages(
       upsertToolExecutionIntoTranscriptMessages(this.context.getMessages(), {
         toolCallId,
@@ -440,13 +440,13 @@ export class ShellTranscriptProjector {
     );
   }
 
-  private findToolTrustProjection(
+  private findToolSafetyProjection(
     toolCallId: string | undefined,
-  ): TrustLoopToolProjection | undefined {
-    return toolCallId ? this.#toolTrustByCallId.get(toolCallId) : undefined;
+  ): OperatorSafetyShellToolView | undefined {
+    return toolCallId ? this.#toolSafetyByCallId.get(toolCallId) : undefined;
   }
 
-  private updateToolTrustCache(update: {
+  private updateToolSafetyCache(update: {
     toolCallId: string;
     toolName?: string;
     args?: unknown;
@@ -465,12 +465,12 @@ export class ShellTranscriptProjector {
       status: update.status ?? previous?.status,
     };
     this.#toolProjectionInputByCallId.set(update.toolCallId, next);
-    this.#toolTrustByCallId.set(update.toolCallId, buildTrustLoopToolProjection(next));
+    this.#toolSafetyByCallId.set(update.toolCallId, buildOperatorSafetyShellToolView(next));
   }
 
-  private rebuildToolTrustCache(messages: readonly CliShellTranscriptMessage[]): void {
+  private rebuildToolSafetyCache(messages: readonly CliShellTranscriptMessage[]): void {
     this.#toolProjectionInputByCallId.clear();
-    this.#toolTrustByCallId.clear();
+    this.#toolSafetyByCallId.clear();
     for (const message of messages) {
       for (const part of message.parts) {
         if (part.type !== "tool") {
@@ -482,7 +482,7 @@ export class ShellTranscriptProjector {
           executionPhase: part.phase,
           status: part.status,
         });
-        this.#toolTrustByCallId.set(part.toolCallId, part.trust);
+        this.#toolSafetyByCallId.set(part.toolCallId, part.safety);
       }
     }
   }

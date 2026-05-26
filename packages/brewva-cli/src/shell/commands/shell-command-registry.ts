@@ -211,10 +211,10 @@ const builtInShellCommands: readonly ShellCommand[] = [
   },
   {
     id: "operator.approvals",
-    title: "Approvals",
-    description: "Review queued approval requests.",
+    title: "Operator safety",
+    description: "Review queued operator safety asks.",
     category: "Operator",
-    slash: { name: "approvals" },
+    slash: { name: "safety" },
     shortcuts: ["ctrl+a"],
   },
   {
@@ -362,7 +362,7 @@ const reservedShellSlashNames: readonly ShellSlashReservation[] = [
   {
     name: "permissions",
     owner: "operator.authority",
-    message: "Use /authority for posture and /approvals for pending commitments.",
+    message: "Use /authority for posture and /safety for pending asks.",
     redirectCommandId: "operator.authority",
   },
   {

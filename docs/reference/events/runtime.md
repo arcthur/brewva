@@ -31,7 +31,7 @@ digest that resumed the exact effectful action.
 
 ## Capability Selection
 
-`capability_selection_recorded` is durable evidence on the event tape. It
+`tool.capability.selected` is durable evidence on the event tape. It
 records the selector trigger, input intent hash, selected capabilities,
 filtered candidates, policy decisions, conflicts, registry version, and
 carry-forward linkage for tool-only turns.

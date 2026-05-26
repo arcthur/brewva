@@ -46,7 +46,7 @@ function createProjectorHarness() {
 }
 
 describe("shell transcript projector", () => {
-  test("ignores malformed session phases before typed trust projection", () => {
+  test("ignores malformed session phases before typed safety projection", () => {
     const { actions, projector } = createProjectorHarness();
 
     projector.handleSessionEvent({
@@ -57,10 +57,10 @@ describe("shell transcript projector", () => {
       },
     } as unknown as BrewvaPromptSessionEvent);
 
-    expect(actions.some((action) => action.type === "status.setTrust")).toBe(false);
+    expect(actions.some((action) => action.type === "status.setSafety")).toBe(false);
   });
 
-  test("projects idle session phases as product trust copy", () => {
+  test("projects idle session phases as product safety copy", () => {
     const { actions, projector } = createProjectorHarness();
 
     projector.handleSessionEvent({
@@ -70,8 +70,8 @@ describe("shell transcript projector", () => {
 
     expect(actions).toContainEqual(
       expect.objectContaining({
-        type: "status.setTrust",
-        trust: expect.objectContaining({
+        type: "status.setSafety",
+        safety: expect.objectContaining({
           source: "idle",
           statusText: "Record",
         }),
@@ -79,7 +79,7 @@ describe("shell transcript projector", () => {
     );
   });
 
-  test("tool events update transcript trust without fabricating session trust", () => {
+  test("tool events update transcript safety without fabricating session safety", () => {
     const { actions, projector } = createProjectorHarness();
 
     projector.handleSessionEvent({
@@ -90,7 +90,7 @@ describe("shell transcript projector", () => {
       args: { path: "src/app.ts" },
     } as unknown as BrewvaPromptSessionEvent);
 
-    expect(actions.some((action) => action.type === "status.setTrust")).toBe(false);
+    expect(actions.some((action) => action.type === "status.setSafety")).toBe(false);
 
     projector.handleSessionEvent({
       type: "session_phase_change",
@@ -104,8 +104,8 @@ describe("shell transcript projector", () => {
 
     expect(actions).toContainEqual(
       expect.objectContaining({
-        type: "status.setTrust",
-        trust: expect.objectContaining({
+        type: "status.setSafety",
+        safety: expect.objectContaining({
           phase: "inspect",
           source: "tool",
           statusText: "Inspect",

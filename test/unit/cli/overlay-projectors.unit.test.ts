@@ -306,7 +306,7 @@ describe("interactive command overlays", () => {
     expect(view.lines.join("\n")).toContain("Request compaction");
   });
 
-  test("authority overlay renders approvals, capabilities, tool access, and explicit unknown scope", () => {
+  test("authority overlay renders approvals, capability receipts, tool access, and safety summary", () => {
     const payload = buildAuthorityOverlayPayload({
       snapshot: {
         approvals: [
@@ -333,7 +333,24 @@ describe("interactive command overlays", () => {
         capabilityScopedTools: 1,
         requiredCapabilities: ["ops.tools.invocation.start"],
         selectedCapabilities: ["github-read"],
+        selectedReceiptId: "capability-selection-1",
+        sourceDiscovery: "tool.capability.selected",
         conflicts: 0,
+      },
+      operatorSafety: {
+        pendingAsks: 1,
+        denials: 0,
+        receiptIds: ["event-approval-requested"],
+        recentDecisions: [
+          {
+            decision: "ask",
+            toolName: "exec",
+            actionClass: "local_exec_effectful",
+            requestId: "approval-1",
+            reason: "approval required",
+            receiptIds: ["event-approval-requested"],
+          },
+        ],
       },
       toolAccess: [
         {
@@ -347,15 +364,19 @@ describe("interactive command overlays", () => {
     const view = buildOverlayView(payload);
 
     expect(view.title).toBe("Authority");
-    expect(view.lines.join("\n")).toContain("Pending approvals: 1");
+    expect(view.lines.join("\n")).toContain("Pending asks: 1");
     expect(view.lines.join("\n")).toContain("managedTools=3");
     expect(view.lines.join("\n")).toContain("capabilityScopedTools=1");
     expect(view.lines.join("\n")).toContain("selected=github-read");
     expect(view.lines.join("\n")).toContain("required=ops.tools.invocation.start");
+    expect(view.lines.join("\n")).toContain("sourceDiscovery=tool.capability.selected");
+    expect(view.lines.join("\n")).toContain("selectedReceipt=capability-selection-1");
+    expect(view.lines.join("\n")).toContain("Operator safety: pendingAsks=1 denials=0");
+    expect(view.lines.join("\n")).toContain("Ask approval-1 tool=exec");
+    expect(view.lines.join("\n")).toContain("Safety ask tool=exec");
     expect(view.lines.join("\n")).toContain("Tool access: checked=1 warnings=1 blocked=0");
     expect(view.lines.join("\n")).toContain("exec allowed=true warning=write requires approval");
-    expect(view.lines.join("\n")).toContain("network=not surfaced");
-    expect(view.lines.join("\n")).toContain("gateway=not surfaced");
+    expect(view.lines.join("\n")).not.toContain("not surfaced");
   });
 
   test("skills overlay renders a searchable picker catalog", () => {

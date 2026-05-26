@@ -406,12 +406,12 @@ export function reduceCliShellState(
         },
       };
     }
-    case "status.setTrust":
+    case "status.setSafety":
       return {
         ...state,
         status: {
           ...state.status,
-          trust: action.trust,
+          safety: action.safety,
         },
       };
     case "status.working":

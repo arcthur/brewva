@@ -60,8 +60,8 @@ function createApprovalDecidedFrame(
     type: "approval.decided",
     turnId: "turn-1",
     requestId: "req-1",
-    decision: "approved",
-    reason: "operator_approved",
+    decision: "accept",
+    reason: "operator_accepted",
   };
 }
 

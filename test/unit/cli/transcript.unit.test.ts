@@ -113,7 +113,7 @@ describe("cli transcript model", () => {
           type: "tool",
           toolCallId: "tool-read-1",
           toolName: "read",
-          trust: {
+          safety: {
             phase: "inspect",
             label: "Inspect",
           },
@@ -156,7 +156,7 @@ describe("cli transcript model", () => {
 
     expect(messages[0]?.parts[0]).toMatchObject({
       type: "tool",
-      trust: {
+      safety: {
         phase: "inspect",
         label: "Inspect",
       },
@@ -325,7 +325,7 @@ describe("cli transcript model", () => {
           type: "tool",
           toolCallId: "tool-edit-1",
           toolName: "edit",
-          trust: {
+          safety: {
             phase: "inspect",
             label: "Inspect",
           },
@@ -358,7 +358,7 @@ describe("cli transcript model", () => {
         {
           type: "tool",
           toolName: "custom_commit_tool",
-          trust: {
+          safety: {
             phase: "inspect",
             label: "Inspect",
           },

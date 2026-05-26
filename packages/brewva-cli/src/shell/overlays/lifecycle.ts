@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
 import type { OverlayPriority } from "../../internal/tui/index.js";
-import { buildSessionInspectReport, resolveInspectDirectory } from "../../operator/inspect.js";
+import {
+  buildInspectReport,
+  buildSessionInspectReport,
+  resolveInspectDirectory,
+} from "../../operator/inspect.js";
 import {
   explainCliRuntimeToolAccess,
   getCliRuntimeCompactionGateStatus,
@@ -60,8 +64,42 @@ type PagerTarget = {
   readonly lines: readonly string[];
 };
 
+interface AuthorityCapabilitySelectionSummary {
+  readonly selectedReceiptId?: string;
+  readonly selectedCapabilities: readonly string[];
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readAuthorityCapabilitySelection(
+  value: unknown,
+): AuthorityCapabilitySelectionSummary | undefined {
+  const record = readRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  const selectedCapabilities = Array.isArray(record.selected_capabilities)
+    ? record.selected_capabilities
+        .map((entry) => readRecord(entry)?.name)
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+    : [];
+  const selectionId =
+    typeof record.selection_id === "string" ? record.selection_id.trim() : undefined;
+  return {
+    ...(selectionId ? { selectedReceiptId: selectionId } : {}),
+    selectedCapabilities,
+  };
+}
+
 function buildAuthorityCapabilitySummary(
   toolDefinitions: CliShellSessionBundle["toolDefinitions"],
+  selection: AuthorityCapabilitySelectionSummary | undefined,
 ): AuthorityCapabilitySummary {
   let managedTools = 0;
   let capabilityScopedTools = 0;
@@ -84,6 +122,9 @@ function buildAuthorityCapabilitySummary(
     managedTools,
     capabilityScopedTools,
     requiredCapabilities: [...requiredCapabilities].toSorted(),
+    ...(selection?.selectedReceiptId ? { selectedReceiptId: selection.selectedReceiptId } : {}),
+    ...(selection ? { selectedCapabilities: selection.selectedCapabilities } : {}),
+    sourceDiscovery: selection ? "tool.capability.selected" : "tool_metadata",
   };
 }
 
@@ -713,10 +754,18 @@ export class ShellOverlayLifecycleHandler {
   openAuthorityOverlay(): void {
     const bundle = this.context.getBundle();
     const sessionId = this.context.getSessionPort().getSessionId();
+    const operatorRuntime = toCliOperatorRuntime(bundle.runtime);
+    const operatorSafety = buildInspectReport(operatorRuntime, sessionId).operatorSafety;
     this.openOverlay(
       buildAuthorityOverlayPayload({
         snapshot: this.context.getOperatorSnapshot(),
-        capabilitySummary: buildAuthorityCapabilitySummary(bundle.toolDefinitions),
+        capabilitySummary: buildAuthorityCapabilitySummary(
+          bundle.toolDefinitions,
+          readAuthorityCapabilitySelection(
+            bundle.runtime.ops.tools.capabilitySelection.latest(sessionId),
+          ),
+        ),
+        operatorSafety,
         toolAccess: buildAuthorityToolAccessRows({ bundle, sessionId }),
       }),
     );

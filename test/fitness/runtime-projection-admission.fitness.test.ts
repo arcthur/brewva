@@ -136,7 +136,9 @@ describe("runtime projection admission", () => {
       /\\.\\.\/\\.\\.\/\\.\\.\/runtime/u,
     ];
 
-    expect(projectionFiles).toEqual([]);
+    expect(projectionFiles).toContain(
+      "packages/brewva-runtime/src/read-models/projection/operator-safety.ts",
+    );
     for (const file of projectionFiles) {
       const source = readRepoFile(file);
       for (const forbidden of forbiddenImports) {

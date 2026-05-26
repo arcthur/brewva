@@ -104,6 +104,15 @@ interface InspectConfigLoadReport {
   }>;
 }
 
+interface InspectOperatorSafetyDecision {
+  readonly decision: "allow" | "ask" | "deny";
+  readonly toolName: string;
+  readonly actionClass: string | null;
+  readonly requestId: string | null;
+  readonly receiptIds: string[];
+  readonly reason: string | null;
+}
+
 interface InspectReport {
   sessionId: string;
   workspaceRoot: string;
@@ -223,6 +232,12 @@ interface InspectReport {
   };
   verification: InspectVerification;
   delegation: DelegationInspectionProjection;
+  operatorSafety: {
+    recentDecisions: InspectOperatorSafetyDecision[];
+    pendingAsks: number;
+    denials: number;
+    receiptIds: string[];
+  };
   hostedTransitions: SessionTransitionSnapshot;
   contextEvidence: ContextEvidenceAggregateReport & {
     promotionReady: boolean;
@@ -309,6 +324,20 @@ function readPayloadStringRecord(payload: unknown, key: string): Record<string, 
     }
   }
   return record;
+}
+
+function readPayloadObject(payload: unknown, key: string): Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return {};
+  }
+  const value = (payload as Record<string, unknown>)[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readText(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 function resolveUnmatchedPresetRoleKeys(roles: Record<string, string>): string[] {
@@ -402,6 +431,108 @@ function buildVerificationInspection(
     missingChecks: latest.missingChecks,
     missingEvidence: latest.missingEvidence,
     reason: latest.reason,
+  };
+}
+
+function buildOperatorSafetyInspection(
+  events: readonly BrewvaEventRecord[],
+): InspectReport["operatorSafety"] {
+  const decisions: InspectOperatorSafetyDecision[] = [];
+  const pendingRequestIds = new Set<string>();
+  const receiptIds = new Set<string>();
+  const requestsById = new Map<
+    string,
+    { readonly toolName: string; readonly actionClass: string | null }
+  >();
+  for (const event of events) {
+    const payload = event.payload && typeof event.payload === "object" ? event.payload : {};
+    const authority = readPayloadObject(payload, "authority");
+    const eventId = readText(event.id);
+    if (event.type === "tool.proposed") {
+      const effectiveAdmission = readText(authority.effectiveAdmission);
+      const requiresApproval = authority.requiresApproval === true;
+      if (effectiveAdmission === "allow" && !requiresApproval) {
+        const call = readPayloadObject(payload, "call");
+        if (eventId) {
+          receiptIds.add(eventId);
+        }
+        decisions.push({
+          decision: "allow",
+          toolName: readText(call.toolName) ?? readText(authority.normalizedToolName) ?? "unknown",
+          actionClass: readText(authority.actionClass),
+          requestId: null,
+          receiptIds: eventId ? [eventId] : [],
+          reason: null,
+        });
+      }
+      continue;
+    }
+    if (event.type === "approval.requested") {
+      const requestId = readText((payload as Record<string, unknown>).id);
+      const toolName = readText((payload as Record<string, unknown>).toolName) ?? "unknown";
+      const actionClass = readText(authority.actionClass);
+      if (requestId) {
+        pendingRequestIds.add(requestId);
+        requestsById.set(requestId, { toolName, actionClass });
+      }
+      if (eventId) {
+        receiptIds.add(eventId);
+      }
+      decisions.push({
+        decision: "ask",
+        toolName,
+        actionClass,
+        requestId,
+        receiptIds: eventId ? [eventId] : [],
+        reason: readText((payload as Record<string, unknown>).reason),
+      });
+      continue;
+    }
+    if (event.type === "approval.decided") {
+      const requestId =
+        readText((payload as Record<string, unknown>).id) ??
+        readText((payload as Record<string, unknown>).requestId);
+      if (requestId) {
+        pendingRequestIds.delete(requestId);
+      }
+      const rawDecision = (payload as Record<string, unknown>).decision;
+      const request = requestId ? requestsById.get(requestId) : undefined;
+      const decision = rawDecision === "accept" ? "allow" : "deny";
+      if (eventId) {
+        receiptIds.add(eventId);
+      }
+      decisions.push({
+        decision,
+        toolName: request?.toolName ?? "operator_request",
+        actionClass: request?.actionClass ?? null,
+        requestId,
+        receiptIds: eventId ? [eventId] : [],
+        reason:
+          readText((payload as Record<string, unknown>).reason) ??
+          (rawDecision === "cancel" ? "approval_cancelled" : null),
+      });
+      continue;
+    }
+    if (event.type === "tool.aborted") {
+      const call = readPayloadObject(payload, "call");
+      if (eventId) {
+        receiptIds.add(eventId);
+      }
+      decisions.push({
+        decision: "deny",
+        toolName: readText(call.toolName) ?? readText(authority.normalizedToolName) ?? "unknown",
+        actionClass: readText(authority.actionClass),
+        requestId: null,
+        receiptIds: eventId ? [eventId] : [],
+        reason: readText((payload as Record<string, unknown>).reason),
+      });
+    }
+  }
+  return {
+    recentDecisions: decisions.slice(-8),
+    pendingAsks: pendingRequestIds.size,
+    denials: decisions.filter((decision) => decision.decision === "deny").length,
+    receiptIds: [...receiptIds].slice(-16),
   };
 }
 
@@ -819,6 +950,7 @@ function buildInspectReport(
     },
     verification,
     delegation: projectDelegationInspectionState({ sessionId, records: events }),
+    operatorSafety: buildOperatorSafetyInspection(events),
     hostedTransitions: createEmptySessionTransitionSnapshot(),
     contextEvidence: {
       ...contextEvidenceReport.aggregate,

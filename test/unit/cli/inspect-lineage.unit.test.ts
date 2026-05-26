@@ -222,4 +222,68 @@ describe("cli inspect lineage reporting", () => {
     expect(text).toContain("Delegation timeline: groups=1");
     expect(text).toContain("Recovery preview: nextReceiptOwner=parent");
   });
+
+  test("summarizes operator safety decisions without unrelated receipt ids", async () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-safety-")),
+    });
+    const sessionId = "inspect-safety-session";
+    const unrelated = runtime.ops.task.items.add(sessionId, {
+      id: "task-unrelated",
+      text: "unrelated task event",
+      timestamp: 1,
+    });
+    expect(unrelated.ok).toBe(true);
+    if (!unrelated.ok) {
+      throw new Error("expected_unrelated_task_item");
+    }
+
+    await runtime.runtime.kernel.beginToolCall({
+      sessionId,
+      toolCallId: "call-read",
+      toolName: "read",
+      args: { path: "README.md" },
+    });
+    const deferred = await runtime.runtime.kernel.beginToolCall({
+      sessionId,
+      toolCallId: "call-exec",
+      toolName: "exec",
+      args: { command: "echo hello" },
+    });
+    expect(deferred).toMatchObject({
+      kind: "defer",
+      request: { id: "approval:inspect-safety-session:call-exec" },
+    });
+    runtime.ops.proposals.requests.decide(sessionId, "approval:inspect-safety-session:call-exec", {
+      decision: "cancel",
+      actor: "arthur",
+    });
+
+    const report = buildInspectReport(runtime, sessionId);
+
+    expect(report.operatorSafety.pendingAsks).toBe(0);
+    expect(report.operatorSafety.recentDecisions).toMatchObject([
+      {
+        decision: "allow",
+        toolName: "read",
+        actionClass: "workspace_read",
+        requestId: null,
+      },
+      {
+        decision: "ask",
+        toolName: "exec",
+        actionClass: "local_exec_effectful",
+        requestId: "approval:inspect-safety-session:call-exec",
+      },
+      {
+        decision: "deny",
+        toolName: "exec",
+        actionClass: "local_exec_effectful",
+        requestId: "approval:inspect-safety-session:call-exec",
+        reason: "approval_cancelled",
+      },
+    ]);
+    expect(report.operatorSafety.receiptIds).toHaveLength(3);
+    expect(report.operatorSafety.receiptIds).not.toContain(unrelated.itemId);
+  });
 });

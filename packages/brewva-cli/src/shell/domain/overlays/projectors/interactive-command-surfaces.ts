@@ -166,7 +166,22 @@ export function buildAuthorityOverlayPayload(input: {
     capabilityScopedTools: number;
     requiredCapabilities: readonly string[];
     selectedCapabilities?: readonly string[];
+    selectedReceiptId?: string;
+    sourceDiscovery?: string;
     conflicts?: number;
+  };
+  operatorSafety?: {
+    pendingAsks: number;
+    denials: number;
+    receiptIds: readonly string[];
+    recentDecisions?: readonly {
+      decision: string;
+      toolName: string;
+      actionClass?: string | null;
+      requestId?: string | null;
+      reason?: string | null;
+      receiptIds: readonly string[];
+    }[];
   };
   toolAccess?: readonly {
     toolName: string;
@@ -177,24 +192,55 @@ export function buildAuthorityOverlayPayload(input: {
 }): CliAuthorityOverlayPayload {
   const capabilitySummary = input.capabilitySummary;
   const selected = capabilitySummary
-    ? capabilitySummary.selectedCapabilities?.join(",") || "not surfaced"
-    : "not surfaced";
+    ? formatList(capabilitySummary.selectedCapabilities ?? [], 4)
+    : "unavailable";
   const requiredCapabilities = capabilitySummary
     ? formatList(capabilitySummary.requiredCapabilities, 4)
-    : "not surfaced";
+    : "unavailable";
+  const selectedReceipt = capabilitySummary
+    ? (capabilitySummary.selectedReceiptId ?? "none")
+    : "unavailable";
+  const sourceDiscovery = capabilitySummary
+    ? (capabilitySummary.sourceDiscovery ?? "tool_metadata")
+    : "unavailable";
+  const manifestAvailability = capabilitySummary
+    ? `managedTools=${capabilitySummary.managedTools} capabilityScopedTools=${capabilitySummary.capabilityScopedTools}`
+    : "unavailable";
   const toolAccessWarnings =
     input.toolAccess?.filter((access) => !access.allowed || access.warning || access.reason) ?? [];
   const toolAccessSummary = input.toolAccess
     ? `checked=${input.toolAccess.length} warnings=${toolAccessWarnings.filter((access) => access.warning).length} blocked=${toolAccessWarnings.filter((access) => !access.allowed).length}`
-    : "not surfaced";
+    : "unavailable";
+  const pendingAskTools = formatList(
+    input.snapshot.approvals.map((approval) => approval.toolName),
+    4,
+  );
+  const operatorSafetySummary = input.operatorSafety
+    ? `pendingAsks=${input.operatorSafety.pendingAsks} denials=${input.operatorSafety.denials} receipts=${formatList(input.operatorSafety.receiptIds, 4)}`
+    : `pendingAsks=${input.snapshot.approvals.length} denials=unavailable receipts=unavailable`;
   const lines = [
-    `Pending approvals: ${input.snapshot.approvals.length}`,
+    `Pending asks: ${input.snapshot.approvals.length}`,
     `Operator questions: ${input.snapshot.questions.length}`,
     `Task runs: ${input.snapshot.taskRuns.length}`,
-    `Capabilities: managedTools=${capabilitySummary?.managedTools ?? "not surfaced"} capabilityScopedTools=${capabilitySummary?.capabilityScopedTools ?? "not surfaced"} selected=${selected} required=${requiredCapabilities} conflicts=${capabilitySummary?.conflicts ?? "not surfaced"}`,
-    "Scopes: network=not surfaced gateway=not surfaced channel=not surfaced",
+    `Capabilities: ${manifestAvailability} selected=${selected} required=${requiredCapabilities} conflicts=${capabilitySummary?.conflicts ?? "unavailable"}`,
+    `Operator safety: ${operatorSafetySummary}`,
+    `Authority facts: sourceDiscovery=${sourceDiscovery} manifestAvailability=${manifestAvailability} selectedReceipt=${selectedReceipt} actionPolicy=${toolAccessSummary}`,
+    `Scopes: selectedCapabilities=${selected} requiredCapabilities=${requiredCapabilities} pendingAskTools=${pendingAskTools}`,
     `Tool access: ${toolAccessSummary}`,
   ];
+  for (const ask of input.snapshot.approvals.slice(0, 3)) {
+    lines.push(
+      `- Ask ${ask.requestId} tool=${ask.toolName} boundary=${ask.boundary} effects=${formatList(ask.effects ?? [], 4)} evidence=${formatList(
+        (ask.evidenceRefs ?? []).map((ref) => ref.id),
+        4,
+      )}`,
+    );
+  }
+  for (const decision of input.operatorSafety?.recentDecisions?.slice(-3) ?? []) {
+    lines.push(
+      `- Safety ${decision.decision} tool=${decision.toolName} action=${decision.actionClass ?? "n/a"} request=${decision.requestId ?? "n/a"} reason=${decision.reason ?? "n/a"} receipts=${formatList(decision.receiptIds, 4)}`,
+    );
+  }
   if (toolAccessWarnings.length > 0) {
     for (const access of toolAccessWarnings) {
       const suffix = access.warning

@@ -51,6 +51,21 @@ export type {
 export { checkToolAccess } from "./security/tool-policy.js";
 export type { ToolPolicyOptions } from "./security/tool-policy.js";
 export {
+  projectOperatorSafetyDecision,
+  renderOperatorSafetyDecision,
+  renderOperatorSafetyRecoveryHint,
+} from "./read-models/projection/operator-safety.js";
+export type {
+  DenialReason,
+  DenialReasonCategory,
+  OperatorSafetyCapabilityBasis,
+  OperatorSafetyDecision,
+  OperatorSafetyDecisionView,
+  OperatorSafetyRetryHint,
+  ProjectOperatorSafetyDecisionInput,
+  SandboxPosture,
+} from "./read-models/projection/operator-safety.js";
+export {
   ActionPolicyRegistry,
   TOOL_ACTION_CLASSES,
   TOOL_ACTION_POLICY_BY_NAME,

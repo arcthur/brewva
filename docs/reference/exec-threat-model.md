@@ -69,14 +69,25 @@ There is no automatic host fallback. `security.execution.backend` is either
   policy must classify the command as read-only and execution must route through
   `virtual_readonly`. Boundary policy may tighten or block it, but it may not
   relax a non-virtual route into read-only auto-allow.
+- `ToolActionPolicySafetyGate.localExecReadonlyAutoAllow` is the stable field
+  name for the readonly auto-allow invariant. It only renders operator
+  `Allow` when command policy is readonly, the field is `true`, backend evidence
+  is `virtual_readonly`, and boundary policy did not tighten the route.
+  Otherwise-valid readonly evidence with a non-virtual backend renders as
+  `sandbox_wrong_backend`, not as a generic policy denial.
 - Deployment boundary policy remains responsible for filesystem roots,
   command deny lists, and network allowlists.
 - Box execution network policy is enforced by BoxLite when `exec` routes through
   the box backend. `security.execution.box.network.allow` and tool-level
   `ToolBoxPolicy.networkAllowlist` become the native `allowNet` list for that
   box.
-- `exec.*` and `box.*` events record `commandHash`, `commandRedacted`, and structured
-  `commandPolicy`, never raw command/env values.
+- `exec.*` and `box.*` events record `commandHash`, `commandRedacted`, and
+  structured `commandPolicy`, never raw command/env values.
+- Execution audit events may add two operator-safety evidence fields:
+  `sandboxProfile` and `failureBasis`. `sandboxProfile` identifies
+  `virtual_readonly`, `box`, or explicit high-risk `host` execution.
+  `failureBasis.kind` is one of `policy_block`, `backend_unavailable`,
+  `boundary_violation`, or `execution_failure`.
 - The `virtual_readonly` backend materializes explicit relative path arguments
   into a temporary workspace subset, rejects unsafe path materialization, drops
   the subset after execution, enforces a default timeout, and terminates on
@@ -86,6 +97,13 @@ There is no automatic host fallback. `security.execution.backend` is either
 - Box runtime failures emit `box.exec.failed` or `box.bootstrap.failed` and do
   not downgrade to host. Host and virtual-readonly routing failures emit
   `exec.failed`.
+- A virtual readonly route failure never falls back to host. If execution still
+  needs to proceed, the next attempt must be a separate
+  `local_exec_effectful` `Ask` request.
+- BoxLite failure renders sandbox status `violated` only when
+  `failureBasis.kind === "boundary_violation"`. Backend outages render
+  `unavailable`; execution failures render `failed`; policy blocks render
+  `blocked`.
 - Exec preflight runs before execution and writes
   `details.executionPreflight`. It may block high-confidence shell-as-tool
   misuse and may advise on better dedicated tools, but it cannot authorize a
@@ -111,8 +129,8 @@ There is no automatic host fallback. `security.execution.backend` is either
 ## Scenario Verdicts
 
 | Scenario                           | Verdict                     | Control                                                                 |
-| ---------------------------------- | --------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------- |
-| `cat package.json                  | head -n 1`                  | allow as exploration                                                    | readonly grammar plus materialized file subset |
+| ---------------------------------- | --------------------------- | ----------------------------------------------------------------------- |
+| `cat package.json \| head -n 1`    | allow as exploration        | readonly grammar plus materialized file subset                          |
 | `rg needle packages test`          | allow as exploration        | explicit relative directories materialized into temp workspace          |
 | `rg needle`                        | block from virtual readonly | implicit workspace scan lacks finite materialization target             |
 | `find . -type f`                   | block from virtual readonly | whole-root materialization is not accepted as an implicit default       |

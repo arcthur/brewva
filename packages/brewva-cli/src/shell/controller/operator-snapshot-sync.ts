@@ -1,11 +1,11 @@
 import type { ShellAction } from "../domain/actions.js";
+import {
+  buildOperatorSafetyShellIdleView,
+  buildOperatorSafetyShellSessionView,
+} from "../domain/operator-safety/shell-view.js";
 import type { OperatorSurfaceSnapshot } from "../domain/operator-snapshot.js";
 import { questionRequestsFromSnapshot } from "../domain/question-utils.js";
 import type { CliShellViewState } from "../domain/state.js";
-import {
-  buildTrustLoopIdleProjection,
-  buildTrustLoopSessionProjection,
-} from "../domain/trust-loop/projection.js";
 import type { ShellOverlayLifecycleHandler } from "../overlays/lifecycle.js";
 
 export interface ShellOperatorSnapshotSyncContext {
@@ -46,21 +46,20 @@ export class ShellOperatorSnapshotSync {
   }
 
   private commitStatus(snapshot: OperatorSurfaceSnapshot): void {
-    const shouldClearApprovalTrust =
-      snapshot.approvals.length === 0 &&
-      this.context.getState().status.trust?.source === "approval";
-    const trustActions: ShellAction[] = [];
+    const shouldClearApprovalSafety =
+      snapshot.approvals.length === 0 && this.context.getState().status.safety?.source === "ask";
+    const safetyActions: ShellAction[] = [];
     if (snapshot.approvals.length > 0) {
-      trustActions.push({
-        type: "status.setTrust",
-        trust: buildTrustLoopSessionProjection({
-          pendingApprovalCount: snapshot.approvals.length,
+      safetyActions.push({
+        type: "status.setSafety",
+        safety: buildOperatorSafetyShellSessionView({
+          pendingAskCount: snapshot.approvals.length,
         }),
       });
-    } else if (shouldClearApprovalTrust) {
-      trustActions.push({
-        type: "status.setTrust",
-        trust: buildTrustLoopIdleProjection(),
+    } else if (shouldClearApprovalSafety) {
+      safetyActions.push({
+        type: "status.setSafety",
+        safety: buildOperatorSafetyShellIdleView(),
       });
     }
     this.context.commit(
@@ -84,7 +83,7 @@ export class ShellOperatorSnapshotSync {
           type: "operator.setTaskRuns",
           taskRuns: snapshot.taskRuns,
         },
-        ...trustActions,
+        ...safetyActions,
       ],
       { debounceStatus: false },
     );

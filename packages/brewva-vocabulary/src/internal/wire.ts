@@ -649,7 +649,7 @@ export type SessionWireFrame =
       readonly type: "approval.decided";
       readonly turnId: string;
       readonly requestId: string;
-      readonly decision: "approved" | "rejected";
+      readonly decision: "accept" | "deny" | "cancel";
       readonly actor?: string;
       readonly reason?: string;
     })

@@ -16,6 +16,7 @@ export interface ToolAuthorityDecisionPayload {
   readonly receiptPolicy?: ResolvedToolAuthority["receiptPolicy"];
   readonly recoveryPolicy?: ResolvedToolAuthority["recoveryPolicy"];
   readonly policyBasis: readonly string[];
+  readonly manifestBasis: ResolvedToolAuthority["manifestBasis"];
 }
 
 export interface ToolProposedPayload {
@@ -44,7 +45,7 @@ export interface ApprovalRequestedPayload extends ApprovalRequest {
 
 export interface ApprovalDecidedPayload {
   readonly id: string;
-  readonly decision: "approve" | "decline";
+  readonly decision: "accept" | "deny" | "cancel";
   readonly actor?: string;
   readonly reason?: string;
 }

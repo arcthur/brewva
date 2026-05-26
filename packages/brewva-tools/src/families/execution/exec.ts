@@ -20,6 +20,7 @@ import {
   buildCommandPolicyAuditPayload,
   buildExecAuditPayload,
   buildVirtualReadonlyAuditPayload,
+  EXEC_SANDBOX_PROFILES,
   recordExecEvent,
   redactTextForAudit,
 } from "./exec/audit.js";
@@ -158,6 +159,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               toolCallId,
               policy,
               command,
+              failureBasis: { kind: "policy_block", code: "shell_as_tool" },
               payload: {
                 detectedCommands: primaryTokens,
                 reason,
@@ -194,6 +196,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               toolCallId,
               policy,
               command,
+              failureBasis: { kind: "policy_block", code: boundaryDecision.reason },
               payload: {
                 detectedCommands: primaryTokens,
                 deniedCommand,
@@ -238,6 +241,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.virtualReadonly,
               payload: {
                 resolvedBackend: "virtual_readonly",
                 requestedCwd: hostCwd,
@@ -276,6 +280,17 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
                 toolCallId,
                 policy,
                 command,
+                sandboxProfile: EXEC_SANDBOX_PROFILES.virtualReadonly,
+                failureBasis: {
+                  kind:
+                    error instanceof VirtualReadonlyMaterializationError
+                      ? "boundary_violation"
+                      : "execution_failure",
+                  code:
+                    error instanceof VirtualReadonlyMaterializationError
+                      ? error.code
+                      : "virtual_readonly_execution_error",
+                },
                 payload: {
                   reason: "virtual_readonly_execution_error",
                   blockedFeature:
@@ -314,6 +329,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.host,
               payload: {
                 resolvedBackend: preferredBackend,
                 requestedCwd: boxRequestedCwd,
@@ -348,6 +364,8 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
+              failureBasis: { kind: "boundary_violation", code: "box_unmapped_host_path" },
               payload: {
                 resolvedBackend: "box",
                 reason: "box_unmapped_host_path",

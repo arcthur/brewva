@@ -254,14 +254,14 @@ function isShellCommitBatch(input: ShellCommitInput): input is ShellCommitBatch 
 type CliShellStatusAction = Extract<
   CliShellAction,
   {
-    type: "status.set" | "status.setTrust" | "status.working" | "status.hiddenThinking";
+    type: "status.set" | "status.setSafety" | "status.working" | "status.hiddenThinking";
   }
 >;
 
 function isCliShellStatusAction(action: ShellAction): action is CliShellStatusAction {
   return (
     action.type === "status.set" ||
-    action.type === "status.setTrust" ||
+    action.type === "status.setSafety" ||
     action.type === "status.working" ||
     action.type === "status.hiddenThinking"
   );
@@ -673,7 +673,7 @@ export class CliShellRuntime {
     }
   }
 
-  async decideApproval(requestId: string, decision: "accept" | "reject"): Promise<void> {
+  async decideApproval(requestId: string, decision: "accept" | "deny" | "cancel"): Promise<void> {
     await this.runShellEffects([
       {
         type: "operator.decideApproval",

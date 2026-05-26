@@ -10,9 +10,9 @@ import {
   type NormalizedMessageContentPart,
 } from "../../io/message-content.js";
 import {
-  buildTrustLoopToolProjection,
-  type TrustLoopToolProjection,
-} from "./trust-loop/projection.js";
+  buildOperatorSafetyShellToolView,
+  type OperatorSafetyShellToolView,
+} from "./operator-safety/shell-view.js";
 
 export type CliShellTranscriptRole = "assistant" | "user" | "tool" | "custom" | "system";
 export type CliTranscriptRenderMode = "stable" | "streaming";
@@ -45,7 +45,7 @@ export interface CliShellTranscriptToolPart {
   id: string;
   toolCallId: string;
   toolName: string;
-  trust: TrustLoopToolProjection;
+  safety: OperatorSafetyShellToolView;
   args?: unknown;
   phase?: ToolExecutionPhase;
   status: CliShellTranscriptToolStatus;
@@ -54,13 +54,13 @@ export interface CliShellTranscriptToolPart {
   renderMode: CliTranscriptRenderMode;
 }
 
-function buildToolTrustProjection(input: {
+function buildToolSafetyProjection(input: {
   toolName: string;
   args?: unknown;
   phase?: ToolExecutionPhase;
   status: CliShellTranscriptToolStatus;
-}): TrustLoopToolProjection {
-  return buildTrustLoopToolProjection({
+}): OperatorSafetyShellToolView {
+  return buildOperatorSafetyShellToolView({
     toolName: input.toolName,
     args: input.args,
     executionPhase: input.phase,
@@ -206,7 +206,7 @@ function buildAssistantParts(
         id: `${messageId}:tool:${part.id}`,
         toolCallId: part.id,
         toolName,
-        trust: buildToolTrustProjection({
+        safety: buildToolSafetyProjection({
           toolName,
           args,
           phase,
@@ -257,7 +257,7 @@ function buildToolFallbackMessage(
         id: `${update.fallbackMessageId ?? `tool:${update.toolCallId}`}:tool:${update.toolCallId}`,
         toolCallId: update.toolCallId,
         toolName,
-        trust: buildToolTrustProjection({
+        safety: buildToolSafetyProjection({
           toolName,
           args: update.args,
           phase: update.phase,
@@ -457,7 +457,7 @@ export function upsertToolExecutionIntoTranscriptMessages(
   const nextPart: CliShellTranscriptToolPart = {
     ...location.part,
     toolName: nextToolName,
-    trust: buildToolTrustProjection({
+    safety: buildToolSafetyProjection({
       toolName: nextToolName,
       args: nextArgs,
       phase: nextPhase,

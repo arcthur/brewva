@@ -24,6 +24,7 @@ import {
   buildCommandPolicyAuditPayload,
   buildExecAuditPayload,
   buildVirtualReadonlyAuditPayload,
+  EXEC_SANDBOX_PROFILES,
   recordExecEvent,
   redactTextForAudit,
 } from "./audit.js";
@@ -103,6 +104,7 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
               payload: {
                 scopeKind: scope.kind,
                 scopeId: scope.id,
@@ -123,6 +125,7 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
               payload: {
                 scopeKind: scope.kind,
                 scopeId: scope.id,
@@ -143,6 +146,7 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
               payload: {
                 boxId: box.id,
                 fingerprint: box.fingerprint,
@@ -165,6 +169,8 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
+              failureBasis: { kind: "backend_unavailable", code: "box_bootstrap_failed" },
               payload: {
                 scopeKind: scope.kind,
                 scopeId: scope.id,
@@ -187,6 +193,7 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
               payload: {
                 boxId: box.id,
                 fingerprint: box.fingerprint,
@@ -209,6 +216,7 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
               payload: {
                 boxId: box.id,
                 fingerprint: box.fingerprint,
@@ -228,6 +236,7 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
               payload: {
                 boxId: box.id,
                 fingerprint: box.fingerprint,
@@ -254,6 +263,8 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
+              failureBasis: { kind: "execution_failure", code: "box_process_nonzero" },
               payload: {
                 boxId: box.id,
                 fingerprint: box.fingerprint,
@@ -273,6 +284,7 @@ export async function executeBoxCommandWithAudit(input: {
               toolCallId,
               policy,
               command,
+              sandboxProfile: EXEC_SANDBOX_PROFILES.box,
               payload: {
                 boxId: box.id,
                 fingerprint: box.fingerprint,
@@ -320,6 +332,7 @@ export async function executeBoxCommandWithAudit(input: {
         toolCallId,
         policy,
         command,
+        sandboxProfile: EXEC_SANDBOX_PROFILES.box,
         payload: {
           boxId: result.boxId,
           fingerprint: result.fingerprint,
@@ -379,6 +392,8 @@ export async function executeBoxCommandWithAudit(input: {
         toolCallId,
         policy,
         command,
+        sandboxProfile: EXEC_SANDBOX_PROFILES.box,
+        failureBasis: { kind: "execution_failure", code: "box_execution_error" },
         payload: {
           reason: "box_execution_error",
           error: auditError,

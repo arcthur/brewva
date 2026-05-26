@@ -59,4 +59,37 @@ describe("quality gate diff preview", () => {
       "+1 const value = 2;",
     );
   });
+
+  test("renders missing capability blocks through operator safety recovery", () => {
+    const runtime = {
+      ops: {
+        tools: {
+          invocation: {
+            start() {
+              return { allowed: false, reason: "missing_selected_capability" };
+            },
+          },
+        },
+      },
+    } as unknown as HostedRuntimeAdapterPort;
+
+    const lifecycle = createQualityGateLifecycle(runtime);
+    const result = lifecycle.toolCall(
+      {
+        toolCallId: "tool-call-1",
+        toolName: "custom_tool",
+        input: { title: "Example", token: "SECRET_TOKEN" },
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "session-1",
+        },
+        getContextUsage: () => undefined,
+      },
+    );
+
+    expect(result).toMatchObject({ block: true });
+    expect(result?.reason).toContain("Select a capability");
+    expect(result?.reason).not.toContain("SECRET_TOKEN");
+  });
 });

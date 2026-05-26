@@ -111,9 +111,9 @@ export function PromptPanel(input: {
     if (input.status.hiddenThinkingLabel) {
       return input.status.hiddenThinkingLabel;
     }
-    const trust = input.status.trust;
-    if (trust?.statusText && trust.source !== "idle") {
-      return trust.statusText;
+    const safety = input.status.safety;
+    if (safety?.statusText && safety.source !== "idle") {
+      return safety.statusText;
     }
     const phase = input.status.entries.phase;
     const pressure = input.status.entries.pressure;

@@ -10,8 +10,8 @@ import { listCliRuntimeProposalRequests } from "../../runtime/runtime-ports.js";
 const MAX_FINDINGS = 3;
 const MAX_GAPS = 2;
 const MAX_SUMMARY_CHARS = 160;
-const MAX_REPLAYABLE_APPROVALS = 2;
-const MAX_APPROVAL_REASON_CHARS = 96;
+const MAX_REPLAYABLE_ASKS = 2;
+const MAX_ASK_REASON_CHARS = 96;
 
 type InspectReport = ReturnType<typeof buildSessionInspectReport>;
 
@@ -45,11 +45,12 @@ function formatCoverageLine(report: InspectReport): string {
   ].join(" · ");
 }
 
-function formatApprovalSummaryLine(requests: EffectCommitmentRequestRecord[]): string {
+function formatOperatorSafetySummaryLine(requests: EffectCommitmentRequestRecord[]): string {
   const counts = {
     pending: 0,
     accepted: 0,
-    rejected: 0,
+    denied: 0,
+    cancelled: 0,
     consumed: 0,
   };
   for (const request of requests) {
@@ -58,20 +59,21 @@ function formatApprovalSummaryLine(requests: EffectCommitmentRequestRecord[]): s
     }
   }
   return [
-    `Approvals: pending=${counts.pending}`,
+    `Operator safety: pendingAsks=${counts.pending}`,
     `accepted=${counts.accepted}`,
-    `rejected=${counts.rejected}`,
+    `denied=${counts.denied}`,
+    `cancelled=${counts.cancelled}`,
     `consumed=${counts.consumed}`,
   ].join(" · ");
 }
 
-function formatReplayableApprovalLine(request: EffectCommitmentRequestRecord): string {
+function formatReplayableAskLine(request: EffectCommitmentRequestRecord): string {
   const details = [`tool=${request.toolName}`];
   if (request.actor) {
     details.push(`actor=${request.actor}`);
   }
   if (request.reason) {
-    details.push(`reason=${clampText(request.reason, MAX_APPROVAL_REASON_CHARS)}`);
+    details.push(`reason=${clampText(request.reason, MAX_ASK_REASON_CHARS)}`);
   }
   return `- ${request.state} ${request.requestId} · ${details.join(" · ")}`;
 }
@@ -80,7 +82,7 @@ function formatInspectChannelText(input: {
   agentId: string;
   focusedAgentId: string;
   report: InspectReport;
-  approvalRequests: EffectCommitmentRequestRecord[];
+  operatorRequests: EffectCommitmentRequestRecord[];
 }): string {
   const lines = [`Inspect @${input.agentId} — ${input.report.verdict}`];
 
@@ -91,20 +93,20 @@ function formatInspectChannelText(input: {
   lines.push(`Dir: ${input.report.directory}`);
   lines.push(formatCoverageLine(input.report));
   lines.push(formatScopeLine(input.report));
-  lines.push(formatApprovalSummaryLine(input.approvalRequests));
+  lines.push(formatOperatorSafetySummaryLine(input.operatorRequests));
 
-  const replayableRequests = input.approvalRequests.filter(
+  const replayableRequests = input.operatorRequests.filter(
     (request) => request.state === "pending" || request.state === "accepted",
   );
   if (replayableRequests.length > 0) {
-    lines.push("Replayable approvals:");
-    for (const request of replayableRequests.slice(0, MAX_REPLAYABLE_APPROVALS)) {
-      lines.push(formatReplayableApprovalLine(request));
+    lines.push("Replayable asks:");
+    for (const request of replayableRequests.slice(0, MAX_REPLAYABLE_ASKS)) {
+      lines.push(formatReplayableAskLine(request));
     }
     const hiddenCount =
-      replayableRequests.length - Math.min(replayableRequests.length, MAX_REPLAYABLE_APPROVALS);
+      replayableRequests.length - Math.min(replayableRequests.length, MAX_REPLAYABLE_ASKS);
     if (hiddenCount > 0) {
-      lines.push(`- ... ${hiddenCount} more replayable approval(s)`);
+      lines.push(`- ... ${hiddenCount} more replayable ask(s)`);
     }
   }
 
@@ -169,17 +171,20 @@ export async function handleInspectChannelCommand(
     sessionId: input.targetSession.sessionId,
     directory,
   });
-  const approvalRequests = listCliRuntimeProposalRequests(
+  const operatorRequests = listCliRuntimeProposalRequests(
     input.targetSession.runtime,
     input.targetSession.sessionId,
   );
+  const replayableAskCount = operatorRequests.filter(
+    (request) => request.state === "pending" || request.state === "accepted",
+  ).length;
 
   return {
     text: formatInspectChannelText({
       agentId: input.targetAgentId,
       focusedAgentId: input.focusedAgentId,
       report,
-      approvalRequests,
+      operatorRequests,
     }),
     meta: {
       command: "inspect",
@@ -187,10 +192,12 @@ export async function handleInspectChannelCommand(
       agentSessionId: input.targetSession.sessionId,
       directory: report.directory,
       verdict: report.verdict,
-      approvalRequestCount: approvalRequests.length,
-      replayableApprovalCount: approvalRequests.filter(
-        (request) => request.state === "pending" || request.state === "accepted",
-      ).length,
+      operatorSafety: {
+        requestCount: operatorRequests.length,
+        replayableAskCount,
+        pendingAsks: operatorRequests.filter((request) => request.state === "pending").length,
+        denials: operatorRequests.filter((request) => request.state === "denied").length,
+      },
     },
   };
 }

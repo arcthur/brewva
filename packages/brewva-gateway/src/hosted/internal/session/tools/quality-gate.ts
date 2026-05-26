@@ -1,5 +1,10 @@
 import { accessSync, constants, readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
+import {
+  projectOperatorSafetyDecision,
+  renderOperatorSafetyRecoveryHint,
+  resolveToolAuthority,
+} from "@brewva/brewva-runtime/security";
 import { truncateText } from "@brewva/brewva-std/text";
 import {
   BrewvaHostInputEventResult as InputEventResult,
@@ -46,6 +51,9 @@ interface QualityGateToolResultResult {
 interface RuntimeCapabilityAccessFact extends ProtocolRecord {
   allowed: boolean;
   basis: string;
+  receiptId?: string;
+  source?: string;
+  selectedCapabilityNames?: readonly string[];
   reason?: string;
   advisory?: string;
 }
@@ -157,12 +165,18 @@ function resolveRuntimeCapabilityAccess(input: {
     return {
       allowed: true,
       basis: selectedCapabilityAccess.basis,
+      receiptId: selectedCapabilityAccess.receiptId,
+      source: selectedCapabilityAccess.source,
+      selectedCapabilityNames: selectedCapabilityAccess.selectedCapabilityNames,
       advisory: selectedCapabilityAccess.advisory,
     };
   }
   return {
     allowed: true,
     basis: "runtime_capability_scope",
+    receiptId: selectedCapabilityAccess.receiptId,
+    source: selectedCapabilityAccess.source,
+    selectedCapabilityNames: selectedCapabilityAccess.selectedCapabilityNames,
     advisory: [
       selectedCapabilityAccess.advisory,
       `runtime_capabilities:${required.requiredCapabilities.join(",")}`,
@@ -170,6 +184,49 @@ function resolveRuntimeCapabilityAccess(input: {
       .filter((entry): entry is string => Boolean(entry))
       .join("; "),
   };
+}
+
+function renderMissingCapabilityRecoveryHint(input: {
+  toolName: string;
+  args?: Record<string, unknown>;
+  runtimeCapabilityAccess: RuntimeCapabilityAccessFact;
+  toolDefinitionsByName?: ReadonlyMap<string, Parameters<typeof getBrewvaAgentParameters>[0]>;
+}): string {
+  const authority = resolveToolAuthority(input.toolName, undefined, input.args);
+  const toolDefinition = input.toolDefinitionsByName?.get(input.toolName);
+  const actionClass =
+    authority.actionClass ??
+    getBrewvaToolMetadata(toolDefinition)?.actionClass ??
+    "external_side_effect";
+  const receiptIds = input.runtimeCapabilityAccess.receiptId
+    ? [input.runtimeCapabilityAccess.receiptId]
+    : [];
+  const view = projectOperatorSafetyDecision({
+    kernelDecision: "deny",
+    kernelReason: "missing_selected_capability",
+    toolName: input.toolName,
+    actionClass,
+    effectBoundary: authority.boundary,
+    consequencePosture: authority.commitmentPosture?.recoverability ?? "manual_recovery",
+    manifestBasis: authority.manifestBasis,
+    policyBasis: [input.runtimeCapabilityAccess.basis],
+    targetScope: input.runtimeCapabilityAccess.selectedCapabilityNames ?? [],
+    receiptIds,
+    capabilityBasis: {
+      allowed: false,
+      ...(input.runtimeCapabilityAccess.receiptId
+        ? { receiptId: input.runtimeCapabilityAccess.receiptId }
+        : {}),
+      ...(input.runtimeCapabilityAccess.source
+        ? { source: input.runtimeCapabilityAccess.source }
+        : {}),
+      ...(input.runtimeCapabilityAccess.selectedCapabilityNames
+        ? { selectedCapabilityNames: input.runtimeCapabilityAccess.selectedCapabilityNames }
+        : {}),
+      reason: input.runtimeCapabilityAccess.reason ?? "missing_selected_capability",
+    },
+  });
+  return renderOperatorSafetyRecoveryHint(view.denialReason);
 }
 
 export function createQualityGateLifecycle(
@@ -360,6 +417,13 @@ export function createQualityGateLifecycle(
           ? (ctx as { getContextUsage: () => unknown }).getContextUsage()
           : undefined,
       );
+      const runtimeCapabilityAccess = resolveRuntimeCapabilityAccess({
+        toolName,
+        args,
+        runtime,
+        sessionId,
+        toolDefinitionsByName: options.toolDefinitionsByName,
+      });
       const started = startRuntimeToolInvocation(runtime, {
         sessionId,
         toolCallId,
@@ -368,19 +432,21 @@ export function createQualityGateLifecycle(
         cwd,
         usage,
         diffPreview: buildDiffPreview({ toolName, args, cwd }),
-        runtimeCapabilityAccess: resolveRuntimeCapabilityAccess({
-          toolName,
-          args,
-          runtime,
-          sessionId,
-          toolDefinitionsByName: options.toolDefinitionsByName,
-        }),
+        runtimeCapabilityAccess,
       });
       if (!started.allowed) {
         deletePendingToolState(sessionId, toolCallId);
         return {
           block: true,
-          reason: started.reason ?? "Tool call blocked by runtime policy.",
+          reason:
+            started.reason === "missing_selected_capability"
+              ? renderMissingCapabilityRecoveryHint({
+                  toolName,
+                  args,
+                  runtimeCapabilityAccess,
+                  toolDefinitionsByName: options.toolDefinitionsByName,
+                })
+              : (started.reason ?? "Tool call blocked by runtime policy."),
         };
       }
       getPendingToolStates(sessionId).set(toolCallId, {

@@ -20,6 +20,8 @@ Current rule:
 - skill routing is not a proposal boundary
 - capability selection is not a proposal boundary
 - context shaping is not a proposal boundary
+- operator safety is a projection over kernel authority and receipt evidence,
+  not a second proposal or permission engine
 
 This keeps the kernel boundary focused on one question:
 
@@ -155,6 +157,51 @@ Decision meanings:
 - `defer`: durable pending approval-bearing commitment exists, but it is not
   yet approved for exact resume
 
+Proposal admission and request-local operator decisions use different enums:
+
+- proposal admission remains `accept`, `reject`, or `defer`
+- operator request decision is `accept`, `deny`, or `cancel`
+- request state is `pending`, `accepted`, `denied`, `cancelled`, or `consumed`
+
+The split is intentional. Proposal admission answers whether a proposal can
+enter or resume the commitment boundary. Operator request decision records what
+the operator did for one pending ask. Neither path creates persistent
+preferences, regex permissions, or reusable source approval state.
+
+## Operator Safety Projection
+
+Operator safety renders the existing authority facts as `Allow`, `Ask`, or
+`Deny`:
+
+- `Allow`: the kernel admitted the action and required evidence is present
+- `Ask`: the kernel deferred the action or projection evidence is incomplete
+- `Deny`: the kernel denied the action or durable evidence proves a narrower
+  outcome
+
+The pure projection API is exported from `@brewva/brewva-runtime/security`:
+
+- `OperatorSafetyDecisionView`
+- `SandboxPosture`
+- `DenialReason`
+- `projectOperatorSafetyDecision(...)`
+- `renderOperatorSafetyDecision(...)`
+- `renderOperatorSafetyRecoveryHint(...)`
+
+Projection code lives under `packages/brewva-runtime/src/read-models/projection`
+and may depend only on pure governance types and structured event inputs. It
+must not import kernel ports, gateway adapters, provider code, or managed tool
+families.
+
+Projection invariants:
+
+- kernel `deny` can only render `Deny`
+- kernel `ask` can render `Ask` or narrower `Deny`
+- missing projection evidence fails closed to `Ask`, unless durable kernel
+  evidence is already `Deny`
+- one `DenialReason` drives both operator text and model-facing recovery hints
+- recovery hints are redacted and must not expose raw command, env, credential,
+  or token text
+
 ## Direct Commit Boundary
 
 Not every effectful action becomes a proposal.
@@ -181,6 +228,7 @@ Approval state is layered on top through:
 - `effect_commitment_approval_requested`
 - `effect_commitment_approval_decided`
 - `effect_commitment_approval_consumed`
+- canonical runtime events `approval.requested` and `approval.decided`
 
 `HostedRuntimeAdapterPort.ops.proposals.proposals.list(sessionId, query?)` returns newest-first
 `EffectCommitmentRecord` values by receipt timestamp. The read model rebuilds
@@ -190,9 +238,9 @@ rather than rejoining `proposal_received` and `proposal_decided`.
 Request-state views are intentionally separate:
 
 - `HostedRuntimeAdapterPort.ops.proposals.requests.list(sessionId, query?)` is the
-  normalized request-lifecycle view ordered by `updatedAt` descending
+  normalized request-lifecycle view rebuilt from tape
 - `HostedRuntimeAdapterPort.ops.proposals.requests.listPending(sessionId)` is the
-  pending-only queue ordered by request `createdAt` descending
+  pending-only queue ordered by request `createdAt`
 
 The operator desk surface lives in the same domain:
 
@@ -204,5 +252,5 @@ The operator desk surface lives in the same domain:
 This keeps approval state and proposal history in one replay-first namespace.
 
 - never mutate authoritative state without a receipt-worthy reason
-- keep `policyBasis` and `reasons` readable by operators
+- keep `policyBasis` structured as an ordered list and render it only at the UI boundary
 - prefer explicit deferral over opaque fallback behavior

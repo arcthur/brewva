@@ -40,19 +40,19 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
   switch (payload.kind) {
     case "approval": {
       const lines = [
-        `Pending approvals: ${payload.snapshot.approvals.length}`,
-        "Use ↑/↓ to choose, Enter or a to accept, r to reject, Ctrl+F to expand diff, Esc to close.",
+        `Pending asks: ${payload.snapshot.approvals.length}`,
+        "Use ↑/↓ to choose, Enter or a to allow once, r to deny, Ctrl+F to expand diff, Esc to close.",
       ];
       for (const [index, item] of payload.snapshot.approvals.entries()) {
         const marker = index === payload.selectedIndex ? ">" : " ";
         lines.push(
-          `${marker} [${item.requestId}] ${item.toolName} :: ${item.subject} :: ${(item.effects ?? []).join(", ")}`,
+          `${marker} Ask [${item.requestId}] ${item.toolName} :: ${item.subject} :: ${(item.effects ?? []).join(", ")}`,
         );
       }
       if (payload.snapshot.approvals.length === 0) {
-        lines.push("No pending approvals.");
+        lines.push("No pending asks.");
       }
-      return { title: "Approvals", lines };
+      return { title: "Operator safety", lines };
     }
     case "question": {
       const requests = questionRequestsFromOverlay(payload);

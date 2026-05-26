@@ -237,6 +237,45 @@ describe("gateway protocol validator", () => {
     expect(result.error).toContain("tool.started");
   });
 
+  test("given approval decided frame with request-local decision, when validating payload, then validation succeeds", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "live:approval-decided",
+      ts: 1,
+      source: "live",
+      durability: "durable",
+      sourceEventId: "evt-approval-decided",
+      sourceEventType: "approval.decided",
+      type: "approval.decided",
+      turnId: "turn-1",
+      requestId: "approval-session-turn-tool",
+      decision: "deny",
+      actor: "operator",
+      reason: "not required",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("given approval decided frame with legacy decision, when validating payload, then validation fails", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "live:approval-decided",
+      ts: 1,
+      source: "live",
+      durability: "durable",
+      sourceEventId: "evt-approval-decided",
+      sourceEventType: "approval.decided",
+      type: "approval.decided",
+      turnId: "turn-1",
+      requestId: "approval-session-turn-tool",
+      decision: "approved",
+      actor: "operator",
+    });
+    expect(result.ok).toBe(false);
+  });
+
   test("given durable replay frame without provenance, when validating payload, then validation fails", () => {
     const result = validateSessionWireFramePayload({
       schema: "brewva.session-wire.v2",

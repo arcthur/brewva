@@ -13,6 +13,27 @@ Governance rule: `active/` is for unresolved design work only. When the target
 stable docs already carry the accepted contract, convert the note to
 `docs/research/decisions/` rather than keeping it as a shadow reference.
 
+## Shared Projection Discipline
+
+Projection-bearing active notes share one product discipline:
+
+- projections are deterministic from receipts and declared read-model evidence
+- projections are rebuildable and never become replay truth
+- projections do not widen kernel, capability, source, or adoption authority
+- inspect views are explicit-pull and must not auto-push into model-visible
+  context
+- bundle inspect views should mount under one shared inspect host with common
+  navigation, filters, redaction, and cross-view linking
+- opening a projection must not trigger recall, capability selection,
+  materialization, provider routing, workbench mutation, or background delivery
+- rendering reuses existing redaction layers and never expands raw command,
+  environment, credential, or secret-bearing text
+- projection failure fails closed to an inspectable blocked, denied, or ask
+  posture instead of silently rendering broader authority
+
+RFC-specific documents should only add narrower invariants on top of this shared
+discipline.
+
 ## Runtime Fidelity
 
 - [`event-stream-consistency-and-replay-fidelity.md`](./event-stream-consistency-and-replay-fidelity.md)

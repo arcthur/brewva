@@ -36,6 +36,7 @@ Stable interactive slash commands include:
 - `/inbox`
 - `/inspect`
 - `/context`
+- `/safety`
 - `/authority`
 - `/skills`
 - `/diff`
@@ -62,7 +63,8 @@ full output when a section is truncated.
 transcript Markdown, turn attribution, patch-set identifiers, and Git evidence.
 `Session: export inspect bundle` remains inspect-only in the command palette.
 
-`/context`, `/authority`, and `/skills` are read-only dashboards. Mutating
+`/context`, `/authority`, and `/skills` are read-only dashboards. `/safety`
+opens the request-local operator safety queue for pending asks. Mutating
 actions such as requesting compaction remain view-local or command-palette
 actions instead of becoming slash subcommand grammar.
 
@@ -73,7 +75,7 @@ but the shell does not invent a workflow-specific invocation path.
 Reserved slash names stay out of completion and do not submit prompts:
 
 - `/compact` redirects to `/context`
-- `/permissions` opens `/authority` and points approval decisions to `/approvals`
+- `/permissions` redirects to `/authority`; pending operator asks stay in `/safety`
 - `/review` and `/security-review` redirect to `/skills`
 
 Slash commands are presentation and control-plane veneers. Runtime receipts and
@@ -116,7 +118,7 @@ Review {{target}} and report only actionable findings.
 
 The body expands as ordinary operator-authored prompt text. Missing required
 arguments fail before submission. Frontmatter that asks for external authority
-or tool permissions fails closed; command files do not grant capabilities.
+or tool authority fails closed; command files do not grant capabilities.
 Argument parsing supports whitespace splitting, single/double quotes, and
 backslash escapes outside single quotes. Missing optional template variables
 submit with an interactive warning and expand to an empty string.
@@ -136,8 +138,8 @@ slash spelling.
 
 ## Overlays
 
-Supported overlays include approval, question, task browser, queued prompts,
-model picker, provider connection, thinking level, inspect, context, authority,
-skills, session switcher, and pager surfaces. Background subagent detail opens
-in the footer surface above the composer. Opening an overlay preserves the
-composer draft.
+Supported overlays include operator safety, question, task browser, queued
+prompts, model picker, provider connection, thinking level, inspect, context,
+authority, skills, session switcher, and pager surfaces. Background subagent
+detail opens in the footer surface above the composer. Opening an overlay
+preserves the composer draft.

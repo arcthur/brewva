@@ -9,8 +9,8 @@ import { createToolRenderCache } from "../../../packages/brewva-cli/runtime/shel
 import { renderCliTranscriptScrollbackLines } from "../../../packages/brewva-cli/runtime/shell/transcript-scrollback.js";
 import { DEFAULT_TUI_THEME } from "../../../packages/brewva-cli/src/internal/tui/index.js";
 import type { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
+import { buildOperatorSafetyShellToolView } from "../../../packages/brewva-cli/src/shell/domain/operator-safety/shell-view.js";
 import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
-import { buildTrustLoopToolProjection } from "../../../packages/brewva-cli/src/shell/domain/trust-loop/projection.js";
 
 describe("transcript scrollback rendering", () => {
   let previewDir = "";
@@ -311,7 +311,7 @@ describe("transcript scrollback rendering", () => {
                     id: "tool-grep:part",
                     toolCallId: "call-grep",
                     toolName: "grep",
-                    trust: buildTrustLoopToolProjection({
+                    safety: buildOperatorSafetyShellToolView({
                       toolName: "grep",
                       args: { query: "architecture" },
                       status: "completed",

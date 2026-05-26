@@ -116,6 +116,31 @@ describe("kernel tool transaction", () => {
         effectiveAdmission: "ask",
         requiresApproval: true,
         actionClass: "local_exec_effectful",
+        manifestBasis: {
+          schema: "brewva.effect_authority_basis.v2",
+          toolName: "exec",
+          boundary: "effectful",
+          authoritySource: "exact",
+          actionClass: "local_exec_effectful",
+          effectiveAdmission: "ask",
+          effects: ["local_exec"],
+          requiresApproval: true,
+          recoveryPreparation: "manual",
+          receiptRequired: true,
+        },
+      },
+    });
+    expect(
+      runtime.tape.list("kernel-session", { type: "approval.requested" })[0]?.payload,
+    ).toMatchObject({
+      id: "approval:kernel-session:call-exec",
+      authority: {
+        manifestBasis: {
+          schema: "brewva.effect_authority_basis.v2",
+          toolName: "exec",
+          actionClass: "local_exec_effectful",
+          effectiveAdmission: "ask",
+        },
       },
     });
 
@@ -130,6 +155,19 @@ describe("kernel tool transaction", () => {
       commitmentId: "tool:kernel-session:call-shell",
       reason: "tool_action_policy_denied",
     });
+    expect(runtime.tape.list("kernel-session", { type: "tool.aborted" })[0]?.payload).toMatchObject(
+      {
+        authority: {
+          manifestBasis: {
+            schema: "brewva.effect_authority_basis.v2",
+            toolName: "bash",
+            actionClass: "local_exec_effectful",
+            effectiveAdmission: "deny",
+            requiresApproval: false,
+          },
+        },
+      },
+    );
     expect(runtime.tape.list("kernel-session").map((event) => event.type)).toEqual([
       "tool.proposed",
       "approval.requested",

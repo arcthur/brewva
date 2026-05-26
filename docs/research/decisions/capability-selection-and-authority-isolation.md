@@ -38,7 +38,7 @@
 - Structured producer outputs live in `skills/producers/<name>.yaml`, keyed by producer name. Producer contracts are not prompt authority and do not activate a skill.
 - Capability manifests live in `@brewva/brewva-capabilities`, separate from skills, tools, and MCP transport code. They describe authority inventory, not model instructions.
 - The promoted selector is deterministic-only: explicit target, policy default within scope, then deterministic filters and selection-field ranking. Embedding ranking and LLM fallback are reserved and inactive; if deterministic selection yields no capability, no external authority is exposed.
-- Capability selection records durable `capability_selection_recorded` events. Tool-only turns carry the previous receipt instead of re-ranking.
+- Capability selection records durable `tool.capability.selected` events. Tool-only turns carry the previous receipt instead of re-ranking.
 - Hosted context physically separates advisory skill cards from `[CapabilitySelection]`. `/skill:name` can load advisory context only; `/capability:name` or an equivalent trusted target is required before external authority can become visible.
 - Hosted tool exposure and the quality gate use the latest selected capability receipt. Operator tools and gated external CLI/MCP actions remain hidden or blocked without matching selected capability evidence.
 - MCP stdio execution uses allowlist semantics. `inheritEnv` is fixed to `false`; only explicit config `env` entries and `envAllowlist` keys are passed to the child process.

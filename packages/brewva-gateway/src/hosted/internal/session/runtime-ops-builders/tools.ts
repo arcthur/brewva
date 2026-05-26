@@ -33,12 +33,22 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
           allowed,
           ...(access?.reason ? { reason: access.reason } : {}),
           ...(access?.advisory ? { advisory: access.advisory } : {}),
+          ...(access?.receiptId ? { receiptId: access.receiptId } : {}),
+          ...(access?.source ? { source: access.source } : {}),
+          ...(access?.selectedCapabilityNames
+            ? { selectedCapabilityNames: access.selectedCapabilityNames }
+            : {}),
         });
         return {
           ...event,
           allowed,
           ...(access?.reason ? { reason: access.reason } : {}),
           ...(access?.advisory ? { advisory: access.advisory } : {}),
+          ...(access?.receiptId ? { receiptId: access.receiptId } : {}),
+          ...(access?.source ? { source: access.source } : {}),
+          ...(access?.selectedCapabilityNames
+            ? { selectedCapabilityNames: access.selectedCapabilityNames }
+            : {}),
         };
       },
       finish(inputValue) {

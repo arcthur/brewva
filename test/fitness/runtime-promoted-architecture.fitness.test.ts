@@ -496,9 +496,13 @@ describe("four-port runtime architecture fitness", () => {
   test("runtime domain lattice does not regain rehomed control-plane and infrastructure folders", () => {
     const domainRoot = resolve(repoRoot, "packages/brewva-runtime/src/domain");
     const rootTapeViews = resolve(repoRoot, "packages/brewva-runtime/src/tape-views");
+    const operatorSafetyProjection = resolve(
+      repoRoot,
+      "packages/brewva-runtime/src/read-models/projection/operator-safety.ts",
+    );
     expect(existsSync(domainRoot)).toBe(false);
     expect(existsSync(rootTapeViews)).toBe(false);
-    expect(existsSync(resolve(repoRoot, "packages/brewva-runtime/src/read-models"))).toBe(false);
+    expect(existsSync(operatorSafetyProjection)).toBe(true);
   });
 
   test("legacy tape views and read models are not rehomed as compatibility internals", () => {
@@ -511,10 +515,10 @@ describe("four-port runtime architecture fitness", () => {
       runtimeSourceFiles.some((file) => file.startsWith("packages/brewva-runtime/src/tape-views/")),
     ).toBe(false);
     expect(
-      runtimeSourceFiles.some((file) =>
+      runtimeSourceFiles.filter((file) =>
         file.startsWith("packages/brewva-runtime/src/read-models/"),
       ),
-    ).toBe(false);
+    ).toEqual(["packages/brewva-runtime/src/read-models/projection/operator-safety.ts"]);
   });
 
   test("rehomed runtime modules do not keep domain registrar names", () => {

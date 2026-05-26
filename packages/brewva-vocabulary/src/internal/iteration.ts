@@ -11,7 +11,9 @@ export type {
   DecisionReceipt,
   EffectCommitmentDiffPreview,
   EffectCommitmentProposal,
+  EffectCommitmentRequestListQuery,
   EffectCommitmentRequestRecord,
+  EffectCommitmentRequestState,
   PendingEffectCommitmentRequest,
 } from "./types/effect-commitment.js";
 
@@ -504,6 +506,9 @@ export interface RuntimeCapabilityAccessFact extends ProtocolRecord {
   readonly basis?: string;
   readonly reason?: string;
   readonly advisory?: string;
+  readonly receiptId?: string;
+  readonly source?: string;
+  readonly selectedCapabilityNames?: readonly string[];
 }
 
 export interface ToolInvocationStartInput extends ProtocolRecord {
@@ -522,4 +527,7 @@ export interface ToolInvocationStartReceipt extends BrewvaEventRecord {
   readonly allowed: boolean;
   readonly reason?: string;
   readonly advisory?: string;
+  readonly receiptId?: string;
+  readonly source?: string;
+  readonly selectedCapabilityNames?: readonly string[];
 }

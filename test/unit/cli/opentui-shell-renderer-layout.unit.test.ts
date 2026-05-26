@@ -842,8 +842,8 @@ describe("opentui solid shell runtime: layout contract", () => {
 
       const frame = testSetup.captureCharFrame();
       expect(runtime.getViewState().overlay.active?.kind).toBe("approval");
-      expect(frame).toContain("Authorize effects");
-      expect(frame).toContain("No pending effects to authorize.");
+      expect(frame).toContain("Operator safety");
+      expect(frame).toContain("No pending asks.");
       expect(frame).toContain("Brewva asks before crossing effect boundaries.");
       expect(frame).not.toContain("permission");
     } finally {
@@ -976,16 +976,17 @@ describe("opentui solid shell runtime: layout contract", () => {
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain("Write /tmp/output.ts");
-      expect(frame).toContain("Authorize effect");
+      expect(frame).toContain("Ask operator");
       expect(frame).toContain("Brewva asks before crossing effect boundaries.");
       expect(frame).toContain(
         "Every code-changing action gets a reason, a receipt, and a recovery path.",
       );
-      expect(frame).toContain("Authorize once");
+      expect(frame).toContain("Allow once");
+      expect(frame).toContain("Deny");
       expect(frame).toContain("Summary: path=/tmp/output.ts");
       expect(frame).toContain("Tool: write");
       expect(frame).toContain("Boundary: effectful");
-      expect(frame).not.toContain("trust=authorize");
+      expect(frame).not.toContain("safety=authorize");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

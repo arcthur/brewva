@@ -36,6 +36,7 @@ export function formatInspectText(report: InspectReport): string {
     `Delegation inbox: items=${report.delegation.inbox.items.length} explicitPull=${report.delegation.inbox.explicitPull ? "yes" : "no"}`,
     `Delegation timeline: groups=${report.delegation.timeline.groups.length}`,
     `Recovery preview: nextReceiptOwner=${report.delegation.recoveryPreview.nextReceiptOwner} primitives=${report.delegation.recoveryPreview.primitives.map((primitive) => primitive.kind).join(",") || "none"}`,
+    `Operator safety: pendingAsks=${report.operatorSafety.pendingAsks} denials=${report.operatorSafety.denials} receipts=${renderList(report.operatorSafety.receiptIds)}`,
     "Hosted transitions: removed source=canonical_tape",
     `Context evidence: ready=${report.contextEvidence.promotionReady ? "yes" : "no"} gaps=${renderList(report.contextEvidence.promotionGaps)} compactions=${report.contextEvidence.totalCompactionEvents} generation=${report.contextEvidence.totalCompactionGenerationEvents} llmPrimary=${report.contextEvidence.totalLlmPrimaryCompactionEvents} deterministicEmergency=${report.contextEvidence.totalDeterministicEmergencyCompactionEvents} genTokens=${report.contextEvidence.totalCompactionGenerationTokens} genCacheRead=${report.contextEvidence.totalCompactionGenerationCacheReadTokens} genCacheWrite=${report.contextEvidence.totalCompactionGenerationCacheWriteTokens} genCost=$${report.contextEvidence.totalCompactionGenerationCostUsd.toFixed(6)}`,
     `Context cockpit: policy=${report.contextCockpit.sideEffectPolicy} workbench=${report.contextCockpit.workbench.activeCount} visibleReadEpoch=${report.contextCockpit.context.visibleReadEpoch}`,
@@ -117,6 +118,11 @@ export function formatInspectText(report: InspectReport): string {
   for (const group of report.delegation.timeline.groups.slice(0, 8)) {
     lines.push(
       `Delegation timeline group: kind=${group.kind} events=${group.eventIds.join(",")} refs=${group.canonicalRefs.join(",")} summary=${group.summary}`,
+    );
+  }
+  for (const decision of report.operatorSafety.recentDecisions) {
+    lines.push(
+      `Operator safety decision: ${decision.decision} tool=${decision.toolName} action=${decision.actionClass ?? "n/a"} request=${decision.requestId ?? "n/a"} reason=${decision.reason ?? "n/a"} receipts=${renderList(decision.receiptIds)}`,
     );
   }
   if (report.recoveryWal.pendingRows.length > 0) {

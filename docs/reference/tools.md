@@ -75,11 +75,27 @@ Exact reversibility is evidence-backed. A tool may prepare a workspace patchset,
 but it is only treated as reversible after execution records an applicable undo
 handle or reversible mutation receipt.
 
+## Operator Safety Projection
+
+Managed tool UX renders authority as `Allow`, `Ask`, or `Deny` through the
+operator safety projection exported by `@brewva/brewva-runtime/security`.
+This projection is deterministic and cannot widen kernel admission. It reads
+structured facts such as action class, `manifestBasis`, selected capability
+receipt, sandbox posture, target scope, pending request id, and audit receipt
+ids.
+
+`DenialReason` is the shared source for operator copy and model-facing recovery
+text. A missing selected capability maps to `missing_capability`; action-policy
+denial maps to `denied_by_policy`; sandbox and boundary failures map to the
+corresponding sandbox category, including `sandbox_wrong_backend` and
+`sandbox_failed`. Tool names, prompt text, and SkillCards cannot broaden
+authority or invent capability access.
+
 ## External Capability Authority
 
 External SaaS, CLI, MCP, credential, publish, deploy, and operator authority is
 not granted by a skill card or by a provider appearing in the prompt. The
-hosted gateway records a `capability_selection_recorded` receipt before
+hosted gateway records a `tool.capability.selected` receipt before
 materializing the tool surface. Only selected capabilities can expose matching
 operator-surface tools or pass the capability-aware quality gate.
 
@@ -95,6 +111,22 @@ as `npm publish`, `pnpm publish`, `cargo publish`, and `docker push`, require a
 matching selected capability receipt. Ordinary package-manager commands such as
 `npm test` do not become external authority just because they share the same
 binary.
+
+Capability access facts include:
+
+- `receiptId`
+- `source`
+- `selectedCapabilityNames`
+
+These fields are determined from the selected capability receipt and manifest
+registry. They are visibility facts, not authority grants. Missing selected
+capability blocks or hides the external authority path and uses the canonical
+`missing_capability` recovery hint.
+
+Authority overlays and inspect reports should present source discovery,
+manifest availability, selected receipt, tool surface, and action policy as
+separate facts. A prompt, SkillCard, or tool name alone is never sufficient to
+expand the available tool surface.
 
 ## Family Map
 

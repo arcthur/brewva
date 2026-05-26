@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createExecTool } from "@brewva/brewva-tools/execution";
@@ -69,6 +69,10 @@ describe("exec command policy routing", () => {
       "Expected exec.started event.",
     );
     expect(routed.payload?.resolvedBackend).toBe("virtual_readonly");
+    expect(routed.payload?.sandboxProfile).toEqual({
+      backend: "virtual_readonly",
+      isolation: "materialized_workspace_subset",
+    });
     const commandPolicy = requireRecord(
       routed.payload?.commandPolicy,
       "Expected commandPolicy payload.",
@@ -120,6 +124,10 @@ describe("exec command policy routing", () => {
       events.find((event) => event.type === "exec.failed"),
       "Expected exec.failed event.",
     );
+    expect(failed.payload?.failureBasis).toEqual({
+      kind: "policy_block",
+      code: "shell_as_tool",
+    });
     expect(failed.payload?.executionPreflight).toMatchObject({
       decision: "block",
     });
@@ -156,6 +164,50 @@ describe("exec command policy routing", () => {
     expect(routed.payload?.requestedEnvKeys).toEqual([]);
     expect(routed.payload?.withheldBoundEnvKeys).toEqual(["BREWVA_TEST_SECRET"]);
     expect(JSON.stringify(routed.payload)).not.toContain("super-secret-value");
+  });
+
+  test("virtual readonly boundary failures do not fall back to host or box execution", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "brewva-vro-workspace-"));
+    const outsideRoot = mkdtempSync(join(tmpdir(), "brewva-vro-outside-"));
+    const outsideFile = join(outsideRoot, "secret.txt");
+    const symlinkPath = join(workspaceRoot, "outside-link");
+    writeFileSync(outsideFile, "outside\n", "utf8");
+    symlinkSync(outsideFile, symlinkPath);
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "box",
+      cwd: workspaceRoot,
+      targetRoots: [workspaceRoot],
+    });
+    const execTool = createExecTool({ runtime });
+
+    let rejection: unknown;
+    try {
+      await execTool.execute(
+        "tc-exec-readonly-virtual-symlink-escape",
+        {
+          command: "cat outside-link",
+        },
+        undefined,
+        undefined,
+        fakeContext("s13-exec-readonly-virtual-symlink-escape"),
+      );
+    } catch (error) {
+      rejection = error;
+    }
+    expect(rejection).toBeInstanceOf(Error);
+    expect((rejection as Error).message).toContain("exec_blocked_isolation");
+
+    expect(eventTypes(events)).toEqual(["exec.started", "exec.failed"]);
+    expect(events[0]?.payload?.sandboxProfile).toEqual({
+      backend: "virtual_readonly",
+      isolation: "materialized_workspace_subset",
+    });
+    expect(events[1]?.payload?.failureBasis).toEqual({
+      kind: "boundary_violation",
+      code: "virtual_readonly_symlink_escape",
+    });
+    expect(eventTypes(events)).not.toContain("box.exec.started");
   });
 
   test("grep commands with option-supplied patterns still materialize file candidates", async () => {

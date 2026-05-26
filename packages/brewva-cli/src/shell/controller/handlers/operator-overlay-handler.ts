@@ -50,7 +50,7 @@ export class ShellOperatorOverlayHandler {
         return true;
       }
       if (key === "r") {
-        await this.decideApproval(item.requestId, "reject");
+        await this.decideApproval(item.requestId, "deny");
         return true;
       }
     }
@@ -180,7 +180,10 @@ export class ShellOperatorOverlayHandler {
     }
   }
 
-  private async decideApproval(requestId: string, decision: "accept" | "reject"): Promise<void> {
+  private async decideApproval(
+    requestId: string,
+    decision: "accept" | "deny" | "cancel",
+  ): Promise<void> {
     await this.context.runShellEffects([
       {
         type: "operator.decideApproval",
@@ -192,7 +195,7 @@ export class ShellOperatorOverlayHandler {
       },
     ]);
     this.context.notify(
-      `${decision === "accept" ? "Approved" : "Rejected"} ${requestId}.`,
+      `${decision === "accept" ? "Allowed" : "Denied"} ${requestId}.`,
       decision === "accept" ? "info" : "warning",
     );
     this.context.closeActiveOverlay(false);

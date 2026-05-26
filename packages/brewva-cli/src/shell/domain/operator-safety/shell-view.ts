@@ -12,9 +12,9 @@ import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import { TOOL_EXECUTION_PHASES, type ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import type { PendingEffectCommitmentRequest } from "@brewva/brewva-vocabulary/iteration";
 
-export type TrustLoopPhase = "inspect" | "authorize" | "commit" | "record" | "recover";
-export type TrustLoopTone = "neutral" | "info" | "warning" | "success" | "error";
-export type TrustLoopDetailKey =
+export type OperatorSafetyShellPhase = "inspect" | "authorize" | "commit" | "record" | "recover";
+export type OperatorSafetyShellTone = "neutral" | "info" | "warning" | "success" | "error";
+export type OperatorSafetyShellDetailKey =
   | "subject"
   | "summary"
   | "tool"
@@ -26,20 +26,20 @@ export type TrustLoopDetailKey =
   | "receipt"
   | "recovery";
 
-export interface TrustLoopDetailRow {
-  key: TrustLoopDetailKey;
+export interface OperatorSafetyShellDetailRow {
+  key: OperatorSafetyShellDetailKey;
   label: string;
   value: string;
 }
 
-export interface TrustLoopProjection {
-  phase: TrustLoopPhase;
+export interface OperatorSafetyShellView {
+  phase: OperatorSafetyShellPhase;
   label: string;
   shortLabel: string;
   title: string;
   headline: string;
   subline?: string;
-  tone: TrustLoopTone;
+  tone: OperatorSafetyShellTone;
   effectSummary?: string;
   riskSummary?: string;
   receiptSummary?: string;
@@ -47,70 +47,76 @@ export interface TrustLoopProjection {
   statusText: string;
 }
 
-export interface TrustLoopToolProjection extends TrustLoopProjection {
+export interface OperatorSafetyShellToolView extends OperatorSafetyShellView {
   kind: "tool";
   toolName: string;
   actionClass?: ToolActionClass;
   executionPhase?: ToolExecutionPhase;
   policySource: "resolved" | "missing";
-  details: TrustLoopDetailRow[];
+  details: OperatorSafetyShellDetailRow[];
 }
 
-export interface TrustLoopApprovalProjection extends TrustLoopProjection {
-  kind: "approval";
+export interface OperatorSafetyShellAskView extends OperatorSafetyShellView {
+  kind: "ask";
   requestId: string;
   subject: string;
   toolName: string;
   boundary: PendingEffectCommitmentRequest["boundary"];
   primaryActionLabel: string;
-  rejectActionLabel: string;
-  details: TrustLoopDetailRow[];
+  denyActionLabel: string;
+  details: OperatorSafetyShellDetailRow[];
 }
 
-export interface TrustLoopApprovalEmptyProjection extends TrustLoopProjection {
-  kind: "approval_empty";
+export interface OperatorSafetyShellAskEmptyView extends OperatorSafetyShellView {
+  kind: "ask_empty";
 }
 
-export interface TrustLoopSessionProjection extends TrustLoopProjection {
+export interface OperatorSafetyShellSessionView extends OperatorSafetyShellView {
   kind: "session";
-  source: "approval" | "tool" | "recovery" | "idle";
+  source: "ask" | "tool" | "recovery" | "idle";
 }
 
-export interface TrustLoopToolProjectionInput {
+export interface OperatorSafetyShellToolViewInput {
   toolName: string;
   args?: unknown;
   executionPhase?: ToolExecutionPhase;
   status?: string;
 }
 
-export interface TrustLoopApprovalProjectionInput {
+export interface OperatorSafetyShellAskViewInput {
   request: PendingEffectCommitmentRequest;
 }
 
-export interface TrustLoopSessionProjectionInput {
+export interface OperatorSafetyShellSessionViewInput {
   phase?: SessionPhase;
-  pendingApprovalCount?: number;
-  activeTool?: TrustLoopToolProjection;
+  pendingAskCount?: number;
+  activeTool?: OperatorSafetyShellToolView;
 }
 
-export const TRUST_LOOP_COPY = {
+export interface OperatorSafetyShellCopy {
+  readonly reasonReceiptRecovery: string;
+  readonly askBeforeEffectBoundary: string;
+  readonly inspectReplayUndo: string;
+}
+
+export const OPERATOR_SAFETY_SHELL_COPY: OperatorSafetyShellCopy = {
   reasonReceiptRecovery:
     "Every code-changing action gets a reason, a receipt, and a recovery path.",
   askBeforeEffectBoundary: "Brewva asks before crossing effect boundaries.",
   inspectReplayUndo: "Brewva keeps receipts you can inspect, replay, and undo from.",
-} as const;
+};
 
-const LABEL_BY_PHASE: Record<TrustLoopPhase, string> = {
+const LABEL_BY_PHASE: Record<OperatorSafetyShellPhase, string> = {
   inspect: "Inspect",
-  authorize: "Authorize",
+  authorize: "Ask",
   commit: "Commit",
   record: "Record",
   recover: "Recover",
 };
 
-const SHORT_LABEL_BY_PHASE: Record<TrustLoopPhase, string> = {
+const SHORT_LABEL_BY_PHASE: Record<OperatorSafetyShellPhase, string> = {
   inspect: "inspect",
-  authorize: "auth",
+  authorize: "ask",
   commit: "commit",
   record: "record",
   recover: "recover",
@@ -136,16 +142,16 @@ function formatList(values: readonly string[] | undefined): string | undefined {
   return values.join(", ");
 }
 
-function phaseLabel(phase: TrustLoopPhase): string {
+function phaseLabel(phase: OperatorSafetyShellPhase): string {
   return LABEL_BY_PHASE[phase];
 }
 
-function shortPhaseLabel(phase: TrustLoopPhase): string {
+function shortPhaseLabel(phase: OperatorSafetyShellPhase): string {
   return SHORT_LABEL_BY_PHASE[phase];
 }
 
-function unreachableTrustLoopPhase(phase: never): never {
-  throw new Error(`Unsupported trust loop phase: ${String(phase)}`);
+function unreachableOperatorSafetyShellPhase(phase: never): never {
+  throw new Error(`Unsupported operator safety phase: ${String(phase)}`);
 }
 
 function resolveToolPolicy(input: {
@@ -155,7 +161,9 @@ function resolveToolPolicy(input: {
   return getToolActionPolicy(input.toolName, undefined, asRecord(input.args));
 }
 
-export function isTrustLoopToolExecutionPhase(value: unknown): value is ToolExecutionPhase {
+export function isOperatorSafetyShellToolExecutionPhase(
+  value: unknown,
+): value is ToolExecutionPhase {
   return typeof value === "string" && TOOL_EXECUTION_PHASES.includes(value as ToolExecutionPhase);
 }
 
@@ -171,7 +179,7 @@ function resolveToolPhase(input: {
   actionClass?: ToolActionClass;
   executionPhase?: ToolExecutionPhase;
   status?: string;
-}): TrustLoopPhase {
+}): OperatorSafetyShellPhase {
   if (input.executionPhase === "authorize") {
     return "authorize";
   }
@@ -193,7 +201,10 @@ function resolveToolPhase(input: {
   return "inspect";
 }
 
-function resolveToolTone(input: { phase: TrustLoopPhase; status?: string }): TrustLoopTone {
+function resolveToolTone(input: {
+  phase: OperatorSafetyShellPhase;
+  status?: string;
+}): OperatorSafetyShellTone {
   if (input.status === "error") {
     return "error";
   }
@@ -209,7 +220,7 @@ function resolveToolTone(input: { phase: TrustLoopPhase; status?: string }): Tru
     case "inspect":
       return "info";
     default:
-      return unreachableTrustLoopPhase(input.phase);
+      return unreachableOperatorSafetyShellPhase(input.phase);
   }
 }
 
@@ -255,32 +266,32 @@ function prefixedSummary(label: string, value: string | undefined): string | und
 }
 
 function detailRow(
-  key: TrustLoopDetailKey,
+  key: OperatorSafetyShellDetailKey,
   label: string,
   value: string | undefined,
-): TrustLoopDetailRow | undefined {
+): OperatorSafetyShellDetailRow | undefined {
   return value ? { key, label, value } : undefined;
 }
 
-function buildProjectionBase(input: {
-  phase: TrustLoopPhase;
+function buildShellViewBase(input: {
+  phase: OperatorSafetyShellPhase;
   titleSubject?: string;
   title?: string;
   headline?: string;
   subline?: string;
-  tone: TrustLoopTone;
+  tone: OperatorSafetyShellTone;
   effectSummary?: string;
   riskSummary?: string;
   receiptSummary?: string;
   recoverySummary?: string;
   statusText?: string;
-}): TrustLoopProjection {
+}): OperatorSafetyShellView {
   const label = phaseLabel(input.phase);
   return {
     phase: input.phase,
     label,
     shortLabel: shortPhaseLabel(input.phase),
-    title: input.title ?? formatTrustLoopTitle({ label }, input.titleSubject),
+    title: input.title ?? formatOperatorSafetyShellTitle({ label }, input.titleSubject),
     headline: input.headline ?? headlineForPhase(input.phase),
     subline: input.subline ?? sublineForPhase(input.phase),
     tone: input.tone,
@@ -292,53 +303,53 @@ function buildProjectionBase(input: {
   };
 }
 
-function headlineForPhase(phase: TrustLoopPhase): string {
+function headlineForPhase(phase: OperatorSafetyShellPhase): string {
   switch (phase) {
     case "authorize":
-      return TRUST_LOOP_COPY.askBeforeEffectBoundary;
+      return OPERATOR_SAFETY_SHELL_COPY.askBeforeEffectBoundary;
     case "commit":
-      return TRUST_LOOP_COPY.reasonReceiptRecovery;
+      return OPERATOR_SAFETY_SHELL_COPY.reasonReceiptRecovery;
     case "record":
-      return TRUST_LOOP_COPY.inspectReplayUndo;
+      return OPERATOR_SAFETY_SHELL_COPY.inspectReplayUndo;
     case "recover":
-      return TRUST_LOOP_COPY.inspectReplayUndo;
+      return OPERATOR_SAFETY_SHELL_COPY.inspectReplayUndo;
     case "inspect":
-      return TRUST_LOOP_COPY.askBeforeEffectBoundary;
+      return OPERATOR_SAFETY_SHELL_COPY.askBeforeEffectBoundary;
     default:
-      return unreachableTrustLoopPhase(phase);
+      return unreachableOperatorSafetyShellPhase(phase);
   }
 }
 
-function sublineForPhase(phase: TrustLoopPhase): string | undefined {
+function sublineForPhase(phase: OperatorSafetyShellPhase): string | undefined {
   switch (phase) {
     case "authorize":
-      return TRUST_LOOP_COPY.reasonReceiptRecovery;
+      return OPERATOR_SAFETY_SHELL_COPY.reasonReceiptRecovery;
     case "commit":
-      return TRUST_LOOP_COPY.inspectReplayUndo;
+      return OPERATOR_SAFETY_SHELL_COPY.inspectReplayUndo;
     case "record":
-      return TRUST_LOOP_COPY.reasonReceiptRecovery;
+      return OPERATOR_SAFETY_SHELL_COPY.reasonReceiptRecovery;
     case "recover":
-      return TRUST_LOOP_COPY.reasonReceiptRecovery;
+      return OPERATOR_SAFETY_SHELL_COPY.reasonReceiptRecovery;
     case "inspect":
-      return TRUST_LOOP_COPY.inspectReplayUndo;
+      return OPERATOR_SAFETY_SHELL_COPY.inspectReplayUndo;
     default:
-      return unreachableTrustLoopPhase(phase);
+      return unreachableOperatorSafetyShellPhase(phase);
   }
 }
 
-export function formatTrustLoopTitle(
-  projection: Pick<TrustLoopProjection, "label">,
+export function formatOperatorSafetyShellTitle(
+  shellView: Pick<OperatorSafetyShellView, "label">,
   subject?: string,
 ): string {
   const normalizedSubject = subject?.trim();
   return normalizedSubject && normalizedSubject.length > 0
-    ? `${projection.label} · ${normalizedSubject}`
-    : projection.label;
+    ? `${shellView.label} · ${normalizedSubject}`
+    : shellView.label;
 }
 
-export function buildTrustLoopToolProjection(
-  input: TrustLoopToolProjectionInput,
-): TrustLoopToolProjection {
+export function buildOperatorSafetyShellToolView(
+  input: OperatorSafetyShellToolViewInput,
+): OperatorSafetyShellToolView {
   const policy = resolveToolPolicy({ toolName: input.toolName, args: input.args });
   const actionClass = policy?.actionClass;
   const phase = resolveToolPhase({
@@ -363,8 +374,8 @@ export function buildTrustLoopToolProjection(
     detailRow("risk", "Risk", riskValue),
     detailRow("receipt", "Receipt", receiptValue),
     detailRow("recovery", "Recovery", recoveryValue),
-  ].filter((row): row is TrustLoopDetailRow => row !== undefined);
-  const base = buildProjectionBase({
+  ].filter((row): row is OperatorSafetyShellDetailRow => row !== undefined);
+  const base = buildShellViewBase({
     phase,
     titleSubject: input.toolName,
     tone,
@@ -384,9 +395,9 @@ export function buildTrustLoopToolProjection(
   };
 }
 
-export function buildTrustLoopApprovalProjection(
-  input: TrustLoopApprovalProjectionInput,
-): TrustLoopApprovalProjection {
+export function buildOperatorSafetyShellAskView(
+  input: OperatorSafetyShellAskViewInput,
+): OperatorSafetyShellAskView {
   const request = input.request;
   const policy = resolveToolPolicy({ toolName: request.toolName });
   const effectValue = formatEffectsValue(
@@ -403,9 +414,9 @@ export function buildTrustLoopApprovalProjection(
   const riskSummary = prefixedSummary("Risk", riskValue);
   const receiptSummary = prefixedSummary("Receipt", receiptValue);
   const recoverySummary = prefixedSummary("Recovery", recoveryValue);
-  const base = buildProjectionBase({
+  const base = buildShellViewBase({
     phase: "authorize",
-    title: "Authorize effect",
+    title: "Ask operator",
     tone: "warning",
     effectSummary,
     riskSummary,
@@ -422,66 +433,66 @@ export function buildTrustLoopApprovalProjection(
     detailRow("admission", "Admission", admissionValue),
     detailRow("receipt", "Receipt", receiptValue),
     detailRow("recovery", "Recovery", recoveryValue),
-  ].filter((row): row is TrustLoopDetailRow => row !== undefined);
+  ].filter((row): row is OperatorSafetyShellDetailRow => row !== undefined);
   return {
     ...base,
-    kind: "approval",
+    kind: "ask",
     requestId: request.requestId,
     subject: request.subject,
     toolName: request.toolName,
     boundary: request.boundary,
-    primaryActionLabel: "Authorize once",
-    rejectActionLabel: "Reject",
+    primaryActionLabel: "Allow once",
+    denyActionLabel: "Deny",
     details,
   };
 }
 
-export function buildTrustLoopApprovalEmptyProjection(): TrustLoopApprovalEmptyProjection {
+export function buildOperatorSafetyShellAskEmptyView(): OperatorSafetyShellAskEmptyView {
   return {
-    ...buildProjectionBase({
+    ...buildShellViewBase({
       phase: "authorize",
-      title: "Authorize effects",
-      headline: "No pending effects to authorize.",
-      subline: TRUST_LOOP_COPY.askBeforeEffectBoundary,
+      title: "Operator safety",
+      headline: "No pending asks.",
+      subline: OPERATOR_SAFETY_SHELL_COPY.askBeforeEffectBoundary,
       tone: "neutral",
-      statusText: "Authorize",
+      statusText: "Ask",
     }),
-    kind: "approval_empty",
+    kind: "ask_empty",
   };
 }
 
-export function buildTrustLoopIdleProjection(): TrustLoopSessionProjection {
+export function buildOperatorSafetyShellIdleView(): OperatorSafetyShellSessionView {
   return {
-    ...buildProjectionBase({
+    ...buildShellViewBase({
       phase: "record",
       title: "Record receipts",
       tone: "success",
-      headline: TRUST_LOOP_COPY.inspectReplayUndo,
-      subline: TRUST_LOOP_COPY.reasonReceiptRecovery,
+      headline: OPERATOR_SAFETY_SHELL_COPY.inspectReplayUndo,
+      subline: OPERATOR_SAFETY_SHELL_COPY.reasonReceiptRecovery,
     }),
     kind: "session",
     source: "idle",
   };
 }
 
-export function buildTrustLoopSessionProjection(
-  input: TrustLoopSessionProjectionInput,
-): TrustLoopSessionProjection | undefined {
-  if ((input.pendingApprovalCount ?? 0) > 0 || input.phase?.kind === "waiting_approval") {
+export function buildOperatorSafetyShellSessionView(
+  input: OperatorSafetyShellSessionViewInput,
+): OperatorSafetyShellSessionView | undefined {
+  if ((input.pendingAskCount ?? 0) > 0 || input.phase?.kind === "waiting_approval") {
     return {
-      ...buildProjectionBase({
+      ...buildShellViewBase({
         phase: "authorize",
-        titleSubject: "approval",
+        titleSubject: "operator",
         tone: "warning",
       }),
       kind: "session",
-      source: "approval",
+      source: "ask",
     };
   }
 
   if (input.phase?.kind === "recovering" || input.phase?.kind === "crashed") {
     return {
-      ...buildProjectionBase({
+      ...buildShellViewBase({
         phase: "recover",
         titleSubject: "runtime",
         tone: "error",
@@ -492,21 +503,21 @@ export function buildTrustLoopSessionProjection(
   }
 
   if (input.phase?.kind === "tool_executing") {
-    const toolProjection =
+    const toolShellView =
       input.activeTool ??
-      buildTrustLoopToolProjection({
+      buildOperatorSafetyShellToolView({
         toolName: input.phase.toolName,
       });
     return {
-      ...buildProjectionBase({
-        phase: toolProjection.phase,
-        titleSubject: toolProjection.toolName,
-        tone: toolProjection.tone,
-        effectSummary: toolProjection.effectSummary,
-        riskSummary: toolProjection.riskSummary,
-        receiptSummary: toolProjection.receiptSummary,
-        recoverySummary: toolProjection.recoverySummary,
-        statusText: toolProjection.statusText,
+      ...buildShellViewBase({
+        phase: toolShellView.phase,
+        titleSubject: toolShellView.toolName,
+        tone: toolShellView.tone,
+        effectSummary: toolShellView.effectSummary,
+        riskSummary: toolShellView.riskSummary,
+        receiptSummary: toolShellView.receiptSummary,
+        recoverySummary: toolShellView.recoverySummary,
+        statusText: toolShellView.statusText,
       }),
       kind: "session",
       source: "tool",
@@ -514,7 +525,7 @@ export function buildTrustLoopSessionProjection(
   }
 
   if (input.phase?.kind === "idle") {
-    return buildTrustLoopIdleProjection();
+    return buildOperatorSafetyShellIdleView();
   }
 
   return undefined;

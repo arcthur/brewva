@@ -2,6 +2,7 @@ import { normalizeToolName } from "../../../utils/tool-name.js";
 import { deriveEffectCommitmentPosture, resolveToolRecoveryPreparation } from "./effect-posture.js";
 import type {
   EffectCommitmentPosture,
+  EffectAuthorityManifestBasis,
   EffectiveToolActionPolicy,
   ToolActionAdmissionOverrides,
   ToolActionPolicy,
@@ -48,6 +49,73 @@ export interface ResolvedToolAuthority {
   receiptPolicy?: ToolActionPolicy["receiptPolicy"];
   recoveryPolicy?: ToolActionPolicy["recoveryPolicy"];
   policyBasis?: readonly string[];
+  manifestBasis: EffectAuthorityManifestBasis;
+}
+
+function receiptPolicyRequiresReceipt(
+  policy: ToolActionPolicy["receiptPolicy"] | undefined,
+): boolean {
+  return policy?.required === true;
+}
+
+function deriveRuntimeBasis(input: {
+  source: ToolGovernanceDescriptorSource;
+  boundary: ToolExecutionBoundary;
+  requiresApproval: boolean;
+}): string[] {
+  return [
+    `authority_source:${input.source}`,
+    `boundary:${input.boundary}`,
+    input.requiresApproval ? "approval_required" : "approval_not_required",
+  ];
+}
+
+function deriveReceiptBasis(policy: ToolActionPolicy["receiptPolicy"] | undefined): string[] {
+  if (!policy || policy.kind === "none") {
+    return [];
+  }
+  return [
+    `receipt_policy:${policy.kind}`,
+    policy.required ? "receipt_required" : "receipt_optional",
+  ];
+}
+
+function deriveEffectAuthorityManifestBasis(input: {
+  normalizedToolName: string;
+  source: ToolGovernanceDescriptorSource;
+  boundary: ToolExecutionBoundary;
+  effectivePolicy?: EffectiveToolActionPolicy;
+  requiresApproval: boolean;
+  recoveryPreparation: ToolRecoveryPreparation;
+  commitmentPosture: EffectCommitmentPosture;
+}): EffectAuthorityManifestBasis {
+  const effects = input.effectivePolicy?.effectClasses ?? [];
+  const safetyGateReason = input.effectivePolicy?.safetyGate?.reason;
+  return {
+    schema: "brewva.effect_authority_basis.v2",
+    toolName: input.normalizedToolName,
+    boundary: input.boundary,
+    authoritySource: input.source,
+    ...(input.effectivePolicy?.actionClass
+      ? { actionClass: input.effectivePolicy.actionClass }
+      : {}),
+    ...(input.effectivePolicy?.riskLevel ? { riskLevel: input.effectivePolicy.riskLevel } : {}),
+    ...(input.effectivePolicy?.effectiveAdmission
+      ? { effectiveAdmission: input.effectivePolicy.effectiveAdmission }
+      : {}),
+    effects,
+    requiresApproval: input.requiresApproval,
+    recoveryPreparation: input.recoveryPreparation,
+    commitmentPosture: input.commitmentPosture,
+    receiptRequired:
+      receiptPolicyRequiresReceipt(input.effectivePolicy?.receiptPolicy) ||
+      (input.source === "missing" && input.boundary === "effectful"),
+    invariantBasis:
+      input.source === "missing" ? ["missing_action_policy_fail_closed"] : ["kernel_action_policy"],
+    overlayBasis: safetyGateReason ? [safetyGateReason] : [],
+    runtimeBasis: deriveRuntimeBasis(input),
+    receiptBasis: deriveReceiptBasis(input.effectivePolicy?.receiptPolicy),
+  };
 }
 
 function resolveAuthorityFromResolution(
@@ -71,14 +139,21 @@ function resolveAuthorityFromResolution(
         recoveryPolicy: effectivePolicy.recoveryPolicy,
         recoveryPreparation,
       })
-    : undefined;
+    : deriveEffectCommitmentPosture({
+        effects: [],
+        recoveryPreparation,
+      });
+  const boundary = descriptor?.boundary ?? "effectful";
+  const requiresApproval = effectivePolicy
+    ? toolActionPolicyRequiresApproval(effectivePolicy)
+    : true;
   return {
     normalizedToolName,
     descriptor,
     actionPolicy: effectivePolicy,
     source: resolution.source,
-    boundary: descriptor?.boundary ?? "effectful",
-    requiresApproval: effectivePolicy ? toolActionPolicyRequiresApproval(effectivePolicy) : true,
+    boundary,
+    requiresApproval,
     recoveryPreparation,
     commitmentPosture,
     actionClass: effectivePolicy?.actionClass,
@@ -89,6 +164,15 @@ function resolveAuthorityFromResolution(
     receiptPolicy: effectivePolicy?.receiptPolicy,
     recoveryPolicy: effectivePolicy?.recoveryPolicy,
     policyBasis: effectivePolicy?.safetyGate?.reason ? [effectivePolicy.safetyGate.reason] : [],
+    manifestBasis: deriveEffectAuthorityManifestBasis({
+      normalizedToolName,
+      source: resolution.source,
+      boundary,
+      effectivePolicy,
+      requiresApproval,
+      recoveryPreparation,
+      commitmentPosture,
+    }),
   };
 }
 
