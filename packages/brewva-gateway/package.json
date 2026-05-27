@@ -84,9 +84,9 @@
     "@brewva/brewva-tools": "workspace:*",
     "@brewva/brewva-vocabulary": "workspace:*",
     "@sinclair/typebox": "^0.34.49",
-    "ajv": "^8.18.0",
-    "lru-cache": "^11.3.5",
-    "ws": "^8.20.0"
+    "ajv": "^8.20.0",
+    "lru-cache": "^11.5.0",
+    "ws": "^8.21.0"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

@@ -83,14 +83,14 @@ export class FixtureExecutor implements SkillExecutor {
 export class RuntimeExecutor implements SkillExecutor {
   constructor(
     private readonly model: string,
-    private readonly _workspaceRoot: string,
+    private readonly workspaceRoot: string,
   ) {}
 
   async execute(scenario: EvalScenario): Promise<SkillExecutionResult> {
     if (scenario.kind === "recall" && scenario.dataset_path) {
       return executeRecallRuntimeScenario({
         datasetPath: scenario.dataset_path,
-        workspaceRoot: this._workspaceRoot,
+        workspaceRoot: this.workspaceRoot,
       });
     }
     throw new Error(

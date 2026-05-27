@@ -228,7 +228,7 @@ describe("brewva-effect foundation helpers", () => {
     const error = await promise;
 
     expect(error).toBeInstanceOf(BrewvaCancelled);
-    expect(error._tag).toBe("BrewvaCancelled");
+    expect(error["_tag"]).toBe("BrewvaCancelled");
   });
 
   test("managed intervals run without overlap and stop through close", async () => {
@@ -505,7 +505,7 @@ describe("brewva-effect foundation helpers", () => {
       ),
     );
 
-    expect(error._tag).toBe("BrewvaTimeout");
+    expect(error["_tag"]).toBe("BrewvaTimeout");
     expect(error.timeoutMs).toBe(25);
   });
 

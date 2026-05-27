@@ -62,8 +62,8 @@ export function convertToLlm(
         case "toolResult":
           return message;
         default: {
-          const _exhaustiveCheck: never = message;
-          return _exhaustiveCheck;
+          const exhaustiveCheck: never = message;
+          return exhaustiveCheck;
         }
       }
     })

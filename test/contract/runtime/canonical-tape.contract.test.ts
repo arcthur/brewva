@@ -169,7 +169,8 @@ describe("canonical tape", () => {
       config,
       physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
-    for await (const _frame of writer.turn({ sessionId: "canonical-session", prompt: "hello" })) {
+    for await (const frame of writer.turn({ sessionId: "canonical-session", prompt: "hello" })) {
+      void frame;
       // Drain the runtime-owned turn stream.
     }
 
@@ -192,7 +193,8 @@ describe("canonical tape", () => {
       config,
       physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
-    for await (const _frame of writer.turn({ sessionId: "durable-session", prompt: "hello" })) {
+    for await (const frame of writer.turn({ sessionId: "durable-session", prompt: "hello" })) {
+      void frame;
       // Drain the runtime-owned turn stream.
     }
 
@@ -212,7 +214,8 @@ describe("canonical tape", () => {
       config,
       physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
     });
-    for await (const _frame of writer.turn({ sessionId: "durable-session", prompt: "hello" })) {
+    for await (const frame of writer.turn({ sessionId: "durable-session", prompt: "hello" })) {
+      void frame;
       // Drain the runtime-owned turn stream.
     }
 

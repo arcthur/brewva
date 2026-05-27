@@ -63,13 +63,13 @@
     "@brewva/brewva-token-estimation": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
     "@brewva/brewva-vocabulary": "workspace:*",
-    "@opentui/core": "0.2.14",
-    "@opentui/keymap": "0.2.14",
-    "@opentui/solid": "0.2.14",
+    "@opentui/core": "0.2.16",
+    "@opentui/keymap": "0.2.16",
+    "@opentui/solid": "0.2.16",
     "chalk": "^5.6.2",
-    "date-fns": "^4.1.0",
+    "date-fns": "^4.3.0",
     "get-east-asian-width": "^1.6.0",
-    "solid-js": "1.9.12"
+    "solid-js": "1.9.13"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

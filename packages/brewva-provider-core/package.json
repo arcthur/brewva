@@ -51,16 +51,16 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.93.0",
+    "@anthropic-ai/sdk": "^0.99.0",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-token-estimation": "workspace:*",
-    "@google/genai": "^1.52.0",
+    "@google/genai": "^2.6.0",
     "@sinclair/typebox": "^0.34.49",
-    "ajv": "^8.18.0",
+    "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "eventsource-parser": "^3.0.8",
-    "openai": "6.36.0",
+    "openai": "6.39.0",
     "partial-json": "^0.1.7",
     "proxy-agent": "^8.0.1"
   },

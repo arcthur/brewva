@@ -2,11 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrewvaHostedResourceLoader } from "./resource-loader.js";
-import type {
-  BrewvaResourceProvider,
-  BrewvaResourceReadResult,
-  BrewvaResourceStatus,
-} from "./resource-types.js";
+import type { BrewvaResourceProvider, BrewvaResourceReadResult } from "./resource-types.js";
 
 export type {
   BrewvaResourceProvider,

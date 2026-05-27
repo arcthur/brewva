@@ -18,7 +18,7 @@
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-vocabulary": "workspace:*",
-    "lru-cache": "^11.2.7"
+    "lru-cache": "^11.5.0"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

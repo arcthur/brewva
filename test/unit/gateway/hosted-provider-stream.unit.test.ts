@@ -516,7 +516,7 @@ describe("hosted provider stream", () => {
     };
 
     const provider = createHostedRuntimeProviderPort(session as never);
-    for await (const _frame of provider.stream({
+    for await (const frame of provider.stream({
       turn: { sessionId: "session-1", prompt: "next" },
       prompt: {
         status: "ready",
@@ -548,6 +548,7 @@ describe("hosted provider stream", () => {
         cache: { stablePrefix: false },
       },
     })) {
+      void frame;
     }
 
     expect(observedMessages).toEqual([
