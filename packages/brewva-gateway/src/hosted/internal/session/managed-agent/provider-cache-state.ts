@@ -170,12 +170,3 @@ export function providerCacheCountersAvailable(render: ProviderCacheRenderState)
   }
   return render.status === "rendered" || render.status === "degraded";
 }
-
-export function isCachedContentUnsupportedStreamError(message: string): boolean {
-  if (!/\bcached(?:_|\s*)content\b/i.test(message)) {
-    return false;
-  }
-  return /\b(?:not\s+supported|unsupported|unknown\s+(?:field|name)|unrecognized\s+field|unexpected\s+field|cannot\s+find\s+field|ignored)\b/i.test(
-    message,
-  );
-}

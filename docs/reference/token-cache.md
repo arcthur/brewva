@@ -5,10 +5,10 @@ Implementation anchors:
 - `packages/brewva-provider-core/src/cache/policy.ts`
 - `packages/brewva-provider-core/src/cache/capability.ts`
 - `packages/brewva-provider-core/src/cache/render/`
-- `packages/brewva-provider-core/src/providers/google-gemini-cli/cached-content.ts`
+- `packages/brewva-provider-core/src/cache/render/google-genai.ts`
+- `packages/brewva-provider-core/src/providers/google-genai/index.ts`
 - `packages/brewva-provider-core/src/providers/_shared/payload-metadata.ts`
 - `packages/brewva-provider-core/src/providers/anthropic/index.ts`
-- `packages/brewva-provider-core/src/providers/google-gemini-cli/index.ts`
 - `packages/brewva-provider-core/src/providers/openai-completions/index.ts`
 - `packages/brewva-provider-core/src/providers/openai-responses/index.ts`
 - `packages/brewva-provider-core/src/providers/openai-codex-responses/index.ts`
@@ -96,12 +96,11 @@ model, base URL, and transport. The normalized strategy vocabulary is:
     key when the provider/model supports it.
   - Direct OpenAI can expose longer prompt-cache retention where supported.
 - `explicitCachedContent`
-  - Google can upgrade `retention=long` from implicit prefix behavior to an
-    explicit CachedContent resource when the Vertex adapter and Cloud Code Assist
-    request path are both usable.
-  - Provider-core owns the region-aware Vertex adapter. Gateway owns the shared
-    or injected lifecycle manager that creates, reuses, downgrades, and releases
-    workspace-scoped CachedContent resources.
+  - Google GenAI can consume an explicit `cachedContent` resource name when a
+    caller supplies one through provider options.
+  - The default hosted gateway does not provision Google CachedContent resources.
+    Resource creation belongs in a future direct Google or Vertex provider design,
+    not in the normal Gemini Developer API request path.
 - `implicitPrefix`
   - Providers such as Gemini and OpenAI-compatible completions may rely on
     provider-side implicit prefix behavior when no explicit cache field is
@@ -134,52 +133,21 @@ Every provider-family cache adapter must document:
 - bucket-key material
 - live or contract tests that prove the behavior
 
-Google is the current hybrid example:
+Google is a direct Gemini Developer API provider:
 
 - user-facing provider name: `Google`
-- transport/API envelope: Cloud Code Assist (`google-gemini-cli`)
-- authentication: `/model` always exposes `Import existing Gemini CLI login`.
-  It exposes `Sign in with Google` only when
-  `BREWVA_GOOGLE_OAUTH_CLIENT_ID` and `BREWVA_GOOGLE_OAUTH_CLIENT_SECRET` are
-  configured for the host process. Import reads the official
-  `~/.gemini/oauth_creds.json` file and the official encrypted file fallback at
-  `~/.gemini/gemini-credentials.json`. Both paths store a refreshable hosted
-  OAuth credential with the Google access token, refresh token, expiry, and Code
-  Assist project ID. At request time the auth store renders the provider-core
-  credential shape `{"token":"...","projectId":"..."}`. `GEMINI_API_KEY` and
-  `GOOGLE_API_KEY` are not accepted for this Cloud Code Assist provider route.
+- `google-genai` for the public Gemini Developer API route through
+  `@google/genai` and `https://generativelanguage.googleapis.com`
+- authentication: `vault://google-genai/apiKey`; environment discovery accepts
+  `GEMINI_API_KEY` and `GOOGLE_API_KEY`
+- supported request path: `@google/genai` `models.generateContentStream`
 - short retention: implicit prefix behavior only
-- long retention: may render explicit CachedContent if the gateway lifecycle
-  manager can provision a region-specific Vertex resource and the request path
-  continues to show cache reads
-- explicit CachedContent creation is gated by a cached-prefix token estimate:
-  Pro-family models require at least about 4,096 cached prefix tokens and other
-  Gemini models require at least about 1,024. Below that threshold, Brewva
-  degrades the turn to implicit prefix caching instead of creating a resource or
-  treating zero cache reads as an endpoint failure.
-- failure posture: fail closed; repeated zero-read explicit-cache observations or
-  field-level cachedContent rejection signals (for example `cachedContent not
-supported` or `unknown field`) downgrade the endpoint capability instead of
-  repeatedly retrying a broken long-retention path
-- lifecycle: the default gateway path uses a shared-or-injected manager because
-  CachedContent resources are workspace-scoped, provider-external objects rather
-  than purely session-local bytes
-- lifecycle HTTP calls are bounded by an internal timeout and use abortable
-  requests so a slow Vertex create/delete cannot hang the user turn before the
-  model request starts
-
-Optional local Vertex override environment variables:
-
-- `BREWVA_GOOGLE_VERTEX_CACHE_BASE_URL`
-- `BREWVA_GOOGLE_VERTEX_CACHE_LOCATION`
-
-The base URL, when set, must be a region-specific Vertex host such as
-`https://us-central1-aiplatform.googleapis.com`. A bare global
-`https://aiplatform.googleapis.com` value is rejected because CachedContent
-resources are region-bound. Invalid override configuration disables only the
-explicit CachedContent path for eligible long-retention turns; short retention
-and below-threshold long-retention turns continue to use implicit prefix
-caching.
+- long retention: may consume an already rendered `cachedContent` name, but the
+  default hosted gateway does not yet provision direct Gemini Developer API
+  CachedContent resources for this route
+- failure posture: fail closed when the requested cache policy cannot be honored
+  by the direct route; do not silently inherit Vertex or other Google API cache
+  lifecycle semantics
 
 Kimi is the current guardrail example. Brewva exposes a single `Kimi` connect
 surface, but the provider families remain separate underneath:
@@ -444,14 +412,12 @@ The lifecycle covers:
 - expected-break markers
 - source-text caches tied to visible session behavior, including source-intelligence cache
 
-There is no provider-agnostic global cache authority. Most token-cache state
-remains session-local, but Google explicit CachedContent uses a shared-or-
-injected gateway lifecycle manager because the underlying Vertex resource is
-workspace-scoped and self-expiring. That manager is still non-authoritative: it
-may be dropped, rebuilt, or downgraded without affecting replay truth. Auth-
-scoped Google capability downgrades are also reset on session clear and may be
-re-probed after credential changes so refreshed login state does not require a
-process restart.
+There is no provider-agnostic global cache authority. Token-cache state remains
+session-local for the hosted gateway. Google GenAI explicit `cachedContent`
+names may be supplied by an experimental caller, but the default gateway does
+not create, delete, or own those resources. Any future Google or Vertex
+resource lifecycle must be designed as provider-specific control-plane state and
+kept non-authoritative relative to replay truth.
 
 ## Inspect Surfaces
 
@@ -476,9 +442,7 @@ Current regression coverage includes:
 
 - provider-core cache policy and provider render behavior
 - Anthropic multi-breakpoint cache marker placement
-- Google explicit CachedContent lifecycle behavior, including immutable payload
-  injection, bounded pending-delete retries, and per-resource zero-read
-  downgrade evidence
+- Google GenAI implicit-prefix and supplied `cachedContent` render behavior
 - OpenAI Codex WebSocket plus `previous_response_id` continuation
 - provider request fingerprint attribution and cache-break detector behavior
 - expected-break rebasing
@@ -497,9 +461,6 @@ bun test
 BREWVA_TEST_LIVE=1 bun test test/live/provider/token-cache.live.test.ts
 ```
 
-Live tests require a configured OpenAI/Codex auth environment. Non-live test
-runs skip these checks. The optional Google CachedContent smoke additionally
-accepts either `BREWVA_GOOGLE_GEMINI_CREDENTIAL` or a matching `google` /
-`google-gemini-cli` credential in `auth.json`. Because that smoke is opt-in and
-depends on external Google behavior, keep a periodic live run in CI or release
-verification if Google explicit CachedContent is a relied-on path.
+Live tests require configured provider auth for the covered providers. Non-live
+test runs skip these checks. Google live coverage should use the direct Gemini
+Developer API key path.

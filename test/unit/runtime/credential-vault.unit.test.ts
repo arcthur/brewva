@@ -71,8 +71,8 @@ describe("credential vault", () => {
     ]);
   });
 
-  test("does not discover credentials for removed connect-only providers", () => {
-    const workspace = createTestWorkspace("credential-vault-removed-connect-discovery");
+  test("discovers direct Google GenAI API key credentials", () => {
+    const workspace = createTestWorkspace("credential-vault-google-genai-discovery");
     const vault = new CredentialVaultService({
       vaultPath: join(workspace, "credentials.vault"),
       allowDerivedKeyFallback: true,
@@ -86,6 +86,17 @@ describe("credential vault", () => {
       GOOGLE_API_KEY: "sk-google-legacy",
     });
 
-    expect(discovered).toEqual([]);
+    expect(discovered).toEqual([
+      expect.objectContaining({
+        provider: "google-genai",
+        envVar: "GEMINI_API_KEY",
+        credentialRef: "vault://google-genai/apiKey",
+      }),
+      expect.objectContaining({
+        provider: "google-genai",
+        envVar: "GOOGLE_API_KEY",
+        credentialRef: "vault://google-genai/apiKey",
+      }),
+    ]);
   });
 });

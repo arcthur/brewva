@@ -162,6 +162,11 @@ export function processAnthropicStream(
 
           if (event.delta.type === "thinking_delta" && state.type === "thinking") {
             state.block.thinking += event.delta.thinking;
+            const estimatedTokens = event.delta.estimated_tokens;
+            if (typeof estimatedTokens === "number" && Number.isFinite(estimatedTokens)) {
+              const details = (output.usage.details ??= {});
+              details.thoughtsTokens = (details.thoughtsTokens ?? 0) + estimatedTokens;
+            }
             yield* stream.push({
               type: "thinking_delta",
               contentIndex: state.outputIndex,

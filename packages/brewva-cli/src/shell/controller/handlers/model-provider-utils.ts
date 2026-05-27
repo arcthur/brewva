@@ -124,7 +124,7 @@ export function providerConnectionFooter(provider: ProviderConnectionDescriptor)
       return "OAuth/API key";
     }
     if (provider.id === "google") {
-      return "OAuth/import";
+      return "Gemini API key";
     }
     if (provider.id === "kimi-coding") {
       return "Kimi Code/Moonshot API key";

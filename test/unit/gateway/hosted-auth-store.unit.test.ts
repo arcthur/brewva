@@ -6,7 +6,7 @@ import {
   HostedAuthStore,
   type HostedAuthCredential,
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
-import { patchDateNow, patchProcessEnv } from "../../helpers/global-state.js";
+import { patchDateNow } from "../../helpers/global-state.js";
 
 const INTRINSIC_FETCH = globalThis.fetch;
 
@@ -149,67 +149,6 @@ describe("hosted auth store", () => {
       }
     });
   }
-
-  test("renders Google OAuth credentials as Cloud Code Assist credential JSON", async () => {
-    const authStore = HostedAuthStore.inMemory({
-      google: authSlots({
-        type: "oauth",
-        accessToken: "google-access-token",
-        refreshToken: "google-refresh-token",
-        expiresAt: Date.now() + 60_000,
-        projectId: "project-1",
-      }),
-    });
-
-    expect(JSON.parse((await authStore.getApiKey("google")) ?? "{}")).toEqual({
-      token: "google-access-token",
-      projectId: "project-1",
-    });
-  });
-
-  test("refreshes expired Google OAuth credentials before rendering credential JSON", async () => {
-    const restoreEnv = patchProcessEnv({
-      BREWVA_GOOGLE_OAUTH_CLIENT_ID: "brewva-google-oauth-client-id-for-tests",
-      BREWVA_GOOGLE_OAUTH_CLIENT_SECRET: "brewva-google-oauth-client-secret-for-tests",
-    });
-    const requests: Array<{ url: string; body: string }> = [];
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      requests.push({ url: toRequestUrl(input), body: toRequestBodyText(init?.body) });
-      return jsonResponse({
-        access_token: "refreshed-google-access-token",
-        refresh_token: "next-google-refresh-token",
-        expires_in: 3600,
-      });
-    }) as typeof fetch;
-    const authStore = HostedAuthStore.inMemory({
-      google: authSlots({
-        type: "oauth",
-        accessToken: "expired-google-access-token",
-        refreshToken: "google-refresh-token",
-        expiresAt: Date.now() - 60_000,
-        projectId: "project-1",
-      }),
-    });
-
-    try {
-      expect(JSON.parse((await authStore.getApiKey("google")) ?? "{}")).toEqual({
-        token: "refreshed-google-access-token",
-        projectId: "project-1",
-      });
-      expect(requests).toHaveLength(1);
-      expect(requests[0]?.url).toBe("https://oauth2.googleapis.com/token");
-      expect(requests[0]?.body).toContain("grant_type=refresh_token");
-      expect(requests[0]?.body).toContain("refresh_token=google-refresh-token");
-      expect(authStore.get("google")).toMatchObject({
-        type: "oauth",
-        accessToken: "refreshed-google-access-token",
-        refreshToken: "next-google-refresh-token",
-        projectId: "project-1",
-      });
-    } finally {
-      restoreEnv();
-    }
-  });
 
   test("rotates provider credential slots without exposing secret material", async () => {
     const restoreNow = patchDateNow(() => 1_000);

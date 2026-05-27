@@ -7,34 +7,16 @@ import type {
 } from "@brewva/brewva-vocabulary/context";
 import { observeHostedProviderCache } from "../../context/materialization.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
-import {
-  isCachedContentUnsupportedStreamError,
-  providerCacheCountersAvailable,
-} from "./provider-cache-state.js";
+import { providerCacheCountersAvailable } from "./provider-cache-state.js";
 
 export interface ManagedSessionProviderAssistantObserverState {
   lastProviderFingerprint: ProviderRequestFingerprint | undefined;
   lastCacheRender: ProviderCacheRenderState | undefined;
-  lastGoogleModelBaseUrl: string | undefined;
 }
 
 export interface ManagedSessionProviderAssistantObserverOptions {
   runtime: HostedRuntimeAdapterPort | undefined;
-  workspaceRoot: string;
   sessionId: string;
-  googleCachedContentManager: {
-    markUnsupportedFromStreamError(input: {
-      workspaceRoot: string;
-      modelBaseUrl: string | undefined;
-      reason: string;
-    }): void;
-    observeUsage(input: {
-      workspaceRoot: string;
-      modelBaseUrl: string | undefined;
-      render?: ProviderCacheRenderState;
-      cacheRead: number;
-    }): void;
-  };
   cacheBreakDetector: {
     observe(input: {
       source: string;
@@ -52,18 +34,14 @@ export interface ManagedSessionProviderAssistantObserverOptions {
 
 export class ManagedSessionProviderAssistantObserver {
   readonly #runtime: HostedRuntimeAdapterPort | undefined;
-  readonly #workspaceRoot: string;
   readonly #sessionId: string;
-  readonly #googleCachedContentManager: ManagedSessionProviderAssistantObserverOptions["googleCachedContentManager"];
   readonly #cacheBreakDetector: ManagedSessionProviderAssistantObserverOptions["cacheBreakDetector"];
   readonly #resolveExpectedBreak: ManagedSessionProviderAssistantObserverOptions["resolveExpectedBreak"];
   readonly #state: ManagedSessionProviderAssistantObserverOptions["state"];
 
   constructor(options: ManagedSessionProviderAssistantObserverOptions) {
     this.#runtime = options.runtime;
-    this.#workspaceRoot = options.workspaceRoot;
     this.#sessionId = options.sessionId;
-    this.#googleCachedContentManager = options.googleCachedContentManager;
     this.#cacheBreakDetector = options.cacheBreakDetector;
     this.#resolveExpectedBreak = options.resolveExpectedBreak;
     this.#state = options.state;
@@ -73,26 +51,6 @@ export class ManagedSessionProviderAssistantObserver {
     const state = this.#state();
     if (!this.#runtime || !state.lastProviderFingerprint || !state.lastCacheRender) {
       return;
-    }
-    if (message.api === "google-gemini-cli") {
-      if (
-        message.stopReason === "error" &&
-        typeof message.errorMessage === "string" &&
-        isCachedContentUnsupportedStreamError(message.errorMessage)
-      ) {
-        this.#googleCachedContentManager.markUnsupportedFromStreamError({
-          workspaceRoot: this.#workspaceRoot,
-          modelBaseUrl: state.lastGoogleModelBaseUrl,
-          reason: message.errorMessage,
-        });
-      } else {
-        this.#googleCachedContentManager.observeUsage({
-          workspaceRoot: this.#workspaceRoot,
-          modelBaseUrl: state.lastGoogleModelBaseUrl,
-          render: state.lastCacheRender,
-          cacheRead: message.usage.cacheRead ?? 0,
-        });
-      }
     }
     const breakObservation = this.#cacheBreakDetector.observe({
       source: state.lastProviderFingerprint.bucketKey,

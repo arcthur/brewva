@@ -38,7 +38,6 @@ import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-vocabul
 import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { BrewvaCompactionSummaryGenerator } from "../../compaction/summary-generator.js";
-import type { GoogleCachedContentManager } from "../../provider/cache/index.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { HostedModelRoutingSettings } from "../settings/settings-store.js";
@@ -105,7 +104,6 @@ export interface CreateBrewvaManagedAgentSessionOptions {
   onInitialPersistence?: () => void;
   ui?: BrewvaToolUiPort;
   logger?: HostedSessionLogger;
-  googleCachedContentManager?: GoogleCachedContentManager;
   compactionSummaryGenerator?: BrewvaCompactionSummaryGenerator;
   sessionTitleGenerator?: BrewvaSessionTitleGenerator;
 }
@@ -217,7 +215,5 @@ export interface ProviderCacheRuntimeState {
   lastProviderFingerprint: ProviderRequestFingerprint | undefined;
   lastCacheRender: ProviderCacheRenderState | undefined;
   lastCacheRenderModelKey: string | undefined;
-  lastGoogleCredential: string | undefined;
-  lastGoogleModelBaseUrl: string | undefined;
   lastExpectedProviderCacheBreak: ExpectedProviderCacheBreak | undefined;
 }

@@ -108,14 +108,14 @@ export function resolveProviderCacheCapability(
     };
   }
 
-  if (api === "google-gemini-cli") {
+  if (api === "google-genai") {
     return {
       strategies: ["implicitPrefix", "explicitCachedContent"],
       cacheCounters: "readOnly",
       shortRetention: true,
       longRetention: "1h",
       readOnlyWriteMode: "supported",
-      reason: "google_gemini_context_caching",
+      reason: "google_genai_context_caching",
     };
   }
 

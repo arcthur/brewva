@@ -2,10 +2,6 @@ import { describe, expect } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  createGoogleCachedContent,
-  deleteGoogleCachedContent,
-} from "@brewva/brewva-provider-core/cache";
 import { getModel } from "@brewva/brewva-provider-core/catalog";
 import type {
   AssistantMessage,
@@ -33,11 +29,6 @@ const MODEL = getModel("openai-codex", LIVE_MODEL_ID);
 const KIMI_CODE_MODEL = getModel("kimi-coding", "kimi-for-coding");
 const MOONSHOT_CN_MODEL = getModel("moonshot-cn", "kimi-k2.6");
 const DEEPSEEK_MODEL = getModel("deepseek", "deepseek-v4-flash");
-const GOOGLE_CACHE_MODEL_ID = process.env.BREWVA_LIVE_GOOGLE_CACHE_MODEL || "gemini-2.5-pro";
-const GOOGLE_CACHE_MODEL = getModel(
-  "google",
-  GOOGLE_CACHE_MODEL_ID as never,
-) as Model<"google-gemini-cli">;
 
 type CodexAuthCredential = {
   type?: unknown;
@@ -142,55 +133,6 @@ async function resolveCodexAccessToken(): Promise<string | undefined> {
     if (token) {
       return token;
     }
-  }
-  return undefined;
-}
-
-async function resolveGoogleCacheCredential(): Promise<string | undefined> {
-  const explicit = process.env.BREWVA_GOOGLE_GEMINI_CREDENTIAL;
-  if (explicit && explicit.trim().length > 0) {
-    return explicit.trim();
-  }
-  for (const agentDir of [resolveBrewvaAgentDir(), join(repoRoot, ".brewva", "agent")]) {
-    const credential = readGoogleCredentialFromAuthFile(join(agentDir, "auth.json"));
-    if (credential) {
-      return credential;
-    }
-  }
-  return undefined;
-}
-
-function readGoogleCredentialFromAuthFile(authPath: string): string | undefined {
-  if (!existsSync(authPath)) {
-    return undefined;
-  }
-  const raw = JSON.parse(readFileSync(authPath, "utf8")) as Record<string, unknown>;
-  for (const key of ["google", "google-gemini-cli"] as const) {
-    const credential = raw[key];
-    const resolved = resolveGoogleCredentialRecord(credential);
-    if (resolved) {
-      return resolved;
-    }
-  }
-  return undefined;
-}
-
-function resolveGoogleCredentialRecord(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value.trim();
-  }
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const record = value as Record<string, unknown>;
-  if (record.type === "api_key" && typeof record.key === "string" && record.key.trim().length > 0) {
-    return record.key.trim();
-  }
-  const token =
-    readString(record.token) ?? readString(record.accessToken) ?? readString(record.access);
-  const projectId = readString(record.projectId) ?? readString(record.project);
-  if (token && projectId) {
-    return JSON.stringify({ token, projectId });
   }
   return undefined;
 }
@@ -312,53 +254,6 @@ async function runOpenAICompatTurn(input: {
     throw new Error(message.errorMessage || `Provider ended with ${message.stopReason}`);
   }
   return { message, payload: capturedPayload, metadata: capturedMetadata };
-}
-
-async function runGoogleCachedContentTurn(input: {
-  apiKey: string;
-  cachedContent: string;
-  marker: string;
-}): Promise<AssistantMessage> {
-  const message = await complete(
-    GOOGLE_CACHE_MODEL,
-    {
-      messages: [userMessage(`Reply exactly: ${input.marker}`)],
-    },
-    {
-      apiKey: input.apiKey,
-      maxTokens: 64,
-      cachePolicy: {
-        retention: "long",
-        writeMode: "readWrite",
-        scope: "session",
-        reason: "live_test",
-      },
-      onPayload(payload) {
-        const basePayload = payload as Record<string, unknown>;
-        const request = (payload as { request?: Record<string, unknown> }).request;
-        if (!request) {
-          return payload;
-        }
-        const {
-          systemInstruction: _systemInstruction,
-          tools: _tools,
-          toolConfig: _toolConfig,
-          ...rest
-        } = request;
-        return {
-          ...basePayload,
-          request: {
-            ...rest,
-            cachedContent: input.cachedContent,
-          },
-        };
-      },
-    },
-  );
-  if (message.stopReason === "error" || message.stopReason === "aborted") {
-    throw new Error(message.errorMessage || `Provider ended with ${message.stopReason}`);
-  }
-  return message;
 }
 
 describe("live: provider token cache", () => {
@@ -661,70 +556,5 @@ describe("live: provider token cache", () => {
       );
     },
     120_000,
-  );
-
-  runLive(
-    "google cachedContent smoke shows cache reads when Cloud Code Assist consumes explicit cached content",
-    async () => {
-      const credential = await resolveGoogleCacheCredential();
-      if (!credential) {
-        console.warn(
-          "[token-cache.live] skipped because BREWVA_GOOGLE_GEMINI_CREDENTIAL is unavailable",
-        );
-        return;
-      }
-
-      let cached: Awaited<ReturnType<typeof createGoogleCachedContent>>;
-      try {
-        cached = await createGoogleCachedContent(credential, {
-          model: GOOGLE_CACHE_MODEL.id,
-          ttlSeconds: 3600,
-          systemInstruction: {
-            parts: [{ text: CACHE_ANCHOR }],
-          },
-        });
-      } catch (error) {
-        const skipMessage = formatProviderSkip(
-          "token-cache.live Google cachedContent create",
-          error,
-        );
-        if (skipMessage) {
-          console.warn(skipMessage);
-          return;
-        }
-        throw error;
-      }
-
-      try {
-        const attempts: AssistantMessage[] = [];
-        for (const marker of ["GOOGLE-CACHE-HIT-1", "GOOGLE-CACHE-HIT-2"] as const) {
-          let message: AssistantMessage;
-          try {
-            message = await runGoogleCachedContentTurn({
-              apiKey: credential,
-              cachedContent: cached.name,
-              marker,
-            });
-          } catch (error) {
-            const skipMessage = formatProviderSkip(`token-cache.live ${marker}`, error);
-            if (skipMessage) {
-              console.warn(skipMessage);
-              return;
-            }
-            throw error;
-          }
-          attempts.push(message);
-          if (message.usage.cacheRead > 0) {
-            break;
-          }
-        }
-
-        expect(attempts.length).toBeGreaterThan(0);
-        expect(Math.max(...attempts.map((message) => message.usage.cacheRead))).toBeGreaterThan(0);
-      } finally {
-        await deleteGoogleCachedContent(credential, cached.name).catch(() => undefined);
-      }
-    },
-    180_000,
   );
 });

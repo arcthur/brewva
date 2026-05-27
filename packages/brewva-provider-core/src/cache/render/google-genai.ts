@@ -7,22 +7,22 @@ import {
   normalizeProviderCachePolicy,
 } from "../policy.js";
 
-export interface GoogleGeminiCliCacheRender extends ProviderCacheRenderResult {
+export interface GoogleGenAICacheRender extends ProviderCacheRenderResult {
   cachedContentName?: string;
   cachedContentTtlSeconds?: number;
 }
 
-export function resolveGoogleGeminiCliCacheRender(input: {
+export function resolveGoogleGenAICacheRender(input: {
   cachedContentName?: string;
   cachedContentTtlSeconds?: number;
   modelId?: string;
   policy?: ProviderCachePolicy;
   sessionId?: string;
-}): GoogleGeminiCliCacheRender {
-  const api = "google-gemini-cli";
-  const provider = "google";
+}): GoogleGenAICacheRender {
+  const api = "google-genai";
+  const provider = "google-genai";
   const policy = normalizeProviderCachePolicy(input.policy);
-  const capability = resolveProviderCacheCapability({ api });
+  const capability = resolveProviderCacheCapability({ api, provider, modelId: input.modelId });
 
   if (policy.retention === "none") {
     return {
@@ -41,7 +41,7 @@ export function resolveGoogleGeminiCliCacheRender(input: {
   if (policy.retention === "short") {
     return {
       status: "rendered",
-      reason: "rendered_google_implicit_prefix_cache",
+      reason: "rendered_google_genai_implicit_prefix_cache",
       renderedRetention: "short",
       capability,
       bucketKey: buildRenderBucketKey({
@@ -91,7 +91,7 @@ export function resolveGoogleGeminiCliCacheRender(input: {
 
   return {
     status: "rendered",
-    reason: "rendered_google_cached_content",
+    reason: "rendered_google_genai_cached_content",
     renderedRetention: "long",
     capability,
     bucketKey: buildRenderBucketKey({

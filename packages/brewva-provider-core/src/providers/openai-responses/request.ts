@@ -49,6 +49,7 @@ export function buildOpenAIResponsesParams(
       ? { prompt_cache_retention: resolvedCacheRender.promptCacheRetention }
       : {}),
   };
+  const include = [...(options?.include ?? [])];
 
   if (options?.maxTokens) {
     params.max_output_tokens = options.maxTokens;
@@ -72,10 +73,14 @@ export function buildOpenAIResponsesParams(
         effort: options.reasoningEffort || "medium",
         summary: options.reasoningSummary || "auto",
       };
-      params.include = ["reasoning.encrypted_content"];
+      include.push("reasoning.encrypted_content");
     } else if (model.provider !== "github-copilot") {
       params.reasoning = { effort: "none" };
     }
+  }
+
+  if (include.length > 0) {
+    params.include = [...new Set(include)];
   }
 
   return params;

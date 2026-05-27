@@ -5,13 +5,13 @@ import { resolve } from "node:path";
 describe("provider core contract: Brewva-owned provider and asset branding", () => {
   test("removes Pi-branded provider identity markers from Brewva-owned providers", () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
-    const googleGeminiCliPath = resolve(
+    const googleGenAIPath = resolve(
       repoRoot,
       "packages",
       "brewva-provider-core",
       "src",
       "providers",
-      "google-gemini-cli",
+      "google-genai",
       "adapter.ts",
     );
     const openaiCodexResponsesPath = resolve(
@@ -33,11 +33,11 @@ describe("provider core contract: Brewva-owned provider and asset branding", () 
       "compat.ts",
     );
 
-    const googleGeminiCliSource = readFileSync(googleGeminiCliPath, "utf8");
+    const googleGenAISource = readFileSync(googleGenAIPath, "utf8");
     const openaiCodexResponsesSource = readFileSync(openaiCodexResponsesPath, "utf8");
     const openaiCompletionsSource = readFileSync(openaiCompletionsPath, "utf8");
 
-    expect(googleGeminiCliSource).not.toContain("pi-coding-agent");
+    expect(googleGenAISource).not.toContain("pi-coding-agent");
     expect(openaiCodexResponsesSource).not.toContain('originator", "pi"');
     expect(openaiCodexResponsesSource).not.toContain("pi (");
     expect(openaiCompletionsSource).not.toContain("pi-ai semantics");

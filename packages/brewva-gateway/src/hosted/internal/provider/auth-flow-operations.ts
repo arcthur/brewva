@@ -3,6 +3,8 @@ import type { HostedAuthCredential } from "../session/settings/hosted-auth-store
 import type { ProviderAuthFlowOperations } from "./auth-flow.js";
 import {
   API_KEY_UNSUPPORTED_PROVIDERS,
+  GOOGLE_GENAI_PROVIDER,
+  GOOGLE_PROVIDER,
   KIMI_CODE_PROVIDER,
   KIMI_PROVIDER,
   MOONSHOT_AI_PROVIDER,
@@ -87,6 +89,18 @@ export function createProviderAuthFlowOperations(input: {
     };
   };
 
+  const googleApiKeyMethods = (): ProviderApiKeyAuthMethod[] => [
+    {
+      id: "google_genai_api_key",
+      kind: "api_key",
+      type: "api",
+      label: "Gemini API key",
+      credentialRef: getProviderCredentialRef(GOOGLE_GENAI_PROVIDER),
+      credentialProvider: GOOGLE_GENAI_PROVIDER,
+      modelProviderFilter: GOOGLE_GENAI_PROVIDER,
+    },
+  ];
+
   const oauthMethodsForProvider = (provider: string): ProviderOAuthAuthMethod[] => {
     if (!input.authStore?.set) {
       return [];
@@ -132,6 +146,9 @@ export function createProviderAuthFlowOperations(input: {
     listAuthMethods(provider) {
       if (provider === KIMI_PROVIDER) {
         return kimiApiKeyMethods();
+      }
+      if (provider === GOOGLE_PROVIDER) {
+        return googleApiKeyMethods();
       }
       const apiKeyMethod = apiKeyMethodForProvider(provider);
       return [...oauthMethodsForProvider(provider), ...(apiKeyMethod ? [apiKeyMethod] : [])];

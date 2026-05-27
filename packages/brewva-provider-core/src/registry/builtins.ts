@@ -220,12 +220,12 @@ const STANDARD_BUILT_IN_PROVIDER_REGISTRATION_FACTORIES = [
     },
   }),
   createBuiltInProviderRegistrationFactory({
-    api: "google-gemini-cli",
+    api: "google-genai",
     loadModule: async () => {
-      const module = await import("../providers/google-gemini-cli/index.js");
+      const module = await import("../providers/google-genai/index.js");
       return {
-        stream: module.streamGoogleGeminiCli,
-        streamSimple: module.streamSimpleGoogleGeminiCli,
+        stream: module.streamGoogleGenAI,
+        streamSimple: module.streamSimpleGoogleGenAI,
       };
     },
   }),

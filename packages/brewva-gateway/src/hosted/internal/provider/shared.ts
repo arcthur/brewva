@@ -2,7 +2,6 @@ import type { CredentialVaultService } from "@brewva/brewva-runtime/security";
 import type { BrewvaModelCatalog, BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { BrewvaSessionModelCatalogView } from "@brewva/brewva-substrate/session";
 import type { HostedAuthCredential } from "../session/settings/hosted-auth-store.js";
-import { GOOGLE_OAUTH_PROVIDER } from "./google-oauth.js";
 import type { ProviderConnectionDescriptor, ProviderConnectionSource } from "./types.js";
 
 export type ProviderConnectionModelCatalog = Pick<BrewvaSessionModelCatalogView, "getAll"> &
@@ -24,6 +23,7 @@ const POPULAR_PROVIDER_ORDER = [
   "anthropic",
   "github-copilot",
   "google",
+  "google-genai",
   "deepseek",
   "kimi-coding",
   "openrouter",
@@ -33,7 +33,8 @@ export const TOKEN_PROVIDERS = new Set(["github-copilot"]);
 export const API_KEY_UNSUPPORTED_PROVIDERS = new Set<string>(["google"]);
 export const OPENAI_PROVIDER = "openai";
 export const OPENAI_CODEX_PROVIDER = "openai-codex";
-export const GOOGLE_PROVIDER = GOOGLE_OAUTH_PROVIDER;
+export const GOOGLE_PROVIDER = "google";
+export const GOOGLE_GENAI_PROVIDER = "google-genai";
 export const KIMI_PROVIDER = "kimi-coding";
 export const KIMI_CODE_PROVIDER = "kimi-coding";
 export const MOONSHOT_CN_PROVIDER = "moonshot-cn";
@@ -49,6 +50,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   deepseek: "DeepSeek",
   "github-copilot": "GitHub Copilot",
   google: "Google",
+  "google-genai": "Google GenAI",
   "kimi-coding": "Kimi",
   "moonshot-ai": "Moonshot AI Open Platform (moonshot.ai)",
   "moonshot-cn": "Moonshot AI Open Platform (moonshot.cn)",
@@ -61,7 +63,8 @@ export const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   anthropic: "API key",
   deepseek: "API key",
   "github-copilot": "GitHub OAuth or token",
-  google: "Google OAuth or Gemini CLI import",
+  google: "Gemini API key",
+  "google-genai": "Gemini API key",
   "kimi-coding": "Kimi Code or Moonshot API key",
   "moonshot-ai": "API key",
   "moonshot-cn": "API key",
@@ -171,6 +174,33 @@ function consolidateOpenAIConnectionProviders(
   ].toSorted(sortProviders);
 }
 
+function consolidateGoogleConnectionProviders(
+  providers: readonly ProviderConnectionDescriptor[],
+): ProviderConnectionDescriptor[] {
+  const googleGenAI = providers.find((provider) => provider.id === GOOGLE_GENAI_PROVIDER);
+  if (!googleGenAI) {
+    return [...providers];
+  }
+
+  const consolidated: ProviderConnectionDescriptor = {
+    id: GOOGLE_PROVIDER,
+    name: formatProviderName(GOOGLE_PROVIDER),
+    group: "popular",
+    connected: googleGenAI.connected,
+    connectionSource: googleGenAI.connectionSource,
+    description: PROVIDER_DESCRIPTIONS[GOOGLE_PROVIDER],
+    modelProviders: [googleGenAI.id],
+    modelCount: googleGenAI.modelCount,
+    availableModelCount: googleGenAI.availableModelCount,
+    credentialRef: getProviderCredentialRef(GOOGLE_GENAI_PROVIDER),
+  };
+
+  return [
+    consolidated,
+    ...providers.filter((provider) => provider.id !== GOOGLE_GENAI_PROVIDER),
+  ].toSorted(sortProviders);
+}
+
 function consolidateKimiConnectionProviders(
   providers: readonly ProviderConnectionDescriptor[],
 ): ProviderConnectionDescriptor[] {
@@ -207,7 +237,9 @@ function consolidateKimiConnectionProviders(
 export function consolidateConnectionProviders(
   providers: readonly ProviderConnectionDescriptor[],
 ): ProviderConnectionDescriptor[] {
-  return consolidateKimiConnectionProviders(consolidateOpenAIConnectionProviders(providers));
+  return consolidateKimiConnectionProviders(
+    consolidateGoogleConnectionProviders(consolidateOpenAIConnectionProviders(providers)),
+  );
 }
 
 export async function listAvailableModels(

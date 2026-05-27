@@ -3,13 +3,14 @@ export type KnownApi =
   | "openai-responses"
   | "openai-codex-responses"
   | "anthropic-messages"
-  | "google-gemini-cli";
+  | "google-genai";
 
 export type Api = KnownApi | (string & {});
 
 export type KnownProvider =
   | "anthropic"
   | "google"
+  | "google-genai"
   | "openai"
   | "openai-codex"
   | "github-copilot"

@@ -55,6 +55,16 @@ const DISCOVERY_MAPPINGS: Array<{
   { provider: "anthropic", envVar: "ANTHROPIC_API_KEY", credentialRef: "vault://anthropic/apiKey" },
   { provider: "github", envVar: "GITHUB_TOKEN", credentialRef: "vault://github/token" },
   { provider: "github", envVar: "GH_TOKEN", credentialRef: "vault://github/token" },
+  {
+    provider: "google-genai",
+    envVar: "GEMINI_API_KEY",
+    credentialRef: "vault://google-genai/apiKey",
+  },
+  {
+    provider: "google-genai",
+    envVar: "GOOGLE_API_KEY",
+    credentialRef: "vault://google-genai/apiKey",
+  },
   { provider: "kimi-coding", envVar: "KIMI_API_KEY", credentialRef: "vault://kimi-coding/apiKey" },
   {
     provider: "moonshot-cn",

@@ -2,7 +2,6 @@ export {
   ProviderCacheBreakDetector,
   DEFAULT_PROVIDER_CACHE_DETECTOR_THRESHOLDS,
 } from "./break-detector.js";
-export { GoogleCachedContentManager } from "./google-cached-content-manager.js";
 export { createProviderRequestFingerprint } from "./fingerprint.js";
 export { createReadUnchangedState } from "./read-state.js";
 export {
@@ -15,10 +14,6 @@ export type {
   ProviderCacheBreakDetectorOptions,
   ProviderCacheUsageInput,
 } from "./break-detector.js";
-export type {
-  GoogleCachedContentAdapter,
-  GoogleCachedContentApplyResult,
-} from "./google-cached-content-manager.js";
 export type { ProviderRequestFingerprintInput } from "./fingerprint.js";
 export type {
   ReadStateKey,

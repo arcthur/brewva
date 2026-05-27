@@ -35,23 +35,12 @@ export {
   DEFAULT_PROVIDER_CACHE_POLICY,
   buildProviderCacheBucketKey,
   buildRenderBucketKey,
-  createGoogleCachedContent,
-  deleteGoogleCachedContent,
-  GoogleCachedContentError,
   normalizeProviderCachePolicy,
-  parseGoogleGeminiCliCredential,
   resolveAnthropicCacheRender,
-  resolveGoogleCachedContentEndpoint,
-  resolveGoogleGeminiCliCacheRender,
+  resolveGoogleGenAICacheRender,
   resolveOpenAICompletionsCacheRender,
   resolveOpenAIResponsesCacheRender,
   resolveProviderCacheCapability,
-} from "./cache/index.js";
-
-export type {
-  GoogleCachedContentConfigInput,
-  GoogleCachedContentEndpointConfig,
-  GoogleCachedContentResource,
 } from "./cache/index.js";
 
 export type {

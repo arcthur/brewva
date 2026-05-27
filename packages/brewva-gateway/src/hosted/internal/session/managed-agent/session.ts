@@ -102,7 +102,6 @@ import {
 } from "../../compaction/summary-generator.js";
 import { supportsHostedExtendedThinkingModel as supportsHostedExtendedThinking } from "../../provider/built-in-catalog.js";
 import {
-  GoogleCachedContentManager,
   ProviderCacheBreakDetector,
   createProviderRequestFingerprint,
   createToolSchemaSnapshotStore,
@@ -166,7 +165,6 @@ import {
 import { ManagedSessionProviderAssistantObserver } from "./provider-assistant-observer.js";
 import {
   buildProviderCacheModelKey,
-  isCachedContentUnsupportedStreamError,
   ManagedSessionProviderCacheState,
   normalizeProviderCacheRender,
   resolveProviderCacheDiagnosticDumpDirectory,
@@ -260,11 +258,8 @@ function promptPartsFromCustomMessage(
   return [{ type: "text", text: message.content }];
 }
 
-const DEFAULT_GOOGLE_CACHED_CONTENT_MANAGER = new GoogleCachedContentManager();
-
 export const MANAGED_AGENT_SESSION_TEST_ONLY = {
   resolveWorkbenchContextFingerprint,
-  isCachedContentUnsupportedStreamError,
 } as const;
 
 export type {
@@ -551,15 +546,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       lastProviderFingerprint: undefined,
       lastCacheRender: undefined,
       lastCacheRenderModelKey: undefined,
-      lastGoogleCredential: undefined,
-      lastGoogleModelBaseUrl: undefined,
       lastExpectedProviderCacheBreak: undefined,
     };
     const cacheBreakDetector = new ProviderCacheBreakDetector({
       diagnosticDumpDirectory: resolveProviderCacheDiagnosticDumpDirectory(options.cwd),
     });
-    const googleCachedContentManager =
-      options.googleCachedContentManager ?? DEFAULT_GOOGLE_CACHED_CONTENT_MANAGER;
     const compactionSummaryGenerator =
       options.compactionSummaryGenerator ??
       createHostedLlmCompactionSummaryGenerator({
@@ -571,13 +562,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         resolveAuth: (model) => options.modelCatalog.getApiKeyAndHeaders(model),
       });
     const sessionId = options.sessionStore.getSessionId();
-    const releaseGoogleCachedContent = () => {
-      // Best-effort cleanup uses the latest Google credential. If the user rotates accounts mid-session,
-      // delete may fail and fall back to the manager's pending-delete retry policy.
-      void googleCachedContentManager
-        .releaseSession(options.cwd, sessionId, providerCacheRuntime.lastGoogleCredential)
-        .catch(() => undefined);
-    };
     const clearCacheState = options.runtime?.ops.session.state.onClear(
       (clearedSessionId: string) => {
         if (clearedSessionId === sessionId) {
@@ -585,12 +569,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           providerCacheRuntime.lastProviderFingerprint = undefined;
           providerCacheRuntime.lastCacheRender = undefined;
           providerCacheRuntime.lastCacheRenderModelKey = undefined;
-          googleCachedContentManager.resetCapability(
-            options.cwd,
-            providerCacheRuntime.lastGoogleModelBaseUrl,
-          );
-          providerCacheRuntime.lastGoogleModelBaseUrl = undefined;
-          releaseGoogleCachedContent();
           session?.clearProviderCacheSessionStateBestEffort();
         }
       },
@@ -603,9 +581,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
     const providerAssistantObserver = new ManagedSessionProviderAssistantObserver({
       runtime: options.runtime,
-      workspaceRoot: options.cwd,
       sessionId,
-      googleCachedContentManager,
       cacheBreakDetector,
       resolveExpectedBreak: () => {
         const hint = providerCacheRuntime.lastExpectedProviderCacheBreak;
@@ -615,7 +591,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       state: () => ({
         lastProviderFingerprint: providerCacheRuntime.lastProviderFingerprint,
         lastCacheRender: providerCacheRuntime.lastCacheRender,
-        lastGoogleModelBaseUrl: providerCacheRuntime.lastGoogleModelBaseUrl,
       }),
     });
 
@@ -663,34 +638,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           previousRender: providerCacheRuntime.lastCacheRender,
           previousRenderModelKey: providerCacheRuntime.lastCacheRenderModelKey,
         });
-        if (model.api === "google-gemini-cli") {
-          const authModel = options.initialModel;
-          const auth = authModel
-            ? await options.modelCatalog.getApiKeyAndHeaders(authModel)
-            : ({ ok: false, error: "missing_model" } as const);
-          providerCacheRuntime.lastGoogleCredential = auth.ok ? auth.apiKey : undefined;
-          providerCacheRuntime.lastGoogleModelBaseUrl = model.baseUrl;
-          const googleCache = await googleCachedContentManager.apply({
-            workspaceRoot: options.cwd,
-            sessionId,
-            cachePolicy,
-            credential: auth.ok ? auth.apiKey : undefined,
-            payload: nextPayload,
-            modelBaseUrl: model.baseUrl,
-          });
-          nextPayload = googleCache.payload;
-          if (googleCache.render) {
-            cacheRender = {
-              status: googleCache.render.status,
-              reason: googleCache.render.reason,
-              renderedRetention: googleCache.render.renderedRetention,
-              bucketKey: googleCache.render.bucketKey,
-              capability: googleCache.render.capability,
-              cachedContentName: googleCache.render.cachedContentName,
-              cachedContentTtlSeconds: googleCache.render.cachedContentTtlSeconds,
-            };
-          }
-        }
         providerCacheRuntime.lastCacheRender = cacheRender;
         providerCacheRuntime.lastCacheRenderModelKey = buildProviderCacheModelKey(model);
         const toolSchemaSnapshot = session.resolveProviderToolSchemaSnapshot("provider_payload");
@@ -770,7 +717,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         providerAssistantObserver.onCommittedAssistantMessage(message),
       onInitialPersistence: options.onInitialPersistence,
       onDispose: () => {
-        releaseGoogleCachedContent();
         clearCacheState?.();
       },
     });

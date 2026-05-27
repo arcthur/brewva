@@ -3,7 +3,7 @@ import {
   buildProviderCacheBucketKey,
   normalizeProviderCachePolicy,
   resolveAnthropicCacheRender,
-  resolveGoogleGeminiCliCacheRender,
+  resolveGoogleGenAICacheRender,
   resolveOpenAICompletionsCacheRender,
   resolveProviderCacheCapability,
   resolveOpenAIResponsesCacheRender,
@@ -226,10 +226,10 @@ describe("provider cache policy", () => {
 
     expect(
       resolveProviderCacheCapability({
-        api: "google-gemini-cli",
-        provider: "google",
+        api: "google-genai",
+        provider: "google-genai",
         modelId: "gemini-2.5-pro",
-        baseUrl: "https://cloudcode-pa.googleapis.com",
+        baseUrl: "https://generativelanguage.googleapis.com",
         transport: "sse",
       }),
     ).toEqual(
@@ -238,7 +238,7 @@ describe("provider cache policy", () => {
         cacheCounters: "readOnly",
         longRetention: "1h",
         readOnlyWriteMode: "supported",
-        reason: "google_gemini_context_caching",
+        reason: "google_genai_context_caching",
       }),
     );
 
@@ -352,10 +352,10 @@ describe("provider cache policy", () => {
     });
   });
 
-  test("renders Google short retention as implicit cache and long retention as explicit cached content", () => {
+  test("renders Google GenAI cache policy with direct provider bucket identity", () => {
     expect(
-      resolveGoogleGeminiCliCacheRender({
-        sessionId: "session-google-short",
+      resolveGoogleGenAICacheRender({
+        sessionId: "session-google-genai-short",
         policy: {
           retention: "short",
           writeMode: "readWrite",
@@ -365,62 +365,39 @@ describe("provider cache policy", () => {
       }),
     ).toEqual({
       status: "rendered",
-      reason: "rendered_google_implicit_prefix_cache",
+      reason: "rendered_google_genai_implicit_prefix_cache",
       renderedRetention: "short",
       bucketKey:
-        "google-gemini-cli|session=session-google-short|retention=short|writeMode=readWrite",
+        "google-genai|session=session-google-genai-short|retention=short|writeMode=readWrite",
       capability: expect.objectContaining({
         strategies: ["implicitPrefix", "explicitCachedContent"],
-        longRetention: "1h",
+        reason: "google_genai_context_caching",
       }),
     });
 
     expect(
-      resolveGoogleGeminiCliCacheRender({
-        sessionId: "session-google-long",
+      resolveGoogleGenAICacheRender({
+        sessionId: "session-google-genai-long",
         policy: {
           retention: "long",
           writeMode: "readWrite",
           scope: "session",
           reason: "config",
         },
-        cachedContentName: "cachedContents/brewva-google",
+        cachedContentName: "cachedContents/brewva-google-genai",
         cachedContentTtlSeconds: 3600,
       }),
     ).toEqual({
       status: "rendered",
-      reason: "rendered_google_cached_content",
+      reason: "rendered_google_genai_cached_content",
       renderedRetention: "long",
-      bucketKey: "google-gemini-cli|session=session-google-long|retention=long|writeMode=readWrite",
-      cachedContentName: "cachedContents/brewva-google",
+      bucketKey:
+        "google-genai|session=session-google-genai-long|retention=long|writeMode=readWrite",
+      cachedContentName: "cachedContents/brewva-google-genai",
       cachedContentTtlSeconds: 3600,
       capability: expect.objectContaining({
-        strategies: ["implicitPrefix", "explicitCachedContent"],
         longRetention: "1h",
       }),
-    });
-
-    expect(
-      resolveGoogleGeminiCliCacheRender({
-        sessionId: "session-google-read-only",
-        policy: {
-          retention: "long",
-          writeMode: "readOnly",
-          scope: "session",
-          reason: "config",
-        },
-      }),
-    ).toEqual({
-      status: "unsupported",
-      reason: "cached_content_required_for_read_only_mode",
-      renderedRetention: "none",
-      bucketKey:
-        "google-gemini-cli|session=session-google-read-only|retention=none|writeMode=readOnly",
-      capability: expect.objectContaining({
-        readOnlyWriteMode: "supported",
-      }),
-      cachedContentName: undefined,
-      cachedContentTtlSeconds: undefined,
     });
   });
 

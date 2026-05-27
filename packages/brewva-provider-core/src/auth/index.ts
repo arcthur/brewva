@@ -28,6 +28,10 @@ export function getEnvApiKey(
     return env.MOONSHOT_AI_API_KEY;
   }
 
+  if (provider === "google-genai") {
+    return env.GEMINI_API_KEY || env.GOOGLE_API_KEY;
+  }
+
   const envMap: Record<string, string> = {
     openai: "OPENAI_API_KEY",
     deepseek: "DEEPSEEK_API_KEY",

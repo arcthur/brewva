@@ -1,23 +1,23 @@
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import type { GenerateContentResponse } from "@google/genai";
 import type {
   AssistantMessage,
-  ProviderEventSink,
   Model,
+  ProviderEventSink,
   ProviderStreamError,
   TextContent,
   ThinkingContent,
 } from "../../contracts/index.js";
 import { failProviderStream, runAsyncIterableEffect } from "../../stream/effect-interop.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
-import type { CloudCodeAssistResponseChunk } from "./contract.js";
-import { mapStopReasonString, retainThoughtSignature } from "./shared.js";
-import { applyGoogleGeminiCliUsage } from "./usage.js";
+import { mapStopReason, retainThoughtSignature } from "../_shared/google/messages.js";
+import { applyGoogleUsage } from "../_shared/google/usage.js";
 
-export function processGoogleGeminiCliSseStream(
-  chunks: AsyncIterable<CloudCodeAssistResponseChunk>,
+export function processGoogleGenAIStream(
+  chunks: AsyncIterable<GenerateContentResponse>,
   output: AssistantMessage,
   stream: ProviderEventSink,
-  model: Model<"google-gemini-cli">,
+  model: Model<"google-genai">,
   toolCalls: IncrementalToolCallFolder,
 ): BrewvaEffect.Effect<void, ProviderStreamError> {
   return BrewvaEffect.gen(function* () {
@@ -55,15 +55,14 @@ export function processGoogleGeminiCliSseStream(
 
     yield* runAsyncIterableEffect(chunks, (chunk) =>
       BrewvaEffect.gen(function* () {
-        const candidate = chunk.response?.candidates?.[0];
+        const candidate = chunk.candidates?.[0];
         const parts = candidate?.content?.parts ?? [];
-        const usageMetadata = chunk.response?.usageMetadata;
 
-        if (usageMetadata) {
-          applyGoogleGeminiCliUsage(output, model, usageMetadata);
+        if (chunk.usageMetadata) {
+          applyGoogleUsage(output, model, chunk.usageMetadata);
         }
-        if (chunk.response?.responseId) {
-          output.responseId = chunk.response.responseId;
+        if (chunk.responseId) {
+          output.responseId = chunk.responseId;
         }
 
         for (const part of parts) {
@@ -121,24 +120,27 @@ export function processGoogleGeminiCliSseStream(
 
           if (part.functionCall) {
             hadContent = true;
+            output.stopReason = "toolUse";
             yield* endCurrentTextBlock();
             yield* endCurrentThinkingBlock();
-            const key = part.functionCall.id || part.functionCall.name;
+            const name = part.functionCall.name ?? part.functionCall.id ?? "function_call";
+            const id = part.functionCall.id ?? name;
             yield* toolCalls.pushAtomic(
               {
                 type: "toolCall",
-                id: part.functionCall.id || part.functionCall.name,
-                name: part.functionCall.name,
+                id,
+                name,
                 arguments: part.functionCall.args || {},
                 ...(part.thoughtSignature ? { thoughtSignature: part.thoughtSignature } : {}),
               },
-              key,
+              id,
             );
           }
         }
 
         if (candidate?.finishReason) {
-          output.stopReason = mapStopReasonString(candidate.finishReason);
+          const stopReason = mapStopReason(candidate.finishReason);
+          output.stopReason = output.stopReason === "toolUse" ? "toolUse" : stopReason;
         }
       }),
     );
@@ -147,7 +149,7 @@ export function processGoogleGeminiCliSseStream(
     yield* endCurrentThinkingBlock();
 
     if (!hadContent) {
-      return yield* failProviderStream("Empty SSE response");
+      return yield* failProviderStream("Empty Google GenAI response");
     }
   });
 }

@@ -56,10 +56,8 @@ closing queues.
 Provider retries use the shared Effect retry policy where a provider owns a
 retryable request loop. Drivers still classify protocol-specific failures
 locally. For example, OpenAI Codex SSE distinguishes usage-limit failures from
-transient HTTP/fetch failures, while Google Gemini CLI preserves
-service-directed retry delays from response headers and error text. The shared
-policy owns the schedule and retry budget; provider adapters own
-retryability classification.
+transient HTTP/fetch failures. The shared policy owns the schedule and retry
+budget; provider adapters own retryability classification.
 
 Gateway-hosted model fallback wraps provider stream attempts above
 provider-core. Fallback is allowed only before any provider frame has been
@@ -122,7 +120,7 @@ validation of the TypeBox schema.
 | OpenAI Responses / Codex Responses | `item_id` / `call_id`                    | provider-specific item parsing | `IncrementalToolCallFolder`                                 |
 | OpenAI Completions                 | `tool_calls[*].index` with `id` fallback | provider-local chunk parsing   | `IncrementalToolCallFolder`                                 |
 | Anthropic Messages                 | `content_block.index`                    | provider-local block lifecycle | `IncrementalToolCallFolder`                                 |
-| Google Gemini CLI                  | ordered `parts[]`                        | `AssistantBlockAccumulator`    | `IncrementalToolCallFolder` via atomic tool-call completion |
+| Google GenAI                       | ordered `parts[]`                        | provider-local part lifecycle  | `IncrementalToolCallFolder` via atomic tool-call completion |
 
 The wire protocols are intentionally not unified. Provider adapters keep their
 own parsing logic and only converge at the normalized event seam.

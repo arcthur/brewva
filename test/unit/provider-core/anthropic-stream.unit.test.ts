@@ -243,4 +243,67 @@ describe("anthropic stream processor", () => {
       redacted: true,
     });
   });
+
+  test("captures thinking token-count beta deltas as non-billable details", async () => {
+    const output = createOutput();
+    const stream = createRecordingProviderEventStream();
+
+    await runProviderCoreEffect(
+      processAnthropicStream(
+        (async function* () {
+          yield {
+            type: "content_block_start",
+            index: 0,
+            content_block: {
+              type: "thinking",
+            },
+          };
+          yield {
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "thinking_delta",
+              thinking: "",
+              estimated_tokens: 64,
+            },
+          };
+          yield {
+            type: "content_block_delta",
+            index: 0,
+            delta: {
+              type: "thinking_delta",
+              thinking: "",
+              estimated_tokens: 32,
+            },
+          };
+          yield {
+            type: "content_block_stop",
+            index: 0,
+          };
+        })(),
+        output,
+        stream,
+        {
+          api: "anthropic-messages",
+          id: "claude-sonnet-4-5",
+          name: "Claude Sonnet 4.5",
+          provider: "anthropic",
+          baseUrl: "https://api.anthropic.com",
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 200_000,
+          maxTokens: 8_192,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+        createTestToolCalls(output, stream),
+        {
+          isOAuth: false,
+        },
+      ),
+    );
+
+    await collectQueuedEvents(stream);
+    expect(output.usage.output).toBe(0);
+    expect(output.usage.details?.thoughtsTokens).toBe(96);
+  });
 });

@@ -66,7 +66,7 @@ describe("token estimation", () => {
   test("marks non-OpenAI models as BPE approximation instead of heuristic fallback", () => {
     const text = "abcdefghij";
     const estimate = estimateModelTokens(text, {
-      api: "google-gemini-cli",
+      api: "google-genai",
       modelId: "gemini-2.5-pro",
     });
 

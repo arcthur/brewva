@@ -3,6 +3,7 @@ import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { AssistantMessage } from "@brewva/brewva-provider-core/contracts";
 import { buildOpenAIResponsesDefaultHeaders } from "../../../packages/brewva-provider-core/src/providers/openai-responses/adapter.js";
 import { convertResponsesMessages } from "../../../packages/brewva-provider-core/src/providers/openai-responses/messages.js";
+import { buildOpenAIResponsesParams } from "../../../packages/brewva-provider-core/src/providers/openai-responses/request.js";
 import { processResponsesStream } from "../../../packages/brewva-provider-core/src/providers/openai-responses/stream-events.js";
 import { IncrementalToolCallFolder } from "../../../packages/brewva-provider-core/src/stream/tool-call-folder.js";
 import {
@@ -125,6 +126,29 @@ describe("openai responses cache affinity headers", () => {
 
     expect(headers.session_id).toBe("explicit-session");
     expect(headers["x-client-request-id"]).toBe("explicit-request");
+  });
+});
+
+describe("openai responses request params", () => {
+  test("merges explicit response includes with reasoning encrypted content", () => {
+    const params = buildOpenAIResponsesParams(
+      TEST_MODEL as never,
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Search then reason." }],
+            timestamp: 1,
+          },
+        ],
+      } as never,
+      {
+        reasoningEffort: "medium",
+        include: ["web_search_call.results"],
+      } as never,
+    );
+
+    expect(params.include).toEqual(["web_search_call.results", "reasoning.encrypted_content"]);
   });
 });
 

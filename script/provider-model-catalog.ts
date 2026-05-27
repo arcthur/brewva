@@ -51,6 +51,7 @@ const PROVIDER_ORDER = [
   "anthropic",
   "github-copilot",
   "google",
+  "google-genai",
   "deepseek",
   "openai",
   "openai-codex",
@@ -91,6 +92,12 @@ const DYNAMIC_PROVIDER_CONFIGS: Partial<Record<KnownProvider, DynamicProviderCon
     api: "openai-completions",
     baseUrl: "https://openrouter.ai/api/v1",
     includeModel: isSupportedTextModel,
+  },
+  "google-genai": {
+    modelsDevProvider: "google",
+    api: "google-genai",
+    baseUrl: "https://generativelanguage.googleapis.com",
+    includeModel: isSupportedGoogleGenAIModel,
   },
   "moonshot-cn": {
     modelsDevProvider: "moonshotai-cn",
@@ -186,6 +193,15 @@ function isSupportedOpenAIModel(model: ModelsDevModel): boolean {
   return modelId !== "gpt-3.5-turbo" && modelId !== "o1-mini" && modelId !== "o1-preview";
 }
 
+function isSupportedGoogleGenAIModel(model: ModelsDevModel): boolean {
+  if (!isSupportedTextModel(model)) {
+    return false;
+  }
+
+  const modelId = (model.id ?? "").toLowerCase();
+  return !modelId.includes("embedding");
+}
+
 function toBrewvaInput(model: ModelsDevModel): Model<Api>["input"] {
   return model.modalities?.input?.includes("image") === true ? ["text", "image"] : ["text"];
 }
@@ -257,6 +273,11 @@ export function buildModelsDevCatalog(
 
   for (const provider of PROVIDER_ORDER) {
     if (provider === "openai-codex") {
+      catalog[provider] = {};
+      continue;
+    }
+
+    if (provider === "google") {
       catalog[provider] = {};
       continue;
     }

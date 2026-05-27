@@ -7,21 +7,7 @@ export {
 export { resolveProviderCacheCapability } from "./capability.js";
 export {
   resolveAnthropicCacheRender,
-  resolveGoogleGeminiCliCacheRender,
+  resolveGoogleGenAICacheRender,
   resolveOpenAICompletionsCacheRender,
   resolveOpenAIResponsesCacheRender,
 } from "./render/index.js";
-
-export {
-  GoogleCachedContentError,
-  createGoogleCachedContent,
-  deleteGoogleCachedContent,
-  parseGoogleGeminiCliCredential,
-  resolveGoogleCachedContentEndpoint,
-} from "../providers/google-gemini-cli/cached-content.js";
-
-export type {
-  GoogleCachedContentConfigInput,
-  GoogleCachedContentEndpointConfig,
-  GoogleCachedContentResource,
-} from "../providers/google-gemini-cli/cached-content.js";

@@ -6,12 +6,7 @@ describe("managed-agent-session provider assistant observer", () => {
     let observed = 0;
     const observer = new ManagedSessionProviderAssistantObserver({
       runtime: undefined,
-      workspaceRoot: "/tmp/demo",
       sessionId: "sess-1",
-      googleCachedContentManager: {
-        markUnsupportedFromStreamError: () => undefined,
-        observeUsage: () => undefined,
-      },
       cacheBreakDetector: {
         observe: () => {
           observed += 1;
@@ -34,7 +29,6 @@ describe("managed-agent-session provider assistant observer", () => {
       state: () => ({
         lastProviderFingerprint: undefined,
         lastCacheRender: undefined,
-        lastGoogleModelBaseUrl: undefined,
       }),
     });
 

@@ -7,16 +7,16 @@ import type {
   StreamOptions,
   TextContent,
   Tool,
-} from "../../contracts/index.js";
-import { sanitizeSurrogates } from "../../utils/sanitize-unicode.js";
+} from "../../../contracts/index.js";
+import { sanitizeSurrogates } from "../../../utils/sanitize-unicode.js";
 import {
   buildGoogleFileDataPart,
   materializeResolvedUserMessageContentPart,
   resolveUserMessageContent,
-} from "../_shared/prompt-content.js";
-import { transformMessages } from "../_shared/transform-messages.js";
+} from "../prompt-content.js";
+import { transformMessages } from "../transform-messages.js";
 
-export type GoogleApiType = "google-gemini-cli";
+export type GoogleApiType = "google-genai";
 
 export function isThinkingPart(part: Pick<Part, "thought" | "thoughtSignature">): boolean {
   return part.thought === true;

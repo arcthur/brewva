@@ -9,13 +9,14 @@ type Catalog = Record<KnownProvider, Record<string, Model<Api>>>;
 
 const baseCatalog = {
   anthropic: {},
-  google: {
+  google: {},
+  "google-genai": {
     "gemini-2.5-pro": {
       id: "gemini-2.5-pro",
       name: "Gemini 2.5 Pro",
-      api: "google-gemini-cli",
-      provider: "google",
-      baseUrl: "https://cloudcode-pa.googleapis.com",
+      api: "google-genai",
+      provider: "google-genai",
+      baseUrl: "https://generativelanguage.googleapis.com",
       reasoning: true,
       input: ["text", "image"],
       cost: {
@@ -255,6 +256,17 @@ const modelsDevFixture = {
         inputCost: 0,
         outputCost: 0,
       }),
+      "gemini-embedding-001": modelFixture({
+        id: "gemini-embedding-001",
+        name: "Gemini Embedding 001",
+        reasoning: false,
+        input: ["text"],
+        output: ["text"],
+        context: 2_048,
+        maxTokens: 1,
+        inputCost: 0.15,
+        outputCost: 0,
+      }),
     },
   },
   deepseek: {
@@ -375,7 +387,15 @@ describe("models.dev catalog generation", () => {
     });
     expect(catalog["moonshot-ai"]["kimi-k2-thinking"]?.baseUrl).toBe("https://api.moonshot.ai/v1");
 
-    expect(catalog.google).toEqual(baseCatalog.google);
+    expect(catalog.google).toEqual({});
+    expect(catalog["google-genai"]["gemini-1.5-pro"]).toMatchObject({
+      api: "google-genai",
+      provider: "google-genai",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      input: ["text"],
+      reasoning: false,
+    });
+    expect(Object.keys(catalog["google-genai"])).not.toContain("gemini-embedding-001");
     expect(catalog.deepseek).toEqual(baseCatalog.deepseek);
     expect(catalog["kimi-coding"]).toEqual(baseCatalog["kimi-coding"]);
     expect(catalog["github-copilot"]).toEqual(baseCatalog["github-copilot"]);

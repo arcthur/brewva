@@ -5,7 +5,7 @@ export type BrewvaKnownApi =
   | "openai-responses"
   | "openai-codex-responses"
   | "anthropic-messages"
-  | "google-gemini-cli";
+  | "google-genai";
 
 export type BrewvaApi = BrewvaKnownApi | (string & {});
 

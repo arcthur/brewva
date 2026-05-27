@@ -2,12 +2,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { readFiniteNumberValue } from "@brewva/brewva-std/unknown";
-import {
-  GOOGLE_OAUTH_PROVIDER,
-  refreshGoogleOAuthAccessToken,
-  renderGoogleCloudCodeAssistCredential,
-  type GoogleHostedOAuthCredential,
-} from "../../provider/google-oauth.js";
 import { resolveHostedConfigValue } from "./hosted-config-value.js";
 
 const OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -56,15 +50,6 @@ function readString(value: unknown): string | undefined {
 
 function readFiniteNumber(value: unknown): number | undefined {
   return readFiniteNumberValue(value);
-}
-
-function hasUsableGoogleOAuthCredential(credential: HostedAuthCredential | undefined): boolean {
-  if (credential?.type !== "oauth") {
-    return false;
-  }
-  return (
-    renderGoogleCloudCodeAssistCredential(credential as GoogleHostedOAuthCredential) !== undefined
-  );
 }
 
 async function refreshOpenAIChatGPTAccessToken(
@@ -143,9 +128,7 @@ export class HostedAuthStore {
     const storedCredential = this.get(provider);
     return (
       this.#runtimeOverrides.has(provider) ||
-      (provider === GOOGLE_OAUTH_PROVIDER
-        ? hasUsableGoogleOAuthCredential(storedCredential)
-        : storedCredential !== undefined) ||
+      storedCredential !== undefined ||
       this.#fallbackResolver?.(provider) !== undefined
     );
   }
@@ -172,9 +155,6 @@ export class HostedAuthStore {
       return resolveHostedConfigValue(credential.key);
     }
     if (credential?.type === "oauth") {
-      if (provider === GOOGLE_OAUTH_PROVIDER) {
-        return this.resolveGoogleOAuthApiKey(provider, credential);
-      }
       return this.resolveOAuthAccessToken(provider, credential);
     }
 
@@ -216,49 +196,6 @@ export class HostedAuthStore {
     this.replaceActiveCredential(provider, nextCredential);
     this.persist();
     return refreshed.accessToken;
-  }
-
-  private async resolveGoogleOAuthApiKey(
-    provider: string,
-    credential: Extract<HostedAuthCredential, { type: "oauth" }>,
-  ): Promise<string | undefined> {
-    const googleCredential = credential as GoogleHostedOAuthCredential;
-    const accessToken =
-      readString(googleCredential.accessToken) ?? readString(googleCredential.access);
-    const refreshToken =
-      readString(googleCredential.refreshToken) ?? readString(googleCredential.refresh);
-    const expiresAt =
-      readFiniteNumber(googleCredential.expiresAt) ?? readFiniteNumber(googleCredential.expires);
-
-    if (accessToken && (!expiresAt || expiresAt > Date.now())) {
-      return renderGoogleCloudCodeAssistCredential(googleCredential);
-    }
-
-    if (!refreshToken) {
-      return renderGoogleCloudCodeAssistCredential(googleCredential);
-    }
-
-    const refreshed = await refreshGoogleOAuthAccessToken(refreshToken);
-    const nextRefreshToken = refreshed.refreshToken ?? refreshToken;
-    const nextExpiresAt =
-      typeof refreshed.expiresIn === "number"
-        ? Date.now() + Math.max(0, refreshed.expiresIn) * 1000
-        : undefined;
-    const nextCredential: Extract<HostedAuthCredential, { type: "oauth" }> = {
-      ...credential,
-      type: "oauth",
-      accessToken: refreshed.accessToken,
-      refreshToken: nextRefreshToken,
-      expiresAt: nextExpiresAt,
-      access: refreshed.accessToken,
-      refresh: nextRefreshToken,
-      expires: nextExpiresAt,
-      tokenType: refreshed.tokenType ?? googleCredential.tokenType,
-      scope: refreshed.scope ?? googleCredential.scope,
-    };
-    this.replaceActiveCredential(provider, nextCredential);
-    this.persist();
-    return renderGoogleCloudCodeAssistCredential(nextCredential as GoogleHostedOAuthCredential);
   }
 
   set(provider: string, credential: HostedAuthCredential): void {

@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createCipheriv, randomBytes, scryptSync } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { hostname, tmpdir, userInfo } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   configureCredentialVaultModelAuth,
@@ -11,7 +10,7 @@ import {
 import type { ProviderAuthHandler } from "../../../packages/brewva-gateway/src/hosted/internal/provider/types.js";
 import { HostedAuthStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-auth-store.js";
 import { HostedModelRegistry } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-model-registry.js";
-import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
+import { requireDefined } from "../../helpers/assertions.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
@@ -39,26 +38,6 @@ function readJsonRequestBody(init: RequestInit | undefined): Record<string, unkn
     return {};
   }
   return JSON.parse(init.body) as Record<string, unknown>;
-}
-
-function toRequestBodyText(body: BodyInit | null | undefined): string {
-  if (typeof body === "string") {
-    return body;
-  }
-  if (body instanceof URLSearchParams) {
-    return body.toString();
-  }
-  return "";
-}
-
-function encryptGeminiCliFileKeychain(data: Record<string, Record<string, string>>): string {
-  const key = scryptSync("gemini-cli-oauth", `${hostname()}-${userInfo().username}-gemini-cli`, 32);
-  const iv = randomBytes(16);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = `${cipher.update(JSON.stringify(data, null, 2), "utf8", "hex")}${cipher.final(
-    "hex",
-  )}`;
-  return `${iv.toString("hex")}:${cipher.getAuthTag().toString("hex")}:${encrypted}`;
 }
 
 async function blockTcpPortUntilCancel(port: number): Promise<Server | undefined> {
@@ -156,6 +135,24 @@ function registerSingleModelProvider(
   });
 }
 
+function registerGoogleGenAIProvider(registry: HostedModelRegistry): void {
+  registry.registerProvider("google-genai", {
+    baseUrl: "https://generativelanguage.googleapis.com",
+    api: "google-genai",
+    models: [
+      {
+        id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 1_000_000,
+        maxTokens: 8_192,
+      },
+    ],
+  });
+}
+
 describe("provider connection port", () => {
   test("stores API-key provider credentials in the runtime vault and makes models available", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
@@ -224,6 +221,64 @@ describe("provider connection port", () => {
         modelProviders: ["openai", "openai-codex"],
         modelCount: 2,
         credentialRef: "vault://openai/apiKey",
+      });
+    } finally {
+      restoreEnv();
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  test("exposes direct Google GenAI through the Google connect provider", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
+    const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
+    try {
+      const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+      const authStore = HostedAuthStore.inMemory();
+      configureCredentialVaultModelAuth({ runtime, authStore });
+      const registry = HostedModelRegistry.inMemory(authStore);
+      registerGoogleGenAIProvider(registry);
+      const port = createProviderConnectionPort({ runtime, modelRegistry: registry, authStore });
+
+      const providers = await port.listProviders();
+
+      expect(providers.map((provider) => provider.id)).toContain("google");
+      expect(providers.map((provider) => provider.id)).not.toContain("google-genai");
+      expect(providers.find((provider) => provider.id === "google")).toMatchObject({
+        name: "Google",
+        group: "popular",
+        description: "Gemini API key",
+        modelProviders: ["google-genai"],
+        modelCount: 1,
+        credentialRef: "vault://google-genai/apiKey",
+      });
+
+      expect(port.listAuthMethods("google")).toEqual([
+        expect.objectContaining({
+          id: "google_genai_api_key",
+          kind: "api_key",
+          credentialProvider: "google-genai",
+          modelProviderFilter: "google-genai",
+          credentialRef: "vault://google-genai/apiKey",
+        }),
+      ]);
+
+      await port.connectApiKey("google-genai", "google-genai-secret");
+      expect(registry.getAvailable().some((model) => model.provider === "google-genai")).toBe(true);
+
+      await port.disconnect("google");
+      expect(registry.getAvailable().some((model) => model.provider === "google-genai")).toBe(
+        false,
+      );
+
+      await port.connectApiKey("google", "google-public-secret");
+      const model = requireDefined(
+        registry.find("google-genai", "gemini-2.5-pro"),
+        "Expected connected Google GenAI model.",
+      );
+      expect(await registry.getApiKeyAndHeaders(model)).toEqual({
+        ok: true,
+        apiKey: "google-public-secret",
+        headers: undefined,
       });
     } finally {
       restoreEnv();
@@ -372,257 +427,6 @@ describe("provider connection port", () => {
         connectionSource: "none",
         availableModelCount: 0,
       });
-    } finally {
-      restoreEnv();
-      rmSync(workspace, { recursive: true, force: true });
-    }
-  });
-
-  test("exposes a usable Gemini CLI credential path for the Google provider", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
-    const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
-    try {
-      const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-      const authStore = HostedAuthStore.inMemory();
-      configureCredentialVaultModelAuth({ runtime, authStore });
-      const registry = HostedModelRegistry.inMemory(authStore);
-      registerSingleModelProvider(registry, "google", "gemini-2.5-pro");
-      const port = createProviderConnectionPort({ runtime, modelRegistry: registry, authStore });
-
-      const providers = await port.listProviders();
-
-      expect(providers.map((provider) => provider.id)).toContain("google");
-      expect(providers.find((provider) => provider.id === "google")).toMatchObject({
-        name: "Google",
-        description: "Google OAuth or Gemini CLI import",
-        group: "popular",
-      });
-      expect(port.listAuthMethods("google")).toMatchObject([
-        {
-          id: "gemini_cli_import",
-          kind: "oauth",
-          type: "oauth",
-          label: "Import existing Gemini CLI login",
-          detail: "Local import",
-          credentialProvider: "google",
-          modelProviderFilter: "google",
-        },
-      ]);
-    } finally {
-      restoreEnv();
-      rmSync(workspace, { recursive: true, force: true });
-    }
-  });
-
-  test("exposes Google browser OAuth only when client credentials are configured", () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
-    try {
-      const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-      const authStore = HostedAuthStore.inMemory();
-      const registry = HostedModelRegistry.inMemory(authStore);
-      registerSingleModelProvider(registry, "google", "gemini-2.5-pro");
-      const port = createProviderConnectionPort({ runtime, modelRegistry: registry, authStore });
-
-      expect(port.listAuthMethods("google").map((method) => method.id)).toEqual([
-        "gemini_cli_import",
-      ]);
-
-      const restoreEnv = patchProcessEnv({
-        BREWVA_GOOGLE_OAUTH_CLIENT_ID: "brewva-google-oauth-client-id-for-tests",
-        BREWVA_GOOGLE_OAUTH_CLIENT_SECRET: "brewva-google-oauth-client-secret-for-tests",
-      });
-      try {
-        expect(port.listAuthMethods("google").map((method) => method.id)).toEqual([
-          "gemini_oauth_browser",
-          "gemini_cli_import",
-        ]);
-      } finally {
-        restoreEnv();
-      }
-    } finally {
-      rmSync(workspace, { recursive: true, force: true });
-    }
-  });
-
-  test("imports official Gemini CLI OAuth credentials into Google hosted auth", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
-    const restoreEnv = patchProcessEnv({ BREWVA_VAULT_KEY: "provider-connection-test-key" });
-    try {
-      const credentialDir = join(workspace, ".gemini");
-      const credentialPath = join(credentialDir, "oauth_creds.json");
-      mkdirSync(credentialDir, { recursive: true });
-      writeFileSync(
-        credentialPath,
-        JSON.stringify({
-          access_token: "imported-access-token",
-          refresh_token: "imported-refresh-token",
-          expiry_date: 4_102_444_800_000,
-          token_type: "Bearer",
-          scope: "https://www.googleapis.com/auth/cloud-platform",
-        }),
-        "utf8",
-      );
-
-      const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-      const authStore = HostedAuthStore.inMemory();
-      configureCredentialVaultModelAuth({ runtime, authStore });
-      const registry = HostedModelRegistry.inMemory(authStore);
-      registerSingleModelProvider(registry, "google", "gemini-2.5-pro");
-      const port = createProviderConnectionPort({ runtime, modelRegistry: registry, authStore });
-
-      const authorization = await port.authorizeOAuth("google", "gemini_cli_import", {
-        credentialPath,
-        projectId: "project-1",
-      });
-
-      expect(authorization).toMatchObject({
-        method: "auto",
-        openBrowser: false,
-      });
-      await port.completeOAuth("google", "gemini_cli_import");
-
-      expect(authStore.get("google")).toMatchObject({
-        type: "oauth",
-        accessToken: "imported-access-token",
-        refreshToken: "imported-refresh-token",
-        expiresAt: 4_102_444_800_000,
-        projectId: "project-1",
-      });
-      const resolved = await registry.getApiKeyAndHeaders(
-        registry.find("google", "gemini-2.5-pro")!,
-      );
-      expect(resolved.ok).toBe(true);
-      expect(JSON.parse(resolved.ok ? (resolved.apiKey ?? "{}") : "{}")).toEqual({
-        token: "imported-access-token",
-        projectId: "project-1",
-      });
-    } finally {
-      restoreEnv();
-      rmSync(workspace, { recursive: true, force: true });
-    }
-  });
-
-  test("imports official Gemini CLI encrypted file fallback credentials", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
-    const restoreEnv = patchProcessEnv({
-      BREWVA_VAULT_KEY: "provider-connection-test-key",
-      GEMINI_CLI_HOME: workspace,
-      GOOGLE_CLOUD_PROJECT: "project-from-env",
-    });
-    try {
-      const credentialDir = join(workspace, ".gemini");
-      mkdirSync(credentialDir, { recursive: true });
-      writeFileSync(
-        join(credentialDir, "gemini-credentials.json"),
-        encryptGeminiCliFileKeychain({
-          "gemini-cli-oauth": {
-            "main-account": JSON.stringify({
-              serverName: "main-account",
-              token: {
-                accessToken: "encrypted-access-token",
-                refreshToken: "encrypted-refresh-token",
-                expiresAt: 4_102_444_800_000,
-                tokenType: "Bearer",
-                scope: "https://www.googleapis.com/auth/cloud-platform",
-              },
-              updatedAt: 1_700_000_000_000,
-            }),
-          },
-        }),
-        "utf8",
-      );
-
-      const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-      const authStore = HostedAuthStore.inMemory();
-      configureCredentialVaultModelAuth({ runtime, authStore });
-      const registry = HostedModelRegistry.inMemory(authStore);
-      registerSingleModelProvider(registry, "google", "gemini-2.5-pro");
-      const port = createProviderConnectionPort({ runtime, modelRegistry: registry, authStore });
-
-      await port.authorizeOAuth("google", "gemini_cli_import", {});
-      await port.completeOAuth("google", "gemini_cli_import");
-
-      expect(authStore.get("google")).toMatchObject({
-        type: "oauth",
-        accessToken: "encrypted-access-token",
-        refreshToken: "encrypted-refresh-token",
-        expiresAt: 4_102_444_800_000,
-        projectId: "project-from-env",
-      });
-    } finally {
-      restoreEnv();
-      rmSync(workspace, { recursive: true, force: true });
-    }
-  });
-
-  test("Google browser OAuth stores a refreshable project-scoped credential", async () => {
-    const workspace = mkdtempSync(join(tmpdir(), "brewva-provider-connection-"));
-    const restoreEnv = patchProcessEnv({
-      BREWVA_VAULT_KEY: "provider-connection-test-key",
-      BREWVA_GOOGLE_OAUTH_CLIENT_ID: "brewva-google-oauth-client-id-for-tests",
-      BREWVA_GOOGLE_OAUTH_CLIENT_SECRET: "brewva-google-oauth-client-secret-for-tests",
-    });
-    const tokenRequests: Array<{ url: string; body: string }> = [];
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = toRequestUrl(input);
-      tokenRequests.push({ url, body: toRequestBodyText(init?.body) });
-      if (url === "https://oauth2.googleapis.com/token") {
-        return jsonResponse({
-          access_token: "browser-access-token",
-          refresh_token: "browser-refresh-token",
-          expires_in: 3600,
-          token_type: "Bearer",
-          scope: "https://www.googleapis.com/auth/cloud-platform",
-        });
-      }
-      return jsonResponse({}, 404);
-    }) as typeof fetch;
-    try {
-      const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-      const authStore = HostedAuthStore.inMemory();
-      configureCredentialVaultModelAuth({ runtime, authStore });
-      const registry = HostedModelRegistry.inMemory(authStore);
-      registerSingleModelProvider(registry, "google", "gemini-2.5-pro");
-      const port = createProviderConnectionPort({ runtime, modelRegistry: registry, authStore });
-
-      const authorization = await port.authorizeOAuth("google", "gemini_oauth_browser", {
-        projectId: "project-1",
-      });
-
-      const browserAuthorization = requireDefined(
-        authorization,
-        "Expected Google browser authorization.",
-      );
-      expect(browserAuthorization.method).toBe("auto");
-      expect(browserAuthorization.openBrowser).toBe(true);
-      expect(browserAuthorization.url).toStartWith("https://accounts.google.com/o/oauth2/v2/auth?");
-      const authorizeUrl = new URL(browserAuthorization.url);
-      expect(authorizeUrl.searchParams.get("access_type")).toBe("offline");
-      expect(authorizeUrl.searchParams.get("scope")).toContain(
-        "https://www.googleapis.com/auth/cloud-platform",
-      );
-      const state = requireNonEmptyString(
-        authorizeUrl.searchParams.get("state"),
-        "Expected Google OAuth state.",
-      );
-
-      await port.completeOAuth(
-        "google",
-        "gemini_oauth_browser",
-        `${authorizeUrl.searchParams.get("redirect_uri")}?code=browser-code&state=${state}`,
-      );
-
-      expect(tokenRequests).toHaveLength(1);
-      expect(tokenRequests[0]?.url).toBe("https://oauth2.googleapis.com/token");
-      expect(tokenRequests[0]?.body).toContain("grant_type=authorization_code");
-      expect(tokenRequests[0]?.body).toContain("code=browser-code");
-      expect(authStore.get("google")).toMatchObject({
-        type: "oauth",
-        accessToken: "browser-access-token",
-        refreshToken: "browser-refresh-token",
-        projectId: "project-1",
-      });
-      expect(registry.getAvailable().some((model) => model.provider === "google")).toBe(true);
     } finally {
       restoreEnv();
       rmSync(workspace, { recursive: true, force: true });
