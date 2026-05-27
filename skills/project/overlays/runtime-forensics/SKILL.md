@@ -27,16 +27,23 @@ Focus on Brewva-native artifacts and governance telemetry.
 ### Step 1: Start from canonical artifact paths
 
 Inspect event store, evidence ledger, projection artifacts, WAL, and schedule projection before ad hoc searches.
+Use the Work Card as the first orientation view when available, then drill down
+to context, authority, skills, inbox, diff, timeline, raw replay, or diagnostic
+artifacts for claims that need forensic precision.
 
 ### Step 2: Correlate governance and workflow behavior
 
 Prefer event families and artifact joins that explain routing, workflow,
 context, and verification decisions.
+For handoff questions, anchor on `tape_handoff` events and compare the Work
+Card, transcript, export bundle, and hosted context rendering against the same
+event evidence.
 
 ## Overlay Questions
 
 - Which canonical artifact path should answer this first?
 - Which governance or workflow event family would falsify the current suspicion?
+- Is this a Work Card orientation question or a raw replay drill-down question?
 
 ## Stop Conditions
 
@@ -55,6 +62,8 @@ context, and verification decisions.
 
 - treating log snippets as enough when the artifact graph is available
 - skipping governance events when investigating control-plane behavior
+- treating Work Card text as replay authority instead of a projection over tape
+  and receipts
 
 ## Example
 

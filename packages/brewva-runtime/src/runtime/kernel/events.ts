@@ -1,5 +1,10 @@
 import type { ResolvedToolAuthority } from "./policy/public-contract.js";
-import type { ApprovalRequest, ToolCallProposal, ToolExecutionResult } from "./port.js";
+import type {
+  ApprovalRequest,
+  KernelVerificationGatePolicyInput,
+  ToolCallProposal,
+  ToolExecutionResult,
+} from "./port.js";
 
 export interface ToolAuthorityDecisionPayload {
   readonly normalizedToolName: string;
@@ -37,10 +42,12 @@ export interface ToolAbortedPayload {
   readonly call?: ToolCallProposal;
   readonly attemptedCall?: ToolCallProposal;
   readonly authority?: ToolAuthorityDecisionPayload;
+  readonly verificationGate?: KernelVerificationGatePolicyInput;
 }
 
 export interface ApprovalRequestedPayload extends ApprovalRequest {
   readonly authority: ToolAuthorityDecisionPayload;
+  readonly verificationGate?: KernelVerificationGatePolicyInput;
 }
 
 export interface ApprovalDecidedPayload {

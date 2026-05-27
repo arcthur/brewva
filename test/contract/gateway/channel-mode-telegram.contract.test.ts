@@ -497,9 +497,9 @@ describe("gateway contract: telegram channel dispatch", () => {
     const text = statusText && "text" in statusText ? statusText.text : "";
     expect(text).toContain("Status @default");
     expect(text).toContain("Inspect");
-    expect(text).toContain("  Inspect @default —");
-    expect(text).toContain("  Dir: src");
-    expect(text).toContain("  Findings:");
+    expect(text).toContain("  Inspect @default -");
+    expect(text).toContain("  Work Card: schema=brewva.task-work-card.projection.v1");
+    expect(text).toContain("  Goal: n/a phase=pending health=n/a refs=src");
   });
 
   test("channel orchestration includes insights inside /status output", async () => {
@@ -1236,9 +1236,10 @@ describe("gateway contract: telegram channel dispatch", () => {
     const text =
       explicitInsightText && "text" in explicitInsightText ? explicitInsightText.text : "";
     expect(text).toContain("Status @default (focus @analyst)");
-    expect(text).toContain("  Inspect @default —");
+    expect(text).toContain("  Inspect @default -");
     expect(text).toContain("  Focus: @analyst · explicit target: @default");
-    expect(text).toContain("  Dir: src");
+    expect(text).toContain("  Work Card: schema=brewva.task-work-card.projection.v1");
+    expect(text).toContain("  Goal: n/a phase=pending health=n/a refs=src");
   });
 
   test("channel orchestration routes /update through the focused agent with the shared upgrade workflow", async () => {

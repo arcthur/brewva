@@ -13,6 +13,7 @@ import type {
   KernelShadowEvidenceQuery,
   KernelShadowToolAuthorityInput,
   KernelToolAuthorityDecisionEvidence,
+  KernelVerificationGatePolicyInput,
   TapeCommitPort,
   TapePort,
   ToolCallProposal,
@@ -41,6 +42,12 @@ interface ToolAdmissionDecision {
   readonly authority: ResolvedToolAuthority;
   readonly payload: ToolAuthorityDecisionPayload;
   readonly admission: "allow" | "ask" | "deny";
+  readonly reason: string;
+}
+
+interface VerificationGateAdmissionDecision {
+  readonly gate: KernelVerificationGatePolicyInput;
+  readonly kind: "block" | "defer";
   readonly reason: string;
 }
 
@@ -182,6 +189,80 @@ function approvalRequestFor(
       reason: admission.reason,
     }),
   });
+}
+
+function verificationGateReason(gate: KernelVerificationGatePolicyInput): string {
+  const explicitReason = gate.reason?.trim();
+  if (explicitReason) {
+    return explicitReason;
+  }
+  return `verification_gate_${gate.status}:${gate.adapter}`;
+}
+
+function resolveVerificationGateAdmission(
+  gates: readonly KernelVerificationGatePolicyInput[] | undefined,
+): VerificationGateAdmissionDecision | null {
+  if (!gates || gates.length === 0) {
+    return null;
+  }
+  const abortGate = gates.find((gate) => gate.posture === "abort");
+  if (abortGate) {
+    return {
+      gate: abortGate,
+      kind: "block",
+      reason: verificationGateReason(abortGate),
+    };
+  }
+  const deferGate = gates.find((gate) => gate.posture === "defer");
+  if (deferGate) {
+    return {
+      gate: deferGate,
+      kind: "defer",
+      reason: verificationGateReason(deferGate),
+    };
+  }
+  return null;
+}
+
+function approvalRequestForVerificationGate(
+  call: ToolCallProposal,
+  gateAdmission: VerificationGateAdmissionDecision | null,
+): ApprovalRequest | null {
+  if (gateAdmission?.kind !== "defer") {
+    return null;
+  }
+  return Object.freeze({
+    sessionId: call.sessionId,
+    ...(call.turnId ? { turnId: call.turnId } : {}),
+    toolCallId: call.toolCallId,
+    toolName: call.toolName,
+    reason: gateAdmission.reason,
+    id: approvalRequestIdFor({
+      sessionId: call.sessionId,
+      ...(call.turnId ? { turnId: call.turnId } : {}),
+      toolCallId: call.toolCallId,
+      toolName: call.toolName,
+      reason: gateAdmission.reason,
+    }),
+  });
+}
+
+function resolveBlockAdmission(input: {
+  readonly call: ToolCallProposal;
+  readonly admission: ToolAdmissionDecision;
+  readonly gateAdmission: VerificationGateAdmissionDecision | null;
+}): { readonly reason: string; readonly gate?: KernelVerificationGatePolicyInput } | null {
+  const structuralBlockReason = shouldBlock(input.call);
+  if (structuralBlockReason) {
+    return { reason: structuralBlockReason };
+  }
+  if (input.gateAdmission?.kind === "block") {
+    return { reason: input.gateAdmission.reason, gate: input.gateAdmission.gate };
+  }
+  if (input.admission.admission === "deny") {
+    return { reason: input.admission.reason };
+  }
+  return null;
 }
 
 function readPayload(event: CanonicalEvent): Record<string, unknown> {
@@ -387,21 +468,24 @@ function shadowDecisionEvidence(
   resolveAuthority: KernelToolAuthorityResolver,
 ): KernelToolAuthorityDecisionEvidence {
   const admission = resolveAdmissionDecision(call, resolveAuthority);
-  const blockReason =
-    shouldBlock(call) ?? (admission.admission === "deny" ? admission.reason : null);
-  if (blockReason) {
+  const gateAdmission = resolveVerificationGateAdmission(call.verificationGates);
+  const blockAdmission = resolveBlockAdmission({ call, admission, gateAdmission });
+  if (blockAdmission) {
     return {
       kind: "block",
-      reason: blockReason,
+      reason: blockAdmission.reason,
       authority: admission.payload,
+      ...(blockAdmission.gate ? { verificationGate: blockAdmission.gate } : {}),
     };
   }
-  const approvalRequest = approvalRequestFor(call, admission);
+  const approvalRequest =
+    approvalRequestForVerificationGate(call, gateAdmission) ?? approvalRequestFor(call, admission);
   if (approvalRequest) {
     return {
       kind: "defer",
       reason: approvalRequest.reason,
       authority: admission.payload,
+      ...(gateAdmission?.kind === "defer" ? { verificationGate: gateAdmission.gate } : {}),
     };
   }
   return {
@@ -546,6 +630,7 @@ export function createKernelPort(
       }
       commitments.set(commitmentId, commitment);
       const admission = resolveAdmissionDecision(call, resolveAuthority);
+      const gateAdmission = resolveVerificationGateAdmission(call.verificationGates);
       const emittedEvents: CanonicalEvent[] = [];
       if (!proposedEvent) {
         proposedEvent = tape.commit({
@@ -557,9 +642,8 @@ export function createKernelPort(
         emittedEvents.push(proposedEvent);
       }
 
-      const blockReason =
-        shouldBlock(call) ?? (admission.admission === "deny" ? admission.reason : null);
-      if (blockReason) {
+      const blockAdmission = resolveBlockAdmission({ call, admission, gateAdmission });
+      if (blockAdmission) {
         const event = tape.commit({
           sessionId: call.sessionId,
           ...(call.turnId ? { turnId: call.turnId } : {}),
@@ -567,22 +651,25 @@ export function createKernelPort(
           payload: {
             commitmentId,
             call,
-            reason: blockReason,
+            reason: blockAdmission.reason,
             authority: admission.payload,
+            ...(blockAdmission.gate ? { verificationGate: blockAdmission.gate } : {}),
           },
         });
         commitments.delete(commitmentId);
         const decision = {
           kind: "block" as const,
           commitmentId,
-          reason: blockReason,
+          reason: blockAdmission.reason,
           events: [...emittedEvents, event],
         };
         recordShadowToolAuthorityEvidence(call, decision);
         return decision;
       }
 
-      const approvalRequest = approvalRequestFor(call, admission);
+      const approvalRequest =
+        approvalRequestForVerificationGate(call, gateAdmission) ??
+        approvalRequestFor(call, admission);
       if (approvalRequest) {
         const existingApprovalEvent = findApprovalRequestEvent(
           projection,
@@ -595,7 +682,11 @@ export function createKernelPort(
             sessionId: call.sessionId,
             ...(call.turnId ? { turnId: call.turnId } : {}),
             type: "approval.requested",
-            payload: { ...approvalRequest, authority: admission.payload },
+            payload: {
+              ...approvalRequest,
+              authority: admission.payload,
+              ...(gateAdmission?.kind === "defer" ? { verificationGate: gateAdmission.gate } : {}),
+            },
           });
         if (!existingApprovalEvent) {
           emittedEvents.push(approvalEvent);

@@ -72,6 +72,10 @@ import {
   STEER_QUEUED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/wire";
 import {
+  collectHostedExtensionManifests,
+  type VerificationGateManifest,
+} from "../../../../extensions/api.js";
+import {
   ManagedSessionDeferredCompactionCoordinator,
   type DeferredCompactionSalvageMode,
 } from "../../compaction/deferred.js";
@@ -112,6 +116,7 @@ import {
   HOSTED_RUNTIME_TURN_PRELUDE,
   type HostedRuntimeTurnPreludeResult,
 } from "../../turn-adapter/runtime-turn-prelude.js";
+import { readRuntimeVerificationGateEvidenceFromEvent } from "../../turn-adapter/runtime-turn-verification-gates.js";
 import {
   runHostedTurnEnvelope,
   type HostedTurnEnvelopeSource,
@@ -122,6 +127,7 @@ import {
   getRuntimeContextEvidenceLatest,
   getRuntimeContextUsage,
   getRuntimeVisibleReadEpoch,
+  queryRuntimeEvents,
   recordRuntimeAssistantCost,
   type HostedRuntimeAdapterPort,
 } from "../runtime-ports.js";
@@ -303,6 +309,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #resourceLoader: BrewvaHostedResourceLoader;
   readonly #agent: BrewvaAgentProtocolController;
   readonly #runner: BrewvaHostPluginRunner;
+  readonly #verificationGateManifests: readonly VerificationGateManifest[];
   readonly #compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
   readonly #sessionTitleGenerator: BrewvaSessionTitleGenerator;
   readonly #registeredTools: BrewvaToolDefinition[];
@@ -360,6 +367,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     modelRole?: BrewvaModelRoleAlias;
     customTools: readonly BrewvaToolDefinition[];
     runner: BrewvaHostPluginRunner;
+    verificationGateManifests: readonly VerificationGateManifest[];
     agent: BrewvaAgentProtocolController;
     compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
     sessionTitleGenerator: BrewvaSessionTitleGenerator;
@@ -384,6 +392,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.modelRegistry = new ManagedSessionModelCatalogView(input.catalog);
     this.#registeredTools = [...input.customTools];
     this.#runner = input.runner;
+    this.#verificationGateManifests = input.verificationGateManifests;
     this.#agent = input.agent;
     this.#compactionSummaryGenerator = input.compactionSummaryGenerator;
     this.#sessionTitleGenerator = input.sessionTitleGenerator;
@@ -536,6 +545,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         )}. Add createHostedBehaviorHostAdapter(...).`,
       );
     }
+    const extensionManifests = collectHostedExtensionManifests(options.extensions);
 
     const providerCacheRuntime: ProviderCacheRuntimeState = {
       lastProviderFingerprint: undefined,
@@ -619,6 +629,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       modelRole: options.initialModelRole,
       customTools: toolDefinitions,
       runner,
+      verificationGateManifests: extensionManifests.verificationGateManifests,
       agent,
       compactionSummaryGenerator,
       sessionTitleGenerator,
@@ -957,6 +968,17 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   getRuntimeProviderTransport() {
     return this.#settings.getTransport();
+  }
+
+  getRuntimeVerificationGateManifests() {
+    return this.#verificationGateManifests;
+  }
+
+  getRuntimeVerificationGateEvidence(sessionId: string) {
+    return queryRuntimeEvents(this.#runtime, sessionId, { last: 100 }).flatMap((event) => {
+      const evidence = readRuntimeVerificationGateEvidenceFromEvent(event);
+      return evidence ? [evidence] : [];
+    });
   }
 
   getRuntimeModelRoutingSettings() {

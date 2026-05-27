@@ -2,16 +2,15 @@ import type {
   ChannelInspectCommandInput,
   ChannelInspectCommandResult,
 } from "@brewva/brewva-gateway";
-import type { EffectCommitmentRequestRecord } from "@brewva/brewva-vocabulary/iteration";
-import { clampText, resolveInspectDirectory } from "../../operator/inspect-analysis.js";
-import { buildSessionInspectReport } from "../../operator/inspect.js";
-import { listCliRuntimeProposalRequests } from "../../runtime/runtime-ports.js";
+import { TASK_WORK_CARD_PROJECTION_SCHEMA_V1 } from "@brewva/brewva-vocabulary/session";
+import { resolveInspectDirectory } from "../../operator/inspect-analysis.js";
+import {
+  buildSessionInspectReport,
+  buildTaskWorkCardProjection,
+  formatTaskWorkCardText,
+} from "../../operator/inspect.js";
 
-const MAX_FINDINGS = 3;
-const MAX_GAPS = 2;
-const MAX_SUMMARY_CHARS = 160;
-const MAX_REPLAYABLE_ASKS = 2;
-const MAX_ASK_REASON_CHARS = 96;
+const MAX_CHANNEL_INSPECT_LINES = 12;
 
 type InspectReport = ReturnType<typeof buildSessionInspectReport>;
 
@@ -20,123 +19,24 @@ function normalizeDirectoryArg(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function formatFindingLine(finding: InspectReport["findings"][number]): string {
-  return `- ${finding.severity.toUpperCase()} ${finding.code}: ${clampText(finding.summary, MAX_SUMMARY_CHARS)}`;
-}
-
-function formatGapLine(gap: string): string {
-  return `- ${clampText(gap, MAX_SUMMARY_CHARS)}`;
-}
-
-function formatScopeLine(report: InspectReport): string {
-  return [
-    `Scope: writes ${report.scope.writesInDir}/${report.scope.writesOutOfDir} in/out`,
-    `touched ${report.scope.touchedInDir}/${report.scope.touchedOutOfDir} in/out`,
-    `reads ${report.scope.readsInDirHeuristic}/${report.scope.readsOutOfDirHeuristic} in/out`,
-  ].join(" · ");
-}
-
-function formatCoverageLine(report: InspectReport): string {
-  return [
-    `Mode: ${report.mode}`,
-    `ops=${report.coverage.opsTelemetryAvailable ? "yes" : "no"}`,
-    `write=${report.coverage.writeAttribution}`,
-    `read=${report.coverage.readAttribution}`,
-  ].join(" · ");
-}
-
-function formatOperatorSafetySummaryLine(requests: EffectCommitmentRequestRecord[]): string {
-  const counts = {
-    pending: 0,
-    accepted: 0,
-    denied: 0,
-    cancelled: 0,
-    consumed: 0,
-  };
-  for (const request of requests) {
-    if (request.state in counts) {
-      counts[request.state as keyof typeof counts] += 1;
-    }
-  }
-  return [
-    `Operator safety: pendingAsks=${counts.pending}`,
-    `accepted=${counts.accepted}`,
-    `denied=${counts.denied}`,
-    `cancelled=${counts.cancelled}`,
-    `consumed=${counts.consumed}`,
-  ].join(" · ");
-}
-
-function formatReplayableAskLine(request: EffectCommitmentRequestRecord): string {
-  const details = [`tool=${request.toolName}`];
-  if (request.actor) {
-    details.push(`actor=${request.actor}`);
-  }
-  if (request.reason) {
-    details.push(`reason=${clampText(request.reason, MAX_ASK_REASON_CHARS)}`);
-  }
-  return `- ${request.state} ${request.requestId} · ${details.join(" · ")}`;
-}
-
 function formatInspectChannelText(input: {
   agentId: string;
   focusedAgentId: string;
   report: InspectReport;
-  operatorRequests: EffectCommitmentRequestRecord[];
 }): string {
-  const lines = [`Inspect @${input.agentId} — ${input.report.verdict}`];
+  const lines = [`Inspect @${input.agentId} - ${input.report.verdict}`];
 
   if (input.agentId !== input.focusedAgentId) {
     lines.push(`Focus: @${input.focusedAgentId} · explicit target: @${input.agentId}`);
   }
 
-  lines.push(`Dir: ${input.report.directory}`);
-  lines.push(formatCoverageLine(input.report));
-  lines.push(formatScopeLine(input.report));
-  lines.push(formatOperatorSafetySummaryLine(input.operatorRequests));
-
-  const replayableRequests = input.operatorRequests.filter(
-    (request) => request.state === "pending" || request.state === "accepted",
+  lines.push(
+    ...formatTaskWorkCardText(buildTaskWorkCardProjection(input.report.base), {
+      maxLines: MAX_CHANNEL_INSPECT_LINES - lines.length,
+    }).split("\n"),
   );
-  if (replayableRequests.length > 0) {
-    lines.push("Replayable asks:");
-    for (const request of replayableRequests.slice(0, MAX_REPLAYABLE_ASKS)) {
-      lines.push(formatReplayableAskLine(request));
-    }
-    const hiddenCount =
-      replayableRequests.length - Math.min(replayableRequests.length, MAX_REPLAYABLE_ASKS);
-    if (hiddenCount > 0) {
-      lines.push(`- ... ${hiddenCount} more replayable ask(s)`);
-    }
-  }
 
-  if (input.report.findings.length === 0) {
-    lines.push("Findings: none.");
-  } else {
-    lines.push("Findings:");
-    for (const finding of input.report.findings.slice(0, MAX_FINDINGS)) {
-      lines.push(formatFindingLine(finding));
-    }
-    const hiddenFindings =
-      input.report.findings.length - Math.min(input.report.findings.length, MAX_FINDINGS);
-    if (hiddenFindings > 0) {
-      lines.push(`- ... ${hiddenFindings} more finding(s)`);
-    }
-  }
-
-  if (input.report.evidenceGaps.length > 0) {
-    lines.push("Evidence gaps:");
-    for (const gap of input.report.evidenceGaps.slice(0, MAX_GAPS)) {
-      lines.push(formatGapLine(gap));
-    }
-    const hiddenGaps =
-      input.report.evidenceGaps.length - Math.min(input.report.evidenceGaps.length, MAX_GAPS);
-    if (hiddenGaps > 0) {
-      lines.push(`- ... ${hiddenGaps} more gap(s)`);
-    }
-  }
-
-  return lines.join("\n");
+  return lines.slice(0, MAX_CHANNEL_INSPECT_LINES).join("\n");
 }
 
 export async function handleInspectChannelCommand(
@@ -171,20 +71,11 @@ export async function handleInspectChannelCommand(
     sessionId: input.targetSession.sessionId,
     directory,
   });
-  const operatorRequests = listCliRuntimeProposalRequests(
-    input.targetSession.runtime,
-    input.targetSession.sessionId,
-  );
-  const replayableAskCount = operatorRequests.filter(
-    (request) => request.state === "pending" || request.state === "accepted",
-  ).length;
-
   return {
     text: formatInspectChannelText({
       agentId: input.targetAgentId,
       focusedAgentId: input.focusedAgentId,
       report,
-      operatorRequests,
     }),
     meta: {
       command: "inspect",
@@ -192,12 +83,7 @@ export async function handleInspectChannelCommand(
       agentSessionId: input.targetSession.sessionId,
       directory: report.directory,
       verdict: report.verdict,
-      operatorSafety: {
-        requestCount: operatorRequests.length,
-        replayableAskCount,
-        pendingAsks: operatorRequests.filter((request) => request.state === "pending").length,
-        denials: operatorRequests.filter((request) => request.state === "denied").length,
-      },
+      workCardSchema: TASK_WORK_CARD_PROJECTION_SCHEMA_V1,
     },
   };
 }

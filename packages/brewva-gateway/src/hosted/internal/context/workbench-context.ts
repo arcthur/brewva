@@ -15,6 +15,7 @@ import type { HostedDelegationStore } from "../../../delegation/api.js";
 import { applyWorkbenchEvictionsToMessages } from "../session/projection/workbench-visibility.js";
 import {
   getRuntimeContextStatus,
+  getRuntimeTapeStatus,
   listRuntimeWorkbenchEntries,
   renderRuntimeTurnDigest,
   type HostedRuntimeAdapterPort,
@@ -399,6 +400,24 @@ function buildContextStatusBlock(
   return makeHostedContextBlock("context-status", lines.join("\n"))!;
 }
 
+export function buildLatestHandoffBlock(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): HostedContextBlock | null {
+  const anchor = getRuntimeTapeStatus(runtime, sessionId).lastAnchor;
+  if (!anchor || (!anchor.name && !anchor.summary && !anchor.nextSteps)) {
+    return null;
+  }
+  const lines = [
+    "[LatestHandoff]",
+    `anchor: ${anchor.id}`,
+    ...(anchor.name ? [`name: ${anchor.name}`] : []),
+    ...(anchor.summary ? [`summary: ${anchor.summary}`] : []),
+    ...(anchor.nextSteps ? [`next_steps: ${anchor.nextSteps}`] : []),
+  ];
+  return makeHostedContextBlock("latest-handoff", lines.join("\n"));
+}
+
 function buildCapabilityBlocks(capabilityView: BuildCapabilityViewResult): HostedContextBlock[] {
   if (capabilityView.requested.length === 0 && capabilityView.missing.length === 0) {
     return [];
@@ -485,6 +504,7 @@ async function buildHostedDynamicTail(input: {
       sessionId: input.sessionId,
       usage: input.usage,
     }),
+    buildLatestHandoffBlock(input.runtime, input.sessionId),
     buildWorkbenchBlock(input.runtime, input.sessionId),
     pendingDelegationsBlock,
     completed.block,

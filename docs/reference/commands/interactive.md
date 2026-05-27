@@ -40,6 +40,7 @@ Stable interactive slash commands include:
 - `/authority`
 - `/skills`
 - `/diff`
+- `/handoff [name :: summary :: next]`
 - `/copy`
 - `/export`
 - `/init`
@@ -63,14 +64,21 @@ full output when a section is truncated.
 transcript Markdown, turn attribution, patch-set identifiers, and Git evidence.
 `Session: export inspect bundle` remains inspect-only in the command palette.
 
-`/context`, `/authority`, and `/skills` are read-only dashboards. `/safety`
-opens the request-local operator safety queue for pending asks. Mutating
-actions such as requesting compaction remain view-local or command-palette
-actions instead of becoming slash subcommand grammar.
+`/handoff` records a replayable session handoff anchor through the same tape
+handoff authority path used by managed tools. The optional argument can be split
+as `name :: summary :: next`; omitted fields use narrow defaults. Work Cards,
+transcripts, export bundles, and channel inspect show the latest anchor,
+summary, and next steps.
 
-`/skills` is catalog-only until the runtime exposes a user-invocable skill
-operator port. Review and security-review workflows remain discoverable there,
-but the shell does not invent a workflow-specific invocation path.
+`/context`, `/authority`, and `/skills` are read-only drill-downs behind the
+work card default. `/safety` opens the request-local operator safety queue for
+pending asks. Mutating actions such as requesting compaction remain view-local
+or command-palette actions instead of becoming slash subcommand grammar.
+
+`/skills` is catalog-only until a future accepted decision defines a
+user-invocable skill product contract. Review and security-review workflows
+remain discoverable there, but the shell does not invent a workflow-specific
+invocation path.
 
 Reserved slash names stay out of completion and do not submit prompts:
 
@@ -129,6 +137,7 @@ Palette-only actions include:
 
 - `Context: request compaction`
 - `Transcript: copy latest answer`
+- `Session: create handoff`
 - `Session: export inspect bundle`
 - `Diff: export patch evidence` emits replay turn attribution, patch-set
   identifiers, and a compact Git diff stat without the full diff body.

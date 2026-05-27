@@ -193,6 +193,12 @@ export interface CliPickerItem {
 export interface CliSkillsOverlayItem extends CliPickerItem {
   skillName: string;
   category: string;
+  source: string;
+  whyRelevant: string;
+  tokenEstimate: number;
+  resourceRefs: readonly string[];
+  outputArtifacts: readonly string[];
+  authorityPosture: "none";
 }
 
 export interface CliSkillsOverlayPayload {

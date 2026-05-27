@@ -39,6 +39,8 @@ runtime replay authority.
 ## Surfaces
 
 - recall search and recall curation
+- attention option cards, content consumption, workbench pins, session-scoped
+  ignores, and verification recipes
 - model-authored workbench note, evict, and undo-evict operations
 - knowledge capture and knowledge search
 - precedent audit and sweep
@@ -63,6 +65,22 @@ model-authored memory.
 Inspecting recall results does not admit them to model-visible context. A
 result enters the answer path only when the model explicitly consumes,
 injects, cites, or preserves it in workbench state.
+
+Attention options are the bounded product layer over unbounded memory sources:
+
+- `attention_options` returns candidate cards only
+- `attention_consume` returns selected content and records consumed refs
+- `attention_pin` writes to the existing workbench pin path
+- `attention_ignore` records session-scoped advisory suppression
+- `attention_verify_plan` returns a recipe without filesystem, command,
+  provider, or network effects
+
+For `session_tape_evidence`, consume returns a redacted event summary rather
+than the raw event payload. It preserves event identity and safe structural
+fields without exposing command, content, credential, or result payloads.
+
+Option ids are session-local unless the source already has a stable root ref,
+such as a recall hit or repository precedent.
 
 Session-index query APIs accept raw query text and apply shared query
 tokenization internally. Indexed session and event materialization uses shared

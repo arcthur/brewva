@@ -147,6 +147,13 @@ ordinary verifier blockers are verification debt rather than hard runtime
 blockers. They should be projected from tape and surfaced to operators, but they
 do not widen the default runtime transaction boundary beyond one tool call.
 
+Verifier adapters are advisory by default. A verifier result can influence
+kernel admission only when a schema-tagged verification gate manifest is
+evaluated into `ToolCallProposal.verificationGates`. That policy input binds
+adapter, target roots, patch/evidence refs, freshness, and missing, stale, or
+failed posture. Adapters never call `kernel.beginToolCall(...)` or mutate
+approval state directly.
+
 ## Recovery Causes
 
 The default runtime loop recognizes only five recovery causes:

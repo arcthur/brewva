@@ -11,6 +11,11 @@ It is also distinct from the `history-view baseline`: baseline authority comes
 from durable `session_compact` receipts, while working projection is a separate
 rebuildable execution snapshot for task, claim, and workflow-facing context.
 
+The Work Card may read working projection data, but it is a product projection
+payload, not the working projection storage contract. It can render the active
+snapshot alongside capability, verification, workbench, and handoff refs without
+making any of those refs replay truth.
+
 ## Runtime Behavior
 
 ```mermaid
@@ -34,14 +39,17 @@ flowchart TD
    from the `active` subset only.
 5. Inspect surfaces expose the runtime-refreshed active snapshot, not the full
    projection-unit log.
-6. The per-session working snapshot file (config `projection.workingFile`,
+6. Work Card renderers may include active snapshot refs, but opening them does
+   not refresh recall, capability selection, provider routing, or model context
+   materialization.
+7. The per-session working snapshot file (config `projection.workingFile`,
    default `working.md`) is a write-through artifact persisted under
    `.orchestrator/projection/...`; it mirrors the current snapshot but is not
    the reload source for `brewva.projection-working`.
-7. If the in-memory working snapshot is absent,
+8. If the in-memory working snapshot is absent,
    `ProjectionEngine.refreshIfNeeded(...)` recomputes it from persisted
    projection units when those units already exist.
-8. If projection units for the session are also absent, runtime replays
+9. If projection units for the session are also absent, runtime replays
    durable tape events to rebuild projection state, then refreshes the working
    snapshot.
 

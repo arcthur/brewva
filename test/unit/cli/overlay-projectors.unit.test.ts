@@ -452,28 +452,31 @@ describe("interactive command overlays", () => {
         {
           id: "skill:review",
           skillName: "review",
+          source: "/tmp/SKILL.md",
+          whyRelevant: "review code changes before merging",
+          resourceRefs: [],
+          outputArtifacts: [],
+          authorityPosture: "none",
           section: "Core",
           label: "review",
-          detail:
-            "Review code changes with enough context to decide whether the patch is ready for long-term maintenance.",
+          detail: expect.stringContaining("authority=none"),
         },
       ],
     });
     expect(text).toContain("Search: ");
     expect(text).toContain("Enter inserts $skill");
     expect(text).toContain("> Core: review");
-    expect(text).toContain(
-      ":: Review code changes with enough context to decide whether the patch is ready for long-term maintenance.",
-    );
+    expect(text).toContain("source=/tmp/SKILL.md");
+    expect(text).toContain("why=review code changes before merging");
+    expect(text).toContain("outputs=none");
+    expect(text).toContain("authority=none");
     expect(text).not.toContain("skill=");
     expect(text).not.toContain("producer=");
-    expect(text).not.toContain("file=");
     expect(text).not.toContain("Producers");
     expect(text).not.toContain("loaded-only");
     expect(text).not.toContain("PgUp");
     expect(text).not.toContain("PgDn");
-    expect(text).not.toContain("/tmp");
-    expect(text).not.toContain("review code changes before merging");
+    expect(text).not.toContain("Run skill");
     expect(text).not.toContain("...");
   });
 
@@ -514,7 +517,13 @@ describe("interactive command overlays", () => {
         },
       ],
     });
-    expect(hiddenGuidancePayload.items).toEqual([]);
+    expect(hiddenGuidancePayload.items).toEqual([
+      expect.objectContaining({
+        skillName: "review",
+        whyRelevant: "hidden-guidance-only",
+        authorityPosture: "none",
+      }),
+    ]);
 
     const payload = buildSkillsOverlayPayload({
       query: "sec",
@@ -581,7 +590,8 @@ describe("interactive command overlays", () => {
         {
           skillName: "security-review",
           label: "security-review",
-          detail: "Audit security-sensitive code paths.",
+          detail: expect.stringContaining("why=security review"),
+          authorityPosture: "none",
         },
       ],
     });

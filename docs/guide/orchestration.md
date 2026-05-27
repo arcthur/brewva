@@ -159,7 +159,7 @@ consequence-bearing runtime work should move through `runtime.kernel`.
 
 ## Inspectable Stall Adjudication
 
-Stall detection still starts with the hosted/operator port `operator.session.pollStall(...)`, but the
+Stall detection still starts with the hosted runtime ops adapter, but the
 gateway worker now adds a second, inspectable adjudication step.
 
 - `task_stuck_detected` remains the idle-threshold detection signal

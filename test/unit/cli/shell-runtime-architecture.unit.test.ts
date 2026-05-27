@@ -163,6 +163,42 @@ describe("shell runtime architecture", () => {
     });
   });
 
+  test("shell update routes handoff commands to a replayable tape anchor effect", () => {
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "session.handoff",
+        args: "ready for review",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [{ type: "session.handoff", handoff: { summary: "ready for review" } }],
+    });
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "session.handoff",
+        args: "Implementation handoff :: ready for review :: run inspect tests",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [
+        {
+          type: "session.handoff",
+          handoff: {
+            name: "Implementation handoff",
+            summary: "ready for review",
+            nextSteps: "run inspect tests",
+          },
+        },
+      ],
+    });
+  });
+
   test("shell update opens operator overlays through data actions", () => {
     const context = createUpdateContext({
       operatorSnapshot: {

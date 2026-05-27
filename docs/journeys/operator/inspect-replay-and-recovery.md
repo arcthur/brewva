@@ -19,8 +19,8 @@
 ## Objective
 
 Describe how a persisted session is reconstructed by inspection surfaces and how
-operators move through the `inspect -> replay -> integrity -> rewind/redo` path to
-diagnose issues, recover state, and validate outcomes.
+operators move through the `inspect -> replay -> integrity -> rewind/redo` path
+to diagnose issues, recover state, and validate outcomes.
 
 ## In Scope
 
@@ -60,16 +60,17 @@ flowchart TD
 ## Key Steps
 
 1. `brewva inspect` rebuilds a compact operator view from event tape and nearby
-   rebuildable artifacts.
+   rebuildable artifacts. The default surface is the shared Work Card; raw
+   replay and diagnostic sections are explicit drill-downs.
 2. On first hydration, the runtime performs checkpoint-plus-delta replay and
    restores task, truth, cost, verification, and related fold slices.
 3. `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` aggregates tape, Recovery WAL, and artifact
    persistence issues into one health surface.
-4. `--replay` 从 durable tape 打印 raw structured event dump；依赖原始
-   payload 的脚本继续使用这条兼容路径。
-5. `--replay-timeline` 从同一 durable tape 打印 redacted replay timeline；
-   timeline group 必须带 canonical event/receipt refs，且不读取 live hosted
-   stream。
+4. `--replay` prints raw structured event records from durable tape for scripts
+   that intentionally depend on event payloads.
+5. `--replay-timeline` prints a redacted replay timeline from the same durable
+   tape. Timeline groups must carry canonical event or receipt refs and must
+   not read the live hosted stream.
 6. `--undo` resolves the target session, rewinds the latest active checkpoint,
    carries branch summary by default, resets verification state, and restores
    the original prompt.
@@ -80,9 +81,9 @@ flowchart TD
 8. `--redo` reapplies the latest undone rewind window and re-anchors the
    reasoning leaf selected before rewind when the prior operation changed
    conversation state.
-9. Delegated inspect surfaces expose workboard、run cards、explicit-pull
-   inbox、timeline preview 和 recovery preview；worker patch 与 librarian
-   knowledge 只有在显式 apply/adopt 后才进入父 truth。
+9. Delegated inspect surfaces expose workboard, run cards, explicit-pull inbox,
+   timeline preview, and recovery preview. Worker patches and librarian
+   knowledge enter parent truth only after explicit apply or adoption.
 
 ## Execution Semantics
 
@@ -95,10 +96,10 @@ flowchart TD
 - `inspect` layers deterministic directory-scoped analysis on top of replayed
   state, so it serves both as a recovery entrypoint and as a code-review
   entrypoint
-- replay 使用 V2 delegation vocabulary：public lifecycle 不再产生
-  `timeout` 或 `merged`，这些语义分别进入 lifecycle reason 与 role
-  disposition
-- verifier evidence 是 advisory debt；它可以进入 inspect/workboard，但不能进入
+- replay uses the V2 delegation vocabulary: public lifecycle no longer emits
+  `timeout` or `merged`; those meanings live in lifecycle reason and role
+  disposition respectively
+- verifier evidence is advisory debt; it can enter inspect/workboard, but not
   worker merge/apply authority
 - hydration and integrity are distinct views:
   - hydration reports whether replay successfully rebuilt session-local state
@@ -125,6 +126,7 @@ flowchart TD
   - `brewva --undo`
   - `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)`
 - key report sections:
+  - Work Card goal/context/options/authority/work/evidence/handoff
   - hydration status
   - integrity issues
   - latest verification outcome

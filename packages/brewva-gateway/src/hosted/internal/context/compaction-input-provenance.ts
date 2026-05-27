@@ -2,6 +2,7 @@ import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
+  type SessionCompactionAttentionRefs,
   type SessionCompactionInputProvenance,
   type SessionCompactionRecallResultRef,
   type SessionCompactionResourceRef,
@@ -19,6 +20,7 @@ interface CompactionProvenanceInput {
   readonly capabilitySelection?: unknown;
   readonly recallEvents: readonly CompactionProvenanceEvent[];
   readonly usageEvents?: readonly CompactionProvenanceEvent[];
+  readonly attentionEvents?: readonly CompactionProvenanceEvent[];
   readonly compactBaseline?: unknown;
   readonly recallTokenBudget?: number | null;
 }
@@ -34,6 +36,7 @@ export const RECALL_USAGE_EVENT_TYPES = [
   "tool_call_ended",
 ] as const;
 const RECALL_USAGE_EVENT_TYPE_SET = new Set<string>(RECALL_USAGE_EVENT_TYPES);
+export const ATTENTION_METRIC_EVENT_TYPE = "iteration.metric.observed" as const;
 const MAX_COMPACTION_RECALL_RESULT_REFS = 8;
 
 // One used recall ref is budgeted as a compact provenance pointer plus its projected summary.
@@ -217,6 +220,80 @@ function readRecallStableIdsFromWorkbench(workbenchEntries: readonly WorkbenchEn
   );
 }
 
+function readAttentionOptionRef(value: unknown): string | null {
+  return readString(value);
+}
+
+function readAttentionOptionRefFromPayload(payload: unknown): string | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  return (
+    readAttentionOptionRef(payload.optionId) ??
+    readStringArray(payload.evidenceRefs).map(readAttentionOptionRef).find(Boolean) ??
+    null
+  );
+}
+
+function readAttentionRefsFromEvents(
+  events: readonly CompactionProvenanceEvent[],
+): Pick<SessionCompactionAttentionRefs, "consumedRefs" | "ignoredRefs" | "verifyPlanRefs"> {
+  const consumedRefs = new Set<string>();
+  const ignoredRefs = new Set<string>();
+  const verifyPlanRefs = new Set<string>();
+  for (const event of events) {
+    if (event.type !== ATTENTION_METRIC_EVENT_TYPE || !isRecord(event.payload)) {
+      continue;
+    }
+    const optionRef = readAttentionOptionRefFromPayload(event.payload);
+    if (!optionRef) {
+      continue;
+    }
+    if (event.payload.metricKey === "attention.consume") {
+      consumedRefs.add(optionRef);
+    } else if (event.payload.metricKey === "attention.ignore") {
+      ignoredRefs.add(optionRef);
+    } else if (event.payload.metricKey === "attention.verify_plan") {
+      verifyPlanRefs.add(optionRef);
+    }
+  }
+  return {
+    consumedRefs: [...consumedRefs],
+    ignoredRefs: [...ignoredRefs],
+    verifyPlanRefs: [...verifyPlanRefs],
+  };
+}
+
+function readAttentionPinnedRefsFromWorkbench(
+  workbenchEntries: readonly WorkbenchEntry[],
+): string[] {
+  const pinnedRefs = new Set<string>();
+  for (const entry of workbenchEntries) {
+    const retentionHint = readString((entry as ProtocolRecord).retentionHint);
+    if (entry.reason !== "attention_pin" && retentionHint !== "attention_pin") {
+      continue;
+    }
+    for (const sourceRef of entry.sourceRefs) {
+      const optionRef = readAttentionOptionRef(sourceRef);
+      if (optionRef) {
+        pinnedRefs.add(optionRef);
+      }
+    }
+  }
+  return [...pinnedRefs];
+}
+
+function buildAttentionRefs(input: CompactionProvenanceInput): SessionCompactionAttentionRefs {
+  const eventRefs = readAttentionRefsFromEvents(input.attentionEvents ?? []);
+  return {
+    generationIds: [],
+    consumedRefs: eventRefs.consumedRefs,
+    pinnedRefs: readAttentionPinnedRefsFromWorkbench(input.workbenchEntries),
+    ignoredRefs: eventRefs.ignoredRefs,
+    verifyPlanRefs: eventRefs.verifyPlanRefs,
+  };
+}
+
 function readLatestUsedRecallStableIds(events: readonly CompactionProvenanceEvent[]): string[] {
   return events
     .filter(
@@ -263,6 +340,7 @@ export function buildCompactionInputProvenance(
     const ref = latestProvenanceByStableId.get(stableId);
     return ref ? [ref] : [];
   });
+  const attention = buildAttentionRefs(input);
 
   return {
     schema: SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
@@ -279,5 +357,6 @@ export function buildCompactionInputProvenance(
       maxResults,
       selectedStableIds: recallResultRefs.map((entry) => entry.stableId),
     },
+    attention,
   };
 }

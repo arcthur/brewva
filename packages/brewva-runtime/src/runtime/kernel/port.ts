@@ -15,6 +15,21 @@ export interface ToolCallProposal {
     readonly required: boolean;
     readonly reason: string;
   };
+  readonly verificationGates?: readonly KernelVerificationGatePolicyInput[];
+}
+
+export type KernelVerificationGateStatus = "missing" | "stale" | "failed";
+export type KernelVerificationGatePosture = "advisory" | "defer" | "abort";
+
+export interface KernelVerificationGatePolicyInput {
+  readonly gateId: string;
+  readonly adapter: string;
+  readonly status: KernelVerificationGateStatus;
+  readonly posture: KernelVerificationGatePosture;
+  readonly targetRoots: readonly string[];
+  readonly patchSetRefs: readonly string[];
+  readonly evidenceRefs: readonly string[];
+  readonly reason?: string;
 }
 
 export type ToolCommitmentDecision =
@@ -120,6 +135,7 @@ export interface KernelToolAuthorityDecisionEvidence {
   readonly reason?: string;
   readonly eventIds?: readonly EventId[];
   readonly authority?: ToolAuthorityDecisionPayload;
+  readonly verificationGate?: KernelVerificationGatePolicyInput;
 }
 
 export interface KernelShadowEvidenceEntry {

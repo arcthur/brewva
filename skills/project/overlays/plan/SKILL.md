@@ -30,7 +30,7 @@ Additionally check Brewva boundary ownership.
 ### Step 1: Check boundary ownership
 
 Decide whether a concern belongs in runtime, deliberation utilities, workbench,
-tools, runtime plugins, CLI, or gateway before proposing code movement.
+tools, advisory extensions, CLI, or gateway before proposing code movement.
 
 ### Step 2: Bias toward kernel clarity
 

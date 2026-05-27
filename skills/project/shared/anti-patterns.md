@@ -50,6 +50,24 @@ retirement_sensitivity: review_only
 - Fire-and-forget provider session cleanup on session replacement, rewind,
   compaction, or model/provider change.
 - Re-exposing removed low-level tuning knobs as public config.
+- Restoring forensic inspect dump as the default operator surface instead of
+  the schema-tagged Work Card plus explicit drill-downs.
+- Adding duplicate inspect dashboards or one-off shell/channel/CLI renderers
+  that bypass the shared Work Card projection payload.
+- Materializing unbounded context through `attention_options`; options return
+  candidate cards and `attention_consume` is the reveal boundary.
+- Creating a second memory store for Attention Options instead of using
+  workbench pins, session tape evidence, recall, and repository precedents.
+- Treating `attention_ignore` as global policy rather than session-scoped
+  advisory suppression.
+- Recreating hidden local-hook policy with `block_tool` or any equivalent
+  blocking result outside explicit kernel admission and verification gates.
+- Adding a `Run skill` path or allowing SkillCards to grant tools, accounts,
+  budgets, model routes, or workflow execution.
+- Letting an advisory extension output widen capability, kernel, sandbox,
+  source, or adoption authority.
+- Letting a verifier adapter directly hard-gate admission; hard gates require a
+  verification gate manifest converted into kernel policy input.
 - Reintroducing runtime-stored context evidence slots or legacy
   `prompt.getStability`, `prompt.getTransientReduction`, and
   `providerCache.getObservation` ports.

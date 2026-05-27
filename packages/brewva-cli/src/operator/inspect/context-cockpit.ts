@@ -326,7 +326,14 @@ export function formatCockpitCompactionProvenance(value: unknown): string {
   }
   const schema = typeof value.schema === "string" ? value.schema : "unknown";
   const hiddenRecallSearch = value.hiddenRecallSearch === false ? "false" : "unknown";
-  return `${schema}:hiddenRecallSearch=${hiddenRecallSearch}`;
+  const attention = isRecord(value.attention) ? value.attention : null;
+  const consumed = Array.isArray(attention?.consumedRefs) ? attention.consumedRefs.length : 0;
+  const pinned = Array.isArray(attention?.pinnedRefs) ? attention.pinnedRefs.length : 0;
+  const ignored = Array.isArray(attention?.ignoredRefs) ? attention.ignoredRefs.length : 0;
+  const verifyPlans = Array.isArray(attention?.verifyPlanRefs)
+    ? attention.verifyPlanRefs.length
+    : 0;
+  return `${schema}:hiddenRecallSearch=${hiddenRecallSearch}:attention=${consumed}/${pinned}/${ignored}/${verifyPlans}`;
 }
 
 export function buildContextCockpitReport(

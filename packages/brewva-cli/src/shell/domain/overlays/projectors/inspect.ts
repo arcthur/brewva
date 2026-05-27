@@ -1,5 +1,9 @@
 import { formatInspectAnalysisText } from "../../../../operator/inspect-analysis.js";
-import type { buildSessionInspectReport } from "../../../../operator/inspect.js";
+import {
+  buildTaskWorkCardProjection,
+  formatTaskWorkCardText,
+  type buildSessionInspectReport,
+} from "../../../../operator/inspect.js";
 import {
   formatCockpitCompactionBaseline,
   formatCockpitCompactionProvenance,
@@ -27,15 +31,11 @@ export function buildInspectSections(report: SessionInspectReport): CliOverlaySe
     );
   const sections: CliOverlaySection[] = [
     {
-      id: "summary",
-      title: "Summary",
-      lines: [
-        `Session: ${base.sessionId}`,
-        `Workspace: ${base.workspaceRoot}`,
-        `Config mode: ${base.configLoad.mode}`,
-        `Config paths: ${renderListValue(base.configLoad.paths)}`,
-        `Managed tool mode: ${base.bootstrap.managedToolMode ?? "n/a"}`,
-      ],
+      id: "work-card",
+      title: "Work Card",
+      lines: formatTaskWorkCardText(buildTaskWorkCardProjection(base), { maxLines: 24 }).split(
+        "\n",
+      ),
     },
     {
       id: "runtime",

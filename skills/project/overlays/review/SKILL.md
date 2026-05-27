@@ -1,6 +1,7 @@
 ---
 name: review
 references:
+  - skills/project/shared/critical-rules.md
   - skills/project/shared/package-boundaries.md
   - skills/project/shared/migration-priority-matrix.md
 ---
@@ -22,13 +23,17 @@ Apply base review invariants before Brewva-specific judgment:
 - `invariants/review-lane-rules.md` — activates review lanes from change
   categories and synthesizes lane outcomes into a merge decision.
 
-Additionally check Brewva invariants: package boundaries, CLI branding, dist safety.
+Additionally check Brewva invariants: package boundaries, CLI branding, dist
+safety, Work Card inspect, attention option boundaries, advisory extension
+authority, and verification gate manifest wiring.
 
 ## Workflow
 
 ### Step 1: Check invariant-sensitive surfaces
 
-Prioritize runtime governance, package boundaries, CLI branding, config shape, and dist safety.
+Prioritize runtime governance, package boundaries, CLI branding, config shape,
+dist safety, Work Card projection parity, attention option reveal boundaries,
+and explicit verification gate manifest paths.
 
 ### Step 2: Call out project-specific regressions
 
@@ -38,6 +43,10 @@ Surface violations of the migration matrix, skill DoD, or artifact contract clar
 
 - Which Brewva invariant is this change most likely to violate?
 - Does the diff weaken package boundaries, branding consistency, or dist safety?
+- Does the diff restore old inspect semantics, hidden context admission, skill
+  execution authority, local-hook blocking, or verifier adapter hard-gating?
+- Does the advisory extension path fail closed without expanding capability,
+  kernel, sandbox, source, or adoption authority?
 
 ## Stop Conditions
 
@@ -56,6 +65,8 @@ Surface violations of the migration matrix, skill DoD, or artifact contract clar
 
 - reviewing only code style while missing kernel boundary drift
 - ignoring docs and exported surface changes in catalog refactors
+- treating a clean renderer diff as safe without checking Work Card, attention
+  option, handoff, and channel/CLI/shell parity
 
 ## Example
 

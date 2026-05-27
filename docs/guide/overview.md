@@ -14,15 +14,18 @@ reference.
 - Tool registry: `packages/brewva-tools/src/index.ts`
 - Model-operated workbench state: `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 - Runtime model port: `packages/brewva-runtime/src/runtime/model/impl.ts`
-- Legacy skill catalog contracts: `packages/brewva-runtime/src/runtime/model`
-- Extension wiring: `@brewva/brewva-gateway/extensions` (`packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`)
+- Skill catalog contracts: `packages/brewva-runtime/src/runtime/model`
+- Extension facade: `@brewva/brewva-gateway/extensions` (`packages/brewva-gateway/src/extensions/api.ts`)
+- Work Card projection assembly: `packages/brewva-cli/src/operator/inspect/work-card.ts`
 - CLI entrypoint: `packages/brewva-cli/src/index.ts`
 
 ## Runtime Responsibilities
 
 - Skill catalog discovery and refresh
+- Work Card projection over goal, context, options, authority, work, evidence,
+  and handoff
 - Evidence ledger recording, digest generation, and query
-- Verification gate evaluation and command-based verification checks
+- Verification-gate policy input and command-based verification checks
 - Context budget planning and compaction signaling
 - Event-first recovery via replayable runtime telemetry
 - Structured event persistence and replay support
@@ -37,7 +40,8 @@ reference.
 - `journeys`: operator entrypoints and cross-package review flows
 - `solutions`: repository-native precedents and compound knowledge
 - `troubleshooting`: incident-oriented remediation
-- `research`: incubating notes and roadmap hypotheses before promotion to stable docs
+- `research`: incubating notes and accepted decision provenance after stable
+  docs absorb the contract
 
 Start from `docs/index.md` for the complete map.
 

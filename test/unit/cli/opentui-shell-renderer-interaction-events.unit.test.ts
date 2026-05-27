@@ -776,9 +776,12 @@ describe("opentui solid shell runtime: interaction events", () => {
       expect(frame).toContain("Skills");
       expect(frame).toContain("Search:");
       expect(frame).toContain("review");
-      expect(frame).toContain("Review code changes before merging.");
+      expect(frame).toContain("source=/tmp/review/SKILL.md");
+      expect(frame).toContain("why=select only before release");
+      expect(frame).toContain("hardening");
+      expect(frame).toContain("authority=none");
       expect(frame).toContain("Enter insert");
-      expect(frame).not.toContain("select only before release hardening");
+      expect(frame).not.toContain("Run skill");
       expect(frame).not.toContain("PgUp");
       expect(frame).not.toContain("PgDn");
       expect(runtime.getViewState().composer.text).toBe("");
@@ -788,15 +791,15 @@ describe("opentui solid shell runtime: interaction events", () => {
     }
   });
 
-  test("renders long skill descriptions across all wrapped lines", async () => {
+  test("renders long skill card details across all wrapped lines", async () => {
     const { bundle } = createFakeBundle({
       skills: [
         fakeSkill({
           name: "long-skill",
           category: "core",
-          description:
+          description: "Long skill card.",
+          whenToUse:
             "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron hidden-tail-should-not-render",
-          whenToUse: "hidden selection guidance",
         }),
       ],
     });
@@ -830,11 +833,14 @@ describe("opentui solid shell runtime: interaction events", () => {
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain("long-skill");
       const firstSkillLine = frame.split("\n").find((line) => line.includes("long-skill")) ?? "";
-      expect(firstSkillLine).toContain("zeta eta");
-      expect(frame).toContain("alpha beta gamma");
-      expect(frame).toContain("iota kappa lambda");
+      expect(firstSkillLine).toContain("source=/tmp/long-skill/SKILL.md");
+      expect(firstSkillLine).toContain("why=alpha");
+      expect(frame).toContain("why=alpha");
+      expect(frame).toContain("beta gamma delta");
+      expect(frame).toContain("theta iota");
+      expect(frame).toContain("kappa lambda");
       expect(frame).toContain("hidden-tail-should-not-render");
-      expect(frame).not.toContain("hidden selection guidance");
+      expect(frame).toContain("authority=none");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1701,6 +1707,12 @@ describe("opentui solid shell runtime: interaction events", () => {
           id: "skill:review",
           skillName: "review",
           category: "core",
+          source: "/skills/review/SKILL.md",
+          whyRelevant: "Review code changes before merging.",
+          tokenEstimate: 12,
+          resourceRefs: [],
+          outputArtifacts: [],
+          authorityPosture: "none",
           section: "Core",
           label: "review",
           detail: "Review code changes before merging.",

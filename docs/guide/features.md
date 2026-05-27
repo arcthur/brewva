@@ -16,6 +16,9 @@ For generated inventories, use:
 
 Brewva is organized around replay-visible runtime capabilities:
 
+- Work Card projections for the default
+  `receive -> orient -> authorize -> act -> verify -> handoff` product loop
+- attention options for bounded discovery before unbounded memory admission
 - advisory SkillCards, ProducerContracts, and capability selection receipts
 - tool access policy, effect boundaries, and budget gates
 - evidence ledger recording and replay-visible governance receipts
@@ -26,7 +29,8 @@ Brewva is organized around replay-visible runtime capabilities:
 - event-first persistence, replay, and deterministic recovery
 - cost observability and budget alerts
 - derived workflow artifacts and advisory workflow inspection
-- typed planning and delegated-worker handoff artifacts
+- typed planning, delegated-worker handoff artifacts, and replayable session
+  handoff anchors
 - durable stall adjudication through explicit inspection
 - iteration-fact persistence for bounded optimization loops
 - narrative, deliberation, recall, and precedent surfaces with provenance
@@ -36,7 +40,7 @@ Brewva is organized around replay-visible runtime capabilities:
 Operators interact with those capabilities through:
 
 - the interactive shell and one-shot CLI modes
-- `brewva inspect` for replay-first session inspection
+- `brewva inspect` for Work Card first, replay-first session inspection
 - `brewva insights` for multi-session workspace analysis
 - the gateway daemon for local hosted-session orchestration
 - scheduler daemon mode for intent execution
@@ -53,6 +57,8 @@ Managed tools are grouped by behavior rather than listed in this guide:
 - navigation and read-only repository inspection
 - command, browser, verification, mutation, and rollback execution
 - memory, recall, precedent, output search, and observability
+- attention options over recall, precedent, workbench, SkillCards, and tape
+  evidence
 - producer-contract, subagent, worker-result, and task delegation
 - workflow, scheduling, leases, tape, and resource coordination
 

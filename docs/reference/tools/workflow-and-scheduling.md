@@ -37,6 +37,13 @@ Schedule tools create, update, or cancel intent. Execution is performed by the
 scheduler control plane and remains inspectable through event tape, schedule
 projection, and child-session records.
 
+## Handoff
+
+`tape_handoff` records a replayable session continuation anchor. It carries
+name, summary, next steps, and source refs so transcripts, export bundles, Work
+Cards, and channel inspect can show where another actor should resume. It is
+not a new memory store and does not grant task, tool, or adoption authority.
+
 ## Recovery
 
 Workflow tools should expose deferred, failed, or partial posture as explicit

@@ -1,5 +1,5 @@
 import type { ShellAction, ShellRuntimeResult } from "./actions.js";
-import type { ShellEffect } from "./effects.js";
+import type { SessionHandoffDraft, ShellEffect } from "./effects.js";
 import type { ShellIntent } from "./intent.js";
 import type { OperatorSurfaceSnapshot } from "./operator-snapshot.js";
 import type { CliShellViewState } from "./state.js";
@@ -45,6 +45,31 @@ function unhandled(
     actions: input.actions ?? [],
     effects: input.effects ?? [],
   };
+}
+
+function parseSessionHandoffDraft(args: string): SessionHandoffDraft | undefined {
+  const trimmed = args.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parts = trimmed
+    .split(/\s*::\s*/u)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (parts.length >= 3) {
+    return {
+      name: parts[0],
+      summary: parts[1],
+      nextSteps: parts.slice(2).join(" :: "),
+    };
+  }
+  if (parts.length === 2) {
+    return {
+      name: parts[0],
+      summary: parts[1],
+    };
+  }
+  return { summary: trimmed };
 }
 
 function updateCommandIntent(
@@ -108,6 +133,10 @@ function updateCommandIntent(
       return handled({ effects: [{ type: "transcript.copyLatestAnswer" }] });
     case "session.export":
       return handled({ effects: [{ type: "session.exportBundle" }] });
+    case "session.handoff":
+      return handled({
+        effects: [{ type: "session.handoff", handoff: parseSessionHandoffDraft(intent.args) }],
+      });
     case "session.lineage":
       return handled({ effects: [{ type: "overlay.openLineage" }] });
     case "session.queue":

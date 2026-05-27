@@ -25,6 +25,7 @@ efficiently through ordinary tools:
 - numeric context status and forced-compaction state
 - active model-authored workbench entries
 - pending or newly completed delegation handoffs
+- latest replayable session handoff summary when present
 - the previous completed turn's bounded consequence digest
 - explicitly requested capability details
 - bounded read-path recovery hints
@@ -36,6 +37,7 @@ It does not decide:
 - which tool calls are allowed
 - whether effects are safe
 - which files the model should inspect
+- which unbounded recall, precedent, or extension candidate should be injected
 
 ## Request Shape
 
@@ -60,6 +62,12 @@ A hosted turn has one stable request shape:
 - stable managed tool definitions
 - one hidden dynamic tail rendered by `createHostedWorkbenchContextController`
 - ordinary conversation messages and tool results
+
+Attention options are not a hidden dynamic-tail admission source. The baseline
+request may include bounded facts such as the current request, project guidance,
+target roots, capability posture, diff posture, latest handoff, and context
+pressure. Unbounded or cross-session evidence is exposed as option cards and
+only enters the answer path when the model consumes or pins it.
 
 `Available Brewva SkillCards` and `[CapabilitySelection]` are not part of the
 dynamic-tail renderer. `Available Brewva SkillCards` is an advisory

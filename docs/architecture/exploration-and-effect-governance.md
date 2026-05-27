@@ -10,6 +10,15 @@ and `docs/reference/runtime.md`.
 Deliberation may explore, search, summarize, recall, rank, and propose.
 Runtime authority decides whether an effect may commit.
 
+The default product loop makes that split visible:
+
+`receive -> orient -> authorize -> act -> verify -> handoff`
+
+Orienting artifacts such as Work Cards, SkillCards, attention options, context
+cockpit details, and handoff summaries are evidence projections. They help the
+model and operator decide what to inspect next, but they do not carry effect
+authority.
+
 The boundary is practical:
 
 - model-native exploration can stay flexible and cheap to change
@@ -30,11 +39,26 @@ make advisory context discoverable, and producer contracts can describe
 structured workflow artifacts, but neither grants an account, tool surface,
 budget, or external side effect.
 
+Attention options follow the same rule. Candidate cards, consumed refs, pins,
+ignored refs, and verification recipes shape attention and provenance; they do
+not grant a tool, selected capability, filesystem mutation, network effect, or
+provider route.
+
+Advisory extensions also stay outside the effect boundary. A schema-tagged
+manifest can register a command, renderer, skill provider, context contributor,
+verifier adapter, channel renderer, or capability manifest provider. The
+manifest constrains the extension's ambient capability class; it does not let
+the extension replace hosted runtime stages or bypass kernel admission.
+
 External authority first needs a selected capability receipt. The current
 selector is deterministic-only: explicit capability target, policy default
 inside scope, then deterministic filters and selection-field ranking. Embedding
 ranking and LLM fallback are reserved extension points, not active authority
 paths.
+
+Verifier adapters are advisory until a separate verification gate manifest
+binds adapter, target roots, evidence refs, freshness, and posture into kernel
+policy input. The adapter never calls admission directly.
 
 ## Runtime Effect Substrate
 

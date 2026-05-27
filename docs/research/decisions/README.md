@@ -61,6 +61,7 @@ Every accepted decision inherits these rules:
 ### Delegation, Product, And Knowledge
 
 - [answer-presentation-policy-and-tui-diagram-rendering](./answer-presentation-policy-and-tui-diagram-rendering.md)
+- [bub-shaped-brewva-blueprint](./bub-shaped-brewva-blueprint.md)
 - [cli-shell-import-graph-baseline](./cli-shell-import-graph-baseline.md)
 - [cli-tui-dual-layer-operator-shell](./cli-tui-dual-layer-operator-shell.md)
 - [cli-tui-experience-ring-decomposition-and-shell-port-boundaries](./cli-tui-experience-ring-decomposition-and-shell-port-boundaries.md)

@@ -1,6 +1,7 @@
 import type { A2ABroadcastResult, A2ASendResult } from "@brewva/brewva-tools/contracts";
 import { createA2ATools } from "@brewva/brewva-tools/delegation";
 import {
+  ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
   defineHostedExtensionPlugin,
   type HostedExtensionPlugin,
   type HostedExtensionApi,
@@ -39,6 +40,14 @@ export function createChannelA2AExtension(options: {
   return defineHostedExtensionPlugin({
     name: "channel.a2a",
     capabilities: ["tool_registration.write"],
+    advisoryManifest: {
+      apiVersion: ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
+      slot: "surface.command",
+      name: "channel.a2a",
+      ambientCapabilityClass: "pure",
+      inputs: ["channel.agent_directory"],
+      outputs: ["tool_surface"],
+    },
     register(extensionApi: HostedExtensionApi) {
       const tools = createA2ATools({
         runtime: {

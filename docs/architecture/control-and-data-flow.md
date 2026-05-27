@@ -27,6 +27,50 @@ sequenceDiagram
   RT->>STORE: tool outcome + receipts
 ```
 
+## Default Product Loop
+
+```mermaid
+flowchart LR
+  RECEIVE["receive: request + ingress refs"] --> ORIENT["orient: Work Card + baseline context"]
+  ORIENT --> AUTHORIZE["authorize: capabilities + asks + sandbox"]
+  AUTHORIZE --> ACT["act: kernel tool transaction"]
+  ACT --> VERIFY["verify: advisory evidence or gate policy"]
+  VERIFY --> HANDOFF["handoff: tape anchor + next steps"]
+
+  ORIENT -. "candidate refs" .-> OPTIONS["attention options"]
+  OPTIONS -. "consume or pin" .-> ORIENT
+  HANDOFF -. "latest anchor" .-> ORIENT
+```
+
+## Shared Inspect Projection
+
+```mermaid
+flowchart TD
+  TAPE["canonical tape"] --> WC["TaskWorkCardProjection"]
+  KERNEL["kernel receipts"] --> WC
+  CAP["capability receipts"] --> WC
+  WB["workbench + recall provenance"] --> WC
+  VERIFY["verification evidence"] --> WC
+  HANDOFF["handoff anchors"] --> WC
+
+  WC --> CLI["brewva inspect"]
+  WC --> SHELL["/inspect shell overlay"]
+  WC --> CHANNEL["channel inspect"]
+  WC --> BUNDLE["export bundle + transcript"]
+```
+
+## Verification Gate Bridge
+
+```mermaid
+flowchart LR
+  MANIFEST["verification gate manifest"] --> EVAL["evaluateVerificationGateManifest(...)"]
+  EVIDENCE["receipt-backed evidence"] --> EVAL
+  EVAL --> POLICY["KernelVerificationGatePolicyInput"]
+  POLICY --> PROPOSAL["ToolCallProposal.verificationGates"]
+  PROPOSAL --> KERNEL["kernel.beginToolCall(...)"]
+  KERNEL --> DECISION["allow, defer, or abort receipt"]
+```
+
 ## Runtime Port Selection
 
 ```mermaid

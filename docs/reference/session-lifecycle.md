@@ -1,7 +1,7 @@
 # Reference: Session Lifecycle
 
 This page describes hosted-session ordering, durability, and recovery
-boundaries. Runtime-plugin factory options, port ownership, and command-plugin
+boundaries. Extension factory options, port ownership, and command-plugin
 composition live in `docs/reference/extensions.md`.
 
 Hosted and CLI entrypoints now converge on the same repo-owned substrate route:
@@ -200,7 +200,7 @@ canonical runtime events and tape projections directly.
    - `turn_render_committed` is recorded only for terminal
      `completed | failed | cancelled` outcomes; approval `suspended` turns
      remain represented by the input receipt plus approval/session-wire frames
-   - envelope diagnostics stay process-local; replay and operator forensics use
+   - envelope diagnostics stay process-local; replay and operator diagnostics use
      turn receipts, approval receipts, schedule warning receipts, and canonical
      runtime projections rather than a separate durable diagnostics event
 5. The envelope delegates the prompt to the runtime-owned turn loop
@@ -247,8 +247,9 @@ canonical runtime events and tape projections directly.
     context-entry path
   - unsupported interactive targets and low-capability full-screen terminals
     fail before shell boot instead of reviving a parallel renderer path
-- `brewva inspect`: builds an operator forensic report for one replayable
-  session from tape plus nearby artifact diagnostics; it is not the live
+- `brewva inspect`: builds a schema-tagged work card for one replayable session
+  from tape plus nearby artifact diagnostics by default; explicit
+  diagnostic/raw modes expose the full drill-down, and it is not the live
   transport replay stream
 - `--managed-tools direct`: keeps the same hosted lifecycle shape, but managed
   Brewva tools are provided directly by the host instead of being registered by

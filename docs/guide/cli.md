@@ -32,7 +32,10 @@ Key ideas:
 - slash completion starts with `/`
 - workspace path completion starts with `@`
 - `/model`, `/inspect`, `/transcript`, `/inbox`, `/undo`, `/rewind`, `/redo`,
-  `/answer`, and `/theme` are interactive veneers over runtime or host state
+  `/handoff`, `/answer`, and `/theme` are interactive veneers over runtime or
+  host state
+- `/inspect` opens the shared Work Card first; context, authority, skills,
+  inbox, diff, and raw replay are drill-downs
 - `/transcript` opens a read-only snapshot of the current session transcript in
   the configured external pager
 
@@ -41,7 +44,8 @@ Keyboard details are in `docs/reference/commands/interactive.md`.
 ## Primary Commands
 
 - `brewva credentials`: encrypted credential vault operations
-- `brewva inspect`: replay-first inspection for persisted sessions
+- `brewva inspect`: Work Card first, replay-first inspection for persisted
+  sessions
 - `brewva insights`: multi-session workspace analysis
 - `brewva onboard`: gateway service install/uninstall wrapper
 - `brewva gateway`: local hosted-session daemon lifecycle

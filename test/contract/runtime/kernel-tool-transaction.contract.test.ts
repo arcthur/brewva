@@ -176,6 +176,96 @@ describe("kernel tool transaction", () => {
     ]);
   });
 
+  test("applies explicit verification gate policy input without making adapters authoritative", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-verification-gate-")),
+      physics: { mode: "noop" },
+    });
+
+    const advisory = await runtime.kernel.beginToolCall({
+      sessionId: "kernel-session",
+      toolCallId: "call-advisory",
+      toolName: "read",
+      verificationGates: [
+        {
+          gateId: "typecheck:packages/brewva-cli/src",
+          adapter: "typecheck",
+          status: "missing",
+          posture: "advisory",
+          targetRoots: ["packages/brewva-cli/src"],
+          patchSetRefs: ["patch:set-1"],
+          evidenceRefs: [],
+          reason: "verification_gate_missing:typecheck",
+        },
+      ],
+    });
+    expect(advisory.kind).toBe("allow");
+
+    const deferred = await runtime.kernel.beginToolCall({
+      sessionId: "kernel-session",
+      toolCallId: "call-defer",
+      toolName: "read",
+      verificationGates: [
+        {
+          gateId: "typecheck:packages/brewva-cli/src",
+          adapter: "typecheck",
+          status: "stale",
+          posture: "defer",
+          targetRoots: ["packages/brewva-cli/src"],
+          patchSetRefs: ["patch:set-1"],
+          evidenceRefs: ["event:verify-1"],
+          reason: "verification_gate_stale:typecheck:event:verify-1",
+        },
+      ],
+    });
+    expect(deferred).toMatchObject({
+      kind: "defer",
+      request: {
+        reason: "verification_gate_stale:typecheck:event:verify-1",
+      },
+    });
+    expect(
+      runtime.tape.list("kernel-session", { type: "approval.requested" })[0]?.payload,
+    ).toMatchObject({
+      verificationGate: {
+        adapter: "typecheck",
+        status: "stale",
+        posture: "defer",
+      },
+    });
+
+    const blocked = await runtime.kernel.beginToolCall({
+      sessionId: "kernel-session",
+      toolCallId: "call-abort",
+      toolName: "read",
+      verificationGates: [
+        {
+          gateId: "typecheck:packages/brewva-cli/src",
+          adapter: "typecheck",
+          status: "failed",
+          posture: "abort",
+          targetRoots: ["packages/brewva-cli/src"],
+          patchSetRefs: ["patch:set-1"],
+          evidenceRefs: ["event:verify-2"],
+          reason: "verification_gate_failed:typecheck:event:verify-2",
+        },
+      ],
+    });
+    expect(blocked).toMatchObject({
+      kind: "block",
+      reason: "verification_gate_failed:typecheck:event:verify-2",
+    });
+    expect(runtime.tape.list("kernel-session", { type: "tool.aborted" })[0]?.payload).toMatchObject(
+      {
+        verificationGate: {
+          adapter: "typecheck",
+          status: "failed",
+          posture: "abort",
+        },
+      },
+    );
+  });
+
   test("records approval deferral as a proposed tool plus approval request", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-defer-")),

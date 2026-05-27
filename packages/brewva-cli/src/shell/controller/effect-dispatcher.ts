@@ -1,5 +1,5 @@
 import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
-import type { ShellEffect } from "../domain/effects.js";
+import type { SessionHandoffDraft, ShellEffect } from "../domain/effects.js";
 import type { CliShellInput } from "../domain/input.js";
 import { buildTextTranscriptMessage } from "../domain/transcript.js";
 
@@ -61,6 +61,7 @@ export interface ShellEffectDispatcherContext {
   openSessionDiffExternalPager(): Promise<void>;
   exportSessionBundle(): Promise<void>;
   exportInspectBundle(): Promise<void>;
+  recordSessionHandoff(handoff?: SessionHandoffDraft): Promise<void>;
   steerSession(effect: Extract<ShellEffect, { type: "session.steer" }>): Promise<void>;
   undoSession(): Promise<void>;
   rewindSession(argument?: string): Promise<void>;
@@ -276,6 +277,9 @@ export async function dispatchShellEffect(
       return;
     case "session.exportInspectBundle":
       await context.exportInspectBundle();
+      return;
+    case "session.handoff":
+      await context.recordSessionHandoff(effect.handoff);
       return;
     case "session.steer":
       await context.steerSession(effect);

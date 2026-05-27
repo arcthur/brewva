@@ -10,6 +10,10 @@ Ledger and projection events are the runtime's strongest replay-facing record.
 They include tape anchors, checkpoints, task/claim folding inputs, projection
 refresh signals, and evidence ledger compaction records.
 
+Handoff anchors are tape anchors with product continuation semantics. They are
+replayable evidence for Work Cards, transcripts, export bundles, and channel
+inspect, but they do not become a second memory store or task authority.
+
 Read these events as state-transition evidence, not as user-interface
 commands. Projection refresh events are rebuildable signals; the tape and
 source-of-truth events remain authoritative.

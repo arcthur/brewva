@@ -146,4 +146,58 @@ describe("skill authored behavior coverage", () => {
     expect(referenceMarkdown).not.toContain("`reviewer`");
     expect(referenceMarkdown).not.toContain("`researcher`");
   });
+
+  test("Brewva project skills preserve the accepted Bub-shaped product vision", () => {
+    const criticalRules = readRepoFile("skills/project/shared/critical-rules.md");
+    const sourceMap = readRepoFile("skills/project/shared/source-map.md");
+    const antiPatterns = readRepoFile("skills/project/shared/anti-patterns.md");
+    const runtimeArtifacts = readRepoFile("skills/project/shared/runtime-artifacts.md");
+    const implementationOverlay = readRepoFile("skills/project/overlays/implementation/SKILL.md");
+    const reviewOverlay = readRepoFile("skills/project/overlays/review/SKILL.md");
+    const forensicsOverlay = readRepoFile("skills/project/overlays/runtime-forensics/SKILL.md");
+
+    expect(criticalRules).toContain("receive -> orient -> authorize -> act -> verify -> handoff");
+    expect(criticalRules).toContain("same evidence, different authority");
+    expect(criticalRules).toContain("Work Card");
+    expect(criticalRules).toContain("attention_options");
+    expect(criticalRules).toContain("attention_consume");
+    expect(criticalRules).toContain("session.handoff");
+    expect(criticalRules).toContain("SkillCards");
+    expect(criticalRules).toContain("authority posture `none`");
+    expect(criticalRules).toContain("verification gate manifest");
+    expect(criticalRules).toContain("Advisory extension manifests");
+
+    expect(sourceMap).toContain("packages/brewva-cli/src/operator/inspect/work-card.ts");
+    expect(sourceMap).toContain("packages/brewva-tools/src/families/memory/attention-options.ts");
+    expect(sourceMap).toContain("packages/brewva-gateway/src/extensions/api.ts");
+    expect(sourceMap).toContain(
+      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-verification-gates.ts",
+    );
+    expect(sourceMap).toContain(
+      "packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts",
+    );
+
+    expect(antiPatterns).toContain("forensic inspect dump as the default operator surface");
+    expect(antiPatterns).toContain("second memory store");
+    expect(antiPatterns).toContain("block_tool");
+    expect(antiPatterns).toContain("Run skill");
+    expect(antiPatterns).toContain("verifier adapter");
+
+    expect(runtimeArtifacts).toContain("tape_handoff");
+    expect(runtimeArtifacts).toContain("Work Card");
+    expect(runtimeArtifacts).toContain("handoff");
+
+    expect(implementationOverlay).toContain("Work Card");
+    expect(implementationOverlay).toContain("Attention Options");
+    expect(implementationOverlay).toContain("handoff");
+
+    expect(reviewOverlay).toContain("Work Card");
+    expect(reviewOverlay).toContain("attention option");
+    expect(reviewOverlay).toContain("verification gate manifest");
+    expect(reviewOverlay).toContain("advisory extension");
+
+    expect(forensicsOverlay).toContain("Work Card");
+    expect(forensicsOverlay).toContain("drill-down");
+    expect(forensicsOverlay).toContain("raw replay");
+  });
 });

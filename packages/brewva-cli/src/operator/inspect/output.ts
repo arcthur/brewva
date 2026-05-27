@@ -7,8 +7,13 @@ import {
   formatCockpitSkillInvocations,
 } from "./context-cockpit.js";
 import type { InspectReport } from "./report.js";
+import { buildTaskWorkCardProjection, formatTaskWorkCardText } from "./work-card.js";
 
 export function formatInspectText(report: InspectReport): string {
+  return formatTaskWorkCardText(buildTaskWorkCardProjection(report));
+}
+
+export function formatInspectDiagnosticText(report: InspectReport): string {
   const lines = [
     `Session: ${report.sessionId}`,
     `Workspace: ${report.workspaceRoot}`,

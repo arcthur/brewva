@@ -1,4 +1,5 @@
 import {
+  ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
   defineHostedExtensionPlugin,
   type HostedExtensionPlugin,
   type HostedExtensionApi,
@@ -50,6 +51,14 @@ export function createInsightsCommandExtension(
   return defineHostedExtensionPlugin({
     name: "cli.insights_command",
     capabilities: ["tool_registration.write"],
+    advisoryManifest: {
+      apiVersion: ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
+      slot: "surface.command",
+      name: "cli.insights_command",
+      ambientCapabilityClass: "read_tape",
+      inputs: ["shell.command:insights", "session.index"],
+      outputs: ["operator_notification"],
+    },
     register(extensionApi: HostedExtensionApi) {
       extensionApi.registerCommand("insights", {
         description: "Multi-session aggregated insights for a directory (usage: /insights [dir])",

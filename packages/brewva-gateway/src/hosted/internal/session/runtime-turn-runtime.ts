@@ -5,7 +5,9 @@ import {
   createHostedRuntimeProviderPort,
   createHostedRuntimeToolAuthorityResolver,
   createHostedRuntimeToolExecutorPort,
+  isRuntimeAdapterSession,
 } from "../turn-adapter/runtime-turn-execution-ports.js";
+import { createVerificationGateRuntimeProviderPort } from "../turn-adapter/runtime-turn-verification-gates.js";
 import type { HostedRuntimeAdapterPort } from "./runtime-ports.js";
 
 const SESSION_RUNTIMES = new WeakMap<CollectSessionPromptOutputSession, BrewvaRuntime>();
@@ -35,7 +37,10 @@ export async function resolveHostedRuntimeTurnRuntime(input: {
   if (existing) {
     return existing;
   }
-  const provider = createHostedRuntimeProviderPort(input.session);
+  const provider = createVerificationGateRuntimeProviderPort(
+    createHostedRuntimeProviderPort(input.session),
+    isRuntimeAdapterSession(input.session) ? input.session : null,
+  );
   const toolExecutor = createHostedRuntimeToolExecutorPort(input.session);
   const resolveToolAuthority = createHostedRuntimeToolAuthorityResolver(input.session, {
     actionAdmissionOverrides: input.runtime.config.security.actionAdmissionOverrides,

@@ -30,6 +30,29 @@ order:
 Do not use broad plane or product language from companion docs to widen kernel
 authority, durable control state, or default-path prescriptions.
 
+## Product Shape
+
+The default product loop is:
+
+`receive -> orient -> authorize -> act -> verify -> handoff`
+
+This loop is a projection grammar over existing owners, not a runtime state
+machine. `receive` comes from operator, channel, or hosted ingress; `orient`
+renders Work Card and bounded baseline context; `authorize` presents capability
+receipts, asks, and sandbox posture; `act` flows through kernel tool
+transactions; `verify` surfaces advisory evidence or explicit verification
+gates; `handoff` records replayable tape anchors for continuation.
+
+Shell, CLI, channel, and embedder inspect surfaces should share the same
+schema-tagged projection payload where practical. Renderers may impose different
+line budgets, but they should preserve canonical refs for drill-down instead of
+creating separate product facts.
+
+The rule is `same evidence, different authority`. A Work Card, SkillCard,
+attention option, hook receipt, renderer, or handoff summary can make evidence
+visible. None of them grants tool access, account authority, budget, model
+routing, sandbox bypass, approval, adoption, or kernel admission.
+
 ## Authority Rings
 
 - `Model Attention Boundary`: the model decides what to read, remember, evict,
@@ -73,6 +96,11 @@ Planes describe product behavior:
   references, preserved quotes, on-demand recall results selected by the model,
   and sanitized compact baselines. It is provenance-bearing and inspectable,
   but it is not kernel authority.
+- `Attention Options Plane`: bounded candidate cards for recall, precedent,
+  SkillCards, workbench entries, tape evidence, and verification recipes.
+  Content is revealed only through explicit consumption; pins write to the
+  workbench, ignores are session-scoped advisory suppressions, and verify-plan
+  requests do not read files, run commands, or call providers.
 - `Efficiency Plane`: stable prefix identity, provider cache policy, request
   fingerprints, request-local reductions, numeric context status, cache edit
   application, and provider cache observations.
@@ -240,14 +268,15 @@ compatibility story.
   per-turn context admission pipeline.
 - `@brewva/brewva-tools`: family-sliced managed tool adapters, centralized
   managed-tool capability registry, capability-scoped runtime facades,
-  controlled runtime-port helpers, source snapshot and patch-plan gates, real
-  LSP adapters, and default bundle assembly. It does not own hosted
-  orchestration or model routing policy.
+  controlled runtime-port helpers, attention option tools, source snapshot and
+  patch-plan gates, real LSP adapters, and default bundle assembly. It does not
+  own hosted orchestration or model routing policy.
 - `@brewva/brewva-gateway`: hosted sessions, daemon, hosted extensions,
   subagents, local control-plane orchestration, hosted provider execution,
-  cache-aware request shaping, and LLM-driven compaction.
+  cache-aware request shaping, verification-gate policy bridging, and
+  LLM-driven compaction.
 - `@brewva/brewva-cli`: operator shell, one-shot CLI, CLI-internal renderer
-  boundary, and terminal capability policy.
+  boundary, Work Card projection assembly, and terminal capability policy.
 - `docs/solutions/**` and knowledge tools: repository precedent and
   compounding knowledge surfaces. Deliberation remains an architecture ring, not
   a standalone package.

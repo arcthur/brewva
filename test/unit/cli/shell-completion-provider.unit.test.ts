@@ -55,7 +55,7 @@ function createCommandProvider(): ShellCommandProvider {
   provider.register({
     id: "session.inspect",
     title: "Inspect Session",
-    description: "Replay-first inspect report for the current session.",
+    description: "Replay-first work card for the current session.",
     category: "Session",
     slash: { name: "inspect" },
   });

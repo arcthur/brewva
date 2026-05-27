@@ -93,7 +93,7 @@ interface InspectVerification {
 }
 
 interface InspectConfigLoadReport {
-  mode: "forensic_default" | "explicit";
+  mode: "merged_default" | "explicit";
   paths: string[];
   warningCount: number;
   warnings: Array<{
@@ -151,6 +151,12 @@ interface InspectReport {
     checkpointCount: number;
     tapePressure: string;
     entriesSinceAnchor: number;
+    lastAnchor: {
+      id: string;
+      name: string | null;
+      summary: string | null;
+      nextSteps: string | null;
+    } | null;
   };
   modelPreset: {
     activeName: string;
@@ -769,7 +775,7 @@ function buildInspectReport(
     sessionId,
     workspaceRoot: runtime.identity.workspaceRoot,
     configLoad: options.configLoad ?? {
-      mode: "forensic_default",
+      mode: "merged_default",
       paths: [],
       warningCount: 0,
       warnings: [],
@@ -822,6 +828,14 @@ function buildInspectReport(
       }).length,
       tapePressure: tapeStatus.tapePressure,
       entriesSinceAnchor: tapeStatus.entriesSinceAnchor,
+      lastAnchor: tapeStatus.lastAnchor
+        ? {
+            id: tapeStatus.lastAnchor.id,
+            name: tapeStatus.lastAnchor.name ?? null,
+            summary: tapeStatus.lastAnchor.summary ?? null,
+            nextSteps: tapeStatus.lastAnchor.nextSteps ?? null,
+          }
+        : null,
     },
     modelPreset: {
       activeName: readPayloadString(latestModelPresetEvent?.payload, "presetName") ?? "Default",

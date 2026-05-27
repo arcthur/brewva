@@ -45,25 +45,33 @@ public contracts.
 10. `Recovery is model-native, not kernel choreography.`
     Review, verify, repair, and retry remain first-class product behavior, but
     runtime should provide primitives rather than a planner-shaped state machine.
-11. `Repository governance stays adjacent to the kernel.`
+11. `Same evidence is not shared authority.`
+    Operator, model, channel, and embedder surfaces should converge on shared
+    evidence projections where practical, but approval, capability, sandbox,
+    adoption, verification-gate, and kernel authority stay separate.
+12. `Product loops are projections, not runtime state machines.`
+    `receive -> orient -> authorize -> act -> verify -> handoff` is product
+    grammar over existing receipts and projections. It must not become a hidden
+    planner, prompt choreography engine, or second session lifecycle owner.
+13. `Repository governance stays adjacent to the kernel.`
     Merge or release trust for repository changes belongs to an adjacent
     repository-governance plane. The runtime may consume or emit evidence for
     that plane, but it should not silently absorb repository policy into kernel
     authority.
-12. `Documentation hierarchy follows authority hierarchy.`
+14. `Documentation hierarchy follows authority hierarchy.`
     Documents that describe product shape, orchestration flow, or operator UX
     must not silently widen kernel authority. When wording conflicts, the
     narrowest authority-defining document wins.
-13. `Public width should compress toward authority width.`
+15. `Public width should compress toward authority width.`
     Runtime may expose explicit inspection, recovery, or maintenance helpers,
     but the default host and extension contract should stay anchored to the
     smallest authority-facing layer that preserves effect governance, replay,
     verification, and rollback semantics.
-14. `Kernel contracts admit only correctness-bearing judgments.`
+16. `Kernel contracts admit only correctness-bearing judgments.`
     If a wrong judgment would not change replay correctness, approval claim,
     rollback correctness, or recovery correctness, it does not belong in the
     kernel contract.
-15. `Platform growth stays opt-in until multi-agent semantics mature.`
+17. `Platform growth stays opt-in until multi-agent semantics mature.`
     New orchestration breadth must land as opt-in control-plane behavior or as
     an explicit exception with a compatibility story. The current stable
     transaction boundary remains `single tool call`.
@@ -74,6 +82,12 @@ Implementation note:
   receipt-bearing rollback
 - model-facing memory is a workbench: free-form notes, evictions, source refs,
   preserved quotes, and reversible edits until the next baseline
+- product-facing inspection is a Work Card projection: it may summarize goal,
+  context, options, authority, work, evidence, and handoff, but it remains a
+  view over existing owners
+- attention options expose bounded candidate cards before unbounded content;
+  consume, pin, ignore, and verify-plan actions are distinct effects with
+  distinct authority posture
 - substrate owns how the agent loop runs: session lifecycle, turn orchestration,
   tool execution phases, request materialization primitives, and session
   persistence; it does not execute model calls
@@ -162,7 +176,7 @@ Rings are about authority, not package names.
 
 Product rule:
 
-`Model sees workbench. Operator sees telemetry. Kernel sees receipts.`
+`Model sees workbench and options. Operator sees work cards. Kernel sees receipts.`
 
 Additional rule:
 

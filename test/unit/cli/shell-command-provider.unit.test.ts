@@ -303,12 +303,21 @@ describe("shell command provider", () => {
       },
     });
     expect(provider.slashCommands().map((command) => command.id)).toContain("agent.model");
+    expect(provider.slashCommands().map((command) => command.id)).toContain("session.handoff");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.lineage");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.transcript");
     expect(provider.createSlashCommandIntent("lineage", { args: "", source: "slash" })).toEqual({
       type: "command.invoke",
       commandId: "session.lineage",
       args: "",
+      source: "slash",
+    });
+    expect(
+      provider.createSlashCommandIntent("handoff", { args: "ready for review", source: "slash" }),
+    ).toEqual({
+      type: "command.invoke",
+      commandId: "session.handoff",
+      args: "ready for review",
       source: "slash",
     });
     expect(provider.createSlashCommandIntent("transcript", { args: "", source: "slash" })).toEqual({

@@ -28,7 +28,9 @@
 - Hosted extensions must declare `HostedExtensionCapability` entries for every mutable surface they use. Undeclared writes fail closed and emit governance evidence.
 - `CreateHostedSessionOptions` and `createBrewvaSession(...)` accept `extensions?` for repo-owned plugins and `localHooks?` for safe local rules. The former raw plugin-list public option is not kept as a compatibility alias.
 - `LocalHookPort` is the public local-rule surface. `pre_admission` runs after prompt normalization and before TaskSpec derivation, skill catalog context, context composition, or tool-surface resolution. Classification hints remain advisory inputs.
-- `pre_effect` may only block a tool call with a visible reason. It cannot grant permission or widen authority.
+- `pre_effect` is advisory. Local hooks cannot block tool execution or widen
+  authority; defer/abort behavior requires an explicit verification gate
+  manifest bound to receipt-backed evidence.
 
 ## Superseded by
 

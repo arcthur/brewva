@@ -17,6 +17,9 @@ cost, cache, replay, and recovery explicit.
 - Model-operated working memory through `workbench_note`, `workbench_evict`,
   `workbench_undo_evict`, on-demand `recall_search`, and LLM-driven
   `workbench_compact`
+- A short product loop:
+  `receive -> orient -> authorize -> act -> verify -> handoff`
+- Shared Work Card projections across shell, CLI, channel, and export surfaces
 - Consequence governance through explicit `safe | effectful` execution and
   approval-bearing commitment boundaries
 - Per-tool least privilege through repo-owned capability declarations and
@@ -28,8 +31,10 @@ cost, cache, replay, and recovery explicit.
 - Gateway-owned model calls for main turns, compaction, model routing, provider
   cache policy, and cost tracking
 - Replay-first approval and rollback flows instead of hidden in-memory authority
-- Extensible operator surfaces through CLI, gateway, runtime plugins, channel
-  adapters, and ingress packages
+- Advisory extension and attention option surfaces that expose evidence without
+  widening runtime authority
+- Extensible operator surfaces through CLI, gateway, channel adapters, and
+  ingress packages
 
 The runtime is optimized around one question:
 
@@ -41,21 +46,26 @@ The runtime is optimized around one question:
 flowchart TD
   MODEL["Model<br/>owns attention"]
   WORKBENCH["Workbench Plane<br/>notes + evictions + on-demand recall"]
+  OPTIONS["Attention Options<br/>bounded candidate cards"]
+  WORKCARD["Work Card<br/>goal + context + authority + evidence + handoff"]
   GATEWAY["Gateway Model Boundary<br/>main turn + LLM compaction + cache policy"]
   PHYSICS["Runtime Physics<br/>context status + cost + provider limits"]
   KERNEL["Kernel<br/>effect gates + verification + approvals"]
   TAPE["Tape<br/>receipts + replay + compact baselines"]
-  OPERATOR["Operator Surfaces<br/>CLI + Gateway + Runtime Plugins + Channels"]
+  OPERATOR["Operator Surfaces<br/>CLI + Gateway + Channels"]
 
   MODEL --> WORKBENCH
+  MODEL --> OPTIONS
   WORKBENCH --> GATEWAY
+  OPTIONS --> WORKBENCH
   GATEWAY --> PHYSICS
   MODEL --> KERNEL
   PHYSICS --> KERNEL
   KERNEL --> TAPE
   TAPE --> WORKBENCH
+  TAPE --> WORKCARD
   OPERATOR --> KERNEL
-  OPERATOR --> TAPE
+  OPERATOR --> WORKCARD
 ```
 
 Current runtime shape:
@@ -95,10 +105,11 @@ Implementation detail and system boundaries:
   verification, governance, cost, workbench operation records, numeric context
   status, and WAL durability
 - `@brewva/brewva-tools`: runtime-aware tools for code, tape, task, schedule,
-  observability, workbench memory, recall, and explicit subagent flows
-- `@brewva/brewva-gateway/runtime-plugins`: runtime plugin wiring,
-  integration guards, workbench context composition, and cache-aware request
-  shaping
+  observability, workbench memory, recall, attention options, and explicit
+  subagent flows
+- `@brewva/brewva-gateway/extensions`: advisory extension manifests,
+  integration guards, verification-gate policy bridging, workbench context
+  composition, and cache-aware request shaping
 - `@brewva/brewva-cli`: interactive CLI, print/json modes, replay/undo, daemon, and the user-facing front door into gateway-hosted channels
 - `@brewva/brewva-gateway`: local control-plane daemon, worker supervision, and subagent/session orchestration
 - `@brewva/brewva-channels-telegram`: Telegram adapter and transport
@@ -195,15 +206,15 @@ bun run test:live
 
 ## Documentation Map
 
-| Section         | Path                    | Purpose                                                                      |
-| --------------- | ----------------------- | ---------------------------------------------------------------------------- |
-| Guides          | `docs/guide/`           | Installation, operation, feature walkthroughs, and usage flows               |
-| Architecture    | `docs/architecture/`    | Implemented design, invariants, and control/data boundaries                  |
-| Journeys        | `docs/journeys/`        | Operator entrypoints and cross-package review flows                          |
-| Reference       | `docs/reference/`       | Stable contracts for config, runtime API, tools, events, and runtime plugins |
-| Solutions       | `docs/solutions/`       | Canonical repository-native engineering precedents and compound knowledge    |
-| Troubleshooting | `docs/troubleshooting/` | Failure patterns and remediation                                             |
-| Research        | `docs/research/`        | Incubating design notes and roadmap material                                 |
+| Section         | Path                    | Purpose                                                                   |
+| --------------- | ----------------------- | ------------------------------------------------------------------------- |
+| Guides          | `docs/guide/`           | Installation, operation, feature walkthroughs, and usage flows            |
+| Architecture    | `docs/architecture/`    | Implemented design, invariants, and control/data boundaries               |
+| Journeys        | `docs/journeys/`        | Operator entrypoints and cross-package review flows                       |
+| Reference       | `docs/reference/`       | Stable contracts for config, runtime API, tools, events, and extensions   |
+| Solutions       | `docs/solutions/`       | Canonical repository-native engineering precedents and compound knowledge |
+| Troubleshooting | `docs/troubleshooting/` | Failure patterns and remediation                                          |
+| Research        | `docs/research/`        | Incubating design notes and roadmap material                              |
 
 Start from `docs/index.md` for the full documentation map.
 

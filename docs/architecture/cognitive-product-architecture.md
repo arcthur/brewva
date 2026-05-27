@@ -7,16 +7,62 @@ architecture, or reference docs, the narrower contract wins.
 
 ## Product Boundary
 
-`Model sees workbench. Operator sees telemetry. Kernel sees receipts.`
+`Model sees workbench and options. Operator sees work cards. Kernel sees receipts.`
 
 - The model sees stable instructions, active workbench entries, model-requested
-  recall results, tool affordances, and small physical-status nudges.
-- The operator sees approvals, questions, task state, inspect views, memory
-  operations, session posture, cache, cost, and diagnostics.
+  recall results, bounded attention options, tool affordances, and small
+  physical-status nudges.
+- The operator sees Work Cards, approvals, questions, task state, drill-down
+  inspect views, memory operations, session posture, cache, cost, and
+  diagnostics.
 - The kernel records decisions, effects, verification, rollback, recovery, and
   replay truth.
 - Runtime physics exposes limits and failure posture: context window, cache,
   cost, provider behavior, durability, and recovery constraints.
+
+The product rule is `same evidence, different authority`: the same canonical
+refs can appear in model, operator, channel, and embedder surfaces, but only the
+owning runtime, kernel, capability, sandbox, adoption, or verification-gate
+contract can make those refs authoritative.
+
+## Default Product Loop
+
+The default loop is:
+
+`receive -> orient -> authorize -> act -> verify -> handoff`
+
+This is the product grammar for shell, CLI, channels, and headless sessions. It
+is not a planner ontology and not a session state machine. Each step reads or
+renders existing facts:
+
+- `receive`: user/channel/hosted ingress and current request refs
+- `orient`: Work Card, bounded baseline context, and attention option cards
+- `authorize`: capability receipts, operator asks, sandbox posture, and kernel
+  proposal state
+- `act`: single-tool-call kernel transactions and managed-tool execution
+- `verify`: advisory verification evidence or explicit verification gate
+  policy input
+- `handoff`: replayable tape anchor, summary, and next steps
+
+## Work Card Product
+
+The Work Card is the default inspect projection. It covers goal, context,
+options, authority, work, evidence, and handoff by aggregating existing runtime
+inspect reports, context cockpit facts, operator safety posture, delegation
+inspection, task ledger state, tape status, verification outcome, and handoff
+anchors.
+
+It is deliberately a product projection:
+
+- opening it is read-only and side-effect free
+- shell, CLI, channel, and embedder renderers should consume the same
+  schema-tagged payload
+- text renderers keep bounded line budgets and preserve canonical refs for
+  drill-down
+- raw replay, context, authority, skills, inbox, diff, and timeline details are
+  drill-down views rather than the default surface
+- it never replaces event tape, kernel receipts, workbench state, or capability
+  records
 
 ## Workbench Product
 
@@ -43,6 +89,30 @@ turn-scoped advisory shortlist from explicit mention, path glob, trigger,
 name, or text match. That shortlist manages attention; it does not create
 authority or persistent workflow state.
 
+## Attention Options Product
+
+Attention options are the product answer for unbounded or cross-session
+evidence. They expose candidate cards from SkillCards, workbench entries,
+surfaced recall, session tape evidence, and `docs/solutions/**` precedents
+before returning large content.
+
+The action split is part of the authority model:
+
+- `attention_options` returns bounded cards only
+- `attention_consume` reveals the selected content and records consumed refs
+- `attention_pin` writes through the existing workbench pin path
+- `attention_ignore` records session-scoped advisory suppression
+- `attention_verify_plan` returns a recipe only, without filesystem, command,
+  provider, or network effects
+
+Consuming `session_tape_evidence` returns a redacted event summary, not raw tape
+payload JSON.
+
+Bounded baseline context still materializes directly when it is already part of
+the ordinary request shape: current request, project guidance, target roots,
+selected capability posture, current diff posture, latest handoff, and context
+pressure. Those facts do not pay an options round trip.
+
 ## Context Product
 
 Context composition is request materialization over runtime facts. Its default
@@ -67,6 +137,18 @@ transcript rendering, model selection, provider connection flows, inbox,
 approvals, memory-operation visibility, cache/cost summaries, and drill-down
 views. These surfaces render runtime claims and workbench evidence; they do not
 create authority.
+
+The first inspect surface is the Work Card. `/context`, `/authority`,
+`/safety`, `/skills`, `/inbox`, `/diff`, and timeline views are drill-downs from
+that shared product projection.
+
+## Handoff Product
+
+Handoff is a replayable continuation anchor, not an informal transcript note.
+Shell and palette actions record the handoff through the tape handoff authority
+path. Transcripts, export bundles, Work Cards, and channel inspect views show
+the latest handoff anchor, summary, and next steps so another actor can resume
+from the same evidence trail.
 
 ## Kernel Product
 

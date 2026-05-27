@@ -48,6 +48,20 @@ recovery, and bounded execution.
     in-memory infrastructure mechanics only; they never replace event tape,
     WAL, receipts, capability-scoped authority, or the plain TypeScript
     four-port runtime root.
+14. Work Card projection safety:
+    default inspect views aggregate existing evidence and preserve canonical
+    refs, but opening shell, CLI, channel, or bundle inspect must not mutate
+    tape, workbench, recall counters, capability selection, provider routing,
+    or model attention inputs.
+15. Advisory extension fail-closed:
+    extension manifests must be schema-tagged, precedence-resolved, and
+    ambient-capability checked. Unknown fields, unknown slots, unmanifested
+    hosted extensions, and disallowed capability declarations fail closed.
+16. Verification-gate authority path:
+    verifier adapters are advisory by default. Kernel defer or abort behavior
+    from verification evidence requires an explicit gate manifest converted
+    into kernel policy input; adapters must not call admission or mutate
+    approval state directly.
 
 ## Failure Semantics
 
@@ -57,6 +71,14 @@ recovery, and bounded execution.
   authorization, recovery, or committed tool outcomes.
 - Verifier blockers are visible verification debt until resolved; they do not
   silently become task truth.
+- Missing attention option evidence produces fewer candidate cards, not hidden
+  context injection. Consume, pin, ignore, and verify-plan actions must expose
+  their own bounded effect posture.
+- Missing, stale, or failed verifier evidence is advisory unless an explicit
+  verification gate manifest declares the matching defer or abort posture.
+- Extension manifest parse, precedence, or ambient-capability failures are
+  diagnostics plus non-registration; lower-priority or malformed extensions do
+  not override accepted manifests.
 - Process-local hosted diagnostics may explain a fresh result but are not
   durable recovery truth.
 - Deleted durable source-of-truth events change replay correctness and must be
@@ -78,6 +100,8 @@ recovery, and bounded execution.
 | Recovery WAL    | durable transient recovery material | stale entries recover, expire, or compact |
 | Evidence ledger | durable evidence                    | row issues degrade audit, not tape replay |
 | Projection      | rebuildable state                   | rebuild from tape/workspace               |
+| Work Card       | shared projection payload           | rebuild or render diagnostic drill-down   |
+| Attention cards | candidate projection                | omit or consume explicitly                |
 | Session wire    | derived live/read model             | rebuild or degrade UI details             |
 | Session lineage | rebuildable state                   | rebuild from tape                         |
 | Provider cache  | performance cache                   | disable or miss without changing truth    |
@@ -88,6 +112,10 @@ recovery, and bounded execution.
 - `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - `packages/brewva-runtime/src/runtime/kernel/impl.ts`
 - `packages/brewva-runtime/src/runtime/kernel/policy/tool-decision.ts`
+- `packages/brewva-cli/src/operator/inspect/work-card.ts`
+- `packages/brewva-tools/src/families/memory/attention-options.ts`
+- `packages/brewva-gateway/src/extensions/api.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-verification-gates.ts`
 - `packages/brewva-std/src/async.ts`
 - `packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`
 - `packages/brewva-gateway/src/channels/effect-serial-queue.ts`

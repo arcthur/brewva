@@ -8,6 +8,7 @@ import {
   validateSingleQuestionAnswer,
 } from "@brewva/brewva-gateway";
 import {
+  ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
   defineHostedExtensionPlugin,
   type HostedExtensionPlugin,
   type HostedExtensionApi,
@@ -116,6 +117,14 @@ export function createQuestionsCommandExtension(
   return defineHostedExtensionPlugin({
     name: "cli.questions_command",
     capabilities: ["tool_registration.write", "user_message.enqueue"],
+    advisoryManifest: {
+      apiVersion: ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
+      slot: "surface.command",
+      name: "cli.questions_command",
+      ambientCapabilityClass: "read_tape",
+      inputs: ["shell.command:questions", "shell.command:answer", "operator_inbox"],
+      outputs: ["operator_notification", "queued_user_message"],
+    },
     register(extensionApi: HostedExtensionApi) {
       extensionApi.registerCommand("questions", {
         description: "Inspect the operator inbox without entering a model turn (usage: /questions)",

@@ -113,6 +113,14 @@ export function getCliRuntimeTapeStatus(
   return runtime.ops.tape.status.get(sessionId);
 }
 
+export function recordCliRuntimeTapeHandoff(
+  runtime: AuthorityRuntime,
+  sessionId: string,
+  input: Parameters<HostedRuntimeAdapterPort["ops"]["tape"]["handoff"]["record"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["tape"]["handoff"]["record"]> {
+  return runtime.ops.tape.handoff.record(sessionId, input);
+}
+
 export function getCliRuntimeLifecycleHydration(
   runtime: InspectRuntime,
   sessionId: string,
@@ -185,14 +193,6 @@ export function getCliRuntimeSessionWire(
   sessionId: string,
 ): ReturnType<InspectRuntime["ops"]["sessionWire"]["query"]> {
   return runtime.ops.sessionWire.query(sessionId);
-}
-
-export function listCliRuntimeProposalRequests(
-  runtime: InspectRuntime,
-  sessionId: string,
-  query?: Parameters<InspectRuntime["ops"]["proposals"]["requests"]["list"]>[1],
-): ReturnType<InspectRuntime["ops"]["proposals"]["requests"]["list"]> {
-  return runtime.ops.proposals.requests.list(sessionId, query);
 }
 
 export function listCliRuntimePendingProposalRequests(

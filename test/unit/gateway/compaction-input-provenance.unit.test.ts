@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
-import { buildCompactionInputProvenance } from "../../../packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.js";
+import {
+  ATTENTION_METRIC_EVENT_TYPE,
+  buildCompactionInputProvenance,
+} from "../../../packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.js";
 import { createHostedCompactionController } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.js";
 import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
@@ -87,6 +90,13 @@ describe("compaction input provenance", () => {
         maxResults: 3,
         selectedStableIds: ["precedent:docs/solutions/runtime.md"],
       },
+      attention: {
+        generationIds: [],
+        consumedRefs: [],
+        pinnedRefs: [],
+        ignoredRefs: [],
+        verifyPlanRefs: [],
+      },
     });
   });
 
@@ -171,6 +181,63 @@ describe("compaction input provenance", () => {
     expect(provenance.usedRecallSelection).toEqual({
       maxResults: 1,
       selectedStableIds: ["precedent:docs/solutions/latest.md"],
+    });
+    expect(provenance.attention).toEqual({
+      generationIds: [],
+      consumedRefs: [],
+      pinnedRefs: [],
+      ignoredRefs: [],
+      verifyPlanRefs: [],
+    });
+  });
+
+  test("records attention consumed, pinned, and ignored refs as compaction provenance", () => {
+    const provenance = buildCompactionInputProvenance({
+      workbenchEntries: [
+        {
+          id: "attention-pin-1",
+          digest: "digest-attention-pin",
+          reason: "attention_pin",
+          sourceRefs: ["skill:runtime-orientation"],
+          retentionHint: "attention_pin",
+        },
+      ],
+      skillSelection: undefined,
+      capabilitySelection: undefined,
+      recallEvents: [],
+      attentionEvents: [
+        {
+          type: ATTENTION_METRIC_EVENT_TYPE,
+          payload: {
+            metricKey: "attention.consume",
+            optionId: "skill:runtime-orientation",
+          },
+        },
+        {
+          type: ATTENTION_METRIC_EVENT_TYPE,
+          payload: {
+            metricKey: "attention.ignore",
+            evidenceRefs: ["precedent:docs/solutions/stale.md"],
+          },
+        },
+        {
+          type: ATTENTION_METRIC_EVENT_TYPE,
+          payload: {
+            metricKey: "attention.verify_plan",
+            optionId: "skill:runtime-orientation",
+          },
+        },
+      ],
+      compactBaseline: null,
+      recallTokenBudget: 400,
+    });
+
+    expect(provenance.attention).toEqual({
+      generationIds: [],
+      consumedRefs: ["skill:runtime-orientation"],
+      pinnedRefs: ["skill:runtime-orientation"],
+      ignoredRefs: ["precedent:docs/solutions/stale.md"],
+      verifyPlanRefs: ["skill:runtime-orientation"],
     });
   });
 

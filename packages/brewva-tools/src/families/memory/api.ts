@@ -23,6 +23,7 @@ export {
   createWorkbenchNoteTool,
   createWorkbenchUndoEvictTool,
 } from "./workbench.js";
+export { createAttentionOptionTools } from "./attention-options.js";
 export {
   DERIVATIVE_RELATIONS,
   DERIVATIVE_TARGET_KINDS,

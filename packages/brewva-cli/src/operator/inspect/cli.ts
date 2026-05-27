@@ -2,7 +2,7 @@ import { parseArgs as parseNodeArgs } from "node:util";
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config";
 import { resolveInspectDirectory, type InspectDirectory } from "../inspect-analysis.js";
-import { printInspectText, formatInspectText } from "./output.js";
+import { formatInspectDiagnosticText, formatInspectText, printInspectText } from "./output.js";
 import {
   buildContextCockpitReport,
   buildInspectReport,
@@ -12,6 +12,7 @@ import {
   type InspectReport,
   type SessionInspectReport,
 } from "./report.js";
+import { buildTaskWorkCardProjection, formatTaskWorkCardText } from "./work-card.js";
 
 const INSPECT_PARSE_OPTIONS = {
   help: { type: "boolean", short: "h" },
@@ -20,6 +21,8 @@ const INSPECT_PARSE_OPTIONS = {
   session: { type: "string" },
   dir: { type: "string" },
   json: { type: "boolean" },
+  diagnostic: { type: "boolean" },
+  raw: { type: "boolean" },
 } as const;
 
 function printInspectHelp(): void {
@@ -30,10 +33,12 @@ Usage:
 
 Options:
   --cwd <path>       Working directory
-  --config <path>    Brewva config path (default: forensic merge of global + workspace config)
+  --config <path>    Brewva config path (default: merged global + workspace config)
   --session <id>     Inspect a specific replay session
   --dir <path>       Target directory for deterministic analysis (alternative to positional argument)
-  --json             Emit JSON output
+  --json             Emit schema-tagged work card JSON
+  --diagnostic       Emit diagnostic drill-down text instead of the work card
+  --raw              Emit the full diagnostic report JSON with --json, or diagnostic text otherwise
   -h, --help         Show help
 
 Examples:
@@ -41,7 +46,8 @@ Examples:
   brewva inspect packages/brewva-runtime/src
   brewva inspect --dir packages/brewva-cli/src
   brewva inspect --session <session-id>
-  brewva inspect --json --session <session-id>`);
+  brewva inspect --json --session <session-id>
+  brewva inspect --diagnostic --session <session-id>`);
 }
 
 export async function runInspectCli(argv: string[]): Promise<number> {
@@ -103,7 +109,7 @@ export async function runInspectCli(argv: string[]): Promise<number> {
   const report = buildInspectReport(operatorRuntime, targetSessionId, {
     directory,
     configLoad: {
-      mode: typeof parsed.values.config === "string" ? "explicit" : "forensic_default",
+      mode: typeof parsed.values.config === "string" ? "explicit" : "merged_default",
       paths: [...configLoad.consultedPaths],
       warningCount: configLoad.warnings.length,
       warnings: configLoad.warnings.map((warning) => ({
@@ -114,8 +120,11 @@ export async function runInspectCli(argv: string[]): Promise<number> {
       })),
     },
   });
+  const workCard = buildTaskWorkCardProjection(report);
   if (parsed.values.json === true) {
-    console.log(JSON.stringify(report, null, 2));
+    console.log(JSON.stringify(parsed.values.raw === true ? report : workCard, null, 2));
+  } else if (parsed.values.raw === true || parsed.values.diagnostic === true) {
+    console.log(formatInspectDiagnosticText(report));
   } else {
     printInspectText(report);
   }
@@ -126,7 +135,10 @@ export {
   buildContextCockpitReport,
   buildInspectReport,
   buildSessionInspectReport,
+  buildTaskWorkCardProjection,
+  formatInspectDiagnosticText,
   formatInspectText,
+  formatTaskWorkCardText,
   resolveInspectDirectory,
   resolveTargetSession,
 };

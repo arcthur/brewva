@@ -1,4 +1,5 @@
 export {
+  ATTENTION_OPTION_PROJECTION_SCHEMA_V1,
   buildSessionRewindProjection,
   DEFAULT_SESSION_TITLE,
   deriveSessionLineageState,
@@ -21,6 +22,7 @@ export {
   SESSION_REWIND_DIVERGENCE_SCHEMA,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_TITLE_RECORDED_EVENT_TYPE,
+  TASK_WORK_CARD_PROJECTION_SCHEMA_V1,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
   TURN_INPUT_RECORDED_EVENT_TYPE,
@@ -39,6 +41,10 @@ export {
 } from "./internal/skills.js";
 
 export type {
+  AttentionOptionActionKind,
+  AttentionOptionAuthorityPosture,
+  AttentionOptionProjection,
+  AttentionOptionSourceFamily,
   BrewvaReplaySession,
   CreateBrewvaSessionOptions,
   ForkPoint,
@@ -52,6 +58,7 @@ export type {
   RecoveryWalStatus,
   SessionCompactionCacheImpact,
   SessionCompactionCacheImpactSnapshot,
+  SessionCompactionAttentionRefs,
   SessionCompactionGenerationMetadata,
   SessionCompactionInputProvenance,
   SessionCompactionRecallResultRef,
@@ -76,6 +83,8 @@ export type {
   SessionRewindSummary,
   SessionRewindTargetView,
   SessionUncleanShutdownDiagnostic,
+  TaskWorkCardContextPressure,
+  TaskWorkCardProjection,
   TapeHandoffResult,
   TapeLedgerRow,
   TapePressureLevel,

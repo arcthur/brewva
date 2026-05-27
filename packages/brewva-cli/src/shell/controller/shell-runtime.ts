@@ -30,7 +30,9 @@ import {
   getCliRuntimeContextUsage,
   getCliRuntimeSessionWire,
   getCliRuntimePendingCompactionReason,
+  getCliRuntimeTapeStatus,
   getCliRuntimeTurnProjection,
+  recordCliRuntimeTapeHandoff,
   renderCliRuntimeTurnDigest,
 } from "../../runtime/runtime-ports.js";
 import { buildCommandPalettePayload, parseShellSlashPrompt } from "../commands/command-palette.js";
@@ -47,7 +49,7 @@ import {
   createWorkspaceReferenceCompletionSource,
   type ShellCompletionAgent,
 } from "../domain/completion-provider.js";
-import type { ShellEffect } from "../domain/effects.js";
+import type { SessionHandoffDraft, ShellEffect } from "../domain/effects.js";
 import { routeShellInput } from "../domain/input-router.js";
 import { isShellKeyboardInput, type CliShellInput, type ShellInput } from "../domain/input.js";
 import type { ShellIntent } from "../domain/intent.js";
@@ -1228,6 +1230,7 @@ export class CliShellRuntime {
       openSessionDiffExternalPager: () => this.openSessionDiffExternalPager(),
       exportSessionBundle: () => this.exportSessionBundle(),
       exportInspectBundle: () => this.exportInspectBundle(),
+      recordSessionHandoff: (handoff) => this.recordSessionHandoff(handoff),
       steerSession: async (steerEffect) => {
         if (steerEffect.sessionGeneration !== this.#sessionGeneration) {
           return;
@@ -1784,7 +1787,27 @@ export class CliShellRuntime {
   }
 
   private buildTranscriptMarkdownLines(): string[] {
-    return renderTranscriptAsMarkdown(this.#state.transcript.messages);
+    return [
+      ...this.buildLatestHandoffLines(),
+      ...renderTranscriptAsMarkdown(this.#state.transcript.messages),
+    ];
+  }
+
+  private buildLatestHandoffLines(): string[] {
+    const status = getCliRuntimeTapeStatus(this.#bundle.runtime, this.#sessionPort.getSessionId());
+    const anchor = status.lastAnchor;
+    if (!anchor) {
+      return [];
+    }
+    return [
+      "# Latest Handoff",
+      "",
+      `Anchor: ${anchor.id}`,
+      `Name: ${anchor.name ?? "n/a"}`,
+      `Summary: ${anchor.summary ?? "n/a"}`,
+      `Next steps: ${anchor.nextSteps ?? "n/a"}`,
+      "",
+    ];
   }
 
   private async exportSessionBundle(): Promise<void> {
@@ -1799,6 +1822,11 @@ export class CliShellRuntime {
       "## Inspect Report",
       ...this.buildInspectTextLines(),
       "",
+      "## Latest Handoff",
+      ...(this.buildLatestHandoffLines().length > 0
+        ? this.buildLatestHandoffLines().slice(2)
+        : ["None"]),
+      "",
       "## Transcript Markdown",
       ...this.buildTranscriptMarkdownLines(),
       "",
@@ -1809,6 +1837,23 @@ export class CliShellRuntime {
       title: "Brewva session export",
       lines,
     });
+  }
+
+  private async recordSessionHandoff(handoff?: SessionHandoffDraft): Promise<void> {
+    const sessionId = this.#sessionPort.getSessionId();
+    const name = handoff?.name?.trim() || "Interactive handoff";
+    const summary = handoff?.summary?.trim();
+    const nextSteps = handoff?.nextSteps?.trim() || "Continue from the latest work card.";
+    const result = recordCliRuntimeTapeHandoff(this.#bundle.runtime, sessionId, {
+      name,
+      ...(summary ? { summary } : {}),
+      nextSteps,
+    });
+    if (!result.ok) {
+      this.ui.notify(`Handoff was not recorded: ${result.reason ?? "unknown error"}.`, "error");
+      return;
+    }
+    this.ui.notify(`Handoff recorded: ${result.eventId ?? "anchor recorded"}.`, "info");
   }
 
   private async exportInspectBundle(): Promise<void> {

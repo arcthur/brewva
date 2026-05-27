@@ -1,4 +1,8 @@
-import type { ToolCommitment, ToolExecutionResult } from "../kernel/port.js";
+import type {
+  KernelVerificationGatePolicyInput,
+  ToolCommitment,
+  ToolExecutionResult,
+} from "../kernel/port.js";
 import type { PromptContent, PromptPlan, RuntimeBudget } from "../model/port.js";
 import type { CanonicalEvent, RuntimeRecoveryCause, SessionId } from "../runtime-api.js";
 
@@ -26,6 +30,7 @@ export interface RuntimeProviderToolCall {
   readonly toolName: string;
   readonly args?: Record<string, unknown>;
   readonly cwd?: string;
+  readonly verificationGates?: readonly KernelVerificationGatePolicyInput[];
   readonly approval?: {
     readonly required: boolean;
     readonly reason: string;

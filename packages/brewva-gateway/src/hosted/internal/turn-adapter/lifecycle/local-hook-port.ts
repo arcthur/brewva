@@ -1,8 +1,4 @@
-import type {
-  BrewvaHostContext,
-  BrewvaHostToolCallResult,
-  InternalHostPluginApi,
-} from "@brewva/brewva-substrate/host-api";
+import type { BrewvaHostContext, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
 import { SESSION_REWIND_COMPLETED_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
@@ -74,26 +70,13 @@ export type LocalHookResult =
       readonly kind: "recommend";
       readonly recommendations: readonly LocalHookRecommendation[];
       readonly notes?: readonly LocalHookNote[];
-    }
-  | {
-      readonly kind: "block_tool";
-      readonly reason: string;
-      readonly notes?: readonly LocalHookNote[];
     };
 
-export type LocalHookPreAdmissionResult =
-  | Extract<LocalHookResult, { kind: "observe" | "recommend" }>
-  | undefined;
+export type LocalHookPreAdmissionResult = LocalHookResult | undefined;
 export type LocalHookPreEffectResult = LocalHookResult | undefined;
-export type LocalHookPostReceiptResult =
-  | Extract<LocalHookResult, { kind: "observe" | "recommend" }>
-  | undefined;
-export type LocalHookPostRollbackResult =
-  | Extract<LocalHookResult, { kind: "observe" | "recommend" }>
-  | undefined;
-export type LocalHookPostTerminalResult =
-  | Extract<LocalHookResult, { kind: "observe" | "recommend" }>
-  | undefined;
+export type LocalHookPostReceiptResult = LocalHookResult | undefined;
+export type LocalHookPostRollbackResult = LocalHookResult | undefined;
+export type LocalHookPostTerminalResult = LocalHookResult | undefined;
 
 export interface LocalHookPort {
   readonly name: string;
@@ -119,11 +102,6 @@ export interface LocalHookManager {
   clear(sessionId: string): void;
   dispose(): void;
 }
-
-type NonBlockingLocalHookPhase = Exclude<LocalHookPhase, "pre_effect">;
-type NonBlockingLocalHookResult =
-  | Extract<LocalHookResult, { readonly kind: "observe" | "recommend" }>
-  | undefined;
 
 const POST_ROLLBACK_EVENT_TYPES = new Set<string>([
   ROLLBACK_EVENT_TYPE,
@@ -187,27 +165,30 @@ function describeHookError(error: unknown): string {
     : "Unknown local hook error.";
 }
 
-function normalizeNonBlockingHookResult(
-  phase: NonBlockingLocalHookPhase,
-  result: LocalHookResult | undefined,
-): NonBlockingLocalHookResult {
+function isLocalHookResult(result: unknown): result is LocalHookResult {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return false;
+  }
+  const kind = (result as { kind?: unknown }).kind;
+  return kind === "observe" || kind === "recommend";
+}
+
+function normalizeAdvisoryHookResult(
+  phase: LocalHookPhase,
+  result: unknown,
+): LocalHookResult | undefined {
   if (!result) {
     return undefined;
   }
-  if (result.kind !== "block_tool") {
+  if (isLocalHookResult(result)) {
     return result;
   }
   return {
     kind: "observe",
     notes: [
-      ...(result.notes ?? []),
       {
         severity: "warning",
-        message: `${phase} hook returned block_tool; only pre_effect hooks may block tool execution.`,
-      },
-      {
-        severity: "warning",
-        message: `Ignored block reason: ${result.reason}`,
+        message: `${phase} hook returned an invalid advisory result; ignored by the local hook manager.`,
       },
     ],
   };
@@ -256,9 +237,9 @@ export function createLocalHookManager(input: {
       if (!hook.postRollback) {
         continue;
       }
-      let result: NonBlockingLocalHookResult;
+      let result: LocalHookResult | undefined;
       try {
-        result = normalizeNonBlockingHookResult(
+        result = normalizeAdvisoryHookResult(
           "post_rollback",
           await hook.postRollback({
             phase: "post_rollback",
@@ -298,39 +279,36 @@ export function createLocalHookManager(input: {
 
   ensurePostRollbackSubscription();
 
-  input.extensionApi.on(
-    "tool_call",
-    async (event, ctx): Promise<BrewvaHostToolCallResult | undefined> => {
-      const sessionId = getSessionId(ctx);
-      for (const hook of input.hooks) {
-        const preEffect = resolvePreEffectHook(hook);
-        if (!preEffect) {
-          continue;
-        }
-        const result = await preEffect({
+  input.extensionApi.on("tool_call", async (event, ctx): Promise<undefined> => {
+    const sessionId = getSessionId(ctx);
+    for (const hook of input.hooks) {
+      const preEffect = resolvePreEffectHook(hook);
+      if (!preEffect) {
+        continue;
+      }
+      const result = normalizeAdvisoryHookResult(
+        "pre_effect",
+        await preEffect({
           phase: "pre_effect",
           sessionId,
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           input: event.input,
-        });
-        if (!result) {
-          continue;
-        }
-        recordGovernanceDecision({
-          runtime: input.runtime,
-          sessionId,
-          phase: "pre_effect",
-          hookName: hook.name,
-          result,
-        });
-        if (result.kind === "block_tool") {
-          return { block: true, reason: result.reason };
-        }
+        }),
+      );
+      if (!result) {
+        continue;
       }
-      return undefined;
-    },
-  );
+      recordGovernanceDecision({
+        runtime: input.runtime,
+        sessionId,
+        phase: "pre_effect",
+        hookName: hook.name,
+        result,
+      });
+    }
+    return undefined;
+  });
 
   input.extensionApi.on("tool_result", async (event, ctx): Promise<undefined> => {
     const sessionId = getSessionId(ctx);
@@ -349,7 +327,7 @@ export function createLocalHookManager(input: {
         isError: event.isError,
         ...(event.details !== undefined ? { details: cloneHookDetails(event.details) } : {}),
       });
-      const normalized = normalizeNonBlockingHookResult("post_receipt", result);
+      const normalized = normalizeAdvisoryHookResult("post_receipt", result);
       if (normalized) {
         recordGovernanceDecision({
           runtime: input.runtime,
@@ -375,7 +353,7 @@ export function createLocalHookManager(input: {
           if (!preAdmission) {
             continue;
           }
-          const result = normalizeNonBlockingHookResult(
+          const result = normalizeAdvisoryHookResult(
             "pre_admission",
             await preAdmission({
               phase: "pre_admission",
@@ -403,7 +381,7 @@ export function createLocalHookManager(input: {
           if (!postTerminal) {
             continue;
           }
-          const result = normalizeNonBlockingHookResult(
+          const result = normalizeAdvisoryHookResult(
             "post_terminal",
             await postTerminal({
               phase: "post_terminal",

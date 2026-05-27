@@ -4,6 +4,7 @@ import {
   type HostedDelegationCatalogInspection,
 } from "@brewva/brewva-gateway";
 import {
+  ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
   defineHostedExtensionPlugin,
   type HostedExtensionPlugin,
   type HostedExtensionApi,
@@ -101,6 +102,14 @@ export function createAgentOverlaysCommandExtension(
   return defineHostedExtensionPlugin({
     name: "cli.agent_overlays_command",
     capabilities: ["tool_registration.write"],
+    advisoryManifest: {
+      apiVersion: ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
+      slot: "surface.command",
+      name: "cli.agent_overlays_command",
+      ambientCapabilityClass: "read_fs",
+      inputs: ["shell.command:agent-overlays", "project.agent_overlays"],
+      outputs: ["operator_notification"],
+    },
     register(extensionApi: HostedExtensionApi) {
       extensionApi.registerCommand("agent-overlays", {
         description:

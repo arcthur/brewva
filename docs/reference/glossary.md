@@ -4,7 +4,15 @@
 - SkillInvocationRecord: advisory provenance for a prompt-visible or inspect-only SkillCard projection, including source, trigger, mode, surfaced resource refs, token estimate, capability refs, output artifacts, and argument hints
 - Contract: an explicit runtime or substrate policy surface; SkillCards are advisory context, not authority contracts
 - Ledger: append-only evidence stream for tool outcomes
-- Verification Gate: completion policy that checks required evidence
+- Work Card: the default schema-tagged inspect projection for goal, context,
+  options, authority, work, evidence, and handoff; it is a view, not truth
+- Attention Option: a bounded model-facing candidate card for unbounded
+  evidence sources; content enters the answer path only through explicit
+  consume or pin actions
+- Handoff Anchor: a replayable tape anchor containing continuation summary and
+  next steps for another actor
+- Verification Gate: manifest-bound kernel policy input that can defer or abort
+  a tool proposal when required evidence is missing, stale, or failed
 - Checkpoint: machine-generated tape baseline event used to accelerate replay
 - Snapshot (rollback): per-file pre-mutation copy used by `rollback_last_patch`, the stable tool id for `PatchSet` rollback; not a runtime session-state `durable source of truth`
 - Replay: reconstruction of session history from structured events
@@ -17,7 +25,9 @@
 - Channel Gateway: external channel ingress/egress gateway used by `--channel` mode
 - Channel Host: hosted runtime loop behind `brewva --channel ...`; binds channel scopes to agent sessions and runs tool-governed turns
 - Gateway (Control Plane): local daemon exposed via `brewva gateway ...`, providing a typed WebSocket API to control-plane clients
-- Hosted Extension: the canonical opt-in Brewva hosted session integration unit registered through `@brewva/brewva-gateway/extensions`; implemented on top of the substrate host-api contract
+- Hosted Extension: the canonical opt-in Brewva hosted session integration unit
+  registered through `@brewva/brewva-gateway/extensions`; schema-tagged
+  manifests keep it advisory and fail closed
 - Proposal: the public approval-bearing authorization envelope; current stable public shape is `EffectCommitmentProposal`
 - DecisionReceipt: the durable kernel decision record for a public `EffectCommitmentProposal`; captures the decision, policy basis, reasons, committed effects, evidence references, turn, and timestamp
 - Workbench: model-authored working-memory notebook exposed through `workbench_note` and `workbench_evict`

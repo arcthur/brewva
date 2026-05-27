@@ -18,6 +18,7 @@ import {
   readRecord,
   sliceWindow,
 } from "./helpers.js";
+import { listGuardResultsFromEvents, listMetricObservationsFromEvents } from "./iteration-facts.js";
 import {
   FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES,
   type FourPortRuntimeCapabilityContext,
@@ -270,8 +271,20 @@ export function createFourPortEventsRuntimeOps(
       getTurnProjection: (_sessionId, value = {}) => deriveTurnEffectCommitmentProjection(value),
     },
     iteration: {
-      listGuardResults: () => [],
-      listMetricObservations: () => [],
+      listGuardResults: (sessionId, query) =>
+        listGuardResultsFromEvents(
+          listFourPortRuntimeEvents(context.runtime, sessionId, {
+            type: "iteration.guard.recorded",
+          }),
+          query,
+        ),
+      listMetricObservations: (sessionId, query) =>
+        listMetricObservationsFromEvents(
+          listFourPortRuntimeEvents(context.runtime, sessionId, {
+            type: "iteration.metric.observed",
+          }),
+          query,
+        ),
     },
   };
 }

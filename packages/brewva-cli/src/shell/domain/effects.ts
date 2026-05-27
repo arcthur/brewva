@@ -6,6 +6,12 @@ import type {
 import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
 import type { CliShellInput } from "./input.js";
 
+export interface SessionHandoffDraft {
+  readonly name?: string;
+  readonly summary?: string;
+  readonly nextSteps?: string;
+}
+
 export type ShellEffect =
   | { type: "input.handle"; input: CliShellInput }
   | { type: "runtime.exit" }
@@ -60,6 +66,7 @@ export type ShellEffect =
   | { type: "session.diffExternalPager" }
   | { type: "session.exportBundle" }
   | { type: "session.exportInspectBundle" }
+  | { type: "session.handoff"; handoff?: SessionHandoffDraft }
   | { type: "session.steer"; sessionGeneration: number; text: string }
   | { type: "session.undo" }
   | { type: "session.rewind"; argument?: string }

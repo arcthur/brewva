@@ -2,9 +2,10 @@
 
 Canonical tape events are the four-port runtime truth record. They cover turn
 boundaries, assistant and reasoning commits, tool transactions, checkpoints,
-anchors, approvals, cost observations, runtime suspension, and versioned custom
-payloads. There is no second runtime event plane; operational adapter evidence
-is either a canonical event payload or rebuildable local state.
+anchors, including handoff anchors, approvals, cost observations, runtime
+suspension, and versioned custom payloads. There is no second runtime event
+plane; operational adapter evidence is either a canonical event payload or
+rebuildable local state.
 
 Implementation anchors:
 

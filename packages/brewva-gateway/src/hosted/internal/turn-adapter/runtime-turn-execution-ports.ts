@@ -4,4 +4,7 @@ export {
   createHostedRuntimeToolExecutorPort,
   summarizeRuntimeToolResultContent,
 } from "./runtime-turn-tool-executor.js";
-export { canCreateHostedRuntimeExecutionPorts } from "./runtime-turn-session.js";
+export {
+  canCreateHostedRuntimeExecutionPorts,
+  isRuntimeAdapterSession,
+} from "./runtime-turn-session.js";

@@ -26,6 +26,7 @@ import {
   type RuntimeTurnClockStore,
 } from "../turn-adapter/lifecycle/runtime-turn-clock.js";
 import {
+  ATTENTION_METRIC_EVENT_TYPE,
   buildCompactionInputProvenance,
   RECALL_USAGE_EVENT_TYPES,
 } from "./compaction-input-provenance.js";
@@ -244,6 +245,9 @@ function buildRuntimeCompactionInputProvenance(input: {
       runtime: input.runtime,
       sessionId: input.sessionId,
       compactBaseline,
+    }),
+    attentionEvents: queryRuntimeEvents(input.runtime, input.sessionId, {
+      type: ATTENTION_METRIC_EVENT_TYPE,
     }),
     compactBaseline,
     recallTokenBudget: resolveRecallTokenBudget(input.usage),

@@ -6,7 +6,7 @@ Output:
 
 ```json
 {
-  "runtime_trace": "Turn 8 records `provider_fallback_retry` with `status=entered` and `attempt=1`. The fallback-model request then succeeds and output resumes, but no later `completed` or `failed` transition is present for that attempt. On the next turn, the hosted transition snapshot still reports `pendingFamily=recovery`, so posture-aware runtime plugins keep treating the session as mid-recovery.",
+  "runtime_trace": "Turn 8 records `provider_fallback_retry` with `status=entered` and `attempt=1`. The fallback-model request then succeeds and output resumes, but no later `completed` or `failed` transition is present for that attempt. On the next turn, the hosted transition snapshot still reports `pendingFamily=recovery`, so hosted advisory surfaces keep treating the session as mid-recovery.",
   "session_summary": "Session `sess_abc123` is functionally resumed but still advertises recovery posture because the durable provider-fallback transition sequence never closed.",
   "artifact_findings": [
     {

@@ -24,6 +24,11 @@ Managed or headless sessions register extension commands such as inspect,
 insights, questions, answer, agent overlay validation, and update. They are
 thin control-plane veneers over replay-visible session state.
 
+Channel inspect renders the same Work Card projection used by shell and
+non-interactive CLI inspect, with a smaller line budget and canonical refs for
+follow-up drill-down. It should not JSON-stringify raw projections as the
+default channel experience.
+
 ## Orchestration Commands
 
 When `channels.orchestration.enabled=true`, channel orchestration commands add

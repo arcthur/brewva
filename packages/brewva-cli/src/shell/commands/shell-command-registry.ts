@@ -65,7 +65,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
   {
     id: "session.inspect",
     title: "Inspect session",
-    description: "Replay-first inspect report for the current session.",
+    description: "Replay-first work card for the current session.",
     category: "Session",
     slash: { name: "inspect" },
     shortcuts: ["ctrl+i"],
@@ -73,7 +73,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
   {
     id: "session.context",
     title: "Context",
-    description: "Open the read-only context pressure and compaction dashboard.",
+    description: "Open the read-only context pressure and compaction drill-down.",
     category: "Session",
     slash: { name: "context", argumentMode: "optional" },
     suggested: true,
@@ -105,6 +105,15 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Export a replay-visible session handoff bundle.",
     category: "Session",
     slash: { name: "export" },
+  },
+  {
+    id: "session.handoff",
+    title: "Create handoff",
+    description:
+      "Record a replayable tape handoff anchor (usage: /handoff [name :: summary :: next]).",
+    category: "Session",
+    slash: { name: "handoff", argumentMode: "optional" },
+    suggested: true,
   },
   {
     id: "session.lineage",

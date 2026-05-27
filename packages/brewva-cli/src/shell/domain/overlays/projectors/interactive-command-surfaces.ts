@@ -1,3 +1,4 @@
+import { estimateModelTokens } from "@brewva/brewva-token-estimation";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
@@ -5,8 +6,11 @@ import type {
   ContextEvidenceSample,
   ContextStatus,
 } from "@brewva/brewva-vocabulary/context";
-import type { HistoryViewBaselineSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-vocabulary/session";
+import {
+  listSkillResourceRefs,
+  type HistoryViewBaselineSnapshot,
+} from "@brewva/brewva-vocabulary/session";
 import type { OperatorSurfaceSnapshot } from "../../operator-snapshot.js";
 import { fuzzyScore } from "../../search-scoring.js";
 import type {
@@ -294,7 +298,13 @@ function compareSkills(left: SkillDocument, right: SkillDocument): number {
 }
 
 function skillSearchScore(query: string, skill: SkillDocument): number | null {
-  const fields = [skill.name, skill.category, skill.description, skill.card.description];
+  const fields = [
+    skill.name,
+    skill.category,
+    skill.description,
+    skill.card.description,
+    skill.card.selection?.whenToUse,
+  ].filter((field): field is string => typeof field === "string");
   let best: number | null = null;
   for (const field of fields) {
     const score = fuzzyScore(query, field);
@@ -314,6 +324,31 @@ function buildSkillsSummary(loadReport: SkillRegistryLoadReport): string {
     loadReport.roots.length,
     "source root",
   )}.`;
+}
+
+function skillTokenEstimate(skill: SkillDocument): number {
+  return estimateModelTokens(
+    [skill.name, skill.description, skill.card.selection?.whenToUse, skill.markdown]
+      .filter((entry): entry is string => Boolean(entry))
+      .join("\n"),
+  ).tokens;
+}
+
+function formatSkillCardDetail(input: {
+  readonly source: string;
+  readonly whyRelevant: string;
+  readonly tokenEstimate: number;
+  readonly resourceRefs: readonly string[];
+  readonly outputArtifacts: readonly string[];
+}): string {
+  return [
+    `source=${input.source}`,
+    `why=${input.whyRelevant}`,
+    `tokens=${input.tokenEstimate}`,
+    `resources=${formatList(input.resourceRefs, 3)}`,
+    `outputs=${formatList(input.outputArtifacts, 3)}`,
+    "authority=none",
+  ].join(" | ");
 }
 
 export function buildSkillsOverlayPayload(input: {
@@ -339,13 +374,29 @@ export function buildSkillsOverlayPayload(input: {
     });
   const items = scoredSkills.map(({ skill }) => {
     const description = normalizeInlineText(skill.description || skill.card.description);
+    const whyRelevant = normalizeInlineText(skill.card.selection?.whenToUse) || description;
+    const resourceRefs = listSkillResourceRefs(skill).map((ref) => `${ref.kind}:${ref.path}`);
+    const outputArtifacts = skill.card.outputArtifacts ?? [];
+    const tokenEstimate = skillTokenEstimate(skill);
     return {
       id: `skill:${skill.name}`,
       skillName: skill.name,
       category: skill.category,
+      source: skill.filePath,
+      whyRelevant,
+      tokenEstimate,
+      resourceRefs,
+      outputArtifacts,
+      authorityPosture: "none" as const,
       section: formatCategoryTitle(skill.category),
       label: skill.name,
-      detail: description || "No description provided.",
+      detail: formatSkillCardDetail({
+        source: skill.filePath,
+        whyRelevant,
+        tokenEstimate,
+        resourceRefs,
+        outputArtifacts,
+      }),
     };
   });
   const selectedIndex =

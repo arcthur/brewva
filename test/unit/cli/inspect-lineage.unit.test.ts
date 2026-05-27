@@ -8,8 +8,10 @@ import {
 } from "@brewva/brewva-vocabulary/delegation";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
-  buildInspectReport,
   buildContextCockpitReport,
+  buildInspectReport,
+  buildTaskWorkCardProjection,
+  formatInspectDiagnosticText,
   formatInspectText,
 } from "../../../packages/brewva-cli/src/operator/inspect.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
@@ -40,10 +42,13 @@ describe("cli inspect lineage reporting", () => {
     });
 
     const report = buildInspectReport(runtime, sessionId);
-    const text = formatInspectText(report);
+    const text = formatInspectDiagnosticText(report);
+    const workCardText = formatInspectText(report);
 
     expect(text).toContain("Lineage: root=lineage:main current=lineage:review nodes=2 edges=1");
     expect(text).toContain("Lineage: selected=cli:lineage:review");
+    expect(workCardText).toContain("Work Card: schema=brewva.task-work-card.projection.v1");
+    expect(workCardText).not.toContain("Lineage: root=");
   });
 
   test("prints read-only context cockpit without recording events", () => {
@@ -152,7 +157,9 @@ describe("cli inspect lineage reporting", () => {
     )?.payload;
     const cockpit = buildContextCockpitReport(runtime, sessionId);
     const report = buildInspectReport(runtime, sessionId);
-    const text = formatInspectText(report);
+    const text = formatInspectDiagnosticText(report);
+    const workCard = buildTaskWorkCardProjection(report);
+    const workCardText = formatInspectText(report);
     const afterEventCount = runtime.ops.events.records.query(sessionId).length;
     const afterAttentionHash = runtime.ops.context.evidence.latest(
       sessionId,
@@ -166,13 +173,21 @@ describe("cli inspect lineage reporting", () => {
     expect(cockpit.skills.invocationRecords[0]?.skillName).toBe("architecture");
     expect(cockpit.recall.results[0]?.sourceFamily).toBe("repository_precedent");
     expect(cockpit.cachePosture.status).toBe("warm");
+    expect(workCard.schema).toBe("brewva.task-work-card.projection.v1");
+    expect(workCard.context.workbenchEntryCount).toBe(1);
+    expect(workCard.context.skillInvocationRefs).toEqual(["skill-selection-1:architecture"]);
+    expect(workCard.context.recallResultRefs).toEqual(["precedent:docs/solutions/runtime.md"]);
+    expect(workCardText).toContain("Context: pressure=");
+    expect(workCardText).toContain("workbench=1");
+    expect(workCardText).toContain("skills=1");
+    expect(workCardText).toContain("recall=1");
     expect(text).toContain("Context cockpit: policy=inspect_projection_only");
     expect(text).toContain("Context cockpit skills: invocations=architecture");
     expect(text).toContain("Context cockpit resources: refs=reference:references/design.md");
     expect(text).toContain("Context cockpit capabilities: receipts=capability-selection-1");
     expect(text).toContain("Context cockpit recall: results=precedent:docs/solutions/runtime.md");
     expect(text).toContain(
-      "Context cockpit compaction: baseline=compact-1 provenance=brewva.compaction.input-provenance.v1:hiddenRecallSearch=false",
+      "Context cockpit compaction: baseline=compact-1 provenance=brewva.compaction.input-provenance.v1:hiddenRecallSearch=false:attention=0/0/0/0",
     );
     expect(text).toContain("Context cockpit cache: status=warm read=42 write=0");
   });
@@ -213,7 +228,7 @@ describe("cli inspect lineage reporting", () => {
       type: SUBAGENT_COMPLETED_EVENT_TYPE,
     });
 
-    const text = formatInspectText(buildInspectReport(runtime, sessionId));
+    const text = formatInspectDiagnosticText(buildInspectReport(runtime, sessionId));
 
     expect(text).toContain("Delegation workboard: workerPatches=1");
     expect(text).toContain(
@@ -285,5 +300,36 @@ describe("cli inspect lineage reporting", () => {
     ]);
     expect(report.operatorSafety.receiptIds).toHaveLength(3);
     expect(report.operatorSafety.receiptIds).not.toContain(unrelated.itemId);
+  });
+
+  test("projects latest handoff anchor into the default work card", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-handoff-")),
+    });
+    const sessionId = "inspect-handoff-session";
+    const handoff = runtime.ops.tape.handoff.record(sessionId, {
+      name: "Implementation handoff",
+      summary: "Work card cutover is ready for follow-up.",
+      nextSteps: "Run focused inspect tests.",
+    });
+    expect(handoff.ok).toBe(true);
+    if (!handoff.ok) {
+      throw new Error("expected_handoff_recorded");
+    }
+    const anchorId = handoff.eventId;
+    if (!anchorId) {
+      throw new Error("expected_handoff_anchor_id");
+    }
+
+    const report = buildInspectReport(runtime, sessionId);
+    const workCard = buildTaskWorkCardProjection(report);
+    const text = formatInspectText(report);
+
+    expect(workCard.handoff.anchorId).toBe(anchorId);
+    expect(workCard.handoff.name).toBe("Implementation handoff");
+    expect(workCard.handoff.summary).toBe("Work card cutover is ready for follow-up.");
+    expect(workCard.handoff.nextSteps).toBe("Run focused inspect tests.");
+    expect(text).toContain(`Handoff: anchor=${anchorId}`);
+    expect(text).toContain("summary=Work card cutover is ready for follow-up.");
   });
 });

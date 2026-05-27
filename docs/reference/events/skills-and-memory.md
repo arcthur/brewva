@@ -1,7 +1,8 @@
 # Skill And Memory Event Families
 
 This page covers skill catalog refresh and advisory selection events plus
-recall, workbench, semantic extraction, and iteration-fact events.
+recall, attention options, workbench, semantic extraction, and iteration-fact
+events.
 
 ## Skill Catalog
 
@@ -25,12 +26,16 @@ and tool admission are owned by session-level budget and effect governance.
 
 ## Recall And Workbench Memory
 
-Recall and workbench events expose semantic memory as inspectable evidence:
+Recall, attention option, and workbench events expose semantic memory as
+inspectable evidence:
 
 - recall curation records operator or runtime curation actions
 - recall utility observations describe usefulness signals
 - recall surfaced events connect query intent to returned evidence through
   projected `sourceFamily`, `sessionScope`, `rootRef`, and `stableId`
+- attention option metric observations record bounded option exposure,
+  consumption, pin, ignore, and verify-plan refs separately from automatically
+  available context
 - workbench events track model-authored notes, reversible evictions, and
   committed baselines
 
@@ -40,7 +45,8 @@ uses it as evidence. It is not kernel truth.
 `session.compaction.committed` carries `inputProvenance` for compacted active
 sets. The provenance records active workbench entry ids, selected skill
 invocation ids, surfaced resource refs, capability receipt refs, bounded used
-recall refs, pinned workbench recall refs, compact baseline metadata, and
+recall refs, consumed attention refs, pinned attention refs, ignored attention
+refs, verify-plan refs, compact baseline metadata, and
 `hiddenRecallSearch=false`.
 Compaction does not run recall search behind the model.
 

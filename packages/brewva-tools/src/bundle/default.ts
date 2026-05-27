@@ -13,6 +13,7 @@ import {
 } from "../families/delegation/api.js";
 import { createExecTool, createProcessTool } from "../families/execution/api.js";
 import {
+  createAttentionOptionTools,
   createKnowledgeCaptureTool,
   createKnowledgeSearchTool,
   createPrecedentAuditTool,
@@ -80,6 +81,7 @@ export function buildDefaultBundledBrewvaTools(
     ...createBrowserTools({ runtime }),
     createProcessTool({ runtime }),
     createQuestionTool(),
+    ...createAttentionOptionTools({ runtime }),
     createCostViewTool({ runtime }),
     createWorkbenchNoteTool({ runtime }),
     createWorkbenchEvictTool({ runtime }),

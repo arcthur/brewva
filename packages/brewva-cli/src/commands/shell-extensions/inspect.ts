@@ -1,4 +1,5 @@
 import {
+  ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
   defineHostedExtensionPlugin,
   type HostedExtensionPlugin,
   type HostedExtensionApi,
@@ -54,6 +55,14 @@ export function createInspectCommandExtension(
   return defineHostedExtensionPlugin({
     name: "cli.inspect_command",
     capabilities: ["tool_registration.write"],
+    advisoryManifest: {
+      apiVersion: ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
+      slot: "surface.command",
+      name: "cli.inspect_command",
+      ambientCapabilityClass: "read_tape",
+      inputs: ["shell.command:inspect", "session.tape"],
+      outputs: ["operator_notification"],
+    },
     register(extensionApi: HostedExtensionApi) {
       const handler = async (args: string, ctx: BrewvaHostContext) => {
         const normalizedArgs = normalizeCommandArgs(args);
@@ -69,7 +78,7 @@ export function createInspectCommandExtension(
             directory,
           });
           const text = formatInspectText(report.base);
-          const summary = `Inspect report for ${report.directory} (${report.verdict}).`;
+          const summary = `Work card for ${report.directory} (${report.verdict}).`;
           ctx.ui.notify(
             toNotificationMessage(summary, text, maxNotificationLines, maxLineChars),
             resolveVerdictNotifyLevel(report.verdict),

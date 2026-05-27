@@ -1,8 +1,10 @@
 ---
 name: implementation
 references:
+  - skills/project/shared/critical-rules.md
   - skills/project/shared/package-boundaries.md
   - skills/project/shared/migration-priority-matrix.md
+  - skills/project/shared/source-map.md
 ---
 
 # Brewva Implementation Overlay
@@ -28,10 +30,15 @@ Additionally preserve Brewva public surfaces and dist guardrails.
 ### Step 1: Preserve public surfaces
 
 Treat runtime, CLI branding, and distribution safety gates as high-risk surfaces.
+For product-loop work, preserve Work Card-first inspect, Attention Options
+boundaries, replayable handoff, advisory SkillCards, and explicit verification
+gate manifests.
 
 ### Step 2: Pair code and evidence
 
 When touching routing, verification, or distribution behavior, keep verification evidence explicit in the same change set.
+When touching inspect, context, skill, extension, or handoff behavior, update
+the paired docs, source map, and fitness coverage in the same change set.
 
 ## Overlay Gate
 
@@ -56,6 +63,8 @@ When touching routing, verification, or distribution behavior, keep verification
 
 - mixing public-surface churn with opportunistic runtime rewrites
 - weakening dist or verification guardrails to make the refactor easier
+- preserving obsolete operator compatibility when an accepted decision requires
+  the Work Card, attention option, or handoff product cutover
 
 ## Example
 

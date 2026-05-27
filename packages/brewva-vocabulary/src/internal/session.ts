@@ -141,6 +141,108 @@ export interface SessionCompactionResourceRef extends ProtocolRecord {
   readonly path: string;
 }
 
+export const TASK_WORK_CARD_PROJECTION_SCHEMA_V1 = "brewva.task-work-card.projection.v1" as const;
+
+export type TaskWorkCardContextPressure = "low" | "medium" | "high" | "forced" | "unknown";
+
+export interface TaskWorkCardProjection extends ProtocolRecord {
+  readonly schema: typeof TASK_WORK_CARD_PROJECTION_SCHEMA_V1;
+  readonly version: 1;
+  readonly sessionId: string;
+  readonly refs: readonly string[];
+  readonly goal: {
+    readonly current: string | null;
+    readonly phase: string | null;
+    readonly health: string | null;
+    readonly targetRoots: readonly string[];
+    readonly taskItemCount: number;
+    readonly blockerCount: number;
+  };
+  readonly context: {
+    readonly pressure: TaskWorkCardContextPressure;
+    readonly workbenchEntryCount: number;
+    readonly skillInvocationRefs: readonly string[];
+    readonly resourceRefs: readonly string[];
+    readonly recallResultRefs: readonly string[];
+    readonly compactBaselineRef: string | null;
+    readonly automaticallyAvailableRefs: readonly string[];
+  };
+  readonly options: {
+    readonly generatedCount: number;
+    readonly consumedRefs: readonly string[];
+    readonly pinnedRefs: readonly string[];
+    readonly ignoredRefs: readonly string[];
+    readonly verifyPlanRefs: readonly string[];
+  };
+  readonly authority: {
+    readonly selectedCapabilities: readonly string[];
+    readonly capabilityReceiptRefs: readonly string[];
+    readonly pendingAskCount: number;
+    readonly denialCount: number;
+    readonly recentDecisionRefs: readonly string[];
+  };
+  readonly work: {
+    readonly activeRunCount: number;
+    readonly pendingWorkerPatchCount: number;
+    readonly pendingKnowledgeAdoptionCount: number;
+    readonly unreadEvidenceCount: number;
+    readonly blockedOrFailedRunCount: number;
+    readonly recoveryNextOwner: string;
+  };
+  readonly evidence: {
+    readonly verificationOutcome: string | null;
+    readonly verificationLevel: string | null;
+    readonly failedChecks: readonly string[];
+    readonly missingChecks: readonly string[];
+    readonly missingEvidence: readonly string[];
+    readonly verificationDebtCount: number;
+    readonly latestPatchSetRef: string | null;
+  };
+  readonly handoff: {
+    readonly anchorId: string | null;
+    readonly name: string | null;
+    readonly summary: string | null;
+    readonly nextSteps: string | null;
+  };
+}
+
+export const ATTENTION_OPTION_PROJECTION_SCHEMA_V1 =
+  "brewva.attention-option.projection.v1" as const;
+
+export type AttentionOptionSourceFamily =
+  | "skill_card"
+  | "workbench"
+  | "surfaced_recall"
+  | "session_tape_evidence"
+  | "repository_precedent";
+
+export type AttentionOptionAuthorityPosture = "none" | "read_context" | "write_workbench";
+
+export interface AttentionOptionProjection extends ProtocolRecord {
+  readonly schema: typeof ATTENTION_OPTION_PROJECTION_SCHEMA_V1;
+  readonly optionId: string;
+  readonly generationId: string;
+  readonly sourceFamily: AttentionOptionSourceFamily;
+  readonly rootRef: string;
+  readonly title: string;
+  readonly whyRelevant: string;
+  readonly tokenEstimate: number | null;
+  readonly resourceRefs: readonly string[];
+  readonly outputArtifacts: readonly string[];
+  readonly allowedActions: readonly AttentionOptionActionKind[];
+  readonly authorityPosture: AttentionOptionAuthorityPosture;
+}
+
+export type AttentionOptionActionKind = "consume" | "pin" | "ignore" | "verify_plan";
+
+export interface SessionCompactionAttentionRefs extends ProtocolRecord {
+  readonly generationIds: readonly string[];
+  readonly consumedRefs: readonly string[];
+  readonly pinnedRefs: readonly string[];
+  readonly ignoredRefs: readonly string[];
+  readonly verifyPlanRefs: readonly string[];
+}
+
 /**
  * Persisted compaction provenance schema discriminator. Future revisions should widen
  * the reader type to a version union and keep a v1 compatibility reader instead of
@@ -162,6 +264,7 @@ export interface SessionCompactionInputProvenance extends ProtocolRecord {
     readonly maxResults: number;
     readonly selectedStableIds: readonly string[];
   };
+  readonly attention?: SessionCompactionAttentionRefs;
 }
 
 export type TapeHandoffResult =

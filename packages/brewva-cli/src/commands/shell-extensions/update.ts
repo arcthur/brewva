@@ -1,5 +1,6 @@
 import { buildBrewvaUpdatePrompt } from "@brewva/brewva-gateway";
 import {
+  ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
   defineHostedExtensionPlugin,
   type HostedExtensionPlugin,
   type HostedExtensionApi,
@@ -17,6 +18,14 @@ export function createUpdateCommandExtension(
   return defineHostedExtensionPlugin({
     name: "cli.update_command",
     capabilities: ["tool_registration.write", "user_message.enqueue"],
+    advisoryManifest: {
+      apiVersion: ADVISORY_EXTENSION_MANIFEST_SCHEMA_V1,
+      slot: "surface.command",
+      name: "cli.update_command",
+      ambientCapabilityClass: "read_tape",
+      inputs: ["shell.command:update", "runtime.state"],
+      outputs: ["queued_user_message"],
+    },
     register(extensionApi: HostedExtensionApi) {
       extensionApi.registerCommand("update", {
         description:

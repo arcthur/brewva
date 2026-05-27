@@ -16,7 +16,8 @@
 
 Describe how the `--channel` path normalizes external channel updates into
 `TurnEnvelope`, binds them to runtime-backed agent sessions, and returns
-responses or approval turns to the originating channel.
+responses, Work Card inspect summaries, or approval turns to the originating
+channel.
 
 ## In Scope
 
@@ -62,9 +63,11 @@ flowchart TD
    channel session id in metadata.
 6. The runtime executes one hosted turn and collects assistant, tool, and
    approval outputs.
-7. The adapter renders outbound payloads according to channel capabilities and
+7. Channel inspect commands render the shared Work Card projection with channel
+   line budgets and canonical refs for drill-down.
+8. The adapter renders outbound payloads according to channel capabilities and
    sends them.
-8. Approval callbacks are signature-validated, projected into approval turns,
+9. Approval callbacks are signature-validated, projected into approval turns,
    and routed by exact `requestId` match to a live agent session. Matching
    prefers the current scope, then other live scopes.
 

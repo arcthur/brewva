@@ -13,6 +13,10 @@ import type {
   BrewvaModelRoleAlias,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import type {
+  VerificationGateEvidence,
+  VerificationGateManifest,
+} from "../../../extensions/api.js";
 import type { HostedModelRoutingSettings } from "../session/settings/settings-store.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
 import { hasHostedPromptAttemptDispatch } from "./hosted-prompt-attempt.js";
@@ -52,6 +56,9 @@ export interface RuntimeAdapterSession extends CollectSessionPromptOutputSession
     cooldownMs: number;
   }): void;
   createRuntimeToolContext(): BrewvaToolContext;
+  getRuntimeVerificationGateManifests?(): readonly VerificationGateManifest[];
+  getRuntimeVerificationGateEvidence?(sessionId: string): readonly VerificationGateEvidence[];
+  getRuntimeVerificationGateNow?(): number;
   getRuntimeProviderCachePolicy?(): ProviderCachePolicy;
   getRuntimeProviderTransport?(): ProviderStreamOptions["transport"];
   prepareRuntimeProviderPayload?(input: {

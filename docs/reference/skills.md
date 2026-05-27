@@ -217,6 +217,11 @@ The interactive shell exposes skills through `/skills`. That command reads the
 runtime skill catalog, producer contracts, and load report; it does not grant
 tool authority and does not special-case workflow names.
 
+The catalog renders SkillCards as advisory cards: name, source, why relevant,
+token estimate, resource refs, output artifacts, and authority posture `none`.
+`Enter` may insert a `$skill` mention into the composer, but the shell must not
+add a `Run skill` path or hard-code workflow command IDs.
+
 Review-oriented workflows such as `review` and security review remain
 catalog-discoverable skills or producer-backed workflows. They are intentionally
 not built-in `/review` or `/security-review` shell commands.

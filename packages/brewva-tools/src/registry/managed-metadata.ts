@@ -86,6 +86,27 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.skills.catalog.list",
     "capabilities.skills.selection.record",
   ]),
+  attention_options: metadata("base", "workspace_read", [
+    "capabilities.skills.catalog.list",
+    "capabilities.workbench.list",
+    "capabilities.events.records.query",
+    "capabilities.events.recordMetricObservation",
+    "capabilities.task.target.getDescriptor",
+  ]),
+  attention_consume: metadata("base", "memory_write", [
+    "capabilities.skills.catalog.get",
+    "capabilities.workbench.list",
+    "capabilities.events.records.query",
+    "capabilities.events.iteration.listMetricObservations",
+    "capabilities.events.recordMetricObservation",
+  ]),
+  attention_pin: metadata("base", "memory_write", ["capabilities.workbench.note"]),
+  attention_ignore: metadata("base", "memory_write", [
+    "capabilities.events.recordMetricObservation",
+  ]),
+  attention_verify_plan: metadata("base", "memory_write", [
+    "capabilities.events.recordMetricObservation",
+  ]),
   code_outline: metadata("base", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
