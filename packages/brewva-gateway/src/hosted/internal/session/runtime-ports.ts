@@ -251,6 +251,13 @@ export function getRuntimeCostSummary(
   return runtime.ops.cost.summary.get(sessionId);
 }
 
+export function getRuntimeCostPosture(
+  runtime: Pick<HostedRuntimeAdapterPort, "ops">,
+  sessionId: string,
+): ReturnType<HostedRuntimeAdapterPort["ops"]["cost"]["posture"]["get"]> {
+  return runtime.ops.cost.posture.get(sessionId);
+}
+
 export function getRuntimeTaskState(
   runtime: Pick<HostedRuntimeAdapterPort, "ops">,
   sessionId: string,

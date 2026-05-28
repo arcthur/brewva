@@ -16,6 +16,12 @@ payload, not the working projection storage contract. It can render the active
 snapshot alongside capability, verification, workbench, and handoff refs without
 making any of those refs replay truth.
 
+The interactive shell cockpit is another product projection. It composes the
+Work Card, context cockpit, operator snapshot, session wire, runtime events,
+cost posture, rewind targets, and operator observation cursor into a
+shell-local view model. It is rebuildable UI state; it does not add storage
+authority to the working projection or event tape.
+
 ## Runtime Behavior
 
 ```mermaid
@@ -42,16 +48,19 @@ flowchart TD
 6. Work Card renderers may include active snapshot refs, but opening them does
    not refresh recall, capability selection, provider routing, or model context
    materialization.
-7. The per-session working snapshot file (config `projection.workingFile`,
+7. The shell cockpit may link visible refs into archive/detail overlays, but
+   opening those overlays is explicit-pull inspection and does not materialize
+   model-visible context.
+8. The per-session working snapshot file (config `projection.workingFile`,
    default `working.md`) is a write-through artifact persisted under
    `.orchestrator/projection/...`; it mirrors the current snapshot but is not
    the reload source for `brewva.projection-working`.
-8. If the in-memory working snapshot is absent,
+9. If the in-memory working snapshot is absent,
    `ProjectionEngine.refreshIfNeeded(...)` recomputes it from persisted
    projection units when those units already exist.
-9. If projection units for the session are also absent, runtime replays
-   durable tape events to rebuild projection state, then refreshes the working
-   snapshot.
+10. If projection units for the session are also absent, runtime replays
+    durable tape events to rebuild projection state, then refreshes the working
+    snapshot.
 
 ## Rebuildable Artifacts
 
@@ -81,6 +90,8 @@ flowchart TD
   classes
 - working projection is a bounded working snapshot, not planner memory and not
   a default injected workflow brief
+- shell cockpit projection is a renderer-facing view model, not a working
+  projection artifact, planner memory, or model-visible context input
 - the per-session working snapshot file and `brewva.projection-working`
   materialize only the current `active` subset, not the full unit log
 - workflow projection convergence is driven by `projection_group` resolves that

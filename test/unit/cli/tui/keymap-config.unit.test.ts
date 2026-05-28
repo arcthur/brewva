@@ -42,14 +42,14 @@ describe("brewva tui keymap bindings", () => {
         "app.commandPalette": "leader p",
         "app.help": "none",
         "selection.copy": "none",
-        "transcript.pageUp": "pgup",
+        "surface.pageUp": "pgup",
       },
     });
 
     expect(bindings.get("app.commandPalette")).toEqual(["leader p"]);
     expect(bindings.get("app.help")).toEqual([]);
     expect(bindings.get("selection.copy")).toEqual([]);
-    expect(bindings.get("transcript.pageUp")).toEqual(["pageup"]);
+    expect(bindings.get("surface.pageUp")).toEqual(["pageup"]);
     expect(formatShortcutLabel(bindings.get("app.commandPalette")[0])).toBe("Leader P");
 
     expect(() =>
@@ -65,7 +65,12 @@ describe("brewva tui keymap bindings", () => {
 
   test("keeps command registry and built-in effect ids explicit", () => {
     expect(commandBindings().map((binding) => binding.id)).toEqual(
-      expect.arrayContaining(["app.commandPalette", "app.help"]),
+      expect.arrayContaining([
+        "app.commandPalette",
+        "app.help",
+        "cockpit.archive",
+        "cockpit.attention",
+      ]),
     );
     expect(BREWVA_BUILT_IN_KEYMAP_BINDINGS.map((binding) => binding.id)).toEqual(
       expect.arrayContaining([
@@ -74,7 +79,7 @@ describe("brewva tui keymap bindings", () => {
         "completion.accept",
         "overlay.close",
         "selection.copy",
-        "transcript.pageDown",
+        "surface.pageDown",
       ]),
     );
   });

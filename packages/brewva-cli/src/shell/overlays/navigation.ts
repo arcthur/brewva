@@ -49,6 +49,9 @@ export function selectableItemCount(payload: CliShellOverlayPayload): number | u
   if (payload.kind === "inspect") {
     return payload.sections.length;
   }
+  if (payload.kind === "cockpitArchive") {
+    return payload.items.length;
+  }
   if (payload.kind === "select") {
     return payload.options.length;
   }

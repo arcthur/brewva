@@ -7,7 +7,7 @@ import type {
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { BrewvaReplaySession, SkillDocument } from "@brewva/brewva-vocabulary/session";
-import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
+import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { parseKeypress, type ParsedKey } from "@opentui/core";
 import {
   createOpenTuiSolidElement,
@@ -24,6 +24,7 @@ import type {
   ProviderConnectionDescriptor,
   ProviderOAuthAuthorization,
 } from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import type { CliShellTranscriptTextPart } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 import { requireDefined } from "../../helpers/assertions.js";
 interface FakeOpenTuiSelectionRenderer extends OpenTuiRenderer {
@@ -43,6 +44,26 @@ interface OpenTuiPasteRenderer extends OpenTuiRenderer {
 interface OpenTuiKeyInputRenderer extends OpenTuiRenderer {
   keyInput: {
     processParsedKey(key: ParsedKey): boolean;
+  };
+}
+
+interface OpenTuiRootRenderer extends OpenTuiRenderer {
+  root: {
+    getChildren(): unknown[];
+  };
+}
+
+interface OpenTuiRenderableLike {
+  getChildren?(): unknown[];
+}
+
+interface OpenTuiScrollBoxLike {
+  scrollTop: number;
+  scrollHeight: number;
+  scrollBy(delta: number): void;
+  scrollTo(offset: number): void;
+  viewport: {
+    height: number;
   };
 }
 
@@ -120,6 +141,57 @@ function toOpenTuiKeyEvent(parsed: ParsedKey): OpenTuiKeyEvent {
     preventDefault() {},
     stopPropagation() {},
   };
+}
+
+function isScrollBoxLike(value: unknown): value is OpenTuiScrollBoxLike {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<OpenTuiScrollBoxLike>;
+  return (
+    typeof candidate.scrollTop === "number" &&
+    typeof candidate.scrollHeight === "number" &&
+    typeof candidate.scrollBy === "function" &&
+    typeof candidate.scrollTo === "function" &&
+    typeof candidate.viewport === "object" &&
+    candidate.viewport !== null &&
+    typeof candidate.viewport.height === "number"
+  );
+}
+
+function findScrollableTranscriptScrollbox(renderer: OpenTuiRenderer): OpenTuiScrollBoxLike {
+  const root = (renderer as OpenTuiRootRenderer).root;
+  const queue: unknown[] = [...root.getChildren()];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (isScrollBoxLike(current) && current.scrollHeight > current.viewport.height) {
+      return current;
+    }
+    const children = (current as OpenTuiRenderableLike | undefined)?.getChildren?.();
+    if (children) {
+      queue.push(...children);
+    }
+  }
+  throw new Error("expected a scrollable transcript scrollbox");
+}
+
+function countRenderablesByConstructorName(renderer: OpenTuiRenderer, name: string): number {
+  const root = (renderer as OpenTuiRootRenderer).root;
+  let count = 0;
+  const queue: unknown[] = [root];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const constructorName = (current as { constructor?: { name?: string } } | undefined)
+      ?.constructor?.name;
+    if (constructorName === name) {
+      count += 1;
+    }
+    const children = (current as OpenTuiRenderableLike | undefined)?.getChildren?.();
+    if (children) {
+      queue.push(...children);
+    }
+  }
+  return count;
 }
 
 async function waitForRenderedFrame(
@@ -243,6 +315,51 @@ function fakeSkill(input: {
     projectGuidance: [],
     overlayFiles: [],
   };
+}
+
+function assistantTextDeltaSessionEvent(input: {
+  delta: string;
+  text: string;
+}): Extract<BrewvaPromptSessionEvent, { type: "message_update" }> {
+  return {
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "text_delta",
+      contentIndex: 0,
+      delta: input.delta,
+      partial: {
+        role: "assistant",
+        stopReason: "stop",
+        content: [{ type: "text", text: input.text }],
+        timestamp: Date.now(),
+      },
+    },
+  };
+}
+
+function thinkingProgressSessionEvent(): BrewvaPromptSessionEvent {
+  return {
+    type: "session_wire_progress",
+    frameType: "assistant.delta",
+    lane: "thinking",
+    turnId: "turn-1",
+    attemptId: "attempt-1",
+  };
+}
+
+function readLatestAssistantText(runtime: CliShellRuntime): string {
+  const messages = runtime.getViewState().transcript.messages;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== "assistant") {
+      continue;
+    }
+    const part = message.parts.find(
+      (candidate): candidate is CliShellTranscriptTextPart => candidate.type === "text",
+    );
+    return part?.text ?? "";
+  }
+  return "";
 }
 
 function createFakeBundle(
@@ -534,6 +651,41 @@ function createFakeBundle(
       sessionListener?.(event);
     },
   };
+}
+
+function buildDockedCockpitSessionWire(sessionId = "session-1"): SessionWireFrame[] {
+  return [
+    {
+      schema: SESSION_WIRE_SCHEMA,
+      sessionId,
+      frameId: "frame:exec-1",
+      ts: 1_000,
+      source: "live",
+      durability: "cache",
+      type: "tool.finished",
+      turnId: "turn:1",
+      attemptId: "attempt:1",
+      toolCallId: "tool-call-1",
+      toolName: "exec",
+      verdict: "ok",
+      isError: false,
+      text: "output 1",
+    },
+  ];
+}
+
+function buildScrollableTranscriptMessages(): unknown[] {
+  return Array.from({ length: 48 }, (_, index) => ({
+    role: "assistant",
+    stopReason: "stop",
+    content: [
+      {
+        type: "text",
+        text: `Scrollable transcript row ${index + 1}\nDetails for transcript row ${index + 1}.`,
+      },
+    ],
+    timestamp: 1_000 + index,
+  }));
 }
 
 describe("opentui solid shell runtime: interaction events", () => {
@@ -1314,8 +1466,801 @@ describe("opentui solid shell runtime: interaction events", () => {
         await Bun.sleep(0);
       });
       await testSetup.renderOnce();
+      expect(testSetup.captureCharFrame()).toContain("hello");
+      await openTuiSolidAct(async () => {
+        await Bun.sleep(100);
+      });
+      await testSetup.renderOnce();
 
       expect(runtime.getViewState().composer.text).toBe("hello");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps the composer visibly editable while an interactive prompt is still running", async () => {
+    let releasePrompt: (() => void) | undefined;
+    let promptStarted: (() => void) | undefined;
+    const promptStartedPromise = new Promise<void>((resolve) => {
+      promptStarted = resolve;
+    });
+    const promptReleasePromise = new Promise<void>((resolve) => {
+      releasePrompt = resolve;
+    });
+    const { bundle } = createFakeBundle({
+      isStreaming: true,
+      async promptHandler() {
+        promptStarted?.();
+        await promptReleasePromise;
+      },
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        await testSetup.mockInput.typeText("first");
+        await Bun.sleep(100);
+        expect(runtime.getViewState().composer.text).toBe("first");
+        testSetup.mockInput.pressEnter();
+        await Bun.sleep(0);
+        await Promise.race([
+          promptStartedPromise,
+          Bun.sleep(250).then(() => {
+            throw new Error("expected prompt handler to start");
+          }),
+        ]);
+        await testSetup.mockInput.typeText("next");
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(testSetup.captureCharFrame()).toContain("next");
+      await openTuiSolidAct(async () => {
+        await Bun.sleep(100);
+      });
+      await testSetup.renderOnce();
+      expect(runtime.getViewState().composer.text).toBe("next");
+    } finally {
+      releasePrompt?.();
+      await Bun.sleep(0);
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps locally typed queued prompt through streaming refresh before editor sync settles", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const heldEditorSyncs: unknown[] = [];
+    const rendererRuntime = new Proxy(runtime, {
+      get(target, prop, receiver) {
+        if (prop === "handleInput") {
+          return async (input: unknown) => {
+            if (
+              typeof input === "object" &&
+              input !== null &&
+              (input as { type?: unknown }).type === "composer.editorSync"
+            ) {
+              heldEditorSyncs.push(input);
+              return true;
+            }
+            return await target.handleInput(input as Parameters<CliShellRuntime["handleInput"]>[0]);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: rendererRuntime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        await testSetup.mockInput.typeText("queued");
+        fakeBundle.emitSessionEvent(
+          assistantTextDeltaSessionEvent({ delta: "partial", text: "partial" }),
+        );
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(heldEditorSyncs).toHaveLength(0);
+      expect(testSetup.captureCharFrame()).toContain("queued");
+      await openTuiSolidAct(async () => {
+        await Bun.sleep(100);
+      });
+      expect(heldEditorSyncs.length).toBeGreaterThan(0);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("coalesces streaming transcript refreshes before repainting the shell", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    let getViewStateCalls = 0;
+    const rendererRuntime = new Proxy(runtime, {
+      get(target, prop, receiver) {
+        if (prop === "getViewState") {
+          return () => {
+            getViewStateCalls += 1;
+            return target.getViewState();
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: rendererRuntime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      getViewStateCalls = 0;
+      await openTuiSolidAct(async () => {
+        let text = "";
+        for (let index = 0; index < 20; index += 1) {
+          const delta = String.fromCharCode(97 + (index % 26));
+          text += delta;
+          fakeBundle.emitSessionEvent(assistantTextDeltaSessionEvent({ delta, text }));
+        }
+        await Bun.sleep(150);
+      });
+      await testSetup.renderOnce();
+
+      expect(getViewStateCalls).toBeLessThanOrEqual(2);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps continuous streaming refreshes on frame cadence without coarse chunks", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    let getViewStateCalls = 0;
+    const rendererRuntime = new Proxy(runtime, {
+      get(target, prop, receiver) {
+        if (prop === "getViewState") {
+          return () => {
+            getViewStateCalls += 1;
+            return target.getViewState();
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: rendererRuntime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      getViewStateCalls = 0;
+      await openTuiSolidAct(async () => {
+        let text = "";
+        for (let index = 0; index < 18; index += 1) {
+          const delta = String.fromCharCode(97 + (index % 26));
+          text += delta;
+          fakeBundle.emitSessionEvent(assistantTextDeltaSessionEvent({ delta, text }));
+          await Bun.sleep(10);
+        }
+        await Bun.sleep(140);
+      });
+
+      expect(getViewStateCalls).toBeGreaterThan(4);
+      expect(getViewStateCalls).toBeLessThanOrEqual(16);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("batches high-frequency transcript projection between frame ticks", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    try {
+      fakeBundle.emitSessionEvent(
+        assistantTextDeltaSessionEvent({
+          delta: "alpha",
+          text: "alpha",
+        }),
+      );
+      expect(readLatestAssistantText(runtime)).toBe("alpha");
+
+      fakeBundle.emitSessionEvent(
+        assistantTextDeltaSessionEvent({
+          delta: " beta",
+          text: "alpha beta",
+        }),
+      );
+      expect(readLatestAssistantText(runtime)).toBe("alpha");
+
+      await Bun.sleep(CliShellRuntime.STREAMING_RENDER_INTERVAL_MS + 25);
+
+      expect(readLatestAssistantText(runtime)).toBe("alpha beta");
+    } finally {
+      runtime.dispose();
+    }
+  });
+
+  test("flushes queued high-frequency transcript events before disposal", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    fakeBundle.emitSessionEvent(
+      assistantTextDeltaSessionEvent({
+        delta: "alpha",
+        text: "alpha",
+      }),
+    );
+    fakeBundle.emitSessionEvent(
+      assistantTextDeltaSessionEvent({
+        delta: " beta",
+        text: "alpha beta",
+      }),
+    );
+
+    expect(readLatestAssistantText(runtime)).toBe("alpha");
+
+    runtime.dispose();
+
+    expect(readLatestAssistantText(runtime)).toBe("alpha beta");
+  });
+
+  test("renders display summaries for collapsed generic tool results without exact expanded counts", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      fakeBundle.emitSessionEvent({
+        type: "tool_execution_end",
+        toolCallId: "tool-call-summary",
+        toolName: "code_digest",
+        result: {
+          content: [
+            {
+              type: "text",
+              text: Array.from(
+                { length: 60 },
+                (_value, index) => `expanded digest line ${index + 1}`,
+              ).join("\n"),
+            },
+          ],
+          details: { status: "ok" },
+          display: {
+            summaryText: "[CodeDigest]\nroot: /workspace\nfiles: 20\nomitted_files: 220",
+          },
+        },
+        isError: false,
+      });
+
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (currentFrame) => currentFrame.includes("[CodeDigest]"),
+      });
+
+      expect(frame).toContain("root: /workspace");
+      expect(frame).toContain("Click to expand");
+      expect(frame).not.toContain("more line(s)");
+      expect(frame).not.toContain("expanded digest line 60");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("does not repaint for thinking-only wire progress without transcript changes", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    let getViewStateCalls = 0;
+    const rendererRuntime = new Proxy(runtime, {
+      get(target, prop, receiver) {
+        if (prop === "getViewState") {
+          return () => {
+            getViewStateCalls += 1;
+            return target.getViewState();
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: rendererRuntime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      getViewStateCalls = 0;
+      await openTuiSolidAct(async () => {
+        for (let index = 0; index < 30; index += 1) {
+          fakeBundle.emitSessionEvent(thinkingProgressSessionEvent());
+          await Bun.sleep(5);
+        }
+        await Bun.sleep(120);
+      });
+
+      expect(getViewStateCalls).toBe(0);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("does not turn live follow mode into scroll sync while streaming grows content", async () => {
+    const fakeBundle = createFakeBundle({
+      seedMessages: buildScrollableTranscriptMessages(),
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const surfaceScrollSyncInputs: unknown[] = [];
+    const rendererRuntime = new Proxy(runtime, {
+      get(target, prop, receiver) {
+        if (prop === "handleInput") {
+          return async (input: unknown) => {
+            if (
+              typeof input === "object" &&
+              input !== null &&
+              (input as { type?: unknown }).type === "surface.scrollSync"
+            ) {
+              surfaceScrollSyncInputs.push(input);
+            }
+            return await target.handleInput(input as Parameters<CliShellRuntime["handleInput"]>[0]);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: rendererRuntime }),
+      {
+        width: 100,
+        height: 24,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      expect(runtime.getViewState().surface.followMode).toBe("live");
+
+      surfaceScrollSyncInputs.length = 0;
+      await openTuiSolidAct(async () => {
+        fakeBundle.emitSessionEvent(
+          assistantTextDeltaSessionEvent({
+            delta: "Frame-bound live streaming content.",
+            text: "Frame-bound live streaming content.",
+          }),
+        );
+        await Bun.sleep(40);
+      });
+      await waitForRenderedFrame(testSetup, {
+        predicate: (frame) => frame.includes("Frame-bound live streaming content."),
+      });
+
+      expect(surfaceScrollSyncInputs).toEqual([]);
+      expect(runtime.getViewState().surface.followMode).toBe("live");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders live streaming markdown text through a lightweight raw preview", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        fakeBundle.emitSessionEvent(
+          assistantTextDeltaSessionEvent({
+            delta: "# Result\n\n- **Fast** streaming",
+            text: "# Result\n\n- **Fast** streaming",
+          }),
+        );
+        await Bun.sleep(50);
+      });
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) => candidate.includes("**Fast** streaming"),
+      });
+      expect(frame).toContain("# Result");
+      expect(frame).toContain("**Fast** streaming");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("does not warn when a streamed assistant message settles into history", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const runtime = new CliShellRuntime(fakeBundle.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fakeBundle.bundle,
+      createSession: async () => fakeBundle.bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map((arg) => String(arg)).join(" "));
+    };
+
+    try {
+      await testSetup.renderOnce();
+      const answer = [
+        "# Result",
+        "",
+        "| Area | Notes |",
+        "| --- | --- |",
+        "| Runtime | Streaming settled |",
+      ].join("\n");
+      await openTuiSolidAct(async () => {
+        fakeBundle.emitSessionEvent(
+          assistantTextDeltaSessionEvent({
+            delta: answer,
+            text: answer,
+          }),
+        );
+        await Bun.sleep(50);
+      });
+      await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) => candidate.includes("Streaming settled"),
+      });
+      await openTuiSolidAct(async () => {
+        fakeBundle.emitSessionEvent({
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "stop",
+            content: [{ type: "text", text: answer }],
+          },
+        });
+        await Bun.sleep(50);
+      });
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) => candidate.includes("Streaming settled"),
+      });
+
+      expect(warnings.join("\n")).not.toContain("Anchor is the same as the node");
+      expect(frame).not.toContain("Anchor is the same as the node");
+    } finally {
+      console.warn = originalWarn;
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("renders stable interactive markdown tables as tables", async () => {
+    const { bundle } = createFakeBundle({
+      seedMessages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: [
+                "# Project traits",
+                "",
+                "| Area | Notes |",
+                "| --- | --- |",
+                "| Runtime | Agent shell |",
+                "| UI | OpenTUI |",
+              ].join("\n"),
+            },
+          ],
+          timestamp: 1_000,
+        },
+      ],
+    });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) => candidate.includes("Agent shell"),
+      });
+
+      expect(frame).toContain("Runtime");
+      expect(frame).toContain("Agent shell");
+      expect(frame).not.toContain("| --- | --- |");
+      expect(frame).not.toContain("| Runtime | Agent shell |");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps live streaming interactive markdown off native markdown renderables", async () => {
+    const fakeBundle = createFakeBundle({
+      isStreaming: true,
+    });
+    const runtime = new CliShellRuntime(fakeBundle.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fakeBundle.bundle,
+      createSession: async () => fakeBundle.bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        fakeBundle.emitSessionEvent(
+          assistantTextDeltaSessionEvent({
+            delta: "# Result\n\n- **Fast** streaming",
+            text: "# Result\n\n- **Fast** streaming",
+          }),
+        );
+        await Bun.sleep(50);
+      });
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) => candidate.includes("**Fast** streaming"),
+      });
+
+      expect(countRenderablesByConstructorName(testSetup.renderer, "MarkdownRenderable")).toBe(0);
+      expect(frame).toContain("**Fast** streaming");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("typing plain composer text avoids extra view-model projections", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    let getViewStateCalls = 0;
+    const rendererRuntime = new Proxy(runtime, {
+      get(target, prop, receiver) {
+        if (prop === "getViewState") {
+          return () => {
+            getViewStateCalls += 1;
+            return target.getViewState();
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+        runtime: rendererRuntime,
+      }),
+      {
+        width: 100,
+        height: 30,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      getViewStateCalls = 0;
+      await openTuiSolidAct(async () => {
+        await testSetup.mockInput.typeText("hello");
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+
+      expect(testSetup.captureCharFrame()).toContain("hello");
+      expect(getViewStateCalls).toBeLessThanOrEqual(1);
+      await openTuiSolidAct(async () => {
+        await Bun.sleep(100);
+      });
+      await testSetup.renderOnce();
+      expect(runtime.getViewState().composer.text).toBe("hello");
+      expect(getViewStateCalls).toBeLessThanOrEqual(3);
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1352,8 +2297,12 @@ describe("opentui solid shell runtime: interaction events", () => {
       });
       await testSetup.renderOnce();
 
-      expect(runtime.getViewState().composer.text).toBe(imeText);
       expect(testSetup.captureCharFrame()).toContain(imeText);
+      await openTuiSolidAct(async () => {
+        await Bun.sleep(100);
+      });
+      await testSetup.renderOnce();
+      expect(runtime.getViewState().composer.text).toBe(imeText);
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1400,8 +2349,12 @@ describe("opentui solid shell runtime: interaction events", () => {
       await testSetup.renderOnce();
 
       expect(consoleErrors).toEqual([]);
-      expect(runtime.getViewState().composer.text).toBe(imeText);
       expect(testSetup.captureCharFrame()).toContain(imeText);
+      await openTuiSolidAct(async () => {
+        await Bun.sleep(100);
+      });
+      await testSetup.renderOnce();
+      expect(runtime.getViewState().composer.text).toBe(imeText);
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1884,14 +2837,11 @@ describe("opentui solid shell runtime: interaction events", () => {
     }
   });
 
-  test("navigates the transcript with home and end keys through the native scrollbox", async () => {
+  test("keeps docked cockpit effects out of native transcript scrollbox navigation", async () => {
     const { bundle } = createFakeBundle({
-      seedMessages: [
-        {
-          role: "assistant",
-          content: Array.from({ length: 120 }, (_, index) => `Line ${index + 1}`).join("\n"),
-        },
-      ],
+      sessionWireBySessionId: {
+        "session-1": buildDockedCockpitSessionWire(),
+      },
     });
 
     const runtime = new CliShellRuntime(bundle, {
@@ -1913,33 +2863,21 @@ describe("opentui solid shell runtime: interaction events", () => {
     try {
       await testSetup.renderOnce();
       await testSetup.renderOnce();
-      expect(runtime.getViewState().transcript.followMode).toBe("live");
+      expect(testSetup.captureCharFrame()).toContain("Effects");
+      expect(runtime.getViewState().surface.followMode).toBe("live");
       expect(runtime.getViewState().composer.text).toBe("");
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
           type: "keymap.effect",
-          effect: { type: "transcript.navigate", kind: "top" },
+          effect: { type: "surface.navigate", kind: "top" },
         });
       });
       await testSetup.renderOnce();
       await testSetup.renderOnce();
 
-      expect(runtime.getViewState().transcript.followMode).toBe("scrolled");
-      expect(runtime.getViewState().transcript.scrollOffset).toBeGreaterThan(0);
-      expect(runtime.getViewState().composer.text).toBe("");
-
-      await openTuiSolidAct(async () => {
-        await runtime.handleInput({
-          type: "keymap.effect",
-          effect: { type: "transcript.navigate", kind: "bottom" },
-        });
-      });
-      await testSetup.renderOnce();
-      await testSetup.renderOnce();
-
-      expect(runtime.getViewState().transcript.followMode).toBe("live");
-      expect(runtime.getViewState().transcript.scrollOffset).toBe(0);
+      expect(runtime.getViewState().surface.followMode).toBe("live");
+      expect(runtime.getViewState().surface.scrollOffset).toBe(0);
       expect(runtime.getViewState().composer.text).toBe("");
     } finally {
       runtime.dispose();
@@ -1947,14 +2885,12 @@ describe("opentui solid shell runtime: interaction events", () => {
     }
   });
 
-  test("pages the transcript viewport through native scrollbox navigation", async () => {
+  test("navigates transcript rows with home, page down, and end through the native scrollbox", async () => {
     const { bundle } = createFakeBundle({
-      seedMessages: [
-        {
-          role: "assistant",
-          content: Array.from({ length: 120 }, (_, index) => `Line ${index + 1}`).join("\n"),
-        },
-      ],
+      seedMessages: buildScrollableTranscriptMessages(),
+      sessionWireBySessionId: {
+        "session-1": buildDockedCockpitSessionWire(),
+      },
     });
 
     const runtime = new CliShellRuntime(bundle, {
@@ -1980,29 +2916,175 @@ describe("opentui solid shell runtime: interaction events", () => {
       await openTuiSolidAct(async () => {
         await runtime.handleInput({
           type: "keymap.effect",
-          effect: { type: "transcript.navigate", kind: "top" },
+          effect: { type: "surface.navigate", kind: "top" },
         });
       });
       await testSetup.renderOnce();
       await testSetup.renderOnce();
-      const topOffset = runtime.getViewState().transcript.scrollOffset;
+      const topOffset = runtime.getViewState().surface.scrollOffset;
+
+      expect(runtime.getViewState().surface.followMode).toBe("scrolled");
       expect(topOffset).toBeGreaterThan(0);
 
       await openTuiSolidAct(async () => {
-        for (let index = 0; index < 5; index += 1) {
-          await runtime.handleInput({
-            type: "keymap.effect",
-            effect: { type: "transcript.navigate", kind: "pageDown" },
-          });
-        }
+        await runtime.handleInput({
+          type: "keymap.effect",
+          effect: { type: "surface.navigate", kind: "pageDown" },
+        });
       });
       await testSetup.renderOnce();
       await testSetup.renderOnce();
 
-      expect(runtime.getViewState().transcript.scrollOffset).toBeLessThan(topOffset);
-      expect(runtime.getViewState().transcript.scrollOffset).toBeGreaterThan(0);
-      expect(runtime.getViewState().transcript.followMode).toBe("scrolled");
+      expect(runtime.getViewState().surface.scrollOffset).toBeLessThan(topOffset);
+      expect(runtime.getViewState().surface.followMode).toBe("scrolled");
+
+      await openTuiSolidAct(async () => {
+        await runtime.handleInput({
+          type: "keymap.effect",
+          effect: { type: "surface.navigate", kind: "bottom" },
+        });
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      expect(runtime.getViewState().surface.followMode).toBe("live");
+      expect(runtime.getViewState().surface.scrollOffset).toBe(0);
       expect(runtime.getViewState().composer.text).toBe("");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps passive shell updates from projecting manual transcript scroll into runtime state", async () => {
+    const { bundle } = createFakeBundle({
+      seedMessages: buildScrollableTranscriptMessages(),
+    });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const surfaceScrollSyncInputs: unknown[] = [];
+    const rendererRuntime = new Proxy(runtime, {
+      get(target, prop, receiver) {
+        if (prop === "handleInput") {
+          return async (input: unknown) => {
+            if (
+              typeof input === "object" &&
+              input !== null &&
+              (input as { type?: unknown }).type === "surface.scrollSync"
+            ) {
+              surfaceScrollSyncInputs.push(input);
+            }
+            return await target.handleInput(input as Parameters<CliShellRuntime["handleInput"]>[0]);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: rendererRuntime }),
+      {
+        width: 100,
+        height: 24,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const transcriptScrollbox = findScrollableTranscriptScrollbox(testSetup.renderer);
+      const maxScrollTop = Math.max(
+        0,
+        transcriptScrollbox.scrollHeight - transcriptScrollbox.viewport.height,
+      );
+      expect(transcriptScrollbox.scrollTop).toBe(maxScrollTop);
+
+      transcriptScrollbox.scrollBy(-6);
+      await testSetup.renderOnce();
+      const manualScrollTop = transcriptScrollbox.scrollTop;
+      expect(manualScrollTop).toBeLessThan(maxScrollTop);
+
+      surfaceScrollSyncInputs.length = 0;
+      runtime.ui.notify("passive refresh");
+      await testSetup.renderOnce();
+
+      expect(surfaceScrollSyncInputs).toEqual([]);
+      expect(transcriptScrollbox.scrollTop).toBe(manualScrollTop);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("keeps the live streaming answer in native transcript flow while navigating history", async () => {
+    const seedMessages = Array.from({ length: 48 }, (_, index) => ({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `Scrollable transcript row ${index + 1}`,
+        },
+      ],
+      timestamp: 1_000 + index,
+    }));
+    const fakeBundle = createFakeBundle({
+      seedMessages,
+      isStreaming: true,
+    });
+    const bundle = fakeBundle.bundle;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 24,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        fakeBundle.emitSessionEvent(
+          assistantTextDeltaSessionEvent({
+            delta: "Live streaming answer stays pinned.",
+            text: "Live streaming answer stays pinned.",
+          }),
+        );
+        await Bun.sleep(50);
+      });
+      await waitForRenderedFrame(testSetup, {
+        predicate: (frame) => frame.includes("Live streaming answer stays pinned."),
+      });
+
+      await openTuiSolidAct(async () => {
+        await runtime.handleInput({
+          type: "keymap.effect",
+          effect: { type: "surface.navigate", kind: "top" },
+        });
+      });
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) => candidate.includes("Scrollable transcript row 1"),
+      });
+      expect(frame).toContain("Scrollable transcript row 1");
+      expect(frame).not.toContain("Live streaming answer stays pinned.");
+      expect(runtime.getViewState().surface.followMode).toBe("scrolled");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

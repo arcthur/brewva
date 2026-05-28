@@ -4,7 +4,10 @@ import { Show, createMemo } from "solid-js";
 import type { CliShellOverlayPayload } from "../../../src/shell/domain/overlays/payloads.js";
 import type { ShellViewModel } from "../../../src/shell/domain/view-model.js";
 import type { SessionPalette } from "../palette.js";
+import { ApprovalOverlay } from "./approval-overlay.js";
 import {
+  CockpitArchiveOverlay,
+  CockpitAttentionOverlay,
   InboxOverlay,
   InspectOverlay,
   LineageOverlay,
@@ -32,6 +35,7 @@ import {
   ShortcutOverlay,
   ThinkingPickerOverlay,
 } from "./picker-overlays.js";
+import { QuestionOverlay } from "./question-overlay.js";
 
 type OverlayPayloadOf<TKind extends CliShellOverlayPayload["kind"]> = Extract<
   CliShellOverlayPayload,
@@ -58,6 +62,26 @@ export function ModalOverlay(input: {
       <Show when={overlayPayloadOf(payload(), "pager")}>
         {(current) => (
           <PagerOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "approval")}>
+        {(current) => (
+          <ApprovalOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "question")}>
+        {(current) => (
+          <QuestionOverlay
             payload={current()}
             theme={input.theme}
             width={input.width}
@@ -238,6 +262,26 @@ export function ModalOverlay(input: {
       <Show when={overlayPayloadOf(payload(), "authority")}>
         {(current) => (
           <AuthorityOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "cockpitArchive")}>
+        {(current) => (
+          <CockpitArchiveOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "cockpitAttention")}>
+        {(current) => (
+          <CockpitAttentionOverlay
             payload={current()}
             theme={input.theme}
             width={input.width}

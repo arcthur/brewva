@@ -5,6 +5,7 @@ import type {
   BrewvaPromptSessionEvent,
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
+  SessionPhase,
 } from "@brewva/brewva-substrate/session";
 import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-vocabulary/iteration";
 import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-vocabulary/session";
@@ -24,6 +25,7 @@ import type {
   CliShellSessionBundle,
   SessionLineageStatusView,
   SessionViewPort,
+  SessionWireFrameReadOptions,
 } from "./session-port.js";
 export { createCliShellPromptStore } from "../domain/prompt-store.js";
 
@@ -158,6 +160,11 @@ type RuntimeToolSessionWireFrame = Extract<
   SessionWireFrame,
   { type: "tool.progress" | "tool.finished" }
 >;
+type RuntimeThinkingDeltaFrame = Extract<SessionWireFrame, { type: "assistant.delta" }>;
+type ModelStreamingSessionPhase = Extract<SessionPhase, { kind: "model_streaming" }>;
+type ToolExecutingSessionPhase = Extract<SessionPhase, { kind: "tool_executing" }>;
+
+const LIVE_SESSION_WIRE_FRAME_LIMIT = 512;
 
 function readReplayItemSequence(value: unknown): number | undefined {
   if (typeof value !== "object" || value === null || !("sequence" in value)) {
@@ -171,6 +178,10 @@ interface RuntimeTurnSessionProjectionState {
   assistantSegmentText: string;
   assistantSegmentProjected: boolean;
   emittedAssistantMessage: boolean;
+  phaseKey: string | null;
+  currentPhase: SessionPhase;
+  lastModelPhase: ModelStreamingSessionPhase | null;
+  lastToolPhase: ToolExecutingSessionPhase | null;
 }
 
 function buildAssistantTextMessage(text: string): {
@@ -207,7 +218,224 @@ function createRuntimeTurnSessionProjectionState(): RuntimeTurnSessionProjection
     assistantSegmentText: "",
     assistantSegmentProjected: false,
     emittedAssistantMessage: false,
+    phaseKey: null,
+    currentPhase: { kind: "idle" },
+    lastModelPhase: null,
+    lastToolPhase: null,
   };
+}
+
+function sessionWireFrameKey(frame: SessionWireFrame): string {
+  return frame.sourceEventId
+    ? `${frame.sourceEventId}:${frame.type}`
+    : `${frame.sessionId}:${frame.frameId}`;
+}
+
+function sessionWireFrameTurnId(frame: SessionWireFrame): string | undefined {
+  return "turnId" in frame && typeof frame.turnId === "string" ? frame.turnId : undefined;
+}
+
+function isEvictableLiveSessionWireFrame(frame: SessionWireFrame): boolean {
+  return frame.type === "assistant.delta" || frame.type === "tool.progress";
+}
+
+function rememberLiveSessionWireFrame(
+  frames: Map<string, SessionWireFrame>,
+  frame: SessionWireFrame,
+  limit = LIVE_SESSION_WIRE_FRAME_LIMIT,
+): void {
+  const turnId = sessionWireFrameTurnId(frame);
+  if (turnId && frame.type === "turn.committed") {
+    for (const [key, current] of frames) {
+      if (
+        sessionWireFrameTurnId(current) === turnId &&
+        current.type === "assistant.delta" &&
+        current.durability === "cache"
+      ) {
+        frames.delete(key);
+      }
+    }
+  }
+  frames.set(sessionWireFrameKey(frame), frame);
+  while (frames.size > limit) {
+    let oldestKey: string | undefined;
+    for (const [key, candidate] of frames) {
+      if (isEvictableLiveSessionWireFrame(candidate)) {
+        oldestKey = key;
+        break;
+      }
+    }
+    oldestKey ??= frames.keys().next().value;
+    if (typeof oldestKey !== "string") {
+      break;
+    }
+    frames.delete(oldestKey);
+  }
+}
+
+export function createLiveSessionWireFrameStore(limit = LIVE_SESSION_WIRE_FRAME_LIMIT): {
+  remember(frame: SessionWireFrame): void;
+  values(): IterableIterator<SessionWireFrame>;
+} {
+  const frames = new Map<string, SessionWireFrame>();
+  return {
+    remember(frame) {
+      rememberLiveSessionWireFrame(frames, frame, limit);
+    },
+    values() {
+      return frames.values();
+    },
+  };
+}
+
+function mergedSessionWireFrames(input: {
+  readonly durableFrames: readonly SessionWireFrame[];
+  readonly liveFrames: Iterable<SessionWireFrame>;
+  readonly sessionId: string;
+}): SessionWireFrame[] {
+  const framesByKey = new Map<string, SessionWireFrame>();
+  for (const frame of input.durableFrames) {
+    framesByKey.set(sessionWireFrameKey(frame), frame);
+  }
+  for (const frame of input.liveFrames) {
+    if (frame.sessionId !== input.sessionId) {
+      continue;
+    }
+    framesByKey.set(sessionWireFrameKey(frame), frame);
+  }
+  return [...framesByKey.values()].toSorted((left, right) => {
+    const timestampOrder = left.ts - right.ts;
+    return timestampOrder === 0 ? left.frameId.localeCompare(right.frameId) : timestampOrder;
+  });
+}
+
+function createDurableSessionWireReader(bundle: CliShellSessionBundle): {
+  read(sessionId: string, options?: SessionWireFrameReadOptions): readonly SessionWireFrame[];
+} {
+  let cache:
+    | {
+        readonly sessionId: string;
+        readonly frames: readonly SessionWireFrame[];
+      }
+    | undefined;
+
+  return {
+    read(sessionId, options) {
+      const refreshDurable = options?.refreshDurable ?? true;
+      if (refreshDurable || cache?.sessionId !== sessionId) {
+        cache = {
+          sessionId,
+          frames: getCliRuntimeSessionWire(bundle.runtime, sessionId),
+        };
+      }
+      return cache.frames;
+    },
+  };
+}
+
+function parseRuntimeTurnNumber(turnId: string): number {
+  const numeric = turnId.match(/\d+/u)?.[0];
+  if (!numeric) {
+    return 0;
+  }
+  const parsed = Number(numeric);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function runtimeAttemptId(frame: { readonly attemptId?: string }): string {
+  return "attemptId" in frame && typeof frame.attemptId === "string"
+    ? frame.attemptId
+    : "attempt-1";
+}
+
+function modelStreamingPhase(frame: {
+  readonly turnId: string;
+  readonly attemptId?: string;
+}): SessionPhase {
+  return {
+    kind: "model_streaming",
+    modelCallId: `runtime-turn:${frame.turnId}:${runtimeAttemptId(frame)}`,
+    turn: parseRuntimeTurnNumber(frame.turnId),
+  };
+}
+
+function toolExecutingPhase(
+  frame: Extract<SessionWireFrame, { type: "tool.started" | "tool.progress" | "tool.finished" }>,
+): ToolExecutingSessionPhase {
+  return {
+    kind: "tool_executing",
+    toolCallId: frame.toolCallId,
+    toolName: frame.toolName,
+    turn: parseRuntimeTurnNumber(frame.turnId),
+  };
+}
+
+function sessionPhaseKey(phase: SessionPhase): string {
+  switch (phase.kind) {
+    case "model_streaming":
+      return `${phase.kind}:${phase.turn}:${phase.modelCallId}`;
+    case "tool_executing":
+      return `${phase.kind}:${phase.turn}:${phase.toolCallId}`;
+    case "waiting_approval":
+      return `${phase.kind}:${phase.turn}:${phase.requestId}`;
+    case "recovering":
+      return `${phase.kind}:${phase.turn}:${phase.recoveryAnchor ?? ""}`;
+    case "crashed":
+      return `${phase.kind}:${phase.turn}:${phase.crashAt}:${phase.modelCallId ?? ""}:${
+        phase.toolCallId ?? ""
+      }`;
+    case "terminated":
+      return `${phase.kind}:${phase.reason}`;
+    case "idle":
+    default:
+      return phase.kind;
+  }
+}
+
+function emitRuntimeSessionPhase(input: {
+  state: RuntimeTurnSessionProjectionState;
+  phase: SessionPhase;
+  emit(event: BrewvaPromptSessionEvent): void;
+}): void {
+  input.state.currentPhase = input.phase;
+  if (input.phase.kind === "model_streaming") {
+    input.state.lastModelPhase = input.phase;
+  }
+  if (input.phase.kind === "tool_executing") {
+    input.state.lastToolPhase = input.phase;
+  }
+  if (input.phase.kind === "idle" || input.phase.kind === "terminated") {
+    input.state.lastModelPhase = null;
+    input.state.lastToolPhase = null;
+  }
+  const nextKey = sessionPhaseKey(input.phase);
+  if (input.state.phaseKey === nextKey) {
+    return;
+  }
+  input.state.phaseKey = nextKey;
+  input.emit({
+    type: "session_phase_change",
+    phase: input.phase,
+  });
+}
+
+function emitRuntimeThinkingProgress(input: {
+  frame: RuntimeThinkingDeltaFrame;
+  state: RuntimeTurnSessionProjectionState;
+  emit(event: BrewvaPromptSessionEvent): void;
+}): void {
+  emitRuntimeSessionPhase({
+    state: input.state,
+    phase: modelStreamingPhase(input.frame),
+    emit: (event) => input.emit(event),
+  });
+  input.emit({
+    type: "session_wire_progress",
+    frameType: "assistant.delta",
+    lane: "thinking",
+    turnId: input.frame.turnId,
+    attemptId: input.frame.attemptId,
+  });
 }
 
 function finishRuntimeTurnAssistantSegment(input: {
@@ -357,7 +585,23 @@ function emitRuntimeTurnSessionFrame(input: {
 }): void {
   const frame = input.frame;
   const state = input.state;
+  const emit = (event: BrewvaPromptSessionEvent): void => {
+    input.emit(event);
+  };
+  if (frame.type === "turn.input") {
+    emitRuntimeSessionPhase({
+      state,
+      phase: modelStreamingPhase(frame),
+      emit,
+    });
+    return;
+  }
   if (frame.type === "assistant.delta" && frame.lane === "answer" && frame.delta.length > 0) {
+    emitRuntimeSessionPhase({
+      state,
+      phase: modelStreamingPhase(frame),
+      emit,
+    });
     const previousSegmentText = state.assistantSegmentText;
     state.assistantSegmentText += frame.delta;
     if (state.assistantSegmentText.trim().length === 0) {
@@ -375,8 +619,17 @@ function emitRuntimeTurnSessionFrame(input: {
     );
     return;
   }
+  if (frame.type === "assistant.delta" && frame.lane === "thinking" && frame.delta.length > 0) {
+    emitRuntimeThinkingProgress({ frame, state, emit });
+    return;
+  }
   if (frame.type === "tool.started") {
     finishRuntimeTurnAssistantSegment(input);
+    emitRuntimeSessionPhase({
+      state,
+      phase: toolExecutingPhase(frame),
+      emit,
+    });
     input.emit({
       type: "tool_execution_start",
       toolCallId: frame.toolCallId,
@@ -386,6 +639,11 @@ function emitRuntimeTurnSessionFrame(input: {
   }
   if (frame.type === "tool.progress") {
     finishRuntimeTurnAssistantSegment(input);
+    emitRuntimeSessionPhase({
+      state,
+      phase: toolExecutingPhase(frame),
+      emit,
+    });
     input.emit({
       type: "tool_execution_update",
       toolCallId: frame.toolCallId,
@@ -403,17 +661,126 @@ function emitRuntimeTurnSessionFrame(input: {
       result: buildRuntimeToolResultPayload(frame),
       isError: frame.isError,
     });
+    emitRuntimeSessionPhase({
+      state,
+      phase: modelStreamingPhase(frame),
+      emit,
+    });
     return;
   }
-  if (frame.type === "turn.committed" && frame.assistantText.trim().length > 0) {
+  if (frame.type === "approval.requested") {
     finishRuntimeTurnAssistantSegment(input);
-    if (!state.emittedAssistantMessage) {
+    emitRuntimeSessionPhase({
+      state,
+      phase: {
+        kind: "waiting_approval",
+        requestId: frame.requestId,
+        toolCallId: frame.toolCallId,
+        toolName: frame.toolName,
+        turn: parseRuntimeTurnNumber(frame.turnId),
+      },
+      emit,
+    });
+    return;
+  }
+  if (frame.type === "approval.decided") {
+    if (state.currentPhase.kind === "waiting_approval") {
+      emitRuntimeSessionPhase({
+        state,
+        phase: state.lastToolPhase ?? state.lastModelPhase ?? { kind: "idle" },
+        emit,
+      });
+    }
+    return;
+  }
+  if (frame.type === "turn.transition") {
+    finishRuntimeTurnAssistantSegment(input);
+    if (
+      frame.status === "entered" &&
+      (frame.family === "recovery" || frame.family === "output_budget")
+    ) {
+      emitRuntimeSessionPhase({
+        state,
+        phase: {
+          kind: "recovering",
+          recoveryAnchor: `transition:${frame.reason}`,
+          turn: parseRuntimeTurnNumber(frame.turnId),
+        },
+        emit,
+      });
+      return;
+    }
+    if (frame.status === "entered" && frame.family === "approval" && state.lastToolPhase) {
+      emitRuntimeSessionPhase({
+        state,
+        phase: {
+          kind: "waiting_approval",
+          requestId: `transition:${frame.reason}`,
+          toolCallId: state.lastToolPhase.toolCallId,
+          toolName: state.lastToolPhase.toolName,
+          turn: parseRuntimeTurnNumber(frame.turnId),
+        },
+        emit,
+      });
+      return;
+    }
+    if (
+      (frame.status === "completed" || frame.status === "skipped") &&
+      frame.family === "approval" &&
+      state.currentPhase.kind === "waiting_approval"
+    ) {
+      emitRuntimeSessionPhase({
+        state,
+        phase: state.lastToolPhase ?? state.lastModelPhase ?? modelStreamingPhase(frame),
+        emit,
+      });
+      return;
+    }
+    if (
+      (frame.status === "completed" || frame.status === "skipped") &&
+      (frame.family === "recovery" || frame.family === "output_budget") &&
+      state.currentPhase.kind === "recovering"
+    ) {
+      emitRuntimeSessionPhase({
+        state,
+        phase: modelStreamingPhase(frame),
+        emit,
+      });
+      return;
+    }
+    return;
+  }
+  if (frame.type === "attempt.started") {
+    emitRuntimeSessionPhase({
+      state,
+      phase: modelStreamingPhase(frame),
+      emit,
+    });
+    return;
+  }
+  if (frame.type === "session.closed") {
+    finishRuntimeTurnAssistantSegment(input);
+    emitRuntimeSessionPhase({
+      state,
+      phase: { kind: "terminated", reason: "host_closed" },
+      emit,
+    });
+    return;
+  }
+  if (frame.type === "turn.committed") {
+    finishRuntimeTurnAssistantSegment(input);
+    if (!state.emittedAssistantMessage && frame.assistantText.trim().length > 0) {
       state.emittedAssistantMessage = true;
       input.emit({
         type: "message_end",
         message: buildAssistantTextMessage(frame.assistantText),
       });
     }
+    emitRuntimeSessionPhase({
+      state,
+      phase: { kind: "idle" },
+      emit,
+    });
   }
 }
 
@@ -436,6 +803,8 @@ export function projectRuntimeTurnSessionWireFrames(
 
 export function createSessionViewPort(bundle: CliShellSessionBundle): SessionViewPort {
   const localListeners = new Set<SessionViewPortListener>();
+  const liveSessionWireFrames = createLiveSessionWireFrameStore();
+  const durableSessionWire = createDurableSessionWireReader(bundle);
   const emitLocalSessionEvent = (event: BrewvaPromptSessionEvent): void => {
     for (const listener of localListeners) {
       listener(event);
@@ -612,6 +981,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         runtime: bundle.runtime,
         sessionId: bundle.session.sessionManager.getSessionId(),
         onFrame(frame) {
+          liveSessionWireFrames.remember(frame);
           emitRuntimeTurnSessionFrame({
             frame,
             state: projectionState,
@@ -666,14 +1036,29 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         unsubscribeSession();
       };
     },
+    getSessionWireFrames(
+      targetSessionId = bundle.session.sessionManager.getSessionId(),
+      options?: SessionWireFrameReadOptions,
+    ) {
+      return mergedSessionWireFrames({
+        durableFrames: durableSessionWire.read(targetSessionId, options),
+        liveFrames: liveSessionWireFrames.values(),
+        sessionId: targetSessionId,
+      });
+    },
     getTranscriptSeed() {
       const messages = bundle.session.sessionManager.buildSessionContext?.().messages;
       if (Array.isArray(messages) && messages.length > 0) {
         return messages;
       }
       try {
+        const sessionId = bundle.session.sessionManager.getSessionId();
         return buildSessionWireTranscriptSeedMessages(
-          getCliRuntimeSessionWire(bundle.runtime, bundle.session.sessionManager.getSessionId()),
+          mergedSessionWireFrames({
+            durableFrames: durableSessionWire.read(sessionId, { refreshDurable: true }),
+            liveFrames: liveSessionWireFrames.values(),
+            sessionId,
+          }),
         );
       } catch {
         return [];

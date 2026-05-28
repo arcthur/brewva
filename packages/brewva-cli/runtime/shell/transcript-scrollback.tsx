@@ -44,6 +44,7 @@ function TranscriptScrollbackDocument(input: {
               isLast={index() === input.messages.length - 1}
               assistantLabel={sessionIdentity.assistantLabel}
               modelLabel={sessionIdentity.modelLabel}
+              renderSurface="scrollback"
             />
           )}
         </For>

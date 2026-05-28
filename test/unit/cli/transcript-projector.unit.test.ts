@@ -4,7 +4,7 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
+import type { BrewvaPromptSessionEvent, SessionPhase } from "@brewva/brewva-substrate/session";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { CliShellAction } from "../../../packages/brewva-cli/src/shell/domain/state.js";
 import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
@@ -46,6 +46,278 @@ function createProjectorHarness() {
 }
 
 describe("shell transcript projector", () => {
+  test("projects runtime turn input as an active model phase", () => {
+    const frames: SessionWireFrame[] = [
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-input",
+        ts: 1_000,
+        source: "live",
+        durability: "durable",
+        type: "turn.input",
+        turnId: "turn-7",
+        promptText: "who are you",
+        trigger: "user",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-commit",
+        ts: 2_000,
+        source: "live",
+        durability: "durable",
+        type: "turn.committed",
+        turnId: "turn-7",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "I am Brewva.",
+        toolOutputs: [],
+      },
+    ];
+
+    const phaseEvents = projectRuntimeTurnSessionWireFrames(frames).filter(
+      (event): event is BrewvaPromptSessionEvent & { type: "session_phase_change" } =>
+        event.type === "session_phase_change",
+    );
+
+    expect(phaseEvents.map((event) => event.phase)).toEqual([
+      {
+        kind: "model_streaming",
+        modelCallId: "runtime-turn:turn-7:attempt-1",
+        turn: 7,
+      },
+      { kind: "idle" },
+    ]);
+  });
+
+  test("projects idle phase when a runtime turn commits without assistant text", () => {
+    const frames: SessionWireFrame[] = [
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-input",
+        ts: 1_000,
+        source: "live",
+        durability: "durable",
+        type: "turn.input",
+        turnId: "turn-8",
+        promptText: "run a tool",
+        trigger: "user",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-commit",
+        ts: 2_000,
+        source: "live",
+        durability: "durable",
+        type: "turn.committed",
+        turnId: "turn-8",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "",
+        toolOutputs: [],
+      },
+    ];
+
+    const phaseEvents = projectRuntimeTurnSessionWireFrames(frames).filter(
+      (event): event is BrewvaPromptSessionEvent & { type: "session_phase_change" } =>
+        event.type === "session_phase_change",
+    );
+
+    const phases = phaseEvents.map((event) => event.phase as SessionPhase);
+    expect(phases.map((phase) => phase.kind)).toEqual(["model_streaming", "idle"]);
+  });
+
+  test("projects runtime approval, recovery, and post-tool phases", () => {
+    const frames: SessionWireFrame[] = [
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-input",
+        ts: 1_000,
+        source: "live",
+        durability: "durable",
+        type: "turn.input",
+        turnId: "turn-10",
+        promptText: "write and recover",
+        trigger: "user",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-tool-start",
+        ts: 1_010,
+        source: "live",
+        durability: "cache",
+        type: "tool.started",
+        turnId: "turn-10",
+        attemptId: "attempt-1",
+        toolCallId: asBrewvaToolCallId("tool-write-1"),
+        toolName: asBrewvaToolName("write_file"),
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-approval",
+        ts: 1_020,
+        source: "live",
+        durability: "cache",
+        type: "approval.requested",
+        turnId: "turn-10",
+        requestId: "approval-1",
+        toolCallId: asBrewvaToolCallId("tool-write-1"),
+        toolName: asBrewvaToolName("write_file"),
+        subject: "write src/app.ts",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-approval-decided",
+        ts: 1_030,
+        source: "live",
+        durability: "cache",
+        type: "approval.decided",
+        turnId: "turn-10",
+        requestId: "approval-1",
+        decision: "accept",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-tool-finish",
+        ts: 1_040,
+        source: "live",
+        durability: "cache",
+        type: "tool.finished",
+        turnId: "turn-10",
+        attemptId: "attempt-1",
+        toolCallId: asBrewvaToolCallId("tool-write-1"),
+        toolName: asBrewvaToolName("write_file"),
+        verdict: "pass",
+        isError: false,
+        text: "ok",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-recovery-enter",
+        ts: 1_050,
+        source: "live",
+        durability: "cache",
+        type: "turn.transition",
+        turnId: "turn-10",
+        attemptId: "attempt-2",
+        family: "recovery",
+        reason: "max_output_recovery",
+        status: "entered",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-attempt-start",
+        ts: 1_060,
+        source: "live",
+        durability: "cache",
+        type: "attempt.started",
+        turnId: "turn-10",
+        attemptId: "attempt-2",
+        reason: "max_output_recovery",
+      },
+    ];
+
+    const phases = projectRuntimeTurnSessionWireFrames(frames)
+      .filter(
+        (event): event is BrewvaPromptSessionEvent & { type: "session_phase_change" } =>
+          event.type === "session_phase_change",
+      )
+      .map((event) => event.phase as SessionPhase);
+
+    expect(phases).toEqual([
+      {
+        kind: "model_streaming",
+        modelCallId: "runtime-turn:turn-10:attempt-1",
+        turn: 10,
+      },
+      {
+        kind: "tool_executing",
+        toolCallId: "tool-write-1",
+        toolName: "write_file",
+        turn: 10,
+      },
+      {
+        kind: "waiting_approval",
+        requestId: "approval-1",
+        toolCallId: "tool-write-1",
+        toolName: "write_file",
+        turn: 10,
+      },
+      {
+        kind: "tool_executing",
+        toolCallId: "tool-write-1",
+        toolName: "write_file",
+        turn: 10,
+      },
+      {
+        kind: "model_streaming",
+        modelCallId: "runtime-turn:turn-10:attempt-1",
+        turn: 10,
+      },
+      {
+        kind: "recovering",
+        recoveryAnchor: "transition:max_output_recovery",
+        turn: 10,
+      },
+      {
+        kind: "model_streaming",
+        modelCallId: "runtime-turn:turn-10:attempt-2",
+        turn: 10,
+      },
+    ]);
+  });
+
+  test("emits cockpit progress without transcript text for runtime thinking deltas", () => {
+    const frames: SessionWireFrame[] = [
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-input",
+        ts: 1_000,
+        source: "live",
+        durability: "durable",
+        type: "turn.input",
+        turnId: "turn-9",
+        promptText: "think",
+        trigger: "user",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-thinking",
+        ts: 1_010,
+        source: "live",
+        durability: "cache",
+        type: "assistant.delta",
+        turnId: "turn-9",
+        attemptId: "attempt-1",
+        lane: "thinking",
+        delta: "Need to inspect the runtime path.",
+      },
+    ];
+
+    const events = projectRuntimeTurnSessionWireFrames(frames);
+
+    expect(events).toContainEqual({
+      type: "session_wire_progress",
+      frameType: "assistant.delta",
+      lane: "thinking",
+      turnId: "turn-9",
+      attemptId: "attempt-1",
+    });
+    expect(events.some((event) => event.type === "message_update")).toBe(false);
+  });
+
   test("ignores malformed session phases before typed safety projection", () => {
     const { actions, projector } = createProjectorHarness();
 

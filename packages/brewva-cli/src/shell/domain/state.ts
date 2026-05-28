@@ -2,6 +2,7 @@ export { createCliShellState } from "./state/initial.js";
 export { reduceCliShellState } from "./state/reducer.js";
 export type {
   CliShellAction,
+  CliShellCockpitState,
   CliShellCompletionState,
   CliShellDiffState,
   CliShellDiffStyle,

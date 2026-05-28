@@ -1,7 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
-import { For } from "solid-js";
+import { Index, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import {
   buildPromptPartSignature,
   cloneCliShellPromptParts,
@@ -24,8 +23,8 @@ import {
   useRenderer,
   useTerminalDimensions,
 } from "../opentui/index.js";
+import { CockpitDockSurface } from "./cockpit/surface.js";
 import { CompletionOverlay } from "./completion.js";
-import { InlineApprovalPrompt, InlineQuestionPrompt } from "./inline-cards.js";
 import { BrewvaKeymapRoot, registerBrewvaKeymap } from "./keymap.js";
 import { ModalOverlay } from "./overlays/modal-overlay.js";
 import { createPalette, createScrollAcceleration } from "./palette.js";
@@ -39,16 +38,36 @@ import {
 import { SubagentFooterPanel } from "./subagent-footer.js";
 import { ToastStrip } from "./toast.js";
 import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";
+import { createRetainedTranscriptRows } from "./transcript-retention.js";
 import { TranscriptMessageView } from "./transcript.js";
 import {
-  applyTranscriptNavigationRequest,
+  applySurfaceNavigationRequest,
   cloneOverlayPayload,
-  readTranscriptScrollMetrics,
+  readSurfaceScrollMetrics,
   toSemanticInput,
   textOffsetFromLogicalCursor,
   logicalCursorFromTextOffset,
   useShellState,
 } from "./utils.js";
+
+const COMPOSER_EDITOR_SYNC_DEBOUNCE_MS = 80;
+const SURFACE_SCROLL_EPSILON = 1;
+
+function setScrollboxStickyTail(node: OpenTuiScrollBoxHandle, enabled: boolean): void {
+  if (node.stickyScroll !== enabled) {
+    node.stickyScroll = enabled;
+  }
+  if (enabled && node.stickyStart !== "bottom") {
+    node.stickyStart = "bottom";
+  }
+}
+
+function setScrollTopIfChanged(node: OpenTuiScrollBoxHandle, target: number): void {
+  const boundedTarget = Math.max(0, target);
+  if (Math.abs(node.scrollTop - boundedTarget) > SURFACE_SCROLL_EPSILON) {
+    node.scrollTop = boundedTarget;
+  }
+}
 
 function supportsOpenTuiKeymap(renderer: OpenTuiRenderer): boolean {
   const candidate = renderer as unknown as {
@@ -66,6 +85,7 @@ export function BrewvaOpenTuiShell(input: {
   copyTextToClipboard?: ClipboardCopy;
 }) {
   const toolRenderCache = input.toolRenderCache ?? createToolRenderCache();
+  const toolDefinitions = input.runtime.getToolDefinitions();
   const state = useShellState(input.runtime);
   const dimensions = useTerminalDimensions();
   const renderer = (input.renderer ?? useRenderer()) as OpenTuiRenderer;
@@ -90,11 +110,6 @@ export function BrewvaOpenTuiShell(input: {
     const lastId = messages.length > 0 ? (messages[messages.length - 1]?.id ?? "") : "";
     return `${sessionId}:${messages.length}:${firstId}:${lastId}`;
   });
-  const toolDefinitions = createMemo(() => {
-    bundleRefreshKey();
-    return input.runtime.getToolDefinitions();
-  });
-  const transcriptWidth = createMemo(() => Math.max(20, dimensions().width - 8));
   const [scrollbox, setScrollbox] = createSignal<OpenTuiScrollBoxHandle | null>(null);
   const [textarea, setTextarea] = createSignal<OpenTuiTextareaHandle | null>(null);
   const [completionContainer, setCompletionContainer] = createSignal<BoxRenderable | null>(null);
@@ -111,6 +126,22 @@ export function BrewvaOpenTuiShell(input: {
   const [appliedPromptPartSignature, setAppliedPromptPartSignature] = createSignal(
     buildPromptPartSignature(state.composer.parts),
   );
+  const emptyPromptPartSignature = buildPromptPartSignature([]);
+
+  const promptPartIdMapsEqual = (
+    left: ReadonlyMap<number, string>,
+    right: ReadonlyMap<number, string>,
+  ): boolean => {
+    if (left.size !== right.size) {
+      return false;
+    }
+    for (const [key, value] of left) {
+      if (right.get(key) !== value) {
+        return false;
+      }
+    }
+    return true;
+  };
 
   const rebuildPromptPartExtmarks = (
     node: OpenTuiTextareaHandle,
@@ -151,14 +182,22 @@ export function BrewvaOpenTuiShell(input: {
     if (!typeId || node.isDestroyed) {
       return [];
     }
+    const extmarks = node.extmarks.getAllForTypeId(typeId);
+    if (extmarks.length === 0) {
+      if (promptPartIdByExtmarkId().size > 0) {
+        setPromptPartIdByExtmarkId(new Map());
+      }
+      if (appliedPromptPartSignature() !== emptyPromptPartSignature) {
+        setAppliedPromptPartSignature(emptyPromptPartSignature);
+      }
+      return [];
+    }
     const partsById = new Map(
-      input.runtime
-        .getViewState()
-        .composer.parts.map((part) => [part.id, part] satisfies [string, CliShellPromptPart]),
+      state.composer.parts.map((part) => [part.id, part] satisfies [string, CliShellPromptPart]),
     );
     const nextParts: CliShellPromptPart[] = [];
     const nextMap = new Map<number, string>();
-    for (const extmark of node.extmarks.getAllForTypeId(typeId)) {
+    for (const extmark of extmarks) {
       const partId = promptPartIdByExtmarkId().get(extmark.id);
       const part = partId ? partsById.get(partId) : undefined;
       if (!part) {
@@ -173,8 +212,13 @@ export function BrewvaOpenTuiShell(input: {
       nextParts.push(nextPart);
       nextMap.set(extmark.id, nextPart.id);
     }
-    setPromptPartIdByExtmarkId(nextMap);
-    setAppliedPromptPartSignature(buildPromptPartSignature(nextParts));
+    if (!promptPartIdMapsEqual(promptPartIdByExtmarkId(), nextMap)) {
+      setPromptPartIdByExtmarkId(nextMap);
+    }
+    const nextSignature = buildPromptPartSignature(nextParts);
+    if (appliedPromptPartSignature() !== nextSignature) {
+      setAppliedPromptPartSignature(nextSignature);
+    }
     return nextParts;
   };
 
@@ -192,7 +236,17 @@ export function BrewvaOpenTuiShell(input: {
       copyText: input.copyTextToClipboard,
       notifier: input.runtime.ui,
     });
+  let composerEditorSyncTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearScheduledComposerEditorSync = (): void => {
+    const timer = composerEditorSyncTimer;
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    composerEditorSyncTimer = undefined;
+  };
   const syncComposerFromEditor = async (): Promise<void> => {
+    clearScheduledComposerEditorSync();
     const node = textarea();
     if (!node || node.isDestroyed) {
       return;
@@ -203,6 +257,13 @@ export function BrewvaOpenTuiShell(input: {
       cursor: textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
       parts: readPromptPartsFromExtmarks(node),
     });
+  };
+  const scheduleComposerEditorSync = (): void => {
+    clearScheduledComposerEditorSync();
+    composerEditorSyncTimer = setTimeout(() => {
+      composerEditorSyncTimer = undefined;
+      void syncComposerFromEditor();
+    }, COMPOSER_EDITOR_SYNC_DEBOUNCE_MS);
   };
 
   const keymapRenderer = supportsOpenTuiKeymap(renderer) ? renderer : undefined;
@@ -217,6 +278,7 @@ export function BrewvaOpenTuiShell(input: {
     : undefined;
 
   onCleanup(() => keymapController?.dispose());
+  onCleanup(() => clearScheduledComposerEditorSync());
 
   const keymapMode = createMemo(() => {
     if (renderer.getSelection?.()) {
@@ -273,49 +335,41 @@ export function BrewvaOpenTuiShell(input: {
     if (!node || node.isDestroyed) {
       return;
     }
-    if (state.transcript.navigationRequest) {
-      applyTranscriptNavigationRequest({
+    if (state.surface.navigationRequest) {
+      applySurfaceNavigationRequest({
         runtime: input.runtime,
         scrollbox: node,
-        request: state.transcript.navigationRequest,
+        request: state.surface.navigationRequest,
       });
       return;
     }
 
-    const { maxScrollTop, currentOffset } = readTranscriptScrollMetrics(node);
-    if (state.transcript.followMode === "live") {
-      if (currentOffset > 1 && node.scrollHeight > node.viewport.height) {
-        void input.runtime.handleInput({
-          type: "transcript.scrollSync",
-          followMode: "scrolled",
-          scrollOffset: currentOffset,
-        });
-        return;
-      }
-      node.stickyScroll = true;
-      node.stickyStart = "bottom";
-      node.scrollTop = maxScrollTop;
+    if (state.surface.followMode === "live") {
+      setScrollboxStickyTail(node, true);
       return;
     }
 
-    if (currentOffset <= 1 && maxScrollTop > 0) {
+    const { maxScrollTop, currentOffset } = readSurfaceScrollMetrics(node);
+    if (currentOffset <= SURFACE_SCROLL_EPSILON && maxScrollTop > 0) {
+      setScrollboxStickyTail(node, true);
       void input.runtime.handleInput({
-        type: "transcript.scrollSync",
+        type: "surface.scrollSync",
         followMode: "live",
         scrollOffset: 0,
       });
       return;
     }
-    if (Math.abs(currentOffset - state.transcript.scrollOffset) > 1) {
+    if (Math.abs(currentOffset - state.surface.scrollOffset) > SURFACE_SCROLL_EPSILON) {
+      setScrollboxStickyTail(node, false);
       void input.runtime.handleInput({
-        type: "transcript.scrollSync",
+        type: "surface.scrollSync",
         followMode: "scrolled",
         scrollOffset: currentOffset,
       });
       return;
     }
-    node.stickyScroll = false;
-    node.scrollTop = Math.max(0, maxScrollTop - state.transcript.scrollOffset);
+    setScrollboxStickyTail(node, false);
+    setScrollTopIfChanged(node, maxScrollTop - state.surface.scrollOffset);
   });
 
   createEffect(() => {
@@ -366,12 +420,7 @@ export function BrewvaOpenTuiShell(input: {
       if (node.isDestroyed) {
         return;
       }
-      void input.runtime.handleInput({
-        type: "composer.editorSync",
-        text: node.plainText,
-        cursor: textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
-        parts: readPromptPartsFromExtmarks(node),
-      });
+      scheduleComposerEditorSync();
     };
     node.editBuffer.on("content-changed", syncFromEditor);
     node.editBuffer.on("cursor-changed", syncFromEditor);
@@ -451,11 +500,7 @@ export function BrewvaOpenTuiShell(input: {
   });
   const modalOverlay = createMemo(() => {
     const overlay = activeOverlay();
-    if (
-      !overlay?.payload ||
-      overlay.payload.kind === "approval" ||
-      overlay.payload.kind === "question"
-    ) {
+    if (!overlay?.payload) {
       return undefined;
     }
     return overlay;
@@ -483,27 +528,15 @@ export function BrewvaOpenTuiShell(input: {
       getSessionWireFrames: (sessionId) => input.runtime.getSessionWireFrames(sessionId),
     }),
   );
+  const transcriptWidth = createMemo(() => Math.max(20, dimensions().width - 6));
+  const transcriptRows = createRetainedTranscriptRows(() => state.transcript.messages);
+  const composerPolicy = createMemo(() => state.cockpit.projection?.composerPolicy ?? "active");
   const promptInputBlocked = createMemo(
-    () => Boolean(state.overlay.active) || state.focus.active === "subagentFooter",
+    () =>
+      Boolean(state.overlay.active) ||
+      state.focus.active === "subagentFooter" ||
+      composerPolicy() === "block",
   );
-  const inlineApproval = createMemo(() => {
-    const payload = activeOverlay()?.payload;
-    return payload?.kind === "approval" ? payload : undefined;
-  });
-  const inlineQuestion = createMemo(() => {
-    const payload = activeOverlay()?.payload;
-    return payload?.kind === "question" ? payload : undefined;
-  });
-  const lastAssistantId = createMemo(() => {
-    const messages = state.transcript.messages;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (message?.role === "assistant") {
-        return message.id;
-      }
-    }
-    return undefined;
-  });
 
   const shell = (
     <ShellRenderProvider value={shellRenderContext}>
@@ -536,7 +569,7 @@ export function BrewvaOpenTuiShell(input: {
                 foregroundColor: theme().border,
               },
             }}
-            stickyScroll={state.transcript.followMode === "live"}
+            stickyScroll={state.surface.followMode === "live"}
             stickyStart="bottom"
             viewportCulling={true}
             flexGrow={1}
@@ -544,39 +577,30 @@ export function BrewvaOpenTuiShell(input: {
             backgroundColor={theme().background}
           >
             <box height={1} />
-            <For each={state.transcript.messages}>
+            <Index each={transcriptRows.rows()}>
               {(message, index) => (
                 <TranscriptMessageView
-                  message={message}
+                  message={message()}
                   theme={theme()}
-                  toolDefinitions={toolDefinitions()}
+                  toolDefinitions={toolDefinitions}
                   toolRenderCache={toolRenderCache}
                   transcriptWidth={transcriptWidth()}
                   showToolDetails={state.view.toolDetails}
-                  index={index()}
-                  isLast={message.id === lastAssistantId()}
+                  index={index}
+                  isLast={index === transcriptRows.rowCount() - 1}
                   assistantLabel={assistantLabel()}
                   modelLabel={modelLabel()}
+                  renderSurface="interactive"
                 />
               )}
-            </For>
+            </Index>
           </scrollbox>
 
-          <Show when={inlineApproval()}>
-            <InlineApprovalPrompt
-              runtime={input.runtime}
-              payload={inlineApproval()!}
-              theme={theme()}
-              transcriptWidth={transcriptWidth()}
-            />
-          </Show>
-          <Show when={!inlineApproval() && inlineQuestion()}>
-            <InlineQuestionPrompt
-              runtime={input.runtime}
-              payload={inlineQuestion()!}
-              theme={theme()}
-            />
-          </Show>
+          <CockpitDockSurface
+            projection={state.cockpit.projection}
+            theme={theme()}
+            width={dimensions().width}
+          />
 
           <SubagentFooterPanel
             runtime={input.runtime}

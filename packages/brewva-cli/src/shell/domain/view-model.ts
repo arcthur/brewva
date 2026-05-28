@@ -1,3 +1,4 @@
+import { cloneCockpitObservationCursor, shareShellCockpitProjection } from "./cockpit/index.js";
 import { cloneCliShellPromptParts } from "./prompt-parts.js";
 import type { CliShellCompletionState, CliShellViewState } from "./state.js";
 
@@ -30,8 +31,11 @@ export function projectShellViewModel(state: CliShellViewState): ShellViewModel 
     transcript: {
       ...state.transcript,
       messages: [...state.transcript.messages],
-      navigationRequest: state.transcript.navigationRequest
-        ? { ...state.transcript.navigationRequest }
+    },
+    surface: {
+      ...state.surface,
+      navigationRequest: state.surface.navigationRequest
+        ? { ...state.surface.navigationRequest }
         : undefined,
     },
     composer: {
@@ -42,6 +46,12 @@ export function projectShellViewModel(state: CliShellViewState): ShellViewModel 
     pager: state.pager ? { title: state.pager.title, lines: [...state.pager.lines] } : undefined,
     notifications: [...state.notifications],
     queue: [...state.queue],
+    cockpit: {
+      projection: state.cockpit.projection
+        ? shareShellCockpitProjection(state.cockpit.projection)
+        : undefined,
+      observation: cloneCockpitObservationCursor(state.cockpit.observation),
+    },
     operator: {
       taskRuns: [...state.operator.taskRuns],
     },

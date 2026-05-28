@@ -23,6 +23,8 @@ export interface ShellRendererController {
     modelLabel: string;
     thinkingLevel: string;
   };
+  requestRender(): void;
+  submitComposer(): void;
   subscribe(listener: () => void): () => void;
   wantsInput(input: ShellInput): boolean;
   handleInput(input: ShellInput): Promise<boolean>;

@@ -1,4 +1,4 @@
-import { createCliRenderer, getDataPaths } from "@opentui/core";
+import { createCliRenderer, getDataPaths, getTreeSitterClient } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import {
   createElement as createSolidElement,
@@ -29,6 +29,8 @@ import type {
 
 const DEFAULT_SCREEN_MODE: OpenTuiScreenMode = "alternate-screen";
 const OPEN_TUI_TEST_DATA_PATH_LISTENER_LIMIT = 100;
+export const OPEN_TUI_INTERACTIVE_RENDER_TARGET_FPS = 60;
+const INTERACTIVE_RENDER_MAX_FPS = 60;
 const DEFAULT_KITTY_KEYBOARD_CONFIG = {
   disambiguate: true,
   alternateKeys: true,
@@ -36,6 +38,17 @@ const DEFAULT_KITTY_KEYBOARD_CONFIG = {
   // all-keys-as-escapes makes committed IME text depend on terminal-specific
   // CSI-u associated-text support, which is less portable for CJK input.
 } as const;
+
+let textRenderingInitialization: Promise<void> | undefined;
+
+async function initializeOpenTuiTextRendering(): Promise<void> {
+  textRenderingInitialization ??= (async () => {
+    const treeSitterClient = getTreeSitterClient();
+    await treeSitterClient.initialize();
+    await treeSitterClient.highlightOnce("# Warmup\n\ntext", "markdown");
+  })();
+  await textRenderingInitialization;
+}
 
 function createCliRendererConfig(
   overrides: Partial<Parameters<typeof createCliRenderer>[0]> = {},
@@ -47,7 +60,9 @@ function createCliRendererConfig(
     consoleMode: "disabled",
     useKittyKeyboard: DEFAULT_KITTY_KEYBOARD_CONFIG,
     externalOutputMode: "passthrough",
-    targetFps: 60,
+    targetFps: OPEN_TUI_INTERACTIVE_RENDER_TARGET_FPS,
+    maxFps: INTERACTIVE_RENDER_MAX_FPS,
+    autoFocus: false,
     gatherStats: false,
     ...overrides,
   };
@@ -60,6 +75,7 @@ export function isOpenTuiRuntimeAvailable(): boolean {
 }
 
 export async function createOpenTuiCliRenderer(): Promise<OpenTuiRenderer> {
+  await initializeOpenTuiTextRendering();
   return await createCliRenderer(createCliRendererConfig());
 }
 
@@ -247,6 +263,7 @@ export async function openTuiTestRender(
   node: OpenTuiSolidNode,
   options: OpenTuiTestRenderOptions,
 ): Promise<OpenTuiTestRenderSetup> {
+  await initializeOpenTuiTextRendering();
   return await solidTestRender(node, options);
 }
 
@@ -268,10 +285,41 @@ function normalizeScrollbackFrame(frame: string, lineCount: number): string[] {
   return lines;
 }
 
+function collectOpenTuiHighlightPromises(
+  node: unknown,
+  promises: Promise<unknown>[],
+  seen: Set<unknown>,
+): void {
+  if (typeof node !== "object" || node === null || seen.has(node)) {
+    return;
+  }
+  seen.add(node);
+  const renderable = node as {
+    highlightingDone?: Promise<unknown>;
+    getChildren?: () => unknown[];
+  };
+  if (renderable.highlightingDone) {
+    promises.push(renderable.highlightingDone);
+  }
+  for (const child of renderable.getChildren?.() ?? []) {
+    collectOpenTuiHighlightPromises(child, promises, seen);
+  }
+}
+
+export async function settleOpenTuiTextRendering(root: unknown): Promise<void> {
+  const promises: Promise<unknown>[] = [];
+  collectOpenTuiHighlightPromises(root, promises, new Set());
+  if (promises.length === 0) {
+    return;
+  }
+  await Promise.allSettled(promises);
+}
+
 export async function renderOpenTuiScrollbackLines(
   node: OpenTuiSolidNode,
   options: OpenTuiScrollbackRenderOptions,
 ): Promise<string[]> {
+  await initializeOpenTuiTextRendering();
   const width = normalizeScrollbackDimension(options.width, "width");
   const initialHeight =
     options.height === undefined ? 1 : normalizeScrollbackDimension(options.height, "height");
@@ -311,7 +359,8 @@ export async function renderOpenTuiScrollbackLines(
       }
     ).add(producedSnapshot.root);
     await testSetup.renderOnce();
-    await new Promise((resolve) => setTimeout(resolve, 16));
+    await testSetup.renderOnce();
+    await settleOpenTuiTextRendering(producedSnapshot.root);
     await testSetup.renderOnce();
     return normalizeScrollbackFrame(testSetup.captureCharFrame(), renderedHeight);
   } finally {
@@ -368,6 +417,7 @@ export async function openTuiSolidTestRender(
   node: OpenTuiSolidNode,
   options: OpenTuiTestRenderOptions,
 ): Promise<OpenTuiTestRenderSetup> {
+  await initializeOpenTuiTextRendering();
   getDataPaths().setMaxListeners(OPEN_TUI_TEST_DATA_PATH_LISTENER_LIMIT);
   return await solidTestRender(node, options);
 }

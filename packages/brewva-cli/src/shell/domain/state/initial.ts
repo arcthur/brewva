@@ -1,4 +1,5 @@
 import { DEFAULT_TUI_THEME } from "../../../internal/tui/index.js";
+import { createDefaultCockpitObservationCursor } from "../cockpit/index.js";
 import { buildOperatorSafetyShellIdleView } from "../operator-safety/shell-view.js";
 import type { CliShellViewState } from "./types.js";
 
@@ -15,6 +16,8 @@ export function createCliShellState(): CliShellViewState {
     },
     transcript: {
       messages: [],
+    },
+    surface: {
       followMode: "live",
       scrollOffset: 0,
       navigationRequest: undefined,
@@ -26,6 +29,10 @@ export function createCliShellState(): CliShellViewState {
     },
     notifications: [],
     queue: [],
+    cockpit: {
+      projection: undefined,
+      observation: createDefaultCockpitObservationCursor(),
+    },
     operator: {
       taskRuns: [],
     },

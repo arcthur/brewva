@@ -202,6 +202,30 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES = [
 export type BrewvaToolRuntimeCapabilityNamespace =
   (typeof BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES)[number];
 
+export type RuntimeCostPostureStatus = "disabled" | "ok" | "warn" | "blocked";
+export type RuntimeCostPostureSalience = "muted" | "default" | "elevated" | "alert";
+export type RuntimeCostPostureAction =
+  | BrewvaConfig["infrastructure"]["costTracking"]["actionOnExceed"]
+  | "off";
+export type RuntimeCostSoftGateReason = "alert_threshold" | "budget_exceeded" | null;
+
+export interface RuntimeCostPosture {
+  readonly status: RuntimeCostPostureStatus;
+  readonly salience: RuntimeCostPostureSalience;
+  readonly totalCostUsd: number;
+  readonly budgetLimitUsd: number | null;
+  readonly budgetRemainingUsd: number | null;
+  readonly usageRatio: number | null;
+  readonly alertThresholdRatio: number | null;
+  readonly actionOnExceed: RuntimeCostPostureAction;
+  readonly softGate: {
+    readonly required: boolean;
+    readonly reason: RuntimeCostSoftGateReason;
+  };
+  readonly label: string;
+  readonly shortLabel: string;
+}
+
 export interface WorkerResultsClearInput {
   readonly workerIds?: readonly string[];
   readonly decision?: "applied" | "reject";
@@ -539,6 +563,9 @@ export interface BrewvaToolRuntimeQueryPort {
     };
   };
   readonly cost: {
+    readonly posture: {
+      get(sessionId: string): RuntimeCostPosture;
+    };
     readonly summary: {
       get(sessionId: string): SessionCostSummary;
     };

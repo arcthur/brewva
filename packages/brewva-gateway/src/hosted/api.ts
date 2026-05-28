@@ -22,6 +22,7 @@ export {
   adoptRuntimeLineageOutcome,
   createRuntimeLineageNode,
   getRuntimeClaimState,
+  getRuntimeCostPosture,
   getRuntimeCostSummary,
   getRuntimeOpsPort,
   getRuntimeSessionLineageContextEntryPath,

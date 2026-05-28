@@ -12,12 +12,12 @@ export function selectHasCompletion(state: CliShellViewState): boolean {
   return Boolean(state.composer.completion);
 }
 
-export function selectTranscriptScrollState(state: CliShellViewState): {
+export function selectSurfaceScrollState(state: CliShellViewState): {
   readonly followMode: "live" | "scrolled";
   readonly scrollOffset: number;
 } {
   return {
-    followMode: state.transcript.followMode,
-    scrollOffset: state.transcript.scrollOffset,
+    followMode: state.surface.followMode,
+    scrollOffset: state.surface.scrollOffset,
   };
 }

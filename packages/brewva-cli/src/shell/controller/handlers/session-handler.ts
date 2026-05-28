@@ -1,11 +1,17 @@
 import { recordSessionShutdownIfMissing } from "@brewva/brewva-gateway";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
+import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import type {
   SessionRewindMode,
   SessionRewindSummary,
   SessionRewindTargetView,
 } from "@brewva/brewva-vocabulary/session";
 import type { ShellCommitInput, ShellCommitOptions } from "../../domain/actions.js";
+import {
+  describeShellCockpitComposerPolicyBlock,
+  resolveShellCockpitComposerSubmitPolicy,
+  shellCockpitComposerPolicyAllowsSubmit,
+} from "../../domain/cockpit/index.js";
 import type { ShellEffect } from "../../domain/effects.js";
 import {
   buildCliShellPromptContentParts,
@@ -58,6 +64,7 @@ export interface ShellSessionHandlerContext {
   getState(): CliShellViewState;
   getBundle(): CliShellSessionBundle;
   getSessionPort(): SessionViewPort;
+  getSessionPhase(): SessionPhase;
   getSessionGeneration(): number;
   getUi(): CliShellUiPort;
   promptMemory: PromptMemoryDelegate;
@@ -74,6 +81,10 @@ export interface ShellSessionHandlerContext {
   initializeState(): void;
   refreshOperatorSnapshot(): Promise<void>;
   notifyInteractiveUserPromptCommitted: () => void;
+}
+
+export interface ShellComposerSubmitOptions {
+  readonly waitForPromptEffect?: boolean;
 }
 
 export class ShellSessionHandler {
@@ -153,23 +164,36 @@ export class ShellSessionHandler {
     return this.#draftsBySessionId;
   }
 
-  async submitComposer(): Promise<void> {
+  async submitComposer(options: ShellComposerSubmitOptions = {}): Promise<void> {
     if (this.#submittingComposer) {
       return;
     }
     this.#submittingComposer = true;
     try {
-      await this.submitComposerNow();
+      await this.submitComposerNow(options);
     } finally {
       this.#submittingComposer = false;
     }
   }
 
-  private async submitComposerNow(): Promise<void> {
+  private async submitComposerNow(options: ShellComposerSubmitOptions): Promise<void> {
     const promptText = this.context.getState().composer.text;
     const promptParts = cloneCliShellPromptParts(this.context.getState().composer.parts);
     const prompt = promptText.trim();
     if (!prompt) {
+      return;
+    }
+    const composerPolicy = resolveShellCockpitComposerSubmitPolicy({
+      phase: this.context.getSessionPhase(),
+      projectionPolicy: this.context.getState().cockpit?.projection?.composerPolicy,
+    });
+    if (!shellCockpitComposerPolicyAllowsSubmit(composerPolicy)) {
+      this.context
+        .getUi()
+        .notify(
+          describeShellCockpitComposerPolicyBlock(composerPolicy) ?? "Composer is unavailable.",
+          "warning",
+        );
       return;
     }
     if (!prompt.startsWith("/")) {
@@ -252,7 +276,7 @@ export class ShellSessionHandler {
       text: "",
       cursor: 0,
     });
-    await this.context.runShellEffects([
+    const promptEffect = this.context.runShellEffects([
       {
         type: "session.prompt",
         sessionGeneration: this.context.getSessionGeneration(),
@@ -263,9 +287,23 @@ export class ShellSessionHandler {
         ) as readonly BrewvaPromptContentPart[],
         options: {
           source: "interactive",
+          ...(composerPolicy === "queue" ? { streamingBehavior: "queue" as const } : {}),
         },
       },
     ]);
+    if (options.waitForPromptEffect === false) {
+      void promptEffect
+        .then(() => {
+          this.context.notifyInteractiveUserPromptCommitted();
+        })
+        .catch((error) => {
+          this.context
+            .getUi()
+            .notify(error instanceof Error ? error.message : "Failed to run prompt.", "error");
+        });
+      return;
+    }
+    await promptEffect;
     this.context.notifyInteractiveUserPromptCommitted();
   }
 

@@ -1,9 +1,4 @@
-import {
-  SESSION_CRASH_POINTS,
-  SESSION_TERMINATION_REASONS,
-  type BrewvaPromptSessionEvent,
-  type SessionPhase,
-} from "@brewva/brewva-substrate/session";
+import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
 import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import {
   extractMessageError,
@@ -19,6 +14,7 @@ import {
   isOperatorSafetyShellToolExecutionPhase,
   type OperatorSafetyShellToolView,
 } from "../domain/operator-safety/shell-view.js";
+import { isSessionPhase } from "../domain/session-phase.js";
 import type { CliShellAction } from "../domain/state.js";
 import {
   buildSeedTranscriptMessages,
@@ -34,64 +30,22 @@ export interface ShellTranscriptProjectorContext {
   getMessages(): readonly CliShellTranscriptMessage[];
   getSessionId(): string;
   getTranscriptSeed(): unknown[];
-  setMessages(messages: readonly CliShellTranscriptMessage[]): void;
+  setMessages(messages: readonly CliShellTranscriptMessage[], options?: ShellCommitOptions): void;
   commit(action: CliShellAction, options?: ShellCommitOptions): void;
   getUi(): CliShellUiPort;
 }
+
+const STREAMING_TRANSCRIPT_COMMIT_OPTIONS: ShellCommitOptions = {
+  debounceStatus: false,
+  emitChange: false,
+  refreshCompletions: false,
+};
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function isOneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
-  return typeof value === "string" && values.includes(value as T);
-}
-
-function isSessionPhase(value: unknown): value is SessionPhase {
-  const phase = asRecord(value);
-  switch (phase?.kind) {
-    case "idle":
-      return true;
-    case "model_streaming":
-      return isString(phase.modelCallId) && isFiniteNumber(phase.turn);
-    case "tool_executing":
-      return isString(phase.toolCallId) && isString(phase.toolName) && isFiniteNumber(phase.turn);
-    case "waiting_approval":
-      return (
-        isString(phase.requestId) &&
-        isString(phase.toolCallId) &&
-        isString(phase.toolName) &&
-        isFiniteNumber(phase.turn)
-      );
-    case "recovering":
-      return (
-        isFiniteNumber(phase.turn) &&
-        (phase.recoveryAnchor === undefined || isString(phase.recoveryAnchor))
-      );
-    case "crashed":
-      return (
-        isOneOf(phase.crashAt, SESSION_CRASH_POINTS) &&
-        isFiniteNumber(phase.turn) &&
-        (phase.modelCallId === undefined || isString(phase.modelCallId)) &&
-        (phase.toolCallId === undefined || isString(phase.toolCallId)) &&
-        (phase.recoveryAnchor === undefined || isString(phase.recoveryAnchor))
-      );
-    case "terminated":
-      return isOneOf(phase.reason, SESSION_TERMINATION_REASONS);
-    default:
-      return false;
-  }
 }
 
 function toolResultStatus(input: { result?: unknown; isError?: boolean }): "completed" | "error" {
@@ -159,14 +113,14 @@ export class ShellTranscriptProjector {
     this.replaceMessages(this.composeSeedTranscript());
   }
 
-  appendMessage(message: CliShellTranscriptMessage | null): void {
+  appendMessage(message: CliShellTranscriptMessage | null, options?: ShellCommitOptions): void {
     if (!message) {
       return;
     }
-    this.replaceMessages([...this.context.getMessages(), message]);
+    this.replaceMessages([...this.context.getMessages(), message], options);
   }
 
-  handleSessionEvent(event: BrewvaPromptSessionEvent): void {
+  handleSessionEvent(event: BrewvaPromptSessionEvent): boolean {
     if (event.type === "message_update") {
       const assistantPartialMessage =
         readMessageRole(event.message) === "assistant"
@@ -176,8 +130,12 @@ export class ShellTranscriptProjector {
             ? readAssistantMessageEventPartial(event.assistantMessageEvent)
             : undefined;
       if (assistantPartialMessage) {
-        this.upsertAssistantMessage(assistantPartialMessage, "streaming");
-        return;
+        this.upsertAssistantMessage(
+          assistantPartialMessage,
+          "streaming",
+          STREAMING_TRANSCRIPT_COMMIT_OPTIONS,
+        );
+        return true;
       }
 
       const delta = asRecord(event.assistantMessageEvent)?.delta;
@@ -191,9 +149,11 @@ export class ShellTranscriptProjector {
             text: `${this.readText(this.findMessage(id))}${delta}`,
             renderMode: "streaming",
           }),
+          STREAMING_TRANSCRIPT_COMMIT_OPTIONS,
         );
+        return true;
       }
-      return;
+      return false;
     }
 
     if (event.type === "message_end") {
@@ -216,7 +176,7 @@ export class ShellTranscriptProjector {
           renderMode: "stable",
           fallbackMessageId: `tool:result:${toolResult.toolCallId}`,
         });
-        return;
+        return true;
       }
 
       if (role === "assistant") {
@@ -225,12 +185,12 @@ export class ShellTranscriptProjector {
             this.removeMessage(this.#assistantEntryId);
           }
           this.#assistantEntryId = undefined;
-          return;
+          return true;
         }
         if (this.#assistantEntryId) {
           this.upsertAssistantMessage(event.message, "stable");
           this.#assistantEntryId = undefined;
-          return;
+          return true;
         }
         this.appendMessage(
           buildTranscriptMessageFromMessage(event.message, {
@@ -239,12 +199,12 @@ export class ShellTranscriptProjector {
           }),
         );
         this.#assistantEntryId = undefined;
-        return;
+        return true;
       }
 
       if (role === "user") {
         this.#assistantEntryId = undefined;
-        return;
+        return false;
       }
 
       this.appendMessage(
@@ -254,7 +214,7 @@ export class ShellTranscriptProjector {
         }),
       );
       this.#assistantEntryId = undefined;
-      return;
+      return true;
     }
 
     if (event.type === "tool_execution_start") {
@@ -267,21 +227,24 @@ export class ShellTranscriptProjector {
         status: "running",
         renderMode: "streaming",
       });
-      return;
+      return true;
     }
 
     if (event.type === "tool_execution_update") {
       const toolCallId = typeof event.toolCallId === "string" ? event.toolCallId : undefined;
       const toolName = typeof event.toolName === "string" ? event.toolName : undefined;
-      this.upsertToolExecution({
-        toolCallId,
-        toolName,
-        args: event.args,
-        partialResult: event.partialResult,
-        status: "running",
-        renderMode: "streaming",
-      });
-      return;
+      this.upsertToolExecution(
+        {
+          toolCallId,
+          toolName,
+          args: event.args,
+          partialResult: event.partialResult,
+          status: "running",
+          renderMode: "streaming",
+        },
+        STREAMING_TRANSCRIPT_COMMIT_OPTIONS,
+      );
+      return true;
     }
 
     if (event.type === "tool_execution_end") {
@@ -295,7 +258,7 @@ export class ShellTranscriptProjector {
         renderMode: "stable",
         fallbackMessageId: toolCallId ? `tool:end:${toolCallId}` : undefined,
       });
-      return;
+      return true;
     }
 
     if (event.type === "tool_execution_phase_change") {
@@ -309,7 +272,7 @@ export class ShellTranscriptProjector {
         status: event.phase === "cleanup" ? "completed" : "running",
         renderMode: "streaming",
       });
-      return;
+      return true;
     }
 
     if (event.type === "session_phase_change") {
@@ -330,7 +293,7 @@ export class ShellTranscriptProjector {
           }),
         });
       }
-      return;
+      return false;
     }
 
     if (event.type === "context_state_change") {
@@ -343,41 +306,48 @@ export class ShellTranscriptProjector {
             ? contextState.budgetPressure
             : undefined,
       });
+      return false;
     }
+    return false;
   }
 
-  private replaceMessages(messages: readonly CliShellTranscriptMessage[]): void {
-    this.context.setMessages([...messages]);
+  private replaceMessages(
+    messages: readonly CliShellTranscriptMessage[],
+    options?: ShellCommitOptions,
+  ): void {
+    this.context.setMessages([...messages], options);
   }
 
   private findMessage(id: string): CliShellTranscriptMessage | undefined {
     return this.context.getMessages().find((message) => message.id === id);
   }
 
-  private removeMessage(id: string): void {
+  private removeMessage(id: string, options?: ShellCommitOptions): void {
     const current = this.context.getMessages();
     const nextMessages = current.filter((message) => message.id !== id);
     if (nextMessages.length === current.length) {
       return;
     }
-    this.replaceMessages(nextMessages);
+    this.replaceMessages(nextMessages, options);
   }
 
-  private upsertMessage(message: CliShellTranscriptMessage | null): void {
+  private upsertMessage(
+    message: CliShellTranscriptMessage | null,
+    options?: ShellCommitOptions,
+  ): void {
     if (!message) {
       return;
     }
     const current = this.context.getMessages();
     const existingIndex = current.findIndex((candidate) => candidate.id === message.id);
     if (existingIndex < 0) {
-      this.appendMessage(message);
+      this.appendMessage(message, options);
       return;
     }
-    this.replaceMessages([
-      ...current.slice(0, existingIndex),
-      message,
-      ...current.slice(existingIndex + 1),
-    ]);
+    this.replaceMessages(
+      [...current.slice(0, existingIndex), message, ...current.slice(existingIndex + 1)],
+      options,
+    );
   }
 
   private readText(message: CliShellTranscriptMessage | undefined): string {
@@ -398,7 +368,11 @@ export class ShellTranscriptProjector {
     return `${prefix}:${this.context.getSessionId()}:${this.#assistantEntrySequence}`;
   }
 
-  private upsertAssistantMessage(message: unknown, renderMode: "stable" | "streaming"): void {
+  private upsertAssistantMessage(
+    message: unknown,
+    renderMode: "stable" | "streaming",
+    options?: ShellCommitOptions,
+  ): void {
     const id = this.#assistantEntryId ?? this.nextAssistantEntryId("assistant");
     this.#assistantEntryId = id;
     const nextMessage = buildTranscriptMessageFromMessage(message, {
@@ -406,20 +380,23 @@ export class ShellTranscriptProjector {
       renderMode,
       previousMessage: this.findMessage(id),
     });
-    this.upsertMessage(nextMessage);
+    this.upsertMessage(nextMessage, options);
   }
 
-  private upsertToolExecution(update: {
-    toolCallId?: string;
-    toolName?: string;
-    args?: unknown;
-    phase?: ToolExecutionPhase;
-    partialResult?: unknown;
-    result?: unknown;
-    status?: CliShellTranscriptToolStatus;
-    renderMode?: "stable" | "streaming";
-    fallbackMessageId?: string;
-  }): void {
+  private upsertToolExecution(
+    update: {
+      toolCallId?: string;
+      toolName?: string;
+      args?: unknown;
+      phase?: ToolExecutionPhase;
+      partialResult?: unknown;
+      result?: unknown;
+      status?: CliShellTranscriptToolStatus;
+      renderMode?: "stable" | "streaming";
+      fallbackMessageId?: string;
+    },
+    options?: ShellCommitOptions,
+  ): void {
     const toolCallId = update.toolCallId;
     if (typeof toolCallId !== "string" || toolCallId.length === 0) {
       return;
@@ -437,6 +414,7 @@ export class ShellTranscriptProjector {
         renderMode: update.renderMode,
         fallbackMessageId: update.fallbackMessageId,
       }),
+      options,
     );
   }
 

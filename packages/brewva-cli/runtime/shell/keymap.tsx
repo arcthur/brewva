@@ -99,6 +99,10 @@ function effectCommand(
   return () => {
     void (async () => {
       await beforeDispatch?.(effect);
+      if (effect.type === "composer.submit") {
+        runtime.submitComposer();
+        return;
+      }
       await runtime.handleInput({ type: "keymap.effect", effect });
     })();
     return true;

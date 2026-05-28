@@ -1,4 +1,5 @@
 import { FocusManager, OverlayManager } from "../../../internal/tui/index.js";
+import { cloneCockpitObservationCursor, shareShellCockpitProjection } from "../cockpit/index.js";
 import {
   resolveRelativeSubagentFooterRunId,
   resolveSubagentFooterSelectedRunId,
@@ -122,49 +123,49 @@ export function reduceCliShellState(
           messages: action.messages,
         },
       };
-    case "transcript.setScrollState":
+    case "surface.setScrollState":
       return {
         ...state,
-        transcript: {
-          ...state.transcript,
+        surface: {
+          ...state.surface,
           followMode: action.followMode,
           scrollOffset: Math.max(0, action.scrollOffset),
         },
       };
-    case "transcript.scroll":
+    case "surface.scroll":
       return {
         ...state,
-        transcript: {
-          ...state.transcript,
-          followMode: action.delta === 0 ? state.transcript.followMode : "scrolled",
-          scrollOffset: Math.max(0, state.transcript.scrollOffset + action.delta),
+        surface: {
+          ...state.surface,
+          followMode: action.delta === 0 ? state.surface.followMode : "scrolled",
+          scrollOffset: Math.max(0, state.surface.scrollOffset + action.delta),
         },
       };
-    case "transcript.followLive":
+    case "surface.followLive":
       return {
         ...state,
-        transcript: {
-          ...state.transcript,
+        surface: {
+          ...state.surface,
           followMode: "live",
           scrollOffset: 0,
         },
       };
-    case "transcript.requestNavigation":
+    case "surface.requestNavigation":
       return {
         ...state,
-        transcript: {
-          ...state.transcript,
+        surface: {
+          ...state.surface,
           navigationRequest: action.request,
         },
       };
-    case "transcript.clearNavigation":
-      if (state.transcript.navigationRequest?.id !== action.id) {
+    case "surface.clearNavigation":
+      if (state.surface.navigationRequest?.id !== action.id) {
         return state;
       }
       return {
         ...state,
-        transcript: {
-          ...state.transcript,
+        surface: {
+          ...state.surface,
           navigationRequest: undefined,
         },
       };
@@ -261,6 +262,24 @@ export function reduceCliShellState(
         },
       };
     }
+    case "cockpit.setProjection":
+      return {
+        ...state,
+        cockpit: {
+          ...state.cockpit,
+          projection: action.projection
+            ? shareShellCockpitProjection(action.projection)
+            : undefined,
+        },
+      };
+    case "cockpit.setObservation":
+      return {
+        ...state,
+        cockpit: {
+          ...state.cockpit,
+          observation: cloneCockpitObservationCursor(action.observation),
+        },
+      };
     case "subagentFooter.open": {
       // Runtime command handlers avoid modal focus changes first; this keeps the state invariant
       // intact when actions are reduced directly.

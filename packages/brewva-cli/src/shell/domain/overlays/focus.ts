@@ -30,6 +30,7 @@ export function resolveOverlayFocusOwner(
     case "queue":
       return "dialog";
     case "inspect":
+    case "cockpitArchive":
       return "inspectOverlay";
     case "pager":
       return "pager";
@@ -46,6 +47,7 @@ export function resolveOverlayFocusOwner(
     case "shortcutOverlay":
     case "context":
     case "authority":
+    case "cockpitAttention":
     case "skills":
       return "dialog";
     default: {

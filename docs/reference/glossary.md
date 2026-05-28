@@ -4,8 +4,18 @@
 - SkillInvocationRecord: advisory provenance for a prompt-visible or inspect-only SkillCard projection, including source, trigger, mode, surfaced resource refs, token estimate, capability refs, output artifacts, and argument hints
 - Contract: an explicit runtime or substrate policy surface; SkillCards are advisory context, not authority contracts
 - Ledger: append-only evidence stream for tool outcomes
+- Runtime Cockpit: the default interactive shell surface for runtime physics,
+  Work Card, decision lane, effect ledger, attention glance, recovery lane, and
+  composer policy
 - Work Card: the default schema-tagged inspect projection for goal, context,
   options, authority, work, evidence, and handoff; it is a view, not truth
+- Decision Lane: cockpit region that ranks active approvals, questions, cost
+  gates, adoption asks, recovery confirmations, and manual gates before
+  ordinary transcript history
+- Effect Ledger: cockpit region that renders receipt posture, consequence,
+  verdict, duration, and rollback affordance before raw tool output
+- Cockpit Archive: explicit-pull overlay for bounded details behind visible
+  cockpit refs; raw transcript, tape, and tool output remain archive evidence
 - Attention Option: a bounded model-facing candidate card for unbounded
   evidence sources; content enters the answer path only through explicit
   consume or pin actions

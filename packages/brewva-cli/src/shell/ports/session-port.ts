@@ -25,6 +25,7 @@ import type {
   SessionRewindState,
   SessionRewindTargetView,
 } from "@brewva/brewva-vocabulary/session";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { BrewvaSessionResult } from "../../session/session.js";
 
 export interface CliShellSessionBundle {
@@ -44,6 +45,10 @@ export interface SessionLineageStatusView {
   childCount: number;
   nodeCount: number;
   unsupportedReason: string | null;
+}
+
+export interface SessionWireFrameReadOptions {
+  readonly refreshDurable?: boolean;
 }
 
 export interface SessionViewPort {
@@ -83,6 +88,10 @@ export interface SessionViewPort {
   waitForIdle(): Promise<void>;
   abort(): Promise<void>;
   subscribe(listener: (event: BrewvaPromptSessionEvent) => void): () => void;
+  getSessionWireFrames(
+    sessionId?: string,
+    options?: SessionWireFrameReadOptions,
+  ): readonly SessionWireFrame[];
   getTranscriptSeed(): unknown[];
   recordRewindCheckpoint(input: RecordSessionRewindCheckpointInput): Promise<void>;
   rewindSession(input?: SessionRewindInput): Promise<SessionRewindResult>;

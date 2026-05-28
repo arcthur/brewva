@@ -18,6 +18,7 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "capabilities.context.usage.getStatus",
   "capabilities.context.visibleRead.getEpoch",
   "capabilities.context.visibleRead.isCurrent",
+  "capabilities.cost.posture.get",
   "capabilities.cost.summary.get",
   "capabilities.cost.usage.recordAssistant",
   "capabilities.delegation.lifecycle.knowledgeAdoptionRecorded",

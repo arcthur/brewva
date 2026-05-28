@@ -1,9 +1,18 @@
-export { RGBA, SyntaxStyle, TextAttributes, decodePasteBytes } from "@opentui/core";
+export {
+  RGBA,
+  StyledText,
+  SyntaxStyle,
+  TextAttributes,
+  TextRenderable,
+  decodePasteBytes,
+} from "@opentui/core";
 export type {
   BoxRenderable,
   CliRenderer,
   KeyEvent,
+  MarkdownOptions,
   PasteEvent,
+  RenderContext,
   Renderable,
   ScrollAcceleration,
 } from "@opentui/core";

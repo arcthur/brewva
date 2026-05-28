@@ -30,6 +30,8 @@ import type { OperatorSurfaceSnapshot } from "../domain/operator-snapshot.js";
 import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
 import {
   buildAuthorityOverlayPayload,
+  buildCockpitArchiveOverlayPayload,
+  buildCockpitAttentionOverlayPayload,
   buildContextOverlayPayload,
   buildInspectOverlayPayload,
   buildLineageOverlayPayload,
@@ -380,6 +382,16 @@ export class ShellOverlayLifecycleHandler {
       });
       return;
     }
+    if (active.kind === "cockpitArchive") {
+      const nextOffsets = [...active.scrollOffsets];
+      const currentOffset = nextOffsets[active.selectedIndex] ?? 0;
+      nextOffsets[active.selectedIndex] = Math.max(0, currentOffset + delta);
+      this.replaceActiveOverlay({
+        ...active,
+        scrollOffsets: nextOffsets,
+      });
+      return;
+    }
     if (active.kind === "approval") {
       const item = active.snapshot.approvals[active.selectedIndex];
       if (!hasDiffPreviewPayload(item)) {
@@ -616,6 +628,17 @@ export class ShellOverlayLifecycleHandler {
         });
         return;
       }
+      case "cockpitArchive": {
+        const item = active.items[active.selectedIndex];
+        if (!item) {
+          return;
+        }
+        this.openPagerOverlay({
+          title: `${item.label} [${item.ref}]`,
+          lines: item.detailLines,
+        });
+        return;
+      }
       default:
         this.closeActiveOverlay(false);
     }
@@ -717,6 +740,38 @@ export class ShellOverlayLifecycleHandler {
       directory: resolveInspectDirectory(operatorRuntime, undefined, undefined),
     });
     this.openOverlay(buildInspectOverlayPayload(report));
+  }
+
+  openCockpitArchiveOverlay(): void {
+    const projection = this.context.getState().cockpit.projection;
+    if (!projection) {
+      this.openPagerOverlay({
+        title: "Cockpit archive",
+        lines: ["The runtime cockpit projection is not ready yet."],
+      });
+      return;
+    }
+    this.openOverlayWithOptions(
+      buildCockpitArchiveOverlayPayload({
+        projection,
+        selectedRef: projection.observation.focusedRef ?? projection.observation.lastObservedAtRef,
+      }),
+      { suspendCurrent: true },
+    );
+  }
+
+  openCockpitAttentionOverlay(): void {
+    const projection = this.context.getState().cockpit.projection;
+    if (!projection) {
+      this.openPagerOverlay({
+        title: "Attention",
+        lines: ["The runtime cockpit projection is not ready yet."],
+      });
+      return;
+    }
+    this.openOverlayWithOptions(buildCockpitAttentionOverlayPayload({ projection }), {
+      suspendCurrent: true,
+    });
   }
 
   openContextOverlay(): void {

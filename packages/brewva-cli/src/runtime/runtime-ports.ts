@@ -84,6 +84,13 @@ export function getCliRuntimeCostSummary(
   return runtime.ops.cost.summary.get(sessionId);
 }
 
+export function getCliRuntimeCostPosture(
+  runtime: InspectRuntime,
+  sessionId: string,
+): ReturnType<InspectRuntime["ops"]["cost"]["posture"]["get"]> {
+  return runtime.ops.cost.posture.get(sessionId);
+}
+
 export function setCliRuntimeTaskSpec(
   runtime: AuthorityRuntime,
   sessionId: string,

@@ -152,6 +152,11 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
             return { ok: true, sessionId: input.sessionId };
           },
         },
+        posture: {
+          get(sessionId: string) {
+            return { sessionId, status: "ok" };
+          },
+        },
         summary: {
           get(sessionId: string) {
             return { sessionId, totals: {} };
@@ -337,6 +342,9 @@ describe("tool runtime capability scope", () => {
     );
     expect(() => scoped.capabilities.cost.summary.get("session-1")).toThrow(
       "managed Brewva tool 'grep' attempted to access protected runtime capability 'capabilities.cost.summary.get' without declaring it.",
+    );
+    expect(() => scoped.capabilities.cost.posture.get("session-1")).toThrow(
+      "managed Brewva tool 'grep' attempted to access protected runtime capability 'capabilities.cost.posture.get' without declaring it.",
     );
     expect(() =>
       scoped.capabilities?.workbench.note("session-1", {

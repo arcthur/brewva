@@ -8,6 +8,13 @@ import {
 } from "../../../../packages/brewva-cli/src/shell/config/tui-config.js";
 
 describe("brewva tui config", () => {
+  test("defaults to an immediately responsive transcript scroll multiplier", () => {
+    expect(DEFAULT_BREWVA_TUI_CONFIG.scroll.acceleration).toEqual({
+      type: "linear",
+      speed: 3,
+    });
+  });
+
   test("merges global, project, and explicit config in precedence order", () => {
     const root = mkdtempSync(join(tmpdir(), "brewva-tui-config-"));
     const globalRoot = join(root, "brewva");

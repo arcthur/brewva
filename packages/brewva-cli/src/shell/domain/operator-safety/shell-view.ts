@@ -171,6 +171,12 @@ function isReadOnlyActionClass(actionClass: ToolActionClass | undefined): boolea
   return actionClass ? READ_ONLY_ACTION_CLASSES.has(actionClass) : false;
 }
 
+export function isOperatorSafetyShellReadOnlyActionClass(
+  actionClass: ToolActionClass | undefined,
+): boolean {
+  return isReadOnlyActionClass(actionClass);
+}
+
 function isEffectfulActionClass(actionClass: ToolActionClass | undefined): boolean {
   return actionClass !== undefined && !isReadOnlyActionClass(actionClass);
 }

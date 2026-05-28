@@ -167,9 +167,19 @@ export function cloneOverlayPayload(payload: CliShellOverlayPayload): CliShellOv
     case "helpHub":
     case "context":
     case "authority":
+    case "cockpitAttention":
       return {
         ...payload,
         lines: [...payload.lines],
+      };
+    case "cockpitArchive":
+      return {
+        ...payload,
+        items: payload.items.map((item) => ({
+          ...item,
+          detailLines: [...item.detailLines],
+        })),
+        scrollOffsets: [...payload.scrollOffsets],
       };
     case "skills":
       return {
@@ -267,7 +277,7 @@ export function logicalCursorFromTextOffset(
   };
 }
 
-export function readTranscriptScrollMetrics(scrollbox: OpenTuiScrollBoxHandle): {
+export function readSurfaceScrollMetrics(scrollbox: OpenTuiScrollBoxHandle): {
   maxScrollTop: number;
   currentOffset: number;
 } {
@@ -278,30 +288,30 @@ export function readTranscriptScrollMetrics(scrollbox: OpenTuiScrollBoxHandle): 
   };
 }
 
-export function syncTranscriptStateFromScrollbox(
+export function syncSurfaceStateFromScrollbox(
   runtime: ShellRendererController,
   scrollbox: OpenTuiScrollBoxHandle,
 ): void {
-  const { maxScrollTop, currentOffset } = readTranscriptScrollMetrics(scrollbox);
+  const { maxScrollTop, currentOffset } = readSurfaceScrollMetrics(scrollbox);
   if (currentOffset <= 1 || maxScrollTop === 0) {
     void runtime.handleInput({
-      type: "transcript.scrollSync",
+      type: "surface.scrollSync",
       followMode: "live",
       scrollOffset: 0,
     });
     return;
   }
   void runtime.handleInput({
-    type: "transcript.scrollSync",
+    type: "surface.scrollSync",
     followMode: "scrolled",
     scrollOffset: currentOffset,
   });
 }
 
-export function applyTranscriptNavigationRequest(input: {
+export function applySurfaceNavigationRequest(input: {
   runtime: ShellRendererController;
   scrollbox: OpenTuiScrollBoxHandle;
-  request: NonNullable<ShellViewModel["transcript"]["navigationRequest"]>;
+  request: NonNullable<ShellViewModel["surface"]["navigationRequest"]>;
 }): void {
   const pageStep = Math.max(1, Math.floor(Math.max(2, input.scrollbox.viewport.height) / 2));
 
@@ -329,9 +339,9 @@ export function applyTranscriptNavigationRequest(input: {
     }
   }
 
-  syncTranscriptStateFromScrollbox(input.runtime, input.scrollbox);
+  syncSurfaceStateFromScrollbox(input.runtime, input.scrollbox);
   void input.runtime.handleInput({
-    type: "transcript.navigationAck",
+    type: "surface.navigationAck",
     requestId: input.request.id,
   });
 }

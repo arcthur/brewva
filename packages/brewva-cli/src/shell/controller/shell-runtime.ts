@@ -13,6 +13,7 @@ import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptSessionEvent,
   BrewvaQueuedPromptView,
+  SessionPhase,
 } from "@brewva/brewva-substrate/session";
 import {
   listPersistedPatchSets,
@@ -28,7 +29,6 @@ import {
 import {
   getCliRuntimeCompactionGateStatus,
   getCliRuntimeContextUsage,
-  getCliRuntimeSessionWire,
   getCliRuntimePendingCompactionReason,
   getCliRuntimeTapeStatus,
   getCliRuntimeTurnProjection,
@@ -41,6 +41,11 @@ import { registerShellCommands } from "../commands/shell-command-registry.js";
 import { loadBrewvaTuiConfig } from "../config/tui-config.js";
 import type { ShellAction } from "../domain/actions.js";
 import type { ShellCommitBatch, ShellCommitInput, ShellCommitOptions } from "../domain/actions.js";
+import {
+  describeShellCockpitComposerPolicyBlock,
+  resolveShellCockpitComposerSubmitPolicy,
+  shellCockpitComposerPolicyAllowsSubmit,
+} from "../domain/cockpit/index.js";
 import {
   ShellCompletionProvider,
   createAgentCompletionSource,
@@ -65,6 +70,7 @@ import {
   type CliShellRuntimeState,
 } from "../domain/runtime-state.js";
 import { selectActiveOverlayPayload, selectHasCompletion } from "../domain/selectors.js";
+import { isSessionPhase } from "../domain/session-phase.js";
 import { type CliShellAction, type CliShellViewState } from "../domain/state.js";
 import type { BrewvaResolvedKeymapBindings, BrewvaTuiConfig } from "../domain/tui.js";
 import { projectShellViewModel, type ShellViewModel } from "../domain/view-model.js";
@@ -82,6 +88,7 @@ import type { CliShellSessionBundle, SessionViewPort } from "../ports/session-po
 import { createCliShellUiPortController } from "../ports/ui-adapter.js";
 import type { CliShellUiPort } from "../ports/ui-port.js";
 import { ShellTranscriptProjector } from "../projectors/transcript-projector.js";
+import { ShellCockpitSync } from "./cockpit-sync.js";
 import { ShellDialogManager } from "./dialog-manager.js";
 import {
   appendSessionProjectionError,
@@ -130,6 +137,18 @@ function isShellKeymapInput(
   input: ShellInput,
 ): input is Extract<ShellInput, { type: "keymap.command" | "keymap.effect" }> {
   return input.type === "keymap.command" || input.type === "keymap.effect";
+}
+
+function isHighFrequencySessionProgressEvent(event: BrewvaPromptSessionEvent): boolean {
+  return (
+    event.type === "message_update" ||
+    event.type === "tool_execution_update" ||
+    event.type === "session_wire_progress"
+  );
+}
+
+function isHighFrequencyCockpitProgressEvent(event: BrewvaPromptSessionEvent): boolean {
+  return event.type === "tool_execution_update";
 }
 
 type GitCommandResult =
@@ -272,6 +291,7 @@ function isCliShellStatusAction(action: ShellAction): action is CliShellStatusAc
 export class CliShellRuntime {
   static readonly PROMPT_HISTORY_LIMIT = 50;
   static readonly STATUS_DEBOUNCE_MS = 120;
+  static readonly STREAMING_RENDER_INTERVAL_MS = 16;
   readonly #configPort = createShellConfigPort();
   readonly #commandProvider = new ShellCommandProvider();
   readonly #completionProvider: ShellCompletionProvider;
@@ -290,6 +310,7 @@ export class CliShellRuntime {
   readonly #transcriptProjector: ShellTranscriptProjector;
   readonly #viewPreferencesHandler: ShellViewPreferencesHandler;
   #operatorSnapshotSync: ShellOperatorSnapshotSync;
+  #cockpitSync: ShellCockpitSync;
   readonly #listeners = new Set<() => void>();
   readonly #uiController;
   readonly #operatorPort;
@@ -302,15 +323,20 @@ export class CliShellRuntime {
     taskRuns: [],
     sessions: [],
   };
+  #sessionPhase: SessionPhase = { kind: "idle" };
   #unsubscribeSession: (() => void) | undefined;
   #pollTimer: BoundaryIntervalHandle | undefined;
   #statusTimer: { close(): Promise<void> } | undefined;
+  #streamingRenderTimer: ReturnType<typeof setTimeout> | undefined;
+  #sessionProgressTimer: ReturnType<typeof setTimeout> | undefined;
+  #queuedSessionProgressEvents: BrewvaPromptSessionEvent[] = [];
+  #lastSessionProgressFlushAt = 0;
   #queuedStatusActions: CliShellAction[] = [];
   #resolveExit: (() => void) | undefined;
   readonly #exitPromise: Promise<void>;
   #viewportRows = 24;
   #semanticInputQueue: Promise<void> = Promise.resolve();
-  #transcriptNavigationRequestId = 0;
+  #surfaceNavigationRequestId = 0;
   #started = false;
   #disposed = false;
   readonly #effectRunner: ShellEffectRunner;
@@ -431,13 +457,13 @@ export class CliShellRuntime {
       getTranscriptSeed: () => this.#sessionPort.getTranscriptSeed(),
       getUi: () => this.ui,
       commit: (action, commitOptions) => this.commit(action, commitOptions),
-      setMessages: (messages) =>
+      setMessages: (messages, commitOptions) =>
         this.commit(
           {
             type: "transcript.setMessages",
             messages: [...messages],
           },
-          { debounceStatus: false },
+          { debounceStatus: false, ...commitOptions },
         ),
     });
     this.#questionOverlayHandler = new ShellQuestionOverlayHandler({
@@ -491,6 +517,7 @@ export class CliShellRuntime {
         getState: () => this.#state,
         getUi: () => this.ui,
         commit: (actions, commitOptions) => this.commit(actions, commitOptions),
+        requestCockpitSync: () => this.#cockpitSync.requestSync(),
         buildSessionStatusActions: () => this.buildSessionStatusActions(),
         buildCommandPalettePayload: (query) =>
           buildCommandPalettePayload({
@@ -513,6 +540,7 @@ export class CliShellRuntime {
       getState: () => this.#state,
       getBundle: () => this.#bundle,
       getSessionPort: () => this.#sessionPort,
+      getSessionPhase: () => this.#sessionPhase,
       getSessionGeneration: () => this.#sessionGeneration,
       getUi: () => this.ui,
       promptMemory: this.#promptMemoryHandler,
@@ -567,6 +595,19 @@ export class CliShellRuntime {
       commit: (actions, commitOptions) => this.commit(actions, commitOptions),
       overlayHandler: this.#overlayHandler,
     });
+    this.#cockpitSync = new ShellCockpitSync({
+      isDisposed: () => this.#disposed,
+      getRuntime: () => this.#bundle.runtime,
+      getSessionId: () => this.#sessionPort.getSessionId(),
+      getSessionPhase: () => this.#sessionPhase,
+      getModelLabel: () => this.#sessionPort.getModelLabel(),
+      getOperatorSnapshot: () => this.#operatorSnapshot,
+      getObservation: () => this.#state.cockpit.observation,
+      getRewindTargets: () => this.#sessionPort.listRewindTargets(),
+      getSessionWireFrames: (sessionId, readOptions) =>
+        this.#sessionPort.getSessionWireFrames(sessionId, readOptions),
+      commit: (action, commitOptions) => this.commit(action, commitOptions),
+    });
     this.#viewPreferencesHandler = new ShellViewPreferencesHandler({
       getSessionPort: () => this.#sessionPort,
       getState: () => this.#state,
@@ -619,7 +660,7 @@ export class CliShellRuntime {
   }
 
   getSessionWireFrames(sessionId: string) {
-    return getCliRuntimeSessionWire(this.#bundle.runtime, sessionId);
+    return this.#sessionPort.getSessionWireFrames(sessionId);
   }
 
   getToolDefinitions(): CliShellSessionBundle["toolDefinitions"] {
@@ -661,6 +702,14 @@ export class CliShellRuntime {
 
   getOperatorSnapshot(): OperatorSurfaceSnapshot {
     return this.#operatorSnapshot;
+  }
+
+  requestRender(): void {
+    this.emitChange();
+  }
+
+  submitComposer(): void {
+    void this.#sessionHandler.submitComposer({ waitForPromptEffect: false });
   }
 
   private async openSessionById(sessionId: string): Promise<void> {
@@ -712,6 +761,7 @@ export class CliShellRuntime {
     this.#started = true;
     this.initializeState();
     this.mountSession(this.#bundle);
+    this.#cockpitSync.syncNow();
     this.#pollTimer = startBoundaryInterval({
       intervalMs: this.options.operatorPollIntervalMs ?? 750,
       run: () =>
@@ -727,6 +777,7 @@ export class CliShellRuntime {
     await this.runShellEffects([
       { type: "operator.refresh", sessionGeneration: this.#sessionGeneration },
     ]);
+    this.#cockpitSync.syncNow();
 
     if (this.options.initialMessage?.trim()) {
       const initialMessage = this.options.initialMessage.trim();
@@ -747,15 +798,30 @@ export class CliShellRuntime {
     if (this.#disposed) {
       return;
     }
-    this.#disposed = true;
-    this.#started = false;
+    this.flushSessionProgressEvents();
     this.dismissPendingInteractiveQuestionRequests();
     const pollTimer = this.#pollTimer;
     const statusTimer = this.#statusTimer;
+    const streamingRenderTimer = this.#streamingRenderTimer;
+    const sessionProgressTimer = this.#sessionProgressTimer;
+    this.#disposed = true;
+    this.#started = false;
     this.#pollTimer = undefined;
     this.#statusTimer = undefined;
+    this.#streamingRenderTimer = undefined;
+    this.#sessionProgressTimer = undefined;
+    this.#queuedSessionProgressEvents = [];
+    this.#lastSessionProgressFlushAt = 0;
     void pollTimer?.close();
     void statusTimer?.close();
+    if (streamingRenderTimer) {
+      clearTimeout(streamingRenderTimer);
+      this.emitChange();
+    }
+    if (sessionProgressTimer) {
+      clearTimeout(sessionProgressTimer);
+    }
+    this.#cockpitSync.dispose();
     this.#unsubscribeSession?.();
     this.#listeners.clear();
     this.#resolveExit?.();
@@ -855,8 +921,120 @@ export class CliShellRuntime {
     }
   }
 
+  private requestStreamingRender(): void {
+    if (this.#disposed || this.#streamingRenderTimer) {
+      return;
+    }
+    this.#streamingRenderTimer = setTimeout(() => {
+      this.#streamingRenderTimer = undefined;
+      if (!this.#disposed) {
+        this.emitChange();
+      }
+    }, CliShellRuntime.STREAMING_RENDER_INTERVAL_MS);
+  }
+
+  private clearQueuedSessionProgressEvents(): void {
+    if (this.#sessionProgressTimer) {
+      clearTimeout(this.#sessionProgressTimer);
+      this.#sessionProgressTimer = undefined;
+    }
+    this.#queuedSessionProgressEvents = [];
+    this.#lastSessionProgressFlushAt = 0;
+  }
+
+  private enqueueSessionProgressEvent(event: BrewvaPromptSessionEvent): void {
+    if (this.#disposed) {
+      return;
+    }
+    this.#queuedSessionProgressEvents.push(event);
+    if (this.#sessionProgressTimer) {
+      return;
+    }
+
+    const elapsedMs = Date.now() - this.#lastSessionProgressFlushAt;
+    if (
+      this.#lastSessionProgressFlushAt === 0 ||
+      elapsedMs >= CliShellRuntime.STREAMING_RENDER_INTERVAL_MS
+    ) {
+      this.flushSessionProgressEvents();
+      return;
+    }
+
+    this.#sessionProgressTimer = setTimeout(() => {
+      this.#sessionProgressTimer = undefined;
+      this.flushSessionProgressEvents();
+    }, CliShellRuntime.STREAMING_RENDER_INTERVAL_MS - elapsedMs);
+  }
+
+  private flushSessionProgressEvents(): void {
+    if (this.#sessionProgressTimer) {
+      clearTimeout(this.#sessionProgressTimer);
+      this.#sessionProgressTimer = undefined;
+    }
+    if (this.#queuedSessionProgressEvents.length === 0) {
+      return;
+    }
+    const events = this.#queuedSessionProgressEvents;
+    this.#queuedSessionProgressEvents = [];
+    this.#lastSessionProgressFlushAt = Date.now();
+    if (this.#disposed) {
+      return;
+    }
+    for (const event of events) {
+      this.projectSessionEvent(event);
+    }
+  }
+
+  private handleSessionPortEvent(event: BrewvaPromptSessionEvent): void {
+    if (event.type === "queue.changed" && isQueuedPromptViewArray(event.items)) {
+      this.flushSessionProgressEvents();
+      this.applyQueueProjection(event.items);
+      return;
+    }
+    if (isHighFrequencySessionProgressEvent(event)) {
+      this.enqueueSessionProgressEvent(event);
+      return;
+    }
+    this.flushSessionProgressEvents();
+    this.projectSessionEvent(event);
+  }
+
+  private projectSessionEvent(event: BrewvaPromptSessionEvent): void {
+    let transcriptChanged = false;
+    try {
+      if (event.type === "session_phase_change" && isSessionPhase(event.phase)) {
+        this.#sessionPhase = event.phase;
+      }
+      transcriptChanged = this.#transcriptProjector.handleSessionEvent(event);
+      this.notifySteerOutcome(event);
+    } catch (error) {
+      transcriptChanged = true;
+      const message =
+        error instanceof Error ? error.message : "Failed to render the latest session event.";
+      this.ui.notify(message, "error");
+      appendSessionProjectionError({
+        appendMessage: (renderedMessage) =>
+          this.#transcriptProjector.appendMessage(renderedMessage),
+        eventType: event.type,
+        message,
+      });
+    } finally {
+      if (isHighFrequencySessionProgressEvent(event)) {
+        if (transcriptChanged) {
+          this.requestStreamingRender();
+        }
+        if (isHighFrequencyCockpitProgressEvent(event)) {
+          this.#cockpitSync.requestProgressSync();
+        }
+      } else {
+        this.#cockpitSync.requestSync();
+      }
+    }
+  }
+
   private initializeState(): void {
     const sessionId = this.#sessionPort.getSessionId();
+    this.#sessionPhase = { kind: "idle" };
     this.#transcriptProjector.resetAssistantDraft();
     this.#operatorSnapshotSync.resetSeen();
     const restoredDraft = this.#sessionHandler.getDraftsBySessionId().get(sessionId);
@@ -999,6 +1177,7 @@ export class CliShellRuntime {
   }
 
   private mountSession(bundle: CliShellSessionBundle): void {
+    this.clearQueuedSessionProgressEvents();
     this.commit([{ type: "domain.sessionGeneration.increment" }], {
       debounceStatus: false,
       emitChange: false,
@@ -1007,14 +1186,12 @@ export class CliShellRuntime {
     this.#bundle = bundle;
     bundle.session.setUiPort(this.ui);
     this.#sessionPort = createSessionViewPort(bundle);
+    this.#cockpitSync.reset();
     this.options.onBundleChange?.(bundle);
     this.#unsubscribeSession?.();
+    this.#cockpitSync.requestSync();
     this.#unsubscribeSession = this.#sessionPort.subscribe((event) => {
-      if (event.type === "queue.changed" && isQueuedPromptViewArray(event.items)) {
-        this.applyQueueProjection(event.items);
-        return;
-      }
-      void this.handleShellIntent({ type: "session.event", event });
+      this.handleSessionPortEvent(event);
     });
   }
 
@@ -1190,10 +1367,12 @@ export class CliShellRuntime {
       openContext: () => this.#overlayHandler.openContextOverlay(),
       openAuthority: () => this.#overlayHandler.openAuthorityOverlay(),
       openSkills: () => this.#overlayHandler.openSkillsOverlay(),
+      openCockpitArchive: () => this.#overlayHandler.openCockpitArchiveOverlay(),
+      openCockpitAttention: () => this.#overlayHandler.openCockpitAttentionOverlay(),
       openActivePagerExternally: () => this.openActivePagerExternally(),
       openExternalTranscriptPager: () => this.openExternalTranscriptPager(),
       copyLatestAssistantAnswer: () => this.copyLatestAssistantAnswer(),
-      requestTranscriptNavigation: (kind) => this.requestTranscriptNavigation(kind),
+      requestSurfaceNavigation: (kind) => this.requestSurfaceNavigation(kind),
       toggleSubagentFooter: () => this.toggleSubagentFooter(),
       closeSubagentFooter: () => this.closeSubagentFooter(),
       selectSubagentFooterRun: (runId) => this.selectSubagentFooterRun(runId),
@@ -1202,22 +1381,7 @@ export class CliShellRuntime {
       openSelectedSubagentSession: () => this.openSelectedSubagentSession(),
       cancelSelectedSubagent: () => this.cancelSelectedSubagent(),
       requestContextCompaction: () => this.requestContextCompaction(),
-      projectSessionEvent: (projectEffect) => {
-        try {
-          this.#transcriptProjector.handleSessionEvent(projectEffect.event);
-          this.notifySteerOutcome(projectEffect.event);
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Failed to render the latest session event.";
-          this.ui.notify(message, "error");
-          appendSessionProjectionError({
-            appendMessage: (renderedMessage) =>
-              this.#transcriptProjector.appendMessage(renderedMessage),
-            eventType: projectEffect.event.type,
-            message,
-          });
-        }
-      },
+      projectSessionEvent: (projectEffect) => this.projectSessionEvent(projectEffect.event),
       abortSession: async (notification) => {
         await this.#sessionPort.abort();
         if (notification) {
@@ -1267,6 +1431,7 @@ export class CliShellRuntime {
         this.commit(this.buildSessionStatusActions(), {
           debounceStatus: false,
         });
+        this.#cockpitSync.requestSync();
       },
       openProviderConnect: (query) => this.#providerAuthHandler.openConnectDialog(query ?? ""),
       openThinking: () => this.#modelSelectionHandler.openThinkingDialog(),
@@ -1303,7 +1468,26 @@ export class CliShellRuntime {
       scheduleStatusFlush: (delayMs) => this.scheduleStatusFlush(delayMs),
       promptSession: async (sessionGeneration, parts, options) => {
         if (sessionGeneration === this.#sessionGeneration) {
-          await this.#sessionPort.prompt(parts, options);
+          const composerPolicy = resolveShellCockpitComposerSubmitPolicy({
+            phase: this.#sessionPhase,
+            projectionPolicy: this.#state.cockpit.projection?.composerPolicy,
+          });
+          const source = options?.source;
+          const appliesToComposer =
+            source === "interactive" || source === "slash" || source === "internal";
+          if (appliesToComposer && !shellCockpitComposerPolicyAllowsSubmit(composerPolicy)) {
+            this.ui.notify(
+              describeShellCockpitComposerPolicyBlock(composerPolicy) ?? "Composer is unavailable.",
+              "warning",
+            );
+            return;
+          }
+          await this.#sessionPort.prompt(parts, {
+            ...options,
+            ...(appliesToComposer && composerPolicy === "queue"
+              ? { streamingBehavior: "queue" as const }
+              : {}),
+          });
         }
       },
       openExternalEditorEffect: async (title, prefill) => {
@@ -1382,7 +1566,10 @@ export class CliShellRuntime {
   private async refreshOperatorSnapshot(
     sessionGeneration = this.#sessionGeneration,
   ): Promise<void> {
-    await this.#operatorSnapshotSync.refresh(sessionGeneration);
+    const changed = await this.#operatorSnapshotSync.refresh(sessionGeneration);
+    if (changed) {
+      this.#cockpitSync.requestSync();
+    }
   }
 
   private async refreshOperatorSnapshotEffect(): Promise<void> {
@@ -1453,16 +1640,16 @@ export class CliShellRuntime {
     return await this.handleShellIntent(intent);
   }
 
-  private getTranscriptPageStep(): number {
+  private getSurfacePageStep(): number {
     return Math.max(3, Math.floor(Math.max(8, this.#viewportRows - 10) / 2));
   }
 
-  private requestTranscriptNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void {
+  private requestSurfaceNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void {
     this.commit(
       {
-        type: "transcript.requestNavigation",
+        type: "surface.requestNavigation",
         request: {
-          id: ++this.#transcriptNavigationRequestId,
+          id: ++this.#surfaceNavigationRequestId,
           kind,
         },
       },

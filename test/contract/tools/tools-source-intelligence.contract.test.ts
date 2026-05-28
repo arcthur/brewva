@@ -195,6 +195,13 @@ describe("source intelligence managed tools", () => {
     expect(text).toContain("[CodeDigest]");
     expect(text).toContain("tool.py");
     expect(text).toContain("function run");
+    const display = result as {
+      display?: { summaryText?: string; detailsText?: string; rawText?: string };
+    };
+    const displayPayload = requireDefined(display.display, "Expected code_digest display payload.");
+    expect(displayPayload.summaryText).toContain("[CodeDigest]");
+    expect(displayPayload.summaryText).toContain("budget_tokens: 400");
+    expect(Object.keys(displayPayload).toSorted()).toEqual(["summaryText"]);
     const details = result as {
       details?: { budget?: { estimator?: string; maxTokens?: number; renderedTokens?: number } };
     };

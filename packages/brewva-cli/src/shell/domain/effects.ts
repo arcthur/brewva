@@ -48,10 +48,12 @@ export type ShellEffect =
   | { type: "overlay.openContext" }
   | { type: "overlay.openAuthority" }
   | { type: "overlay.openSkills" }
+  | { type: "cockpit.openArchive" }
+  | { type: "cockpit.openAttention" }
   | { type: "pager.externalActive" }
   | { type: "transcript.externalPager" }
   | { type: "transcript.copyLatestAnswer" }
-  | { type: "transcript.navigate"; kind: "pageUp" | "pageDown" | "top" | "bottom" }
+  | { type: "surface.navigate"; kind: "pageUp" | "pageDown" | "top" | "bottom" }
   | { type: "subagentFooter.toggle" }
   | { type: "subagentFooter.close" }
   | { type: "subagentFooter.select"; runId: string }

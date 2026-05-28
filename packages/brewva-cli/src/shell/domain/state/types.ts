@@ -2,6 +2,7 @@ import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
 import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import type { TuiTheme } from "../../../internal/tui/index.js";
 import type { OverlayEntry } from "../../../internal/tui/index.js";
+import type { CockpitObservationCursor, ShellCockpitProjection } from "../cockpit/index.js";
 import type { ShellCompletionCandidate, ShellCompletionRange } from "../completion-provider.js";
 import type { OperatorSafetyShellSessionView } from "../operator-safety/shell-view.js";
 import type { CliShellOverlayPayload } from "../overlays/payloads.js";
@@ -45,6 +46,11 @@ export interface CliShellSubagentFooterState {
   mode: "collapsed" | "inspecting";
   selectedRunId?: string;
   scrollOffset: number;
+}
+
+export interface CliShellCockpitState {
+  projection?: ShellCockpitProjection;
+  observation: CockpitObservationCursor;
 }
 
 export type CliShellDiffStyle = "auto" | "stacked";
@@ -94,6 +100,8 @@ export interface CliShellViewState {
   overlay: CliShellOverlayState;
   transcript: {
     messages: CliShellTranscriptMessage[];
+  };
+  surface: {
     followMode: "live" | "scrolled";
     scrollOffset: number;
     navigationRequest?:
@@ -115,6 +123,7 @@ export interface CliShellViewState {
   };
   notifications: CliShellNotification[];
   queue: readonly BrewvaQueuedPromptView[];
+  cockpit: CliShellCockpitState;
   operator: CliShellOperatorState;
   subagentFooter: CliShellSubagentFooterState;
   status: CliShellStatusState;
@@ -144,23 +153,23 @@ export type CliShellAction =
       messages: CliShellTranscriptMessage[];
     }
   | {
-      type: "transcript.setScrollState";
+      type: "surface.setScrollState";
       followMode: "live" | "scrolled";
       scrollOffset: number;
     }
   | {
-      type: "transcript.scroll";
+      type: "surface.scroll";
       delta: number;
     }
   | {
-      type: "transcript.followLive";
+      type: "surface.followLive";
     }
   | {
-      type: "transcript.requestNavigation";
-      request: NonNullable<CliShellViewState["transcript"]["navigationRequest"]>;
+      type: "surface.requestNavigation";
+      request: NonNullable<CliShellViewState["surface"]["navigationRequest"]>;
     }
   | {
-      type: "transcript.clearNavigation";
+      type: "surface.clearNavigation";
       id: number;
     }
   | {
@@ -196,6 +205,14 @@ export type CliShellAction =
   | {
       type: "operator.setTaskRuns";
       taskRuns: DelegationRunRecord[];
+    }
+  | {
+      type: "cockpit.setProjection";
+      projection: ShellCockpitProjection | undefined;
+    }
+  | {
+      type: "cockpit.setObservation";
+      observation: CockpitObservationCursor;
     }
   | {
       type: "subagentFooter.open";

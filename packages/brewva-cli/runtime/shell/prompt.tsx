@@ -260,14 +260,10 @@ export function PromptPanel(input: {
               event.target?.focus?.();
             }}
             onKeyDown={handleTextareaKeyDown}
-            initialValue={input.composer.text}
             onSubmit={() => {
               void (async () => {
                 await input.syncComposerFromEditor();
-                await input.runtime.handleInput({
-                  type: "keymap.effect",
-                  effect: { type: "composer.submit" },
-                });
+                input.runtime.submitComposer();
               })();
             }}
             onPaste={(event: PasteEvent) => {

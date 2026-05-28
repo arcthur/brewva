@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { ShellAction } from "../../../packages/brewva-cli/src/shell/domain/actions.js";
+import { handleShellRendererInput } from "../../../packages/brewva-cli/src/shell/controller/renderer-input-handler.js";
+import type {
+  ShellAction,
+  ShellCommitOptions,
+} from "../../../packages/brewva-cli/src/shell/domain/actions.js";
 import { routeShellInput } from "../../../packages/brewva-cli/src/shell/domain/input-router.js";
 import { normalizeShellInputTrigger } from "../../../packages/brewva-cli/src/shell/domain/keymap.js";
 import {
@@ -11,6 +15,7 @@ import {
   reduceShellRuntimeAction,
 } from "../../../packages/brewva-cli/src/shell/domain/runtime-state.js";
 import type { CliShellViewState } from "../../../packages/brewva-cli/src/shell/domain/state.js";
+import { createCliShellState } from "../../../packages/brewva-cli/src/shell/domain/state/initial.js";
 import { BREWVA_BUILT_IN_KEYMAP_BINDINGS } from "../../../packages/brewva-cli/src/shell/keymap/keymap-bindings.js";
 
 function containsFunction(value: unknown, seen = new Set<object>()): boolean {
@@ -106,6 +111,75 @@ describe("shell runtime architecture", () => {
     expect(viewState.composer.text).toBe("");
   });
 
+  test("renderer sync cannot mutate the composer while cockpit policy blocks input", async () => {
+    const state = createCliShellState();
+    state.cockpit.projection = { composerPolicy: "block" } as never;
+    let committed = false;
+
+    await handleShellRendererInput(
+      {
+        getState: () => state,
+        setViewportRows() {},
+        commit: () => {
+          committed = true;
+        },
+        completionHandler: {
+          select() {},
+          accept() {},
+        },
+        async openSessionById() {},
+      },
+      {
+        type: "composer.editorSync",
+        text: "blocked mutation",
+        cursor: 16,
+        parts: [],
+      },
+    );
+
+    expect(committed).toBe(false);
+    expect(state.composer.text).toBe("");
+  });
+
+  test("renderer scroll sync does not refresh completion sources", async () => {
+    const state = createCliShellState();
+    const commits: Array<{ action: ShellAction; options?: ShellCommitOptions }> = [];
+
+    await handleShellRendererInput(
+      {
+        getState: () => state,
+        setViewportRows() {},
+        commit: (action, options) => {
+          commits.push({ action, options });
+        },
+        completionHandler: {
+          select() {},
+          accept() {},
+        },
+        async openSessionById() {},
+      },
+      {
+        type: "surface.scrollSync",
+        followMode: "scrolled",
+        scrollOffset: 12,
+      },
+    );
+
+    expect(commits).toEqual([
+      {
+        action: {
+          type: "surface.setScrollState",
+          followMode: "scrolled",
+          scrollOffset: 12,
+        },
+        options: {
+          debounceStatus: false,
+          refreshCompletions: false,
+        },
+      },
+    ]);
+  });
+
   test("input router leaves ordinary shortcuts to the renderer keymap", () => {
     expect(
       routeShellInput({
@@ -160,6 +234,33 @@ describe("shell runtime architecture", () => {
       handled: true,
       actions: [],
       effects: [{ type: "transcript.externalPager" }],
+    });
+  });
+
+  test("shell update routes cockpit drill-down commands to cockpit overlay effects", () => {
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "cockpit.archive",
+        args: "",
+        source: "keybinding",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [{ type: "cockpit.openArchive" }],
+    });
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "cockpit.attention",
+        args: "",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [{ type: "cockpit.openAttention" }],
     });
   });
 

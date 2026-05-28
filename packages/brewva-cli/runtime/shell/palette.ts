@@ -142,12 +142,31 @@ export function createPalette(theme: {
 
 export function getTranscriptSyntaxStyle(theme: SessionPalette): SyntaxStyle {
   return SyntaxStyle.fromTheme([
+    { scope: ["default", "spell", "nospell"], style: { foreground: theme.text } },
+    { scope: ["conceal"], style: { foreground: theme.textDim } },
+    { scope: ["label"], style: { foreground: theme.textMuted } },
     { scope: ["comment", "markup.quote"], style: { foreground: theme.textDim, italic: true } },
+    {
+      scope: ["punctuation.special", "punctuation.delimiter"],
+      style: { foreground: theme.textDim },
+    },
     { scope: ["string", "markup.raw.inline"], style: { foreground: theme.success } },
-    { scope: ["keyword", "storage.type", "markup.heading"], style: { foreground: theme.accent } },
-    { scope: ["markup.bold"], style: { foreground: theme.text, bold: true } },
+    { scope: ["keyword", "storage.type"], style: { foreground: theme.accent } },
+    { scope: ["markup.heading"], style: { foreground: theme.accent, bold: true } },
+    { scope: ["markup.heading.1"], style: { foreground: theme.accent, bold: true } },
+    { scope: ["markup.heading.2"], style: { foreground: theme.accent, bold: true } },
+    { scope: ["markup.heading.3"], style: { foreground: theme.accent, bold: true } },
+    { scope: ["markup.heading.4"], style: { foreground: theme.accent, bold: true } },
+    { scope: ["markup.heading.5"], style: { foreground: theme.accent, bold: true } },
+    { scope: ["markup.heading.6"], style: { foreground: theme.accent, bold: true } },
+    { scope: ["markup.bold", "markup.strong"], style: { foreground: theme.text, bold: true } },
     { scope: ["markup.italic"], style: { foreground: theme.textMuted, italic: true } },
-    { scope: ["markup.link"], style: { foreground: theme.accent, underline: true } },
+    { scope: ["markup.list"], style: { foreground: theme.accent } },
+    { scope: ["markup.raw", "markup.raw.block"], style: { foreground: theme.success } },
+    {
+      scope: ["markup.link", "markup.link.label", "markup.link.url"],
+      style: { foreground: theme.accent, underline: true },
+    },
   ]);
 }
 

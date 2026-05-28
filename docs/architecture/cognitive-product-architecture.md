@@ -133,14 +133,16 @@ instructions. It is not the product layer that decides salience.
 ## Operator Product
 
 The CLI/TUI shell is an experience ring surface. It owns overlays, keybindings,
-transcript rendering, model selection, provider connection flows, inbox,
-approvals, memory-operation visibility, cache/cost summaries, and drill-down
-views. These surfaces render runtime claims and workbench evidence; they do not
-create authority.
+runtime cockpit rendering, model selection, provider connection flows, inbox,
+approvals, memory-operation visibility, cache/cost summaries, and explicit
+archive drill-down views. These surfaces render runtime claims and workbench
+evidence; they do not create authority.
 
-The first inspect surface is the Work Card. `/context`, `/authority`,
-`/safety`, `/skills`, `/inbox`, `/diff`, and timeline views are drill-downs from
-that shared product projection.
+The first operator surface is the runtime cockpit: physics bar, Work Card,
+decision lane, effect ledger, attention glance, recovery lane when active, and
+composer policy. Transcript, raw event tape, receipt detail, context,
+authority, skills, inbox, diff, and timeline views are explicit-pull drill-downs
+from that shared product projection.
 
 ## Handoff Product
 

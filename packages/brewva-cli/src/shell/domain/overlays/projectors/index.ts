@@ -1,3 +1,4 @@
+export * from "./cockpit-archive.js";
 export * from "./inbox.js";
 export * from "./inspect.js";
 export * from "./interactive-command-surfaces.js";

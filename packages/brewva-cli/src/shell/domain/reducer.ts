@@ -127,6 +127,10 @@ function updateCommandIntent(
         : handled({ effects: [{ type: "overlay.openContext" }] });
     case "session.transcript":
       return handled({ effects: [{ type: "transcript.externalPager" }] });
+    case "cockpit.archive":
+      return handled({ effects: [{ type: "cockpit.openArchive" }] });
+    case "cockpit.attention":
+      return handled({ effects: [{ type: "cockpit.openAttention" }] });
     case "session.diff":
       return handled({ effects: [{ type: "session.diffExternalPager" }] });
     case "transcript.copy":

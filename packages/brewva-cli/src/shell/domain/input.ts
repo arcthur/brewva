@@ -40,12 +40,12 @@ export type ShellInput =
       readonly type: "completion.accept";
     }
   | {
-      readonly type: "transcript.scrollSync";
+      readonly type: "surface.scrollSync";
       readonly followMode: "live" | "scrolled";
       readonly scrollOffset: number;
     }
   | {
-      readonly type: "transcript.navigationAck";
+      readonly type: "surface.navigationAck";
       readonly requestId: number;
     }
   | {

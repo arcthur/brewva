@@ -43,10 +43,12 @@ export interface ShellEffectDispatcherContext {
   openContext(): void;
   openAuthority(): void;
   openSkills(): void;
+  openCockpitArchive(): void;
+  openCockpitAttention(): void;
   openActivePagerExternally(): Promise<void>;
   openExternalTranscriptPager(): Promise<boolean>;
   copyLatestAssistantAnswer(): Promise<void>;
-  requestTranscriptNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void;
+  requestSurfaceNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void;
   toggleSubagentFooter(): void;
   closeSubagentFooter(): void;
   selectSubagentFooterRun(runId: string): void;
@@ -220,6 +222,12 @@ export async function dispatchShellEffect(
     case "overlay.openSkills":
       context.openSkills();
       return;
+    case "cockpit.openArchive":
+      context.openCockpitArchive();
+      return;
+    case "cockpit.openAttention":
+      context.openCockpitAttention();
+      return;
     case "pager.externalActive":
       await context.openActivePagerExternally();
       return;
@@ -233,8 +241,8 @@ export async function dispatchShellEffect(
     case "transcript.copyLatestAnswer":
       await context.copyLatestAssistantAnswer();
       return;
-    case "transcript.navigate":
-      context.requestTranscriptNavigation(effect.kind);
+    case "surface.navigate":
+      context.requestSurfaceNavigation(effect.kind);
       return;
     case "subagentFooter.toggle":
       context.toggleSubagentFooter();

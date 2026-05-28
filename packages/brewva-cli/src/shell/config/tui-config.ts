@@ -81,7 +81,7 @@ export const DEFAULT_BREWVA_TUI_CONFIG: BrewvaTuiConfig = {
   scroll: {
     acceleration: {
       type: "linear",
-      speed: 1,
+      speed: 3,
     },
   },
 };

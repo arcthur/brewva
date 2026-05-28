@@ -252,6 +252,34 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
         title: "Authority",
         lines: payload.lines,
       };
+    case "cockpitArchive": {
+      const selected = payload.items[payload.selectedIndex];
+      return {
+        title: payload.title,
+        lines: [
+          `Session: ${payload.sessionId}`,
+          `Projection: ${payload.generatedAtRef}`,
+          "Use Up/Down to choose, Enter to open selected detail, PgUp/PgDn to scroll details.",
+          "",
+          ...payload.items.map(
+            (item, index) =>
+              `${index === payload.selectedIndex ? ">" : " "} ${item.label} [${item.ref}]`,
+          ),
+          "",
+          ...(selected ? selected.detailLines : ["No cockpit archive items."]),
+        ],
+      };
+    }
+    case "cockpitAttention":
+      return {
+        title: payload.title,
+        lines: [
+          `Session: ${payload.sessionId}`,
+          `Projection: ${payload.sourceProjectionRef}`,
+          "",
+          ...payload.lines,
+        ],
+      };
     case "skills":
       return {
         title: payload.title,

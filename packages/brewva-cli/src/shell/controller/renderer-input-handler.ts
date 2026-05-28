@@ -1,5 +1,6 @@
 import type { ShellAction } from "../domain/actions.js";
 import type { ShellCommitOptions } from "../domain/actions.js";
+import { shellCockpitComposerPolicyBlocksMutation } from "../domain/cockpit/index.js";
 import type { ShellInput } from "../domain/input.js";
 import { cloneCliShellPromptParts, promptPartArraysEqual } from "../domain/prompt-parts.js";
 import type { CliShellViewState } from "../domain/state.js";
@@ -31,6 +32,13 @@ export async function handleShellRendererInput(
       return true;
     case "composer.editorSync":
       if (
+        shellCockpitComposerPolicyBlocksMutation(
+          context.getState().cockpit.projection?.composerPolicy ?? "active",
+        )
+      ) {
+        return true;
+      }
+      if (
         context.getState().composer.text === input.text &&
         context.getState().composer.cursor === input.cursor &&
         promptPartArraysEqual(context.getState().composer.parts, input.parts ?? [])
@@ -53,29 +61,29 @@ export async function handleShellRendererInput(
     case "completion.accept":
       context.completionHandler.accept();
       return true;
-    case "transcript.scrollSync":
+    case "surface.scrollSync":
       if (
-        context.getState().transcript.followMode === input.followMode &&
-        context.getState().transcript.scrollOffset === Math.max(0, input.scrollOffset)
+        context.getState().surface.followMode === input.followMode &&
+        context.getState().surface.scrollOffset === Math.max(0, input.scrollOffset)
       ) {
         return true;
       }
       context.commit(
         {
-          type: "transcript.setScrollState",
+          type: "surface.setScrollState",
           followMode: input.followMode,
           scrollOffset: input.scrollOffset,
         },
-        { debounceStatus: false },
+        { debounceStatus: false, refreshCompletions: false },
       );
       return true;
-    case "transcript.navigationAck":
-      if (context.getState().transcript.navigationRequest?.id !== input.requestId) {
+    case "surface.navigationAck":
+      if (context.getState().surface.navigationRequest?.id !== input.requestId) {
         return true;
       }
       context.commit(
-        { type: "transcript.clearNavigation", id: input.requestId },
-        { debounceStatus: false },
+        { type: "surface.clearNavigation", id: input.requestId },
+        { debounceStatus: false, refreshCompletions: false },
       );
       return true;
     case "session.open":

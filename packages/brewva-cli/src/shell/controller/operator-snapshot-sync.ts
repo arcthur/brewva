@@ -18,31 +18,92 @@ export interface ShellOperatorSnapshotSyncContext {
   overlayHandler: ShellOverlayLifecycleHandler;
 }
 
+function signatureValue(value: string | number | null | undefined): string {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function signatureTuple(values: readonly (string | number | null | undefined)[]): string {
+  return values.map(signatureValue).join("\u001f");
+}
+
+function snapshotSignature(snapshot: OperatorSurfaceSnapshot): string {
+  return [
+    `approvals:${snapshot.approvals.length}:${snapshot.approvals
+      .map((approval) =>
+        signatureTuple([
+          approval.requestId,
+          approval.state,
+          approval.toolCallId,
+          approval.createdAt,
+          approval.proposalId,
+        ]),
+      )
+      .join("\u001e")}`,
+    `questions:${snapshot.questions.length}:${snapshot.questions
+      .map((question) =>
+        signatureTuple([
+          question.questionId,
+          question.requestId,
+          question.sourceEventId,
+          question.createdAt,
+          question.requestPosition,
+          question.requestSize,
+        ]),
+      )
+      .join("\u001e")}`,
+    `tasks:${snapshot.taskRuns.length}:${snapshot.taskRuns
+      .map((run) =>
+        signatureTuple([
+          run.runId,
+          run.status,
+          run.updatedAt,
+          run.completedAt,
+          run.totalTokens,
+          run.costUsd,
+        ]),
+      )
+      .join("\u001e")}`,
+    `sessions:${snapshot.sessions.length}:${snapshot.sessions
+      .map((session) =>
+        signatureTuple([session.sessionId, session.eventCount, session.lastEventAt]),
+      )
+      .join("\u001e")}`,
+  ].join("\u001d");
+}
+
 export class ShellOperatorSnapshotSync {
   readonly #seenApprovals = new Set<string>();
   readonly #seenQuestions = new Set<string>();
+  #lastSnapshotSignature: string | undefined;
 
   constructor(private readonly context: ShellOperatorSnapshotSyncContext) {}
 
   resetSeen(): void {
     this.#seenApprovals.clear();
     this.#seenQuestions.clear();
+    this.#lastSnapshotSignature = undefined;
   }
 
   syncOverlay(snapshot: OperatorSurfaceSnapshot): void {
     this.context.overlayHandler.syncSnapshotOverlay(snapshot);
   }
 
-  async refresh(sessionGeneration = this.context.getSessionGeneration()): Promise<void> {
+  async refresh(sessionGeneration = this.context.getSessionGeneration()): Promise<boolean> {
     const snapshot = await this.context.getSnapshot();
     if (this.context.isDisposed() || sessionGeneration !== this.context.getSessionGeneration()) {
-      return;
+      return false;
     }
     this.context.setSnapshot(snapshot);
+    const signature = snapshotSignature(snapshot);
+    if (this.#lastSnapshotSignature === signature) {
+      return false;
+    }
+    this.#lastSnapshotSignature = signature;
     this.syncOverlay(snapshot);
     this.commitStatus(snapshot);
     this.openNewApproval(snapshot);
     this.openNewQuestion(snapshot);
+    return true;
   }
 
   private commitStatus(snapshot: OperatorSurfaceSnapshot): void {

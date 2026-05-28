@@ -60,6 +60,11 @@ fields:
 Result order is tape order from oldest to newest. Query results are read views;
 they do not create authority or mutate recovery truth.
 
+Interactive cockpit projection reads event and session-wire evidence through
+these read paths and exposes bounded archive refs back to the operator. It does
+not write a cockpit event family, duplicate raw tape payloads, or create a
+second ordering authority.
+
 ## Authority Classes
 
 Canonical event authority is expressed by the canonical type and, for `custom`,

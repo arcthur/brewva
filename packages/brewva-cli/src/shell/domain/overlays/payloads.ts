@@ -6,6 +6,7 @@ import type {
 import type { BrewvaInteractiveQuestionRequest } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaQueuedPromptView } from "@brewva/brewva-substrate/session";
 import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
+import type { CockpitArchiveKind } from "../cockpit/index.js";
 import type { OperatorSurfaceSnapshot } from "../operator-snapshot.js";
 
 export interface CliQuestionDraftState {
@@ -132,6 +133,42 @@ export interface CliContextOverlayPayload {
 
 export interface CliAuthorityOverlayPayload {
   kind: "authority";
+  lines: string[];
+}
+
+export type CliCockpitArchiveOverlayItemKind =
+  | CockpitArchiveKind
+  | "work"
+  | "decision"
+  | "effect"
+  | "attention"
+  | "recovery"
+  | "channel"
+  | "transition"
+  | "unknown";
+
+export interface CliCockpitArchiveOverlayItem {
+  readonly kind: CliCockpitArchiveOverlayItemKind;
+  readonly ref: string;
+  readonly label: string;
+  readonly detailLines: readonly string[];
+}
+
+export interface CliCockpitArchiveOverlayPayload {
+  kind: "cockpitArchive";
+  title: string;
+  sessionId: string;
+  generatedAtRef: string;
+  selectedIndex: number;
+  items: readonly CliCockpitArchiveOverlayItem[];
+  scrollOffsets: readonly number[];
+}
+
+export interface CliCockpitAttentionOverlayPayload {
+  kind: "cockpitAttention";
+  title: string;
+  sessionId: string;
+  sourceProjectionRef: string;
   lines: string[];
 }
 
@@ -324,6 +361,8 @@ export interface OverlayPayloadMap {
   shortcutOverlay: CliShortcutOverlayPayload;
   context: CliContextOverlayPayload;
   authority: CliAuthorityOverlayPayload;
+  cockpitArchive: CliCockpitArchiveOverlayPayload;
+  cockpitAttention: CliCockpitAttentionOverlayPayload;
   skills: CliSkillsOverlayPayload;
 }
 

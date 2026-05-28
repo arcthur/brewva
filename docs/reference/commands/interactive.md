@@ -1,17 +1,21 @@
 # Commands: Interactive Shell
 
 Interactive mode is the OpenTUI-backed Brewva shell. It is the default
-operator home for conversation, approvals, questions, tasks, inspect views,
-sessions, subagent footer detail, and pager drill-down.
+operator home for runtime physics, current work, decisions, effect receipts,
+attention posture, sessions, subagent footer detail, and pager drill-down.
 
 ## Shell Contract
 
-- one conversation shell remains the base surface
+- one cockpit shell remains the base surface
 - overlays render over the same session state
-- the base layout is transcript canvas, multiline composer, and bottom status
-  bar
+- the base layout is runtime cockpit, subagent footer, multiline composer, and
+  notification strip
+- the cockpit renders runtime physics, current work, decision lane, effect
+  ledger, attention glance, recovery lane when active, and archive refs
+- transcript, raw event tape, inspect detail, and receipt detail are
+  explicit-pull archive or pager surfaces, not the default spatial model
 - transient operator details render through overlays, pagers, notifications,
-  and inline prompts
+  and first-class decision surfaces
 - the shell uses `alternate-screen`
 - OpenTUI loads only after CLI mode resolution commits to interactive
   full-screen execution
@@ -24,8 +28,10 @@ sessions, subagent footer detail, and pager drill-down.
 - `Ctrl-B`: manage queued prompts
 - `Ctrl-A` / `Ctrl-O` / `Ctrl-T` / `Ctrl-G` / `Ctrl-I` / `Ctrl-N`: open
   approvals, questions, tasks, sessions, inspect, and inbox
+- `Leader T`: open the bounded cockpit archive for visible refs
+- `Leader W`: open the attention drawer
 - `Shift-Tab`: cycle model preset for the next turn
-- `PageUp` / `PageDown`: scroll transcript or active detail surface
+- `PageUp` / `PageDown`: scroll the cockpit or active detail surface
 - `Esc`: dismiss completion or leave overlay
 
 ## Slash Commands
@@ -40,6 +46,8 @@ Stable interactive slash commands include:
 - `/authority`
 - `/skills`
 - `/diff`
+- `/archive`
+- `/attention`
 - `/handoff [name :: summary :: next]`
 - `/copy`
 - `/export`
@@ -52,7 +60,18 @@ Stable interactive slash commands include:
 - `/theme`
 
 `/transcript` opens a read-only snapshot of the current session transcript in the
-configured external pager.
+configured external pager. Transcript is archive evidence; it is not the
+default cockpit surface.
+
+`/archive` opens bounded details for refs visible in the runtime cockpit:
+transcript, event tape, context, Work Card, active decisions, effect receipts,
+recovery anchors, channels, and phase transitions. It does not expand raw tool
+output into the base surface.
+
+`/attention` opens the read-only attention drawer: active workbench count,
+token estimate, pinned/consumed/evicted/stale refs, recall refs, compact
+baseline, and runway. Opening it does not mutate workbench, recall, compaction,
+provider routing, or model-visible context.
 
 `/diff` opens Git working-tree status/diff together with replay-derived turn
 attribution and recorded Brewva patch-set identifiers. Git failures render as
@@ -61,7 +80,8 @@ bounded before pager rendering; use the matching Git command in the shell for
 full output when a section is truncated.
 
 `/export` opens a narrow session handoff bundle: inspect report, projected
-transcript Markdown, turn attribution, patch-set identifiers, and Git evidence.
+transcript archive Markdown, turn attribution, patch-set identifiers, and Git
+evidence.
 `Session: export inspect bundle` remains inspect-only in the command palette.
 
 `/handoff` records a replayable session handoff anchor through the same tape
@@ -71,7 +91,7 @@ transcripts, export bundles, and channel inspect show the latest anchor,
 summary, and next steps.
 
 `/context`, `/authority`, and `/skills` are read-only drill-downs behind the
-work card default. `/safety` opens the request-local operator safety queue for
+cockpit default. `/safety` opens the request-local operator safety queue for
 pending asks. Mutating actions such as requesting compaction remain view-local
 or command-palette actions instead of becoming slash subcommand grammar.
 
@@ -135,6 +155,8 @@ submit with an interactive warning and expand to an empty string.
 
 Palette-only actions include:
 
+- `Cockpit archive`
+- `Attention drawer`
 - `Context: request compaction`
 - `Transcript: copy latest answer`
 - `Session: create handoff`
@@ -149,6 +171,10 @@ slash spelling.
 
 Supported overlays include operator safety, question, task browser, queued
 prompts, model picker, provider connection, thinking level, inspect, context,
-authority, skills, session switcher, and pager surfaces. Background subagent
-detail opens in the footer surface above the composer. Opening an overlay
-preserves the composer draft.
+authority, skills, cockpit archive, attention drawer, session switcher, and
+pager surfaces. Background subagent detail opens in the footer surface above
+the composer. Opening an overlay preserves the composer draft.
+
+Approval and question flows are rendered as cockpit decision surfaces first.
+Dedicated overlays provide focused detail and action entry without restoring the
+old inline-card transcript model.

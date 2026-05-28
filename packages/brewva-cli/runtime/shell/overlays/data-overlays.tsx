@@ -3,6 +3,8 @@
 import { For, Show, createEffect, createMemo } from "solid-js";
 import { visibleWidth } from "../../../src/internal/tui/index.js";
 import type {
+  CliCockpitArchiveOverlayPayload,
+  CliCockpitAttentionOverlayPayload,
   CliInboxOverlayPayload,
   CliInspectOverlayPayload,
   CliLineageOverlayPayload,
@@ -122,6 +124,85 @@ export function InspectOverlay(input: {
           </box>
         </box>
       </box>
+    </OverlaySurface>
+  );
+}
+
+export function CockpitArchiveOverlay(input: {
+  payload: CliCockpitArchiveOverlayPayload;
+  theme: SessionPalette;
+  width: number;
+  height: number;
+}) {
+  const surface = createMemo(() => resolveDialogSurfaceDimensions(input.width, input.height));
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.items.length),
+  );
+  const item = createMemo(() => input.payload.items[input.payload.selectedIndex]);
+  const detailLines = createMemo(() => item()?.detailLines ?? ["No cockpit archive items."]);
+  const detailWindow = createMemo(() =>
+    visibleLineWindow(
+      detailLines(),
+      input.payload.scrollOffsets[input.payload.selectedIndex] ?? 0,
+      Math.max(4, surface().contentHeight - 2),
+    ),
+  );
+  return (
+    <OverlaySurface
+      title={input.payload.title}
+      width={input.width}
+      height={input.height}
+      theme={input.theme}
+      footer="Enter open detail · PgUp/PgDn scroll · Esc close/back"
+      splitContent
+    >
+      <box flexDirection="row" gap={1} flexGrow={1}>
+        <box width={32} flexShrink={0}>
+          <SelectionList
+            items={input.payload.items.map((entry) => entry.label)}
+            selectedIndex={input.payload.selectedIndex}
+            theme={input.theme}
+            maxVisible={sidebarRows()}
+          />
+        </box>
+        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
+          <Show when={item()}>
+            {(entry) => (
+              <>
+                <text fg={input.theme.textMuted} wrapMode="none">
+                  {entry().kind} · {entry().ref}
+                </text>
+                <box marginTop={1} flexGrow={1}>
+                  <TextLineBlock lines={detailWindow().visibleLines} color={input.theme.text} />
+                </box>
+              </>
+            )}
+          </Show>
+        </box>
+      </box>
+    </OverlaySurface>
+  );
+}
+
+export function CockpitAttentionOverlay(input: {
+  payload: CliCockpitAttentionOverlayPayload;
+  theme: SessionPalette;
+  width: number;
+  height: number;
+}) {
+  const surface = createMemo(() => resolveDialogSurfaceDimensions(input.width, input.height));
+  const lineWindow = createMemo(() =>
+    visibleLineWindow(input.payload.lines, 0, surface().contentHeight),
+  );
+  return (
+    <OverlaySurface
+      title={input.payload.title}
+      width={input.width}
+      height={input.height}
+      theme={input.theme}
+      footer={`session ${input.payload.sessionId} · Esc close/back`}
+    >
+      <TextLineBlock lines={lineWindow().visibleLines} color={input.theme.text} />
     </OverlaySurface>
   );
 }

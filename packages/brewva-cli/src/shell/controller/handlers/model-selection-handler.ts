@@ -33,6 +33,7 @@ export interface ShellModelSelectionHandlerContext {
   getState(): CliShellViewState;
   getUi(): CliShellUiPort;
   commit(action: CliShellAction | readonly CliShellAction[], options?: ShellCommitOptions): void;
+  requestCockpitSync(): void;
   buildSessionStatusActions(): CliShellAction[];
   buildCommandPalettePayload(
     query: string,
@@ -308,6 +309,7 @@ export class ShellModelSelectionHandler {
     await this.context.getSessionPort().setModel(next);
     await this.recordRecentModel(next);
     this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
+    this.context.requestCockpitSync();
     this.ui.notify(`Model switched to ${modelKey(next)}.`, "info");
   }
 
@@ -368,6 +370,7 @@ export class ShellModelSelectionHandler {
     await this.recordRecentModel(model);
     this.context.closeActiveOverlay(false);
     this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
+    this.context.requestCockpitSync();
     this.ui.notify(`Model switched to ${modelKey(model)}.`, "info");
     if (this.context.getSessionPort().getAvailableThinkingLevels().length > 1) {
       await this.openThinkingDialog();

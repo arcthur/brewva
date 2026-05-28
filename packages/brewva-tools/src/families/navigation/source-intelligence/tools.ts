@@ -41,6 +41,7 @@ const MAX_EDGE_LIMIT = 1_000;
 const DEFAULT_CYCLE_LIMIT = 50;
 const MAX_CYCLE_LIMIT = 500;
 const DEFAULT_DETAIL_LIMIT = 200;
+const DIGEST_DISPLAY_SUMMARY_LINE_LIMIT = 5;
 const SOURCE_INTELLIGENCE_EXECUTION_TRAITS = {
   concurrencySafe: true,
   interruptBehavior: "cancel",
@@ -128,6 +129,24 @@ function ensureExistingPath(path: string): string | null {
 
 function sourceIntelligenceError(error: unknown): string {
   return `Error: ${error instanceof Error ? error.message : String(error)}`;
+}
+
+function summarizeDigestDisplay(text: string): string {
+  const lines: string[] = [];
+  let start = 0;
+  for (let line = 0; line < DIGEST_DISPLAY_SUMMARY_LINE_LIMIT; line += 1) {
+    const nextBreak = text.indexOf("\n", start);
+    if (nextBreak < 0) {
+      const tail = text.slice(start);
+      if (tail.length > 0) {
+        lines.push(tail);
+      }
+      break;
+    }
+    lines.push(text.slice(start, nextBreak));
+    start = nextBreak + 1;
+  }
+  return lines.join("\n");
 }
 
 function digestScanLimit(input: { readonly query?: string; readonly limit: number }): number {
@@ -487,27 +506,33 @@ export function createSourceIntelligenceTools(options?: {
           });
           renderedTokens = estimateTokenCount(renderedDigest, { encoding: "o200k_base" });
         }
-        return textResult(renderedDigest, {
-          status: "ok",
-          root: roots[0] ?? scope.primaryRoot,
-          budget: {
-            maxTokens: budget,
-            renderedTokens,
-            estimator: "@brewva/brewva-token-estimation",
+        return textResult(
+          renderedDigest,
+          {
+            status: "ok",
+            root: roots[0] ?? scope.primaryRoot,
+            budget: {
+              maxTokens: budget,
+              renderedTokens,
+              estimator: "@brewva/brewva-token-estimation",
+            },
+            files: digestDocuments.map((document) => ({
+              path: document.filePath,
+              language: document.language,
+              declarations: document.declarations.length,
+              imports: document.imports.length,
+            })),
+            diagnostics: graph.diagnostics.length,
+            omitted: {
+              files: Math.max(0, listedFileCount - digestDocuments.length),
+              declarations: omittedDeclarations,
+              listingTruncated,
+            },
           },
-          files: digestDocuments.map((document) => ({
-            path: document.filePath,
-            language: document.language,
-            declarations: document.declarations.length,
-            imports: document.imports.length,
-          })),
-          diagnostics: graph.diagnostics.length,
-          omitted: {
-            files: Math.max(0, listedFileCount - digestDocuments.length),
-            declarations: omittedDeclarations,
-            listingTruncated,
+          {
+            summaryText: summarizeDigestDisplay(renderedDigest),
           },
-        });
+        );
       },
     },
     { executionTraits: SOURCE_INTELLIGENCE_EXECUTION_TRAITS },

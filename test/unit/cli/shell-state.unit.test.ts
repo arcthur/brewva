@@ -85,7 +85,7 @@ describe("cli shell state", () => {
     expect(state.focus.active).toBe("composer");
   });
 
-  test("marks transcript follow mode as scrolled when the operator leaves live tail", () => {
+  test("marks cockpit surface follow mode as scrolled when the operator leaves live tail", () => {
     let state = createCliShellState();
 
     state = reduceCliShellState(state, {
@@ -100,16 +100,16 @@ describe("cli shell state", () => {
       ],
     });
     state = reduceCliShellState(state, {
-      type: "transcript.scroll",
+      type: "surface.scroll",
       delta: -5,
     });
 
-    expect(state.transcript.followMode).toBe("scrolled");
+    expect(state.surface.followMode).toBe("scrolled");
 
     state = reduceCliShellState(state, {
-      type: "transcript.followLive",
+      type: "surface.followLive",
     });
-    expect(state.transcript.followMode).toBe("live");
+    expect(state.surface.followMode).toBe("live");
   });
 
   test("restores a suspended overlay after a drill-down pager closes", () => {
@@ -183,7 +183,7 @@ describe("cli shell state", () => {
     expect(state.notifications).toEqual([]);
   });
 
-  test("leaves scrolled transcript anchoring to the app layer instead of guessing from entry count", () => {
+  test("leaves scrolled cockpit anchoring to the app layer instead of guessing from entry count", () => {
     let state = createCliShellState();
 
     state = reduceCliShellState(state, {
@@ -198,12 +198,12 @@ describe("cli shell state", () => {
       ],
     });
     state = reduceCliShellState(state, {
-      type: "transcript.scroll",
+      type: "surface.scroll",
       delta: 3,
     });
 
-    expect(state.transcript.followMode).toBe("scrolled");
-    expect(state.transcript.scrollOffset).toBe(3);
+    expect(state.surface.followMode).toBe("scrolled");
+    expect(state.surface.scrollOffset).toBe(3);
 
     state = reduceCliShellState(state, {
       type: "transcript.setMessages",
@@ -220,8 +220,8 @@ describe("cli shell state", () => {
       ],
     });
 
-    expect(state.transcript.followMode).toBe("scrolled");
-    expect(state.transcript.scrollOffset).toBe(3);
+    expect(state.surface.followMode).toBe("scrolled");
+    expect(state.surface.scrollOffset).toBe(3);
   });
 
   test("opens the subagent footer as a focused sibling surface and restores composer focus on close", () => {
