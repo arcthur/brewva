@@ -133,6 +133,10 @@ describe("managed-agent-session tool registry", () => {
     expect(prompt).toContain("Append prompt");
     expect(prompt).toContain("Project instructions");
     expect(prompt).toContain("# Operating Contract");
+    expect(prompt).toContain("Use write carefully");
+    expect(prompt).toContain("Prefer write");
+    expect(prompt).not.toContain("Use read carefully");
+    expect(prompt).not.toContain("Prefer read");
     expect(registry.buildPromptInputs(["write"])).toEqual({
       selectedTools: ["write"],
       toolSnippets: { write: "Use write carefully" },
@@ -143,5 +147,65 @@ describe("managed-agent-session tool registry", () => {
       toolSnippets: { read: "Use read carefully" },
       promptGuidelines: ["Prefer read"],
     });
+  });
+
+  test("rejects prompt inputs that do not match active tool names", () => {
+    const registry = new ManagedSessionToolRegistry({
+      resolveSchemaSnapshot: (tools) =>
+        createToolSchemaSnapshot(
+          tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
+          })),
+        ),
+    });
+
+    registry.replaceAll([
+      {
+        name: "read",
+        label: "read",
+        description: "Read",
+        parameters: Type.Object({}),
+        promptSnippet: "Use read carefully",
+        promptGuidelines: ["Prefer read"],
+        execute: async () => ({
+          content: [],
+          outcome: { kind: "ok", value: null },
+          details: null,
+          isError: false,
+        }),
+      },
+      {
+        name: "write",
+        label: "write",
+        description: "Write",
+        parameters: Type.Object({}),
+        promptSnippet: "Use write carefully",
+        promptGuidelines: ["Prefer write"],
+        execute: async () => ({
+          content: [],
+          outcome: { kind: "ok", value: null },
+          details: null,
+          isError: false,
+        }),
+      },
+    ]);
+
+    expect(() =>
+      buildManagedSessionBaseSystemPrompt({
+        cwd: "/tmp/demo",
+        resourceLoader: {
+          getCustomInstructions: () => "",
+          getAppendInstructions: () => [],
+          getProjectInstructions: () => ({ files: [], diagnostics: [] }),
+          getProjectInstructionsForTarget: () => ({ files: [], diagnostics: [] }),
+          getTargetOnlyProjectInstructions: () => ({ files: [], diagnostics: [] }),
+          getSkills: () => ({ skills: [] }),
+        } as never,
+        activeToolNames: ["write"],
+        toolPromptInputs: registry.buildPromptInputs(["read"]),
+      }),
+    ).toThrow("active tool prompt inputs must match active tool names");
   });
 });

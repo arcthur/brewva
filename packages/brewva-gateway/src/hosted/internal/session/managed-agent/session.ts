@@ -1259,11 +1259,12 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   private refreshTools(): void {
     this.#toolRegistry.replaceAll(this.#registeredTools);
     const toolDefinitions = this.#toolRegistry.listRegisteredTools();
+    const activeToolNames = toolDefinitions.map((tool) => tool.name);
     const snapshot = this.#toolRegistry.buildSchemaSnapshot(toolDefinitions, "tool_refresh");
     const tools = this.#toolRegistry.buildAgentTools(toolDefinitions, snapshot, () =>
       this.createToolContext(),
     );
-    this.#baseSystemPrompt = this.rebuildSystemPrompt();
+    this.#baseSystemPrompt = this.rebuildSystemPrompt(activeToolNames);
     this.#liveTranscript.applyBaseContext({
       tools,
       systemPrompt: this.#baseSystemPrompt,
@@ -1284,12 +1285,14 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#liveTranscript.applyBaseSystemPrompt(this.#baseSystemPrompt);
   }
 
-  private rebuildSystemPrompt(): string {
+  private rebuildSystemPrompt(
+    activeToolNames: readonly string[] = this.getActiveToolNames(),
+  ): string {
     return buildManagedSessionBaseSystemPrompt({
       cwd: this.#cwd,
       resourceLoader: this.#resourceLoader,
-      activeToolNames: this.getActiveToolNames(),
-      toolPromptInputs: this.#toolRegistry.buildPromptInputs(this.getActiveToolNames()),
+      activeToolNames,
+      toolPromptInputs: this.#toolRegistry.buildPromptInputs(activeToolNames),
     });
   }
 
@@ -1303,6 +1306,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   private setActiveTools(toolNames: string[]): void {
     const selectedDefinitions = this.#toolRegistry.resolveDefinitions(toolNames);
+    const activeToolNames = selectedDefinitions.map((tool) => tool.name);
     const snapshot = this.#toolRegistry.buildSchemaSnapshot(
       selectedDefinitions,
       "active_tool_set_changed",
@@ -1310,7 +1314,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     const tools = this.#toolRegistry.buildAgentTools(selectedDefinitions, snapshot, () =>
       this.createToolContext(),
     );
-    this.#baseSystemPrompt = this.rebuildSystemPrompt();
+    this.#baseSystemPrompt = this.rebuildSystemPrompt(activeToolNames);
     this.#liveTranscript.applyBaseContext({
       tools,
       systemPrompt: this.#baseSystemPrompt,

@@ -62,6 +62,10 @@ function normalizePromptGuidelines(guidelines: string[] | undefined): string[] {
   return [...new Set(guidelines.map((line) => line.trim()).filter((line) => line.length > 0))];
 }
 
+function stringArraysMatch(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 export interface ManagedSessionToolRegistryOptions {
   resolveSchemaSnapshot: (
     tools: readonly BrewvaToolDefinition[],
@@ -191,9 +195,12 @@ export function buildManagedSessionBaseSystemPrompt(input: {
     promptGuidelines: string[];
   };
 }): string {
+  if (!stringArraysMatch(input.activeToolNames, input.toolPromptInputs.selectedTools)) {
+    throw new Error("active tool prompt inputs must match active tool names");
+  }
   const document = buildBrewvaSystemPromptDocument({
     cwd: input.cwd,
-    selectedTools: input.toolPromptInputs.selectedTools,
+    selectedTools: [...input.activeToolNames],
     toolSnippets: input.toolPromptInputs.toolSnippets,
     promptGuidelines: input.toolPromptInputs.promptGuidelines,
     customInstructions: input.resourceLoader.getCustomInstructions(),
