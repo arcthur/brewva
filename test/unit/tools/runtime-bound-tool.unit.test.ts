@@ -7,7 +7,8 @@ import {
   createRuntimeBoundBrewvaToolFactory,
 } from "@brewva/brewva-tools/registry";
 import { Type } from "@sinclair/typebox";
-import { textResult } from "../../../packages/brewva-tools/src/utils/result.js";
+import { okTextResult } from "../../../packages/brewva-tools/src/utils/result.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function createToolRuntimeFixture(): BrewvaToolRuntime {
   return {
@@ -51,7 +52,7 @@ describe("runtime-bound managed Brewva tool factory", () => {
       description: "test",
       parameters: Type.Object({}, { additionalProperties: false }),
       async execute() {
-        return textResult("ok", { ok: true });
+        return okTextResult("ok", { ok: true });
       },
     });
 
@@ -63,7 +64,7 @@ describe("runtime-bound managed Brewva tool factory", () => {
       {} as never,
     );
 
-    expect(result.details).toMatchObject({ ok: true });
+    expect(toolOutcomePayload(result)).toMatchObject({ ok: true });
     expect(() =>
       factory.define({
         name: "exec",
@@ -71,7 +72,7 @@ describe("runtime-bound managed Brewva tool factory", () => {
         description: "test",
         parameters: Type.Object({}, { additionalProperties: false }),
         async execute() {
-          return textResult("ok", { ok: true });
+          return okTextResult("ok", { ok: true });
         },
       }),
     ).toThrow("managed Brewva tool definition mismatch: expected 'process', received 'exec'.");
@@ -105,7 +106,7 @@ describe("runtime-bound managed Brewva tool factory", () => {
           {} as never,
         );
         expect(result.ok).toBe(true);
-        return textResult("ok", { ok: true });
+        return okTextResult("ok", { ok: true });
       },
     });
 
@@ -122,7 +123,7 @@ describe("runtime-bound managed Brewva tool factory", () => {
       "capabilities.tools.resourceLeases.list",
       "capabilities.tools.resourceLeases.request",
     ]);
-    expect(result.details).toMatchObject({ ok: true });
+    expect(toolOutcomePayload(result)).toMatchObject({ ok: true });
   });
 
   test("fails fast when the built tool name drifts from the scoped runtime name", () => {
@@ -137,7 +138,7 @@ describe("runtime-bound managed Brewva tool factory", () => {
         description: "test",
         parameters: Type.Object({}, { additionalProperties: false }),
         async execute() {
-          return textResult("ok", { ok: true });
+          return okTextResult("ok", { ok: true });
         },
       }),
     ).toThrow(

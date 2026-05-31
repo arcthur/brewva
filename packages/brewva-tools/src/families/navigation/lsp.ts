@@ -18,7 +18,7 @@ import {
   resolveToolTargetScope,
   type ToolTargetScope,
 } from "../../runtime-port/target-scope.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import {
   type LspPosition,
   type LspRange,
@@ -519,7 +519,7 @@ function prepareWorkspaceEditResult(input: {
     planId: plan.id,
     plan,
   };
-  return plan.preflight.ok ? textResult(body, details) : failTextResult(body, details);
+  return plan.preflight.ok ? okTextResult(body, details) : errTextResult(body, details);
 }
 
 function createReadRequestTool(input: {
@@ -540,7 +540,7 @@ function createReadRequestTool(input: {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const requestParams = asRecord(params);
       if (!requestParams || typeof requestParams.uri !== "string") {
-        return failTextResult(`[${input.name}]\nstatus: failed\nreason: invalid_params`, {
+        return errTextResult(`[${input.name}]\nstatus: failed\nreason: invalid_params`, {
           ok: false,
           reason: "invalid_params",
         });
@@ -563,14 +563,14 @@ function createReadRequestTool(input: {
         },
       });
       if (!result.ok) {
-        return failTextResult(`[${input.name}]\nstatus: failed\nreason: ${result.error}`, {
+        return errTextResult(`[${input.name}]\nstatus: failed\nreason: ${result.error}`, {
           ok: false,
           status: "failed",
           reason: result.error,
           stderr: result.stderr,
         });
       }
-      return textResult(
+      return okTextResult(
         [`[${input.name}]`, "status: ok", "result:", formatJson(result.value)].join("\n"),
         {
           ok: true,
@@ -597,7 +597,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       if (!resolution.available) {
         return unavailable("lsp_status", resolution);
       }
-      return textResult(
+      return okTextResult(
         [
           "[lsp_status]",
           "status: available",
@@ -653,14 +653,14 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         },
       });
       if (!result.ok) {
-        return failTextResult(`[lsp_diagnostics]\nstatus: failed\nreason: ${result.error}`, {
+        return errTextResult(`[lsp_diagnostics]\nstatus: failed\nreason: ${result.error}`, {
           ok: false,
           status: "failed",
           reason: result.error,
           stderr: result.stderr,
         });
       }
-      return textResult(
+      return okTextResult(
         ["[lsp_diagnostics]", "status: ok", "diagnostics:", formatJson(result.value)].join("\n"),
         { ok: true, status: "ok", diagnostics: result.value, stderr: result.stderr },
       );
@@ -700,7 +700,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         },
       });
       if (!result.ok) {
-        return failTextResult(`[lsp_rename]\nstatus: failed\nreason: ${result.error}`, {
+        return errTextResult(`[lsp_rename]\nstatus: failed\nreason: ${result.error}`, {
           ok: false,
           status: "failed",
           reason: result.error,
@@ -740,7 +740,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       const oldPath = uriToPath(params.old_uri, scope);
       const newPath = uriToPath(params.new_uri, scope);
       if (!oldPath || !newPath) {
-        return failTextResult("[lsp_file_rename]\nstatus: failed\nreason: path_outside_target", {
+        return errTextResult("[lsp_file_rename]\nstatus: failed\nreason: path_outside_target", {
           ok: false,
           reason: "path_outside_target",
         });
@@ -757,7 +757,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
           }),
       });
       if (!result.ok) {
-        return failTextResult(`[lsp_file_rename]\nstatus: failed\nreason: ${result.error}`, {
+        return errTextResult(`[lsp_file_rename]\nstatus: failed\nreason: ${result.error}`, {
           ok: false,
           status: "failed",
           reason: result.error,
@@ -825,7 +825,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         },
       });
       if (!result.ok) {
-        return failTextResult(`[lsp_code_action]\nstatus: failed\nreason: ${result.error}`, {
+        return errTextResult(`[lsp_code_action]\nstatus: failed\nreason: ${result.error}`, {
           ok: false,
           status: "failed",
           reason: result.error,
@@ -888,7 +888,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
         },
       });
       if (!result.ok) {
-        return failTextResult(`[lsp_format]\nstatus: failed\nreason: ${result.error}`, {
+        return errTextResult(`[lsp_format]\nstatus: failed\nreason: ${result.error}`, {
           ok: false,
           status: "failed",
           reason: result.error,
@@ -897,7 +897,7 @@ export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime })
       }
       const path = uriToPath(params.uri, scope);
       if (!path) {
-        return failTextResult("[lsp_format]\nstatus: failed\nreason: path_outside_target", {
+        return errTextResult("[lsp_format]\nstatus: failed\nreason: path_outside_target", {
           ok: false,
           reason: "path_outside_target",
         });

@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../../registry/runtime-bound-tool.js";
-import { failTextResult, textResult } from "../../../../utils/result.js";
+import { errTextResult, okTextResult } from "../../../../utils/result.js";
 import { getSessionId } from "../../../../utils/session.js";
 import { buildTextArtifact, resolveWritablePath, writeArtifactText } from "../artifacts.js";
 import { executeBrowserCommand } from "../command.js";
@@ -29,7 +29,7 @@ export function createBrowserGetTool(
     async execute(toolCallId, params, signal, _onUpdate, ctx) {
       const field = normalizeBrowserGetField(params.field);
       if (field !== "text" && params.selector) {
-        return failTextResult(
+        return errTextResult(
           "[Browser Get]\nstatus: failed\nreason: selector is only valid when field=text.",
           {
             ok: false,
@@ -39,7 +39,7 @@ export function createBrowserGetTool(
         );
       }
       if (field !== "text" && params.path) {
-        return failTextResult(
+        return errTextResult(
           "[Browser Get]\nstatus: failed\nreason: path is only valid when field=text.",
           {
             ok: false,
@@ -66,7 +66,7 @@ export function createBrowserGetTool(
             })
           : null;
       if (artifactPath && !artifactPath.ok) {
-        return failTextResult(`[Browser Get]\nstatus: failed\nreason: ${artifactPath.message}`, {
+        return errTextResult(`[Browser Get]\nstatus: failed\nreason: ${artifactPath.message}`, {
           ok: false,
           reason: artifactPath.reason,
           requestedPath: artifactPath.requestedPath,
@@ -99,7 +99,7 @@ export function createBrowserGetTool(
           artifactPath.artifactRef,
           result.stdout,
         );
-        return textResult(
+        return okTextResult(
           buildTextPayload({
             header: "[Browser Get]",
             sessionName,
@@ -119,7 +119,7 @@ export function createBrowserGetTool(
           },
         );
       }
-      return textResult(
+      return okTextResult(
         buildTextPayload({
           header: "[Browser Get]",
           sessionName,

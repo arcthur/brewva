@@ -5,6 +5,7 @@ import { defineBrewvaTool, type BrewvaToolDefinition } from "../contracts/tool.j
 import { withFileMutationQueue } from "./_shared/file-mutation-queue.js";
 import { resolveToCwd } from "./_shared/path-utils.js";
 import { asRenderTheme, createStaticTextComponent } from "./_shared/render.js";
+import { DEFAULT_TOOL_OUTCOME_VERSION, ToolErrorRecordSchema } from "./outcome.js";
 
 const writeSchema = Type.Object(
   {
@@ -30,6 +31,8 @@ export interface BrewvaWriteToolOptions {
   operations?: BrewvaWriteOperations;
 }
 
+const writeOutputSchema = Type.Object({}, { additionalProperties: false });
+
 function shortenPath(path: string): string {
   const home = process.env.HOME;
   return home && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
@@ -51,7 +54,7 @@ function assertNotAborted(signal: AbortSignal | undefined): void {
 export function createBrewvaWriteToolDefinition(
   cwd: string,
   options?: BrewvaWriteToolOptions,
-): BrewvaToolDefinition<typeof writeSchema, undefined> {
+): BrewvaToolDefinition<typeof writeSchema, Record<string, never>> {
   const operations = options?.operations ?? defaultWriteOperations;
 
   return defineBrewvaTool({
@@ -62,6 +65,9 @@ export function createBrewvaWriteToolDefinition(
     promptSnippet: "Create or overwrite files",
     promptGuidelines: ["Use write only for new files or complete rewrites."],
     parameters: writeSchema,
+    outputSchema: writeOutputSchema,
+    errorSchema: ToolErrorRecordSchema,
+    outcomeVersion: DEFAULT_TOOL_OUTCOME_VERSION,
     async execute(_toolCallId, { path, content }, signal) {
       const absolutePath = resolveToCwd(path, cwd);
       const dir = dirname(absolutePath);
@@ -79,7 +85,7 @@ export function createBrewvaWriteToolDefinition(
               text: `Successfully wrote ${content.length} bytes to ${path}`,
             },
           ],
-          details: undefined,
+          outcome: { kind: "ok", value: {} },
         };
       });
     },

@@ -50,16 +50,10 @@ export function registerToolResultDistiller(
       event.details && typeof event.details === "object" && !Array.isArray(event.details)
         ? (event.details as Record<string, unknown>)
         : undefined;
-    const verdict =
-      details?.verdict === "pass" ||
-      details?.verdict === "fail" ||
-      details?.verdict === "inconclusive"
-        ? details.verdict
-        : undefined;
     const distillation = distillToolOutput({
       toolName: event.toolName,
       isError: event.isError,
-      verdict,
+      verdict: event.isError ? "fail" : undefined,
       outputText,
     });
     if (!distillation.distillationApplied || !distillation.summaryText.trim()) {

@@ -9,6 +9,7 @@ import {
   createSubagentStatusTool,
 } from "@brewva/brewva-tools/delegation";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function fakeContext(sessionId: string): any {
   return {
@@ -108,7 +109,7 @@ describe("subagent_run public surface", () => {
         effectCeiling: undefined,
       },
     });
-    const detailsText = JSON.stringify(result.details);
+    const detailsText = JSON.stringify(toolOutcomePayload(result));
     expect(detailsText).not.toContain("agentSpec");
     expect(detailsText).not.toContain("explorer-readonly");
     expect(detailsText).not.toContain("consultKind");
@@ -318,7 +319,7 @@ describe("subagent_run public surface", () => {
 
     expect(extractText(result)).toContain("subagent_run started for delegate=explorer");
     expect(extractText(result)).toContain("run-background-1");
-    const detailsText = JSON.stringify(result.details);
+    const detailsText = JSON.stringify(toolOutcomePayload(result));
     expect(detailsText).not.toContain("agentSpec");
     expect(detailsText).not.toContain("explorer-readonly");
     expect(detailsText).not.toContain("consultKind");
@@ -388,7 +389,7 @@ describe("delegation inbox query public surface", () => {
 
     expect(extractText(result)).toContain("# Delegation Inbox");
     expect(extractText(result)).toContain("worker_patch worker-1");
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: true,
       explicitPull: true,
       injectedIntoParentContext: false,
@@ -490,7 +491,7 @@ describe("subagent_status V2 run-card surface", () => {
       fakeContext("session-status"),
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       detailMode: "public",
       runCards: [
         {
@@ -500,7 +501,7 @@ describe("subagent_status V2 run-card surface", () => {
         },
       ],
     });
-    const detailsText = JSON.stringify(result.details);
+    const detailsText = JSON.stringify(toolOutcomePayload(result));
     expect(detailsText).not.toContain("agentSpec");
     expect(detailsText).not.toContain("envelope");
     expect(detailsText).not.toContain("modelRoute");
@@ -552,7 +553,7 @@ describe("subagent_status V2 run-card surface", () => {
     );
 
     expect(extractText(result)).toContain("delegation inspection projection is unavailable");
-    const detailsText = JSON.stringify(result.details);
+    const detailsText = JSON.stringify(toolOutcomePayload(result));
     expect(detailsText).not.toContain("agentSpec");
     expect(detailsText).not.toContain("envelope");
     expect(detailsText).not.toContain("modelRoute");
@@ -727,13 +728,13 @@ describe("subagent_run_diagnostic tool", () => {
       fakeContext("session-diagnostic"),
     );
 
-    expect((result.details as { ok?: boolean } | undefined)?.ok).toBe(true);
+    expect((toolOutcomePayload(result) as { ok?: boolean } | undefined)?.ok).toBe(true);
     expect(capturedRequest).toMatchObject({
       agent: "explorer",
       targetName: "review-security",
       consultKind: "review",
     });
-    const detailsText = JSON.stringify(result.details);
+    const detailsText = JSON.stringify(toolOutcomePayload(result));
     expect(detailsText).toContain("targetName");
     expect(detailsText).toContain("explorer-readonly");
     expect(detailsText).toContain("consultKind");
@@ -822,7 +823,7 @@ describe("subagent_fork tool", () => {
     });
     expect(extractText(result)).toContain("primitive=fork");
     expect(extractText(result)).toContain("fork complete");
-    const detailsText = JSON.stringify(result.details);
+    const detailsText = JSON.stringify(toolOutcomePayload(result));
     expect(detailsText).not.toContain("agentSpec");
     expect(detailsText).not.toContain("explorer-readonly");
     expect(detailsText).not.toContain("consultKind");

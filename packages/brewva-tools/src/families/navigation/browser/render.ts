@@ -1,4 +1,4 @@
-import { failTextResult } from "../../../utils/result.js";
+import { errTextResult } from "../../../utils/result.js";
 import { buildInvocationMetadata } from "./command.js";
 import type { BrowserCommandExecution, BrowserCommandFailure } from "./types.js";
 
@@ -28,7 +28,7 @@ export function buildFailureResult(
   extraDetails: Record<string, unknown> = {},
 ) {
   const label = formatBrowserLabel(toolName);
-  return failTextResult(
+  return errTextResult(
     [
       `[${label}]`,
       `status: failed`,

@@ -1,5 +1,5 @@
 import { differenceInMilliseconds } from "date-fns";
-import type { ToolResultVerdict } from "../../../utils/result.js";
+import type { ToolTextOutcomeKind } from "../../../utils/result.js";
 import {
   DEFAULT_LOG_TAIL_LINES,
   type ManagedBoxExecFinishedSession,
@@ -48,12 +48,12 @@ export function defaultTailHint(totalLines: number, usingDefaultTail: boolean): 
   return `\n\n[showing last ${DEFAULT_LOG_TAIL_LINES} of ${totalLines} lines; pass offset/limit to page]`;
 }
 
-export function resolveProcessVerdict(
+export function resolveProcessOutcomeKind(
   status: "running" | "completed" | "failed",
-): ToolResultVerdict | undefined {
+): ToolTextOutcomeKind {
   if (status === "running") return "inconclusive";
-  if (status === "failed") return "fail";
-  return undefined;
+  if (status === "failed") return "err";
+  return "ok";
 }
 
 export function readDetachedLog(output: string, offset?: number, limit?: number): string {

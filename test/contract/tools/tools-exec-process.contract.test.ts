@@ -6,6 +6,7 @@ import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireNonEmptyString } from "../../helpers/assertions.js";
 import { sleep } from "../../helpers/process.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import {
   createRuntimeForExecTests,
   extractTextContent,
@@ -233,20 +234,19 @@ describe("exec/process tool flow", () => {
       undefined,
       fakeContext(sessionId),
     );
-    const startDetails = started.details as {
+    const startDetails = toolOutcomePayload(started) as {
       status?: string;
-      verdict?: string;
       sessionId?: string;
     };
     expect(startDetails.status).toBe("running");
-    expect(startDetails.verdict).toBe("inconclusive");
+    expect(started.outcome.kind).toBe("inconclusive");
     const sessionHandle = requireNonEmptyString(
       startDetails.sessionId,
       "Expected background exec sessionId.",
     );
     let observedDone = false;
     let finalStatus: string | undefined;
-    let finalVerdict: string | undefined;
+    let finalOutcomeKind: string | undefined;
 
     for (const [index, pollCallId] of [
       "tc-exec-poll",
@@ -267,22 +267,22 @@ describe("exec/process tool flow", () => {
       const pollText = extractTextContent(polled);
       observedDone ||= pollText.includes("done");
 
-      const pollDetails = polled.details as { status?: string; verdict?: string };
+      const pollDetails = toolOutcomePayload(polled) as { status?: string };
       finalStatus = pollDetails.status;
-      finalVerdict = pollDetails.verdict;
+      finalOutcomeKind = polled.outcome.kind;
 
       if (pollDetails.status === "completed") {
         break;
       }
 
       expect(pollDetails.status).toBe("running");
-      expect(pollDetails.verdict).toBe("inconclusive");
+      expect(polled.outcome.kind).toBe("inconclusive");
       expect(index).toBeLessThan(2);
     }
 
     expect(observedDone).toBe(true);
     expect(finalStatus).toBe("completed");
-    expect(finalVerdict).toBe(undefined);
+    expect(finalOutcomeKind).toBe("ok");
   });
 
   test("box background output polling does not duplicate final observed chunks", async () => {
@@ -309,7 +309,7 @@ describe("exec/process tool flow", () => {
       fakeContext(sessionId),
     );
     const sessionHandle = requireNonEmptyString(
-      (started.details as { sessionId?: string }).sessionId,
+      (toolOutcomePayload(started) as { sessionId?: string }).sessionId,
       "Expected box process session handle.",
     );
 
@@ -327,7 +327,7 @@ describe("exec/process tool flow", () => {
     const pollText = extractTextContent(polled);
     const occurrences = pollText.split("box-race-output").length - 1;
 
-    expect((polled.details as { status?: string }).status).toBe("completed");
+    expect((toolOutcomePayload(polled) as { status?: string }).status).toBe("completed");
     expect(occurrences).toBe(1);
     expect(observedOffsets).toContain(output.length);
   });
@@ -361,7 +361,7 @@ describe("exec/process tool flow", () => {
     const pollText = extractTextContent(polled);
     expect(pollText).toContain("first-chunk");
     expect(pollText).toContain("second-chunk");
-    expect((polled.details as { status?: string }).status).toBe("completed");
+    expect((toolOutcomePayload(polled) as { status?: string }).status).toBe("completed");
     expect(observedOffsets).toEqual([0, firstChunk.length]);
   });
 
@@ -385,7 +385,7 @@ describe("exec/process tool flow", () => {
       fakeContext(sessionId),
     );
     const sessionHandle = requireNonEmptyString(
-      (started.details as { sessionId?: string }).sessionId,
+      (toolOutcomePayload(started) as { sessionId?: string }).sessionId,
       "Expected process session handle.",
     );
 
@@ -399,8 +399,8 @@ describe("exec/process tool flow", () => {
       undefined,
       fakeContext(sessionId),
     );
-    expect((killed.details as { status?: string; verdict?: string }).status).toBe("failed");
-    expect((killed.details as { status?: string; verdict?: string }).verdict).toBe("fail");
+    expect((toolOutcomePayload(killed) as { status?: string }).status).toBe("failed");
+    expect(killed.outcome.kind).toBe("err");
 
     const polled = await processTool.execute(
       "tc-process-poll",
@@ -414,7 +414,7 @@ describe("exec/process tool flow", () => {
       fakeContext(sessionId),
     );
     const pollStatus = requireDefined(
-      (polled.details as { status?: string }).status,
+      (toolOutcomePayload(polled) as { status?: string }).status,
       "expected polled process status",
     );
     expect(["completed", "failed"]).toContain(pollStatus);
@@ -438,9 +438,9 @@ describe("exec/process tool flow", () => {
       fakeContext(sessionId),
     );
 
-    const details = rejected.details as { status?: string; verdict?: string };
+    const details = toolOutcomePayload(rejected) as { status?: string };
     expect(details.status).toBe("failed");
-    expect(details.verdict).toBe("fail");
+    expect(rejected.outcome.kind).toBe("err");
   });
 
   test("exec throws on non-zero exit code", async () => {
@@ -541,9 +541,9 @@ describe("exec/process tool flow", () => {
       fakeContext(sessionId),
     );
 
-    const details = result.details as { status?: string; verdict?: string; reason?: string };
+    const details = toolOutcomePayload(result) as { status?: string; reason?: string };
     expect(details.status).toBe("failed");
-    expect(details.verdict).toBe("fail");
+    expect(result.outcome.kind).toBe("err");
     expect(details.reason).toBe("workdir_outside_target");
     expect(extractTextContent(result)).toContain("Exec rejected (workdir_outside_target)");
   });

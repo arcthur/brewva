@@ -126,7 +126,9 @@ describe("hosted tool execution traits", () => {
         startOrder.push(`end:${input.mode}`);
         return {
           content: [],
+          outcome: { kind: "ok", value: {} },
           details: {},
+          isError: false,
         };
       },
     };
@@ -193,7 +195,9 @@ describe("hosted tool execution traits", () => {
         }
         return {
           content: signal?.aborted === true ? [{ type: "text", text: "aborted" }] : [],
+          outcome: { kind: "ok", value: {} },
           details: {},
+          isError: false,
         };
       },
     };

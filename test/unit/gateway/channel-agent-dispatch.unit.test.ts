@@ -93,12 +93,15 @@ function createRuntimeTurnFixture(input: {
             ) {
               await onUpdate?.({
                 content: [{ type: "text" as const, text: "exec:running" }],
-                details: { stage: "running" },
+                outcome: { kind: "ok", value: { stage: "running" } },
                 display: { summaryText: "running" },
               });
               return {
                 content: [{ type: "text" as const, text: toolResult.content }],
-                isError: toolResult.isError === true,
+                outcome:
+                  toolResult.isError === true
+                    ? { kind: "err" as const, error: { message: toolResult.content } }
+                    : { kind: "ok" as const, value: {} },
               };
             },
           },

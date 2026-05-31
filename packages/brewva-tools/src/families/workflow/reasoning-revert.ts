@@ -4,7 +4,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { revertReasoning } from "../../runtime-port/reasoning.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const REVERT_TRIGGERS = [
@@ -68,13 +68,13 @@ export function createReasoningRevertTool(options: BrewvaBundledToolOptions): To
             linkedRollbackReceiptIds: normalizeReceiptIds(params.linked_rollback_receipt_ids),
           });
           if (!revert) {
-            return failTextResult("Reasoning revert surface is unavailable in this runtime.", {
+            return errTextResult("Reasoning revert surface is unavailable in this runtime.", {
               ok: false,
               error: "reasoning_revert_unavailable",
             });
           }
           ctx.abort();
-          return textResult(
+          return okTextResult(
             `Reasoning revert scheduled to ${revert.toCheckpointId}; hosted resume will continue from branch ${revert.newBranchId}.`,
             {
               ok: true,
@@ -86,7 +86,7 @@ export function createReasoningRevertTool(options: BrewvaBundledToolOptions): To
           );
         } catch (error) {
           const message = normalizeErrorMessage(error);
-          return failTextResult(`Reasoning revert failed (${message}).`, {
+          return errTextResult(`Reasoning revert failed (${message}).`, {
             ok: false,
             error: message,
           });

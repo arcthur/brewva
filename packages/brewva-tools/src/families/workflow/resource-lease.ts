@@ -9,7 +9,7 @@ import {
   listResourceLeases,
   requestResourceLease,
 } from "../../runtime-port/resource-lease.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const RESOURCE_LEASE_ACTION_VALUES = ["request", "list", "cancel"] as const;
@@ -69,7 +69,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
 
         if (params.action === "request") {
           if (typeof params.reason !== "string" || params.reason.trim().length === 0) {
-            return failTextResult("Error: reason is required for action=request.", { ok: false });
+            return errTextResult("Error: reason is required for action=request.", { ok: false });
           }
           const result = requestResourceLease(runtime, sessionId, {
             reason: params.reason,
@@ -82,9 +82,9 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
             ttlTurns: params.ttlTurns,
           });
           if (!result.ok) {
-            return failTextResult(`Error: ${result.reason}`, { ok: false });
+            return errTextResult(`Error: ${result.reason}`, { ok: false });
           }
-          return textResult(["# Resource Lease Granted", formatLease(result.lease)].join("\n"), {
+          return okTextResult(["# Resource Lease Granted", formatLease(result.lease)].join("\n"), {
             ok: true,
             leaseId: result.lease.id,
             sessionId,
@@ -102,7 +102,7 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
           } else {
             lines.push(...leases.map((lease) => formatLease(lease)));
           }
-          return textResult(lines.join("\n"), {
+          return okTextResult(lines.join("\n"), {
             ok: true,
             count: leases.length,
             sessionId,
@@ -110,13 +110,13 @@ export function createResourceLeaseTool(options: BrewvaToolOptions): ToolDefinit
         }
 
         if (typeof params.leaseId !== "string" || params.leaseId.trim().length === 0) {
-          return failTextResult("Error: leaseId is required for action=cancel.", { ok: false });
+          return errTextResult("Error: leaseId is required for action=cancel.", { ok: false });
         }
         const result = cancelResourceLease(runtime, sessionId, params.leaseId, params.reason);
         if (!result.ok) {
-          return failTextResult(`Error: ${result.reason}`, { ok: false });
+          return errTextResult(`Error: ${result.reason}`, { ok: false });
         }
-        return textResult(["# Resource Lease Cancelled", formatLease(result.lease)].join("\n"), {
+        return okTextResult(["# Resource Lease Cancelled", formatLease(result.lease)].join("\n"), {
           ok: true,
           leaseId: result.lease.id,
           sessionId,

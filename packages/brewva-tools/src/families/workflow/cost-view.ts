@@ -5,7 +5,7 @@ import { formatISO } from "date-fns";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { getSessionCostSummary } from "../../runtime-port/cost.js";
-import { textResult } from "../../utils/result.js";
+import { okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 function formatTopRows<T>(
@@ -77,7 +77,7 @@ export function createCostViewTool(options: BrewvaToolOptions): ToolDefinition {
       const top = typeof params.top === "number" ? Math.max(1, Math.trunc(params.top)) : 5;
       const summary = getSessionCostSummary(costViewTool.runtime, sessionId);
 
-      return textResult(formatCostViewText(summary, top), {
+      return okTextResult(formatCostViewText(summary, top), {
         sessionId,
         summary,
       });

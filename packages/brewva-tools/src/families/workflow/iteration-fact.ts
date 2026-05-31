@@ -14,7 +14,7 @@ import {
   recordGuardResult,
   recordMetricObservation,
 } from "../../runtime-port/iteration.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const ITERATION_ACTION_VALUES = ["record_metric", "record_guard", "list"] as const;
@@ -131,7 +131,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
             typeof params.value !== "number" ||
             evidenceRefs.length === 0
           ) {
-            return failTextResult(
+            return errTextResult(
               "Metric recording requires metric_key, value, and evidence_refs.",
               {
                 ok: false,
@@ -151,7 +151,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
             summary: params.summary,
           });
           if (!event) {
-            return failTextResult("Metric observation was not recorded.", {
+            return errTextResult("Metric observation was not recorded.", {
               ok: false,
               error: "record_failed",
             });
@@ -161,7 +161,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
             metricKey: params.metric_key,
             source,
           })[0];
-          return textResult(`Metric observation recorded (${event.id}).`, {
+          return okTextResult(`Metric observation recorded (${event.id}).`, {
             ok: true,
             eventId: event.id,
             record: record ?? null,
@@ -170,13 +170,10 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
 
         if (params.action === "record_guard") {
           if (!params.guard_key?.trim() || !guardStatus || evidenceRefs.length === 0) {
-            return failTextResult(
-              "Guard recording requires guard_key, status, and evidence_refs.",
-              {
-                ok: false,
-                error: "missing_guard_fields",
-              },
-            );
+            return errTextResult("Guard recording requires guard_key, status, and evidence_refs.", {
+              ok: false,
+              error: "missing_guard_fields",
+            });
           }
           const event = recordGuardResult(runtime, sessionId, {
             guardKey: params.guard_key,
@@ -187,7 +184,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
             summary: params.summary,
           });
           if (!event) {
-            return failTextResult("Guard result was not recorded.", {
+            return errTextResult("Guard result was not recorded.", {
               ok: false,
               error: "record_failed",
             });
@@ -197,7 +194,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
             guardKey: params.guard_key,
             source,
           })[0];
-          return textResult(`Guard result recorded (${event.id}).`, {
+          return okTextResult(`Guard result recorded (${event.id}).`, {
             ok: true,
             eventId: event.id,
             record: record ?? null,
@@ -243,7 +240,7 @@ export function createIterationFactTool(options: BrewvaToolOptions): ToolDefinit
           lines.push(`session_scope: ${sessionScope}`);
         }
 
-        return textResult(lines.join("\n"), {
+        return okTextResult(lines.join("\n"), {
           ok: true,
           ...details,
         });

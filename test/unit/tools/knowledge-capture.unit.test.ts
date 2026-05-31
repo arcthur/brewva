@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createKnowledgeCaptureTool } from "@brewva/brewva-tools/memory";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 let workspace = "";
@@ -86,7 +87,7 @@ describe("knowledge capture tool", () => {
       { cwd: workspace } as never,
     );
 
-    const details = result.details as
+    const details = toolOutcomePayload(result) as
       | {
           captureStatus?: string;
           solutionDocPath?: string;
@@ -168,7 +169,7 @@ describe("knowledge capture tool", () => {
       { cwd: workspace } as never,
     );
 
-    const details = second.details as
+    const details = toolOutcomePayload(second) as
       | {
           captureStatus?: string;
           solutionDocPath?: string;
@@ -214,9 +215,9 @@ describe("knowledge capture tool", () => {
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("investigation_record");
     expect(text).toContain("Failed Attempts");
-    expect(result.details).toMatchObject({
-      verdict: "fail",
-      error: "invalid_solution_record",
+    expect(result.outcome).toMatchObject({
+      kind: "err",
+      error: { error: "invalid_solution_record" },
     });
   });
 
@@ -254,13 +255,13 @@ describe("knowledge capture tool", () => {
       { cwd: workspace } as never,
     );
 
-    expect(result.details).toMatchObject({
-      verdict: "fail",
-      error: "precedent_audit_failed",
+    expect(result.outcome).toMatchObject({
+      kind: "err",
+      error: { error: "precedent_audit_failed" },
     });
     expect(
       (
-        result.details as { precedentAudit?: { findings?: Array<{ code?: string }> } }
+        toolOutcomePayload(result) as { precedentAudit?: { findings?: Array<{ code?: string }> } }
       ).precedentAudit?.findings?.some((finding) => finding.code === "missing_displacement_link"),
     ).toBe(true);
     expect(extractText(result as { content: Array<{ type: string; text?: string }> })).toContain(

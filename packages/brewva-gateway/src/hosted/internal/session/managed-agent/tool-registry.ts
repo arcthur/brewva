@@ -6,6 +6,7 @@ import {
 } from "@brewva/brewva-substrate/prompt";
 import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
 import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import { outcomeIsError } from "@brewva/brewva-vocabulary/outcome";
 import type { ToolSchemaSnapshot, ToolSchemaSnapshotTool } from "../../provider/cache/index.js";
 
 function toAgentTool(
@@ -20,19 +21,26 @@ function toAgentTool(
     parameters: (schemaOverride?.parameters ??
       tool.parameters) as BrewvaAgentProtocolTool["parameters"],
     prepareArguments: tool.prepareArguments,
-    execute: (toolCallId, params, signal, onUpdate) =>
-      tool.execute(
+    execute: async (toolCallId, params, signal, onUpdate) => {
+      const result = await tool.execute(
         toolCallId,
         params,
         signal,
         onUpdate ? (update) => onUpdate(update as never) : undefined,
         ctxFactory(),
-      ) as Promise<{
-        content: Array<
-          { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
-        >;
-        details: unknown;
-      }>,
+      );
+      const details =
+        result.outcome.kind === "err"
+          ? result.outcome.error
+          : result.outcome.kind === "ok"
+            ? result.outcome.value
+            : result.outcome.value;
+      return {
+        content: result.content,
+        details,
+        isError: outcomeIsError(result.outcome),
+      };
+    },
   };
 }
 

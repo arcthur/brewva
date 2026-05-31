@@ -108,7 +108,56 @@ describe("Hosted behavior gaps: ledger writer", () => {
     expect(finished).toHaveLength(1);
   });
 
-  test("given status-only legacy tool_result details, when ledger writer runs, then status does not override the verdict model", () => {
+  test("given tool_execution_end with typed inconclusive outcome, when ledger writer runs, then verdict stays inconclusive", () => {
+    const { api, handlers } = createMockExtensionApi();
+
+    const finished: any[] = [];
+    const runtime = createRuntimeFixture({
+      tools: {
+        finish: (input: any) => {
+          finished.push(input);
+        },
+      },
+    });
+
+    registerLedgerWriter(api, runtime);
+
+    invokeHandler(
+      handlers,
+      "tool_execution_end",
+      {
+        toolCallId: "tc-inconclusive",
+        toolName: "poll",
+        isError: false,
+        result: {
+          content: [{ type: "text", text: "still running" }],
+          outcome: {
+            kind: "inconclusive",
+            reason: "process_running",
+            value: { reason: "process_running", pid: 1234 },
+          },
+        },
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "lw-inconclusive-1",
+        },
+      },
+    );
+
+    expect(finished).toHaveLength(1);
+    expect(finished[0].channelSuccess).toBe(true);
+    expect(finished[0].verdict).toBe("inconclusive");
+    expect(finished[0].metadata.details).toEqual(
+      expect.objectContaining({
+        reason: "process_running",
+        pid: 1234,
+        sourceEvent: "tool_execution_end",
+      }),
+    );
+  });
+
+  test("given legacy tool_result details verdict, when ledger writer runs, then details do not override the verdict model", () => {
     const { api, handlers } = createMockExtensionApi();
 
     const finished: any[] = [];
@@ -131,7 +180,7 @@ describe("Hosted behavior gaps: ledger writer", () => {
         input: { action: "poll", sessionId: "exec-1" },
         isError: false,
         content: [{ type: "text", text: "Process still running." }],
-        details: { status: "running", sessionId: "exec-1" },
+        details: { status: "running", sessionId: "exec-1", verdict: "fail" },
       },
       {
         sessionManager: {
@@ -146,6 +195,7 @@ describe("Hosted behavior gaps: ledger writer", () => {
     expect(finished[0].metadata.details).toEqual({
       status: "running",
       sessionId: "exec-1",
+      verdict: "fail",
     });
   });
 });

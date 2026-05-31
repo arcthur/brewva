@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { createLookAtTool } from "@brewva/brewva-tools/navigation";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createRuntimeConfig } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
   const textPart = result.content.find(
@@ -62,12 +63,12 @@ describe("look_at tool", () => {
     );
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
-    const details = (result as { details?: Record<string, unknown> }).details;
+    const details = toolOutcomePayload(result) as Record<string, unknown>;
     expect(text).toContain("look_at unavailable");
     expect(text).toContain("next_step=");
     expect(text.includes("export const alpha")).toBe(false);
     expect(details?.status).toBe("unavailable");
-    expect(details?.verdict).toBe("inconclusive");
+    expect(result.outcome.kind).toBe("inconclusive");
     expect(details?.reason).toBe("no_high_confidence_match");
   });
 
@@ -88,9 +89,9 @@ describe("look_at tool", () => {
       context,
     );
 
-    const details = (result as { details?: Record<string, unknown> }).details;
+    const details = toolOutcomePayload(result) as Record<string, unknown>;
     expect(details?.status).toBe("unavailable");
-    expect(details?.verdict).toBe("inconclusive");
+    expect(result.outcome.kind).toBe("inconclusive");
     expect(details?.reason).toBe("goal_keywords_insufficient");
   });
 
@@ -111,9 +112,9 @@ describe("look_at tool", () => {
       context,
     );
 
-    const details = (result as { details?: Record<string, unknown> }).details;
+    const details = toolOutcomePayload(result) as Record<string, unknown>;
     expect(details?.status).toBe("unavailable");
-    expect(details?.verdict).toBe("inconclusive");
+    expect(result.outcome.kind).toBe("inconclusive");
     expect(details?.reason).toBe("unsupported_goal_language");
   });
 });

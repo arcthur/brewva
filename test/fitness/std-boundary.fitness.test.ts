@@ -69,6 +69,7 @@ describe("brewva std utility boundary", () => {
       "./node/fs",
       "./runtime-identity",
       "./text",
+      "./tool-outcome-version",
       "./unknown",
     ];
     const missingSubpaths = requiredSubpaths.filter((subpath) => !(subpath in exports));

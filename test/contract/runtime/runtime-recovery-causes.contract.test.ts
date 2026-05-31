@@ -19,7 +19,7 @@ const SILENT_PROVIDER: RuntimeProviderPort = {
 
 const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
   async execute() {
-    return { ok: true, content: "" };
+    return { outcome: { kind: "ok", value: {} }, content: "" };
   },
 };
 
@@ -118,7 +118,7 @@ async function runScenario(cause: RuntimeRecoveryCause): Promise<readonly Runtim
   const toolExecutor: RuntimeToolExecutorPort = {
     async execute() {
       return {
-        ok: true,
+        outcome: { kind: "ok", value: {} },
         content: [{ type: "text", text: "x".repeat(3_000) }],
       };
     },

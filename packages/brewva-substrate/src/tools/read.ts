@@ -16,6 +16,7 @@ import {
   truncateHead,
   type TruncationResult,
 } from "./_shared/truncate.js";
+import { DEFAULT_TOOL_OUTCOME_VERSION, ToolErrorRecordSchema } from "./outcome.js";
 
 const readSchema = Type.Object(
   {
@@ -33,6 +34,30 @@ export type BrewvaReadToolInput = Static<typeof readSchema>;
 export interface BrewvaReadToolDetails {
   truncation?: TruncationResult;
 }
+
+const truncationSchema = Type.Object(
+  {
+    content: Type.String(),
+    truncated: Type.Boolean(),
+    truncatedBy: Type.Union([Type.Literal("lines"), Type.Literal("bytes"), Type.Null()]),
+    totalLines: Type.Number(),
+    totalBytes: Type.Number(),
+    outputLines: Type.Number(),
+    outputBytes: Type.Number(),
+    lastLinePartial: Type.Boolean(),
+    firstLineExceedsLimit: Type.Boolean(),
+    maxLines: Type.Number(),
+    maxBytes: Type.Number(),
+  },
+  { additionalProperties: false },
+);
+
+const readOutputSchema = Type.Object(
+  {
+    truncation: Type.Optional(truncationSchema),
+  },
+  { additionalProperties: false },
+);
 
 export interface BrewvaResizedImage {
   data: string;
@@ -89,25 +114,30 @@ function formatDimensionNote(result: BrewvaResizedImage): string | undefined {
   return `[Image: original ${result.originalWidth}x${result.originalHeight}, displayed at ${result.width}x${result.height}. Multiply coordinates by ${scale.toFixed(2)} to map to original image.]`;
 }
 
-function extractText(result: BrewvaToolResult<BrewvaReadToolDetails | undefined>): string {
+function extractText(result: BrewvaToolResult<BrewvaReadToolDetails>): string {
   return result.content
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("\n");
 }
 
+function readOutcomeValue(result: BrewvaToolResult<BrewvaReadToolDetails>): BrewvaReadToolDetails {
+  return result.outcome.kind === "ok" ? result.outcome.value : {};
+}
+
 function renderSummaryFromText(
-  result: BrewvaToolResult<BrewvaReadToolDetails | undefined>,
+  result: BrewvaToolResult<BrewvaReadToolDetails>,
   expanded: boolean,
 ): string {
   const text = extractText(result);
+  const details = readOutcomeValue(result);
   if (!expanded) {
-    if (result.details?.truncation?.firstLineExceedsLimit) {
+    if (details.truncation?.firstLineExceedsLimit) {
       return "\nLine exceeds output limit";
     }
-    if (result.details?.truncation?.truncated) {
-      const shown = result.details.truncation.outputLines;
-      const total = result.details.truncation.totalLines;
+    if (details.truncation?.truncated) {
+      const shown = details.truncation.outputLines;
+      const total = details.truncation.totalLines;
       return `\n${shown} lines (truncated from ${total})`;
     }
   }
@@ -117,7 +147,7 @@ function renderSummaryFromText(
 export function createBrewvaReadToolDefinition(
   cwd: string,
   readOptions?: BrewvaReadToolOptions,
-): BrewvaToolDefinition<typeof readSchema, BrewvaReadToolDetails | undefined> {
+): BrewvaToolDefinition<typeof readSchema, BrewvaReadToolDetails> {
   const autoResizeImages = readOptions?.autoResizeImages ?? true;
   const operations = readOptions?.operations ?? defaultReadOperations;
 
@@ -128,9 +158,12 @@ export function createBrewvaReadToolDefinition(
     promptSnippet: "Read file contents",
     promptGuidelines: ["Use read to examine files instead of shelling out to cat or sed."],
     parameters: readSchema,
+    outputSchema: readOutputSchema,
+    errorSchema: ToolErrorRecordSchema,
+    outcomeVersion: DEFAULT_TOOL_OUTCOME_VERSION,
     async execute(_toolCallId, { path, offset, limit }, signal) {
       const absolutePath = resolveReadPath(path, cwd);
-      return new Promise<BrewvaToolResult<BrewvaReadToolDetails | undefined>>((resolve, reject) => {
+      return new Promise<BrewvaToolResult<BrewvaReadToolDetails>>((resolve, reject) => {
         if (signal?.aborted) {
           reject(new Error("Operation aborted"));
           return;
@@ -154,7 +187,7 @@ export function createBrewvaReadToolDefinition(
               ? await operations.detectImageMimeType(absolutePath)
               : undefined;
 
-            let result: BrewvaToolResult<BrewvaReadToolDetails | undefined>;
+            let result: BrewvaToolResult<BrewvaReadToolDetails>;
             if (mimeType) {
               const buffer = await operations.readFile(absolutePath);
               const base64 = buffer.toString("base64");
@@ -173,7 +206,7 @@ export function createBrewvaReadToolDefinition(
                   { type: "text", text },
                   { type: "image", data: image.data, mimeType: image.mimeType },
                 ],
-                details: undefined,
+                outcome: { kind: "ok", value: {} },
               };
             } else {
               const buffer = await operations.readFile(absolutePath);
@@ -231,7 +264,7 @@ export function createBrewvaReadToolDefinition(
 
               result = {
                 content: [{ type: "text", text: outputText }],
-                details,
+                outcome: { kind: "ok", value: details ?? {} },
               };
             }
 

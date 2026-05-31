@@ -1,3 +1,5 @@
+import type { JsonValue } from "@brewva/brewva-std/json";
+import type { BrewvaOutcome } from "@brewva/brewva-vocabulary/outcome";
 import type { Static, TSchema } from "@sinclair/typebox";
 import type { BrewvaToolUiPort } from "../host-api/ui.js";
 import type { BrewvaSourceInfo } from "../provenance/source-info.js";
@@ -21,10 +23,9 @@ export interface BrewvaToolResultDisplay {
   rawText?: string;
 }
 
-export interface BrewvaToolResult<TDetails = unknown> {
+export interface BrewvaToolResult<TOutput = unknown, TError = unknown> {
   content: BrewvaToolContentPart[];
-  details: TDetails;
-  isError?: boolean;
+  outcome: BrewvaOutcome<TOutput, TError>;
   display?: BrewvaToolResultDisplay;
 }
 
@@ -89,15 +90,22 @@ export interface BrewvaToolResultRenderOptions {
   isPartial: boolean;
 }
 
-export type BrewvaToolUpdateHandler<TDetails = unknown> = (
-  update: BrewvaToolResult<TDetails>,
+export type BrewvaToolUpdateHandler<TOutput = JsonValue, TError = JsonValue> = (
+  update: BrewvaToolResult<TOutput, TError>,
 ) => Promise<void>;
 
-export interface BrewvaToolDefinition<TParams extends TSchema = TSchema, TDetails = unknown> {
+export interface BrewvaToolDefinition<
+  TParams extends TSchema = TSchema,
+  TOutput = unknown,
+  TError = unknown,
+> {
   name: string;
   label: string;
   description: string;
   parameters: TParams;
+  outputSchema?: TSchema;
+  errorSchema?: TSchema;
+  outcomeVersion?: string;
   sourceInfo?: BrewvaSourceInfo;
   promptSnippet?: string;
   promptGuidelines?: string[];
@@ -106,16 +114,16 @@ export interface BrewvaToolDefinition<TParams extends TSchema = TSchema, TDetail
     toolCallId: string,
     params: Static<TParams>,
     signal: AbortSignal | undefined,
-    onUpdate: BrewvaToolUpdateHandler<TDetails> | undefined,
+    onUpdate: BrewvaToolUpdateHandler<TOutput, TError> | undefined,
     ctx: BrewvaToolContext,
-  ): Promise<BrewvaToolResult<TDetails>>;
+  ): Promise<BrewvaToolResult<TOutput, TError>>;
   renderCall?(
     args: Static<TParams>,
     theme: unknown,
     ctx: BrewvaToolRenderContext,
   ): BrewvaRenderableComponent;
   renderResult?(
-    result: BrewvaToolResult<TDetails>,
+    result: BrewvaToolResult<TOutput, TError>,
     options: BrewvaToolResultRenderOptions,
     theme: unknown,
     ctx: BrewvaToolRenderContext,
@@ -124,8 +132,8 @@ export interface BrewvaToolDefinition<TParams extends TSchema = TSchema, TDetail
 
 type AnyBrewvaToolDefinition = BrewvaToolDefinition;
 
-export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
-  tool: BrewvaToolDefinition<TParams, TDetails>,
-): BrewvaToolDefinition<TParams, TDetails> & AnyBrewvaToolDefinition {
+export function defineBrewvaTool<TParams extends TSchema, TOutput = unknown, TError = unknown>(
+  tool: BrewvaToolDefinition<TParams, TOutput, TError>,
+): BrewvaToolDefinition<TParams, TOutput, TError> & AnyBrewvaToolDefinition {
   return tool;
 }

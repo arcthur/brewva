@@ -25,7 +25,7 @@ import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { resolveRecallBrokerRuntime } from "../../runtime-port/recall.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const RECALL_SCOPE_SCHEMA = buildStringEnumSchema(RECALL_SCOPE_VALUES, {
@@ -47,7 +47,7 @@ const RECALL_SEARCH_INTENT_SCHEMA = buildStringEnumSchema(RECALL_SEARCH_INTENT_V
 
 function sessionIndexUnavailableResult(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return failTextResult(`recall_search unavailable (session_index_unavailable): ${message}`, {
+  return errTextResult(`recall_search unavailable (session_index_unavailable): ${message}`, {
     ok: false,
     error: "session_index_unavailable",
     message,
@@ -167,13 +167,13 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
       const query = normalizeQuery(params.query);
       const stableIds = normalizeStableIds(params.stable_ids);
       if (!query && stableIds.length === 0) {
-        return failTextResult("recall_search rejected (missing_query_or_stable_ids).", {
+        return errTextResult("recall_search rejected (missing_query_or_stable_ids).", {
           ok: false,
           error: "missing_query_or_stable_ids",
         });
       }
       if (query && stableIds.length > 0) {
-        return failTextResult("recall_search rejected (query_and_stable_ids_conflict).", {
+        return errTextResult("recall_search rejected (query_and_stable_ids_conflict).", {
           ok: false,
           error: "query_and_stable_ids_conflict",
         });
@@ -220,7 +220,7 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
           });
         }
 
-        return textResult(
+        return okTextResult(
           [
             "[RecallSearch]",
             "mode: search",
@@ -299,7 +299,7 @@ export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefiniti
         });
       }
 
-      return textResult(
+      return okTextResult(
         [
           "[RecallSearch]",
           "mode: inspect",
@@ -369,7 +369,7 @@ export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefiniti
       const sessionId = getSessionId(ctx);
       const stableIds = normalizeStableIds(params.stable_ids);
       if (stableIds.length === 0) {
-        return failTextResult("recall_curate rejected (missing_stable_ids).", {
+        return errTextResult("recall_curate rejected (missing_stable_ids).", {
           ok: false,
           error: "missing_stable_ids",
         });
@@ -387,7 +387,7 @@ export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefiniti
         },
       });
 
-      return textResult(
+      return okTextResult(
         [
           "[RecallCurate]",
           `signal: ${signal}`,

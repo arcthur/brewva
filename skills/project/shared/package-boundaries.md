@@ -13,7 +13,7 @@ owner: runtime-maintainers
 | Package                            | Responsibility                                                                                                                                                                             | Must Not Own                                                                            |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
 | `@brewva/brewva-runtime`           | four-port runtime root, canonical tape, kernel authority policy, model attention planning, and config/security contracts                                                                   | product vocabulary, CLI wiring, transport-specific behavior, or read-model truth        |
-| `@brewva/brewva-vocabulary`        | explicit product vocabulary subpaths for events, wire payloads, tasks, schedules, context, delegation, workbench, sessions, and iteration facts                                            | runtime authority, provider/tool mechanics, persistence authority, or root exports      |
+| `@brewva/brewva-vocabulary`        | explicit product vocabulary subpaths for events, wire payloads, typed tool outcomes, tasks, schedules, context, delegation, workbench, sessions, and iteration facts                       | runtime authority, provider/tool mechanics, persistence authority, or root exports      |
 | `@brewva/brewva-capabilities`      | capability manifest parsing, registry versioning, deterministic selection, and authority receipt primitives                                                                                | tool execution or hosted policy wiring                                                  |
 | `@brewva/brewva-provider-core`     | provider contracts, catalog lookup, typed registry, streaming, cache rendering, drivers                                                                                                    | replay authority or credential ownership                                                |
 | `@brewva/brewva-substrate`         | contract root plus explicit session, turn, prompt/resource, provenance, execution, compaction, tools/tool-protocol, host-api, persistence, provider, and sdk subpaths                      | replay authority, credentials, hosted policy                                            |
@@ -22,7 +22,7 @@ owner: runtime-maintainers
 | `@brewva/brewva-token-estimation`  | leaf model token estimation primitives                                                                                                                                                     | model routing or provider policy                                                        |
 | `@brewva/brewva-recall`            | curated root plus explicit broker, knowledge, and evidence subpaths for on-demand recall search, curation semantics, trust labels, and result rendering                                    | event tape authority or database ownership                                              |
 | `@brewva/brewva-session-index`     | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                                                                | replay authority, tokenization policy, SQL UI                                           |
-| `@brewva/brewva-std`               | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, and Node-only filesystem helpers                                                          | product policy, runtime authority, or domains                                           |
+| `@brewva/brewva-std`               | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, outcome-version vocabulary, and Node-only filesystem helpers                              | product policy, runtime authority, or domains                                           |
 | `@brewva/brewva-tools`             | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry/capability spine, runtime-port helpers, internal BoxLite execution, and default bundle assembly           | orchestration policy or model routing                                                   |
 | `@brewva/brewva-mcp-adapter`       | MCP protocol translation into substrate tool descriptors and guarded MCP client calls                                                                                                      | managed-tool capability policy or hosted UX                                             |
 | `@brewva/brewva-channels-telegram` | Telegram channel protocol translation, update projection, callback handling, and Telegram transports                                                                                       | gateway hosted policy or generic ingress                                                |
@@ -59,6 +59,10 @@ owner: runtime-maintainers
 - vocabulary is a leaf product-contract package. It has no root export, depends
   only on `@brewva/brewva-std` among Brewva packages, and separates kernel/tape
   payload vocabulary from substrate mechanism contracts.
+- typed tool outcome vocabulary belongs to
+  `@brewva/brewva-vocabulary/outcome`. Runtime may carry structural mirrors for
+  canonical tape validation, but it must not import product vocabulary or derive
+  authority from outcome fields.
 - runtime root exports stay narrow: `createBrewvaRuntime`, the four-port runtime
   contract types, `DEFAULT_BREWVA_CONFIG`, and the minimal config/deep-readonly
   types. Do not reintroduce the `BrewvaRuntime` class, root-reflective runtime
@@ -120,6 +124,9 @@ owner: runtime-maintainers
   `@brewva/brewva-substrate/tools`; the removed
   `@brewva/brewva-tool-protocol` package must not return as a standalone
   workspace package or import path
+- tool result authoring is outcome-first: managed tool definitions publish
+  `outputSchema`, `errorSchema`, and `outcomeVersion`; internal tool results
+  carry `outcome`, not semantic `details`, `isError`, or `ok`
 - substrate mechanisms are imported through explicit domain subpaths:
   `@brewva/brewva-substrate/session`, `/prompt`, `/resources`, `/tools`,
   `/host-api`, `/persistence`, `/provider`, `/turn`, `/sdk`, `/provenance`,
@@ -184,7 +191,8 @@ owner: runtime-maintainers
   utility substrate libraries such as Remeda, `p-limit`, and `@noble/hashes`;
   product packages import Brewva-owned std subpaths instead
 - std has no root export. Callers use explicit subpaths such as
-  `@brewva/brewva-std/hash`, `/json`, `/collections`, `/async`, and `/node/fs`
+  `@brewva/brewva-std/hash`, `/json`, `/collections`, `/async`,
+  `/tool-outcome-version`, and `/node/fs`
 - portable std subpaths must not import Node builtins; Node-only utilities live
   under explicit `/node/*` subpaths
 - generic stable hashing, short SHA-256 IDs, redacted digests, and cache

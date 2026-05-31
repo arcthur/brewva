@@ -52,8 +52,8 @@ function toolResultStatus(input: { result?: unknown; isError?: boolean }): "comp
   if (input.isError === true) {
     return "error";
   }
-  const details = asRecord(asRecord(input.result)?.details);
-  return details?.verdict === "fail" ? "error" : "completed";
+  const result = asRecord(input.result);
+  return result?.verdict === "fail" ? "error" : "completed";
 }
 
 export class ShellTranscriptProjector {

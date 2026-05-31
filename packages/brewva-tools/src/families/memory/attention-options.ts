@@ -21,7 +21,7 @@ import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-boun
 import { recordMetricObservation } from "../../runtime-port/iteration.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { noteWorkbench } from "../../runtime-port/workbench.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const MAX_OPTION_CARDS = 20;
@@ -744,7 +744,7 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
         generationId: generation,
         cards,
       });
-      return textResult(renderCards(cards), {
+      return okTextResult(renderCards(cards), {
         ok: true,
         schema: ATTENTION_OPTION_PROJECTION_SCHEMA_V1,
         generationId: generation,
@@ -771,7 +771,7 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
         optionId,
       });
       if (!consumed) {
-        return failTextResult(`attention_consume could not resolve option ${optionId}.`, {
+        return errTextResult(`attention_consume could not resolve option ${optionId}.`, {
           ok: false,
           optionId,
           error: "unknown_option",
@@ -790,7 +790,7 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
         optionId,
       });
       const content = truncateText(consumed.content, MAX_CONSUMED_CHARS, { marker: "\n..." });
-      return textResult(
+      return okTextResult(
         [
           "# Attention Consume",
           `option_id: ${optionId}`,
@@ -832,13 +832,13 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
         retentionHint: "attention_pin",
       });
       if (!entry) {
-        return failTextResult("attention_pin unavailable (missing_runtime_workbench).", {
+        return errTextResult("attention_pin unavailable (missing_runtime_workbench).", {
           ok: false,
           optionId,
           error: "missing_runtime_workbench",
         });
       }
-      return textResult(`Attention option pinned (${entry.id ?? entry.digest}).`, {
+      return okTextResult(`Attention option pinned (${entry.id ?? entry.digest}).`, {
         ok: true,
         optionId,
         entryId: entry.id ?? null,
@@ -865,7 +865,7 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
         optionId,
         reason: readNonEmptyString(params.reason),
       });
-      return textResult(`Attention option ignored for this session (${optionId}).`, {
+      return okTextResult(`Attention option ignored for this session (${optionId}).`, {
         ok: true,
         optionId,
         scope: "session",
@@ -902,7 +902,7 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
         "3. If implementation depends on this option, consume it explicitly before acting.",
         "4. Treat any missing or stale evidence as advisory unless a verification gate manifest says otherwise.",
       ].join("\n");
-      return textResult(recipe, {
+      return okTextResult(recipe, {
         ok: true,
         optionId,
         eventId: event?.id ?? null,

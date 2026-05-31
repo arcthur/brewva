@@ -89,6 +89,24 @@ same event, receipt, WAL record, ledger row, or projection update that the
 runtime contract requires. Scope finalizers may clean up resources, but they do
 not substitute for replay-visible cancellation, rollback, or recovery evidence.
 
+## Tool Outcome Receipts
+
+`tool.committed.payload.result.outcome` is the canonical tool-result truth. The
+allowed outcome kinds are `ok`, `err`, and `inconclusive`; only `err` maps to
+external binary `isError: true`. Legacy `result.ok` and adapter-only
+`result.isError` or `result.details` are invalid inside canonical tape.
+
+Outcome schema evolution is versioned by `result.metadata.outcomeVersion`.
+Unsupported versions fail closed during live commit and persisted tape replay.
+The supported version list is owned by `@brewva/brewva-std/tool-outcome-version`
+so runtime validation and tool authoring use the same version vocabulary without
+adding a runtime-to-substrate dependency.
+
+`step_projection` is a rebuildable read model over `tool.proposed`,
+`tool.committed`, and `tool.aborted`. It exposes authority-derived effects and
+recovery policy beside the realized outcome kind, but it does not create a new
+event family or a second persistence authority.
+
 ## Canonical Surface
 
 The canonical event vocabulary lives in

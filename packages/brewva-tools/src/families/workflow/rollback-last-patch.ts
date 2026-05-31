@@ -3,7 +3,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { rollbackLastPatchSet } from "../../runtime-port/patches.js";
-import { textResult } from "../../utils/result.js";
+import { okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 function formatRollbackMessage(input: {
@@ -49,7 +49,7 @@ export function createRollbackLastPatchTool(options: BrewvaToolOptions): ToolDef
       async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
         const rollback = rollbackLastPatchSet(runtime, sessionId);
-        return textResult(formatRollbackMessage(rollback), {
+        return okTextResult(formatRollbackMessage(rollback), {
           ok: rollback.ok,
           patchSetId: rollback.patchSetId,
           restoredPaths: rollback.restoredPaths,

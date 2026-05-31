@@ -7,6 +7,7 @@ import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/it
 import type { SkillDocument } from "@brewva/brewva-vocabulary/session";
 import { Value } from "@sinclair/typebox/value";
 import { createBundledToolRuntime, createRuntimeFixture } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function skill(input: { name: string; description: string; markdown: string }): SkillDocument {
   return {
@@ -120,13 +121,13 @@ describe("attention option tools", () => {
     const optionsText = textContent(
       optionsResult as { content: Array<{ type: string; text?: string }> },
     );
-    expect(optionsResult.details).toMatchObject({
+    expect(toolOutcomePayload(optionsResult)).toMatchObject({
       ok: true,
       schema: "brewva.attention-option.projection.v1",
     });
     expect(
       (
-        optionsResult.details as {
+        toolOutcomePayload(optionsResult) as {
           options: Array<{ optionId: string; generationId: unknown }>;
         }
       ).options.map((card) => ({
@@ -169,7 +170,10 @@ describe("attention option tools", () => {
       async () => undefined,
       toolContext(sessionId) as never,
     );
-    expect(pinResult.details).toMatchObject({ ok: true, optionId: "skill:runtime-orientation" });
+    expect(toolOutcomePayload(pinResult)).toMatchObject({
+      ok: true,
+      optionId: "skill:runtime-orientation",
+    });
     expect(runtime.ops.workbench.list(sessionId)).toHaveLength(beforePinCount + 1);
 
     const ignoreResult = await ignoreTool.execute(
@@ -179,7 +183,7 @@ describe("attention option tools", () => {
       async () => undefined,
       toolContext(sessionId) as never,
     );
-    expect(ignoreResult.details).toMatchObject({
+    expect(toolOutcomePayload(ignoreResult)).toMatchObject({
       ok: true,
       optionId: "precedent:docs/solutions/runtime-context.md",
       scope: "session",
@@ -194,7 +198,7 @@ describe("attention option tools", () => {
       async () => undefined,
       toolContext(sessionId) as never,
     );
-    expect(verifyResult.details).toMatchObject({
+    expect(toolOutcomePayload(verifyResult)).toMatchObject({
       ok: true,
       optionId: "skill:runtime-orientation",
       effects: {
@@ -471,7 +475,7 @@ describe("attention option tools", () => {
     expect(text).toContain("precedent:docs/solutions/capability-gate-precedent.md");
     expect(text).toContain("source=repository_precedent");
     expect(text).not.toContain("FULL PRECEDENT BODY SHOULD NOT APPEAR");
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: true,
       options: [
         expect.objectContaining({

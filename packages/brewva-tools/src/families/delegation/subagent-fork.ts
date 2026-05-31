@@ -7,7 +7,7 @@ import type {
   SubagentForkResult,
 } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { failTextResult, textResult, toolDetails, withVerdict } from "../../utils/result.js";
+import { errTextResult, okTextResult, toolOutcomeRecord } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const ForkTurnsSchema = Type.Union([
@@ -110,7 +110,7 @@ export function createSubagentForkTool(options: BrewvaToolOptions): ToolDefiniti
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const adapter = runtime.orchestration?.subagents;
       if (!adapter?.fork) {
-        return failTextResult("Subagent fork is unavailable in this session.", {
+        return errTextResult("Subagent fork is unavailable in this session.", {
           ok: false,
         });
       }
@@ -130,10 +130,10 @@ export function createSubagentForkTool(options: BrewvaToolOptions): ToolDefiniti
       const details = projectForkResultForPublicDetails(result);
 
       if (!result.ok) {
-        return failTextResult(lines.join("\n"), withVerdict(toolDetails(details), "fail"));
+        return errTextResult(lines.join("\n"), toolOutcomeRecord(details));
       }
 
-      return textResult(lines.join("\n"), toolDetails(details));
+      return okTextResult(lines.join("\n"), toolOutcomeRecord(details));
     },
   });
 }

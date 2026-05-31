@@ -14,7 +14,7 @@ const SILENT_PROVIDER: RuntimeProviderPort = {
 
 const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
   async execute() {
-    return { ok: true, content: "" };
+    return { outcome: { kind: "ok", value: {} }, content: "" };
   },
 };
 
@@ -128,7 +128,7 @@ describe("model materialization", () => {
     await runtime.kernel.commitToolResult({
       commitmentId: commitment.commitment.id,
       result: {
-        ok: true,
+        outcome: { kind: "ok", value: {} },
         content: [{ type: "text", text: "tool-result" }],
       },
     });
@@ -161,6 +161,75 @@ describe("model materialization", () => {
     ]);
   });
 
+  test("derives provider isError from typed outcome kind", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-model-outcome-error-projection-")),
+      physics: { mode: "real", provider: SILENT_PROVIDER, toolExecutor: NOOP_TOOL_EXECUTOR },
+    });
+
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        prompt: "run tools",
+      }),
+    );
+
+    const errorCommitment = await runtime.kernel.beginToolCall({
+      sessionId: "s1",
+      toolCallId: "call-error",
+      toolName: "read_file",
+      args: { path: "missing.md" },
+    });
+    if (errorCommitment.kind !== "allow") {
+      throw new Error("expected_tool_allow");
+    }
+    await runtime.kernel.commitToolResult({
+      commitmentId: errorCommitment.commitment.id,
+      result: {
+        outcome: { kind: "err", error: { message: "missing" } },
+        content: "missing",
+      },
+    });
+
+    const inconclusiveCommitment = await runtime.kernel.beginToolCall({
+      sessionId: "s1",
+      toolCallId: "call-inconclusive",
+      toolName: "grep",
+      args: { query: "TODO" },
+    });
+    if (inconclusiveCommitment.kind !== "allow") {
+      throw new Error("expected_tool_allow");
+    }
+    await runtime.kernel.commitToolResult({
+      commitmentId: inconclusiveCommitment.commitment.id,
+      result: {
+        outcome: { kind: "inconclusive", value: { reason: "partial" } },
+        content: "partial",
+      },
+    });
+
+    const prompt = await runtime.model.materialize({
+      sessionId: "s1",
+      budget: { maxInputTokens: 100_000 },
+    });
+
+    const toolMessages = prompt.messages.filter((message) => message.role === "tool");
+    expect(toolMessages).toContainEqual({
+      role: "tool",
+      content: "missing",
+      toolCallId: "call-error",
+      toolName: "read_file",
+      isError: true,
+    });
+    expect(toolMessages).toContainEqual({
+      role: "tool",
+      content: "partial",
+      toolCallId: "call-inconclusive",
+      toolName: "grep",
+      isError: false,
+    });
+  });
+
   test("materializes empty tool results when call metadata is present", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-model-empty-tool-result-")),
@@ -184,10 +253,7 @@ describe("model materialization", () => {
     }
     await runtime.kernel.commitToolResult({
       commitmentId: commitment.commitment.id,
-      result: {
-        ok: true,
-        content: "",
-      },
+      result: { outcome: { kind: "ok", value: {} }, content: "" },
     });
 
     const prompt = await runtime.model.materialize({
@@ -240,7 +306,7 @@ describe("model materialization", () => {
           timestamp: 2,
           payload: {
             commitmentId: "commitment-orphan",
-            result: { ok: true, content: "orphan result" },
+            result: { outcome: { kind: "ok", value: {} }, content: "orphan result" },
           },
         },
         {

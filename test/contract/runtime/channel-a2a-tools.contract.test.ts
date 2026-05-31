@@ -90,7 +90,7 @@ describe("channel a2a tools", () => {
     const text = extractText(result);
     expect(text).toContain("ok=1 failed=1");
     expect(text).toContain("mike: a2a_depth_limit_exceeded");
-    expect((result.details as { verdict?: string } | undefined)?.verdict).toBe("fail");
+    expect(result.outcome.kind).toBe("err");
   });
 
   test("agent_list returns visible agents", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createExecTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireNonEmptyString, requireRecord } from "../../helpers/assertions.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import {
   createRuntimeForExecTests,
   extractTextContent,
@@ -59,7 +60,7 @@ describe("exec command guardrails", () => {
     );
 
     expect(extractTextContent(result)).toContain("Exec rejected");
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       status: "failed",
       reason: "shell_as_tool",
       executionPreflight: {

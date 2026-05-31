@@ -6,7 +6,7 @@ import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import {
   auditPrecedentRecord,
   type PrecedentAuditFinding,
@@ -328,12 +328,12 @@ export function createPrecedentSweepTool(options: BrewvaToolOptions): ToolDefini
       });
 
       if (verdict === "fail") {
-        return failTextResult(text, details);
+        return errTextResult(text, details);
       }
       if (verdict === "inconclusive") {
         return inconclusiveTextResult(text, details);
       }
-      return textResult(text, details);
+      return okTextResult(text, details);
     },
   });
 }

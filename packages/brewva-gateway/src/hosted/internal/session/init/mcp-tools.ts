@@ -12,10 +12,16 @@ import type {
 } from "@brewva/brewva-runtime/config";
 import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
+import {
+  DEFAULT_TOOL_OUTCOME_VERSION,
+  ToolErrorRecordSchema,
+  ToolJsonRecordSchema,
+} from "@brewva/brewva-substrate/tools";
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { ToolCatalog, ToolDescriptor } from "@brewva/brewva-substrate/tools";
 import type { BrewvaToolRequiredCapability } from "@brewva/brewva-tools/contracts";
 import { defineBrewvaTool, type BrewvaToolSurface } from "@brewva/brewva-tools/registry";
+import type { TSchema } from "@sinclair/typebox";
 import type { HostedSessionCustomTool } from "../session-factory.js";
 
 const HOSTED_MCP_TOOL_NAME_PREFIX = "mcp";
@@ -304,6 +310,9 @@ export async function createHostedMcpToolBundle(
             label: descriptor.label,
             description: descriptor.description,
             parameters: descriptor.parameters as never,
+            outputSchema: (descriptor.outputSchema ?? ToolJsonRecordSchema) as TSchema,
+            errorSchema: (descriptor.errorSchema ?? ToolErrorRecordSchema) as TSchema,
+            outcomeVersion: descriptor.outcomeVersion ?? DEFAULT_TOOL_OUTCOME_VERSION,
             async execute(_toolCallId, params, signal) {
               try {
                 const result = await source.adapter.callTool(
@@ -316,16 +325,24 @@ export async function createHostedMcpToolBundle(
                   },
                   { signal },
                 );
+                const details = {
+                  serverId,
+                  mcpToolName: descriptor.name,
+                  hostedToolName,
+                  structuredContent: result.structuredContent,
+                  content: summarizeMcpContentForReceipt(result.content ?? []),
+                };
                 return {
                   content: normalizeMcpToolContent(result),
-                  details: {
-                    serverId,
-                    mcpToolName: descriptor.name,
-                    hostedToolName,
-                    structuredContent: result.structuredContent,
-                    content: summarizeMcpContentForReceipt(result.content ?? []),
-                  },
-                  isError: result.isError,
+                  outcome: result.isError
+                    ? {
+                        kind: "err",
+                        error: details,
+                      }
+                    : {
+                        kind: "ok",
+                        value: details,
+                      },
                 };
               } catch (error) {
                 recordEvent(options, {

@@ -7,7 +7,7 @@ import type { RuntimeProviderPort, RuntimeToolExecutorPort } from "@brewva/brewv
 
 const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
   async execute() {
-    return { ok: true, content: "" };
+    return { outcome: { kind: "ok", value: {} }, content: "" };
   },
 };
 
@@ -211,17 +211,17 @@ describe("runtime turn loop", () => {
     const toolExecutor: RuntimeToolExecutorPort = {
       async execute(commitment, input) {
         await input.onProgress?.({
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: [{ type: "text", text: "starting tool" }],
           metadata: { verdict: "inconclusive" },
         });
         await input.onProgress?.({
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: [{ type: "text", text: "reading README.md" }],
           metadata: { verdict: "inconclusive" },
         });
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: `executed:${commitment.call.toolName}:${commitment.call.toolCallId}`,
         };
       },
@@ -263,7 +263,7 @@ describe("runtime turn loop", () => {
     ]);
     expect(runtime.tape.list("s1", { type: "tool.committed" })[0]?.payload).toMatchObject({
       commitmentId: expect.stringMatching(/^tool:s1:turn_[^:]+:call-1$/u),
-      result: { ok: true, content: "executed:read_file:call-1" },
+      result: { outcome: { kind: "ok", value: {} }, content: "executed:read_file:call-1" },
     });
     expect(runtime.tape.list("s1", { type: "msg.committed" })[0]?.payload).toEqual({
       text: "read complete",
@@ -293,7 +293,7 @@ describe("runtime turn loop", () => {
     const toolExecutor: RuntimeToolExecutorPort = {
       async execute() {
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: "docs/architecture/system-architecture.md",
         };
       },
@@ -354,7 +354,7 @@ describe("runtime turn loop", () => {
     const toolExecutor: RuntimeToolExecutorPort = {
       async execute() {
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: "packages/brewva-runtime/src/runtime/turn/impl.ts",
         };
       },
@@ -456,7 +456,7 @@ describe("runtime turn loop", () => {
     const toolExecutor: RuntimeToolExecutorPort = {
       async execute() {
         executed = true;
-        return { ok: true, content: "should not execute" };
+        return { outcome: { kind: "ok", value: {} }, content: "should not execute" };
       },
     };
     const runtime = createBrewvaRuntime({
@@ -563,7 +563,7 @@ describe("runtime turn loop", () => {
     const toolExecutor: RuntimeToolExecutorPort = {
       async execute(commitment) {
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: `executed:${commitment.call.toolName}:${commitment.call.toolCallId}`,
         };
       },
@@ -625,7 +625,7 @@ describe("runtime turn loop", () => {
     const toolExecutor: RuntimeToolExecutorPort = {
       async execute(commitment) {
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: `executed:${commitment.call.toolName}:${commitment.call.toolCallId}`,
         };
       },
@@ -686,7 +686,7 @@ describe("runtime turn loop", () => {
       async execute(commitment) {
         executedTools += 1;
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: `executed:${commitment.call.toolCallId}`,
         };
       },

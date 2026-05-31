@@ -79,9 +79,13 @@ describe("substrate file tools", () => {
     expect(readFileSync(filePath, "utf8")).toContain("const alpha = 10;");
     expect(readFileSync(filePath, "utf8")).toContain("const beta = 20;");
     expect(extractText(result)).toContain("Successfully replaced 2 block(s)");
-    expect(result.details?.firstChangedLine).toBe(1);
-    expect(result.details?.diff).toContain("-1 const alpha = 1;");
-    expect(result.details?.diff).toContain("+1 const alpha = 10;");
+    expect(result.outcome.kind).toBe("ok");
+    if (result.outcome.kind !== "ok") {
+      throw new Error("Expected edit result to be ok");
+    }
+    expect(result.outcome.value.firstChangedLine).toBe(1);
+    expect(result.outcome.value.diff).toContain("-1 const alpha = 1;");
+    expect(result.outcome.value.diff).toContain("+1 const alpha = 10;");
 
     cleanupTestWorkspace(workspace);
   });

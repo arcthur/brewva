@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../../registry/runtime-bound-tool.js";
-import { failTextResult, textResult } from "../../../../utils/result.js";
+import { errTextResult, okTextResult } from "../../../../utils/result.js";
 import { getSessionId } from "../../../../utils/session.js";
 import { buildArtifact, resolveWritablePath } from "../artifacts.js";
 import { executeBrowserCommand } from "../command.js";
@@ -43,7 +43,7 @@ export function createBrowserScreenshotTool(
         defaultFileName: "screenshot.png",
       });
       if (!path.ok) {
-        return failTextResult(`[Browser Screenshot]\nstatus: failed\nreason: ${path.message}`, {
+        return errTextResult(`[Browser Screenshot]\nstatus: failed\nreason: ${path.message}`, {
           ok: false,
           reason: path.reason,
           requestedPath: path.requestedPath,
@@ -70,7 +70,7 @@ export function createBrowserScreenshotTool(
         });
       }
       const artifact = buildArtifact("browser_screenshot", path.artifactRef, path.absolutePath);
-      return textResult(
+      return okTextResult(
         buildStatusPayload({
           header: "[Browser Screenshot]",
           sessionName,

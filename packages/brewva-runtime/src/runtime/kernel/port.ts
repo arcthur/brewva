@@ -61,8 +61,24 @@ export interface CommitToolResultInput {
   readonly result: ToolExecutionResult;
 }
 
+export type ToolExecutionOutcome<TOutput = unknown, TError = unknown> =
+  | {
+      readonly kind: "ok";
+      readonly value: TOutput;
+    }
+  | {
+      readonly kind: "err";
+      readonly error: TError;
+    }
+  | {
+      readonly kind: "inconclusive";
+      readonly reason?: string;
+      readonly value?: TOutput;
+      readonly evidenceRefs?: readonly string[];
+    };
+
 export interface ToolExecutionResult {
-  readonly ok: boolean;
+  readonly outcome: ToolExecutionOutcome;
   readonly content: ToolExecutionResultContent;
   readonly metadata?: Record<string, JsonValue>;
 }

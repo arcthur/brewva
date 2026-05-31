@@ -53,6 +53,12 @@
       "import": "./dist/text.js",
       "default": "./dist/text.js"
     },
+    "./tool-outcome-version": {
+      "types": "./dist/tool-outcome-version.d.ts",
+      "bun": "./src/tool-outcome-version.ts",
+      "import": "./dist/tool-outcome-version.js",
+      "default": "./dist/tool-outcome-version.js"
+    },
     "./unknown": {
       "types": "./dist/unknown.d.ts",
       "bun": "./src/unknown.ts",

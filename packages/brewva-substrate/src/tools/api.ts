@@ -29,6 +29,21 @@ export {
   defineBrewvaTool,
 } from "../contracts/tool.js";
 export {
+  assertSupportedToolOutcomeVersion,
+  DEFAULT_TOOL_OUTCOME_VERSION,
+  SUPPORTED_TOOL_OUTCOME_VERSIONS,
+  ToolErrorRecordSchema,
+  ToolJsonRecordSchema,
+  ToolJsonValueSchema,
+  isSupportedToolOutcomeVersion,
+  normalizeOutcomeJson,
+  outcomeDisplayVerdict,
+  outcomeIsWireError,
+  outcomePayload,
+  type SupportedToolOutcomeVersion,
+  validateOutcomeAgainstSchemas,
+} from "./outcome.js";
+export {
   TOOL_EXECUTION_PHASES,
   advanceToolExecutionPhase,
   isToolExecutionPhaseTerminal,

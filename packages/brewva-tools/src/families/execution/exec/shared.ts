@@ -1,7 +1,7 @@
 import { relative, resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { sha256Hex } from "@brewva/brewva-std/hash";
-import { textResult } from "../../../utils/result.js";
+import { textResultForOutcome, type ToolTextOutcomeKind } from "../../../utils/result.js";
 
 export const DEFAULT_YIELD_MS = 10_000;
 export const MAX_TIMEOUT_SEC = 7_200;
@@ -165,8 +165,12 @@ export function resolveWorkspaceRootForCwd(cwd: string, allowedRoots: readonly s
   return matches[0] ?? resolve(cwd);
 }
 
-export function execDisplayResult(text: string, details: Record<string, unknown>) {
-  return textResult(text, details, {
+export function execDisplayResult(
+  text: string,
+  payload: Record<string, unknown>,
+  outcomeKind: ToolTextOutcomeKind = "ok",
+) {
+  return textResultForOutcome(outcomeKind, text, payload, {
     detailsText: text,
     rawText: text,
   });

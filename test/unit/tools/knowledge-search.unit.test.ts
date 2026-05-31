@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { findKnowledgeDocByRelativePath } from "@brewva/brewva-recall/knowledge";
 import { createKnowledgeSearchTool } from "@brewva/brewva-tools/memory";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -62,7 +63,7 @@ updated_at: 2026-04-19
       { cwd: workspace } as never,
     );
 
-    const details = result.details as
+    const details = toolOutcomePayload(result) as
       | {
           results?: Array<{
             path: string;
@@ -233,7 +234,7 @@ This note mentions replay experiments but is not the canonical precedent.
     );
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
-    const details = result.details as
+    const details = toolOutcomePayload(result) as
       | {
           results?: Array<{
             path: string;
@@ -322,7 +323,7 @@ Always-on reviewer lanes should stay active even when metadata is incomplete.
       undefined,
       { cwd: workspace } as never,
     );
-    const filteredDetails = filtered.details as
+    const filteredDetails = toolOutcomePayload(filtered) as
       | {
           results?: Array<{
             sourceType: string;
@@ -406,7 +407,7 @@ Architecture guidance for replay ordering.
       { cwd: workspace } as never,
     );
 
-    const details = result.details as
+    const details = toolOutcomePayload(result) as
       | {
           results?: Array<{ sourceType: string }>;
           searchPlan?: { mode: string; broadened: boolean; solutionResultCount: number };
@@ -477,7 +478,7 @@ The runtime contract covers broader system behavior but not this specific replay
       { cwd: workspace } as never,
     );
 
-    const details = result.details as
+    const details = toolOutcomePayload(result) as
       | {
           results?: Array<{ path: string; sourceType: string; matchReasons: string[] }>;
           searchPlan?: { mode: string };
@@ -548,7 +549,7 @@ Replay ordering and cursor movement are normative runtime contracts.
       { cwd: workspace } as never,
     );
 
-    const details = result.details as
+    const details = toolOutcomePayload(result) as
       | {
           results?: Array<{ sourceType: string; path: string; authorityRank: number }>;
           searchPlan?: { queryIntent: string };

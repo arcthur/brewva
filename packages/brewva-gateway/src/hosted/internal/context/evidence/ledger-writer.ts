@@ -2,6 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import {
+  outcomeIsError,
+  outcomeVerdict,
+  type BrewvaOutcome,
+} from "@brewva/brewva-vocabulary/outcome";
 import { LRUCache } from "lru-cache";
 import {
   finishRuntimeToolInvocation,
@@ -49,16 +54,6 @@ function normalizeToolResultStatus(
   if (typeof raw !== "string") return undefined;
   const normalized = raw.trim().toLowerCase();
   return normalized.length > 0 ? normalized : undefined;
-}
-
-function normalizeToolResultVerdict(
-  details: Record<string, unknown> | undefined,
-): ToolOutcomeVerdict | undefined {
-  const raw = details?.verdict;
-  if (raw === "pass" || raw === "fail" || raw === "inconclusive") {
-    return raw;
-  }
-  return undefined;
 }
 
 function normalizeArtifactOverride(
@@ -129,21 +124,54 @@ function validateArtifactOverride(
   }
 }
 
-function resolveToolOutcome(input: {
+function resolveToolOutcome(input: { isError: boolean; outcome?: BrewvaOutcome }): {
   isError: boolean;
-  details: Record<string, unknown> | undefined;
-}): { isError: boolean; verdict: ToolOutcomeVerdict } {
-  const explicitVerdict = normalizeToolResultVerdict(input.details);
-  if (explicitVerdict) {
+  verdict: ToolOutcomeVerdict;
+} {
+  if (input.outcome) {
     return {
-      isError: input.isError,
-      verdict: explicitVerdict,
+      isError: outcomeIsError(input.outcome),
+      verdict: outcomeVerdict(input.outcome),
     };
   }
   return {
     isError: input.isError,
     verdict: input.isError ? "fail" : "pass",
   };
+}
+
+function readToolOutcome(value: unknown): BrewvaOutcome | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.kind === "ok") {
+    return { kind: "ok", value: record.value ?? null };
+  }
+  if (record.kind === "err") {
+    return { kind: "err", error: record.error ?? null };
+  }
+  if (record.kind === "inconclusive") {
+    return {
+      kind: "inconclusive",
+      ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
+      ...(record.value !== undefined ? { value: record.value } : {}),
+    };
+  }
+  return undefined;
+}
+
+function outcomeDetailsRecord(
+  outcome: BrewvaOutcome | undefined,
+): Record<string, unknown> | undefined {
+  if (!outcome) {
+    return undefined;
+  }
+  const value =
+    outcome.kind === "err" ? outcome.error : outcome.kind === "ok" ? outcome.value : outcome.value;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function extractToolExecutionResultText(result: unknown): string {
@@ -514,7 +542,7 @@ export function registerLedgerWriter(
     const details = event.details as Record<string, unknown> | undefined;
     const outcome = resolveToolOutcome({
       isError: event.isError,
-      details,
+      outcome: readToolOutcome((event as { outcome?: unknown }).outcome),
     });
     const outputText = extractTextContent(event.content);
     const recording = recordToolOutcome(runtime, {
@@ -573,15 +601,11 @@ export function registerLedgerWriter(
       event.result && typeof event.result === "object" && !Array.isArray(event.result)
         ? (event.result as Record<string, unknown>)
         : undefined;
-    const resultDetails =
-      rawResult?.details &&
-      typeof rawResult.details === "object" &&
-      !Array.isArray(rawResult.details)
-        ? (rawResult.details as Record<string, unknown>)
-        : undefined;
+    const rawOutcome = readToolOutcome(rawResult?.outcome);
+    const resultDetails = outcomeDetailsRecord(rawOutcome);
     const outcome = resolveToolOutcome({
       isError: event.isError,
-      details: resultDetails,
+      outcome: rawOutcome,
     });
 
     recordToolOutcome(runtime, {

@@ -4,7 +4,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";
 import { readObservabilitySnapshotState } from "../../../runtime-port/observability.js";
-import { textResult } from "../../../utils/result.js";
+import { okTextResult } from "../../../utils/result.js";
 import { getSessionId } from "../../../utils/session.js";
 
 function formatPercent(value: number | null): string {
@@ -98,7 +98,7 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
         lines.push(`verification_reason: ${verificationPayload.reason}`);
       }
 
-      return textResult(lines.join("\n"), {
+      return okTextResult(lines.join("\n"), {
         ok: true,
         tape,
         context: {

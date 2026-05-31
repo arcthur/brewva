@@ -6,7 +6,7 @@ import {
   recordToolRuntimeEvent,
   resolveToolRuntimeContextPort,
 } from "../../runtime-port/extensions.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 function normalizeReason(input: unknown): string | undefined {
@@ -64,7 +64,7 @@ export function createWorkbenchCompactTool(options: BrewvaBundledToolOptions): T
           },
         });
         if (compactError) {
-          return failTextResult(`Session compaction request failed (${compactError}).`, {
+          return errTextResult(`Session compaction request failed (${compactError}).`, {
             ok: false,
             error: compactError,
           });
@@ -88,13 +88,13 @@ export function createWorkbenchCompactTool(options: BrewvaBundledToolOptions): T
             error: errorMessage,
           },
         });
-        return failTextResult(`Session compaction request failed (${errorMessage}).`, {
+        return errTextResult(`Session compaction request failed (${errorMessage}).`, {
           ok: false,
           error: errorMessage,
         });
       }
 
-      return textResult(
+      return okTextResult(
         "Workbench compaction requested; the gateway will resume the interrupted turn after compaction.",
         {
           ok: true,

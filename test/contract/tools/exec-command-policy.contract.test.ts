@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createExecTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireRecord } from "../../helpers/assertions.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import {
   createRuntimeForExecTests,
   extractTextContent,
@@ -45,13 +46,17 @@ describe("exec command policy routing", () => {
     );
 
     expect(extractTextContent(result)).toContain("{");
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       backend: "virtual_readonly",
       evidenceKind: "exploration",
       verificationEvidence: false,
       isolation: "materialized_workspace_subset",
     });
-    const details = requireRecord(result.details, "Expected exec details.");
+    expect(result.outcome.kind).toBe("ok");
+    if (result.outcome.kind !== "ok") {
+      throw new Error("Expected exec result to be ok");
+    }
+    const details = requireRecord(result.outcome.value, "Expected exec outcome value.");
     expect(details.materializedPaths).toEqual(["package.json"]);
     expect(details.executionPreflight).toMatchObject({
       decision: "allow",
@@ -105,7 +110,7 @@ describe("exec command policy routing", () => {
     );
 
     expect(extractTextContent(result)).toContain("Exec rejected");
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       status: "failed",
       reason: "shell_as_tool",
       executionPreflight: {
@@ -151,7 +156,7 @@ describe("exec command policy routing", () => {
       fakeContext("s13-exec-readonly-bound-env"),
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       backend: "virtual_readonly",
       evidenceKind: "exploration",
       verificationEvidence: false,
@@ -228,7 +233,7 @@ describe("exec command policy routing", () => {
     );
 
     expect(extractTextContent(result)).toContain("name");
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       backend: "virtual_readonly",
       materializedPaths: ["package.json"],
     });
@@ -266,7 +271,7 @@ describe("exec command policy routing", () => {
       fakeContext("s13-exec-unsupported-box"),
     );
 
-    expect((result.details as { backend?: string }).backend).toBe("box");
+    expect((toolOutcomePayload(result) as { backend?: string }).backend).toBe("box");
     expect(eventTypes(events)).toContain("box.exec.started");
     const blocked = requireDefined(
       events.find((event) => event.type === "box.exec.started"),
@@ -299,7 +304,7 @@ describe("exec command policy routing", () => {
       fakeContext("s13-exec-readonly-absolute-path"),
     );
 
-    expect((result.details as { backend?: string }).backend).toBe("box");
+    expect((toolOutcomePayload(result) as { backend?: string }).backend).toBe("box");
     expect(eventTypes(events)).toContain("box.exec.started");
     const routed = requireDefined(
       events.find((event) => event.type === "box.exec.started"),
@@ -348,7 +353,7 @@ describe("exec command policy routing", () => {
 
     expect(extractTextContent(result)).toContain("Exec rejected (box_unmapped_host_path).");
     expect(extractTextContent(result)).not.toContain("(no output)");
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       status: "failed",
       reason: "box_unmapped_host_path",
       unmappedPaths: [siblingRoot],

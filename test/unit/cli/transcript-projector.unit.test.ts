@@ -130,6 +130,41 @@ describe("shell transcript projector", () => {
     expect(phases.map((phase) => phase.kind)).toEqual(["model_streaming", "idle"]);
   });
 
+  test("projects runtime inconclusive tool frames with typed outcome", () => {
+    const frames: SessionWireFrame[] = [
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-tool-finish",
+        ts: 1_000,
+        source: "live",
+        durability: "cache",
+        type: "tool.finished",
+        turnId: "turn-11",
+        attemptId: "attempt-1",
+        toolCallId: asBrewvaToolCallId("tool-poll-1"),
+        toolName: asBrewvaToolName("poll"),
+        verdict: "inconclusive",
+        isError: false,
+        text: "still running",
+        details: { reason: "process_running", pid: 1234 },
+      },
+    ];
+
+    const event = projectRuntimeTurnSessionWireFrames(frames).find(
+      (candidate): candidate is BrewvaPromptSessionEvent & { type: "tool_execution_end" } =>
+        candidate.type === "tool_execution_end",
+    );
+    const result = event?.result as Record<string, unknown> | undefined;
+
+    expect(event?.isError).toBe(false);
+    expect(result?.outcome).toEqual({
+      kind: "inconclusive",
+      reason: "process_running",
+      value: { reason: "process_running", pid: 1234 },
+    });
+  });
+
   test("projects runtime approval, recovery, and post-tool phases", () => {
     const frames: SessionWireFrame[] = [
       {

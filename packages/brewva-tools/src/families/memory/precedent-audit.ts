@@ -3,7 +3,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { auditPrecedentRecord } from "./precedent-audit/audit.js";
 import { loadAuditCandidate } from "./precedent-audit/candidate.js";
 import { formatAuditText } from "./precedent-audit/render.js";
@@ -48,7 +48,7 @@ export function createPrecedentAuditTool(options: BrewvaToolOptions): ToolDefini
         rawRecord: params.solution_record,
       });
       if (!loaded.ok) {
-        return failTextResult(loaded.message, {
+        return errTextResult(loaded.message, {
           ok: false,
           ...loaded.details,
         });
@@ -66,12 +66,12 @@ export function createPrecedentAuditTool(options: BrewvaToolOptions): ToolDefini
         ...audit,
       };
       if (audit.verdict === "fail") {
-        return failTextResult(formatAuditText(audit), details);
+        return errTextResult(formatAuditText(audit), details);
       }
       if (audit.verdict === "inconclusive") {
         return inconclusiveTextResult(formatAuditText(audit), details);
       }
-      return textResult(formatAuditText(audit), details);
+      return okTextResult(formatAuditText(audit), details);
     },
   });
 }

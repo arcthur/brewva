@@ -11,7 +11,7 @@ import {
   noteWorkbench,
   undoWorkbenchEviction,
 } from "../../runtime-port/workbench.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 function readNonEmptyString(value: unknown): string | undefined {
@@ -77,7 +77,7 @@ export function createWorkbenchNoteTool(options: BrewvaToolOptions): ToolDefinit
       const reason = readNonEmptyString(params.reason);
       const sourceRefs = readStringList(params.source_refs);
       if (!content || !reason || sourceRefs.length === 0) {
-        return failTextResult("workbench_note rejected (missing_content_reason_or_source_refs).", {
+        return errTextResult("workbench_note rejected (missing_content_reason_or_source_refs).", {
           ok: false,
           error: "missing_content_reason_or_source_refs",
         });
@@ -91,13 +91,13 @@ export function createWorkbenchNoteTool(options: BrewvaToolOptions): ToolDefinit
         ...(retentionHint ? { retentionHint } : {}),
       });
       if (!entry) {
-        return failTextResult("workbench_note unavailable (missing_runtime_workbench).", {
+        return errTextResult("workbench_note unavailable (missing_runtime_workbench).", {
           ok: false,
           error: "missing_runtime_workbench",
         });
       }
 
-      return textResult(
+      return okTextResult(
         [
           "[WorkbenchNote]",
           formatEntryHeader(entry),
@@ -155,7 +155,7 @@ export function createWorkbenchEvictTool(options: BrewvaToolOptions): ToolDefini
       const reason = readNonEmptyString(params.reason);
       const invalidRefs = listInvalidWorkbenchEvictionSpanRefs(spanRefs);
       if (spanRefs.length === 0 || !reason || invalidRefs.length > 0) {
-        return failTextResult("workbench_evict rejected (missing_span_refs_or_reason).", {
+        return errTextResult("workbench_evict rejected (missing_span_refs_or_reason).", {
           ok: false,
           error: invalidRefs.length > 0 ? "invalid_span_refs" : "missing_span_refs_or_reason",
           invalidRefs,
@@ -171,13 +171,13 @@ export function createWorkbenchEvictTool(options: BrewvaToolOptions): ToolDefini
         preservedQuotes,
       });
       if (!entry) {
-        return failTextResult("workbench_evict unavailable (missing_runtime_workbench).", {
+        return errTextResult("workbench_evict unavailable (missing_runtime_workbench).", {
           ok: false,
           error: "missing_runtime_workbench",
         });
       }
 
-      return textResult(
+      return okTextResult(
         [
           "[WorkbenchEvict]",
           formatEntryHeader(entry),
@@ -225,7 +225,7 @@ export function createWorkbenchUndoEvictTool(options: BrewvaToolOptions): ToolDe
       const entryId = readNonEmptyString(params.entry_id);
       const reason = readNonEmptyString(params.reason);
       if (!entryId || !reason) {
-        return failTextResult("workbench_undo_evict rejected (missing_entry_id_or_reason).", {
+        return errTextResult("workbench_undo_evict rejected (missing_entry_id_or_reason).", {
           ok: false,
           error: "missing_entry_id_or_reason",
         });
@@ -233,20 +233,20 @@ export function createWorkbenchUndoEvictTool(options: BrewvaToolOptions): ToolDe
 
       const result = undoWorkbenchEviction(runtime, getSessionId(ctx), entryId, reason);
       if (!result) {
-        return failTextResult("workbench_undo_evict unavailable (missing_runtime_workbench).", {
+        return errTextResult("workbench_undo_evict unavailable (missing_runtime_workbench).", {
           ok: false,
           error: "missing_runtime_workbench",
         });
       }
       if (!result.undone || !result.entry) {
-        return failTextResult("workbench_undo_evict rejected (not_reversible_or_missing).", {
+        return errTextResult("workbench_undo_evict rejected (not_reversible_or_missing).", {
           ok: false,
           error: "not_reversible_or_missing",
           entryId,
         });
       }
 
-      return textResult(
+      return okTextResult(
         [
           "[WorkbenchUndoEvict]",
           formatEntryHeader(result.entry),

@@ -8,7 +8,7 @@ import type { BrewvaBundledToolOptions } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../../runtime-port/extensions.js";
-import { inconclusiveTextResult, textResult } from "../../../utils/result.js";
+import { inconclusiveTextResult, okTextResult } from "../../../utils/result.js";
 import { getSessionId } from "../../../utils/session.js";
 import {
   OBS_AGGREGATION_SCHEMA,
@@ -239,7 +239,7 @@ export function createObsSloAssertTool(options: BrewvaBundledToolOptions): ToolD
         `next_step: ${nextStep}`,
       ];
 
-      return textResult(lines.join("\n"), {
+      return okTextResult(lines.join("\n"), {
         ok: true,
         verdict,
         queryRef: artifactOverride?.artifactRef ?? null,

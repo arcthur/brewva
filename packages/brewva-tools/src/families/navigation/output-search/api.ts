@@ -8,7 +8,7 @@ import {
   recordToolRuntimeEvent,
   resolveToolRuntimeEventPort,
 } from "../../../runtime-port/extensions.js";
-import { inconclusiveTextResult, textResult } from "../../../utils/result.js";
+import { inconclusiveTextResult, okTextResult } from "../../../utils/result.js";
 import { getSessionId } from "../../../utils/session.js";
 import { getPreparedArtifact } from "./artifact-cache.js";
 import { extractArtifactCandidates } from "./artifact-candidates.js";
@@ -140,7 +140,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
       });
 
       if (candidates.length === 0) {
-        return textResult("[OutputSearch]\nNo artifact candidates found for current session.", {
+        return okTextResult("[OutputSearch]\nNo artifact candidates found for current session.", {
           sessionId,
           artifactsScanned: 0,
           queries: queryList,
@@ -198,7 +198,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
         if (candidates.length > 24) {
           lines.push(`... (${candidates.length - 24} more artifacts omitted)`);
         }
-        return textResult(clampOutput(lines.join("\n"), maxOutputChars), {
+        return okTextResult(clampOutput(lines.join("\n"), maxOutputChars), {
           sessionId,
           mode: "inventory",
           artifactsScanned: candidates.length,
@@ -364,7 +364,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
         matchLayers,
       });
 
-      return textResult(clampOutput(`${summary}${throttleWarning}`, maxOutputChars), {
+      return okTextResult(clampOutput(`${summary}${throttleWarning}`, maxOutputChars), {
         sessionId,
         queryCount: queryList.length,
         artifactsConsidered: candidates.length,

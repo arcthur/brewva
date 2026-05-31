@@ -1,8 +1,8 @@
 import { addMilliseconds, differenceInMilliseconds, isBefore } from "date-fns";
 import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
-import { textResult, withVerdict } from "../../../utils/result.js";
+import { errTextResult, textResultForOutcome } from "../../../utils/result.js";
 import { resolveConfiguredBoxPlane, resolveRuntimeBoxConfig } from "../box-plane-runtime.js";
-import { normalizeOutputText, readDetachedLog, resolveProcessVerdict } from "./render.js";
+import { normalizeOutputText, readDetachedLog, resolveProcessOutcomeKind } from "./render.js";
 import type { ProcessAction } from "./schema.js";
 
 export async function executeDetachedBoxIdentityAction(input: {
@@ -15,10 +15,10 @@ export async function executeDetachedBoxIdentityAction(input: {
   runtime?: BrewvaBundledToolRuntime;
 }) {
   if (!["poll", "log", "kill"].includes(input.action)) {
-    return textResult(
-      `Action ${input.action} requires a managed sessionId.`,
-      withVerdict({ status: "failed", backend: "box" }, "fail"),
-    );
+    return errTextResult(`Action ${input.action} requires a managed sessionId.`, {
+      status: "failed",
+      backend: "box",
+    });
   }
 
   const boxConfig = resolveRuntimeBoxConfig(input.runtime);
@@ -27,25 +27,22 @@ export async function executeDetachedBoxIdentityAction(input: {
   if (input.action === "kill") {
     const execution = await plane.reattach(input.boxId, input.executionId);
     if (!execution) {
-      return textResult(
+      return errTextResult(
         `No detached box execution found for ${input.boxId}/${input.executionId}`,
-        withVerdict({ status: "failed", backend: "box" }, "fail"),
-      );
-    }
-    await execution.kill("SIGKILL");
-    return textResult(
-      `Termination requested for box execution ${input.executionId}.`,
-      withVerdict(
         {
           status: "failed",
           backend: "box",
-          boxId: input.boxId,
-          executionId: input.executionId,
-          reattached: true,
         },
-        "fail",
-      ),
-    );
+      );
+    }
+    await execution.kill("SIGKILL");
+    return errTextResult(`Termination requested for box execution ${input.executionId}.`, {
+      status: "failed",
+      backend: "box",
+      boxId: input.boxId,
+      executionId: input.executionId,
+      reattached: true,
+    });
   }
 
   let observation = await observeDetachedBoxExecution({
@@ -55,9 +52,12 @@ export async function executeDetachedBoxIdentityAction(input: {
     timeoutMs: input.action === "poll" ? input.timeoutMs : 0,
   });
   if (!observation) {
-    return textResult(
+    return errTextResult(
       `No detached box execution found for ${input.boxId}/${input.executionId}`,
-      withVerdict({ status: "failed", backend: "box" }, "fail"),
+      {
+        status: "failed",
+        backend: "box",
+      },
     );
   }
 
@@ -73,19 +73,17 @@ export async function executeDetachedBoxIdentityAction(input: {
       ? "\n\nProcess still running."
       : `\n\nProcess exited with code ${observation.exitCode ?? 0}.`;
 
-  return textResult(
+  return textResultForOutcome(
+    resolveProcessOutcomeKind(observation.status),
     input.action === "poll" ? `${content}${suffix}` : content,
-    withVerdict(
-      {
-        status: observation.status,
-        backend: "box",
-        boxId: input.boxId,
-        executionId: input.executionId,
-        exitCode: observation.exitCode,
-        reattached: true,
-      },
-      resolveProcessVerdict(observation.status),
-    ),
+    {
+      status: observation.status,
+      backend: "box",
+      boxId: input.boxId,
+      executionId: input.executionId,
+      exitCode: observation.exitCode,
+      reattached: true,
+    },
   );
 }
 

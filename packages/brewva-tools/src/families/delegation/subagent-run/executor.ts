@@ -5,7 +5,7 @@ import type {
   SubagentReturnMode,
   SubagentRunRequest,
 } from "../../../contracts/index.js";
-import { failTextResult, textResult, toolDetails, withVerdict } from "../../../utils/result.js";
+import { errTextResult, okTextResult, toolOutcomeRecord } from "../../../utils/result.js";
 import { deliverSubagentOutcome } from "./delivery.js";
 import {
   projectRunResultForPublicDetails,
@@ -58,15 +58,15 @@ export async function executeSubagentToolWithRequest(input: {
   completionVerb: string;
   startVerb: string;
   delivery?: NonNullable<SubagentRunRequest["delivery"]>;
-}): Promise<ReturnType<typeof textResult>> {
+}): Promise<ReturnType<typeof okTextResult>> {
   if (input.waitMode === "start") {
     if (!input.adapter.start) {
-      return failTextResult("Subagent background start is unavailable in this session.", {
+      return errTextResult("Subagent background start is unavailable in this session.", {
         ok: false,
       });
     }
     if (input.returnMode === "supplemental") {
-      return failTextResult(
+      return errTextResult(
         "Background subagent delivery must be text_only; inspect durable results later with subagent_status or worker_results_*.",
         {
           ok: false,
@@ -101,10 +101,10 @@ export async function executeSubagentToolWithRequest(input: {
       input.detailsMode === "public"
         ? projectStartResultForPublicDetails(started, input.delegate)
         : started;
-    return textResult(
-      lines.join("\n"),
-      started.ok ? toolDetails(details) : withVerdict(toolDetails(details), "fail"),
-    );
+    if (!started.ok) {
+      return errTextResult(lines.join("\n"), toolOutcomeRecord(details));
+    }
+    return okTextResult(lines.join("\n"), toolOutcomeRecord(details));
   }
 
   const result = await input.adapter.run({
@@ -112,9 +112,9 @@ export async function executeSubagentToolWithRequest(input: {
     request: input.request,
   });
   if (!result.ok) {
-    return failTextResult(
+    return errTextResult(
       `${input.completionVerb} failed for delegate=${input.delegate}: ${result.error}`,
-      toolDetails(result),
+      toolOutcomeRecord(result),
     );
   }
 
@@ -145,12 +145,15 @@ export async function executeSubagentToolWithRequest(input: {
     );
   }
   const details = {
-    ...toolDetails(
+    ...toolOutcomeRecord(
       input.detailsMode === "public"
         ? projectRunResultForPublicDetails(result, input.delegate)
         : result,
     ),
     delivery,
   };
-  return textResult(lines.join("\n"), failures.length > 0 ? withVerdict(details, "fail") : details);
+  if (failures.length > 0) {
+    return errTextResult(lines.join("\n"), details);
+  }
+  return okTextResult(lines.join("\n"), details);
 }

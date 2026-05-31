@@ -58,6 +58,7 @@ export type {
   ToolCommitment,
   ToolCommitmentDecision,
   ToolCommitReceipt,
+  ToolExecutionOutcome,
   ToolExecutionResult,
   ToolExecutionResultContent,
 } from "./kernel/port.js";
@@ -87,6 +88,10 @@ export type {
   BaselineView,
   CostSummaryView,
   RecoveryHistoryView,
+  StepProjectionAuthority,
+  StepProjectionRecord,
+  StepProjectionStatus,
+  StepProjectionView,
   TapeCommitPort,
   TapePort,
   TapeQuery,

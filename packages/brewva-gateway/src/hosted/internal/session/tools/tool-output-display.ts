@@ -1,3 +1,8 @@
+import {
+  outcomeIsError,
+  outcomeVerdict,
+  type BrewvaOutcome,
+} from "@brewva/brewva-vocabulary/outcome";
 import type { ToolOutputDisplayView } from "@brewva/brewva-vocabulary/wire";
 import { distillToolOutput } from "./tool-output-distiller.js";
 
@@ -16,22 +21,29 @@ export interface ResolvedToolDisplay {
 
 const SUMMARY_CHAR_LIMIT = 1_200;
 
-function normalizeToolDisplayVerdict(value: unknown): ToolDisplayVerdict | undefined {
-  if (value === "pass" || value === "fail" || value === "inconclusive") {
-    return value;
-  }
-  return undefined;
-}
-
-function extractResultDetails(result: unknown): Record<string, unknown> | undefined {
+function extractResultOutcome(result: unknown): BrewvaOutcome | undefined {
   if (!result || typeof result !== "object" || Array.isArray(result)) {
     return undefined;
   }
-  const details = (result as { details?: unknown }).details;
-  if (!details || typeof details !== "object" || Array.isArray(details)) {
+  const outcome = (result as { outcome?: unknown }).outcome;
+  if (!outcome || typeof outcome !== "object" || Array.isArray(outcome)) {
     return undefined;
   }
-  return details as Record<string, unknown>;
+  const record = outcome as Record<string, unknown>;
+  if (record.kind === "ok") {
+    return { kind: "ok", value: record.value ?? null };
+  }
+  if (record.kind === "err") {
+    return { kind: "err", error: record.error ?? null };
+  }
+  if (record.kind === "inconclusive") {
+    return {
+      kind: "inconclusive",
+      ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
+      ...(record.value !== undefined ? { value: record.value } : {}),
+    };
+  }
+  return undefined;
 }
 
 function extractExplicitDisplay(result: unknown): ToolOutputDisplayView | undefined {
@@ -84,12 +96,8 @@ export function resolveToolDisplayVerdict(input: {
   isError: boolean;
   result: unknown;
 }): ToolDisplayVerdict {
-  if (input.result && typeof input.result === "object" && !Array.isArray(input.result)) {
-    const explicit = normalizeToolDisplayVerdict((input.result as { verdict?: unknown }).verdict);
-    if (explicit) return explicit;
-  }
-  const detailsVerdict = normalizeToolDisplayVerdict(extractResultDetails(input.result)?.verdict);
-  if (detailsVerdict) return detailsVerdict;
+  const outcome = extractResultOutcome(input.result);
+  if (outcome) return outcomeVerdict(outcome);
   return input.isError ? "fail" : "pass";
 }
 
@@ -136,13 +144,15 @@ export function extractToolResultText(result: unknown): string {
 
 export function resolveToolDisplay(input: ResolveToolDisplayTextInput): ResolvedToolDisplay {
   const rawText = extractToolResultText(input.result);
+  const outcome = extractResultOutcome(input.result);
+  const isError = outcome ? outcomeIsError(outcome) : input.isError;
   const verdict = resolveToolDisplayVerdict({
-    isError: input.isError,
+    isError,
     result: input.result,
   });
   const distillation = distillToolOutput({
     toolName: input.toolName,
-    isError: input.isError,
+    isError,
     verdict,
     outputText: rawText,
   });

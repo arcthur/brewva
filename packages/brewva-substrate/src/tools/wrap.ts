@@ -16,9 +16,10 @@ export interface BrewvaToolInvocation<TParams = unknown> {
 
 export interface BrewvaToolInvocationResult<
   TParams = unknown,
-  TDetails = unknown,
+  TOutput = unknown,
+  TError = unknown,
 > extends BrewvaToolInvocation<TParams> {
-  result: BrewvaToolResult<TDetails>;
+  result: BrewvaToolResult<TOutput, TError>;
 }
 
 export interface BrewvaToolInvocationError<
@@ -27,12 +28,15 @@ export interface BrewvaToolInvocationError<
   error: unknown;
 }
 
-export interface BrewvaToolWrapper<TParams = unknown, TDetails = unknown> {
+export interface BrewvaToolWrapper<TParams = unknown, TOutput = unknown, TError = unknown> {
   before?(input: BrewvaToolInvocation<TParams>): void | Promise<void>;
-  after?(input: BrewvaToolInvocationResult<TParams, TDetails>): void | Promise<void>;
+  after?(input: BrewvaToolInvocationResult<TParams, TOutput, TError>): void | Promise<void>;
   onError?(
     input: BrewvaToolInvocationError<TParams>,
-  ): BrewvaToolResult<TDetails> | undefined | Promise<BrewvaToolResult<TDetails> | undefined>;
+  ):
+    | BrewvaToolResult<TOutput, TError>
+    | undefined
+    | Promise<BrewvaToolResult<TOutput, TError> | undefined>;
 }
 
 const TOOL_DEFINITION_KEYS = new Set<PropertyKey>([
@@ -40,6 +44,9 @@ const TOOL_DEFINITION_KEYS = new Set<PropertyKey>([
   "label",
   "description",
   "parameters",
+  "outputSchema",
+  "errorSchema",
+  "outcomeVersion",
   "sourceInfo",
   "promptSnippet",
   "promptGuidelines",
@@ -69,12 +76,23 @@ type BrewvaToolDefinitionResult<TTool extends BrewvaToolDefinition> = Awaited<
   ReturnType<TTool["execute"]>
 >;
 
-type BrewvaToolDefinitionDetails<TTool extends BrewvaToolDefinition> =
-  BrewvaToolDefinitionResult<TTool> extends BrewvaToolResult<infer TDetails> ? TDetails : unknown;
+type BrewvaToolDefinitionOutput<TTool extends BrewvaToolDefinition> =
+  BrewvaToolDefinitionResult<TTool> extends BrewvaToolResult<infer TOutput, infer _TError>
+    ? TOutput
+    : unknown;
+
+type BrewvaToolDefinitionError<TTool extends BrewvaToolDefinition> =
+  BrewvaToolDefinitionResult<TTool> extends BrewvaToolResult<infer _TOutput, infer TError>
+    ? TError
+    : unknown;
 
 export function wrapBrewvaTool<TTool extends BrewvaToolDefinition>(
   tool: TTool,
-  wrapper: BrewvaToolWrapper<BrewvaToolDefinitionParams<TTool>, BrewvaToolDefinitionDetails<TTool>>,
+  wrapper: BrewvaToolWrapper<
+    BrewvaToolDefinitionParams<TTool>,
+    BrewvaToolDefinitionOutput<TTool>,
+    BrewvaToolDefinitionError<TTool>
+  >,
 ): TTool {
   const wrapped = {
     ...tool,
@@ -101,7 +119,10 @@ export function wrapBrewvaTool<TTool extends BrewvaToolDefinition>(
         )) as BrewvaToolDefinitionResult<TTool>;
         await wrapper.after?.({
           ...invocation,
-          result: result as BrewvaToolResult<BrewvaToolDefinitionDetails<TTool>>,
+          result: result as BrewvaToolResult<
+            BrewvaToolDefinitionOutput<TTool>,
+            BrewvaToolDefinitionError<TTool>
+          >,
         });
         return result;
       } catch (error) {

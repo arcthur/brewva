@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../../registry/runtime-bound-tool.js";
-import { failTextResult, textResult } from "../../../../utils/result.js";
+import { errTextResult, okTextResult } from "../../../../utils/result.js";
 import { getSessionId } from "../../../../utils/session.js";
 import { resolveExistingPath } from "../artifacts.js";
 import { executeBrowserCommand } from "../command.js";
@@ -36,7 +36,7 @@ export function createBrowserStateLoadTool(
         requestedPath: params.path,
       });
       if (!path.ok) {
-        return failTextResult(`[Browser State Load]\nstatus: failed\nreason: ${path.message}`, {
+        return errTextResult(`[Browser State Load]\nstatus: failed\nreason: ${path.message}`, {
           ok: false,
           reason: path.reason,
           requestedPath: path.requestedPath,
@@ -57,7 +57,7 @@ export function createBrowserStateLoadTool(
           artifactRef: path.artifactRef,
         });
       }
-      return textResult(
+      return okTextResult(
         buildStatusPayload({
           header: "[Browser State Load]",
           sessionName,

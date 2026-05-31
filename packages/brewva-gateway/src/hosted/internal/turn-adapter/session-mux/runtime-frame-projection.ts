@@ -4,6 +4,7 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
+import { outcomeIsError, outcomeVerdict } from "@brewva/brewva-vocabulary/outcome";
 import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-vocabulary/wire";
 import type {
   AssistantTextSegmentView,
@@ -15,6 +16,7 @@ import {
   isRuntimeProjectionRecord,
   promptTextFromRuntimeTurnStartedPayload,
   readRuntimeToolOutputDisplay,
+  runtimeOutcomePayload,
   runtimeTurnCommittedStatusFromPayload,
   summarizeRuntimeToolContent,
   toolOutputFromRuntimeEvent,
@@ -99,26 +101,21 @@ function toolProgressFromRuntimeFrame(frame: Extract<TurnFrame, { type: "tool.pr
   verdict: ToolOutputView["verdict"];
   isError: boolean;
   text: string;
+  details?: ToolOutputView["details"];
   display?: ToolOutputView["display"];
 } {
   const metadata = isRuntimeProjectionRecord(frame.progress.update.metadata)
     ? frame.progress.update.metadata
     : null;
   const display = readRuntimeToolOutputDisplay(metadata);
-  const verdict =
-    metadata?.verdict === "pass" ||
-    metadata?.verdict === "fail" ||
-    metadata?.verdict === "inconclusive"
-      ? metadata.verdict
-      : frame.progress.update.ok
-        ? "pass"
-        : "fail";
+  const verdict = outcomeVerdict(frame.progress.update.outcome);
   return {
     toolCallId: asBrewvaToolCallId(frame.progress.toolCallId),
     toolName: asBrewvaToolName(frame.progress.toolName),
     verdict,
-    isError: !frame.progress.update.ok,
+    isError: outcomeIsError(frame.progress.update.outcome),
     text: summarizeRuntimeToolContent(frame.progress.update.content),
+    details: runtimeOutcomePayload(frame.progress.update.outcome),
     ...(display ? { display } : {}),
   };
 }
@@ -231,6 +228,7 @@ export function emitRuntimeToolProgressFrame(input: {
       verdict: toolProgress.verdict,
       isError: toolProgress.isError,
       text: toolProgress.text,
+      ...(toolProgress.details !== undefined ? { details: toolProgress.details } : {}),
       ...(toolProgress.display ? { display: toolProgress.display } : {}),
     }),
   });
@@ -404,6 +402,7 @@ export function emitRuntimeEventFrame(input: {
       verdict: toolOutput.verdict,
       isError: toolOutput.isError,
       text: toolOutput.text,
+      ...(toolOutput.details !== undefined ? { details: toolOutput.details } : {}),
       ...(toolOutput.display ? { display: toolOutput.display } : {}),
     }),
   });

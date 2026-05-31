@@ -1,5 +1,5 @@
 import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
-import type { ToolOutputDisplayView } from "@brewva/brewva-vocabulary/wire";
+import type { ToolOutputDisplayView, ToolOutputView } from "@brewva/brewva-vocabulary/wire";
 import {
   extractMessageError,
   extractVisibleTextFromMessage,
@@ -37,6 +37,7 @@ export interface CliShellTranscriptToolResultPayload {
   content: NormalizedMessageContentPart[];
   details?: unknown;
   display?: ToolOutputDisplayView;
+  verdict?: ToolOutputView["verdict"];
   isError?: boolean;
 }
 
@@ -116,10 +117,15 @@ function normalizeToolResultPayload(
     ? readMessageContentParts({ content: record.content })
     : [];
   const display = normalizeToolOutputDisplay(record.display);
+  const verdict =
+    record.verdict === "pass" || record.verdict === "fail" || record.verdict === "inconclusive"
+      ? record.verdict
+      : undefined;
   return {
     content,
     details: record.details,
     ...(display ? { display } : {}),
+    ...(verdict ? { verdict } : {}),
     isError: record.isError === true,
   };
 }
@@ -130,7 +136,7 @@ function toolPayloadIndicatesError(
   if (!payload) {
     return false;
   }
-  return payload.isError === true || asRecord(payload.details)?.verdict === "fail";
+  return payload.isError === true || payload.verdict === "fail";
 }
 
 function buildTextPart(

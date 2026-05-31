@@ -14,17 +14,28 @@ import type {
 } from "./required-capabilities.js";
 import { defineBrewvaTool } from "./tool.js";
 
+type ManagedToolAuthoringDefinition<TParams extends TSchema, TOutput, TError> = Omit<
+  ToolDefinition<TParams, TOutput, TError>,
+  "outputSchema" | "errorSchema" | "outcomeVersion"
+> &
+  Partial<
+    Pick<
+      ToolDefinition<TParams, TOutput, TError>,
+      "outputSchema" | "errorSchema" | "outcomeVersion"
+    >
+  >;
+
 export interface ManagedBrewvaToolFactory {
-  define: <TParams extends TSchema, TDetails = unknown>(
-    tool: ToolDefinition<TParams, TDetails>,
+  define: <TParams extends TSchema, TOutput = unknown, TError = unknown>(
+    tool: ManagedToolAuthoringDefinition<TParams, TOutput, TError>,
     metadata?: Partial<BrewvaToolMetadata>,
   ) => BrewvaManagedToolDefinition;
 }
 
 export interface RuntimeBoundBrewvaToolFactory<TRuntime extends BrewvaToolRuntime | undefined> {
   runtime: TRuntime;
-  define: <TParams extends TSchema, TDetails = unknown>(
-    tool: ToolDefinition<TParams, TDetails>,
+  define: <TParams extends TSchema, TOutput = unknown, TError = unknown>(
+    tool: ManagedToolAuthoringDefinition<TParams, TOutput, TError>,
     metadata?: Partial<BrewvaToolMetadata>,
   ) => BrewvaManagedToolDefinition;
 }
@@ -33,8 +44,8 @@ export function createManagedBrewvaToolFactory(toolName: string): ManagedBrewvaT
   const normalizedToolName = normalizeToolName(toolName);
 
   return {
-    define: <TParams extends TSchema, TDetails = unknown>(
-      tool: ToolDefinition<TParams, TDetails>,
+    define: <TParams extends TSchema, TOutput = unknown, TError = unknown>(
+      tool: ManagedToolAuthoringDefinition<TParams, TOutput, TError>,
       metadata: Partial<BrewvaToolMetadata> = {},
     ): BrewvaManagedToolDefinition => {
       const normalizedDefinitionName = normalizeToolName(tool.name);

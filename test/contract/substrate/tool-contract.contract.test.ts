@@ -9,6 +9,7 @@ import {
   wrapBrewvaTool,
 } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 describe("substrate tool contract", () => {
   test("exports tool protocol catalog vocabulary from the tools subpath", () => {
@@ -54,11 +55,13 @@ describe("substrate tool contract", () => {
                 text: `session=${ctx.sessionManager.getSessionId()} query=${params.query}`,
               },
             ],
-            details: {
-              ok: true,
-              cwd: ctx.cwd,
+            outcome: {
+              kind: "ok",
+              value: {
+                ok: true,
+                cwd: ctx.cwd,
+              },
             },
-            isError: false,
           };
         },
       });
@@ -148,14 +151,14 @@ describe("substrate tool contract", () => {
         text: "session=sess_01 query=health",
       },
     ]);
-    expect(result.details).toEqual({
+    expect(toolOutcomePayload(result)).toEqual({
       ok: true,
       cwd: "/workspace/project",
     });
-    expect(result.isError).toBe(false);
+    expect(result.outcome.kind === "err").toBe(false);
   });
 
-  test("requires image parts to carry a mime type and details field", () => {
+  test("requires image parts to carry a mime type", () => {
     const result = {
       content: [
         {
@@ -164,12 +167,8 @@ describe("substrate tool contract", () => {
           mimeType: "image/png",
         },
       ],
-      details: undefined,
-      isError: false,
     } satisfies {
       content: Array<{ type: "image"; data: string; mimeType: string }>;
-      details: undefined;
-      isError: boolean;
     };
 
     expect(result.content[0]).toEqual({
@@ -177,7 +176,6 @@ describe("substrate tool contract", () => {
       data: "base64-payload",
       mimeType: "image/png",
     });
-    expect("details" in result).toBe(true);
   });
 
   test("exports a metadata-preserving tool wrapper from the tools subpath", () => {

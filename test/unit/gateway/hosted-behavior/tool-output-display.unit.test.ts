@@ -16,9 +16,7 @@ describe("tool output display", () => {
           ).join("\n"),
         },
       ],
-      details: {
-        verdict: "fail",
-      },
+      outcome: { kind: "err", error: { reason: "failed" } },
     };
 
     expect(resolveToolDisplayVerdict({ isError: false, result })).toBe("fail");

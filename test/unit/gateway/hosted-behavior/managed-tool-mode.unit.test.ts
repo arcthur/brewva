@@ -79,7 +79,12 @@ describe("managed tool registration modes", () => {
       description: "Foreign tool",
       parameters: Type.Object({}),
       async execute() {
-        return { content: [{ type: "text", text: "foreign" }], details: {} };
+        return {
+          content: [{ type: "text", text: "foreign" }],
+          outcome: { kind: "ok", value: {} },
+          details: {},
+          isError: false,
+        };
       },
     };
     api.api.registerTool(foreignTool);

@@ -9,7 +9,7 @@ import {
   resolveScopedPath,
   resolveToolTargetScope,
 } from "../../runtime-port/target-scope.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { auditPrecedentRecord, type PrecedentAuditSummary } from "./precedent-audit.js";
 import {
   deriveSolutionId,
@@ -158,7 +158,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
       const record = normalizeSolutionRecord(params.solution_record);
       const validationProblems = validateSolutionRecord(record);
       if (validationProblems.length > 0) {
-        return failTextResult(validationProblems.join("\n"), {
+        return errTextResult(validationProblems.join("\n"), {
           ok: false,
           error: "invalid_solution_record",
           validationProblems,
@@ -172,7 +172,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
         record,
       });
       if ("error" in pathResolution) {
-        return failTextResult(pathResolution.error, {
+        return errTextResult(pathResolution.error, {
           ok: false,
           error: "invalid_solution_doc_path",
           requestedPath: requestedPath ?? null,
@@ -185,7 +185,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
         candidatePath: pathResolution.relativePath,
       });
       if (precedentAudit.verdict === "fail") {
-        return failTextResult(
+        return errTextResult(
           formatResultText({
             captureStatus: "skipped",
             solutionDocPath: pathResolution.relativePath,
@@ -206,7 +206,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
       let existingText: string | null = null;
       if (existsSync(pathResolution.absolutePath)) {
         if (!statSync(pathResolution.absolutePath).isFile()) {
-          return failTextResult("knowledge_capture target path is not a file.", {
+          return errTextResult("knowledge_capture target path is not a file.", {
             ok: false,
             error: "target_not_file",
             solutionDocPath: pathResolution.relativePath,
@@ -217,7 +217,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
       const existingParsed = existingText ? parseSolutionDocument(existingText) : null;
       const existingId = existingParsed?.id ?? null;
       if (record.id && existingId && record.id !== existingId) {
-        return failTextResult(
+        return errTextResult(
           `knowledge_capture refuses to overwrite ${pathResolution.relativePath} because the existing id (${existingId}) conflicts with solution_record.id (${record.id}).`,
           {
             ok: false,
@@ -241,7 +241,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
       const normalizedNext = normalizeDocumentText(nextDocument);
 
       if (normalizedExisting === normalizedNext) {
-        return textResult(
+        return okTextResult(
           formatResultText({
             captureStatus: "skipped",
             solutionDocPath: pathResolution.relativePath,
@@ -271,7 +271,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
             }),
           );
           if (stableDocument === normalizedExisting) {
-            return textResult(
+            return okTextResult(
               formatResultText({
                 captureStatus: "skipped",
                 solutionDocPath: pathResolution.relativePath,
@@ -306,7 +306,7 @@ export function createKnowledgeCaptureTool(options: BrewvaToolOptions): ToolDefi
       writeFileSync(pathResolution.absolutePath, finalDocument, "utf8");
 
       const captureStatus = existingText ? "updated" : "created";
-      return textResult(
+      return okTextResult(
         formatResultText({
           captureStatus,
           solutionDocPath: pathResolution.relativePath,

@@ -17,7 +17,7 @@ import {
   resolveScopedPath,
   resolveToolTargetScope,
 } from "../../runtime-port/target-scope.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import {
   buildAdvisorHeader,
   buildGrepSourceSuggestions,
@@ -113,7 +113,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       const scope = resolveToolTargetScope(runtime, ctx);
       const cwd = params.workdir ? resolve(scope.baseCwd, params.workdir) : scope.baseCwd;
       if (!isPathInsideRoots(cwd, scope.allowedRoots)) {
-        return failTextResult(
+        return errTextResult(
           `grep rejected: workdir escapes target roots (${scope.allowedRoots.join(", ")}).`,
           {
             ok: false,
@@ -132,7 +132,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
         const absolutePath = resolveScopedPath(entry, scope, { relativeTo: cwd });
         if (!absolutePath) {
-          return failTextResult(`grep rejected: path escapes target roots (${entry}).`, {
+          return errTextResult(`grep rejected: path escapes target roots (${entry}).`, {
             ok: false,
             reason: "path_outside_target",
             path: entry,
@@ -267,7 +267,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
             ],
             input.advisor,
           );
-          return textResult([...header, "", ...anchored.lines].join("\n"), {
+          return okTextResult([...header, "", ...anchored.lines].join("\n"), {
             ok: true,
             ...input.result,
             advisor: input.advisor,
@@ -389,7 +389,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
               ],
               advisor,
             );
-            return textResult(
+            return okTextResult(
               [
                 ...header,
                 "",
@@ -404,7 +404,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
             );
           }
 
-          return textResult(
+          return okTextResult(
             [
               ...baseHeader,
               `- exit_code: ${finalNoMatchResult.exitCode}`,
@@ -428,7 +428,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
         }
 
         const stderr = finalNoMatchResult.stderr ? `\n\nstderr:\n${finalNoMatchResult.stderr}` : "";
-        return failTextResult(
+        return errTextResult(
           [
             ...baseHeader,
             `- exit_code: ${finalNoMatchResult.exitCode}`,
@@ -450,7 +450,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
         const message = error instanceof Error ? error.message : String(error);
         const notFound = /ENOENT|not found|spawn rg/i.test(message);
         const hint = notFound ? " (install ripgrep: rg)" : "";
-        return failTextResult(`grep failed: ${message}${hint}`, {
+        return errTextResult(`grep failed: ${message}${hint}`, {
           ok: false,
           error: message,
           hint,

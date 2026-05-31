@@ -9,7 +9,7 @@ import type {
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import { createManagedBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 
 const QuestionOptionSchema = Type.Object({
   label: Type.String({ minLength: 1, maxLength: 120 }),
@@ -60,7 +60,7 @@ export function createQuestionTool(): ToolDefinition {
       parameters: QuestionSchema,
       async execute(toolCallId, params, signal, _onUpdate, ctx) {
         if (!ctx.hasUI) {
-          return failTextResult("Question tool requires an interactive UI host.", {
+          return errTextResult("Question tool requires an interactive UI host.", {
             ok: false,
             error: "ui_unavailable",
           });
@@ -70,7 +70,7 @@ export function createQuestionTool(): ToolDefinition {
           normalizeQuestionPrompt(question),
         );
         if (normalizedQuestions.some((question) => question === null)) {
-          return failTextResult("Question request contains an invalid or unanswerable prompt.", {
+          return errTextResult("Question request contains an invalid or unanswerable prompt.", {
             ok: false,
             error: "invalid_question_request",
           });
@@ -90,7 +90,7 @@ export function createQuestionTool(): ToolDefinition {
           { signal },
         );
         if (!answers) {
-          return failTextResult("Question was dismissed without an answer.", {
+          return errTextResult("Question was dismissed without an answer.", {
             ok: false,
             error: "question_rejected",
           });
@@ -100,13 +100,13 @@ export function createQuestionTool(): ToolDefinition {
           answers,
         });
         if (!validatedAnswers.ok) {
-          return failTextResult(validatedAnswers.error, {
+          return errTextResult(validatedAnswers.error, {
             ok: false,
             error: "invalid_question_answer",
           });
         }
 
-        return textResult(
+        return okTextResult(
           `User answered: ${formatAnswerSummary(questions, validatedAnswers.answers)}.`,
           {
             ok: true,

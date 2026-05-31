@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../../registry/runtime-bound-tool.js";
-import { failTextResult, textResult } from "../../../../utils/result.js";
+import { errTextResult, okTextResult } from "../../../../utils/result.js";
 import { getSessionId } from "../../../../utils/session.js";
 import { buildTextArtifact, resolveWritablePath, writeArtifactText } from "../artifacts.js";
 import { executeBrowserCommand } from "../command.js";
@@ -42,7 +42,7 @@ export function createBrowserDiffSnapshotTool(
         defaultFileName: "diff-snapshot.txt",
       });
       if (!path.ok) {
-        return failTextResult(`[Browser Diff Snapshot]\nstatus: failed\nreason: ${path.message}`, {
+        return errTextResult(`[Browser Diff Snapshot]\nstatus: failed\nreason: ${path.message}`, {
           ok: false,
           reason: path.reason,
           requestedPath: path.requestedPath,
@@ -66,7 +66,7 @@ export function createBrowserDiffSnapshotTool(
       }
       writeArtifactText(path.absolutePath, result.stdout);
       const artifact = buildTextArtifact("browser_diff_snapshot", path.artifactRef, result.stdout);
-      return textResult(
+      return okTextResult(
         buildTextPayload({
           header: "[Browser Diff Snapshot]",
           sessionName,

@@ -128,17 +128,17 @@ describe("hosted turn envelope", () => {
             ) {
               await onUpdate?.({
                 content: [{ type: "text" as const, text: "echo:preparing" }],
-                details: { stage: "preparing" },
+                outcome: { kind: "ok", value: { stage: "preparing" } },
                 display: { summaryText: "preparing" },
               });
               await onUpdate?.({
                 content: [{ type: "text" as const, text: `echo:progress:${params.value}` }],
-                details: { stage: "running" },
+                outcome: { kind: "ok", value: { stage: "running" } },
                 display: { summaryText: `running ${params.value}` },
               });
               return {
                 content: [{ type: "text" as const, text: `echo:${params.value}` }],
-                details: { echoed: params.value },
+                outcome: { kind: "ok", value: { echoed: params.value } },
               };
             },
           },
@@ -191,6 +191,7 @@ describe("hosted turn envelope", () => {
             verdict: "pass",
             isError: false,
             text: "echo:runtime-path",
+            details: { echoed: "runtime-path" },
           },
         ],
       });
@@ -206,8 +207,13 @@ describe("hosted turn envelope", () => {
       expect(
         observedFrames
           .filter((frame) => frame.type === "tool.progress")
-          .map((frame) => (frame.type === "tool.progress" ? frame.text : "")),
-      ).toEqual(["echo:preparing", "echo:progress:runtime-path"]);
+          .map((frame) =>
+            frame.type === "tool.progress" ? { text: frame.text, details: frame.details } : {},
+          ),
+      ).toEqual([
+        { text: "echo:preparing", details: { stage: "preparing" } },
+        { text: "echo:progress:runtime-path", details: { stage: "running" } },
+      ]);
       const events = result.status === "completed" ? runtime.tape.list(sessionId) : [];
       expect(events.map((event) => event.type)).toEqual(
         expect.arrayContaining([

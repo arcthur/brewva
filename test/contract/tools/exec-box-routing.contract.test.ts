@@ -6,6 +6,7 @@ import type { BoxExecSpec, BoxHandle, BoxPlane, BoxScope } from "@brewva/brewva-
 import { createExecTool, createProcessTool } from "@brewva/brewva-tools/execution";
 import { resolveToolTargetScope } from "@brewva/brewva-tools/runtime-port";
 import { sleep, waitUntil } from "../../helpers/process.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import {
   createRuntimeForExecTests,
   extractTextContent,
@@ -162,7 +163,7 @@ describe("exec box routing", () => {
     );
 
     expect(extractTextContent(result)).toContain("(no output)");
-    expect((result.details as { backend?: string }).backend).toBe("box");
+    expect((toolOutcomePayload(result) as { backend?: string }).backend).toBe("box");
     expect(eventTypes(events)).toContain("box.acquired");
     expect(eventTypes(events)).toContain("box.bootstrap.started");
     expect(eventTypes(events)).toContain("box.bootstrap.progress");
@@ -195,7 +196,7 @@ describe("exec box routing", () => {
     );
 
     expect(extractTextContent(result)).toContain("host-ok");
-    expect((result.details as { backend?: string }).backend).toBe("host");
+    expect((toolOutcomePayload(result) as { backend?: string }).backend).toBe("host");
     expect(eventTypes(events)).toContain("exec.started");
     expect(eventTypes(events)).not.toContain("box.exec.started");
     expect(eventTypes(events)).not.toContain(["exec", "fallback", "host"].join("_"));
@@ -807,7 +808,7 @@ describe("exec box routing", () => {
       undefined,
       fakeContext(sessionId),
     );
-    const details = started.details as {
+    const details = toolOutcomePayload(started) as {
       sessionId?: string;
       boxId?: string;
       executionId?: string;
@@ -833,7 +834,7 @@ describe("exec box routing", () => {
     );
 
     expect(extractTextContent(polled)).toContain("captured");
-    expect((polled.details as { backend?: string }).backend).toBe("box");
+    expect((toolOutcomePayload(polled) as { backend?: string }).backend).toBe("box");
   });
 
   test("box foreground execution auto-backgrounds after the configured wait", async () => {
@@ -862,7 +863,11 @@ describe("exec box routing", () => {
       undefined,
       fakeContext(sessionId),
     );
-    const details = started.details as { sessionId?: string; status?: string; backend?: string };
+    const details = toolOutcomePayload(started) as {
+      sessionId?: string;
+      status?: string;
+      backend?: string;
+    };
 
     expect(details.status).toBe("running");
     expect(details.backend).toBe("box");
@@ -912,7 +917,7 @@ describe("exec box routing", () => {
       undefined,
       fakeContext(sessionId),
     );
-    const details = started.details as { sessionId?: string; status?: string };
+    const details = toolOutcomePayload(started) as { sessionId?: string; status?: string };
 
     expect(details.status).toBe("running");
     expect(calls.releases).toEqual([]);
@@ -1016,7 +1021,11 @@ describe("exec box routing", () => {
     );
 
     expect(extractTextContent(polled)).toContain("captured");
-    expect((polled.details as { backend?: string; reattached?: boolean }).backend).toBe("box");
-    expect((polled.details as { backend?: string; reattached?: boolean }).reattached).toBe(true);
+    expect((toolOutcomePayload(polled) as { backend?: string; reattached?: boolean }).backend).toBe(
+      "box",
+    );
+    expect(
+      (toolOutcomePayload(polled) as { backend?: string; reattached?: boolean }).reattached,
+    ).toBe(true);
   });
 });

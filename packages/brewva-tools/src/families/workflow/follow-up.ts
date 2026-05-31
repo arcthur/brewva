@@ -11,7 +11,7 @@ import {
   getScheduleProjectionSnapshot,
   listScheduleIntents,
 } from "../../runtime-port/schedule.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 import {
   formatIntentSummary,
@@ -112,7 +112,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
         if (!runtime.config.schedule.enabled) {
-          return failTextResult("Follow-up rejected (scheduler_disabled).", {
+          return errTextResult("Follow-up rejected (scheduler_disabled).", {
             ok: false,
             error: "scheduler_disabled",
           });
@@ -121,20 +121,20 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
         if (params.action === "create") {
           const reason = normalizeOptionalString(params.reason);
           if (!reason) {
-            return failTextResult("Follow-up rejected (missing_reason).", {
+            return errTextResult("Follow-up rejected (missing_reason).", {
               ok: false,
               error: "missing_reason",
             });
           }
 
           if (params.after !== undefined && params.every !== undefined) {
-            return failTextResult("Follow-up rejected (after_and_every_are_mutually_exclusive).", {
+            return errTextResult("Follow-up rejected (after_and_every_are_mutually_exclusive).", {
               ok: false,
               error: "after_and_every_are_mutually_exclusive",
             });
           }
           if (params.after === undefined && params.every === undefined) {
-            return failTextResult("Follow-up rejected (missing_follow_up_timing).", {
+            return errTextResult("Follow-up rejected (missing_follow_up_timing).", {
               ok: false,
               error: "missing_follow_up_timing",
             });
@@ -146,7 +146,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
 
           if (params.after !== undefined) {
             if (params.runs !== undefined) {
-              return failTextResult("Follow-up rejected (runs_requires_every).", {
+              return errTextResult("Follow-up rejected (runs_requires_every).", {
                 ok: false,
                 error: "runs_requires_every",
               });
@@ -154,7 +154,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
 
             const after = parseDuration(params.after, ["m", "h", "d"]);
             if (!after) {
-              return failTextResult("Follow-up rejected (invalid_after).", {
+              return errTextResult("Follow-up rejected (invalid_after).", {
                 ok: false,
                 error: "invalid_after",
               });
@@ -162,7 +162,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
 
             const scheduleTarget = resolveScheduleTarget({ delayMs: after.ms });
             if (!scheduleTarget.ok || scheduleTarget.runAt === undefined) {
-              return failTextResult("Follow-up rejected (invalid_after).", {
+              return errTextResult("Follow-up rejected (invalid_after).", {
                 ok: false,
                 error: "invalid_after",
               });
@@ -176,14 +176,14 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
               maxRuns: 1,
             });
             if (!created.ok) {
-              return failTextResult(`Follow-up rejected (${created.reason}).`, {
+              return errTextResult(`Follow-up rejected (${created.reason}).`, {
                 ok: false,
                 error: created.reason,
               });
             }
 
             const intent = created.intent;
-            return textResult(
+            return okTextResult(
               [
                 "Follow-up created.",
                 `intentId: ${intent.intentId}`,
@@ -207,14 +207,14 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
                 }
               : undefined;
           if (!recurringEvery) {
-            return failTextResult("Follow-up rejected (invalid_every).", {
+            return errTextResult("Follow-up rejected (invalid_every).", {
               ok: false,
               error: "invalid_every",
             });
           }
           const cron = compileEveryDurationToCron(recurringEvery);
           if (!cron) {
-            return failTextResult("Follow-up rejected (unsupported_every_interval).", {
+            return errTextResult("Follow-up rejected (unsupported_every_interval).", {
               ok: false,
               error: "unsupported_every_interval",
             });
@@ -228,14 +228,14 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             maxRuns: params.runs ?? 12,
           });
           if (!created.ok) {
-            return failTextResult(`Follow-up rejected (${created.reason}).`, {
+            return errTextResult(`Follow-up rejected (${created.reason}).`, {
               ok: false,
               error: created.reason,
             });
           }
 
           const intent = created.intent;
-          return textResult(
+          return okTextResult(
             [
               "Follow-up created.",
               `intentId: ${intent.intentId}`,
@@ -254,7 +254,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
         if (params.action === "cancel") {
           const intentId = normalizeOptionalString(params.intentId);
           if (!intentId) {
-            return failTextResult("Follow-up cancel rejected (missing_intent_id).", {
+            return errTextResult("Follow-up cancel rejected (missing_intent_id).", {
               ok: false,
               error: "missing_intent_id",
             });
@@ -265,12 +265,12 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
             reason: normalizeOptionalString(params.reason),
           });
           if (!cancelled.ok) {
-            return failTextResult(`Follow-up cancel rejected (${cancelled.reason}).`, {
+            return errTextResult(`Follow-up cancel rejected (${cancelled.reason}).`, {
               ok: false,
               error: cancelled.reason ?? "unknown_error",
             });
           }
-          return textResult(`Follow-up cancelled (${intentId}).`, {
+          return okTextResult(`Follow-up cancelled (${intentId}).`, {
             ok: true,
             intentId,
           });
@@ -288,7 +288,7 @@ export function createFollowUpTool(options: BrewvaToolOptions): ToolDefinition {
         ];
         const lines =
           intents.length > 0 ? intents.map((intent) => formatIntentSummary(intent)) : ["- (none)"];
-        return textResult([...header, ...lines].join("\n"), {
+        return okTextResult([...header, ...lines].join("\n"), {
           ok: true,
           intents,
           watermarkOffset: snapshot.watermarkOffset,

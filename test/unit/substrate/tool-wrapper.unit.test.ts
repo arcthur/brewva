@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { defineBrewvaTool, wrapBrewvaTool } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 describe("wrapBrewvaTool", () => {
   test("runs hooks around the wrapped tool while preserving metadata descriptors", async () => {
@@ -14,7 +15,7 @@ describe("wrapBrewvaTool", () => {
         calls.push(`execute:${params.value}`);
         return {
           content: [{ type: "text", text: "ok" }],
-          details: { value: params.value },
+          outcome: { kind: "ok", value: { value: params.value } },
         };
       },
     });
@@ -28,7 +29,7 @@ describe("wrapBrewvaTool", () => {
         calls.push(`before:${(input.params as { value: string }).value}`);
       },
       after(input) {
-        calls.push(`after:${(input.result.details as { value: string }).value}`);
+        calls.push(`after:${(toolOutcomePayload(input.result) as { value: string }).value}`);
       },
     });
 
@@ -64,8 +65,12 @@ describe("wrapBrewvaTool", () => {
                 text: input.error instanceof Error ? input.error.message : "failed",
               },
             ],
-            details: undefined,
-            isError: true,
+            outcome: {
+              kind: "err",
+              error: {
+                message: input.error instanceof Error ? input.error.message : "failed",
+              },
+            },
           };
         },
       },
@@ -76,7 +81,7 @@ describe("wrapBrewvaTool", () => {
     } as never);
     expect(result).toMatchObject({
       content: [{ type: "text", text: "boom" }],
-      isError: true,
+      outcome: { kind: "err" },
     });
   });
 });

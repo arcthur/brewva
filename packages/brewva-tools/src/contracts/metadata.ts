@@ -87,6 +87,9 @@ export interface BrewvaToolRuntimeExtensions {
 export interface BrewvaToolMetadataCarrier {
   name: string;
   parameters?: TSchema;
+  outputSchema?: TSchema;
+  errorSchema?: TSchema;
+  outcomeVersion?: string;
   brewva?: BrewvaToolMetadata;
   brewvaExecutionTraits?: BrewvaToolExecutionTraitsDefinition;
   brewvaAgentParameters?: TSchema;

@@ -10,6 +10,7 @@ import { resolveBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry"
 import { requireDefined } from "../../helpers/assertions.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
 function requireTool<T extends { name: string }>(tools: T[], name: string): T {
@@ -147,9 +148,9 @@ describe("source intelligence managed tools", () => {
     expect(text).toContain("[CodeOutline]");
     expect(text).toContain("class Runner");
     expect(text).toContain("function main");
-    expect(
-      (result as { details?: { declarationsCount?: number } }).details?.declarationsCount,
-    ).toBe(3);
+    expect((toolOutcomePayload(result) as { declarationsCount?: number }).declarationsCount).toBe(
+      3,
+    );
     expect(
       runtime.capabilities.events.records.query("source-intelligence-outline", {
         type: "tool_source_intelligence",
@@ -175,7 +176,7 @@ describe("source intelligence managed tools", () => {
     expect(text).toContain("language: json");
     expect(text).toContain("module source-intelligence-tool-fixture");
     expect(text).toContain("./src/barrel.ts");
-    expect((result as { details?: { status?: string } }).details?.status).toBe("ok");
+    expect((toolOutcomePayload(result) as { status?: string }).status).toBe("ok");
   });
 
   test("code_digest uses token budget accounting and supports Python outlines", async () => {
@@ -202,15 +203,15 @@ describe("source intelligence managed tools", () => {
     expect(displayPayload.summaryText).toContain("[CodeDigest]");
     expect(displayPayload.summaryText).toContain("budget_tokens: 400");
     expect(Object.keys(displayPayload).toSorted()).toEqual(["summaryText"]);
-    const details = result as {
-      details?: { budget?: { estimator?: string; maxTokens?: number; renderedTokens?: number } };
+    const details = toolOutcomePayload(result) as {
+      budget?: { estimator?: string; maxTokens?: number; renderedTokens?: number };
     };
-    expect(details.details?.budget?.estimator).toBe("@brewva/brewva-token-estimation");
-    expect(details.details?.budget?.renderedTokens).toBe(
+    expect(details.budget?.estimator).toBe("@brewva/brewva-token-estimation");
+    expect(details.budget?.renderedTokens).toBe(
       estimateTokenCount(text, { encoding: "o200k_base" }),
     );
-    expect(details.details?.budget?.renderedTokens ?? Infinity).toBeLessThanOrEqual(
-      details.details?.budget?.maxTokens ?? 0,
+    expect(details.budget?.renderedTokens ?? Infinity).toBeLessThanOrEqual(
+      details.budget?.maxTokens ?? 0,
     );
   });
 
@@ -240,9 +241,9 @@ describe("source intelligence managed tools", () => {
       expect(text).toContain("[CodeDigest]");
       expect(text).toContain("src/a.ts");
       expect(text).not.toContain("src/z.ts");
-      expect(
-        (result as { details?: { omitted?: { files?: number } } }).details?.omitted?.files,
-      ).toBe(1);
+      expect((toolOutcomePayload(result) as { omitted?: { files?: number } }).omitted?.files).toBe(
+        1,
+      );
     } finally {
       chmodSync(unreadablePath, 0o600);
     }
@@ -323,7 +324,7 @@ describe("source intelligence managed tools", () => {
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("source_intelligence_aborted");
-    expect((result as { details?: { verdict?: string } }).details?.verdict).toBe("fail");
+    expect(result.outcome.kind).toBe("err");
   });
 
   test("code_deps and code_callers expose graph confidence without edit authority", async () => {
@@ -351,16 +352,14 @@ describe("source intelligence managed tools", () => {
       undefined,
       fakeContext("source-intelligence-callers"),
     );
-    const details = callersResult as {
-      details?: {
-        edges?: Array<{ confidence?: string; editAuthority?: boolean }>;
-        omittedEdges?: number;
-      };
+    const details = toolOutcomePayload(callersResult) as {
+      edges?: Array<{ confidence?: string; editAuthority?: boolean }>;
+      omittedEdges?: number;
     };
-    expect(details.details?.edges?.length).toBe(1);
-    expect(details.details?.omittedEdges ?? 0).toBeGreaterThan(0);
-    expect(details.details?.edges?.some((edge) => edge.confidence === "exact")).toBe(true);
-    expect(details.details?.edges?.every((edge) => edge.editAuthority === false)).toBe(true);
+    expect(details.edges?.length).toBe(1);
+    expect(details.omittedEdges ?? 0).toBeGreaterThan(0);
+    expect(details.edges?.some((edge) => edge.confidence === "exact")).toBe(true);
+    expect(details.edges?.every((edge) => edge.editAuthority === false)).toBe(true);
 
     const ambiguousResult = await codeCallers.execute(
       "tc-code-callers-ambiguous",
@@ -369,11 +368,11 @@ describe("source intelligence managed tools", () => {
       undefined,
       fakeContext("source-intelligence-callers-ambiguous"),
     );
-    const ambiguousDetails = ambiguousResult as {
-      details?: { edges?: Array<{ fromPath?: string; confidence?: string }> };
+    const ambiguousDetails = toolOutcomePayload(ambiguousResult) as {
+      edges?: Array<{ fromPath?: string; confidence?: string }>;
     };
     expect(
-      ambiguousDetails.details?.edges?.some(
+      ambiguousDetails.edges?.some(
         (edge) => edge.fromPath?.endsWith("src/loose.ts") && edge.confidence === "ambiguous",
       ),
     ).toBe(true);
@@ -385,13 +384,11 @@ describe("source intelligence managed tools", () => {
       undefined,
       fakeContext("source-intelligence-callees"),
     );
-    const calleesDetails = calleesResult as {
-      details?: { edges?: Array<{ rawSpecifier?: string; editAuthority?: boolean }> };
+    const calleesDetails = toolOutcomePayload(calleesResult) as {
+      edges?: Array<{ rawSpecifier?: string; editAuthority?: boolean }>;
     };
-    expect(calleesDetails.details?.edges?.some((edge) => edge.rawSpecifier === "helper")).toBe(
-      true,
-    );
-    expect(calleesDetails.details?.edges?.every((edge) => edge.editAuthority === false)).toBe(true);
+    expect(calleesDetails.edges?.some((edge) => edge.rawSpecifier === "helper")).toBe(true);
+    expect(calleesDetails.edges?.every((edge) => edge.editAuthority === false)).toBe(true);
   });
 
   test("code_surface reports true re-exports and code_outline fails closed on unsupported files", async () => {
@@ -435,7 +432,7 @@ describe("source intelligence managed tools", () => {
       undefined,
       fakeContext("source-intelligence-unsupported"),
     );
-    expect((unsupportedResult as { details?: { verdict?: string } }).details?.verdict).toBe("fail");
+    expect(unsupportedResult.outcome.kind).toBe("err");
     expect(
       extractTextContent(unsupportedResult as { content: Array<{ type: string; text?: string }> }),
     ).toContain("Unsupported source language");

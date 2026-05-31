@@ -20,7 +20,7 @@ import { resolveHostedTurnAdapterProfile } from "../../../packages/brewva-gatewa
 
 const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
   async execute() {
-    return { ok: true, content: "" };
+    return { outcome: { kind: "ok", value: {} }, content: "" };
   },
 };
 
@@ -66,10 +66,7 @@ describe("gateway runtime adapter", () => {
             progress: {
               toolCallId: "tool-1",
               toolName: "read",
-              update: {
-                ok: true,
-                content: "src/app.ts",
-              },
+              update: { outcome: { kind: "ok", value: {} }, content: "src/app.ts" },
             },
           };
           yield { type: "text", delta: "After tool." };
@@ -143,7 +140,7 @@ describe("gateway runtime adapter", () => {
     }
     await hostedTurnRuntime.kernel.commitToolResult({
       commitmentId: decision.commitment.id,
-      result: { ok: true, content: "ok" },
+      result: { outcome: { kind: "ok", value: {} }, content: "ok" },
     });
 
     expect(existsSync(join(cwd, ".brewva/tape/durable-adapter-session.jsonl"))).toBe(true);
@@ -187,7 +184,7 @@ describe("gateway runtime adapter", () => {
     }
     await hostedTurnRuntime.kernel.commitToolResult({
       commitmentId: decision.commitment.id,
-      result: { ok: true, content: "ok" },
+      result: { outcome: { kind: "ok", value: {} }, content: "ok" },
     });
 
     expect(hostedTurnRuntime.tape).toBe(adapter.runtime.tape);

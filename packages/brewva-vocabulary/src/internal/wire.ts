@@ -2,7 +2,7 @@ import { type ContextStatusView } from "./context.js";
 import { type BrewvaEventRecord } from "./events.js";
 import { TURN_INPUT_RECORDED_EVENT_TYPE } from "./session.js";
 import { UnknownRecord, isProtocolRecord } from "./shared.js";
-import type { ProtocolRecord } from "./types/foundation.js";
+import type { JsonValue, ProtocolRecord } from "./types/foundation.js";
 
 export type { ProtocolRecord } from "./types/foundation.js";
 
@@ -45,6 +45,7 @@ export interface ToolOutputView extends ProtocolRecord {
   readonly ts?: number;
   readonly sequence?: number;
   readonly sourceEventId?: string;
+  readonly details?: JsonValue;
   readonly display?: ToolOutputDisplayView;
 }
 
@@ -625,6 +626,7 @@ export type SessionWireFrame =
       readonly verdict: string;
       readonly isError: boolean;
       readonly text: string;
+      readonly details?: JsonValue;
       readonly display?: ToolOutputDisplayView;
     })
   | (SessionWireFrameBase & {

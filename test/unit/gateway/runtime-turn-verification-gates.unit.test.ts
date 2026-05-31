@@ -12,7 +12,7 @@ import { createVerificationGateRuntimeProviderPort } from "../../../packages/bre
 
 const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
   async execute() {
-    return { ok: true, content: "should-not-run" };
+    return { outcome: { kind: "ok", value: {} }, content: "should-not-run" };
   },
 };
 

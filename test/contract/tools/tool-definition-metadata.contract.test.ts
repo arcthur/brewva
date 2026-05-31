@@ -10,20 +10,21 @@ import {
   MANAGED_BREWVA_TOOL_NAMES,
   attachBrewvaToolExecutionTraits,
   defineBrewvaTool,
+  getBrewvaToolDescriptor,
   getBrewvaToolMetadata,
   getBrewvaToolSurface,
   resolveBrewvaToolExecutionTraits,
 } from "@brewva/brewva-tools/registry";
+import type { TSchema } from "@sinclair/typebox";
 import { requireDefined } from "../../helpers/assertions.js";
 
 const requireFromBrewvaTools = createRequire(
   new URL("../../../packages/brewva-tools/package.json", import.meta.url),
 );
 
-type SchemaLike = Record<string, unknown>;
 type TypeBoxFactory = {
-  Object: (properties: Record<string, SchemaLike>) => SchemaLike;
-  String: (...args: unknown[]) => SchemaLike;
+  Object: (properties: Record<string, TSchema>) => TSchema;
+  String: (...args: unknown[]) => TSchema;
 };
 
 const { Type } = requireFromBrewvaTools("@sinclair/typebox") as {
@@ -123,6 +124,56 @@ describe("managed Brewva tool definition metadata", () => {
     expect(actualManagedToolNames).toEqual(MANAGED_BREWVA_TOOL_NAMES);
   });
 
+  test("bundled and A2A managed tools expose typed outcome contracts", () => {
+    const runtime = {
+      extensions: { tools: {} },
+    } as Parameters<typeof buildBrewvaTools>[0]["runtime"];
+    const tools = [
+      ...buildBrewvaTools({ runtime }),
+      ...createA2ATools({
+        runtime: {
+          orchestration: {
+            a2a: {
+              send: async () => ({ ok: false, toAgentId: "na", error: "unused" }),
+              broadcast: async () => ({ ok: true, results: [] }),
+              listAgents: async () => [],
+            },
+          },
+        },
+      }),
+    ];
+
+    for (const tool of tools) {
+      const descriptor = requireDefined(
+        getBrewvaToolDescriptor(tool),
+        `missing descriptor for ${tool.name}`,
+      );
+      expect(descriptor.outputSchema).toMatchObject({ type: "object" });
+      expect(descriptor.errorSchema).toMatchObject({ type: "object" });
+      expect(descriptor.outcomeVersion).toBe("v1");
+    }
+  });
+
+  test("managed tool definitions fail closed on unsupported outcome versions", () => {
+    expect(() =>
+      defineBrewvaTool({
+        name: "question",
+        label: "Question",
+        description: "Asks a question.",
+        parameters: Type.Object({}),
+        outputSchema: Type.Object({}),
+        errorSchema: Type.Object({}),
+        outcomeVersion: "v2",
+        async execute() {
+          return {
+            content: [{ type: "text", text: "done" }],
+            outcome: { kind: "ok", value: {} },
+          };
+        },
+      }),
+    ).toThrow("unsupported_tool_outcome_version:v2");
+  });
+
   test("skill promotion tools are no longer model-facing managed tools", () => {
     const runtime = {
       extensions: { tools: {} },
@@ -155,7 +206,7 @@ describe("managed Brewva tool definition metadata", () => {
   test("execution traits resolve per invocation without coupling to governance metadata", () => {
     const parameters = Type.Object({
       command: Type.String(),
-    }) as Parameters<typeof defineBrewvaTool>[0]["parameters"];
+    });
     const tool = defineBrewvaTool(
       {
         name: "grep",
@@ -165,7 +216,9 @@ describe("managed Brewva tool definition metadata", () => {
         async execute() {
           return {
             content: [{ type: "text", text: "ok" }],
+            outcome: { kind: "ok", value: {} },
             details: {},
+            isError: false,
           };
         },
       },
@@ -221,11 +274,13 @@ describe("managed Brewva tool definition metadata", () => {
         description: "unmanaged execution traits probe",
         parameters: Type.Object({
           path: Type.String(),
-        }) as Parameters<typeof defineBrewvaTool>[0]["parameters"],
+        }),
         async execute() {
           return {
             content: [{ type: "text", text: "ok" }],
+            outcome: { kind: "ok", value: {} },
             details: {},
+            isError: false,
           };
         },
       },

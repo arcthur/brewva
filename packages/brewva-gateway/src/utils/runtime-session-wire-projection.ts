@@ -1,3 +1,9 @@
+import { toJsonValue, type JsonValue } from "@brewva/brewva-std/json";
+import {
+  outcomeIsError,
+  outcomeVerdict,
+  type BrewvaOutcome,
+} from "@brewva/brewva-vocabulary/outcome";
 import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-vocabulary/wire";
 import type {
   AssistantTextSegmentView,
@@ -19,6 +25,31 @@ export interface RuntimeSessionWireProjectionEvent {
 
 export function isRuntimeProjectionRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readRuntimeOutcome(value: unknown): BrewvaOutcome {
+  const record = isRuntimeProjectionRecord(value) ? value : null;
+  if (record?.kind === "ok") {
+    return { kind: "ok", value: record.value ?? null };
+  }
+  if (record?.kind === "err") {
+    return { kind: "err", error: record.error ?? null };
+  }
+  if (record?.kind === "inconclusive") {
+    return {
+      kind: "inconclusive",
+      ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
+      ...(record.value !== undefined ? { value: record.value } : {}),
+    };
+  }
+  throw new Error("invalid_runtime_tool_outcome");
+}
+
+export function runtimeOutcomePayload(outcome: BrewvaOutcome): JsonValue {
+  if (outcome.kind === "err") {
+    return toJsonValue(outcome.error);
+  }
+  return toJsonValue(outcome.value ?? {});
 }
 
 export function summarizeRuntimeToolContent(content: unknown): string {
@@ -84,14 +115,15 @@ export function toolOutputFromRuntimeEvent(event: {
     if (!call || typeof call.toolCallId !== "string" || typeof call.toolName !== "string") {
       return null;
     }
-    const ok = result?.ok !== false;
+    const outcome = readRuntimeOutcome(result?.outcome);
     const display = readRuntimeToolOutputDisplay(result?.metadata);
     return {
       toolCallId: call.toolCallId,
       toolName: call.toolName,
-      verdict: ok ? "pass" : "fail",
-      isError: !ok,
+      verdict: outcomeVerdict(outcome),
+      isError: outcomeIsError(outcome),
       text: summarizeRuntimeToolContent(result?.content),
+      details: runtimeOutcomePayload(outcome),
       ...(typeof event.timestamp === "number" ? { ts: event.timestamp } : {}),
       ...(typeof event.id === "string" ? { sourceEventId: event.id } : {}),
       ...(display ? { display } : {}),

@@ -8,7 +8,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
-import { failTextResult, textResult, toolDetails, withVerdict } from "../../utils/result.js";
+import { errTextResult, okTextResult, toolOutcomeRecord } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const SUBAGENT_STATUS_VALUES = [
@@ -297,17 +297,20 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
           : undefined);
 
       if (!resolved) {
-        return failTextResult("Subagent orchestration is unavailable in this session.", {
+        return errTextResult("Subagent orchestration is unavailable in this session.", {
           ok: false,
         });
       }
 
       if (!resolved.ok) {
-        return failTextResult(`subagent_status failed: ${resolved.error}`, toolDetails(resolved));
+        return errTextResult(
+          `subagent_status failed: ${resolved.error}`,
+          toolOutcomeRecord(resolved),
+        );
       }
 
       if (resolved.runs.length === 0) {
-        return textResult("No matching subagent runs.", toolDetails(resolved));
+        return okTextResult("No matching subagent runs.", toolOutcomeRecord(resolved));
       }
       const visibleRuns = resolved.runs.filter((run) =>
         shouldIncludeRunForDetailMode(run, detailMode),
@@ -316,9 +319,9 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
       if (detailMode !== "diagnostic") {
         const inspection = await runtime.delegation?.inspect?.(sessionId);
         if (!inspection) {
-          return failTextResult(
+          return errTextResult(
             "subagent_status failed: delegation inspection projection is unavailable.",
-            toolDetails({
+            toolOutcomeRecord({
               ok: false,
               detailMode,
               hiddenCount,
@@ -332,9 +335,9 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
             hiddenCount > 0
               ? ` ${hiddenCount} internal/diagnostic run(s) hidden by detailMode=${detailMode}.`
               : "";
-          return textResult(
+          return okTextResult(
             `No matching subagent runs.${hiddenSuffix}`,
-            toolDetails({
+            toolOutcomeRecord({
               ok: true,
               detailMode,
               hiddenCount,
@@ -344,7 +347,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
             }),
           );
         }
-        return textResult(
+        return okTextResult(
           [
             "# Subagent Status",
             hiddenCount > 0
@@ -352,7 +355,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
               : `detailMode=${detailMode}`,
             ...runCards.map(summarizeRunCard),
           ].join("\n"),
-          toolDetails({
+          toolOutcomeRecord({
             ok: true,
             detailMode,
             hiddenCount,
@@ -367,9 +370,9 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
           hiddenCount > 0
             ? ` ${hiddenCount} internal/diagnostic run(s) hidden by detailMode=${detailMode}.`
             : "";
-        return textResult(
+        return okTextResult(
           `No matching subagent runs.${hiddenSuffix}`,
-          toolDetails({
+          toolOutcomeRecord({
             ...resolved,
             runs: visibleRuns.map((run) => projectRunForDetailMode(run, detailMode)),
             hiddenCount,
@@ -378,7 +381,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
         );
       }
 
-      return textResult(
+      return okTextResult(
         [
           "# Subagent Status",
           hiddenCount > 0
@@ -386,7 +389,7 @@ export function createSubagentStatusTool(options: BrewvaToolOptions): ToolDefini
             : `detailMode=${detailMode}`,
           ...visibleRuns.map((run) => summarizeRun(run, detailMode)),
         ].join("\n"),
-        toolDetails({
+        toolOutcomeRecord({
           ...resolved,
           runs: visibleRuns.map((run) => projectRunForDetailMode(run, detailMode)),
           hiddenCount,
@@ -420,7 +423,7 @@ export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefini
       const sessionId = getSessionId(ctx);
       const adapter = runtime.orchestration?.subagents;
       if (!adapter?.cancel) {
-        return failTextResult("Subagent cancellation is unavailable in this session.", {
+        return errTextResult("Subagent cancellation is unavailable in this session.", {
           ok: false,
         });
       }
@@ -435,9 +438,9 @@ export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefini
         const text = cancelled.run
           ? `subagent_cancel failed: ${cancelled.error}\n${summarizeRun(cancelled.run, "public")}`
           : `subagent_cancel failed: ${cancelled.error}`;
-        return failTextResult(
+        return errTextResult(
           text,
-          toolDetails({
+          toolOutcomeRecord({
             ...cancelled,
             run: cancelled.run ? projectRunForDetailMode(cancelled.run, "public") : undefined,
           }),
@@ -445,26 +448,20 @@ export function createSubagentCancelTool(options: BrewvaToolOptions): ToolDefini
       }
 
       if (!cancelled.run) {
-        return failTextResult("subagent_cancel failed: missing_run_state", {
+        return errTextResult("subagent_cancel failed: missing_run_state", {
           ok: false,
         });
       }
 
-      return textResult(
-        ["Subagent cancelled.", summarizeRun(cancelled.run, "public")].join("\n"),
-        cancelled.run.status === "cancelled"
-          ? toolDetails({
-              ...cancelled,
-              run: projectRunForDetailMode(cancelled.run, "public"),
-            })
-          : withVerdict(
-              toolDetails({
-                ...cancelled,
-                run: projectRunForDetailMode(cancelled.run, "public"),
-              }),
-              "fail",
-            ),
-      );
+      const details = toolOutcomeRecord({
+        ...cancelled,
+        run: projectRunForDetailMode(cancelled.run, "public"),
+      });
+      const text = ["Subagent cancelled.", summarizeRun(cancelled.run, "public")].join("\n");
+      if (cancelled.run.status !== "cancelled") {
+        return errTextResult(text, details);
+      }
+      return okTextResult(text, details);
     },
   });
 }

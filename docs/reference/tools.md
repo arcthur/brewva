@@ -31,6 +31,33 @@ Tool descriptor/catalog protocol types are imported from
 `@brewva/brewva-substrate/tools`. There is no standalone
 `@brewva/brewva-tool-protocol` package or compatibility import path.
 
+## Typed Outcome Contract
+
+Managed tools publish typed outcome contracts through their descriptors:
+
+- `outputSchema`
+- `errorSchema`
+- `outcomeVersion`
+
+Tool implementations return `BrewvaToolResult<Output, Error>` with `content`,
+`outcome`, and optional `display`. The outcome is the internal semantic truth:
+`ok` carries a schema-validated output value, `err` carries a schema-validated
+domain error, and `inconclusive` carries partial or insufficient domain
+evidence without becoming a provider/tool transport error.
+
+Use the result builders from `@brewva/brewva-tools` to preserve text ergonomics
+without reintroducing legacy result truth:
+
+- `okTextResult`
+- `errTextResult`
+- `inconclusiveTextResult`
+
+Author-facing tool code must not treat `details`, `isError`, or `ok` as
+internal semantic fields. Provider, MCP, agent-protocol, CLI, and UI adapters
+may expose binary compatibility fields, but they derive them from
+`outcome.kind === "err"`. `inconclusive` projects to external `isError: false`
+while preserving the three-state verdict and display evidence.
+
 ## Runtime Capability Proof
 
 Managed tools receive `ToolRuntimeAdapterPort`, not the hosted or operator port.

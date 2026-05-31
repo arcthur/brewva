@@ -15,7 +15,7 @@ import {
   recordTapeHandoff,
   searchTape,
 } from "../../runtime-port/tape.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const TAPE_SEARCH_SCOPE_VALUES = ["current_phase", "all_phases", "anchors_only"] as const;
@@ -170,7 +170,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
           nextSteps: params.next_steps,
         });
         if (!handoff.ok) {
-          return failTextResult(
+          return errTextResult(
             `Tape handoff rejected (${handoff.reason ?? "unknown_error"}).`,
             handoff,
           );
@@ -185,7 +185,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
           `entries_since_anchor: ${status.entriesSinceAnchor}`,
           `total_entries: ${status.totalEntries}`,
         ].join("\n");
-        return textResult(text, {
+        return okTextResult(text, {
           ok: true,
           anchorId: handoff.eventId ?? null,
           createdAt: handoff.createdAt ?? null,
@@ -211,7 +211,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       const contextStatus = getContextStatus(tapeInfoTool.runtime, sessionId, usage);
       const reasoning = getActiveReasoningState(tapeInfoTool.runtime, sessionId);
 
-      return textResult(
+      return okTextResult(
         formatTapeInfoBlock({
           tape,
           contextStatus,
@@ -249,7 +249,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       const sessionId = getSessionId(ctx);
       const query = normalizeQuery(params.query);
       if (!query) {
-        return failTextResult("Tape search rejected (missing_query).", {
+        return errTextResult("Tape search rejected (missing_query).", {
           ok: false,
           error: "missing_query",
         });
@@ -263,7 +263,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       });
 
       if (result.matches.length === 0) {
-        return textResult(
+        return okTextResult(
           [
             "[TapeSearch]",
             `query: ${query}`,
@@ -294,7 +294,7 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
         lines.push(`   ${match.excerpt}`);
       }
 
-      return textResult(lines.join("\n"), {
+      return okTextResult(lines.join("\n"), {
         ok: true,
         ...result,
       });

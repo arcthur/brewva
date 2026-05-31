@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolRuntime } from "../../contracts/index.js";
 import { createManagedBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { failTextResult, textResult, withVerdict } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const OptionalUInt = Type.Optional(Type.Integer({ minimum: 0 }));
@@ -34,7 +34,7 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const adapter = options.runtime.orchestration?.a2a;
       if (!adapter) {
-        return failTextResult("A2A orchestration is unavailable in this session.", { ok: false });
+        return errTextResult("A2A orchestration is unavailable in this session.", { ok: false });
       }
       const sessionId = getSessionId(ctx);
       const result = await adapter.send({
@@ -46,12 +46,12 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
         hops: params.hops,
       });
       if (!result.ok) {
-        return failTextResult(
+        return errTextResult(
           `agent_send failed for ${result.toAgentId}: ${result.error}`,
           result as Record<string, unknown>,
         );
       }
-      return textResult(
+      return okTextResult(
         result.responseText?.trim() || `agent_send completed for ${result.toAgentId}.`,
         result as Record<string, unknown>,
       );
@@ -72,7 +72,7 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const adapter = options.runtime.orchestration?.a2a;
       if (!adapter) {
-        return failTextResult("A2A orchestration is unavailable in this session.", { ok: false });
+        return errTextResult("A2A orchestration is unavailable in this session.", { ok: false });
       }
       const sessionId = getSessionId(ctx);
       const result = await adapter.broadcast({
@@ -92,12 +92,10 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
           entry.ok ? `- ${entry.toAgentId}: ok` : `- ${entry.toAgentId}: ${entry.error}`,
         ),
       ];
-      return textResult(
-        lines.join("\n"),
-        failCount > 0
-          ? withVerdict(result as Record<string, unknown>, "fail")
-          : (result as Record<string, unknown>),
-      );
+      if (failCount > 0) {
+        return errTextResult(lines.join("\n"), result as Record<string, unknown>);
+      }
+      return okTextResult(lines.join("\n"), result as Record<string, unknown>);
     },
   });
 
@@ -111,13 +109,13 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
     async execute(_toolCallId, params) {
       const adapter = options.runtime.orchestration?.a2a;
       if (!adapter) {
-        return failTextResult("A2A orchestration is unavailable in this session.", { ok: false });
+        return errTextResult("A2A orchestration is unavailable in this session.", { ok: false });
       }
       const agents = await adapter.listAgents({
         includeDeleted: params.includeDeleted,
       });
       if (agents.length === 0) {
-        return textResult("No agents found.", {
+        return okTextResult("No agents found.", {
           ok: true,
           count: 0,
           agents,
@@ -132,7 +130,7 @@ export function createA2ATools(options: CreateA2AToolsOptions): ToolDefinition[]
           return `- ${agent.agentId} (${agent.status})${primary}${aliases}`;
         }),
       ];
-      return textResult(lines.join("\n"), {
+      return okTextResult(lines.join("\n"), {
         ok: true,
         count: agents.length,
         agents,

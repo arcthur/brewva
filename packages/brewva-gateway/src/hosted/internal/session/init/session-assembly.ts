@@ -232,25 +232,23 @@ function buildReadPathGuardResult(input: {
   }
   return {
     content: [{ type: "text", text: lines.join("\n") }],
-    details: {
-      verdict: "fail" as const,
-      requestedPath: input.requestedPath,
-      recentFailedPaths: input.state.failedPaths,
-      observedPaths: input.state.observedPaths,
-      observedDirectories: input.state.observedDirectories,
-      consecutiveMissingPathFailures: input.state.consecutiveMissingPathFailures,
-      phase: input.state.phase,
-      recoveryHint: "path_discovery_required_after_missing_path_failures",
+    outcome: {
+      kind: "err" as const,
+      error: {
+        requestedPath: input.requestedPath,
+        recentFailedPaths: input.state.failedPaths,
+        observedPaths: input.state.observedPaths,
+        observedDirectories: input.state.observedDirectories,
+        consecutiveMissingPathFailures: input.state.consecutiveMissingPathFailures,
+        phase: input.state.phase,
+        recoveryHint: "path_discovery_required_after_missing_path_failures",
+      },
     },
   };
 }
 
-function didReadToolSucceed(result: { details?: unknown } | undefined): boolean {
-  const details = result?.details as { verdict?: unknown; ok?: unknown } | undefined;
-  if (details?.verdict === "fail" || details?.ok === false) {
-    return false;
-  }
-  return true;
+function didReadToolSucceed(result: { outcome?: { kind?: unknown } } | undefined): boolean {
+  return result?.outcome?.kind !== "err";
 }
 
 function isTextReadResult(result: { content?: unknown } | undefined): boolean {
@@ -322,6 +320,9 @@ export function createCompactReadTool(input: CompactReadToolInput): HostedSessio
     label: originalRead.label,
     description: originalRead.description,
     parameters: originalRead.parameters,
+    outputSchema: originalRead.outputSchema,
+    errorSchema: originalRead.errorSchema,
+    outcomeVersion: originalRead.outcomeVersion,
     async execute(toolCallId, params, signal, onUpdate, ctx) {
       const requestedPath = resolveRequestedReadPath(params as Record<string, unknown> | undefined);
       const sessionId = resolveReadSessionId(ctx);
@@ -363,12 +364,14 @@ export function createCompactReadTool(input: CompactReadToolInput): HostedSessio
                 text: `File unchanged since previous visible read: ${requestedPath}`,
               },
             ],
-            details: {
-              ok: true,
-              unchanged: {
-                path: requestedPath,
-                previousReadId: unchanged.previousReadId,
-                visibleHistoryEpoch: unchanged.visibleHistoryEpoch,
+            outcome: {
+              kind: "ok",
+              value: {
+                unchanged: {
+                  path: requestedPath,
+                  previousReadId: unchanged.previousReadId,
+                  visibleHistoryEpoch: unchanged.visibleHistoryEpoch,
+                },
               },
             },
           } as unknown as Awaited<ReturnType<HostedSessionCustomTool["execute"]>>;
@@ -485,7 +488,10 @@ export function createCompactReadTool(input: CompactReadToolInput): HostedSessio
         return createStaticTextComponent("");
       }
 
-      const details = result.details as HostedSessionReadToolDetails | undefined;
+      const details =
+        result.outcome.kind === "ok"
+          ? (result.outcome.value as HostedSessionReadToolDetails | undefined)
+          : undefined;
       if (details?.truncation?.firstLineExceedsLimit) {
         if (!expanded) {
           return createStaticTextComponent(

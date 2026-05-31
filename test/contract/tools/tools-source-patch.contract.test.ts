@@ -22,6 +22,7 @@ import {
 } from "@brewva/brewva-vocabulary/delegation";
 import type { SourcePatchPlan, SourceSnapshot } from "@brewva/brewva-vocabulary/workbench";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
 function requireAnchor(details: SourceReadToolDetails, line: number): string {
@@ -82,7 +83,7 @@ describe("source_read and source_patch tools", () => {
     );
 
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
-    const details = (result as { details?: SourceReadToolDetails }).details;
+    const details = toolOutcomePayload(result) as SourceReadToolDetails;
     expect(text).toContain("[SourceRead]");
     expect(text).toMatch(/snapshot_id: snap_/u);
     expect(text).toMatch(/L1@[A-Za-z0-9_-]{6}\|export const alpha = 1;/u);
@@ -109,7 +110,7 @@ describe("source_read and source_patch tools", () => {
       fakeContext("tc-source-read-file-url"),
     );
 
-    const details = (result as { details?: SourceReadToolDetails }).details;
+    const details = toolOutcomePayload(result) as SourceReadToolDetails;
     expect(details?.resourceUri).toBe("brewva-resource:///file/example.ts");
     expect(
       extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
@@ -135,7 +136,7 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-source-patch"),
     );
-    const readDetails = (readResult as { details?: SourceReadToolDetails }).details;
+    const readDetails = toolOutcomePayload(readResult) as SourceReadToolDetails;
     if (!readDetails) {
       throw new Error("Missing source_read details.");
     }
@@ -161,7 +162,7 @@ describe("source_read and source_patch tools", () => {
     const prepareText = extractTextContent(
       prepareResult as { content: Array<{ type: string; text?: string }> },
     );
-    const prepareDetails = (prepareResult as { details?: { planId?: string } }).details;
+    const prepareDetails = toolOutcomePayload(prepareResult) as { planId?: string };
     expect(prepareText).toContain("[SourcePatchPlan]");
     expect(prepareText).toContain("-export const beta = 2;");
     expect(prepareText).toContain("+export const beta = 20;");
@@ -181,11 +182,9 @@ describe("source_read and source_patch tools", () => {
     expect(
       extractTextContent(applyResult as { content: Array<{ type: string; text?: string }> }),
     ).toContain("[SourcePatchApply]");
-    const applyDetails = (
-      applyResult as {
-        details?: { patchSet?: { rollbackArtifactRef?: string } | null };
-      }
-    ).details;
+    const applyDetails = toolOutcomePayload(applyResult) as {
+      patchSet?: { rollbackArtifactRef?: string } | null;
+    };
     const rollbackArtifactRef = applyDetails?.patchSet?.rollbackArtifactRef;
     expect(rollbackArtifactRef).toMatch(/^tc-source-patch\/patch_/u);
     const rollbackManifestPath = join(workspace, rollbackArtifactRef ?? "");
@@ -220,7 +219,7 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-preview"),
     );
-    const readDetails = (readResult as { details?: SourceReadToolDetails }).details;
+    const readDetails = toolOutcomePayload(readResult) as SourceReadToolDetails;
     if (!readDetails) {
       throw new Error("Missing source_read details.");
     }
@@ -244,7 +243,7 @@ describe("source_read and source_patch tools", () => {
       fakeContext("tc-preview"),
     );
 
-    const plan = (prepareResult as { details?: { plan?: SourcePatchPlan } }).details?.plan;
+    const plan = (toolOutcomePayload(prepareResult) as { plan?: SourcePatchPlan }).plan;
     expect(plan?.preview).toContain("\n-\n");
     expect(plan?.preview).toContain("\n+\n");
     expect(readFileSync(filePath, "utf8")).toContain("export const alpha = 1;");
@@ -269,7 +268,7 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-bom"),
     );
-    const readDetails = (readResult as { details?: SourceReadToolDetails }).details;
+    const readDetails = toolOutcomePayload(readResult) as SourceReadToolDetails;
     if (!readDetails) {
       throw new Error("Missing source_read details.");
     }
@@ -291,7 +290,7 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-bom"),
     );
-    const planId = (prepareResult as { details?: { planId?: string } }).details?.planId;
+    const planId = (toolOutcomePayload(prepareResult) as { planId?: string }).planId;
 
     await apply.execute(
       "tc-bom-apply",
@@ -329,7 +328,7 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-generated-policy"),
     );
-    const readDetails = (readResult as { details?: SourceReadToolDetails }).details;
+    const readDetails = toolOutcomePayload(readResult) as SourceReadToolDetails;
     if (!readDetails) {
       throw new Error("Missing source_read details.");
     }
@@ -394,8 +393,8 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-conflict-apply"),
     );
-    const sourceDetails = (sourceReadResult as { details?: SourceReadToolDetails }).details;
-    const generatedDetails = (generatedReadResult as { details?: SourceReadToolDetails }).details;
+    const sourceDetails = toolOutcomePayload(sourceReadResult) as SourceReadToolDetails;
+    const generatedDetails = toolOutcomePayload(generatedReadResult) as SourceReadToolDetails;
     if (!sourceDetails || !generatedDetails) {
       throw new Error("Missing source_read details.");
     }
@@ -424,7 +423,7 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-conflict-apply"),
     );
-    const planId = (prepareResult as { details?: { planId?: string } }).details?.planId;
+    const planId = (toolOutcomePayload(prepareResult) as { planId?: string }).planId;
     expect(
       extractTextContent(prepareResult as { content: Array<{ type: string; text?: string }> }),
     ).toContain("generated_file_rejected");
@@ -619,7 +618,7 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-rename-collision"),
     );
-    const planId = (prepareResult as { details?: { planId?: string } }).details?.planId;
+    const planId = (toolOutcomePayload(prepareResult) as { planId?: string }).planId;
     expect(
       extractTextContent(prepareResult as { content: Array<{ type: string; text?: string }> }),
     ).toContain("path_conflict");
@@ -722,7 +721,7 @@ describe("source_read and source_patch tools", () => {
       undefined,
       fakeContext("tc-worker-results"),
     );
-    const planId = (prepared as { details?: { planId?: string } }).details?.planId;
+    const planId = (toolOutcomePayload(prepared) as { planId?: string }).planId;
     expect(planId).toMatch(/^plan_/u);
     expect(readFileSync(sourcePath, "utf8")).toContain("value = 1");
 
@@ -852,7 +851,7 @@ describe("source_read and source_patch tools", () => {
     expect(
       extractTextContent(prepared as { content: Array<{ type: string; text?: string }> }),
     ).toContain("generated_file_rejected");
-    expect((prepared as { details?: { status?: string } }).details?.status).toBe("conflict");
+    expect((toolOutcomePayload(prepared) as { status?: string }).status).toBe("conflict");
     expect(readFileSync(sourcePath, "utf8")).toContain("export {};");
   });
 });

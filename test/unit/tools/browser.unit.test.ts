@@ -6,6 +6,7 @@ import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
 import { createBrowserTools } from "@brewva/brewva-tools/navigation";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createBundledToolRuntime } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function fakeContext(sessionId: string, cwd: string): any {
   return {
@@ -129,7 +130,7 @@ describe("browser tools", () => {
     );
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
-    const details = result.details as {
+    const details = toolOutcomePayload(result) as {
       artifactRef?: string;
       artifacts?: Array<{ kind?: string }>;
     };
@@ -173,7 +174,7 @@ describe("browser tools", () => {
     );
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
-    const details = result.details as { reason?: string } | undefined;
+    const details = toolOutcomePayload(result) as { reason?: string } | undefined;
     expect(text).toContain("escapes workspace root");
     expect(details?.reason).toBe("path_outside_workspace");
   });
@@ -200,7 +201,7 @@ describe("browser tools", () => {
     );
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
-    const details = result.details as { reason?: string } | undefined;
+    const details = toolOutcomePayload(result) as { reason?: string } | undefined;
     expect(text).toContain("does not exist");
     expect(details?.reason).toBe("missing_path");
     expect(existsSync(logPath)).toBe(false);
@@ -229,7 +230,7 @@ describe("browser tools", () => {
     );
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
-    const details = result.details as { reason?: string } | undefined;
+    const details = toolOutcomePayload(result) as { reason?: string } | undefined;
     expect(text).toContain("choose either loadState or urlPattern");
     expect(details?.reason).toBe("wait_condition_conflict");
     expect(existsSync(logPath)).toBe(false);
@@ -258,7 +259,7 @@ describe("browser tools", () => {
     );
 
     const text = extractText(result as { content: Array<{ type: string; text?: string }> });
-    const details = result.details as {
+    const details = toolOutcomePayload(result) as {
       artifactRef?: string;
       artifacts?: Array<{ kind?: string }>;
     };

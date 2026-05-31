@@ -23,6 +23,7 @@ describe("tool catalog", () => {
         async execute() {
           return {
             content: [{ type: "text", text: "ok" }],
+            outcome: { kind: "ok", value: null },
             details: null,
             isError: false,
           };
@@ -65,6 +66,7 @@ describe("tool catalog", () => {
           async execute() {
             return {
               content: [{ type: "text", text: "ok" }],
+              outcome: { kind: "ok", value: null },
               details: null,
               isError: false,
             };
@@ -89,6 +91,7 @@ describe("tool catalog", () => {
         async execute() {
           return {
             content: [{ type: "text", text: "first" }],
+            outcome: { kind: "ok", value: null },
             details: null,
             isError: false,
           };
@@ -105,6 +108,7 @@ describe("tool catalog", () => {
         async execute() {
           return {
             content: [{ type: "text", text: "second" }],
+            outcome: { kind: "ok", value: null },
             details: null,
             isError: false,
           };

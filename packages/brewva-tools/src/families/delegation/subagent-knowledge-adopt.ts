@@ -5,7 +5,7 @@ import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
-import { failTextResult, textResult, toolDetails } from "../../utils/result.js";
+import { errTextResult, okTextResult, toolOutcomeRecord } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const DecisionSchema = buildStringEnumSchema(["accept", "reject", "defer"] as const, {
@@ -60,7 +60,7 @@ export function createSubagentKnowledgeAdoptTool(options: BrewvaToolOptions): To
       };
       const artifactRefs = adoptionArtifactRefs(normalizedParams);
       if (decision === "accept" && artifactRefs.length === 0) {
-        return failTextResult(
+        return errTextResult(
           "subagent_knowledge_adopt failed: accept requires a knowledge-capture, worker patch, or final artifact reference.",
           {
             ok: false,
@@ -83,9 +83,9 @@ export function createSubagentKnowledgeAdoptTool(options: BrewvaToolOptions): To
           finalArtifactRef: params.finalArtifactRef ?? null,
         },
       });
-      return textResult(
+      return okTextResult(
         `subagent_knowledge_adopt recorded ${decision} for run=${params.runId}`,
-        toolDetails({
+        toolOutcomeRecord({
           ok: true,
           runId: params.runId,
           decision: params.decision,

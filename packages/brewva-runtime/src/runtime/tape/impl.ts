@@ -9,7 +9,9 @@ import {
   writeSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { toJsonValue } from "@brewva/brewva-std/json";
+import { isSupportedToolOutcomeVersion } from "@brewva/brewva-std/tool-outcome-version";
 import type {
   Baseline,
   CanonicalEvent,
@@ -18,6 +20,9 @@ import type {
   CostSummaryView,
   RecoveryHistoryView,
   RuntimeRecoveryCause,
+  StepProjectionAuthority,
+  StepProjectionRecord,
+  StepProjectionView,
   TapeCommitPort,
   TapePort,
   TapeQuery,
@@ -198,6 +203,135 @@ function projectToolCommitments(
   });
 }
 
+function stableHash(value: unknown): string {
+  return `sha256:redacted-stable-json:v1:${redactedStableJsonSha256Hex(value)}`;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readStringArray(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
+function readOutcomeKind(value: unknown): "ok" | "err" | "inconclusive" | undefined {
+  const record = isRecord(value) ? value : undefined;
+  return record?.kind === "ok" || record?.kind === "err" || record?.kind === "inconclusive"
+    ? record.kind
+    : undefined;
+}
+
+function readOutcomeVersion(result: Record<string, unknown>): string | undefined {
+  const metadata = isRecord(result.metadata) ? result.metadata : undefined;
+  return isSupportedToolOutcomeVersion(metadata?.outcomeVersion)
+    ? metadata.outcomeVersion
+    : undefined;
+}
+
+function readAuthority(value: unknown): StepProjectionAuthority | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const authority: StepProjectionAuthority = {
+    effects: readStringArray(value.effects),
+    ...(optionalString(value.actionClass)
+      ? { actionClass: optionalString(value.actionClass) }
+      : {}),
+    ...(value.receiptPolicy !== undefined
+      ? { receiptPolicy: toJsonValue(value.receiptPolicy) }
+      : {}),
+    ...(value.recoveryPolicy !== undefined
+      ? { recoveryPolicy: toJsonValue(value.recoveryPolicy) }
+      : {}),
+    ...(optionalString(value.source) ? { source: optionalString(value.source) } : {}),
+    ...(optionalString(value.boundary) ? { boundary: optionalString(value.boundary) } : {}),
+  };
+  return authority;
+}
+
+function mergeStepRecord(
+  records: Map<string, StepProjectionRecord>,
+  commitmentId: string,
+  next: Omit<StepProjectionRecord, "stepId" | "commitmentId">,
+): void {
+  const previous = records.get(commitmentId);
+  records.set(commitmentId, {
+    ...(previous ?? { stepId: commitmentId, commitmentId, status: next.status }),
+    ...next,
+    status: next.status,
+  });
+}
+
+function projectStepProjection(
+  sessionId: string,
+  events: readonly CanonicalEvent[],
+): StepProjectionView {
+  const records = new Map<string, StepProjectionRecord>();
+  for (const event of events) {
+    if (
+      event.type !== "tool.proposed" &&
+      event.type !== "tool.committed" &&
+      event.type !== "tool.aborted"
+    ) {
+      continue;
+    }
+    const payload: Record<string, unknown> = isRecord(event.payload) ? event.payload : {};
+    const commitmentId = optionalString(payload.commitmentId);
+    if (!commitmentId) {
+      continue;
+    }
+    const call: Record<string, unknown> = isRecord(payload.call)
+      ? payload.call
+      : isRecord(payload.attemptedCall)
+        ? payload.attemptedCall
+        : {};
+    if (event.type === "tool.proposed") {
+      mergeStepRecord(records, commitmentId, {
+        status: "proposed",
+        proposedEventId: event.id,
+        toolCallId: optionalString(call.toolCallId),
+        toolName: optionalString(call.toolName),
+        turnId: optionalString(call.turnId),
+        inputHash: stableHash(call.args ?? {}),
+        authority: readAuthority(payload.authority),
+      });
+      continue;
+    }
+    if (event.type === "tool.committed") {
+      const result: Record<string, unknown> = isRecord(payload.result) ? payload.result : {};
+      mergeStepRecord(records, commitmentId, {
+        status: "committed",
+        committedEventId: event.id,
+        toolCallId: optionalString(call.toolCallId),
+        toolName: optionalString(call.toolName),
+        turnId: optionalString(call.turnId),
+        inputHash: stableHash(call.args ?? {}),
+        outputHash: stableHash(result),
+        outcomeKind: readOutcomeKind(result.outcome),
+        outcomeVersion: readOutcomeVersion(result),
+      });
+      continue;
+    }
+    const authority = readAuthority(payload.authority);
+    mergeStepRecord(records, commitmentId, {
+      status: "aborted",
+      abortedEventId: event.id,
+      toolCallId: optionalString(call.toolCallId),
+      toolName: optionalString(call.toolName),
+      turnId: optionalString(call.turnId),
+      inputHash: stableHash(call.args ?? {}),
+      ...(authority ? { authority } : {}),
+    });
+  }
+  return Object.freeze({
+    sessionId,
+    steps: Object.freeze([...records.values()]),
+  });
+}
+
 function projectRecoveryHistory(
   sessionId: string,
   events: readonly CanonicalEvent[],
@@ -298,9 +432,82 @@ function isCustomEventPayload(value: unknown): value is CustomEventPayload {
   );
 }
 
+function isStrictJsonValue(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (value === null) {
+    return true;
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return true;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (typeof value !== "object") {
+    return false;
+  }
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    return value.every((entry) => isStrictJsonValue(entry, seen));
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return false;
+  }
+  return Object.values(value).every((entry) => isStrictJsonValue(entry, seen));
+}
+
+function isToolOutcome(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (value.kind === "ok") {
+    return "value" in value && isStrictJsonValue(value.value);
+  }
+  if (value.kind === "err") {
+    return "error" in value && isStrictJsonValue(value.error);
+  }
+  if (value.kind === "inconclusive") {
+    return (
+      (value.reason === undefined || typeof value.reason === "string") &&
+      (value.value === undefined || isStrictJsonValue(value.value)) &&
+      (value.evidenceRefs === undefined ||
+        (Array.isArray(value.evidenceRefs) &&
+          value.evidenceRefs.every((entry) => typeof entry === "string")))
+    );
+  }
+  return false;
+}
+
+function hasLegacyToolResultFields(result: Record<string, unknown>): boolean {
+  return "ok" in result || "isError" in result || "details" in result;
+}
+
+function hasUnsupportedToolOutcomeVersion(result: Record<string, unknown>): boolean {
+  const metadata = isRecord(result.metadata) ? result.metadata : undefined;
+  if (!metadata || !Object.prototype.hasOwnProperty.call(metadata, "outcomeVersion")) {
+    return false;
+  }
+  return !isSupportedToolOutcomeVersion(metadata.outcomeVersion);
+}
+
 function assertCanonicalEventPayload(event: CanonicalEvent): void {
   if (event.type === "custom" && !isCustomEventPayload(event.payload)) {
     throw new Error("invalid_custom_event_payload");
+  }
+  if (event.type === "tool.committed") {
+    const payload = isRecord(event.payload) ? event.payload : undefined;
+    const result = isRecord(payload?.result) ? payload?.result : undefined;
+    if (
+      !result ||
+      hasLegacyToolResultFields(result) ||
+      hasUnsupportedToolOutcomeVersion(result) ||
+      !isToolOutcome(result.outcome)
+    ) {
+      throw new Error("invalid_tool_committed_payload");
+    }
   }
 }
 
@@ -368,6 +575,7 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
 
   const commit: TapeCommitPort = Object.freeze({
     commit(input: TapeCommitInput) {
+      assertCanonicalEventPayload(input as CanonicalEvent);
       const event = freezeCanonicalEvent({
         ...input,
         ...(input.payload !== undefined
@@ -400,6 +608,8 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
           return projectTurnState(sessionId, events) as TapeView<TName>;
         case "tool_commitments":
           return projectToolCommitments(sessionId, events) as TapeView<TName>;
+        case "step_projection":
+          return projectStepProjection(sessionId, events) as TapeView<TName>;
         case "recovery_history":
           return projectRecoveryHistory(sessionId, events) as TapeView<TName>;
         case "cost_summary":

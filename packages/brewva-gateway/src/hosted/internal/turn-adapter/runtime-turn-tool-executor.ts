@@ -1,10 +1,16 @@
 import type { RuntimeToolExecutorPort, ToolExecutionResult } from "@brewva/brewva-runtime";
 import { toJsonValue, type JsonValue } from "@brewva/brewva-std/json";
-import type { BrewvaToolResult } from "@brewva/brewva-substrate/tools";
+import type { BrewvaToolDefinition, BrewvaToolResult } from "@brewva/brewva-substrate/tools";
 import {
-  resolveToolDisplay,
-  resolveToolDisplayVerdict,
-} from "../session/tools/tool-output-display.js";
+  assertSupportedToolOutcomeVersion,
+  DEFAULT_TOOL_OUTCOME_VERSION,
+  outcomeDisplayVerdict,
+  outcomeIsWireError,
+  ToolErrorRecordSchema,
+  ToolJsonRecordSchema,
+  validateOutcomeAgainstSchemas,
+} from "@brewva/brewva-substrate/tools";
+import { resolveToolDisplay } from "../session/tools/tool-output-display.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
 import { isRuntimeAdapterSession } from "./runtime-turn-session.js";
 
@@ -33,38 +39,59 @@ function textFromToolResultContent(content: unknown): string {
   return textParts.join("\n");
 }
 
-function toolExecutionResultFromHostedResult(result: BrewvaToolResult): ToolExecutionResult {
-  const metadata: Record<string, JsonValue> = {};
-  if (result.details !== undefined) {
-    metadata.details = toJsonValue(result.details);
+function assertToolOutcomeMatchesSchema(
+  tool: BrewvaToolDefinition,
+  result: BrewvaToolResult,
+): void {
+  if (
+    !validateOutcomeAgainstSchemas({
+      outputSchema: tool.outputSchema ?? ToolJsonRecordSchema,
+      errorSchema: tool.errorSchema ?? ToolErrorRecordSchema,
+      outcome: result.outcome,
+    })
+  ) {
+    throw new Error(`tool_outcome_schema_mismatch:${tool.name}:${result.outcome.kind}`);
   }
+}
+
+function toolExecutionResultFromHostedResult(
+  tool: BrewvaToolDefinition,
+  result: BrewvaToolResult,
+): ToolExecutionResult {
+  assertToolOutcomeMatchesSchema(tool, result);
+  const outcomeVersion = assertSupportedToolOutcomeVersion(
+    tool.outcomeVersion ?? DEFAULT_TOOL_OUTCOME_VERSION,
+  );
+  const metadata: Record<string, JsonValue> = { outcomeVersion };
   if (result.display !== undefined) {
     metadata.display = toJsonValue(result.display);
   }
   return {
-    ok: result.isError !== true,
+    outcome: result.outcome,
     content: result.content,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   };
 }
 
 function toolExecutionResultFromHostedUpdate(
-  toolName: string,
+  tool: BrewvaToolDefinition,
   update: BrewvaToolResult,
 ): ToolExecutionResult {
+  assertToolOutcomeMatchesSchema(tool, update);
+  const outcomeVersion = assertSupportedToolOutcomeVersion(
+    tool.outcomeVersion ?? DEFAULT_TOOL_OUTCOME_VERSION,
+  );
   const display = resolveToolDisplay({
-    toolName,
-    isError: update.isError === true,
+    toolName: tool.name,
+    isError: outcomeIsWireError(update.outcome),
     result: update,
   });
   return {
-    ok: update.isError !== true,
+    outcome: update.outcome,
     content: update.content,
     metadata: {
-      verdict: resolveToolDisplayVerdict({
-        isError: update.isError === true,
-        result: update,
-      }),
+      outcomeVersion,
+      verdict: outcomeDisplayVerdict(update.outcome),
       ...(display.display ? { display: toJsonValue(display.display) } : {}),
     },
   };
@@ -92,14 +119,12 @@ export function createHostedRuntimeToolExecutorPort(
         input.signal,
         input.onProgress
           ? async (update) => {
-              await input.onProgress?.(
-                toolExecutionResultFromHostedUpdate(commitment.call.toolName, update),
-              );
+              await input.onProgress?.(toolExecutionResultFromHostedUpdate(tool, update));
             }
           : undefined,
         session.createRuntimeToolContext(),
       );
-      return toolExecutionResultFromHostedResult(result);
+      return toolExecutionResultFromHostedResult(tool, result);
     },
   };
 }

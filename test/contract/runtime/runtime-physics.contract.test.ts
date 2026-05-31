@@ -46,7 +46,7 @@ function sourceEvents(): CanonicalEvent[] {
 
 const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
   async execute() {
-    return { ok: true, content: "" };
+    return { outcome: { kind: "ok", value: {} }, content: "" };
   },
 };
 

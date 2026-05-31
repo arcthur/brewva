@@ -18,7 +18,7 @@ import {
   resolveTaskBlocker,
   updateTaskItem,
 } from "../../runtime-port/task-ledger.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const TaskItemStatusSchema = buildStringEnumSchema(TASK_AGENT_ITEM_STATUS_VALUES, {
@@ -35,7 +35,7 @@ function toRuntimeTaskItemStatus(value: unknown): TaskItemStatus | undefined {
 }
 
 function invalidTaskStatusResult(toolAction: "add" | "update", status: unknown) {
-  return failTextResult(
+  return errTextResult(
     `Task item ${toolAction} rejected (invalid_status). status must be one of pending, in_progress, done, blocked; use done instead of completed.`,
     {
       ok: false,
@@ -143,7 +143,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           verification: normalizedVerification,
           acceptance: normalizedAcceptance,
         });
-        return textResult("TaskSpec recorded.", { ok: true });
+        return okTextResult("TaskSpec recorded.", { ok: true });
       },
     },
     {},
@@ -174,12 +174,9 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           status,
         });
         if (!result.ok) {
-          return failTextResult(
-            `Task item rejected (${result.reason ?? "unknown_error"}).`,
-            result,
-          );
+          return errTextResult(`Task item rejected (${result.reason ?? "unknown_error"}).`, result);
         }
-        return textResult(`Task item added (${result.itemId}).`, result);
+        return okTextResult(`Task item added (${result.itemId}).`, result);
       },
     },
     {},
@@ -209,12 +206,12 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           status,
         });
         if (!result.ok) {
-          return failTextResult(
+          return errTextResult(
             `Task item update rejected (${result.reason ?? "unknown_error"}).`,
             result,
           );
         }
-        return textResult("Task item updated.", result);
+        return okTextResult("Task item updated.", result);
       },
     },
     {},
@@ -241,9 +238,9 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           claimId: params.claimId,
         });
         if (!result.ok) {
-          return failTextResult(`Blocker rejected (${result.reason ?? "unknown_error"}).`, result);
+          return errTextResult(`Blocker rejected (${result.reason ?? "unknown_error"}).`, result);
         }
-        return textResult(`Blocker recorded (${result.blockerId}).`, result);
+        return okTextResult(`Blocker recorded (${result.blockerId}).`, result);
       },
     },
     {},
@@ -262,12 +259,12 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         const sessionId = getSessionId(ctx);
         const result = resolveTaskBlocker(taskResolveBlockerTool.runtime, sessionId, params.id);
         if (!result.ok) {
-          return failTextResult(
+          return errTextResult(
             `Blocker resolve rejected (${result.reason ?? "unknown_error"}).`,
             result,
           );
         }
-        return textResult("Blocker resolved.", result);
+        return okTextResult("Blocker resolved.", result);
       },
     },
     {},
@@ -293,7 +290,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
         const sessionId = getSessionId(ctx);
         const status = toRuntimeTaskAcceptanceStatus(params.status);
         if (!status) {
-          return failTextResult("Acceptance update rejected (invalid_status).", {
+          return errTextResult("Acceptance update rejected (invalid_status).", {
             ok: false,
             error: "invalid_status",
           });
@@ -304,12 +301,12 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
           notes: params.notes,
         });
         if (!result.ok) {
-          return failTextResult(
+          return errTextResult(
             `Acceptance update rejected (${result.reason ?? "unknown_error"}).`,
             result,
           );
         }
-        return textResult(`Acceptance state recorded (${status}).`, result);
+        return okTextResult(`Acceptance state recorded (${status}).`, result);
       },
     },
     {},
@@ -328,7 +325,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       const sessionId = getSessionId(ctx);
       const state = getTaskState(taskViewStateTool.runtime, sessionId);
       const block = formatTaskStateBlock(state);
-      return textResult(block || "[TaskLedger]\n(empty)", { ok: true });
+      return okTextResult(block || "[TaskLedger]\n(empty)", { ok: true });
     },
   });
 

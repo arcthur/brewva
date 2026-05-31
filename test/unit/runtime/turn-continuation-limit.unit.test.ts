@@ -30,7 +30,7 @@ describe("runtime turn provider tool continuation limit", () => {
       async execute(commitment) {
         executedTools += 1;
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: `executed:${commitment.call.toolCallId}`,
         };
       },
@@ -80,7 +80,7 @@ describe("runtime turn provider tool continuation limit", () => {
       async execute(commitment) {
         executedTools += 1;
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: `executed:${commitment.call.toolCallId}`,
         };
       },

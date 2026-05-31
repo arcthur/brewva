@@ -1,7 +1,7 @@
 import type { BrewvaBundledToolOptions } from "../../../contracts/index.js";
 import { recordToolRuntimeEvent } from "../../../runtime-port/extensions.js";
 import { explainToolAccess } from "../../../runtime-port/tool-access.js";
-import { failTextResult } from "../../../utils/result.js";
+import { errTextResult } from "../../../utils/result.js";
 import { formatBrowserLabel } from "./render.js";
 
 export function enforceRuntimeToolAccess(input: {
@@ -10,7 +10,7 @@ export function enforceRuntimeToolAccess(input: {
   toolName: string;
   args?: Record<string, unknown>;
   cwd: string;
-}): { allowed: true } | { allowed: false; result: ReturnType<typeof failTextResult> } {
+}): { allowed: true } | { allowed: false; result: ReturnType<typeof errTextResult> } {
   const decision = explainToolAccess(input);
   if (decision.allowed) {
     return { allowed: true };
@@ -32,7 +32,7 @@ export function enforceRuntimeToolAccess(input: {
 
   return {
     allowed: false,
-    result: failTextResult(
+    result: errTextResult(
       `[${formatBrowserLabel(input.toolName)}]\nstatus: failed\nreason: Tool call blocked by runtime policy.${
         decision.reason ? ` ${decision.reason}` : ""
       }`,

@@ -4,7 +4,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";
 import { recordToolRuntimeEvent } from "../../../runtime-port/extensions.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../../utils/result.js";
 import { getSessionId } from "../../../utils/session.js";
 import {
   OBS_AGGREGATION_SCHEMA,
@@ -65,7 +65,7 @@ export function createObsQueryTool(options: BrewvaBundledToolOptions): ToolDefin
           : null;
       const aggregation = normalizeObservabilityAggregation(params.aggregation) ?? null;
       if ((metric === null) !== (aggregation === null)) {
-        return failTextResult("obs_query rejected (metric_and_aggregation_must_be_paired).", {
+        return errTextResult("obs_query rejected (metric_and_aggregation_must_be_paired).", {
           ok: false,
           error: "metric_and_aggregation_must_be_paired",
         });
@@ -185,7 +185,7 @@ export function createObsQueryTool(options: BrewvaBundledToolOptions): ToolDefin
         },
       });
 
-      return textResult(lines.join("\n"), {
+      return okTextResult(lines.join("\n"), {
         ok: true,
         queryRef: artifactOverride?.artifactRef ?? null,
         matchCount: query.matchCount,

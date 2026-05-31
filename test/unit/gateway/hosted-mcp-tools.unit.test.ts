@@ -6,6 +6,7 @@ import {
   createHostedMcpToolBundle,
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/init/mcp-tools.js";
 import { requireDefined } from "../../helpers/assertions.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 describe("hosted MCP tools", () => {
   test("bridges MCP catalog entries into executable hosted tools without trusting annotations", async () => {
@@ -66,9 +67,9 @@ describe("hosted MCP tools", () => {
       undefined as never,
     );
     expect(calls).toEqual([{ name: "Search.Files", arguments: { query: "needle" } }]);
-    expect(result.isError).toBe(false);
+    expect(result.outcome.kind === "err").toBe(false);
     expect(result.content).toEqual([{ type: "text", text: "found results" }]);
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       serverId: "repo",
       mcpToolName: "Search.Files",
       hostedToolName: "mcp__repo__search_files",
@@ -180,7 +181,7 @@ describe("hosted MCP tools", () => {
       text: "[MCP resource: uri=file:///tmp/result.json name=unnamed mimeType=application/json]",
     });
     expect(JSON.stringify(result.content)).not.toContain("YmFzZTY0");
-    expect(JSON.stringify(result.details)).toContain(imageData);
+    expect(JSON.stringify(toolOutcomePayload(result))).toContain(imageData);
   });
 
   test("rejects duplicate hosted names across MCP sources", async () => {

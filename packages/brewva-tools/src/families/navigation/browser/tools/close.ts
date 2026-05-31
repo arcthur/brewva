@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../../registry/runtime-bound-tool.js";
-import { textResult } from "../../../../utils/result.js";
+import { okTextResult } from "../../../../utils/result.js";
 import { getSessionId } from "../../../../utils/session.js";
 import { executeBrowserCommand } from "../command.js";
 import { buildFailureResult, buildStatusPayload, buildSuccessDetails } from "../render.js";
@@ -35,7 +35,7 @@ export function createBrowserCloseTool(
       if (!result.ok) {
         return buildFailureResult("browser_close", result);
       }
-      return textResult(
+      return okTextResult(
         buildStatusPayload({
           header: "[Browser Close]",
           sessionName,

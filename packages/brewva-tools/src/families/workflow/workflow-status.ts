@@ -12,7 +12,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { readWorkflowStatusState } from "../../runtime-port/workflow-status.js";
-import { textResult, withVerdict } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 async function listPendingDelegationOutcomes(
@@ -327,37 +327,38 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         }
       }
 
-      return textResult(
-        lines.join("\n"),
-        withVerdict(
-          {
-            sessionId,
-            currentWorkspaceRevision: snapshot.currentWorkspaceRevision ?? null,
-            posture,
-            finish: snapshot.finish,
-            artifacts: includeArtifacts ? displayArtifacts : [],
-            pendingWorkerResults: pendingWorkerResults.map((result) => ({
-              workerId: result.workerId,
-              status: result.status,
-              summary: result.summary,
-            })),
-            pendingDelegationOutcomesCount: snapshot.pendingDelegationOutcomes,
-            pendingDelegationOutcomes: pendingDelegationOutcomes.map((run) => ({
-              runId: run.runId,
-              delegate: run.delegate,
-              label: run.label,
-              status: run.status,
-              summary: run.summary,
-              handoffState: run.delivery?.handoffState ?? null,
-            })),
-            openToolCalls,
-            uncleanShutdownDiagnostic,
-            stallAdjudication,
-            updatedAt: snapshot.updatedAt,
-          },
-          verdict,
-        ),
-      );
+      const details = {
+        sessionId,
+        currentWorkspaceRevision: snapshot.currentWorkspaceRevision ?? null,
+        posture,
+        finish: snapshot.finish,
+        artifacts: includeArtifacts ? displayArtifacts : [],
+        pendingWorkerResults: pendingWorkerResults.map((result) => ({
+          workerId: result.workerId,
+          status: result.status,
+          summary: result.summary,
+        })),
+        pendingDelegationOutcomesCount: snapshot.pendingDelegationOutcomes,
+        pendingDelegationOutcomes: pendingDelegationOutcomes.map((run) => ({
+          runId: run.runId,
+          delegate: run.delegate,
+          label: run.label,
+          status: run.status,
+          summary: run.summary,
+          handoffState: run.delivery?.handoffState ?? null,
+        })),
+        openToolCalls,
+        uncleanShutdownDiagnostic,
+        stallAdjudication,
+        updatedAt: snapshot.updatedAt,
+      };
+      if (verdict === "fail") {
+        return errTextResult(lines.join("\n"), details);
+      }
+      if (verdict === "inconclusive") {
+        return inconclusiveTextResult(lines.join("\n"), details);
+      }
+      return okTextResult(lines.join("\n"), details);
     },
   });
 }

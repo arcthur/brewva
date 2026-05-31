@@ -236,7 +236,7 @@ describe("hosted runtime event query", () => {
     );
     await runtime.runtime.kernel.commitToolResult({
       commitmentId: "tool:approval-denied-not-consumed:call-exec",
-      result: { ok: true, content: "unexpected commit" },
+      result: { outcome: { kind: "ok", value: {} }, content: "unexpected commit" },
     });
 
     expect(runtime.ops.proposals.requests.list(sessionId)).toMatchObject([
@@ -344,7 +344,7 @@ describe("hosted runtime event query", () => {
     const toolExecutor: RuntimeToolExecutorPort = {
       async execute() {
         return {
-          ok: true,
+          outcome: { kind: "ok", value: {} },
           content: [{ type: "text", text: "docs/architecture/system-architecture.md" }],
         };
       },

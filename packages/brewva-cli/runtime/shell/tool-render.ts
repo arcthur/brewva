@@ -3,6 +3,7 @@ import process from "node:process";
 import type {
   BrewvaRenderableComponent,
   BrewvaToolDefinition,
+  BrewvaToolResult,
 } from "@brewva/brewva-substrate/tools";
 import type { CliShellTranscriptToolPart } from "../../src/shell/domain/transcript.js";
 import type { SessionPalette } from "./palette.js";
@@ -84,6 +85,22 @@ function readToolRenderState(cache: ToolRenderCache, toolCallId: string): unknow
   return state;
 }
 
+function resultOutcomeFromPayload(
+  payload: NonNullable<CliShellTranscriptToolPart["result"]>,
+): BrewvaToolResult["outcome"] {
+  const details = payload.details ?? {};
+  const detailRecord = asRecord(payload.details);
+  const verdict = payload.verdict;
+  if (payload.isError === true || verdict === "fail") {
+    return { kind: "err", error: details };
+  }
+  if (verdict === "inconclusive") {
+    const reason = typeof detailRecord?.reason === "string" ? detailRecord.reason : "inconclusive";
+    return { kind: "inconclusive", reason, value: details };
+  }
+  return { kind: "ok", value: details };
+}
+
 export function renderToolComponentLines(input: {
   kind: "call" | "result";
   toolDefinitions: ReadonlyMap<string, BrewvaToolDefinition>;
@@ -135,8 +152,7 @@ export function renderToolComponentLines(input: {
   const component = toolDefinition.renderResult(
     {
       content: payload.content as never,
-      details: payload.details,
-      isError: payload.isError,
+      outcome: resultOutcomeFromPayload(payload),
       ...(payload.display ? { display: payload.display } : {}),
     },
     {

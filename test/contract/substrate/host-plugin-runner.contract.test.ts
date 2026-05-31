@@ -230,7 +230,12 @@ describe("substrate host plugin runner", () => {
             description: "Demo tool",
             parameters: Type.Object({ value: Type.String() }),
             async execute() {
-              return { content: [{ type: "text", text: "ok" }], details: {} };
+              return {
+                content: [{ type: "text", text: "ok" }],
+                outcome: { kind: "ok", value: {} },
+                details: {},
+                isError: false,
+              };
             },
           });
           api.registerCommand("demo", {

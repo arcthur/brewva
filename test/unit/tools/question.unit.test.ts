@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BrewvaToolContext } from "@brewva/brewva-substrate/tools";
 import { createQuestionTool } from "@brewva/brewva-tools/delegation";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function createToolContext(overrides?: {
   custom?(
@@ -105,7 +106,7 @@ describe("question tool", () => {
     );
 
     expect(receivedSignal).toBe(abortController.signal);
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: true,
       answers: [["Yes"]],
       questionCount: 1,
@@ -132,9 +133,9 @@ describe("question tool", () => {
       createToolContext(),
     );
 
-    expect(result.details).toMatchObject({
-      error: "invalid_question_request",
-      verdict: "fail",
+    expect(result.outcome).toMatchObject({
+      kind: "err",
+      error: { error: "invalid_question_request" },
     });
   });
 
@@ -168,9 +169,9 @@ describe("question tool", () => {
       }),
     );
 
-    expect(result.details).toMatchObject({
-      error: "invalid_question_answer",
-      verdict: "fail",
+    expect(result.outcome).toMatchObject({
+      kind: "err",
+      error: { error: "invalid_question_answer" },
     });
   });
 });

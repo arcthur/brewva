@@ -27,7 +27,12 @@ describe("managed-agent-session tool registry", () => {
         parameters: Type.Object({}),
         promptSnippet: " line one \n line two ",
         promptGuidelines: [" alpha ", "alpha", "beta "],
-        execute: async () => ({ content: [], details: null }),
+        execute: async () => ({
+          content: [],
+          outcome: { kind: "ok", value: null },
+          details: null,
+          isError: false,
+        }),
       },
     ]);
     registry.upsert({
@@ -37,7 +42,12 @@ describe("managed-agent-session tool registry", () => {
       parameters: Type.Object({ path: Type.String() }),
       promptSnippet: " updated \n snippet ",
       promptGuidelines: [" beta ", "gamma"],
-      execute: async () => ({ content: [], details: null }),
+      execute: async () => ({
+        content: [],
+        outcome: { kind: "ok", value: null },
+        details: null,
+        isError: false,
+      }),
     });
 
     expect(registry.listRegisteredTools()).toHaveLength(1);
@@ -71,7 +81,12 @@ describe("managed-agent-session tool registry", () => {
         parameters: Type.Object({}),
         promptSnippet: "Use read carefully",
         promptGuidelines: ["Prefer read"],
-        execute: async () => ({ content: [], details: null }),
+        execute: async () => ({
+          content: [],
+          outcome: { kind: "ok", value: null },
+          details: null,
+          isError: false,
+        }),
       },
       {
         name: "write",
@@ -80,7 +95,12 @@ describe("managed-agent-session tool registry", () => {
         parameters: Type.Object({}),
         promptSnippet: "Use write carefully",
         promptGuidelines: ["Prefer write"],
-        execute: async () => ({ content: [], details: null }),
+        execute: async () => ({
+          content: [],
+          outcome: { kind: "ok", value: null },
+          details: null,
+          isError: false,
+        }),
       },
     ]);
 

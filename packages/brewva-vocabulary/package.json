@@ -23,6 +23,12 @@
       "import": "./dist/events.js",
       "default": "./dist/events.js"
     },
+    "./outcome": {
+      "types": "./dist/outcome.d.ts",
+      "bun": "./src/outcome.ts",
+      "import": "./dist/outcome.js",
+      "default": "./dist/outcome.js"
+    },
     "./iteration": {
       "types": "./dist/iteration.d.ts",
       "bun": "./src/iteration.ts",

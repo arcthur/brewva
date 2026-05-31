@@ -16,6 +16,7 @@ interface ReadToolRendererLike {
   renderResult?: (
     result: {
       content?: Array<{ type: string; text?: string }>;
+      outcome?: { kind: "ok"; value: unknown };
       details?: unknown;
     },
     options: { expanded: boolean },
@@ -66,6 +67,18 @@ describe("brewva session tool rendering", () => {
             outputLines: 3,
             truncatedBy: "lines",
             firstLineExceedsLimit: false,
+          },
+        },
+        outcome: {
+          kind: "ok" as const,
+          value: {
+            truncation: {
+              truncated: true,
+              totalLines: 10,
+              outputLines: 3,
+              truncatedBy: "lines",
+              firstLineExceedsLimit: false,
+            },
           },
         },
       };
@@ -119,6 +132,7 @@ describe("brewva session tool rendering", () => {
             text: "alpha\nbeta\ngamma\n\n[7 more lines in file. Use offset=4 to continue.]",
           },
         ],
+        outcome: { kind: "ok" as const, value: {} },
       };
 
       const collapsed = readTool

@@ -8,7 +8,7 @@ import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-boun
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import { resolveScopedPath, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
 
 function isLikelyText(content: Buffer): boolean {
@@ -129,17 +129,17 @@ export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): Too
       const scope = resolveToolTargetScope(lookAtTool.runtime, ctx);
       const absolute = resolveScopedPath(params.file_path, scope);
       if (!absolute) {
-        return failTextResult(
+        return errTextResult(
           `look_at rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
         );
       }
       if (!existsSync(absolute)) {
-        return failTextResult(`Error: File not found: ${absolute}`);
+        return errTextResult(`Error: File not found: ${absolute}`);
       }
 
       const stats = statSync(absolute);
       if (stats.isDirectory()) {
-        return failTextResult(`Error: Expected file path, got directory: ${absolute}`);
+        return errTextResult(`Error: Expected file path, got directory: ${absolute}`);
       }
 
       const sessionId = getToolSessionId(ctx);
@@ -161,7 +161,7 @@ export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): Too
       const ext = extname(absolute).toLowerCase();
 
       if (!isLikelyText(raw)) {
-        return textResult(
+        return okTextResult(
           [
             `Binary file detected: ${absolute}`,
             `size=${stats.size} bytes`,
@@ -194,7 +194,7 @@ export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): Too
         );
       }
 
-      return textResult(
+      return okTextResult(
         [`Analysis goal: ${params.goal}`, `File: ${absolute}`, "", relevant.excerpt].join("\n"),
         {
           status: "ok",

@@ -18,6 +18,7 @@ import {
 import { withFileMutationQueue } from "./_shared/file-mutation-queue.js";
 import { resolveToCwd } from "./_shared/path-utils.js";
 import { asRenderTheme, createStaticTextComponent } from "./_shared/render.js";
+import { DEFAULT_TOOL_OUTCOME_VERSION, ToolErrorRecordSchema } from "./outcome.js";
 
 const replaceEditSchema = Type.Object(
   {
@@ -56,6 +57,14 @@ export interface BrewvaEditToolDetails {
 export interface BrewvaEditDiffPreview extends BrewvaEditToolDetails {
   path: string;
 }
+
+const editOutputSchema = Type.Object(
+  {
+    diff: Type.String(),
+    firstChangedLine: Type.Optional(Type.Number()),
+  },
+  { additionalProperties: false },
+);
 
 export interface BrewvaEditOperations {
   readFile: (absolutePath: string) => Promise<Buffer>;
@@ -134,7 +143,7 @@ export function buildBrewvaEditDiffPreview(
 export function createBrewvaEditToolDefinition(
   cwd: string,
   options?: BrewvaEditToolOptions,
-): BrewvaToolDefinition<typeof editSchema, BrewvaEditToolDetails | undefined> {
+): BrewvaToolDefinition<typeof editSchema, BrewvaEditToolDetails> {
   const operations = options?.operations ?? defaultEditOperations;
 
   return defineBrewvaTool({
@@ -150,6 +159,9 @@ export function createBrewvaEditToolDefinition(
       "Do not emit overlapping or nested edits. Merge nearby changes into one edit.",
     ],
     parameters: editSchema,
+    outputSchema: editOutputSchema,
+    errorSchema: ToolErrorRecordSchema,
+    outcomeVersion: DEFAULT_TOOL_OUTCOME_VERSION,
     prepareArguments: prepareEditArguments,
     async execute(_toolCallId, input, signal) {
       const { path, edits } = validateEditInput(input);
@@ -192,9 +204,14 @@ export function createBrewvaEditToolDefinition(
               text: `Successfully replaced ${edits.length} block(s) in ${path}.`,
             },
           ],
-          details: {
-            diff: diffResult.diff,
-            firstChangedLine: diffResult.firstChangedLine,
+          outcome: {
+            kind: "ok",
+            value: {
+              diff: diffResult.diff,
+              ...(diffResult.firstChangedLine !== undefined
+                ? { firstChangedLine: diffResult.firstChangedLine }
+                : {}),
+            },
           },
         };
       });
@@ -218,7 +235,8 @@ export function createBrewvaEditToolDefinition(
           output.length > 0 ? `\n${renderTheme.fg("error", output)}` : "",
         );
       }
-      return createStaticTextComponent(result.details?.diff ? `\n${result.details.diff}` : "");
+      const diff = result.outcome.kind === "ok" ? result.outcome.value.diff : undefined;
+      return createStaticTextComponent(diff ? `\n${diff}` : "");
     },
   });
 }

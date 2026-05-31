@@ -1,3 +1,4 @@
+import type { ToolExecutionOutcome } from "../kernel/port.js";
 import type {
   CanonicalEvent,
   CheckpointCandidate,
@@ -32,6 +33,32 @@ function readRecord(value: unknown): Record<string, unknown> | null {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function outcomeIsError(outcome: ToolExecutionOutcome): boolean {
+  return outcome.kind === "err";
+}
+
+function readOutcome(value: unknown): ToolExecutionOutcome {
+  const record = readRecord(value);
+  if (record?.kind === "ok") {
+    return { kind: "ok", value: record.value ?? null };
+  }
+  if (record?.kind === "err") {
+    return { kind: "err", error: record.error ?? null };
+  }
+  if (record?.kind === "inconclusive") {
+    const evidenceRefs = Array.isArray(record.evidenceRefs)
+      ? record.evidenceRefs.filter((entry): entry is string => typeof entry === "string")
+      : undefined;
+    return {
+      kind: "inconclusive",
+      ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
+      ...(record.value !== undefined ? { value: record.value } : {}),
+      ...(evidenceRefs && evidenceRefs.length > 0 ? { evidenceRefs } : {}),
+    };
+  }
+  throw new Error("invalid_tool_outcome");
 }
 
 function readPromptContentPart(value: unknown): PromptContentPart | null {
@@ -226,7 +253,7 @@ function promptMessagesFromEvent(event: CanonicalEvent): readonly PromptMessage[
       content,
       toolCallId: toolCall.toolCallId,
       toolName: toolCall.toolName,
-      isError: result?.ok === false,
+      isError: outcomeIsError(readOutcome(result?.outcome)),
     });
     return [
       Object.freeze({

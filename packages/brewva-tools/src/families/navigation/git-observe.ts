@@ -5,7 +5,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { isPathInsideRoots, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
-import { failTextResult, textResult, withVerdict } from "../../utils/result.js";
+import { errTextResult, okTextResult, textResultForOutcome } from "../../utils/result.js";
 
 interface GitObserveToolOptions extends BrewvaToolOptions {
   gitCommand?: string;
@@ -146,7 +146,7 @@ function renderGitResult(input: {
   cwd: string;
   result: GitRunResult;
   emptyFallback: string;
-}): ReturnType<typeof textResult> {
+}): ReturnType<typeof okTextResult> {
   const lines = [
     input.result.stdout || input.emptyFallback,
     input.result.stderr ? `\n[stderr]\n${input.result.stderr}` : "",
@@ -155,14 +155,13 @@ function renderGitResult(input: {
   ]
     .join("")
     .trim();
-  const verdict =
-    input.result.exitCode === 0 ? undefined : input.result.exitCode === 1 ? "inconclusive" : "fail";
-  return textResult(lines, {
+  const outcomeKind =
+    input.result.exitCode === 0 ? "ok" : input.result.exitCode === 1 ? "inconclusive" : "err";
+  return textResultForOutcome(outcomeKind, lines, {
     cwd: input.cwd,
     exitCode: input.result.exitCode,
     truncated: input.result.truncated,
     timedOut: input.result.timedOut,
-    ...(verdict ? withVerdict({}, verdict) : {}),
   });
 }
 
@@ -187,7 +186,7 @@ export function createGitStatusTool(options: GitObserveToolOptions): ToolDefinit
         try {
           cwd = resolveWorkdir(runtime, ctx, params.workdir);
         } catch (error) {
-          return failTextResult(
+          return errTextResult(
             `git_status rejected: ${error instanceof Error ? error.message : String(error)}.`,
             { ok: false },
           );
@@ -250,7 +249,7 @@ export function createGitDiffTool(options: GitObserveToolOptions): ToolDefinitio
         try {
           cwd = resolveWorkdir(runtime, ctx, params.workdir);
         } catch (error) {
-          return failTextResult(
+          return errTextResult(
             `git_diff rejected: ${error instanceof Error ? error.message : String(error)}.`,
             { ok: false },
           );
@@ -323,7 +322,7 @@ export function createGitLogTool(options: GitObserveToolOptions): ToolDefinition
         try {
           cwd = resolveWorkdir(runtime, ctx, params.workdir);
         } catch (error) {
-          return failTextResult(
+          return errTextResult(
             `git_log rejected: ${error instanceof Error ? error.message : String(error)}.`,
             { ok: false },
           );

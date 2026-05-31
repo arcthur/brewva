@@ -13,7 +13,7 @@ import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions, BrewvaToolRuntime } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { listRuntimeSkills } from "../../runtime-port/skills.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 interface SkillSearchMetadata {
@@ -223,7 +223,7 @@ export function createDiscoverSkillsTool(options: BrewvaToolOptions): ToolDefini
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const query = params.query.trim();
       if (!query) {
-        return failTextResult("discover_skills requires a non-empty query.", {
+        return errTextResult("discover_skills requires a non-empty query.", {
           ok: false,
           error: "missing_query",
         });
@@ -285,7 +285,7 @@ export function createDiscoverSkillsTool(options: BrewvaToolOptions): ToolDefini
         runtime,
       });
 
-      return textResult(renderedText, {
+      return okTextResult(renderedText, {
         ok: true,
         query,
         results: results.map((entry) => {

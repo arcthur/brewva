@@ -97,6 +97,7 @@ Built-in projections are deterministic folds over canonical tape:
 
 - `turn_state`
 - `tool_commitments`
+- `step_projection`
 - `recovery_history`
 - `cost_summary`
 - `baseline`
@@ -123,6 +124,22 @@ frames are converted into `kernel.beginToolCall(...)` decisions. Approved
 commitments execute through the runtime tool executor and complete through
 `kernel.commitToolResult(...)`; missing or failed executors abort through
 `kernel.abortToolCall(...)`.
+
+Committed tool results carry top-level `result.outcome` as the canonical domain
+truth. Outcome kinds are `ok`, `err`, and `inconclusive`; only `err` projects to
+external binary `isError: true`. Adapter-only fields such as `result.isError`
+and `result.details`, plus legacy `result.ok`, are rejected before a
+`tool.committed` payload can become tape truth. Outcome payloads must be
+JSON-compatible and match the tool's declared output or error schema before the
+hosted executor commits them.
+
+`runtime.tape.project(sessionId, "step_projection")` joins `tool.proposed`,
+`tool.committed`, and `tool.aborted` into rebuildable step records. The
+projection derives effects, action class, receipt policy, and recovery policy
+from the authority payload recorded before execution; realized outcome kind and
+version come from the committed result. It stores redacted stable hashes for
+inputs and outputs instead of expanding raw payloads, and it never becomes a
+second replay truth store.
 
 Runtime does not expose a stable public contract for cross-agent recovery. No
 cross-agent saga semantics, generalized compensation graphs, or broad

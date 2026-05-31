@@ -9,7 +9,7 @@ import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-b
 import { registerToolRuntimeClearStateListener } from "../../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../../runtime-port/parallel-read.js";
 import { resolveScopedPath, resolveToolTargetScope } from "../../../runtime-port/target-scope.js";
-import { failTextResult, textResult } from "../../../utils/result.js";
+import { errTextResult, okTextResult } from "../../../utils/result.js";
 import { normalizeSearchAdvisorPath, registerSearchIntent } from "../search-advisor.js";
 import {
   clearSourceIntelligenceCaches,
@@ -299,13 +299,13 @@ export function createSourceIntelligenceTools(options?: {
         const scope = resolveToolTargetScope(codeOutlineFactory.runtime, ctx);
         const absolutePath = resolveScopedPath(params.file_path, scope);
         if (!absolutePath) {
-          return failTextResult(
+          return errTextResult(
             `code_outline rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
           );
         }
         const fileError = ensureExistingFile(absolutePath);
         if (fileError) {
-          return failTextResult(fileError);
+          return errTextResult(fileError);
         }
         const sessionId = getToolSessionId(ctx);
         const engine = engineForRoot(scope.primaryRoot);
@@ -314,7 +314,7 @@ export function createSourceIntelligenceTools(options?: {
         try {
           document = await engine.loadDocument(absolutePath, { signal });
         } catch (error) {
-          return failTextResult(sourceIntelligenceError(error));
+          return errTextResult(sourceIntelligenceError(error));
         }
         recordSourceIntelligenceReadPathObservation({
           runtime: codeOutlineFactory.runtime,
@@ -335,7 +335,7 @@ export function createSourceIntelligenceTools(options?: {
           diagnosticsCount: document.diagnostics.length,
           durationMs: Date.now() - startedAt,
         });
-        return textResult(renderOutline(document, scope.baseCwd), {
+        return okTextResult(renderOutline(document, scope.baseCwd), {
           status: "ok",
           filePath: absolutePath,
           language: document.language,
@@ -383,13 +383,13 @@ export function createSourceIntelligenceTools(options?: {
           scope,
         });
         if (!roots) {
-          return failTextResult(
+          return errTextResult(
             `code_digest rejected: paths escape target roots (${scope.allowedRoots.join(", ")}).`,
           );
         }
         const missingRoot = roots.map((root) => ensureExistingPath(root)).find(Boolean);
         if (missingRoot) {
-          return failTextResult(missingRoot);
+          return errTextResult(missingRoot);
         }
         const sessionId = getToolSessionId(ctx);
         const startedAt = Date.now();
@@ -439,7 +439,7 @@ export function createSourceIntelligenceTools(options?: {
               : emptyGraph(scope.primaryRoot);
           orderedDocuments = orderDocumentsByFilePaths(graph.documents, graphPaths);
         } catch (error) {
-          return failTextResult(sourceIntelligenceError(error));
+          return errTextResult(sourceIntelligenceError(error));
         }
         const selected = selectDigestDocuments({
           documents: orderedDocuments,
@@ -506,7 +506,7 @@ export function createSourceIntelligenceTools(options?: {
           });
           renderedTokens = estimateTokenCount(renderedDigest, { encoding: "o200k_base" });
         }
-        return textResult(
+        return okTextResult(
           renderedDigest,
           {
             status: "ok",
@@ -551,20 +551,20 @@ export function createSourceIntelligenceTools(options?: {
         const scope = resolveToolTargetScope(codeSurfaceFactory.runtime, ctx);
         const absolutePath = resolveScopedPath(params.path, scope);
         if (!absolutePath) {
-          return failTextResult(
+          return errTextResult(
             `code_surface rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
           );
         }
         const pathError = ensureExistingPath(absolutePath);
         if (pathError) {
-          return failTextResult(pathError);
+          return errTextResult(pathError);
         }
         const engine = engineForRoot(scope.primaryRoot);
         let surface: Awaited<ReturnType<typeof engine.resolveSurface>>;
         try {
           surface = await engine.resolveSurface(absolutePath, { signal });
         } catch (error) {
-          return failTextResult(sourceIntelligenceError(error));
+          return errTextResult(sourceIntelligenceError(error));
         }
         const sessionId = getToolSessionId(ctx);
         recordSourceIntelligenceEvent(codeSurfaceFactory.runtime, sessionId, {
@@ -574,7 +574,7 @@ export function createSourceIntelligenceTools(options?: {
           declarationsCount: surface.declarations.length,
           reExportsCount: surface.reExports.length,
         });
-        return textResult(renderSurface(surface, scope.baseCwd), {
+        return okTextResult(renderSurface(surface, scope.baseCwd), {
           status: "ok",
           path: absolutePath,
           declarations: surface.declarations.slice(0, DEFAULT_DETAIL_LIMIT),
@@ -615,13 +615,13 @@ export function createSourceIntelligenceTools(options?: {
             scope,
           });
           if (!roots) {
-            return failTextResult(
+            return errTextResult(
               `${name} rejected: paths escape target roots (${scope.allowedRoots.join(", ")}).`,
             );
           }
           const missingRoot = roots.map((root) => ensureExistingPath(root)).find(Boolean);
           if (missingRoot) {
-            return failTextResult(missingRoot);
+            return errTextResult(missingRoot);
           }
           const maxEdges = clampInteger(params.max_edges, DEFAULT_EDGE_LIMIT, {
             min: 1,
@@ -633,7 +633,7 @@ export function createSourceIntelligenceTools(options?: {
           try {
             graph = await engine.buildGraph(roots, { signal });
           } catch (error) {
-            return failTextResult(sourceIntelligenceError(error));
+            return errTextResult(sourceIntelligenceError(error));
           }
           const edges = reverse ? graph.reverseEdges : graph.edges;
           recordSourceIntelligenceReadPathObservation({
@@ -650,7 +650,7 @@ export function createSourceIntelligenceTools(options?: {
             edges: edges.length,
             roots,
           });
-          return textResult(
+          return okTextResult(
             renderGraphEdges({
               title: reverse ? "[CodeReverseDeps]" : "[CodeDeps]",
               baseCwd: scope.baseCwd,
@@ -691,13 +691,13 @@ export function createSourceIntelligenceTools(options?: {
           scope,
         });
         if (!roots) {
-          return failTextResult(
+          return errTextResult(
             `code_cycles rejected: paths escape target roots (${scope.allowedRoots.join(", ")}).`,
           );
         }
         const missingRoot = roots.map((root) => ensureExistingPath(root)).find(Boolean);
         if (missingRoot) {
-          return failTextResult(missingRoot);
+          return errTextResult(missingRoot);
         }
         const maxCycles = clampInteger(params.max_cycles, DEFAULT_CYCLE_LIMIT, {
           min: 1,
@@ -709,7 +709,7 @@ export function createSourceIntelligenceTools(options?: {
         try {
           graph = await engine.buildGraph(roots, { signal });
         } catch (error) {
-          return failTextResult(sourceIntelligenceError(error));
+          return errTextResult(sourceIntelligenceError(error));
         }
         recordSourceIntelligenceEvent(codeCyclesFactory.runtime, sessionId, {
           toolName: "code_cycles",
@@ -717,7 +717,7 @@ export function createSourceIntelligenceTools(options?: {
           cycles: graph.cycles.length,
           roots,
         });
-        return textResult(renderCycles(graph, scope.baseCwd, maxCycles), {
+        return okTextResult(renderCycles(graph, scope.baseCwd, maxCycles), {
           status: "ok",
           roots,
           cycles: graph.cycles.slice(0, maxCycles),
@@ -754,14 +754,14 @@ export function createSourceIntelligenceTools(options?: {
             ? resolveScopedPath(params.file_path, scope)
             : undefined;
           if (params.file_path && !absolutePath) {
-            return failTextResult(
+            return errTextResult(
               `${name} rejected: file_path escapes target roots (${scope.allowedRoots.join(", ")}).`,
             );
           }
           if (absolutePath) {
             const fileError = ensureExistingFile(absolutePath);
             if (fileError) {
-              return failTextResult(fileError);
+              return errTextResult(fileError);
             }
           }
           const maxEdges = clampInteger(params.max_edges, DEFAULT_EDGE_LIMIT, {
@@ -791,7 +791,7 @@ export function createSourceIntelligenceTools(options?: {
                     { signal },
                   );
           } catch (error) {
-            return failTextResult(sourceIntelligenceError(error));
+            return errTextResult(sourceIntelligenceError(error));
           }
           recordSourceIntelligenceReadPathObservation({
             runtime: factory.runtime,
@@ -809,7 +809,7 @@ export function createSourceIntelligenceTools(options?: {
             edges: edges.length,
             ambiguousEdges: edges.filter((edge) => edge.confidence === "ambiguous").length,
           });
-          return textResult(
+          return okTextResult(
             renderGraphEdges({
               title: name === "code_callers" ? "[CodeCallers]" : "[CodeCallees]",
               baseCwd: scope.baseCwd,

@@ -26,6 +26,8 @@ export interface ToolDescriptor<TParameters extends JsonSchema = JsonSchema> {
   description: string;
   parameters: TParameters;
   outputSchema?: JsonSchema;
+  errorSchema?: JsonSchema;
+  outcomeVersion?: string;
   annotations?: Record<string, unknown>;
   promptSnippet?: string;
   promptGuidelines?: readonly string[];

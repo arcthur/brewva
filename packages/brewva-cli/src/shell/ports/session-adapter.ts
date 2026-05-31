@@ -8,6 +8,7 @@ import type {
   SessionPhase,
 } from "@brewva/brewva-substrate/session";
 import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-vocabulary/iteration";
+import type { BrewvaOutcome } from "@brewva/brewva-vocabulary/outcome";
 import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-vocabulary/session";
 import type { SessionRewindDivergenceNote } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
@@ -455,17 +456,49 @@ function finishRuntimeTurnAssistantSegment(input: {
   });
 }
 
+function runtimeToolDetails(frame: RuntimeToolSessionWireFrame): unknown {
+  return frame.details ?? { verdict: frame.verdict };
+}
+
+function readRuntimeToolOutcomeReason(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const reason = (value as Record<string, unknown>).reason;
+  return typeof reason === "string" && reason.length > 0 ? reason : undefined;
+}
+
+function buildRuntimeToolOutcome(frame: RuntimeToolSessionWireFrame): BrewvaOutcome {
+  const details = runtimeToolDetails(frame);
+  if (frame.isError || frame.verdict === "fail") {
+    return { kind: "err", error: details };
+  }
+  if (frame.verdict === "inconclusive") {
+    const reason = readRuntimeToolOutcomeReason(details);
+    return {
+      kind: "inconclusive",
+      ...(reason ? { reason } : {}),
+      value: details,
+    };
+  }
+  return { kind: "ok", value: details };
+}
+
 function buildRuntimeToolResultPayload(frame: RuntimeToolSessionWireFrame): {
   readonly content: readonly { readonly type: "text"; readonly text: string }[];
-  readonly details: { readonly verdict: string };
+  readonly details: unknown;
   readonly display?: RuntimeToolSessionWireFrame["display"];
+  readonly verdict: RuntimeToolSessionWireFrame["verdict"];
   readonly isError: boolean;
+  readonly outcome: BrewvaOutcome;
 } {
   return {
     content: frame.text.length > 0 ? [{ type: "text", text: frame.text }] : [],
-    details: { verdict: frame.verdict },
+    details: runtimeToolDetails(frame),
     ...(frame.display ? { display: frame.display } : {}),
+    verdict: frame.verdict,
     isError: frame.isError,
+    outcome: buildRuntimeToolOutcome(frame),
   };
 }
 
@@ -539,8 +572,9 @@ export function buildSessionWireTranscriptSeedMessages(
           toolCallId: toolOutput.toolCallId,
           toolName: toolOutput.toolName,
           content: toolOutput.text.length > 0 ? [{ type: "text", text: toolOutput.text }] : [],
-          details: { verdict: toolOutput.verdict },
+          details: toolOutput.details ?? { verdict: toolOutput.verdict },
           ...(toolOutput.display ? { display: toolOutput.display } : {}),
+          verdict: toolOutput.verdict,
           isError: toolOutput.isError,
           timestamp: toolOutput.ts ?? frame.ts,
         },

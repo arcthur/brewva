@@ -11,7 +11,7 @@ import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 
 const SOURCE_TYPE_SCHEMA = buildStringEnumSchema(KNOWLEDGE_SOURCE_TYPES, {});
 const QUERY_INTENT_SCHEMA = buildStringEnumSchema(KNOWLEDGE_QUERY_INTENTS, {});
@@ -87,7 +87,7 @@ export function createKnowledgeSearchTool(options: BrewvaToolOptions): ToolDefin
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (!hasKnowledgeSearchSignal(params)) {
-        return failTextResult(
+        return errTextResult(
           "knowledge_search requires query or at least one filter (module, boundary, tags, problem_kind, or status).",
           {
             ok: false,
@@ -127,7 +127,7 @@ export function createKnowledgeSearchTool(options: BrewvaToolOptions): ToolDefin
         );
       }
 
-      return textResult(
+      return okTextResult(
         [
           "# Knowledge Search",
           `query_summary: ${search.querySummary}`,

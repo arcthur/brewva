@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";
-import { failTextResult } from "../../../utils/result.js";
+import { errTextResult } from "../../../utils/result.js";
 import { getSessionId } from "../../../utils/session.js";
 import { validateDeliveryConfiguration } from "./delivery.js";
 import { executeSubagentToolWithRequest } from "./executor.js";
@@ -52,25 +52,25 @@ export function createSubagentRunTool(options: BrewvaToolOptions): ToolDefinitio
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const adapter = runtime.orchestration?.subagents;
         if (!adapter) {
-          return failTextResult("Subagent orchestration is unavailable in this session.", {
+          return errTextResult("Subagent orchestration is unavailable in this session.", {
             ok: false,
           });
         }
 
         const publicValidation = failIfPublicForbiddenFields(params);
         if (!publicValidation.ok) {
-          return failTextResult(publicValidation.message, { ok: false });
+          return errTextResult(publicValidation.message, { ok: false });
         }
         const decodedParams = decodeToolParams(SubagentRunParamsSchema, params);
         const waitMode = resolveWaitMode(decodedParams.waitMode);
         const returnMode = resolveReturnMode(decodedParams.returnMode);
         const deliveryValidation = validateDeliveryConfiguration(runtime, returnMode);
         if (!deliveryValidation.ok) {
-          return failTextResult(deliveryValidation.message, { ok: false });
+          return errTextResult(deliveryValidation.message, { ok: false });
         }
         const builtRequest = buildPublicRunRequestFromParams({ params: decodedParams });
         if (!builtRequest.ok) {
-          return failTextResult(builtRequest.message, { ok: false });
+          return errTextResult(builtRequest.message, { ok: false });
         }
         const sessionId = getSessionId(ctx);
         return executeSubagentToolWithRequest({
@@ -124,25 +124,25 @@ export function createSubagentFanoutTool(options: BrewvaToolOptions): ToolDefini
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const adapter = runtime.orchestration?.subagents;
         if (!adapter) {
-          return failTextResult("Subagent orchestration is unavailable in this session.", {
+          return errTextResult("Subagent orchestration is unavailable in this session.", {
             ok: false,
           });
         }
 
         const publicValidation = failIfPublicForbiddenFields(params);
         if (!publicValidation.ok) {
-          return failTextResult(publicValidation.message, { ok: false });
+          return errTextResult(publicValidation.message, { ok: false });
         }
         const decodedParams = decodeToolParams(SubagentFanoutParamsSchema, params);
         const waitMode = resolveWaitMode(decodedParams.waitMode);
         const returnMode = resolveReturnMode(decodedParams.returnMode);
         const deliveryValidation = validateDeliveryConfiguration(runtime, returnMode);
         if (!deliveryValidation.ok) {
-          return failTextResult(deliveryValidation.message, { ok: false });
+          return errTextResult(deliveryValidation.message, { ok: false });
         }
         const builtRequest = buildPublicFanoutRequestFromParams({ params: decodedParams });
         if (!builtRequest.ok) {
-          return failTextResult(builtRequest.message, { ok: false });
+          return errTextResult(builtRequest.message, { ok: false });
         }
         const sessionId = getSessionId(ctx);
         return executeSubagentToolWithRequest({
@@ -189,14 +189,14 @@ export function createSubagentRunDiagnosticTool(options: BrewvaToolOptions): Too
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const adapter = runtime.orchestration?.subagents;
         if (!adapter) {
-          return failTextResult("Subagent orchestration is unavailable in this session.", {
+          return errTextResult("Subagent orchestration is unavailable in this session.", {
             ok: false,
           });
         }
 
         const legacyValidation = failIfLegacyFields(params);
         if (!legacyValidation.ok) {
-          return failTextResult(legacyValidation.message, { ok: false });
+          return errTextResult(legacyValidation.message, { ok: false });
         }
         const decodedParams = decodeToolParams(DiagnosticSubagentRunParamsSchema, params);
         const mode = resolveMode(decodedParams.mode, decodedParams.tasks);
@@ -204,14 +204,14 @@ export function createSubagentRunDiagnosticTool(options: BrewvaToolOptions): Too
         const returnMode = resolveReturnMode(decodedParams.returnMode);
         const deliveryValidation = validateDeliveryConfiguration(runtime, returnMode);
         if (!deliveryValidation.ok) {
-          return failTextResult(deliveryValidation.message, { ok: false });
+          return errTextResult(deliveryValidation.message, { ok: false });
         }
         const builtRequest = buildRunRequestFromParams({
           params: decodedParams,
           mode,
         });
         if (!builtRequest.ok) {
-          return failTextResult(builtRequest.message, { ok: false });
+          return errTextResult(builtRequest.message, { ok: false });
         }
         const sessionId = getSessionId(ctx);
         return executeSubagentToolWithRequest({

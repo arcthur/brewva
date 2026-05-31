@@ -2,7 +2,7 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { failTextResult, textResult, toolDetails } from "../../utils/result.js";
+import { errTextResult, okTextResult, toolOutcomeRecord } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 export function createDelegationInboxQueryTool(options: BrewvaToolOptions): ToolDefinition {
@@ -30,16 +30,16 @@ export function createDelegationInboxQueryTool(options: BrewvaToolOptions): Tool
       const sessionId = getSessionId(ctx);
       const inspection = await runtime.delegation?.inspect?.(sessionId);
       if (!inspection) {
-        return failTextResult("inbox_query failed: delegation inspection is unavailable.", {
+        return errTextResult("inbox_query failed: delegation inspection is unavailable.", {
           ok: false,
         });
       }
       const limit = typeof params.limit === "number" ? Math.trunc(params.limit) : 25;
       const items = inspection.inbox.items.slice(0, limit);
       if (items.length === 0) {
-        return textResult(
+        return okTextResult(
           "# Delegation Inbox\nNo pending delegation inbox items.",
-          toolDetails({
+          toolOutcomeRecord({
             ok: true,
             explicitPull: true,
             injectedIntoParentContext: false,
@@ -47,7 +47,7 @@ export function createDelegationInboxQueryTool(options: BrewvaToolOptions): Tool
           }),
         );
       }
-      return textResult(
+      return okTextResult(
         [
           "# Delegation Inbox",
           "explicit_pull=true injected_into_parent_context=false",
@@ -56,7 +56,7 @@ export function createDelegationInboxQueryTool(options: BrewvaToolOptions): Tool
               `- ${item.kind} ${item.runId}: ${item.title} disposition=${item.disposition} adoption=${item.adoptionRequirement}`,
           ),
         ].join("\n"),
-        toolDetails({
+        toolOutcomeRecord({
           ok: true,
           explicitPull: true,
           injectedIntoParentContext: false,

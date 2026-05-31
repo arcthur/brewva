@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createPrecedentSweepTool } from "@brewva/brewva-tools/memory";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 let workspace = "";
@@ -126,7 +127,7 @@ describe("precedent sweep tool", () => {
       { cwd: workspace } as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       verdict: "fail",
       totalDocs: 3,
       auditedDocs: 3,
@@ -136,7 +137,7 @@ describe("precedent sweep tool", () => {
     });
     const entries =
       (
-        result.details as {
+        toolOutcomePayload(result) as {
           entries?: Array<{
             path?: string;
             maintenanceRecommendation?: string;
@@ -181,7 +182,7 @@ describe("precedent sweep tool", () => {
       { cwd: workspace } as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       verdict: "inconclusive",
       totalDocs: 0,
       auditedDocs: 0,

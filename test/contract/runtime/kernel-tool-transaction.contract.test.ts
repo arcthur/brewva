@@ -34,7 +34,7 @@ describe("kernel tool transaction", () => {
 
     await runtime.kernel.commitToolResult({
       commitmentId,
-      result: { ok: true, content: "ok", metadata: { rollback: null } },
+      result: { outcome: { kind: "ok", value: {} }, content: "ok", metadata: { rollback: null } },
     });
 
     expect(runtime.tape.list("kernel-session").map((event) => event.type)).toEqual([
@@ -403,7 +403,7 @@ describe("kernel tool transaction", () => {
     expect(await reader.start()).toEqual({ recoveredSessions: ["kernel-session"] });
     await reader.kernel.commitToolResult({
       commitmentId,
-      result: { ok: true, content: "after restart" },
+      result: { outcome: { kind: "ok", value: {} }, content: "after restart" },
     });
 
     expect(reader.tape.list("kernel-session").map((event) => event.type)).toEqual([

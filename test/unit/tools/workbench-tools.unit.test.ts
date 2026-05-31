@@ -7,6 +7,7 @@ import {
 } from "@brewva/brewva-tools/memory";
 import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
 import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function createToolContext(sessionId = "session-workbench") {
   return {
@@ -123,7 +124,7 @@ describe("workbench memory tools", () => {
       createToolContext() as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: true,
       entryId: "note-1",
       kind: "note",
@@ -152,7 +153,7 @@ describe("workbench memory tools", () => {
       createToolContext() as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: false,
       error: "missing_content_reason_or_source_refs",
     });
@@ -175,7 +176,7 @@ describe("workbench memory tools", () => {
       createToolContext() as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: true,
       entryId: "eviction-1",
       kind: "eviction",
@@ -203,7 +204,7 @@ describe("workbench memory tools", () => {
       createToolContext() as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: false,
       error: "invalid_span_refs",
       invalidRefs: ["topic:old-registry"],
@@ -230,7 +231,7 @@ describe("workbench memory tools", () => {
       createToolContext() as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: true,
       entryId: "eviction-1",
       reason: "The model needs to inspect the raw output again.",

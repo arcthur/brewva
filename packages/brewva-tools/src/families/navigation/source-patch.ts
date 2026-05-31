@@ -46,7 +46,7 @@ import {
   resolveToolTargetScope,
   type ToolTargetScope,
 } from "../../runtime-port/target-scope.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { readSourceTextCached } from "./source-intelligence/cache.js";
 import { createSourceIntelligenceEngine } from "./source-intelligence/engine.js";
 
@@ -631,7 +631,7 @@ function writeRollbackArtifact(input: {
 }
 
 function sourcePatchConflictResult(planId: string, conflicts: readonly SourcePatchConflict[]) {
-  return failTextResult(
+  return errTextResult(
     [
       "[SourcePatchPlan]",
       `status: conflict`,
@@ -928,7 +928,7 @@ export function createSourceReadTool(options?: {
       const resource = await router.read(params.uri);
       const absolutePath = resource.path ?? pathFromResourceUri(params.uri, scope);
       if (!absolutePath) {
-        return failTextResult(
+        return errTextResult(
           `source_read rejected: uri escapes target roots (${scope.allowedRoots.join(", ")}).`,
           { ok: false, reason: "path_outside_target" },
         );
@@ -938,19 +938,19 @@ export function createSourceReadTool(options?: {
         resource.reason !== "not_found" &&
         resource.reason !== "not_file"
       ) {
-        return failTextResult(`source_read unavailable: ${resource.reason ?? "not_found"}`, {
+        return errTextResult(`source_read unavailable: ${resource.reason ?? "not_found"}`, {
           ok: false,
           reason: resource.reason ?? "not_found",
         });
       }
       if (!existsSync(absolutePath)) {
-        return failTextResult(`Error: File not found: ${absolutePath}`, {
+        return errTextResult(`Error: File not found: ${absolutePath}`, {
           ok: false,
           reason: "not_found",
         });
       }
       if (!statSync(absolutePath).isFile()) {
-        return failTextResult(`Error: Path is not a file: ${absolutePath}`, {
+        return errTextResult(`Error: Path is not a file: ${absolutePath}`, {
           ok: false,
           reason: "not_file",
         });
@@ -972,7 +972,7 @@ export function createSourceReadTool(options?: {
           : normalizeSpans(params.spans);
       const summary =
         mode === "summary" ? await buildSummary(absolutePath, scope.baseCwd) : undefined;
-      return textResult(
+      return okTextResult(
         formatSourceRead({
           filePath: absolutePath,
           uri,
@@ -1571,7 +1571,7 @@ export function createSourcePatchTools(options?: {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const edits = params.edits.map(normalizeIntent);
       if (edits.some((edit) => edit === null)) {
-        return failTextResult("source_patch_prepare rejected: invalid_edit_intent", {
+        return errTextResult("source_patch_prepare rejected: invalid_edit_intent", {
           ok: false,
           reason: "invalid_edit_intent",
         });
@@ -1588,7 +1588,7 @@ export function createSourcePatchTools(options?: {
       if (!prepared.plan.preflight.ok) {
         return sourcePatchConflictResult(prepared.plan.id, prepared.plan.conflicts);
       }
-      return textResult(
+      return okTextResult(
         [
           "[SourcePatchPlan]",
           "status: prepared",
@@ -1630,7 +1630,7 @@ export function createSourcePatchTools(options?: {
         });
       }
       if (!receipt.ok) {
-        return failTextResult(
+        return errTextResult(
           [
             "[SourcePatchApply]",
             "status: failed",
@@ -1645,7 +1645,7 @@ export function createSourcePatchTools(options?: {
           },
         );
       }
-      return textResult(
+      return okTextResult(
         [
           "[SourcePatchApply]",
           "status: applied",
@@ -1818,7 +1818,7 @@ export function createResourceReadTool(options?: {
           reason: result.reason ?? "provider_unavailable",
         });
       }
-      return textResult(formatResourceRead(result), {
+      return okTextResult(formatResourceRead(result), {
         ok: true,
         status: result.status,
         uri: result.uri,

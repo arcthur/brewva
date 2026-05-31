@@ -346,8 +346,8 @@ describe("cli transcript model", () => {
         content: [{ type: "text", text: "Skill completion rejected." }],
         details: {
           ok: false,
-          verdict: "fail",
         },
+        verdict: "fail",
       },
       renderMode: "stable",
     });

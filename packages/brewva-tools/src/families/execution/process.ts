@@ -1,7 +1,12 @@
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { addMilliseconds, isBefore } from "date-fns";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { textResult, withVerdict } from "../../utils/result.js";
+import {
+  errTextResult,
+  inconclusiveTextResult,
+  okTextResult,
+  textResultForOutcome,
+} from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 import { drainSessionOutput, readSessionLog } from "./exec-process-registry/api.js";
 import { resolveManagedExecProcessRegistryRuntime } from "./exec-process-registry/runtime.js";
@@ -12,7 +17,7 @@ import {
   formatSessionLabel,
   normalizeOutputText,
   renderListLine,
-  resolveProcessVerdict,
+  resolveProcessOutcomeKind,
 } from "./process/render.js";
 import {
   pickBoxExecutionIdentity,
@@ -111,7 +116,7 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
               command: session.command,
             }),
           );
-        return textResult(lines.join("\n") || "No running or recent background sessions.", {
+        return okTextResult(lines.join("\n") || "No running or recent background sessions.", {
           status: "completed",
           sessions,
         });
@@ -120,10 +125,9 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
       const sessionId = pickSessionId(params);
       const boxIdentity = pickBoxExecutionIdentity(params);
       if (!sessionId && !boxIdentity) {
-        return textResult(
-          "sessionId is required unless boxId and executionId are provided.",
-          withVerdict({ status: "failed" }, "fail"),
-        );
+        return errTextResult("sessionId is required unless boxId and executionId are provided.", {
+          status: "failed",
+        });
       }
       if (!sessionId && boxIdentity) {
         return await executeDetachedBoxIdentityAction({
@@ -137,10 +141,7 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
         });
       }
       if (!sessionId) {
-        return textResult(
-          "sessionId is required for this action.",
-          withVerdict({ status: "failed" }, "fail"),
-        );
+        return errTextResult("sessionId is required for this action.", { status: "failed" });
       }
 
       if (action === "poll") {
@@ -150,43 +151,30 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
         const running = await registry.getRunning(ownerSessionId, sessionId);
         if (running) {
           if (!running.backgrounded) {
-            return textResult(
-              `Session ${sessionId} is not backgrounded.`,
-              withVerdict({ status: "failed" }, "fail"),
-            );
+            return errTextResult(`Session ${sessionId} is not backgrounded.`, {
+              status: "failed",
+            });
           }
           const output = normalizeOutputText(drainSessionOutput(running), "(no new output)");
-          return textResult(
-            `${output}\n\nProcess still running.`,
-            withVerdict(
-              {
-                status: "running",
-                sessionId,
-                pid: running.pid ?? undefined,
-                name: formatSessionLabel(running.command),
-              },
-              "inconclusive",
-            ),
-          );
+          return inconclusiveTextResult(`${output}\n\nProcess still running.`, {
+            status: "running",
+            sessionId,
+            pid: running.pid ?? undefined,
+            name: formatSessionLabel(running.command),
+          });
         }
 
         const runningBox = await registry.getRunningBox(ownerSessionId, sessionId);
         if (runningBox) {
           const output = normalizeOutputText(drainSessionOutput(runningBox), "(no new output)");
-          return textResult(
-            `${output}\n\nProcess still running.`,
-            withVerdict(
-              {
-                status: "running",
-                sessionId,
-                backend: "box",
-                boxId: runningBox.boxId,
-                executionId: runningBox.executionId,
-                name: formatSessionLabel(runningBox.command),
-              },
-              "inconclusive",
-            ),
-          );
+          return inconclusiveTextResult(`${output}\n\nProcess still running.`, {
+            status: "running",
+            sessionId,
+            backend: "box",
+            boxId: runningBox.boxId,
+            executionId: runningBox.executionId,
+            name: formatSessionLabel(runningBox.command),
+          });
         }
 
         const finished = await registry.getFinished(ownerSessionId, sessionId);
@@ -195,26 +183,21 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           : await registry.getFinishedBox(ownerSessionId, sessionId);
         const finishedSession = finished ?? finishedBox;
         if (!finishedSession) {
-          return textResult(
-            `No session found for ${sessionId}`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`No session found for ${sessionId}`, { status: "failed" });
         }
 
         const output = normalizeOutputText(drainSessionOutput(finishedSession), "(no new output)");
-        return textResult(
+        return textResultForOutcome(
+          resolveProcessOutcomeKind(finishedSession.status),
           `${output}\n\nProcess exited with ${exitLabel(finishedSession)}.`,
-          withVerdict(
-            {
-              status: finishedSession.status,
-              sessionId,
-              backend: finishedBox ? "box" : "host",
-              exitCode: finishedSession.exitCode ?? undefined,
-              exitSignal: finishedSession.exitSignal ?? undefined,
-              name: formatSessionLabel(finishedSession.command),
-            },
-            resolveProcessVerdict(finishedSession.status),
-          ),
+          {
+            status: finishedSession.status,
+            sessionId,
+            backend: finishedBox ? "box" : "host",
+            exitCode: finishedSession.exitCode ?? undefined,
+            exitSignal: finishedSession.exitSignal ?? undefined,
+            name: formatSessionLabel(finishedSession.command),
+          },
         );
       }
 
@@ -231,16 +214,12 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
             : await registry.getFinishedBox(ownerSessionId, sessionId);
         const session = running ?? runningBox ?? finished ?? finishedBox;
         if (!session) {
-          return textResult(
-            `No session found for ${sessionId}`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`No session found for ${sessionId}`, { status: "failed" });
         }
         if (!session.backgrounded) {
-          return textResult(
-            `Session ${sessionId} is not backgrounded.`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`Session ${sessionId} is not backgrounded.`, {
+            status: "failed",
+          });
         }
 
         const log = readSessionLog(session, params.offset, params.limit);
@@ -252,19 +231,17 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           running || runningBox
             ? "running"
             : (finished?.status ?? finishedBox?.status ?? "completed");
-        return textResult(
+        return textResultForOutcome(
+          resolveProcessOutcomeKind(status),
           content + defaultTailHint(log.totalLines, log.usingDefaultTail),
-          withVerdict(
-            {
-              status,
-              sessionId,
-              totalLines: log.totalLines,
-              totalChars: log.totalChars,
-              truncated: session.truncated,
-              name: formatSessionLabel(session.command),
-            },
-            resolveProcessVerdict(status),
-          ),
+          {
+            status,
+            sessionId,
+            totalLines: log.totalLines,
+            totalChars: log.totalChars,
+            truncated: session.truncated,
+            name: formatSessionLabel(session.command),
+          },
         );
       }
 
@@ -274,50 +251,41 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           ? undefined
           : await registry.getRunningBox(ownerSessionId, sessionId);
         if (runningBox) {
-          return textResult(
+          return errTextResult(
             `Session ${sessionId} is a box execution; stdin reattach is not supported.`,
-            withVerdict({ status: "failed", backend: "box" }, "fail"),
+            { status: "failed", backend: "box" },
           );
         }
         if (!running) {
-          return textResult(
-            `No active session found for ${sessionId}`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`No active session found for ${sessionId}`, { status: "failed" });
         }
         if (!running.backgrounded) {
-          return textResult(
-            `Session ${sessionId} is not backgrounded.`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`Session ${sessionId} is not backgrounded.`, {
+            status: "failed",
+          });
         }
         if (!running.stdin || running.stdin.destroyed) {
-          return textResult(
-            `Session ${sessionId} stdin is not writable.`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`Session ${sessionId} stdin is not writable.`, {
+            status: "failed",
+          });
         }
 
         const data = typeof params.data === "string" ? params.data : "";
         try {
           await writeToStdin(running, data, params.eof === true);
-          return textResult(
+          return inconclusiveTextResult(
             `Wrote ${data.length} bytes to session ${sessionId}${params.eof ? " (stdin closed)" : ""}.`,
-            withVerdict(
-              {
-                status: "running",
-                sessionId,
-                name: formatSessionLabel(running.command),
-              },
-              "inconclusive",
-            ),
+            {
+              status: "running",
+              sessionId,
+              name: formatSessionLabel(running.command),
+            },
           );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          return textResult(
-            `Failed to write to session ${sessionId}: ${message}`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`Failed to write to session ${sessionId}: ${message}`, {
+            status: "failed",
+          });
         }
       }
 
@@ -327,16 +295,12 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           ? undefined
           : await registry.getRunningBox(ownerSessionId, sessionId);
         if (!running && !runningBox) {
-          return textResult(
-            `No active session found for ${sessionId}`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`No active session found for ${sessionId}`, { status: "failed" });
         }
         if (running && !running.backgrounded) {
-          return textResult(
-            `Session ${sessionId} is not backgrounded.`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`Session ${sessionId} is not backgrounded.`, {
+            status: "failed",
+          });
         }
 
         const terminated = running
@@ -344,23 +308,17 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           : await registry.terminateBox(runningBox!, true);
         const killedSession = running ?? runningBox!;
         if (!terminated) {
-          return textResult(
+          return errTextResult(
             `Unable to terminate session ${sessionId}: no active process id or handle.`,
-            withVerdict({ status: "failed" }, "fail"),
+            { status: "failed" },
           );
         }
-        return textResult(
-          `Termination requested for session ${sessionId}.`,
-          withVerdict(
-            {
-              status: "failed",
-              sessionId,
-              backend: runningBox ? "box" : "host",
-              name: formatSessionLabel(killedSession.command),
-            },
-            "fail",
-          ),
-        );
+        return errTextResult(`Termination requested for session ${sessionId}.`, {
+          status: "failed",
+          sessionId,
+          backend: runningBox ? "box" : "host",
+          name: formatSessionLabel(killedSession.command),
+        });
       }
 
       if (action === "clear") {
@@ -369,13 +327,12 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
           ? undefined
           : await registry.getFinishedBox(ownerSessionId, sessionId);
         if (!finished && !finishedBox) {
-          return textResult(
-            `No finished session found for ${sessionId}`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`No finished session found for ${sessionId}`, {
+            status: "failed",
+          });
         }
         await registry.delete(ownerSessionId, sessionId);
-        return textResult(`Cleared session ${sessionId}.`, { status: "completed" });
+        return okTextResult(`Cleared session ${sessionId}.`, { status: "completed" });
       }
 
       if (action === "remove") {
@@ -390,9 +347,9 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
             await new Promise((r) => setTimeout(r, 50));
           }
           if (!running.exited) {
-            return textResult(
+            return errTextResult(
               `Session ${sessionId} did not exit after termination. Use kill then try remove again.`,
-              withVerdict({ status: "failed" }, "fail"),
+              { status: "failed" },
             );
           }
         }
@@ -403,30 +360,27 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
             await new Promise((r) => setTimeout(r, 50));
           }
           if (!runningBox.exited) {
-            return textResult(
+            return errTextResult(
               `Session ${sessionId} did not exit after termination. Use kill then try remove again.`,
-              withVerdict({ status: "failed" }, "fail"),
+              { status: "failed" },
             );
           }
         }
         const removed = await registry.delete(ownerSessionId, sessionId);
         if (!removed) {
-          return textResult(
-            `No session found for ${sessionId}`,
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult(`No session found for ${sessionId}`, { status: "failed" });
         }
         const status = running || runningBox ? "failed" : "completed";
-        return textResult(
+        return textResultForOutcome(
+          resolveProcessOutcomeKind(status),
           `Removed session ${sessionId}.`,
-          withVerdict({ status }, resolveProcessVerdict(status)),
+          {
+            status,
+          },
         );
       }
 
-      return textResult(
-        `Unknown action: ${String(action)}`,
-        withVerdict({ status: "failed" }, "fail"),
-      );
+      return errTextResult(`Unknown action: ${String(action)}`, { status: "failed" });
     },
   });
 }

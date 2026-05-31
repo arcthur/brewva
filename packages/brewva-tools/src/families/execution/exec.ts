@@ -13,7 +13,7 @@ import { Type } from "@sinclair/typebox";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { resolveToolRuntimeCredentialBindings } from "../../runtime-port/extensions.js";
 import { isPathInsideRoots, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
-import { textResult, withVerdict } from "../../utils/result.js";
+import { errTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 import { resolveManagedExecProcessRegistryRuntime } from "./exec-process-registry/runtime.js";
 import {
@@ -87,27 +87,18 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
         const baseCwd = targetScope.baseCwd;
         const command = normalizeCommand(params.command);
         if (!command) {
-          return textResult(
-            "Exec rejected (missing_command).",
-            withVerdict({ status: "failed" }, "fail"),
-          );
+          return errTextResult("Exec rejected (missing_command).", { status: "failed" });
         }
 
         const requestedWorkdir = normalizeOptionalString(params.workdir);
         const hostCwd = resolveWorkdir(baseCwd, requestedWorkdir);
         if (!isPathInsideRoots(hostCwd, targetScope.allowedRoots)) {
-          return textResult(
-            `Exec rejected (workdir_outside_target): ${hostCwd}`,
-            withVerdict(
-              {
-                status: "failed",
-                reason: "workdir_outside_target",
-                requestedCwd: hostCwd,
-                allowedRoots: targetScope.allowedRoots,
-              },
-              "fail",
-            ),
-          );
+          return errTextResult(`Exec rejected (workdir_outside_target): ${hostCwd}`, {
+            status: "failed",
+            reason: "workdir_outside_target",
+            requestedCwd: hostCwd,
+            allowedRoots: targetScope.allowedRoots,
+          });
         }
 
         const boxWorkspaceRoot = resolveWorkspaceRootForCwd(hostCwd, targetScope.allowedRoots);
@@ -169,17 +160,11 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               },
             }),
           );
-          return textResult(
-            `Exec rejected (shell_as_tool). ${reason}`,
-            withVerdict(
-              {
-                status: "failed",
-                reason: "shell_as_tool",
-                executionPreflight: details,
-              },
-              "fail",
-            ),
-          );
+          return errTextResult(`Exec rejected (shell_as_tool). ${reason}`, {
+            status: "failed",
+            reason: "shell_as_tool",
+            executionPreflight: details,
+          });
         }
 
         const boundaryDecision = evaluateBoundaryClassification(
@@ -377,19 +362,13 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
             }),
           );
           return attachExecPreflightDetails(
-            textResult(
-              "Exec rejected (box_unmapped_host_path).",
-              withVerdict(
-                {
-                  status: "failed",
-                  reason: "box_unmapped_host_path",
-                  unmappedPaths: boxCommandPathRewrite.unmappedPaths,
-                  mappedRoots: rootMappings,
-                  ...buildCommandPolicyAuditPayload(commandPolicy),
-                },
-                "fail",
-              ),
-            ),
+            errTextResult("Exec rejected (box_unmapped_host_path).", {
+              status: "failed",
+              reason: "box_unmapped_host_path",
+              unmappedPaths: boxCommandPathRewrite.unmappedPaths,
+              mappedRoots: rootMappings,
+              ...buildCommandPolicyAuditPayload(commandPolicy),
+            }),
             executionPreflight,
           );
         }

@@ -29,7 +29,7 @@ import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-boun
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { resolveScopedPath, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { mergeWorkerResults } from "../../runtime-port/worker-results.js";
-import { failTextResult, inconclusiveTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 function formatMergeReport(report: WorkerMergeReport): string {
@@ -299,7 +299,7 @@ export function createWorkerResultsMergeTool(options: BrewvaToolOptions): ToolDe
       const sessionId = getSessionId(ctx);
       const report = mergeWorkerResults(runtime, sessionId);
       if (report.status === "conflicts") {
-        return failTextResult(formatMergeReport(report), {
+        return errTextResult(formatMergeReport(report), {
           ok: false,
           status: report.status,
           workerIds: report.workerIds,
@@ -315,7 +315,7 @@ export function createWorkerResultsMergeTool(options: BrewvaToolOptions): ToolDe
           conflicts: [],
         });
       }
-      return textResult(formatMergeReport(report), {
+      return okTextResult(formatMergeReport(report), {
         ok: true,
         status: report.status,
         workerIds: report.workerIds,
@@ -390,7 +390,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
             });
           }
           if (!receipt.ok) {
-            return failTextResult(formatApplyReport(report), {
+            return errTextResult(formatApplyReport(report), {
               ok: false,
               status: report.status,
               workerIds: report.workerIds,
@@ -398,7 +398,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
               reason: report.reason ?? null,
             });
           }
-          return textResult(formatApplyReport(report), {
+          return okTextResult(formatApplyReport(report), {
             ok: true,
             status: report.status,
             workerIds: report.workerIds,
@@ -421,7 +421,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
           });
         }
         if (report.status === "conflicts") {
-          return failTextResult(formatMergeReport(report), {
+          return errTextResult(formatMergeReport(report), {
             ok: false,
             status: report.status,
             workerIds: report.workerIds,
@@ -446,7 +446,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
           sessionId,
         });
         if (!converted.ok) {
-          return failTextResult(
+          return errTextResult(
             [
               "# Worker Results Apply",
               "Prepare failed",
@@ -476,7 +476,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
           },
         });
         if (!prepared.plan.preflight.ok) {
-          return failTextResult(
+          return errTextResult(
             [
               "# Worker Results Apply",
               "Prepare failed",
@@ -499,7 +499,7 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
             },
           );
         }
-        return textResult(
+        return okTextResult(
           [
             "# Worker Results Apply",
             "Prepared SourcePatchPlan",
@@ -583,7 +583,7 @@ export function createWorkerResultsRejectTool(options: BrewvaToolOptions): ToolD
         decision: "reject",
         reason: params.reason,
       });
-      return textResult(
+      return okTextResult(
         [
           "# Worker Results Reject",
           "Rejected worker results",

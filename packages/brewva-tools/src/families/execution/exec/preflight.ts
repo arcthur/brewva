@@ -126,18 +126,30 @@ export function preflightDetails(report: ExecPreflightReport): Record<string, un
 }
 
 export function attachExecPreflightDetails<TDetails extends Record<string, unknown>>(
-  result: BrewvaToolResult<TDetails>,
+  result: BrewvaToolResult<TDetails, TDetails>,
   report: ExecPreflightReport,
-): BrewvaToolResult<TDetails & { executionPreflight?: Record<string, unknown> }> {
+): BrewvaToolResult<TDetails & { executionPreflight?: Record<string, unknown> }, TDetails> {
   const details = preflightDetails(report);
   if (!details) {
-    return result as BrewvaToolResult<TDetails & { executionPreflight?: Record<string, unknown> }>;
+    return result as BrewvaToolResult<
+      TDetails & { executionPreflight?: Record<string, unknown> },
+      TDetails
+    >;
+  }
+  if (result.outcome.kind !== "ok") {
+    return result as BrewvaToolResult<
+      TDetails & { executionPreflight?: Record<string, unknown> },
+      TDetails
+    >;
   }
   return {
     ...result,
-    details: {
-      ...(result.details ?? ({} as TDetails)),
-      executionPreflight: details,
+    outcome: {
+      kind: "ok",
+      value: {
+        ...result.outcome.value,
+        executionPreflight: details,
+      },
     },
   };
 }

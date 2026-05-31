@@ -5,7 +5,7 @@ import {
   withBrewvaObservability,
 } from "@brewva/brewva-effect";
 import { BrewvaDuration, BrewvaEffect } from "@brewva/brewva-effect/primitives";
-import { textResult, withVerdict } from "../../../utils/result.js";
+import { errTextResult, okTextResult } from "../../../utils/result.js";
 import {
   terminateRunningSession,
   type ManagedExecFinishedSession,
@@ -15,7 +15,7 @@ import { ManagedExecProcessRegistryService } from "../exec-process-registry/serv
 import { execDisplayResult, isSafeEnvKey } from "./shared.js";
 import { ExecCommandFailedError } from "./shared.js";
 
-type HostCommandResult = ReturnType<typeof textResult>;
+type HostCommandResult = ReturnType<typeof okTextResult>;
 
 function formatExit(session: ManagedExecFinishedSession): string {
   if (session.exitSignal) return `signal ${session.exitSignal}`;
@@ -30,17 +30,20 @@ function runningResult(session: ManagedExecRunningSession) {
   if (session.tail.trim().length > 0) {
     lines.push("", session.tail.trimEnd());
   }
-  return execDisplayResult(lines.join("\n"), {
-    status: "running",
-    verdict: "inconclusive",
-    sessionId: session.id,
-    pid: session.pid ?? undefined,
-    startedAt: session.startedAt,
-    cwd: session.cwd,
-    tail: session.tail,
-    command: session.command,
-    backend: "host",
-  });
+  return execDisplayResult(
+    lines.join("\n"),
+    {
+      status: "running",
+      sessionId: session.id,
+      pid: session.pid ?? undefined,
+      startedAt: session.startedAt,
+      cwd: session.cwd,
+      tail: session.tail,
+      command: session.command,
+      backend: "host",
+    },
+    "inconclusive",
+  );
 }
 
 function waitForCompletionOrYieldEffect(
@@ -126,18 +129,12 @@ export const executeHostCommandEffect: (
           startedResult.error instanceof Error
             ? startedResult.error.message
             : String(startedResult.error);
-        return textResult(
-          `Exec failed to start: ${message}`,
-          withVerdict(
-            {
-              status: "failed",
-              command: input.command,
-              cwd: input.cwd,
-              backend: "host",
-            },
-            "fail",
-          ),
-        );
+        return errTextResult(`Exec failed to start: ${message}`, {
+          status: "failed",
+          command: input.command,
+          cwd: input.cwd,
+          backend: "host",
+        });
       }
 
       const started = startedResult.started;

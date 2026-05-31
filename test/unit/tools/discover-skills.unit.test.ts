@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createDiscoverSkillsTool } from "@brewva/brewva-tools/skills";
 import type { SkillDocument } from "@brewva/brewva-vocabulary/session";
 import { createBundledToolRuntime, createRuntimeFixture } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {
   return (
@@ -105,7 +106,7 @@ describe("discover_skills tool", () => {
       }>;
     };
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       ok: true,
       searchedSkillCount: 2,
       results: [

@@ -299,29 +299,32 @@ export async function executeBoxCommandWithAudit(input: {
     );
 
     if (result.status === "running") {
-      return execDisplayResult(result.output, {
-        status: "running",
-        verdict: "inconclusive",
-        sessionId: result.sessionId,
-        pid: result.pid,
-        tail: result.tail,
-        boxId: result.boxId,
-        executionId: result.executionId,
-        fingerprint: result.fingerprint,
-        cwd: result.effectiveCwd,
-        command,
-        backend: "box",
-        requestedCwd: result.requestedCwd,
-        rootMappings: serializeBoxRootMappings(boxRootMappings),
-        requestedEnvKeys: result.requestedEnvKeys,
-        appliedEnvKeys: result.appliedEnvKeys,
-        droppedEnvKeys: result.droppedEnvKeys,
-        timeoutSec: result.timeoutSec,
-        commandPolicy: commandPolicy ? summarizeShellCommandAnalysis(commandPolicy) : undefined,
-        virtualReadonly: virtualReadonly
-          ? summarizeVirtualReadonlyEligibility(virtualReadonly)
-          : undefined,
-      });
+      return execDisplayResult(
+        result.output,
+        {
+          status: "running",
+          sessionId: result.sessionId,
+          pid: result.pid,
+          tail: result.tail,
+          boxId: result.boxId,
+          executionId: result.executionId,
+          fingerprint: result.fingerprint,
+          cwd: result.effectiveCwd,
+          command,
+          backend: "box",
+          requestedCwd: result.requestedCwd,
+          rootMappings: serializeBoxRootMappings(boxRootMappings),
+          requestedEnvKeys: result.requestedEnvKeys,
+          appliedEnvKeys: result.appliedEnvKeys,
+          droppedEnvKeys: result.droppedEnvKeys,
+          timeoutSec: result.timeoutSec,
+          commandPolicy: commandPolicy ? summarizeShellCommandAnalysis(commandPolicy) : undefined,
+          virtualReadonly: virtualReadonly
+            ? summarizeVirtualReadonlyEligibility(virtualReadonly)
+            : undefined,
+        },
+        "inconclusive",
+      );
     }
 
     recordExecEvent(
@@ -365,18 +368,21 @@ export async function executeBoxCommandWithAudit(input: {
       throw new Error(error.message, { cause: error });
     }
     if (error instanceof BoxWorkdirOutsideWorkspaceError) {
-      return execDisplayResult("Exec rejected (box_workdir_outside_workspace).", {
-        status: "failed",
-        verdict: "fail",
-        reason: "box_workdir_outside_workspace",
-        requestedCwd: error.requestedCwd,
-        command,
-        backend: "box",
-        commandPolicy: commandPolicy ? summarizeShellCommandAnalysis(commandPolicy) : undefined,
-        virtualReadonly: virtualReadonly
-          ? summarizeVirtualReadonlyEligibility(virtualReadonly)
-          : undefined,
-      });
+      return execDisplayResult(
+        "Exec rejected (box_workdir_outside_workspace).",
+        {
+          status: "failed",
+          reason: "box_workdir_outside_workspace",
+          requestedCwd: error.requestedCwd,
+          command,
+          backend: "box",
+          commandPolicy: commandPolicy ? summarizeShellCommandAnalysis(commandPolicy) : undefined,
+          virtualReadonly: virtualReadonly
+            ? summarizeVirtualReadonlyEligibility(virtualReadonly)
+            : undefined,
+        },
+        "err",
+      );
     }
     if (isExecAbortedError(error) || signal?.aborted) {
       throw error;

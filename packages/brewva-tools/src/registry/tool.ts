@@ -2,6 +2,10 @@ import { normalizeToolName } from "@brewva/brewva-runtime/core";
 import { getExactToolActionPolicy } from "@brewva/brewva-runtime/security";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
+  assertSupportedToolOutcomeVersion,
+  DEFAULT_TOOL_OUTCOME_VERSION,
+  ToolErrorRecordSchema,
+  ToolJsonRecordSchema,
   ToolCatalog,
   createToolCatalog,
   resolveToolExecutionTraits,
@@ -28,6 +32,14 @@ const DEFAULT_BREWVA_TOOL_EXECUTION_TRAITS: BrewvaToolExecutionTraits = {
   streamingEligible: false,
   contextModifying: false,
 };
+
+type ToolOutcomeContract = Pick<ToolDefinition, "outputSchema" | "errorSchema" | "outcomeVersion">;
+
+type ManagedToolAuthoringDefinition<TParams extends TSchema, TOutput, TError> = Omit<
+  ToolDefinition<TParams, TOutput, TError>,
+  keyof ToolOutcomeContract
+> &
+  Partial<ToolOutcomeContract>;
 
 export function defineTool<TParams extends TSchema, TDetails = unknown>(
   tool: ToolDefinition<TParams, TDetails>,
@@ -149,8 +161,8 @@ function copyToolMetadataProperties(source: object, target: object): void {
   }
 }
 
-export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
-  tool: ToolDefinition<TParams, TDetails>,
+export function defineBrewvaTool<TParams extends TSchema, TOutput = unknown, TError = unknown>(
+  tool: ManagedToolAuthoringDefinition<TParams, TOutput, TError>,
   metadata: Partial<BrewvaToolMetadata> = {},
 ): BrewvaManagedToolDefinition {
   const normalizedName = normalizeToolName(tool.name);
@@ -167,7 +179,13 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
     throw new Error(`managed Brewva tool '${normalizedName}' is missing action class metadata`);
   }
 
-  const execute: ToolDefinition<TParams, TDetails>["execute"] = async (
+  const outputSchema = tool.outputSchema ?? ToolJsonRecordSchema;
+  const errorSchema = tool.errorSchema ?? ToolErrorRecordSchema;
+  const outcomeVersion = assertSupportedToolOutcomeVersion(
+    tool.outcomeVersion ?? DEFAULT_TOOL_OUTCOME_VERSION,
+  );
+
+  const execute: ToolDefinition<TParams, TOutput, TError>["execute"] = async (
     toolCallId,
     params,
     signal,
@@ -180,6 +198,9 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
   const managed = {
     ...tool,
     parameters: tool.parameters,
+    outputSchema,
+    errorSchema,
+    outcomeVersion,
     execute,
   } as BrewvaManagedToolDefinition;
   Object.defineProperty(managed, "brewvaDescriptor", {
@@ -193,6 +214,9 @@ export function defineBrewvaTool<TParams extends TSchema, TDetails = unknown>(
         label: tool.label,
         description: tool.description,
         parameters: tool.parameters,
+        outputSchema,
+        errorSchema,
+        outcomeVersion,
         promptSnippet: tool.promptSnippet,
         promptGuidelines: tool.promptGuidelines,
         surface: nextMetadata.surface,
@@ -368,6 +392,20 @@ export function getBrewvaToolDescriptor(
         ? (tool as { description: string }).description
         : "",
     parameters: tool.parameters,
+    outputSchema:
+      "outputSchema" in tool &&
+      typeof (tool as { outputSchema?: unknown }).outputSchema === "object"
+        ? (tool as { outputSchema: TSchema }).outputSchema
+        : ToolJsonRecordSchema,
+    errorSchema:
+      "errorSchema" in tool && typeof (tool as { errorSchema?: unknown }).errorSchema === "object"
+        ? (tool as { errorSchema: TSchema }).errorSchema
+        : ToolErrorRecordSchema,
+    outcomeVersion: assertSupportedToolOutcomeVersion(
+      "outcomeVersion" in tool
+        ? ((tool as { outcomeVersion?: unknown }).outcomeVersion ?? DEFAULT_TOOL_OUTCOME_VERSION)
+        : DEFAULT_TOOL_OUTCOME_VERSION,
+    ),
     surface: metadata?.surface,
     actionClass: metadata?.actionClass,
     executionTraits: cloneSerializableExecutionTraits(metadata?.executionTraits),

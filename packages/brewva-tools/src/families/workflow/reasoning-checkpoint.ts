@@ -5,7 +5,7 @@ import type { BrewvaBundledToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { recordReasoningCheckpoint } from "../../runtime-port/reasoning.js";
 import { readLiteral } from "../../utils/literal.js";
-import { failTextResult, textResult } from "../../utils/result.js";
+import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
 const CHECKPOINT_BOUNDARIES = [
@@ -42,12 +42,12 @@ export function createReasoningCheckpointTool(options: BrewvaBundledToolOptions)
           leafEntryId: ctx.sessionManager.getLeafId(),
         });
         if (!checkpoint) {
-          return failTextResult("Reasoning checkpoint surface is unavailable in this runtime.", {
+          return errTextResult("Reasoning checkpoint surface is unavailable in this runtime.", {
             ok: false,
             error: "reasoning_checkpoint_unavailable",
           });
         }
-        return textResult(
+        return okTextResult(
           `Recorded reasoning checkpoint ${checkpoint.checkpointId} on branch ${checkpoint.branchId}.`,
           {
             ok: true,

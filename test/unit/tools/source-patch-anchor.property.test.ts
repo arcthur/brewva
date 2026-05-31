@@ -10,6 +10,7 @@ import {
 import fc from "fast-check";
 import { extractTextContent } from "../../contract/tools/tools-flow.helpers.js";
 import { propertyTest } from "../../helpers/property.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function context(workspace: string) {
   return {
@@ -59,7 +60,7 @@ propertyTest("anchors recover across unrelated leading line insertions and apply
       undefined,
       context(workspace),
     );
-    const details = (readResult as { details?: SourceReadToolDetails }).details;
+    const details = toolOutcomePayload(readResult) as SourceReadToolDetails;
     if (!details) {
       throw new Error("Missing source_read details.");
     }
@@ -93,7 +94,7 @@ propertyTest("anchors recover across unrelated leading line insertions and apply
       extractTextContent(prepareResult as { content: Array<{ type: string; text?: string }> }),
     ).toContain("status: prepared");
     expect(readFileSync(filePath, "utf8")).toBe(beforePrepare);
-    const planId = (prepareResult as { details?: { planId?: string } }).details?.planId;
+    const planId = (toolOutcomePayload(prepareResult) as { planId?: string }).planId;
     expect(planId).toMatch(/^plan_/u);
 
     await apply.execute(

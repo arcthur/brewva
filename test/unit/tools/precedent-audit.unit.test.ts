@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createPrecedentAuditTool } from "@brewva/brewva-tools/memory";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
 let workspace = "";
@@ -70,21 +71,21 @@ describe("precedent audit tool", () => {
       { cwd: workspace } as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       verdict: "inconclusive",
       maintenanceRecommendation: "review_for_drift",
     });
-    expect((result.details as { stableDocRefs?: string[] }).stableDocRefs).toContain(
+    expect((toolOutcomePayload(result) as { stableDocRefs?: string[] }).stableDocRefs).toContain(
       "docs/reference/runtime-wal-replay.md",
     );
-    expect((result.details as { querySummary?: string }).querySummary).toContain(
+    expect((toolOutcomePayload(result) as { querySummary?: string }).querySummary).toContain(
       "query_intent=normative_lookup",
     );
-    expect((result.details as { querySummary?: string }).querySummary).toContain(
+    expect((toolOutcomePayload(result) as { querySummary?: string }).querySummary).toContain(
       "query_intent=precedent_lookup",
     );
     expect(
-      (result.details as { findings?: Array<{ code?: string }> }).findings?.some(
+      (toolOutcomePayload(result) as { findings?: Array<{ code?: string }> }).findings?.some(
         (finding) => finding.code === "higher_authority_overlap",
       ),
     ).toBe(true);
@@ -122,12 +123,12 @@ describe("precedent audit tool", () => {
       { cwd: workspace } as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       verdict: "fail",
       maintenanceRecommendation: "mark_superseded",
     });
     expect(
-      (result.details as { findings?: Array<{ code?: string }> }).findings?.some(
+      (toolOutcomePayload(result) as { findings?: Array<{ code?: string }> }).findings?.some(
         (finding) => finding.code === "active_superseded_precedent",
       ),
     ).toBe(true);
@@ -189,12 +190,12 @@ describe("precedent audit tool", () => {
       { cwd: workspace } as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       verdict: "inconclusive",
       maintenanceRecommendation: "review_for_drift",
     });
     expect(
-      (result.details as { findings?: Array<{ code?: string }> }).findings?.some(
+      (toolOutcomePayload(result) as { findings?: Array<{ code?: string }> }).findings?.some(
         (finding) => finding.code === "same_rank_conflict",
       ),
     ).toBe(true);
@@ -232,12 +233,12 @@ describe("precedent audit tool", () => {
       { cwd: workspace } as never,
     );
 
-    expect(result.details).toMatchObject({
+    expect(toolOutcomePayload(result)).toMatchObject({
       verdict: "fail",
       maintenanceRecommendation: "complete_derivative_routing",
     });
     expect(
-      (result.details as { findings?: Array<{ code?: string }> }).findings?.some(
+      (toolOutcomePayload(result) as { findings?: Array<{ code?: string }> }).findings?.some(
         (finding) => finding.code === "invalid_promotion_candidate_ref",
       ),
     ).toBe(true);

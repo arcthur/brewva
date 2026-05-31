@@ -9,6 +9,7 @@ import {
   shutdownLspWorkspaceServerManager,
 } from "@brewva/brewva-tools/navigation";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
 function names(tools: Array<{ name: string }>): string[] {
@@ -246,7 +247,7 @@ process.stdin.on("data", (chunk) => {
       fakeContext("tc-lsp-rename"),
     );
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
-    const planId = (result as { details?: { planId?: string } }).details?.planId;
+    const planId = (toolOutcomePayload(result) as { planId?: string }).planId;
     expect(text).toContain("status: prepared");
     expect(planId).toMatch(/^plan_/u);
     expect(readFileSync(sourcePath, "utf8")).toContain("oldName");
@@ -365,7 +366,7 @@ process.stdin.on("data", (chunk) => {
       fakeContext("tc-lsp-code-action"),
     );
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
-    const planId = (result as { details?: { planId?: string } }).details?.planId;
+    const planId = (toolOutcomePayload(result) as { planId?: string }).planId;
     expect(text).toContain("status: prepared");
     expect(planId).toMatch(/^plan_/u);
     expect(existsSync(helperPath)).toBe(false);
