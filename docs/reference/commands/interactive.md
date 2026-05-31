@@ -12,6 +12,9 @@ attention posture, sessions, subagent footer detail, and pager drill-down.
   notification strip
 - the cockpit renders runtime physics, current work, decision lane, effect
   ledger, attention glance, recovery lane when active, and archive refs
+- the base transcript lane is bounded to recent live work and currently
+  streaming rows; older transcript evidence is pulled through archive,
+  transcript, export, or pager surfaces
 - transcript, raw event tape, inspect detail, and receipt detail are
   explicit-pull archive or pager surfaces, not the default spatial model
 - transient operator details render through overlays, pagers, notifications,

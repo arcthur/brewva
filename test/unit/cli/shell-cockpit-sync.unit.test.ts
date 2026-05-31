@@ -4,6 +4,7 @@ import type { RuntimeCostPosture } from "@brewva/brewva-tools/contracts";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { ShellCockpitSync } from "../../../packages/brewva-cli/src/shell/controller/cockpit-sync.js";
 import { createDefaultCockpitObservationCursor } from "../../../packages/brewva-cli/src/shell/domain/cockpit/index.js";
+import { createShellCockpitWireFoldStore } from "../../../packages/brewva-cli/src/shell/domain/cockpit/wire-fold.js";
 import type { OperatorSurfaceSnapshot } from "../../../packages/brewva-cli/src/shell/domain/operator-snapshot.js";
 import type { CliShellAction } from "../../../packages/brewva-cli/src/shell/domain/state.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
@@ -37,6 +38,76 @@ function operatorSnapshot(): OperatorSurfaceSnapshot {
 }
 
 describe("shell cockpit sync", () => {
+  test("uses the folded session wire snapshot instead of raw frame reads during progress sync", async () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      sessionWireFrame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        durability: "durable",
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "Say hello",
+      }),
+    );
+    const committedActions: CliShellAction[] = [];
+    let rawReadCount = 0;
+    const sync = new ShellCockpitSync({
+      isDisposed: () => false,
+      getRuntime: () => createRuntimeFixture(),
+      getSessionId: () => "session-1",
+      getSessionPhase: () => ({
+        kind: "model_streaming",
+        modelCallId: "model-call:1",
+        turn: 1,
+      }),
+      getModelLabel: () => "faux/faux-shell-1",
+      getOperatorSnapshot: operatorSnapshot,
+      getObservation: () => createDefaultCockpitObservationCursor(),
+      getRewindTargets: () => [],
+      getSessionWireFrames: () => {
+        rawReadCount += 1;
+        return [];
+      },
+      getCockpitWireFoldSnapshot: () => fold.snapshot("session-1"),
+      commit(action) {
+        committedActions.push(action);
+      },
+    });
+
+    sync.syncNow();
+    fold.remember(
+      sessionWireFrame({
+        type: "assistant.delta",
+        frameId: "frame:delta",
+        ts: 1_010,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta: "hello",
+      }),
+    );
+
+    sync.requestProgressSync();
+    await Promise.resolve();
+
+    expect(rawReadCount).toBe(0);
+    const projectionAction = committedActions.at(-1);
+    expect(projectionAction?.type).toBe("cockpit.setProjection");
+    if (projectionAction?.type !== "cockpit.setProjection") {
+      throw new Error("expected cockpit projection action");
+    }
+    expect(projectionAction.projection?.runtimeActivity).toMatchObject({
+      status: "streaming_answer",
+      streamedChars: 5,
+    });
+    expect(projectionAction.projection?.effectLedger.items[0]).toMatchObject({
+      kind: "answer",
+      summary: "hello",
+    });
+  });
+
   test("keeps streaming progress sync on the lightweight live path", async () => {
     let replayListCalls = 0;
     let eventQueryCalls = 0;

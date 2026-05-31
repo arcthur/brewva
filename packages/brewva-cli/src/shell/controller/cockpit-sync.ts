@@ -45,6 +45,10 @@ export interface ShellCockpitSyncContext {
     sessionId?: string,
     options?: Parameters<SessionViewPort["getSessionWireFrames"]>[1],
   ): ReturnType<SessionViewPort["getSessionWireFrames"]>;
+  getCockpitWireFoldSnapshot?(
+    sessionId?: string,
+    options?: Parameters<SessionViewPort["getCockpitWireFoldSnapshot"]>[1],
+  ): ReturnType<SessionViewPort["getCockpitWireFoldSnapshot"]>;
   commit(action: CliShellAction, options?: ShellCommitOptions): void;
 }
 
@@ -301,6 +305,9 @@ function latestSourceRef(source: Omit<ShellCockpitProjectionSource, "transitions
   for (const frame of source.sessionWire) {
     observe({ ref: frame.sourceEventId ?? frame.frameId, changedAt: frame.ts });
   }
+  if (source.wireFold?.latestWireRef) {
+    observe(source.wireFold.latestWireRef);
+  }
   for (const event of source.runtimeEvents) {
     observe({ ref: event.id, changedAt: event.timestamp });
   }
@@ -407,19 +414,29 @@ export class ShellCockpitSync {
     const coldSource = input.refreshColdSource
       ? this.refreshColdSource({ runtime, sessionId })
       : this.readColdSource({ runtime, sessionId });
+    const wireFold = safeRead(
+      () =>
+        this.context.getCockpitWireFoldSnapshot?.(sessionId, {
+          refreshDurable: input.refreshColdSource,
+        }),
+      undefined,
+    );
     const sourceBase: Omit<ShellCockpitProjectionSource, "transitionsSince"> = {
       sessionId,
       phase,
       workCard: coldSource.workCard,
       contextCockpit: coldSource.contextCockpit,
       operator,
-      sessionWire: safeRead(
-        () =>
-          this.context.getSessionWireFrames(sessionId, {
-            refreshDurable: input.refreshColdSource,
-          }),
-        [],
-      ),
+      sessionWire: wireFold
+        ? []
+        : safeRead(
+            () =>
+              this.context.getSessionWireFrames(sessionId, {
+                refreshDurable: input.refreshColdSource,
+              }),
+            [],
+          ),
+      ...(wireFold ? { wireFold } : {}),
       runtimeEvents: coldSource.runtimeEvents,
       cost: coldSource.cost,
       rewindTargets: coldSource.rewindTargets,

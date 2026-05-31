@@ -27,6 +27,9 @@ selection, and pagers inside one operator surface.
 Key ideas:
 
 - the transcript/composer/footer surface is the base layer
+- the base transcript keeps a bounded live working set; older transcript
+  evidence is explicit-pull through archive, transcript, export, or pager
+  surfaces
 - overlays preserve the current composer draft
 - streaming presentation is a renderer concern, not a runtime authority change
 - slash completion starts with `/`

@@ -590,6 +590,19 @@ describe("shell runtime: steering and recovery", () => {
     await runtime.start();
     runtime.ui.setEditorText("你是谁");
     await submitComposer(runtime);
+    fixture.emitSessionEvent(
+      createPromptMessageUpdateEvent({
+        assistantMessageEvent: createTextDeltaAssistantEvent({
+          delta: "ok",
+          partial: {
+            role: "assistant",
+            stopReason: "stop",
+            content: [{ type: "text", text: "ok" }],
+            timestamp: Date.now(),
+          },
+        }),
+      }),
+    );
 
     const assistantMessages = runtime
       .getViewState()

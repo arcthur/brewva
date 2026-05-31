@@ -44,9 +44,10 @@ const editSchema = Type.Object(
 
 export type BrewvaEditToolInput = Static<typeof editSchema>;
 
-type LegacyEditToolInput = BrewvaEditToolInput & {
+type LegacyEditToolInput = Record<string, unknown> & {
   oldText?: unknown;
   newText?: unknown;
+  edits?: unknown;
 };
 
 export interface BrewvaEditToolDetails {

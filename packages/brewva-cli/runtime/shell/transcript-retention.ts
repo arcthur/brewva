@@ -5,6 +5,8 @@ import type {
   CliShellTranscriptPart,
 } from "../../src/shell/domain/transcript.js";
 
+const INTERACTIVE_TRANSCRIPT_ROW_LIMIT = 100;
+
 export interface RetainedTranscriptRows {
   stableRows: readonly CliShellTranscriptMessage[];
   liveRows: readonly CliShellTranscriptMessage[];
@@ -44,26 +46,34 @@ function sameRows(
 
 export function splitRetainedTranscriptRows(
   messages: readonly CliShellTranscriptMessage[],
+  rowLimit = INTERACTIVE_TRANSCRIPT_ROW_LIMIT,
 ): RetainedTranscriptRows {
   const liveStartIndex = messages.findIndex(isStreamingMessage);
+  const boundedRowLimit = Math.max(1, Math.floor(rowLimit));
   if (liveStartIndex < 0) {
+    const start = Math.max(0, messages.length - boundedRowLimit);
     return {
-      stableRows: messages,
+      stableRows: messages.slice(start),
       liveRows: [],
     };
   }
+  const stableRows = messages.slice(0, liveStartIndex);
+  const liveRows = messages.slice(liveStartIndex);
+  const stableLimit = Math.max(0, boundedRowLimit - liveRows.length);
+  const retainedStableStart = Math.max(0, stableRows.length - stableLimit);
   return {
-    stableRows: messages.slice(0, liveStartIndex),
-    liveRows: messages.slice(liveStartIndex),
+    stableRows: stableRows.slice(retainedStableStart),
+    liveRows,
   };
 }
 
 export function createRetainedTranscriptRows(
   messages: Accessor<readonly CliShellTranscriptMessage[]>,
+  rowLimit: Accessor<number> = () => INTERACTIVE_TRANSCRIPT_ROW_LIMIT,
 ): RetainedTranscriptRowAccessors {
   const rows = createMemo<RetainedTranscriptRows>(
     (previous) => {
-      const next = splitRetainedTranscriptRows(messages());
+      const next = splitRetainedTranscriptRows(messages(), rowLimit());
       const stableRows =
         previous && sameRows(previous.stableRows, next.stableRows)
           ? previous.stableRows

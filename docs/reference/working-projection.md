@@ -22,6 +22,10 @@ cost posture, rewind targets, and operator observation cursor into a
 shell-local view model. It is rebuildable UI state; it does not add storage
 authority to the working projection or event tape.
 
+The interactive shell transcript lane is bounded live UI state, not a
+full-history projection. Older transcript evidence stays in explicit archive,
+transcript, export, and pager surfaces.
+
 ## Runtime Behavior
 
 ```mermaid
@@ -92,6 +96,8 @@ flowchart TD
   a default injected workflow brief
 - shell cockpit projection is a renderer-facing view model, not a working
   projection artifact, planner memory, or model-visible context input
+- shell transcript retention is renderer-local live policy and does not define
+  a public projection budget or a durable history boundary
 - the per-session working snapshot file and `brewva.projection-working`
   materialize only the current `active` subset, not the full unit log
 - workflow projection convergence is driven by `projection_group` resolves that

@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { Index, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import {
   buildPromptPartSignature,
   cloneCliShellPromptParts,
@@ -53,6 +53,51 @@ import {
 const COMPOSER_EDITOR_SYNC_DEBOUNCE_MS = 80;
 const SURFACE_SCROLL_EPSILON = 1;
 
+interface TranscriptScrollSnapshot {
+  readonly scrollTop: number;
+  readonly scrollHeight: number;
+  readonly viewportHeight: number;
+}
+
+type OpenTuiFrameHandler = (event?: unknown) => void;
+type OpenTuiEventHandler = (event?: unknown) => void;
+
+interface OpenTuiFrameEmitter {
+  on(event: "frame", handler: OpenTuiFrameHandler): void;
+  off(event: "frame", handler: OpenTuiFrameHandler): void;
+}
+
+interface OpenTuiEventEmitter {
+  on(event: string, handler: OpenTuiEventHandler): void;
+  off(event: string, handler: OpenTuiEventHandler): void;
+}
+
+function isOpenTuiFrameEmitter(value: unknown): value is OpenTuiFrameEmitter {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<OpenTuiFrameEmitter>;
+  return typeof candidate.on === "function" && typeof candidate.off === "function";
+}
+
+function isOpenTuiEventEmitter(value: unknown): value is OpenTuiEventEmitter {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const candidate = value as Partial<OpenTuiEventEmitter>;
+  return typeof candidate.on === "function" && typeof candidate.off === "function";
+}
+
+function readScrollboxMetricEmitters(node: OpenTuiScrollBoxHandle): readonly OpenTuiEventEmitter[] {
+  const candidate = node as OpenTuiScrollBoxHandle & {
+    readonly verticalScrollBar?: unknown;
+    readonly horizontalScrollBar?: unknown;
+  };
+  return [candidate.verticalScrollBar, candidate.horizontalScrollBar, node].filter(
+    isOpenTuiEventEmitter,
+  );
+}
+
 function setScrollboxStickyTail(node: OpenTuiScrollBoxHandle, enabled: boolean): void {
   if (node.stickyScroll !== enabled) {
     node.stickyScroll = enabled;
@@ -62,11 +107,91 @@ function setScrollboxStickyTail(node: OpenTuiScrollBoxHandle, enabled: boolean):
   }
 }
 
+function scrollboxHasManualScroll(node: OpenTuiScrollBoxHandle): boolean {
+  const manualScrollKey = ["_has", "ManualScroll"].join("");
+  const candidate = node as OpenTuiScrollBoxHandle & Record<string, unknown>;
+  return candidate[manualScrollKey] === true;
+}
+
 function setScrollTopIfChanged(node: OpenTuiScrollBoxHandle, target: number): void {
   const boundedTarget = Math.max(0, target);
   if (Math.abs(node.scrollTop - boundedTarget) > SURFACE_SCROLL_EPSILON) {
     node.scrollTop = boundedTarget;
   }
+}
+
+function sameTranscriptScrollSnapshot(
+  left: TranscriptScrollSnapshot,
+  right: TranscriptScrollSnapshot,
+): boolean {
+  return (
+    Math.abs(left.scrollTop - right.scrollTop) <= SURFACE_SCROLL_EPSILON &&
+    Math.abs(left.scrollHeight - right.scrollHeight) <= SURFACE_SCROLL_EPSILON &&
+    Math.abs(left.viewportHeight - right.viewportHeight) <= SURFACE_SCROLL_EPSILON
+  );
+}
+
+function readTranscriptScrollSnapshot(node: OpenTuiScrollBoxHandle): TranscriptScrollSnapshot {
+  return {
+    scrollTop: Math.max(0, node.scrollTop),
+    scrollHeight: Math.max(0, node.scrollHeight),
+    viewportHeight: Math.max(1, node.viewport.height),
+  };
+}
+
+function installScrollboxMetricObserver(
+  node: OpenTuiScrollBoxHandle,
+  renderer: OpenTuiRenderer,
+  notify: () => void,
+): () => void {
+  let disposed = false;
+  let lastSnapshot = readTranscriptScrollSnapshot(node);
+  const notifyWhenChanged = (): void => {
+    if (disposed || node.isDestroyed) {
+      return;
+    }
+    const nextSnapshot = readTranscriptScrollSnapshot(node);
+    if (sameTranscriptScrollSnapshot(lastSnapshot, nextSnapshot)) {
+      return;
+    }
+    lastSnapshot = nextSnapshot;
+    notify();
+  };
+
+  const emitter = isOpenTuiFrameEmitter(renderer) ? renderer : undefined;
+  const scrollEmitters = readScrollboxMetricEmitters(node);
+  const onScrollMetricChanged: OpenTuiEventHandler = () => {
+    notifyWhenChanged();
+    queueMicrotask(notifyWhenChanged);
+  };
+  for (const scrollEmitter of scrollEmitters) {
+    scrollEmitter.on("change", onScrollMetricChanged);
+  }
+
+  const cleanupScrollEmitters = (): void => {
+    for (const scrollEmitter of scrollEmitters) {
+      scrollEmitter.off("change", onScrollMetricChanged);
+    }
+  };
+
+  if (emitter) {
+    const onFrame: OpenTuiFrameHandler = () => notifyWhenChanged();
+    emitter.on("frame", onFrame);
+    queueMicrotask(notifyWhenChanged);
+    return () => {
+      disposed = true;
+      cleanupScrollEmitters();
+      emitter.off("frame", onFrame);
+    };
+  }
+
+  const timer = setInterval(notifyWhenChanged, 16);
+  queueMicrotask(notifyWhenChanged);
+  return () => {
+    disposed = true;
+    cleanupScrollEmitters();
+    clearInterval(timer);
+  };
 }
 
 function supportsOpenTuiKeymap(renderer: OpenTuiRenderer): boolean {
@@ -114,6 +239,22 @@ export function BrewvaOpenTuiShell(input: {
   const [textarea, setTextarea] = createSignal<OpenTuiTextareaHandle | null>(null);
   const [completionContainer, setCompletionContainer] = createSignal<BoxRenderable | null>(null);
   const [promptAnchor, setPromptAnchor] = createSignal<BoxRenderable | null>(null);
+  const [transcriptScrollSnapshot, setTranscriptScrollSnapshot] =
+    createSignal<TranscriptScrollSnapshot>({
+      scrollTop: 0,
+      scrollHeight: 0,
+      viewportHeight: Math.max(1, dimensions().height),
+    });
+  const syncTranscriptScrollSnapshot = (): void => {
+    const node = scrollbox();
+    if (!node || node.isDestroyed) {
+      return;
+    }
+    const next = readTranscriptScrollSnapshot(node);
+    setTranscriptScrollSnapshot((current) =>
+      sameTranscriptScrollSnapshot(current, next) ? current : next,
+    );
+  };
 
   const promptPartStyle = createMemo(() => createPromptPartStyle(theme()));
   const filePromptPartStyleId = createMemo(() => promptPartStyle().getStyleId("extmark.file"));
@@ -335,6 +476,17 @@ export function BrewvaOpenTuiShell(input: {
     if (!node || node.isDestroyed) {
       return;
     }
+    const cleanup = installScrollboxMetricObserver(node, renderer, syncTranscriptScrollSnapshot);
+    syncTranscriptScrollSnapshot();
+    onCleanup(cleanup);
+  });
+
+  createEffect(() => {
+    transcriptScrollSnapshot();
+    const node = scrollbox();
+    if (!node || node.isDestroyed) {
+      return;
+    }
     if (state.surface.navigationRequest) {
       applySurfaceNavigationRequest({
         runtime: input.runtime,
@@ -344,12 +496,21 @@ export function BrewvaOpenTuiShell(input: {
       return;
     }
 
+    const { maxScrollTop, currentOffset } = readSurfaceScrollMetrics(node);
     if (state.surface.followMode === "live") {
+      if (scrollboxHasManualScroll(node) && currentOffset > SURFACE_SCROLL_EPSILON) {
+        setScrollboxStickyTail(node, false);
+        void input.runtime.handleInput({
+          type: "surface.scrollSync",
+          followMode: "scrolled",
+          scrollOffset: currentOffset,
+        });
+        return;
+      }
       setScrollboxStickyTail(node, true);
       return;
     }
 
-    const { maxScrollTop, currentOffset } = readSurfaceScrollMetrics(node);
     if (currentOffset <= SURFACE_SCROLL_EPSILON && maxScrollTop > 0) {
       setScrollboxStickyTail(node, true);
       void input.runtime.handleInput({
@@ -576,24 +737,33 @@ export function BrewvaOpenTuiShell(input: {
             scrollAcceleration={scrollAcceleration()}
             backgroundColor={theme().background}
           >
-            <box height={1} />
-            <Index each={transcriptRows.rows()}>
-              {(message, index) => (
-                <TranscriptMessageView
-                  message={message()}
-                  theme={theme()}
-                  toolDefinitions={toolDefinitions}
-                  toolRenderCache={toolRenderCache}
-                  transcriptWidth={transcriptWidth()}
-                  showToolDetails={state.view.toolDetails}
-                  index={index}
-                  isLast={index === transcriptRows.rowCount() - 1}
-                  assistantLabel={assistantLabel()}
-                  modelLabel={modelLabel()}
-                  renderSurface="interactive"
-                />
-              )}
-            </Index>
+            <For each={transcriptRows.rows()}>
+              {(message, index) => {
+                return (
+                  <box
+                    id={`transcript-row:${message.id}`}
+                    width="100%"
+                    flexDirection="column"
+                    flexShrink={0}
+                    overflow="visible"
+                  >
+                    <TranscriptMessageView
+                      message={message}
+                      theme={theme()}
+                      toolDefinitions={toolDefinitions}
+                      toolRenderCache={toolRenderCache}
+                      transcriptWidth={transcriptWidth()}
+                      showToolDetails={state.view.toolDetails}
+                      index={index()}
+                      isLast={index() === transcriptRows.rowCount() - 1}
+                      assistantLabel={assistantLabel()}
+                      modelLabel={modelLabel()}
+                      renderSurface="interactive"
+                    />
+                  </box>
+                );
+              }}
+            </For>
           </scrollbox>
 
           <CockpitDockSurface

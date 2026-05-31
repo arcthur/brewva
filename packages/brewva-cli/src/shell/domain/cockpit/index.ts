@@ -32,6 +32,9 @@ export {
   type ShellCockpitDecisionLane,
   type ShellCockpitEffectLedger,
   type ShellCockpitEffectLedgerItem,
+  type ShellCockpitFoldedAnswer,
+  type ShellCockpitFoldedSourceRef,
+  type ShellCockpitFoldedToolCall,
   type ShellCockpitLedgerKind,
   type ShellCockpitPhaseTransition,
   type ShellCockpitPhysicsBar,
@@ -43,4 +46,6 @@ export {
   type ShellCockpitRuntimeActivityStatus,
   type ShellCockpitSandboxPosture,
   type ShellCockpitSurfaceRegion,
+  type ShellCockpitWireFoldSnapshot,
 } from "./types.js";
+export { createShellCockpitWireFoldStore } from "./wire-fold.js";

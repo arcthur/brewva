@@ -8,6 +8,7 @@ import {
   readToolResultMessage,
 } from "../../io/message-content.js";
 import type { ShellCommitOptions } from "../domain/actions.js";
+import type { ShellCockpitWireFoldSnapshot } from "../domain/cockpit/index.js";
 import {
   buildOperatorSafetyShellSessionView,
   buildOperatorSafetyShellToolView,
@@ -30,6 +31,7 @@ export interface ShellTranscriptProjectorContext {
   getMessages(): readonly CliShellTranscriptMessage[];
   getSessionId(): string;
   getTranscriptSeed(): unknown[];
+  getWireFoldSnapshot?(): ShellCockpitWireFoldSnapshot;
   setMessages(messages: readonly CliShellTranscriptMessage[], options?: ShellCommitOptions): void;
   commit(action: CliShellAction, options?: ShellCommitOptions): void;
   getUi(): CliShellUiPort;
@@ -60,6 +62,7 @@ export class ShellTranscriptProjector {
   #assistantEntryId: string | undefined;
   #assistantEntrySequence = 0;
   #rewindTranscriptMarkerSequence = 0;
+  #wireFoldTranscriptSignature: string | undefined;
   readonly #rewindTranscriptMarkersBySessionId = new Map<string, CliShellTranscriptMessage>();
   readonly #toolProjectionInputByCallId = new Map<string, ToolProjectionInputState>();
   readonly #toolSafetyByCallId = new Map<string, OperatorSafetyShellToolView>();
@@ -111,6 +114,38 @@ export class ShellTranscriptProjector {
 
   refreshFromSession(): void {
     this.replaceMessages(this.composeSeedTranscript());
+    this.#wireFoldTranscriptSignature = undefined;
+  }
+
+  refreshFromWireFold(options: ShellCommitOptions = STREAMING_TRANSCRIPT_COMMIT_OPTIONS): boolean {
+    const snapshot = this.context.getWireFoldSnapshot?.();
+    if (!snapshot) {
+      return false;
+    }
+    const sessionId = this.context.getSessionId();
+    const ownedPrefix = `wire:${sessionId}:`;
+    const current = this.context.getMessages();
+    const currentOwned = current.filter((message) => message.id.startsWith(ownedPrefix));
+    if (snapshot.transcriptMessages.length === 0 && currentOwned.length === 0) {
+      this.#wireFoldTranscriptSignature = `${sessionId}:${snapshot.transcriptVersion}`;
+      return false;
+    }
+    const nextSignature = `${sessionId}:${snapshot.transcriptVersion}`;
+    const ownedIdsMatch =
+      currentOwned.length === snapshot.transcriptMessages.length &&
+      currentOwned.every((message, index) => message.id === snapshot.transcriptMessages[index]?.id);
+    if (this.#wireFoldTranscriptSignature === nextSignature && ownedIdsMatch) {
+      return false;
+    }
+
+    const nextMessages = [
+      ...current.filter((message) => !message.id.startsWith(ownedPrefix)),
+      ...snapshot.transcriptMessages,
+    ];
+    this.#wireFoldTranscriptSignature = nextSignature;
+    this.rebuildToolSafetyCache(nextMessages);
+    this.replaceMessages(nextMessages, options);
+    return true;
   }
 
   appendMessage(message: CliShellTranscriptMessage | null, options?: ShellCommitOptions): void {

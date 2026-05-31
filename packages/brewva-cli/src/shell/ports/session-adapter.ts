@@ -22,9 +22,11 @@ import {
   redoCliRuntimeSession,
   rewindCliRuntimeSession,
 } from "../../runtime/runtime-ports.js";
+import { createShellCockpitWireFoldStore } from "../domain/cockpit/wire-fold.js";
 import type {
   CliShellSessionBundle,
   SessionLineageStatusView,
+  SessionProjectionMode,
   SessionViewPort,
   SessionWireFrameReadOptions,
 } from "./session-port.js";
@@ -838,7 +840,9 @@ export function projectRuntimeTurnSessionWireFrames(
 export function createSessionViewPort(bundle: CliShellSessionBundle): SessionViewPort {
   const localListeners = new Set<SessionViewPortListener>();
   const liveSessionWireFrames = createLiveSessionWireFrameStore();
+  const cockpitWireFold = createShellCockpitWireFoldStore();
   const durableSessionWire = createDurableSessionWireReader(bundle);
+  let projectionMode: SessionProjectionMode = "legacySessionEvents";
   const emitLocalSessionEvent = (event: BrewvaPromptSessionEvent): void => {
     for (const listener of localListeners) {
       listener(event);
@@ -851,6 +855,9 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
   });
   return {
     session: bundle.session,
+    getProjectionMode() {
+      return projectionMode;
+    },
     getSessionId() {
       return bundle.session.sessionManager.getSessionId();
     },
@@ -1004,9 +1011,11 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         options?.streamingBehavior ||
         options?.source !== "interactive"
       ) {
+        projectionMode = "legacySessionEvents";
         await bundle.session.prompt(parts, options);
         return;
       }
+      projectionMode = "wireFold";
       const projectionState = createRuntimeTurnSessionProjectionState();
       const output = await runHostedPromptTurn({
         session: bundle.session,
@@ -1016,6 +1025,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         sessionId: bundle.session.sessionManager.getSessionId(),
         onFrame(frame) {
           liveSessionWireFrames.remember(frame);
+          cockpitWireFold.remember(frame);
           emitRuntimeTurnSessionFrame({
             frame,
             state: projectionState,
@@ -1079,6 +1089,18 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         liveFrames: liveSessionWireFrames.values(),
         sessionId: targetSessionId,
       });
+    },
+    getCockpitWireFoldSnapshot(
+      targetSessionId = bundle.session.sessionManager.getSessionId(),
+      options?: SessionWireFrameReadOptions,
+    ) {
+      if (options?.refreshDurable ?? true) {
+        cockpitWireFold.hydrateSession(
+          targetSessionId,
+          durableSessionWire.read(targetSessionId, options),
+        );
+      }
+      return cockpitWireFold.snapshot(targetSessionId);
     },
     getTranscriptSeed() {
       const messages = bundle.session.sessionManager.buildSessionContext?.().messages;

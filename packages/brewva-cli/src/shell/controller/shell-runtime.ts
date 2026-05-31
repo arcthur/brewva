@@ -148,7 +148,22 @@ function isHighFrequencySessionProgressEvent(event: BrewvaPromptSessionEvent): b
 }
 
 function isHighFrequencyCockpitProgressEvent(event: BrewvaPromptSessionEvent): boolean {
-  return event.type === "tool_execution_update";
+  return (
+    event.type === "message_update" ||
+    event.type === "tool_execution_update" ||
+    event.type === "session_wire_progress"
+  );
+}
+
+function isWireFoldTranscriptCandidateEvent(event: BrewvaPromptSessionEvent): boolean {
+  return (
+    event.type === "message_update" ||
+    event.type === "message_end" ||
+    event.type === "tool_execution_start" ||
+    event.type === "tool_execution_update" ||
+    event.type === "tool_execution_end" ||
+    event.type === "session_wire_progress"
+  );
 }
 
 type GitCommandResult =
@@ -455,6 +470,10 @@ export class CliShellRuntime {
       getMessages: () => this.#state.transcript.messages,
       getSessionId: () => this.#sessionPort.getSessionId(),
       getTranscriptSeed: () => this.#sessionPort.getTranscriptSeed(),
+      getWireFoldSnapshot: () =>
+        this.#sessionPort.getCockpitWireFoldSnapshot(this.#sessionPort.getSessionId(), {
+          refreshDurable: false,
+        }),
       getUi: () => this.ui,
       commit: (action, commitOptions) => this.commit(action, commitOptions),
       setMessages: (messages, commitOptions) =>
@@ -606,6 +625,8 @@ export class CliShellRuntime {
       getRewindTargets: () => this.#sessionPort.listRewindTargets(),
       getSessionWireFrames: (sessionId, readOptions) =>
         this.#sessionPort.getSessionWireFrames(sessionId, readOptions),
+      getCockpitWireFoldSnapshot: (sessionId, readOptions) =>
+        this.#sessionPort.getCockpitWireFoldSnapshot(sessionId, readOptions),
       commit: (action, commitOptions) => this.commit(action, commitOptions),
     });
     this.#viewPreferencesHandler = new ShellViewPreferencesHandler({
@@ -980,6 +1001,25 @@ export class CliShellRuntime {
     if (this.#disposed) {
       return;
     }
+    const useWireFoldProjection = this.#sessionPort.getProjectionMode() === "wireFold";
+    if (useWireFoldProjection && events.some(isWireFoldTranscriptCandidateEvent)) {
+      const transcriptChanged = this.#transcriptProjector.refreshFromWireFold();
+      let requestCockpitProgress = false;
+      for (const event of events) {
+        if (isWireFoldTranscriptCandidateEvent(event)) {
+          requestCockpitProgress ||= isHighFrequencyCockpitProgressEvent(event);
+          continue;
+        }
+        this.projectSessionEvent(event);
+      }
+      if (transcriptChanged) {
+        this.requestStreamingRender();
+      }
+      if (requestCockpitProgress) {
+        this.#cockpitSync.requestProgressSync();
+      }
+      return;
+    }
     for (const event of events) {
       this.projectSessionEvent(event);
     }
@@ -1005,7 +1045,11 @@ export class CliShellRuntime {
       if (event.type === "session_phase_change" && isSessionPhase(event.phase)) {
         this.#sessionPhase = event.phase;
       }
-      transcriptChanged = this.#transcriptProjector.handleSessionEvent(event);
+      transcriptChanged =
+        this.#sessionPort.getProjectionMode() === "wireFold" &&
+        isWireFoldTranscriptCandidateEvent(event)
+          ? this.#transcriptProjector.refreshFromWireFold()
+          : this.#transcriptProjector.handleSessionEvent(event);
       this.notifySteerOutcome(event);
     } catch (error) {
       transcriptChanged = true;

@@ -6,13 +6,20 @@ import {
 } from "@brewva/brewva-runtime/core";
 import type { BrewvaPromptSessionEvent, SessionPhase } from "@brewva/brewva-substrate/session";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
+import { createShellCockpitWireFoldStore } from "../../../packages/brewva-cli/src/shell/domain/cockpit/wire-fold.js";
 import type { CliShellAction } from "../../../packages/brewva-cli/src/shell/domain/state.js";
 import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 import { projectRuntimeTurnSessionWireFrames } from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";
 import type { CliShellUiPort } from "../../../packages/brewva-cli/src/shell/ports/ui-port.js";
 import { ShellTranscriptProjector } from "../../../packages/brewva-cli/src/shell/projectors/transcript-projector.js";
 
-function createProjectorHarness() {
+function createProjectorHarness(
+  options: {
+    getWireFoldSnapshot?: ConstructorParameters<
+      typeof ShellTranscriptProjector
+    >[0]["getWireFoldSnapshot"];
+  } = {},
+) {
   let messages: CliShellTranscriptMessage[] = [];
   const actions: CliShellAction[] = [];
   const projector = new ShellTranscriptProjector({
@@ -25,6 +32,7 @@ function createProjectorHarness() {
     getTranscriptSeed() {
       return [];
     },
+    getWireFoldSnapshot: options.getWireFoldSnapshot,
     setMessages(nextMessages) {
       messages = [...nextMessages];
     },
@@ -46,6 +54,43 @@ function createProjectorHarness() {
 }
 
 describe("shell transcript projector", () => {
+  test("refreshes transcript from folded wire state without replaying legacy deltas", () => {
+    const fold = createShellCockpitWireFoldStore();
+    for (let index = 0; index < 200; index += 1) {
+      fold.remember({
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: `frame-delta-${index}`,
+        ts: 1_000 + index,
+        source: "live",
+        durability: "cache",
+        type: "assistant.delta",
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta: "x",
+      });
+    }
+    const { getMessages, projector } = createProjectorHarness({
+      getWireFoldSnapshot: () => fold.snapshot("session-1"),
+    });
+
+    expect(projector.refreshFromWireFold()).toBe(true);
+    expect(projector.refreshFromWireFold()).toBe(false);
+
+    expect(getMessages()).toHaveLength(1);
+    expect(getMessages()[0]).toMatchObject({
+      role: "assistant",
+      renderMode: "streaming",
+      parts: [
+        {
+          type: "text",
+          text: "x".repeat(200),
+        },
+      ],
+    });
+  });
+
   test("projects runtime turn input as an active model phase", () => {
     const frames: SessionWireFrame[] = [
       {

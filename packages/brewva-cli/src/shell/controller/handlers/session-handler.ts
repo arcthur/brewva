@@ -30,7 +30,10 @@ interface PromptMemoryDelegate {
 
 interface TranscriptProjectorDelegate {
   clearRewindMarker(sessionId: string): void;
-  appendMessage(message: ReturnType<typeof buildTextTranscriptMessage>): void;
+  appendMessage(
+    message: ReturnType<typeof buildTextTranscriptMessage>,
+    options?: ShellCommitOptions,
+  ): void;
   setRewindMarker(text: string): void;
   refreshFromSession(): void;
 }
@@ -100,6 +103,7 @@ export class ShellSessionHandler {
   #interactiveTurnSequence = 0;
   #preserveComposerAfterShellCommand = false;
   #submittingComposer = false;
+  #pendingOptimisticSubmitKey: string | undefined;
 
   constructor(private readonly context: ShellSessionHandlerContext) {}
 
@@ -196,42 +200,22 @@ export class ShellSessionHandler {
         );
       return;
     }
-    if (!prompt.startsWith("/")) {
-      const availableModels = await this.context.getSessionPort().listModels();
-      if (!this.context.getBundle().session.model || availableModels.length === 0) {
-        this.context
-          .getUi()
-          .notify(
-            availableModels.length === 0
-              ? "No connected model provider. Use /model to connect one."
-              : "No model selected. Use /model to choose one.",
-            "warning",
-          );
-        if (availableModels.length === 0) {
-          await this.context.providerAuth.openConnectDialog();
-        } else {
-          await this.context.modelSelection.openModelsDialog();
+    const slashCommand = parseLeadingSlashCommand(prompt);
+    if (slashCommand) {
+      this.#preserveComposerAfterShellCommand = false;
+      const handled = await this.context.handleShellCommand(prompt);
+      if (handled) {
+        if (!this.#preserveComposerAfterShellCommand) {
+          this.context.commit({
+            type: "composer.setText",
+            text: "",
+            cursor: 0,
+          });
         }
+        this.#preserveComposerAfterShellCommand = false;
         return;
       }
-    }
-
-    this.#preserveComposerAfterShellCommand = false;
-    const handled = await this.context.handleShellCommand(prompt);
-    if (handled) {
-      if (!this.#preserveComposerAfterShellCommand) {
-        this.context.commit({
-          type: "composer.setText",
-          text: "",
-          cursor: 0,
-        });
-      }
-      this.#preserveComposerAfterShellCommand = false;
-      return;
-    }
-    const unknownSlashCommand = parseLeadingSlashCommand(prompt);
-    if (unknownSlashCommand) {
-      const commandLabel = unknownSlashCommand.name ? `: /${unknownSlashCommand.name}` : "";
+      const commandLabel = slashCommand.name ? `: /${slashCommand.name}` : "";
       const commandPaletteShortcut = this.context.getShortcutLabel("app.commandPalette");
       const commandPaletteHint = commandPaletteShortcut
         ? ` or press ${commandPaletteShortcut} for commands`
@@ -245,65 +229,151 @@ export class ShellSessionHandler {
       return;
     }
 
+    if (!this.context.getBundle().session.model) {
+      const availableModels = await this.context.getSessionPort().listModels();
+      if (availableModels.length === 0) {
+        this.context
+          .getUi()
+          .notify("No connected model provider. Use /model to connect one.", "warning");
+        await this.context.providerAuth.openConnectDialog();
+        return;
+      }
+      this.context.getUi().notify("No model selected. Use /model to choose one.", "warning");
+      await this.context.modelSelection.openModelsDialog();
+      return;
+    }
+    const availableModels = this.context.getBundle().session.modelRegistry?.getAvailable?.();
+    if (Array.isArray(availableModels) && availableModels.length === 0) {
+      this.context
+        .getUi()
+        .notify("No connected model provider. Use /model to connect one.", "warning");
+      await this.context.providerAuth.openConnectDialog();
+      return;
+    }
+
+    const optimisticSubmitKey =
+      options.waitForPromptEffect === false
+        ? JSON.stringify({ text: promptText, parts: promptParts })
+        : undefined;
+    if (
+      optimisticSubmitKey !== undefined &&
+      this.#pendingOptimisticSubmitKey === optimisticSubmitKey
+    ) {
+      this.context.commit(
+        {
+          type: "composer.setText",
+          text: "",
+          cursor: 0,
+        },
+        {
+          debounceStatus: false,
+          refreshCompletions: false,
+        },
+      );
+      return;
+    }
+    if (optimisticSubmitKey !== undefined) {
+      this.#pendingOptimisticSubmitKey = optimisticSubmitKey;
+    }
+    const clearPendingOptimisticSubmit = (): void => {
+      if (
+        optimisticSubmitKey !== undefined &&
+        this.#pendingOptimisticSubmitKey === optimisticSubmitKey
+      ) {
+        this.#pendingOptimisticSubmitKey = undefined;
+      }
+    };
+
     this.context.promptMemory.appendHistory({
       text: promptText,
       parts: promptParts,
     });
 
+    const submittedAt = Date.now();
+    const turnId = `interactive:${submittedAt}:${++this.#interactiveTurnSequence}`;
     type RewindPromptParts = NonNullable<
       Parameters<SessionViewPort["recordRewindCheckpoint"]>[0]["prompt"]
     >["parts"];
-    await this.context.getSessionPort().recordRewindCheckpoint({
-      turnId: `interactive:${Date.now()}:${++this.#interactiveTurnSequence}`,
-      prompt: {
-        text: promptText,
-        parts: structuredClone(promptParts) as unknown as RewindPromptParts,
-      },
-    });
+    const recordCheckpoint = async (): Promise<void> => {
+      await this.context.getSessionPort().recordRewindCheckpoint({
+        turnId,
+        prompt: {
+          text: promptText,
+          parts: structuredClone(promptParts) as unknown as RewindPromptParts,
+        },
+      });
+    };
+    const runPromptEffect = async (): Promise<void> => {
+      try {
+        await recordCheckpoint();
+        await this.context.runShellEffects([
+          {
+            type: "session.prompt",
+            sessionGeneration: this.context.getSessionGeneration(),
+            parts: buildCliShellPromptContentParts(
+              this.context.cwd,
+              promptText,
+              promptParts,
+            ) as readonly BrewvaPromptContentPart[],
+            options: {
+              source: "interactive",
+              ...(composerPolicy === "queue" ? { streamingBehavior: "queue" as const } : {}),
+            },
+          },
+        ]);
+      } finally {
+        clearPendingOptimisticSubmit();
+      }
+    };
+
     this.context.transcriptProjector.clearRewindMarker(
       this.context.getSessionPort().getSessionId(),
     );
-    this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
+    this.context.commit(this.context.buildSessionStatusActions(), {
+      debounceStatus: false,
+      emitChange: false,
+      refreshCompletions: false,
+    });
     this.context.transcriptProjector.appendMessage(
       buildTextTranscriptMessage({
-        id: `user:${Date.now()}`,
+        id: `user:${submittedAt}`,
         role: "user",
         text: expandPromptTextParts(promptText, promptParts).trim(),
       }),
-    );
-    this.context.commit({
-      type: "composer.setText",
-      text: "",
-      cursor: 0,
-    });
-    const promptEffect = this.context.runShellEffects([
       {
-        type: "session.prompt",
-        sessionGeneration: this.context.getSessionGeneration(),
-        parts: buildCliShellPromptContentParts(
-          this.context.cwd,
-          promptText,
-          promptParts,
-        ) as readonly BrewvaPromptContentPart[],
-        options: {
-          source: "interactive",
-          ...(composerPolicy === "queue" ? { streamingBehavior: "queue" as const } : {}),
-        },
+        debounceStatus: false,
+        emitChange: false,
+        refreshCompletions: false,
       },
-    ]);
+    );
+    this.context.commit(
+      {
+        type: "composer.setText",
+        text: "",
+        cursor: 0,
+      },
+      {
+        debounceStatus: false,
+        refreshCompletions: false,
+      },
+    );
+
     if (options.waitForPromptEffect === false) {
-      void promptEffect
-        .then(() => {
-          this.context.notifyInteractiveUserPromptCommitted();
-        })
-        .catch((error) => {
-          this.context
-            .getUi()
-            .notify(error instanceof Error ? error.message : "Failed to run prompt.", "error");
-        });
+      setTimeout(() => {
+        void runPromptEffect()
+          .then(() => {
+            this.context.notifyInteractiveUserPromptCommitted();
+          })
+          .catch((error) => {
+            this.context
+              .getUi()
+              .notify(error instanceof Error ? error.message : "Failed to run prompt.", "error");
+          });
+      }, 0);
       return;
     }
-    await promptEffect;
+
+    await runPromptEffect();
     this.context.notifyInteractiveUserPromptCommitted();
   }
 

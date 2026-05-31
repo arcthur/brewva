@@ -1,15 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { createRoot, createSignal } from "solid-js";
-import {
-  createRetainedTranscriptRows,
-  splitRetainedTranscriptRows,
-} from "../../../packages/brewva-cli/runtime/shell/transcript-retention.js";
+import { splitRetainedTranscriptRows } from "../../../packages/brewva-cli/runtime/shell/transcript-retention.js";
 import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
+
+const expectedDefaultInteractiveRowLimit = 100;
 
 function textMessage(
   id: string,
-  renderMode: CliShellTranscriptMessage["renderMode"],
-  text = id,
+  renderMode: CliShellTranscriptMessage["renderMode"] = "stable",
 ): CliShellTranscriptMessage {
   return {
     id,
@@ -19,75 +16,59 @@ function textMessage(
       {
         type: "text",
         id: `${id}:text`,
-        text,
+        text: id,
         renderMode,
       },
     ],
   };
 }
 
-describe("transcript row retention", () => {
-  test("splits history before the first active streaming row", () => {
-    const stableA = textMessage("stable-a", "stable");
-    const streaming = textMessage("streaming", "streaming");
-    const stableAfterStreaming = textMessage("stable-after-streaming", "stable");
+describe("transcript retention", () => {
+  test("keeps only the stable tail when there is no live row", () => {
+    const messages = Array.from({ length: 150 }, (_, index) => textMessage(`row-${index + 1}`));
 
-    const rows = splitRetainedTranscriptRows([stableA, streaming, stableAfterStreaming]);
+    const retained = splitRetainedTranscriptRows(messages);
 
-    expect(rows.stableRows).toEqual([stableA]);
-    expect(rows.liveRows).toEqual([streaming, stableAfterStreaming]);
+    expect(retained.stableRows).toHaveLength(expectedDefaultInteractiveRowLimit);
+    expect(retained.liveRows).toEqual([]);
+    expect(retained.stableRows[0]?.id).toBe("row-51");
+    expect(retained.stableRows.at(-1)?.id).toBe("row-150");
   });
 
-  test("retains the stable prefix array while only the live row changes", () => {
-    createRoot((dispose) => {
-      try {
-        const stableA = textMessage("stable-a", "stable");
-        const stableB = textMessage("stable-b", "stable");
-        const streamingA = textMessage("streaming", "streaming", "first");
-        const streamingB = textMessage("streaming", "streaming", "second");
-        const [messages, setMessages] = createSignal<readonly CliShellTranscriptMessage[]>([
-          stableA,
-          stableB,
-          streamingA,
-        ]);
-        const retained = createRetainedTranscriptRows(messages);
+  test("always keeps live rows and uses the remaining budget for stable rows", () => {
+    const stable = Array.from({ length: 120 }, (_, index) => textMessage(`stable-${index + 1}`));
+    const live = Array.from({ length: 3 }, (_, index) =>
+      textMessage(`live-${index + 1}`, "streaming"),
+    );
 
-        const initialStableRows = retained.stableRows();
-        expect(initialStableRows).toEqual([stableA, stableB]);
-        expect(retained.liveRows()).toEqual([streamingA]);
+    const retained = splitRetainedTranscriptRows([...stable, ...live], 10);
 
-        setMessages([stableA, stableB, streamingB]);
-
-        expect(retained.stableRows()).toBe(initialStableRows);
-        expect(retained.liveRows()).toEqual([streamingB]);
-      } finally {
-        dispose();
-      }
-    });
+    expect(retained.stableRows.map((message) => message.id)).toEqual([
+      "stable-114",
+      "stable-115",
+      "stable-116",
+      "stable-117",
+      "stable-118",
+      "stable-119",
+      "stable-120",
+    ]);
+    expect(retained.liveRows.map((message) => message.id)).toEqual(["live-1", "live-2", "live-3"]);
   });
 
-  test("promotes the live row into retained history after streaming finalizes", () => {
-    createRoot((dispose) => {
-      try {
-        const stableA = textMessage("stable-a", "stable");
-        const streaming = textMessage("streaming", "streaming", "partial");
-        const finalized = textMessage("streaming", "stable", "final");
-        const [messages, setMessages] = createSignal<readonly CliShellTranscriptMessage[]>([
-          stableA,
-          streaming,
-        ]);
-        const retained = createRetainedTranscriptRows(messages);
+  test("does not drop live rows when live rows exceed the stable budget", () => {
+    const stable = [textMessage("stable-1"), textMessage("stable-2")];
+    const live = Array.from({ length: 4 }, (_, index) =>
+      textMessage(`live-${index + 1}`, "streaming"),
+    );
 
-        expect(retained.stableRows()).toEqual([stableA]);
-        expect(retained.liveRows()).toEqual([streaming]);
+    const retained = splitRetainedTranscriptRows([...stable, ...live], 2);
 
-        setMessages([stableA, finalized]);
-
-        expect(retained.stableRows()).toEqual([stableA, finalized]);
-        expect(retained.liveRows()).toEqual([]);
-      } finally {
-        dispose();
-      }
-    });
+    expect(retained.stableRows).toEqual([]);
+    expect(retained.liveRows.map((message) => message.id)).toEqual([
+      "live-1",
+      "live-2",
+      "live-3",
+      "live-4",
+    ]);
   });
 });

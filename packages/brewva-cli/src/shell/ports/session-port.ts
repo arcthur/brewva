@@ -27,6 +27,7 @@ import type {
 } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { BrewvaSessionResult } from "../../session/session.js";
+import type { ShellCockpitWireFoldSnapshot } from "../domain/cockpit/index.js";
 
 export interface CliShellSessionBundle {
   session: BrewvaManagedPromptSession;
@@ -51,8 +52,18 @@ export interface SessionWireFrameReadOptions {
   readonly refreshDurable?: boolean;
 }
 
+/**
+ * Selects the active projection source for one session viewport.
+ *
+ * `wireFold` is the normal interactive path. `legacySessionEvents` remains for
+ * adapters that do not hydrate session wire frames. A viewport must not project
+ * the same streaming event through both paths.
+ */
+export type SessionProjectionMode = "wireFold" | "legacySessionEvents";
+
 export interface SessionViewPort {
   session: BrewvaManagedPromptSession;
+  getProjectionMode(): SessionProjectionMode;
   getSessionId(): string;
   getLineageStatus(): SessionLineageStatusView;
   getLineageTree(): SessionLineageTree;
@@ -92,6 +103,10 @@ export interface SessionViewPort {
     sessionId?: string,
     options?: SessionWireFrameReadOptions,
   ): readonly SessionWireFrame[];
+  getCockpitWireFoldSnapshot(
+    sessionId?: string,
+    options?: SessionWireFrameReadOptions,
+  ): ShellCockpitWireFoldSnapshot;
   getTranscriptSeed(): unknown[];
   recordRewindCheckpoint(input: RecordSessionRewindCheckpointInput): Promise<void>;
   rewindSession(input?: SessionRewindInput): Promise<SessionRewindResult>;

@@ -18,6 +18,8 @@ import {
   type ShellCockpitDecisionItem,
   type ShellCockpitEffectLedger,
   type ShellCockpitEffectLedgerItem,
+  type ShellCockpitFoldedAnswer,
+  type ShellCockpitFoldedToolCall,
   type ShellCockpitPhaseTransition,
   type ShellCockpitPhysicsBar,
   type ShellCockpitProjection,
@@ -26,17 +28,13 @@ import {
   type ShellCockpitRuntimeActivity,
   type ShellCockpitSurfaceRegion,
 } from "./types.js";
+import { foldShellCockpitSessionWireFrames } from "./wire-fold.js";
 
 const DECISION_LANE_VISIBLE_ROWS = 4;
 const RECOVERY_ANCHOR_LIMIT = 4;
 const EFFECT_LEDGER_ITEM_LIMIT = 12;
-const THINKING_PREVIEW_LIMIT = 160;
 
 type CockpitQuestion = ShellCockpitProjectionSource["operator"]["questions"][number];
-type TurnInputFrame = Extract<SessionWireFrame, { type: "turn.input" }>;
-type TurnCommittedFrame = Extract<SessionWireFrame, { type: "turn.committed" }>;
-type ToolStartedFrame = Extract<SessionWireFrame, { type: "tool.started" }>;
-type ToolOutputFrame = Extract<SessionWireFrame, { type: "tool.progress" | "tool.finished" }>;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -139,10 +137,6 @@ function frameRef(frame: SessionWireFrame): string {
   return frame.sourceEventId ?? frame.frameId;
 }
 
-function compareFrames(left: SessionWireFrame, right: SessionWireFrame): number {
-  return left.ts - right.ts || left.frameId.localeCompare(right.frameId);
-}
-
 function eventRef(event: BrewvaEventRecord): string {
   return event.id;
 }
@@ -162,8 +156,14 @@ function latestClockRef(sourceClock: ReadonlyMap<string, number>, fallback: stri
 function buildSourceClock(source: ShellCockpitProjectionSource): Map<string, number> {
   const sourceClock = new Map<string, number>();
   sourceClock.set(`work-card:${source.sessionId}`, 0);
-  for (const frame of source.sessionWire) {
-    sourceClock.set(frameRef(frame), frame.ts);
+  if (source.wireFold) {
+    for (const [ref, timestamp] of source.wireFold.sourceClock) {
+      sourceClock.set(ref, timestamp);
+    }
+  } else {
+    for (const frame of source.sessionWire) {
+      sourceClock.set(frameRef(frame), frame.ts);
+    }
   }
   for (const event of source.runtimeEvents) {
     sourceClock.set(eventRef(event), event.timestamp);
@@ -409,26 +409,6 @@ function formatDuration(startedAt: number | undefined, finishedAt: number): stri
   return `${(durationMs / 1_000).toFixed(1)}s`;
 }
 
-function compactPromptPreview(text: string): string | null {
-  const normalized = text.trim().replace(/\s+/gu, " ");
-  if (normalized.length === 0) {
-    return null;
-  }
-  if (normalized.length <= 160) {
-    return normalized;
-  }
-  return `${normalized.slice(0, 157).trimEnd()}...`;
-}
-
-function appendThinkingPreview(current: string, delta: string): string {
-  const existingTail = current.startsWith("...") ? current.slice(3) : current;
-  const combined = `${existingTail}${delta}`.replace(/\s+/gu, " ").trimStart();
-  if (combined.length <= THINKING_PREVIEW_LIMIT) {
-    return combined;
-  }
-  return `...${combined.slice(-(THINKING_PREVIEW_LIMIT - 3)).trimStart()}`;
-}
-
 function idleRuntimeActivity(source: ShellCockpitProjectionSource): ShellCockpitRuntimeActivity {
   if (source.phase.kind === "terminated") {
     return {
@@ -544,255 +524,10 @@ function phaseFallbackRuntimeActivity(
 }
 
 function buildRuntimeActivity(source: ShellCockpitProjectionSource): ShellCockpitRuntimeActivity {
-  type MutableActivity = {
-    status: ShellCockpitRuntimeActivity["status"];
-    turnId: string;
-    attemptId: string | null;
-    startedAt: number;
-    lastProgressAt: number;
-    lastProgressRef: string;
-    promptPreview: string | null;
-    thinkingPreview: string;
-    progressLabel: string;
-    streamedChars: number;
-    providerBuffered: boolean;
-    committed: boolean;
-  };
-
-  const turns = new Map<string, MutableActivity>();
-  for (const frame of [...source.sessionWire].toSorted(compareFrames)) {
-    const turnId = "turnId" in frame && typeof frame.turnId === "string" ? frame.turnId : undefined;
-    let activity = turnId ? turns.get(turnId) : undefined;
-    if (frame.type === "turn.input") {
-      activity = {
-        status: "waiting_provider",
-        turnId: frame.turnId,
-        attemptId: null,
-        startedAt: frame.ts,
-        lastProgressAt: frame.ts,
-        lastProgressRef: frameRef(frame),
-        promptPreview: compactPromptPreview(frame.promptText),
-        thinkingPreview: "",
-        progressLabel: "Waiting for provider response",
-        streamedChars: 0,
-        providerBuffered: true,
-        committed: false,
-      };
-      turns.set(frame.turnId, activity);
-      continue;
-    }
-    if (!activity) {
-      continue;
-    }
-
-    switch (frame.type) {
-      case "attempt.started":
-        activity.attemptId = frame.attemptId;
-        activity.lastProgressAt = frame.ts;
-        activity.lastProgressRef = frameRef(frame);
-        activity.progressLabel =
-          frame.reason === "initial" ? "Provider attempt started" : frame.reason;
-        activity.providerBuffered = activity.streamedChars === 0;
-        break;
-      case "assistant.delta":
-        activity.attemptId = frame.attemptId;
-        activity.lastProgressAt = frame.ts;
-        activity.lastProgressRef = frameRef(frame);
-        if (frame.lane === "answer") {
-          activity.status = "streaming_answer";
-          activity.streamedChars += frame.delta.length;
-          activity.progressLabel = `Streaming answer (${activity.streamedChars} chars)`;
-          activity.providerBuffered = false;
-        } else {
-          activity.thinkingPreview = appendThinkingPreview(activity.thinkingPreview, frame.delta);
-          activity.progressLabel = "Streaming thinking";
-          activity.providerBuffered = false;
-        }
-        break;
-      case "tool.started":
-      case "tool.progress":
-        activity.status = "running_tool";
-        activity.attemptId = frame.attemptId;
-        activity.lastProgressAt = frame.ts;
-        activity.lastProgressRef = frameRef(frame);
-        activity.progressLabel = `${frame.toolName} running`;
-        activity.providerBuffered = false;
-        break;
-      case "tool.finished":
-        activity.status = "waiting_provider";
-        activity.attemptId = frame.attemptId;
-        activity.lastProgressAt = frame.ts;
-        activity.lastProgressRef = frameRef(frame);
-        activity.progressLabel = `${frame.toolName} finished; waiting for provider response`;
-        activity.providerBuffered = activity.streamedChars === 0;
-        break;
-      case "approval.requested":
-        activity.status = "waiting_approval";
-        activity.lastProgressAt = frame.ts;
-        activity.lastProgressRef = frameRef(frame);
-        activity.progressLabel = `${frame.toolName} waiting approval`;
-        activity.providerBuffered = false;
-        break;
-      case "approval.decided":
-        activity.status = "waiting_provider";
-        activity.lastProgressAt = frame.ts;
-        activity.lastProgressRef = frameRef(frame);
-        activity.progressLabel = `Approval ${frame.decision}; waiting for provider response`;
-        activity.providerBuffered = activity.streamedChars === 0;
-        break;
-      case "turn.transition":
-        activity.attemptId = frame.attemptId ?? activity.attemptId;
-        activity.lastProgressAt = frame.ts;
-        activity.lastProgressRef = frameRef(frame);
-        if (frame.family === "recovery" || frame.family === "output_budget") {
-          activity.status = frame.status === "entered" ? "recovering" : "waiting_provider";
-        }
-        activity.progressLabel = frame.reason;
-        activity.providerBuffered =
-          activity.status === "waiting_provider" && activity.streamedChars === 0;
-        break;
-      case "turn.committed":
-        activity.attemptId = frame.attemptId;
-        activity.lastProgressAt = frame.ts;
-        activity.lastProgressRef = frameRef(frame);
-        activity.progressLabel = frame.status === "failed" ? "Turn failed" : "Turn committed";
-        activity.status = "idle";
-        activity.providerBuffered = false;
-        activity.committed = true;
-        break;
-      default:
-        break;
-    }
+  if (source.wireFold?.runtimeActivity) {
+    return source.wireFold.runtimeActivity;
   }
-
-  const active = [...turns.values()]
-    .filter((activity) => !activity.committed)
-    .toSorted(
-      (left, right) =>
-        right.lastProgressAt - left.lastProgressAt ||
-        right.startedAt - left.startedAt ||
-        right.turnId.localeCompare(left.turnId),
-    )[0];
-  if (!active) {
-    return phaseFallbackRuntimeActivity(source);
-  }
-  return {
-    status: active.status,
-    turnId: active.turnId,
-    attemptId: active.attemptId,
-    startedAt: active.startedAt,
-    lastProgressAt: active.lastProgressAt,
-    lastProgressRef: active.lastProgressRef,
-    promptPreview: active.promptPreview,
-    thinkingPreview: active.thinkingPreview.trim() || null,
-    progressLabel: active.progressLabel,
-    streamedChars: active.streamedChars,
-    providerBuffered: active.providerBuffered,
-  };
-}
-
-function latestCommittedAnswerFrame(
-  frames: readonly SessionWireFrame[],
-): TurnCommittedFrame | undefined {
-  let latest: TurnCommittedFrame | undefined;
-  for (const frame of frames) {
-    if (frame.type !== "turn.committed" || frame.assistantText.trim().length === 0) {
-      continue;
-    }
-    if (
-      !latest ||
-      frame.ts > latest.ts ||
-      (frame.ts === latest.ts && frame.frameId > latest.frameId)
-    ) {
-      latest = frame;
-    }
-  }
-  return latest;
-}
-
-function turnInputById(
-  frames: readonly SessionWireFrame[],
-  turnId: string,
-): TurnInputFrame | undefined {
-  return frames.find(
-    (frame): frame is TurnInputFrame => frame.type === "turn.input" && frame.turnId === turnId,
-  );
-}
-
-function latestStreamingAnswer(frames: readonly SessionWireFrame[]):
-  | {
-      readonly text: string;
-      readonly turnId: string;
-      readonly attemptId: string;
-      readonly latestFrameRef: string;
-      readonly ts: number;
-    }
-  | undefined {
-  const drafts = new Map<
-    string,
-    {
-      text: string;
-      turnId: string;
-      attemptId: string;
-      latestFrameRef: string;
-      ts: number;
-      committed: boolean;
-    }
-  >();
-  for (const frame of frames) {
-    if (frame.type === "assistant.delta" && frame.lane === "answer") {
-      const key = `${frame.turnId}:${frame.attemptId}`;
-      const current = drafts.get(key);
-      drafts.set(key, {
-        text: `${current?.text ?? ""}${frame.delta}`,
-        turnId: frame.turnId,
-        attemptId: frame.attemptId,
-        latestFrameRef: frameRef(frame),
-        ts: frame.ts,
-        committed: current?.committed ?? false,
-      });
-      continue;
-    }
-    if (frame.type === "turn.committed") {
-      const key = `${frame.turnId}:${frame.attemptId}`;
-      drafts.set(key, {
-        text: frame.assistantText,
-        turnId: frame.turnId,
-        attemptId: frame.attemptId,
-        latestFrameRef: frameRef(frame),
-        ts: frame.ts,
-        committed: true,
-      });
-    }
-  }
-  let latest:
-    | {
-        text: string;
-        turnId: string;
-        attemptId: string;
-        latestFrameRef: string;
-        ts: number;
-      }
-    | undefined;
-  for (const draft of drafts.values()) {
-    if (draft.committed || draft.text.trim().length === 0) {
-      continue;
-    }
-    if (
-      !latest ||
-      draft.ts > latest.ts ||
-      (draft.ts === latest.ts && draft.latestFrameRef > latest.latestFrameRef)
-    ) {
-      latest = {
-        text: draft.text,
-        turnId: draft.turnId,
-        attemptId: draft.attemptId,
-        latestFrameRef: draft.latestFrameRef,
-        ts: draft.ts,
-      };
-    }
-  }
-  return latest;
+  return phaseFallbackRuntimeActivity(source);
 }
 
 function answerLedgerRef(input: {
@@ -803,72 +538,69 @@ function answerLedgerRef(input: {
   return `answer:${input.sessionId}:${input.turnId}:${input.attemptId}`;
 }
 
-function buildAnswerLedgerItem(
+function newerFoldedAnswer(
+  candidate: ShellCockpitFoldedAnswer,
+  current: ShellCockpitFoldedAnswer | undefined,
+): boolean {
+  return (
+    !current ||
+    candidate.ts > current.ts ||
+    (candidate.ts === current.ts && candidate.latestFrameRef > current.latestFrameRef)
+  );
+}
+
+function buildFoldedAnswerLedgerItem(
   source: ShellCockpitProjectionSource,
   sourceClock: ReadonlyMap<string, number>,
 ): ShellCockpitEffectLedgerItem | undefined {
-  const committed = latestCommittedAnswerFrame(source.sessionWire);
-  const streaming = latestStreamingAnswer(source.sessionWire);
-  if (
-    streaming &&
-    (!committed ||
-      streaming.ts > committed.ts ||
-      (streaming.ts === committed.ts && streaming.latestFrameRef > frameRef(committed)))
-  ) {
-    const answerText = streaming.text.trim();
-    const ref = answerLedgerRef({
-      sessionId: source.sessionId,
-      turnId: streaming.turnId,
-      attemptId: streaming.attemptId,
-    });
-    return {
-      kind: "answer",
-      consequence: "answer",
-      ref,
-      title: "Assistant answer",
-      status: "active",
-      verdict: "running",
-      summary: answerText,
-      content: answerText,
-      expandable: true,
-      sourceRef: streaming.latestFrameRef,
-      stateChangedAt: streaming.ts,
-      freshness: ledgerFreshness(source, sourceClock, streaming.latestFrameRef, streaming.ts),
-      pinned:
-        isCockpitPinned(source.observation, ref) ||
-        isCockpitPinned(source.observation, streaming.latestFrameRef),
-      archiveRefs: [streaming.latestFrameRef],
-    };
-  }
-  if (!committed) {
+  const streaming = source.wireFold?.latestStreamingAnswer;
+  const committed = source.wireFold?.latestCommittedAnswer;
+  const answer =
+    streaming && newerFoldedAnswer(streaming, committed)
+      ? streaming
+      : committed && committed.text.trim().length > 0
+        ? committed
+        : undefined;
+  if (!answer) {
     return undefined;
   }
-  const sourceRef = frameRef(committed);
+
+  const answerText = answer.text.trim();
+  if (answerText.length === 0) {
+    return undefined;
+  }
   const ref = answerLedgerRef({
     sessionId: source.sessionId,
-    turnId: committed.turnId,
-    attemptId: committed.attemptId,
+    turnId: answer.turnId,
+    attemptId: answer.attemptId,
   });
-  const inputFrame = turnInputById(source.sessionWire, committed.turnId);
-  const answerText = committed.assistantText.trim();
+  const active = answer.status === "active";
   return {
     kind: "answer",
     consequence: "answer",
     ref,
     title: "Assistant answer",
-    status: "committed",
-    verdict: "committed",
+    status: active ? "active" : "committed",
+    verdict: active ? "running" : "committed",
     summary: answerText,
     content: answerText,
-    durationText: formatDuration(inputFrame?.ts, committed.ts),
+    ...(active ? {} : { durationText: formatDuration(answer.startedAt, answer.ts) }),
     expandable: true,
-    sourceRef,
-    stateChangedAt: committed.ts,
-    freshness: ledgerFreshness(source, sourceClock, sourceRef, committed.ts),
+    sourceRef: answer.latestFrameRef,
+    stateChangedAt: answer.ts,
+    freshness: ledgerFreshness(source, sourceClock, answer.latestFrameRef, answer.ts),
     pinned:
-      isCockpitPinned(source.observation, ref) || isCockpitPinned(source.observation, sourceRef),
-    archiveRefs: [sourceRef],
+      isCockpitPinned(source.observation, ref) ||
+      isCockpitPinned(source.observation, answer.latestFrameRef),
+    archiveRefs: [answer.latestFrameRef],
   };
+}
+
+function buildAnswerLedgerItem(
+  source: ShellCockpitProjectionSource,
+  sourceClock: ReadonlyMap<string, number>,
+): ShellCockpitEffectLedgerItem | undefined {
+  return source.wireFold ? buildFoldedAnswerLedgerItem(source, sourceClock) : undefined;
 }
 
 function toolActionClass(toolName: string, status?: string): ToolActionClass | undefined {
@@ -912,111 +644,94 @@ function toolConsequence(input: {
   };
 }
 
-function buildToolLedgerItems(
+function buildFoldedToolLedgerItems(
   source: ShellCockpitProjectionSource,
   sourceClock: ReadonlyMap<string, number>,
+  toolCalls: readonly ShellCockpitFoldedToolCall[],
 ): ShellCockpitEffectLedger {
-  const started = new Map<string, ToolStartedFrame>();
-  const finished = new Map<string, ToolOutputFrame>();
-  for (const frame of source.sessionWire) {
-    if (frame.type === "tool.started") {
-      started.set(frame.toolCallId, frame);
-    }
-    if (frame.type === "tool.finished") {
-      finished.set(frame.toolCallId, frame);
-    }
-  }
-
   const items: ShellCockpitEffectLedgerItem[] = [];
   const ordinaryRefs: string[] = [];
   let ordinaryStartedAt = Number.POSITIVE_INFINITY;
   let ordinarySourceRef = "";
 
-  for (const frame of finished.values()) {
-    const ref = frameRef(frame);
-    const startedFrame = started.get(frame.toolCallId);
+  for (const tool of toolCalls) {
     const classification = toolConsequence({
-      toolName: frame.toolName,
-      status: frame.isError ? "failed" : "completed",
+      toolName: tool.toolName,
+      status: tool.status,
     });
-    if (frame.isError) {
+    if (tool.status === "failed") {
       items.push({
         kind: "failed_tool",
         consequence: classification.consequence,
-        ref,
-        title: `${frame.toolName} failed`,
+        ref: tool.latestRef,
+        title: `${tool.toolName} failed`,
         status: "failed",
         verdict: "failed",
         actionClass: classification.actionClass,
         summary: classification.readOnly
           ? "Observation failed; no effect receipt was committed."
           : "Effectful tool failed before a committed receipt.",
-        durationText: formatDuration(startedFrame?.ts, frame.ts),
+        durationText: formatDuration(tool.startedAt, tool.latestAt),
         expandable: true,
-        sourceRef: ref,
-        stateChangedAt: frame.ts,
-        freshness: ledgerFreshness(source, sourceClock, ref, frame.ts),
-        pinned: isCockpitPinned(source.observation, ref),
-        archiveRefs: [ref],
+        sourceRef: tool.latestRef,
+        stateChangedAt: tool.latestAt,
+        freshness: ledgerFreshness(source, sourceClock, tool.latestRef, tool.latestAt),
+        pinned: isCockpitPinned(source.observation, tool.latestRef),
+        archiveRefs: [tool.latestRef],
       });
       continue;
     }
-    if (classification.readOnly) {
-      ordinaryRefs.push(ref);
-      if (frame.ts < ordinaryStartedAt) {
-        ordinaryStartedAt = frame.ts;
-        ordinarySourceRef = ref;
+    if (tool.status === "completed") {
+      if (classification.readOnly) {
+        ordinaryRefs.push(tool.latestRef);
+        if (tool.latestAt < ordinaryStartedAt) {
+          ordinaryStartedAt = tool.latestAt;
+          ordinarySourceRef = tool.latestRef;
+        }
+        continue;
       }
+      items.push({
+        kind: "effect_receipt",
+        consequence: classification.consequence,
+        ref: tool.latestRef,
+        title: `${tool.toolName} committed`,
+        status: "committed",
+        verdict: "committed",
+        actionClass: classification.actionClass,
+        summary:
+          classification.consequence === "unknown_receipt"
+            ? "Receipt was archived; action class is unavailable."
+            : "Effect receipt committed and archived.",
+        durationText: formatDuration(tool.startedAt, tool.latestAt),
+        expandable: true,
+        rollbackRef:
+          source.workCard.evidence.latestPatchSetRef ??
+          source.workCard.handoff.anchorId ??
+          undefined,
+        sourceRef: tool.latestRef,
+        stateChangedAt: tool.latestAt,
+        freshness: ledgerFreshness(source, sourceClock, tool.latestRef, tool.latestAt),
+        pinned: isCockpitPinned(source.observation, tool.latestRef),
+        archiveRefs: [tool.latestRef],
+      });
       continue;
     }
-    items.push({
-      kind: "effect_receipt",
-      consequence: classification.consequence,
-      ref,
-      title: `${frame.toolName} committed`,
-      status: "committed",
-      verdict: "committed",
-      actionClass: classification.actionClass,
-      summary:
-        classification.consequence === "unknown_receipt"
-          ? "Receipt was archived; action class is unavailable."
-          : "Effect receipt committed and archived.",
-      durationText: formatDuration(startedFrame?.ts, frame.ts),
-      expandable: true,
-      rollbackRef:
-        source.workCard.evidence.latestPatchSetRef ?? source.workCard.handoff.anchorId ?? undefined,
-      sourceRef: ref,
-      stateChangedAt: frame.ts,
-      freshness: ledgerFreshness(source, sourceClock, ref, frame.ts),
-      pinned: isCockpitPinned(source.observation, ref),
-      archiveRefs: [ref],
-    });
-  }
 
-  for (const frame of started.values()) {
-    if (finished.has(frame.toolCallId)) {
-      continue;
-    }
-    const ref = frameRef(frame);
-    const classification = toolConsequence({
-      toolName: frame.toolName,
-      status: "running",
-    });
     items.push({
       kind: "active_tool",
       consequence: classification.consequence,
-      ref,
-      title: `${frame.toolName} running`,
+      ref: tool.startedRef ?? tool.latestRef,
+      title: `${tool.toolName} running`,
       status: "active",
       verdict: "running",
       actionClass: classification.actionClass,
       summary: classification.readOnly ? "Observation is running." : "Effectful tool is running.",
       expandable: true,
-      sourceRef: ref,
-      stateChangedAt: frame.ts,
-      freshness: ledgerFreshness(source, sourceClock, ref, frame.ts),
-      pinned: isCockpitPinned(source.observation, ref),
-      archiveRefs: [ref],
+      sourceRef: tool.latestRef,
+      stateChangedAt: tool.latestAt,
+      freshness: ledgerFreshness(source, sourceClock, tool.latestRef, tool.latestAt),
+      pinned: isCockpitPinned(source.observation, tool.latestRef),
+      archiveRefs: [tool.latestRef],
     });
   }
 
@@ -1039,6 +754,7 @@ function buildToolLedgerItems(
       archiveRefs: ordinaryRefs,
     });
   }
+
   const answer = buildAnswerLedgerItem(source, sourceClock);
   if (answer) {
     items.push(answer);
@@ -1051,6 +767,20 @@ function buildToolLedgerItems(
     collapsedReceiptCount: ordinaryRefs.length,
     overflowCount: Math.max(0, orderedItems.length - visibleItems.length),
   };
+}
+
+function buildToolLedgerItems(
+  source: ShellCockpitProjectionSource,
+  sourceClock: ReadonlyMap<string, number>,
+): ShellCockpitEffectLedger {
+  if (!source.wireFold) {
+    return {
+      items: [],
+      collapsedReceiptCount: 0,
+      overflowCount: 0,
+    };
+  }
+  return buildFoldedToolLedgerItems(source, sourceClock, source.wireFold.toolCalls);
 }
 
 function buildArchiveRefs(source: ShellCockpitProjectionSource): CockpitArchiveRef[] {
@@ -1185,10 +915,26 @@ function buildTransitions(source: ShellCockpitProjectionSource): ShellCockpitPha
   return [...(source.transitionsSince ?? [])].slice(-5);
 }
 
+function normalizeProjectionSource(
+  input: ShellCockpitProjectionSource,
+): ShellCockpitProjectionSource {
+  if (input.wireFold || input.sessionWire.length === 0) {
+    return input;
+  }
+  return {
+    ...input,
+    sessionWire: [],
+    wireFold: foldShellCockpitSessionWireFrames({
+      sessionId: input.sessionId,
+      frames: input.sessionWire,
+    }),
+  };
+}
+
 export function projectShellCockpitProjection(
   input: ShellCockpitProjectionSource,
 ): ShellCockpitProjection {
-  const source = input;
+  const source = normalizeProjectionSource(input);
   const sourceClock = buildSourceClock(source);
   const workCardRef = `work-card:${source.sessionId}`;
   const generatedAtRef = latestClockRef(sourceClock, workCardRef);

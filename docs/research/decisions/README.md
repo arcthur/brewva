@@ -75,6 +75,7 @@ Every accepted decision inherits these rules:
 - [interactive-command-surface-refinement](./interactive-command-surface-refinement.md)
 - [slash-command-surface-layering-and-control-plane-separation](./slash-command-surface-layering-and-control-plane-separation.md)
 - [tui-runtime-cockpit-refactor](./tui-runtime-cockpit-refactor.md)
+- [tui-bounded-live-cockpit-and-native-scrollback](./tui-bounded-live-cockpit-and-native-scrollback.md)
 - [search-token-policy-and-cjk-tokenizer-boundary](./search-token-policy-and-cjk-tokenizer-boundary.md)
 - [session-index-evidence-projection-boundary](./session-index-evidence-projection-boundary.md)
 - [recall-source-typed-retrieval-spine](./recall-source-typed-retrieval-spine.md)

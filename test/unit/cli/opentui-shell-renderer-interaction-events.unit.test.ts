@@ -194,6 +194,28 @@ function countRenderablesByConstructorName(renderer: OpenTuiRenderer, name: stri
   return count;
 }
 
+function countRenderablesByIdPrefix(renderer: OpenTuiRenderer, prefix: string): number {
+  const root = (renderer as OpenTuiRootRenderer).root;
+  let count = 0;
+  const queue: unknown[] = [root];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const id = (current as { id?: unknown } | undefined)?.id;
+    if (typeof id === "string" && id.startsWith(prefix)) {
+      count += 1;
+    }
+    const children = (current as OpenTuiRenderableLike | undefined)?.getChildren?.();
+    if (children) {
+      queue.push(...children);
+    }
+  }
+  return count;
+}
+
+function frameContainsBoundedTranscriptRow(frame: string, rowNumber: number): boolean {
+  return new RegExp(`Bounded transcript row\\s+${rowNumber}(?!\\d)`).test(frame);
+}
+
 async function waitForRenderedFrame(
   testSetup: Awaited<ReturnType<typeof openTuiSolidTestRender>>,
   input: {
@@ -2397,6 +2419,11 @@ describe("opentui solid shell runtime: interaction events", () => {
         await Bun.sleep(0);
       });
       await testSetup.renderOnce();
+      for (let attempt = 0; attempt < 8 && submittedText.length === 0; attempt += 1) {
+        await openTuiSolidAct(async () => {
+          await Bun.sleep(5);
+        });
+      }
 
       expect(submittedText).toEqual([imeText]);
       expect(runtime.getViewState().composer.text).toBe("");
@@ -3017,6 +3044,73 @@ describe("opentui solid shell runtime: interaction events", () => {
 
       expect(surfaceScrollSyncInputs).toEqual([]);
       expect(transcriptScrollbox.scrollTop).toBe(manualScrollTop);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("bounds large transcript history to a recent native scrollbox window", async () => {
+    const seedMessages = Array.from({ length: 300 }, (_, index) => ({
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: `Bounded transcript row ${index + 1}`,
+        },
+      ],
+      timestamp: 1_000 + index,
+    }));
+    const { bundle } = createFakeBundle({ seedMessages });
+
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime }),
+      {
+        width: 100,
+        height: 24,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+
+      const transcriptScrollbox = findScrollableTranscriptScrollbox(testSetup.renderer);
+      expect((transcriptScrollbox as { viewportCulling?: unknown }).viewportCulling).toBe(true);
+      expect(countRenderablesByIdPrefix(testSetup.renderer, "transcript-row:")).toBeLessThan(
+        seedMessages.length,
+      );
+      let frame = testSetup.captureCharFrame();
+      expect(frameContainsBoundedTranscriptRow(frame, 300)).toBe(true);
+      expect(frameContainsBoundedTranscriptRow(frame, 1)).toBe(false);
+
+      await openTuiSolidAct(async () => {
+        await runtime.handleInput({
+          type: "keymap.effect",
+          effect: { type: "surface.navigate", kind: "top" },
+        });
+      });
+      frame = await waitForRenderedFrame(testSetup, {
+        predicate: (candidate) =>
+          candidate.includes("Bounded transcript row ") &&
+          !frameContainsBoundedTranscriptRow(candidate, 1) &&
+          !frameContainsBoundedTranscriptRow(candidate, 300),
+      });
+
+      expect(countRenderablesByIdPrefix(testSetup.renderer, "transcript-row:")).toBeLessThan(
+        seedMessages.length,
+      );
+      expect(frame).toContain("Bounded transcript row ");
+      expect(frameContainsBoundedTranscriptRow(frame, 1)).toBe(false);
+      expect(frameContainsBoundedTranscriptRow(frame, 300)).toBe(false);
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

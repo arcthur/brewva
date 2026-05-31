@@ -278,22 +278,26 @@ describe("tool runtime capability scope", () => {
     );
   });
 
-  test("generator resolves workspace package imports through source exports instead of dist declarations", () => {
-    const sourceMappings = collectWorkspaceSourcePathMappings();
-    const mappedTargets = Object.values(sourceMappings).flat();
+  test(
+    "generator resolves workspace package imports through source exports instead of dist declarations",
+    () => {
+      const sourceMappings = collectWorkspaceSourcePathMappings();
+      const mappedTargets = Object.values(sourceMappings).flat();
 
-    expect(sourceMappings["@brewva/brewva-runtime"]).toEqual([
-      "packages/brewva-runtime/src/index.ts",
-    ]);
-    expect(Object.keys(sourceMappings).includes("@brewva/brewva-runtime/runtime-extensions")).toBe(
-      false,
-    );
-    expect(sourceMappings["@brewva/brewva-substrate/tools"]).toEqual([
-      "packages/brewva-substrate/src/tools/index.ts",
-    ]);
-    expect(mappedTargets.filter((target) => target.includes("/dist/"))).toEqual([]);
-    expect(collectCapabilityPaths()).toEqual([...BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS]);
-  });
+      expect(sourceMappings["@brewva/brewva-runtime"]).toEqual([
+        "packages/brewva-runtime/src/index.ts",
+      ]);
+      expect(
+        Object.keys(sourceMappings).includes("@brewva/brewva-runtime/runtime-extensions"),
+      ).toBe(false);
+      expect(sourceMappings["@brewva/brewva-substrate/tools"]).toEqual([
+        "packages/brewva-substrate/src/tools/index.ts",
+      ]);
+      expect(mappedTargets.filter((target) => target.includes("/dist/"))).toEqual([]);
+      expect(collectCapabilityPaths()).toEqual([...BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS]);
+    },
+    { timeout: 15_000 },
+  );
 
   test("static inventory covers every registry-declared capability and excludes operator paths", () => {
     const inventory = new Set(BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS);

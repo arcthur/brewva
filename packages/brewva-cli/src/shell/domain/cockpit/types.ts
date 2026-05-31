@@ -9,6 +9,7 @@ import type {
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { ContextCockpitReport } from "../../../operator/inspect/context-cockpit.js";
 import type { OperatorSurfaceSnapshot } from "../operator-snapshot.js";
+import type { CliShellTranscriptMessage } from "../transcript.js";
 
 export const SHELL_COCKPIT_PROJECTION_SCHEMA_V1 = "brewva.shell-cockpit.projection.v1" as const;
 
@@ -244,6 +245,49 @@ export interface ShellCockpitRuntimeActivity {
   readonly providerBuffered: boolean;
 }
 
+export interface ShellCockpitFoldedSourceRef {
+  readonly ref: string;
+  readonly changedAt: number;
+}
+
+export interface ShellCockpitFoldedAnswer {
+  readonly status: "active" | "committed";
+  readonly text: string;
+  readonly turnId: string;
+  readonly attemptId: string;
+  readonly latestFrameRef: string;
+  readonly ts: number;
+  readonly startedAt?: number;
+}
+
+export interface ShellCockpitFoldedToolCall {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly status: "running" | "completed" | "failed";
+  readonly startedAt?: number;
+  readonly startedRef?: string;
+  readonly latestRef: string;
+  readonly latestAt: number;
+  readonly text: string;
+  readonly verdict?: string;
+  readonly isError: boolean;
+  readonly display?: Extract<
+    SessionWireFrame,
+    { type: "tool.progress" | "tool.finished" }
+  >["display"];
+}
+
+export interface ShellCockpitWireFoldSnapshot {
+  readonly sourceClock: ReadonlyMap<string, number>;
+  readonly latestWireRef: ShellCockpitFoldedSourceRef | null;
+  readonly runtimeActivity: ShellCockpitRuntimeActivity | null;
+  readonly latestStreamingAnswer?: ShellCockpitFoldedAnswer;
+  readonly latestCommittedAnswer?: ShellCockpitFoldedAnswer;
+  readonly toolCalls: readonly ShellCockpitFoldedToolCall[];
+  readonly transcriptVersion: number;
+  readonly transcriptMessages: readonly CliShellTranscriptMessage[];
+}
+
 export interface ShellCockpitCurrentWorkCard {
   readonly source: "task_work_card_projection";
   readonly ref: string;
@@ -331,6 +375,7 @@ export interface ShellCockpitProjectionSource {
   readonly contextCockpit: ContextCockpitReport;
   readonly operator: OperatorSurfaceSnapshot;
   readonly sessionWire: readonly SessionWireFrame[];
+  readonly wireFold?: ShellCockpitWireFoldSnapshot;
   readonly runtimeEvents: readonly BrewvaEventRecord[];
   readonly cost: RuntimeCostPosture;
   readonly rewindTargets: readonly SessionRewindTargetView[];
