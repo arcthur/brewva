@@ -10,7 +10,7 @@ import type {
   ThinkingContent,
   ToolCall,
 } from "../../contracts/index.js";
-import { runAsyncIterableEffect } from "../../stream/effect-interop.js";
+import { failProviderStream, runAsyncIterableEffect } from "../../stream/effect-interop.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
 import { normalizeOpenAICompletionsUsage } from "./usage.js";
 import { readChoiceUsage, readReasoningDeltaField, readReasoningDetails } from "./wire.js";
@@ -63,6 +63,7 @@ export function processOpenAICompletionsStream(
 ): BrewvaEffect.Effect<void, ProviderStreamError> {
   return BrewvaEffect.gen(function* () {
     let currentBlock: OpenAICompletionCurrentBlock = null;
+    let hasFinishReason = false;
 
     const finishCurrentBlock = () =>
       BrewvaEffect.gen(function* () {
@@ -127,6 +128,9 @@ export function processOpenAICompletionsStream(
         }
 
         output.responseId ||= chunk.id;
+        if (typeof chunk.model === "string" && chunk.model.length > 0 && chunk.model !== model.id) {
+          output.responseModel ||= chunk.model;
+        }
         if (chunk.usage) {
           output.usage = normalizeOpenAICompletionsUsage(chunk.usage, model);
         }
@@ -141,12 +145,13 @@ export function processOpenAICompletionsStream(
           output.usage = normalizeOpenAICompletionsUsage(choiceUsage, model);
         }
 
-        if (choice.finish_reason) {
+        if (choice.finish_reason !== null && choice.finish_reason !== undefined) {
           const finishReasonResult = mapStopReason(choice.finish_reason);
           output.stopReason = finishReasonResult.stopReason;
           if (finishReasonResult.errorMessage) {
             output.errorMessage = finishReasonResult.errorMessage;
           }
+          hasFinishReason = true;
         }
 
         if (!choice.delta) {
@@ -257,6 +262,9 @@ export function processOpenAICompletionsStream(
       }),
     );
 
+    if (!hasFinishReason) {
+      return yield* failProviderStream("Stream ended without finish_reason");
+    }
     yield* finishCurrentBlock();
     yield* toolCalls.finalizeAll();
   });

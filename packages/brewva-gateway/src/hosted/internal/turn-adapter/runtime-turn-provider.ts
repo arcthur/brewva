@@ -115,6 +115,7 @@ function providerMessageFromTurnLoop(message: BrewvaAgentProtocolMessage): Provi
       api: message.api,
       provider: message.provider,
       model: message.model,
+      ...(message.responseModel ? { responseModel: message.responseModel } : {}),
       ...(message.responseId ? { responseId: message.responseId } : {}),
       usage: {
         input: message.usage.input,
@@ -378,6 +379,7 @@ function toTurnLoopAssistantMessage(
     api: message.api,
     provider: message.provider,
     model: message.model,
+    ...(message.responseModel ? { responseModel: message.responseModel } : {}),
     ...(message.responseId ? { responseId: message.responseId } : {}),
     usage: {
       input: message.usage.input,
@@ -419,7 +421,14 @@ function classifyProviderFailure(error: unknown): ProviderFailureReason {
   if (/\b(quota|insufficient_quota|billing)\b/u.test(message)) return "quota";
   if (/\b(rate.?limit|429|too many requests)\b/u.test(message)) return "rate_limit";
   if (/\b(auth|api key|unauthorized|forbidden|401|403)\b/u.test(message)) return "auth";
-  if (/\b(context|token|maximum context|too long)\b/u.test(message)) return "context";
+  if (
+    /\b(context|tokens?|too long)\b/u.test(message) ||
+    /maximum allowed input length|maximum context|context length|maximum .*input length|exceeds .*maximum .*context length/u.test(
+      message,
+    )
+  ) {
+    return "context";
+  }
   if (/\b(provider|upstream|service unavailable|overloaded|timeout|temporar)\b/u.test(message)) {
     return "provider";
   }

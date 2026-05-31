@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
 import {
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
@@ -164,12 +165,15 @@ function parseJsonLine(line: string, sourcePath: string, lineNumber: number): un
 }
 
 function parseJsonLinesFile(sourcePath: string): unknown[] {
-  const text = readFileSync(sourcePath, "utf8");
-  return text
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line, index) => parseJsonLine(line, sourcePath, index + 1));
+  const rows: unknown[] = [];
+  forEachUtf8LineSync(sourcePath, (line, lineNumber) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return;
+    }
+    rows.push(parseJsonLine(trimmed, sourcePath, lineNumber));
+  });
+  return rows;
 }
 
 function isPiSessionHeader(value: unknown): value is PiSessionHeader {

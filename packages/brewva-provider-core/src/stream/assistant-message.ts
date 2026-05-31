@@ -29,6 +29,7 @@ export function createAssistantMessage<TApi extends Api>(
 
 export function resetAssistantMessage(output: AssistantMessage): void {
   output.content = [];
+  output.responseModel = undefined;
   output.responseId = undefined;
   output.usage = createEmptyUsage();
   output.stopReason = "stop";

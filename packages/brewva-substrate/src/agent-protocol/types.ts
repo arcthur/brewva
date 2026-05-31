@@ -109,6 +109,7 @@ export interface BrewvaAgentProtocolAssistantMessage extends BrewvaAgentProtocol
   api: BrewvaAgentProtocolApi;
   provider: string;
   model: string;
+  responseModel?: string;
   responseId?: string;
   usage: BrewvaAgentProtocolUsage;
   stopReason: BrewvaAgentProtocolStopReason;

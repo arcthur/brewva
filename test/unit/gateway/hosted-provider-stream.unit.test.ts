@@ -141,6 +141,82 @@ describe("hosted provider stream", () => {
     clearApiProviders();
   });
 
+  test("preserves routed response model on runtime assistant observations", async () => {
+    const sourceId = `${SOURCE_ID}-response-model`;
+    const api = "runtime-provider-response-model-test";
+    const model = createRuntimeModel("openrouter/auto", api);
+    let observedMessage: unknown;
+
+    clearApiProviders();
+    registerApiProvider(
+      {
+        api,
+        stream() {
+          return createProviderEventStream();
+        },
+        streamSimple(providerModel) {
+          const partial = createMessage(providerModel.api);
+          return createProviderEventStream([
+            {
+              type: "done",
+              reason: "stop",
+              message: {
+                ...partial,
+                model: providerModel.id,
+                responseModel: "anthropic/claude-opus-4.8",
+                content: [{ type: "text", text: "ok" }],
+                stopReason: "stop",
+              },
+            },
+          ]);
+        },
+      },
+      sourceId,
+    );
+
+    try {
+      const session = {
+        model,
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeModelCatalog() {
+          return {
+            async getApiKeyAndHeaders() {
+              return { ok: true as const, apiKey: "unit-key" };
+            },
+          };
+        },
+        observeRuntimeAssistantMessage(message: unknown) {
+          observedMessage = message;
+        },
+        createRuntimeToolContext() {
+          return {
+            getSystemPrompt() {
+              return "";
+            },
+          };
+        },
+      };
+
+      const frames = [];
+      const provider = createHostedRuntimeProviderPort(session as never);
+      for await (const frame of provider.stream(createRuntimeProviderInput("response-model"))) {
+        frames.push(frame);
+      }
+
+      expect(frames).toEqual([{ type: "text", delta: "ok" }]);
+      expect(observedMessage).toMatchObject({
+        role: "assistant",
+        model: "openrouter/auto",
+        responseModel: "anthropic/claude-opus-4.8",
+      });
+    } finally {
+      unregisterApiProviders(sourceId);
+      clearApiProviders();
+    }
+  });
+
   test("rotates credential slots before provider fallback and marks cache identity invalidated", async () => {
     const sourceId = `${SOURCE_ID}-credential-rotation`;
     const api = "runtime-provider-credential-rotation-test";
@@ -458,6 +534,110 @@ describe("hosted provider stream", () => {
             model: "task-backup",
           },
           reason: "provider",
+        }),
+      );
+    } finally {
+      unregisterApiProviders(sourceId);
+      clearApiProviders();
+    }
+  });
+
+  test("classifies non-standard maximum input length failures as context overflow", async () => {
+    const sourceId = `${SOURCE_ID}-context-overflow-fallback`;
+    const api = "runtime-provider-context-overflow-fallback-test";
+    const primary = createRuntimeModel("primary", api);
+    const backup = createRuntimeModel("backup", api);
+    const providerFallbacks: unknown[] = [];
+    const attemptedModels: string[] = [];
+
+    clearApiProviders();
+    registerApiProvider(
+      {
+        api,
+        stream() {
+          return createProviderEventStream();
+        },
+        streamSimple(providerModel, _context, options) {
+          attemptedModels.push(providerModel.id);
+          providerFallbacks.push(options?.metadata?.providerFallback);
+          const partial = createMessage(providerModel.api);
+          if (providerModel.id === "primary") {
+            return createProviderEventStream([
+              {
+                type: "error",
+                reason: "error",
+                error: {
+                  ...partial,
+                  stopReason: "error",
+                  errorMessage: "maximum allowed input length is 128000 tokens",
+                },
+              },
+            ]);
+          }
+          return createProviderEventStream([
+            { type: "text_delta", contentIndex: 0, delta: "ok", partial },
+            {
+              type: "done",
+              reason: "stop",
+              message: {
+                ...partial,
+                content: [{ type: "text", text: "ok" }],
+                stopReason: "stop",
+              },
+            },
+          ]);
+        },
+      },
+      sourceId,
+    );
+
+    try {
+      const session = {
+        model: primary,
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeModelCatalog() {
+          return {
+            getAll() {
+              return [primary, backup];
+            },
+            async getApiKeyAndHeaders() {
+              return { ok: true as const, apiKey: "unit-key" };
+            },
+          };
+        },
+        getRuntimeModelRoutingSettings() {
+          return {
+            fallbackChains: { default: ["unit-provider/backup"] },
+            credentialRotation: { enabled: false, cooldownMs: 5_000 },
+          };
+        },
+        createRuntimeToolContext() {
+          return {
+            getSystemPrompt() {
+              return "";
+            },
+          };
+        },
+      };
+
+      const frames = [];
+      const provider = createHostedRuntimeProviderPort(session as never);
+      for await (const frame of provider.stream(createRuntimeProviderInput("context-overflow"))) {
+        frames.push(frame);
+      }
+
+      expect(frames).toEqual([{ type: "text", delta: "ok" }]);
+      expect(attemptedModels).toEqual(["primary", "backup"]);
+      expect(providerFallbacks).toContainEqual(
+        expect.objectContaining({
+          active: true,
+          selectedRoute: {
+            provider: "unit-provider",
+            model: "backup",
+          },
+          reason: "context",
         }),
       );
     } finally {

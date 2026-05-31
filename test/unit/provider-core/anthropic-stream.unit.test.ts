@@ -138,6 +138,9 @@ describe("anthropic stream processor", () => {
               cache_creation_input_tokens: 3,
             },
           };
+          yield {
+            type: "message_stop",
+          };
         })(),
         output,
         stream,
@@ -305,5 +308,147 @@ describe("anthropic stream processor", () => {
     await collectQueuedEvents(stream);
     expect(output.usage.output).toBe(0);
     expect(output.usage.details?.thoughtsTokens).toBe(96);
+  });
+
+  test("rejects streams that start a message but end before message_stop", async () => {
+    const output = createOutput();
+    const stream = createRecordingProviderEventStream();
+
+    let thrown: unknown;
+    try {
+      await runProviderCoreEffect(
+        processAnthropicStream(
+          (async function* () {
+            yield {
+              type: "message_start",
+              message: {
+                id: "msg_truncated",
+                usage: {
+                  input_tokens: 10,
+                  output_tokens: 0,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
+              },
+            };
+            yield {
+              type: "content_block_start",
+              index: 0,
+              content_block: {
+                type: "text",
+              },
+            };
+            yield {
+              type: "content_block_delta",
+              index: 0,
+              delta: {
+                type: "text_delta",
+                text: "partial",
+              },
+            };
+            yield {
+              type: "content_block_stop",
+              index: 0,
+            };
+          })(),
+          output,
+          stream,
+          {
+            api: "anthropic-messages",
+            id: "claude-sonnet-4-5",
+            name: "Claude Sonnet 4.5",
+            provider: "anthropic",
+            baseUrl: "https://api.anthropic.com",
+            reasoning: true,
+            input: ["text"],
+            contextWindow: 200_000,
+            maxTokens: 8_192,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          },
+          createTestToolCalls(output, stream),
+          {
+            isOAuth: false,
+          },
+        ),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toContain("Anthropic stream ended before message_stop");
+  });
+
+  test("does not finalize tool calls when a message ends before message_stop", async () => {
+    const output = createOutput();
+    const stream = createRecordingProviderEventStream();
+
+    let thrown: unknown;
+    try {
+      await runProviderCoreEffect(
+        processAnthropicStream(
+          (async function* () {
+            yield {
+              type: "message_start",
+              message: {
+                id: "msg_truncated_tool",
+                usage: {
+                  input_tokens: 10,
+                  output_tokens: 0,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
+              },
+            };
+            yield {
+              type: "content_block_start",
+              index: 0,
+              content_block: {
+                type: "tool_use",
+                id: "tool_1",
+                name: "search",
+                input: {},
+              },
+            };
+            yield {
+              type: "content_block_delta",
+              index: 0,
+              delta: {
+                type: "input_json_delta",
+                partial_json: '{"query":"alpha"}',
+              },
+            };
+            yield {
+              type: "content_block_stop",
+              index: 0,
+            };
+          })(),
+          output,
+          stream,
+          {
+            api: "anthropic-messages",
+            id: "claude-sonnet-4-5",
+            name: "Claude Sonnet 4.5",
+            provider: "anthropic",
+            baseUrl: "https://api.anthropic.com",
+            reasoning: true,
+            input: ["text"],
+            contextWindow: 200_000,
+            maxTokens: 8_192,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          },
+          createTestToolCalls(output, stream),
+          {
+            isOAuth: false,
+          },
+        ),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    const events = await collectQueuedEvents(stream);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(events.map((event) => event.type)).toEqual(["toolcall_start", "toolcall_delta"]);
   });
 });

@@ -19,6 +19,11 @@ All provider adapters normalize into:
 - `AssistantMessageEvent`
 - `ProviderAssistantMessageStream`
 
+`AssistantMessage.model` is the requested model id. When a router or virtual
+model returns a different concrete upstream model id, adapters preserve the
+requested id and may set `AssistantMessage.responseModel` to the returned model
+for observability.
+
 `ProviderAssistantMessageStream` is an Effect stream:
 `Stream.Stream<AssistantMessageEvent, ProviderStreamError, ProviderRuntime>`.
 The old Promise-first `AssistantMessageEventStream` compatibility class has
@@ -32,6 +37,14 @@ The stable event families are:
 - `toolcall_start` / `toolcall_delta` / `toolcall_end`
 - `done`
 - `error`
+
+Provider adapters must preserve provider terminal-event integrity. OpenAI
+Completions streams require a terminal `finish_reason`; Anthropic Messages
+streams that emit `message_start` require a matching `message_stop`. Incomplete
+streams fail with `ProviderStreamError`. Tool-call deltas may stream
+incrementally, but adapters must emit `toolcall_end` only after the provider
+terminal signal is accepted, so truncated streams cannot dispatch executable
+tool calls.
 
 `runProviderStream(...)` owns stream lifecycle:
 

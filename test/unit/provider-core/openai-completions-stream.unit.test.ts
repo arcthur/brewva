@@ -241,6 +241,62 @@ describe("openai completions stream processor", () => {
     expect(output.errorMessage).toBe("Provider finish_reason: content_filter");
   });
 
+  test("surfaces routed chunk model without changing the requested model", async () => {
+    const output = createOutput();
+    const stream = createRecordingProviderEventStream();
+
+    await runProviderCoreEffect(
+      processOpenAICompletionsStream(
+        (async function* () {
+          yield {
+            id: "resp_routed",
+            created: 1,
+            model: "anthropic/claude-opus-4.8",
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                delta: {
+                  content: "Hello",
+                },
+              },
+            ],
+          };
+          yield {
+            id: "resp_routed",
+            created: 1,
+            model: "anthropic/claude-opus-4.8",
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                delta: {},
+                finish_reason: "stop",
+              },
+            ],
+          };
+        })() as unknown as AsyncIterable<any>,
+        output,
+        stream,
+        {
+          api: "openai-completions",
+          id: "gpt-4o",
+          name: "GPT-4o",
+          provider: "openai",
+          baseUrl: "https://api.openai.com/v1",
+          reasoning: true,
+          input: ["text"],
+          contextWindow: 128_000,
+          maxTokens: 16_384,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        },
+        createTestToolCalls(output, stream),
+      ),
+    );
+
+    await collectQueuedEvents(stream);
+    expect(output.model).toBe("gpt-4o");
+    expect(output.responseModel).toBe("anthropic/claude-opus-4.8");
+  });
+
   test("routes interleaved tool call deltas by tool-call index instead of current block", async () => {
     const output = createOutput();
     const stream = createRecordingProviderEventStream();
@@ -344,5 +400,110 @@ describe("openai completions stream processor", () => {
         },
       },
     ]);
+  });
+
+  test("rejects streams that end without a terminal finish_reason", async () => {
+    const output = createOutput();
+    const stream = createRecordingProviderEventStream();
+
+    let thrown: unknown;
+    try {
+      await runProviderCoreEffect(
+        processOpenAICompletionsStream(
+          (async function* () {
+            yield {
+              id: "resp_truncated",
+              created: 1,
+              model: "gpt-4o",
+              object: "chat.completion.chunk",
+              choices: [
+                {
+                  delta: {
+                    content: "partial answer",
+                  },
+                },
+              ],
+            };
+          })() as unknown as AsyncIterable<any>,
+          output,
+          stream,
+          {
+            api: "openai-completions",
+            id: "gpt-4o",
+            name: "GPT-4o",
+            provider: "openai",
+            baseUrl: "https://api.openai.com/v1",
+            reasoning: true,
+            input: ["text"],
+            contextWindow: 128_000,
+            maxTokens: 16_384,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          },
+          createTestToolCalls(output, stream),
+        ),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toContain("Stream ended without finish_reason");
+  });
+
+  test("does not finalize tool calls when a stream ends without finish_reason", async () => {
+    const output = createOutput();
+    const stream = createRecordingProviderEventStream();
+
+    let thrown: unknown;
+    try {
+      await runProviderCoreEffect(
+        processOpenAICompletionsStream(
+          (async function* () {
+            yield {
+              id: "resp_truncated_tool",
+              created: 1,
+              model: "gpt-4o",
+              object: "chat.completion.chunk",
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        id: "call_1",
+                        function: {
+                          name: "search",
+                          arguments: '{"query":"alpha"}',
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            };
+          })() as unknown as AsyncIterable<any>,
+          output,
+          stream,
+          {
+            api: "openai-completions",
+            id: "gpt-4o",
+            name: "GPT-4o",
+            provider: "openai",
+            baseUrl: "https://api.openai.com/v1",
+            reasoning: true,
+            input: ["text"],
+            contextWindow: 128_000,
+            maxTokens: 16_384,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          },
+          createTestToolCalls(output, stream),
+        ),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    const events = await collectQueuedEvents(stream);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(events.map((event) => event.type)).toEqual(["toolcall_start", "toolcall_delta"]);
   });
 });

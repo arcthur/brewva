@@ -189,4 +189,26 @@ describe("substrate native session bundle contract", () => {
     ]);
     expect(artifact.warnings).toEqual(["ignored unsupported Pi session entry type: custom"]);
   });
+
+  test("reports physical line numbers when legacy Pi JSONL import fails", () => {
+    const workspace = createTestWorkspace("session-bundle-legacy-pi-import-line-number");
+    const sessionPath = join(workspace, "legacy-session.jsonl");
+    writeFileSync(
+      sessionPath,
+      [
+        JSON.stringify({
+          type: "session",
+          version: 3,
+          id: "pi-session-2",
+          timestamp: "2026-04-10T00:00:00.000Z",
+          cwd: "/workspace/pi-project",
+        }),
+        "",
+        "{ invalid json",
+      ].join("\n"),
+      "utf8",
+    );
+
+    expect(() => readSessionBundleArtifact(sessionPath)).toThrow(`${sessionPath}:3`);
+  });
 });

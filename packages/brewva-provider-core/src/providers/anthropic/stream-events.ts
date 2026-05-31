@@ -10,7 +10,7 @@ import type {
   Tool,
   ToolCall,
 } from "../../contracts/index.js";
-import { runAsyncIterableEffect } from "../../stream/effect-interop.js";
+import { failProviderStream, runAsyncIterableEffect } from "../../stream/effect-interop.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
 import { fromClaudeCodeName } from "./compat.js";
 import { applyAnthropicUsageTotals } from "./usage.js";
@@ -52,10 +52,13 @@ export function processAnthropicStream(
 ): BrewvaEffect.Effect<void, ProviderStreamError> {
   return BrewvaEffect.gen(function* () {
     const blocks = new Map<number, AnthropicBlockState>();
+    let sawMessageStart = false;
+    let sawMessageStop = false;
 
     yield* runAsyncIterableEffect(anthropicStream, (event) =>
       BrewvaEffect.gen(function* () {
         if (event.type === "message_start") {
+          sawMessageStart = true;
           output.responseId = event.message.id;
           output.usage.input = event.message.usage.input_tokens || 0;
           output.usage.output = event.message.usage.output_tokens || 0;
@@ -216,7 +219,6 @@ export function processAnthropicStream(
             });
             return;
           }
-          yield* toolCalls.finalize(`anthropic:${event.index}`);
           return;
         }
 
@@ -238,8 +240,19 @@ export function processAnthropicStream(
           }
           applyAnthropicUsageTotals(output, model);
         }
+
+        if (event.type === "message_stop") {
+          sawMessageStop = true;
+        }
       }),
     );
+
+    if (sawMessageStart && !sawMessageStop) {
+      return yield* failProviderStream("Anthropic stream ended before message_stop");
+    }
+    if (sawMessageStop) {
+      yield* toolCalls.finalizeAll();
+    }
   });
 }
 
