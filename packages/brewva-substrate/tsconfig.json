@@ -7,7 +7,8 @@
   "references": [
     { "path": "../brewva-provider-core" },
     { "path": "../brewva-std" },
-    { "path": "../brewva-token-estimation" }
+    { "path": "../brewva-token-estimation" },
+    { "path": "../brewva-vocabulary" }
   ],
   "include": ["src/**/*.ts"]
 }
