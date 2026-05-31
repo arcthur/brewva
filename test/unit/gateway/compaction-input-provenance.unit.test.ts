@@ -6,7 +6,7 @@ import {
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.js";
 import { createHostedCompactionController } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.js";
 import { createHostedContextTelemetry } from "../../../packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.js";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 describe("compaction input provenance", () => {
   test("collects only active context artifacts without hidden recall search", () => {
@@ -242,7 +242,7 @@ describe("compaction input provenance", () => {
   });
 
   test("attaches active-set provenance to committed session compaction receipts", async () => {
-    const runtime = createRuntimeInstanceFixture();
+    const runtime = createRuntimeFixture();
     const sessionId = "compact-provenance-session";
     const controller = createHostedCompactionController(
       runtime,
