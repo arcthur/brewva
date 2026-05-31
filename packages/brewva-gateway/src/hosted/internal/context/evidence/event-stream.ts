@@ -390,10 +390,10 @@ export function registerEventStream(
 
   const flushActiveToolExecutions = (
     sessionId: string,
-    terminalReason: Extract<
-      ToolExecutionTerminalReason,
-      "cancelled_by_interrupt" | "cancelled_by_retry_supersession" | "cancelled_by_shutdown"
-    >,
+    input: {
+      terminalReason: ToolExecutionTerminalReason;
+      lifecycleFallbackReason?: string;
+    },
   ): void => {
     const activeExecutions = activeToolExecutionsBySession.get(sessionId);
     if (!activeExecutions || activeExecutions.size === 0) {
@@ -409,7 +409,10 @@ export function registerEventStream(
           toolName: activeExecution.toolName,
           isError: true,
           attempt: activeExecution.attemptSequence,
-          terminalReason,
+          terminalReason: input.terminalReason,
+          ...(input.lifecycleFallbackReason
+            ? { lifecycleFallbackReason: input.lifecycleFallbackReason }
+            : {}),
         } satisfies ToolLifecycleEventPayload,
       });
       observedToolCallsBySession.get(sessionId)?.delete(toolCallId);
@@ -481,7 +484,7 @@ export function registerEventStream(
   extensionApi.on("session_shutdown", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     flushPendingToolResults(sessionId);
-    flushActiveToolExecutions(sessionId, "cancelled_by_shutdown");
+    flushActiveToolExecutions(sessionId, { terminalReason: "cancelled_by_shutdown" });
     clearPendingInterruptFlush(sessionId);
     ensureSessionShutdownRecorded(runtime, sessionId);
     lastAssistantTextBySession.delete(sessionId);
@@ -506,6 +509,10 @@ export function registerEventStream(
   extensionApi.on("agent_end", (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     flushPendingToolResults(sessionId);
+    flushActiveToolExecutions(sessionId, {
+      terminalReason: "failed",
+      lifecycleFallbackReason: "agent_end_without_tool_execution_end",
+    });
     runtime.ops.session.lifecycle.agentEnded({
       sessionId,
       payload: {
@@ -753,7 +760,7 @@ export function registerEventStream(
     rememberLeafEntryId(sessionId, ctx);
     clearPendingInterruptFlush(sessionId);
     flushPendingToolResults(sessionId);
-    flushActiveToolExecutions(sessionId, "cancelled_by_retry_supersession");
+    flushActiveToolExecutions(sessionId, { terminalReason: "cancelled_by_retry_supersession" });
     runtime.ops.session.lifecycle.beforeCompact({
       sessionId,
       payload: {
