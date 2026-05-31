@@ -38,12 +38,16 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
   });
 }
 
-const MAX_RETRIES = 3;
+const DEFAULT_MAX_RETRIES = 0;
 const BASE_DELAY_MS = 1000;
+const DEFAULT_SSE_HEADER_TIMEOUT_MS = 10_000;
 const OPENAI_BETA_RESPONSES_WEBSOCKETS = "responses_websockets=2026-02-06";
 
 class CodexRetryableRequestError extends Error {
-  constructor(readonly original: Error) {
+  constructor(
+    readonly original: Error,
+    readonly retryAfterMs?: number,
+  ) {
     super(original.message);
     this.name = "CodexRetryableRequestError";
   }
@@ -76,12 +80,74 @@ export function shouldAttemptCodexWebSocketTransport(
 }
 
 function isRetryableError(status: number, errorText: string): boolean {
+  if (isTerminalRateLimitError(status, errorText)) {
+    return false;
+  }
   if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504) {
     return true;
   }
   return /rate.?limit|overloaded|service.?unavailable|upstream.?connect|connection.?refused/i.test(
     errorText,
   );
+}
+
+function isTerminalRateLimitError(status: number, errorText: string): boolean {
+  if (status !== 429) {
+    return false;
+  }
+  return /usage_limit_reached|usage_not_included|insufficient_quota|billing|quota|credits?|plan_type/i.test(
+    errorText,
+  );
+}
+
+function normalizeNonNegativeInteger(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(0, Math.trunc(value));
+}
+
+function normalizePositiveInteger(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(1, Math.trunc(value));
+}
+
+function normalizeOptionalTimeoutMs(
+  value: number | undefined,
+  fallback: number,
+): number | undefined {
+  const normalized = normalizeNonNegativeInteger(value, fallback);
+  return normalized > 0 ? normalized : undefined;
+}
+
+function capRetryDelayMs(delayMs: number, maxRetryDelayMs: number | undefined): number {
+  const normalizedDelay = normalizePositiveInteger(delayMs, BASE_DELAY_MS);
+  if (maxRetryDelayMs === undefined) {
+    return normalizedDelay;
+  }
+  return Math.min(normalizedDelay, normalizePositiveInteger(maxRetryDelayMs, normalizedDelay));
+}
+
+function defaultRetryDelayForAttempt(attempt: number): number {
+  return BASE_DELAY_MS * 2 ** Math.max(0, attempt);
+}
+
+function readRetryAfterMs(headers: Headers): number | undefined {
+  const value = headers.get("retry-after");
+  if (!value) {
+    return undefined;
+  }
+  const seconds = Number(value);
+  if (Number.isFinite(seconds)) {
+    return Math.max(0, Math.trunc(seconds * 1000));
+  }
+  const retryAt = Date.parse(value);
+  if (!Number.isNaN(retryAt)) {
+    return Math.max(0, retryAt - Date.now());
+  }
+  return undefined;
 }
 
 function toError(error: unknown): Error {
@@ -91,7 +157,9 @@ function toError(error: unknown): Error {
 function isAbortError(error: unknown): boolean {
   return (
     error instanceof Error &&
-    (error.name === "AbortError" || error.message === "Request was aborted")
+    (error.name === "AbortError" ||
+      error.name === "BrewvaCancelled" ||
+      /aborted|cancelled|canceled/i.test(error.message))
   );
 }
 
@@ -125,10 +193,12 @@ async function parseErrorResponse(
     const err = parsed?.error;
     if (err) {
       const code = err.code || err.type || "";
-      if (
-        /usage_limit_reached|usage_not_included|rate_limit_exceeded/i.test(code) ||
-        response.status === 429
-      ) {
+      const errMessage = err.message || "";
+      const usageLimited =
+        /usage_limit_reached|usage_not_included|insufficient_quota|billing|quota|credits?/i.test(
+          code,
+        ) || /usage limit|billing|quota|credits?/i.test(errMessage);
+      if (usageLimited) {
         const plan = err.plan_type ? ` (${err.plan_type.toLowerCase()} plan)` : "";
         const mins = err.resets_at
           ? Math.max(0, Math.round((err.resets_at * 1000 - Date.now()) / 60000))
@@ -141,6 +211,44 @@ async function parseErrorResponse(
   } catch {}
 
   return { message, friendlyMessage };
+}
+
+async function runWithTimeoutSignal<A>(
+  signal: AbortSignal,
+  timeoutMs: number | undefined,
+  timeoutMessage: string,
+  run: (signal: AbortSignal) => PromiseLike<A>,
+): Promise<A> {
+  if (timeoutMs === undefined) {
+    return await run(signal);
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromParent = () => controller.abort(signal.reason);
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException(timeoutMessage, "TimeoutError"));
+  }, timeoutMs);
+  timer.unref?.();
+
+  if (signal.aborted) {
+    abortFromParent();
+  } else {
+    signal.addEventListener("abort", abortFromParent, { once: true });
+  }
+
+  try {
+    return await run(controller.signal);
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(timeoutMessage);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", abortFromParent);
+  }
 }
 
 function extractAccountId(token: string): string {
@@ -196,7 +304,7 @@ function buildSSEHeaders(
   headers.set("accept", "text/event-stream");
   headers.set("content-type", "application/json");
   if (sessionId) {
-    headers.set("session_id", sessionId);
+    headers.set("session-id", sessionId);
   }
   return headers;
 }
@@ -215,7 +323,7 @@ function buildWebSocketHeaders(
   headers.delete("openai-beta");
   headers.set("OpenAI-Beta", OPENAI_BETA_RESPONSES_WEBSOCKETS);
   headers.set("x-client-request-id", requestId);
-  headers.set("session_id", requestId);
+  headers.set("session-id", requestId);
   return headers;
 }
 
@@ -224,7 +332,12 @@ function fetchCodexSseResponseEffect(input: {
   headers: Headers;
   bodyJson: string;
   signal: AbortSignal;
+  timeoutMs?: number;
+  maxRetries?: number;
+  maxRetryDelayMs?: number;
 }): BrewvaEffect.Effect<Response, Error> {
+  const timeoutMs = normalizeOptionalTimeoutMs(input.timeoutMs, DEFAULT_SSE_HEADER_TIMEOUT_MS);
+  const maxRetries = normalizeNonNegativeInteger(input.maxRetries, DEFAULT_MAX_RETRIES);
   const attempt = BrewvaEffect.gen(function* () {
     if (input.signal.aborted) {
       return yield* BrewvaEffect.fail(
@@ -234,12 +347,18 @@ function fetchCodexSseResponseEffect(input: {
 
     const response = yield* fromAbortableBoundaryPromise(
       (abortSignal) =>
-        fetch(input.url, {
-          method: "POST",
-          headers: input.headers,
-          body: input.bodyJson,
-          signal: abortSignal,
-        }),
+        runWithTimeoutSignal(
+          abortSignal,
+          timeoutMs,
+          `Codex SSE response headers timed out after ${timeoutMs} ms`,
+          (requestSignal) =>
+            fetch(input.url, {
+              method: "POST",
+              headers: input.headers,
+              body: input.bodyJson,
+              signal: requestSignal,
+            }),
+        ),
       input.signal,
     ).pipe(BrewvaEffect.mapError(toError));
 
@@ -250,6 +369,7 @@ function fetchCodexSseResponseEffect(input: {
     const errorText = yield* fromAbortableBoundaryPromise(() => response.text(), input.signal).pipe(
       BrewvaEffect.mapError(toError),
     );
+    const retryAfterMs = readRetryAfterMs(response.headers);
     const info = yield* fromAbortableBoundaryPromise(
       () =>
         parseErrorResponse(
@@ -263,7 +383,7 @@ function fetchCodexSseResponseEffect(input: {
     const requestError = new Error(info.friendlyMessage || info.message);
 
     if (isRetryableError(response.status, errorText)) {
-      return yield* BrewvaEffect.fail(new CodexRetryableRequestError(requestError));
+      return yield* BrewvaEffect.fail(new CodexRetryableRequestError(requestError, retryAfterMs));
     }
     return yield* BrewvaEffect.fail(new CodexNonRetryableRequestError(requestError));
   }).pipe(
@@ -283,8 +403,16 @@ function fetchCodexSseResponseEffect(input: {
   );
 
   return retryWithBrewvaPolicy(attempt, {
-    maxRetries: MAX_RETRIES,
+    maxRetries,
     baseDelayMs: BASE_DELAY_MS,
+    delayFor: (error, attempt) => {
+      const retryAfterMs =
+        error instanceof CodexRetryableRequestError ? error.retryAfterMs : undefined;
+      return capRetryDelayMs(
+        retryAfterMs ?? defaultRetryDelayForAttempt(attempt),
+        input.maxRetryDelayMs,
+      );
+    },
     while: (error) => error instanceof CodexRetryableRequestError,
   }).pipe(BrewvaEffect.mapError(unwrapCodexRequestError));
 }
@@ -369,6 +497,9 @@ export const streamOpenAICodexResponses: StreamFunction<
           headers: sseHeaders,
           bodyJson: JSON.stringify(body),
           signal,
+          timeoutMs: options?.timeoutMs,
+          maxRetries: options?.maxRetries,
+          maxRetryDelayMs: options?.maxRetryDelayMs,
         }).pipe(BrewvaEffect.mapError(toProviderStreamError));
 
         if (!response.body) {

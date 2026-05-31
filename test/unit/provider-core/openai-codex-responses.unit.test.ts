@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
-import type { Model } from "@brewva/brewva-provider-core/contracts";
+import type { AssistantMessageEvent, Model } from "@brewva/brewva-provider-core/contracts";
 import { buildBaseOptions } from "../../../packages/brewva-provider-core/src/providers/_shared/simple-options.js";
 import {
   resolveCodexTransport,
@@ -36,9 +36,13 @@ class FakeCodexWebSocket {
   readonly listeners = new Map<string, Set<(event: unknown) => void>>();
   readonly sent: string[] = [];
   readonly closeCalls: Array<{ code?: number; reason?: string }> = [];
+  readonly url: string;
+  readonly protocols?: string | string[] | { headers?: Record<string, string> };
   readyState = 0;
 
-  constructor() {
+  constructor(url = "", protocols?: string | string[] | { headers?: Record<string, string> }) {
+    this.url = url;
+    this.protocols = protocols;
     FakeCodexWebSocket.sockets.push(this);
     queueMicrotask(() => {
       this.readyState = 1;
@@ -68,6 +72,42 @@ class FakeCodexWebSocket {
 
   dispatchMessage(payload: Record<string, unknown>): void {
     this.dispatch("message", { data: JSON.stringify(payload) });
+  }
+
+  private dispatch(type: string, event: unknown): void {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(event);
+    }
+  }
+}
+
+class NeverOpenCodexWebSocket {
+  static sockets: NeverOpenCodexWebSocket[] = [];
+
+  readonly listeners = new Map<string, Set<(event: unknown) => void>>();
+  readonly closeCalls: Array<{ code?: number; reason?: string }> = [];
+  readyState = 0;
+
+  constructor() {
+    NeverOpenCodexWebSocket.sockets.push(this);
+  }
+
+  send(): void {}
+
+  close(code?: number, reason?: string): void {
+    this.readyState = 3;
+    this.closeCalls.push({ code, reason });
+    this.dispatch("close", { code, reason });
+  }
+
+  addEventListener(type: string, listener: (event: unknown) => void): void {
+    const listeners = this.listeners.get(type) ?? new Set<(event: unknown) => void>();
+    listeners.add(listener);
+    this.listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: (event: unknown) => void): void {
+    this.listeners.get(type)?.delete(listener);
   }
 
   private dispatch(type: string, event: unknown): void {
@@ -134,7 +174,324 @@ function createSseResponse(events: readonly Record<string, unknown>[]): Response
   });
 }
 
+function createCompletedSseResponse(responseId: string): Response {
+  return createSseResponse([
+    {
+      type: "response.completed",
+      response: {
+        id: responseId,
+        status: "completed",
+        usage: {
+          input_tokens: 1,
+          output_tokens: 0,
+          total_tokens: 1,
+          input_tokens_details: { cached_tokens: 0 },
+        },
+      },
+    },
+  ]);
+}
+
+function readFakeWebSocketHeaders(socket: FakeCodexWebSocket): Record<string, string> {
+  const protocols = socket.protocols;
+  if (!protocols || typeof protocols !== "object" || Array.isArray(protocols)) {
+    return {};
+  }
+  return protocols.headers ?? {};
+}
+
+async function collectSingleProviderError(
+  stream: ReturnType<typeof streamOpenAICodexResponses>,
+): Promise<string> {
+  const events = await collectProviderEvents(stream);
+  return readProviderErrorMessage(events);
+}
+
+function readProviderErrorMessage(events: readonly AssistantMessageEvent[]): string {
+  const error = events.find((event) => event.type === "error");
+  if (!error || error.type !== "error") {
+    throw new Error("Expected provider error event");
+  }
+  return error.error.errorMessage ?? "";
+}
+
 describe("openai codex responses continuation", () => {
+  test("Codex SSE transport sends session-id affinity header without legacy session_id", async () => {
+    const originalFetch = globalThis.fetch;
+    const requestHeaders: Headers[] = [];
+
+    globalThis.fetch = (async (_input, init) => {
+      requestHeaders.push(new Headers(init?.headers));
+      return createCompletedSseResponse("resp_sse_header");
+    }) as typeof fetch;
+
+    try {
+      await collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          {
+            apiKey: createFakeCodexToken(),
+            sessionId: "session-header-sse",
+            transport: "sse",
+          },
+        ),
+      );
+
+      expect(requestHeaders).toHaveLength(1);
+      expect(requestHeaders[0]?.get("session-id")).toBe("session-header-sse");
+      expect(requestHeaders[0]?.get("session_id")).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("Codex websocket transport sends session-id affinity header without legacy session_id", async () => {
+    const originalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
+    (globalThis as { WebSocket?: unknown }).WebSocket = FakeCodexWebSocket;
+    FakeCodexWebSocket.sockets = [];
+    clearCodexSessionState("session-header-websocket");
+
+    try {
+      const run = collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          {
+            apiKey: createFakeCodexToken(),
+            sessionId: "session-header-websocket",
+            transport: "websocket",
+          },
+        ),
+      );
+      const socket = await waitForSentSocket(0);
+      const headers = readFakeWebSocketHeaders(socket);
+
+      expect(headers["session-id"]).toBe("session-header-websocket");
+      expect(Object.hasOwn(headers, "session_id")).toBe(false);
+
+      socket.dispatchMessage({
+        type: "response.completed",
+        response: {
+          id: "resp_websocket_header",
+          status: "completed",
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            input_tokens_details: { cached_tokens: 0 },
+          },
+        },
+      });
+
+      await run;
+    } finally {
+      clearCodexSessionState("session-header-websocket");
+      (globalThis as { WebSocket?: unknown }).WebSocket = originalWebSocket;
+    }
+  });
+
+  test("Codex SSE defaults to one attempt for terminal quota failures", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "usage_limit_reached",
+            message: "Usage limit reached",
+            plan_type: "Plus",
+          },
+        }),
+        { status: 429, statusText: "Too Many Requests" },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      const message = await collectSingleProviderError(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          {
+            apiKey: createFakeCodexToken(),
+            transport: "sse",
+          },
+        ),
+      );
+      expect(message).toMatch(/usage limit/i);
+      expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("Codex SSE honors maxRetries instead of retrying transient failures implicitly", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+
+    globalThis.fetch = (async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response("service unavailable", { status: 503, statusText: "Unavailable" });
+      }
+      return createCompletedSseResponse("resp_after_retry");
+    }) as unknown as typeof fetch;
+
+    try {
+      const message = await collectSingleProviderError(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          {
+            apiKey: createFakeCodexToken(),
+            transport: "sse",
+            maxRetries: 0,
+            maxRetryDelayMs: 1,
+          },
+        ),
+      );
+      expect(message).toMatch(/service unavailable/i);
+      expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("Codex SSE honors explicit maxRetries for transient failures", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+
+    globalThis.fetch = (async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response("service unavailable", { status: 503, statusText: "Unavailable" });
+      }
+      return createCompletedSseResponse("resp_after_retry");
+    }) as unknown as typeof fetch;
+
+    try {
+      await collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          {
+            apiKey: createFakeCodexToken(),
+            transport: "sse",
+            maxRetries: 1,
+            maxRetryDelayMs: 1,
+          },
+        ),
+      );
+      expect(calls).toBe(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("Codex SSE times out stalled response headers", async () => {
+    const originalFetch = globalThis.fetch;
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | undefined;
+
+    globalThis.fetch = (async (_input, init) => {
+      requestSignal = init?.signal instanceof AbortSignal ? init.signal : undefined;
+      return await new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("Request was aborted", "AbortError")),
+          { once: true },
+        );
+      });
+    }) as typeof fetch;
+
+    const stream = collectProviderEvents(
+      streamOpenAICodexResponses(
+        CODEX_MODEL,
+        { messages: [] },
+        {
+          apiKey: createFakeCodexToken(),
+          transport: "sse",
+          signal: controller.signal,
+          timeoutMs: 5,
+        },
+      ),
+    );
+
+    try {
+      const result = await Promise.race([
+        stream.then(
+          (events) => events,
+          (error) => error,
+        ),
+        sleep(50).then(() => "timed-out" as const),
+      ]);
+      if (result === "timed-out") {
+        controller.abort();
+        await stream.catch(() => undefined);
+        throw new Error("Expected stalled SSE request to time out");
+      }
+      if (result instanceof Error) {
+        expect(result.message).toMatch(/timed out/i);
+      } else {
+        expect(readProviderErrorMessage(result)).toMatch(/timed out/i);
+      }
+      expect(requestSignal?.aborted).toBe(true);
+    } finally {
+      controller.abort();
+      await stream.catch(() => undefined);
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("Codex websocket connection attempts time out before falling back", async () => {
+    const originalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
+    (globalThis as { WebSocket?: unknown }).WebSocket = NeverOpenCodexWebSocket;
+    NeverOpenCodexWebSocket.sockets = [];
+    const controller = new AbortController();
+
+    const stream = collectProviderEvents(
+      streamOpenAICodexResponses(
+        CODEX_MODEL,
+        { messages: [] },
+        {
+          apiKey: createFakeCodexToken(),
+          transport: "websocket",
+          signal: controller.signal,
+          websocketConnectTimeoutMs: 5,
+        },
+      ),
+    );
+
+    try {
+      const result = await Promise.race([
+        stream.then(
+          (events) => events,
+          (error) => error,
+        ),
+        sleep(50).then(() => "timed-out" as const),
+      ]);
+      if (result === "timed-out") {
+        controller.abort();
+        await stream.catch(() => undefined);
+        throw new Error("Expected stalled websocket connection to time out");
+      }
+      if (result instanceof Error) {
+        expect(result.message).toMatch(/timed out/i);
+      } else {
+        expect(readProviderErrorMessage(result)).toMatch(/timed out/i);
+      }
+      expect(NeverOpenCodexWebSocket.sockets[0]?.closeCalls).toEqual([
+        { code: 1000, reason: "connect_timeout" },
+      ]);
+    } finally {
+      controller.abort();
+      await stream.catch(() => undefined);
+      (globalThis as { WebSocket?: unknown }).WebSocket = originalWebSocket;
+    }
+  });
+
   test("clears continuation state and cached websocket on explicit session clear", () => {
     const socket = {
       closeCalls: [] as Array<{ code?: number; reason?: string }>,

@@ -24,6 +24,7 @@ import { mapCodexEvents } from "./sse.js";
 import { readWebSocketConstructor } from "./wire.js";
 
 const SESSION_WEBSOCKET_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS = 15_000;
 
 type WebSocketEventType = "open" | "message" | "error" | "close";
 type WebSocketListener = (event: unknown) => void;
@@ -102,6 +103,17 @@ function closeWebSocketSilently(socket: WebSocketLike, code = 1000, reason = "do
   } catch {}
 }
 
+function normalizeConnectTimeoutMs(value: number | undefined): number | undefined {
+  if (value === undefined) {
+    return DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
+  }
+  if (!Number.isFinite(value)) {
+    return DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
+  }
+  const normalized = Math.max(0, Math.trunc(value));
+  return normalized > 0 ? normalized : undefined;
+}
+
 function scheduleSessionWebSocketExpiry(sessionId: string, entry: CachedWebSocketConnection): void {
   if (entry.idleTimer) {
     clearTimeout(entry.idleTimer);
@@ -118,6 +130,7 @@ async function connectWebSocket(
   url: string,
   headers: Headers,
   signal?: AbortSignal,
+  timeoutMs?: number,
 ): Promise<WebSocketLike> {
   const WebSocketCtor = getWebSocketConstructor();
   if (!WebSocketCtor) {
@@ -126,10 +139,13 @@ async function connectWebSocket(
 
   const wsHeaders = headersToRecord(headers);
   delete wsHeaders["OpenAI-Beta"];
+  delete wsHeaders["openai-beta"];
 
   return new Promise<WebSocketLike>((resolve, reject) => {
     let settled = false;
     let socket: WebSocketLike;
+    const connectTimeoutMs = normalizeConnectTimeoutMs(timeoutMs);
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
 
     try {
       socket = new WebSocketCtor(url, { headers: wsHeaders });
@@ -165,8 +181,18 @@ async function connectWebSocket(
       socket.close(1000, "aborted");
       reject(new Error("Request was aborted"));
     };
+    const onConnectTimeout = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      socket.close(1000, "connect_timeout");
+      reject(new Error(`Codex websocket connection timed out after ${connectTimeoutMs} ms`));
+    };
 
     const cleanup = () => {
+      if (connectTimer) {
+        clearTimeout(connectTimer);
+      }
       socket.removeEventListener("open", onOpen);
       socket.removeEventListener("error", onError);
       socket.removeEventListener("close", onClose);
@@ -176,7 +202,15 @@ async function connectWebSocket(
     socket.addEventListener("open", onOpen);
     socket.addEventListener("error", onError);
     socket.addEventListener("close", onClose);
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
     signal?.addEventListener("abort", onAbort);
+    if (connectTimeoutMs !== undefined) {
+      connectTimer = setTimeout(onConnectTimeout, connectTimeoutMs);
+      connectTimer.unref?.();
+    }
   });
 }
 
@@ -185,9 +219,10 @@ async function acquireWebSocket(
   headers: Headers,
   sessionId: string | undefined,
   signal?: AbortSignal,
+  timeoutMs?: number,
 ): Promise<{ socket: WebSocketLike; release: (options?: { keep?: boolean }) => void }> {
   if (!sessionId) {
-    const socket = await connectWebSocket(url, headers, signal);
+    const socket = await connectWebSocket(url, headers, signal, timeoutMs);
     return {
       socket,
       release: () => {
@@ -218,7 +253,7 @@ async function acquireWebSocket(
       };
     }
     if (cached.busy) {
-      const socket = await connectWebSocket(url, headers, signal);
+      const socket = await connectWebSocket(url, headers, signal, timeoutMs);
       return {
         socket,
         release: () => {
@@ -232,7 +267,7 @@ async function acquireWebSocket(
     }
   }
 
-  const socket = await connectWebSocket(url, headers, signal);
+  const socket = await connectWebSocket(url, headers, signal, timeoutMs);
   const entry: CachedWebSocketConnection = { socket, busy: true };
   websocketSessionCache.set(sessionId, entry);
   return {
@@ -405,7 +440,13 @@ export function processWebSocketStream(
 ): BrewvaEffect.Effect<void, ProviderStreamError> {
   return BrewvaEffect.gen(function* () {
     const { socket, release } = yield* providerTryPromise(() =>
-      acquireWebSocket(url, headers, options?.sessionId, options?.signal),
+      acquireWebSocket(
+        url,
+        headers,
+        options?.sessionId,
+        options?.signal,
+        options?.websocketConnectTimeoutMs,
+      ),
     );
     let keepConnection = true;
     const sessionGeneration = options?.sessionId

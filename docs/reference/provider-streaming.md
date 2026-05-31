@@ -59,6 +59,13 @@ locally. For example, OpenAI Codex SSE distinguishes usage-limit failures from
 transient HTTP/fetch failures. The shared policy owns the schedule and retry
 budget; provider adapters own retryability classification.
 
+Direct provider stream options may set `maxRetries`, `maxRetryDelayMs`,
+`timeoutMs`, and transport-specific connection limits such as
+`websocketConnectTimeoutMs`. OpenAI Codex Responses defaults to no transport
+retry; callers opt into retry budgets explicitly, while terminal quota, billing,
+and usage-limit failures remain non-retryable. Codex Responses cache/session
+affinity uses the `session-id` header, not the legacy `session_id` header.
+
 Gateway-hosted model fallback wraps provider stream attempts above
 provider-core. Fallback is allowed only before any provider frame has been
 emitted. Once text, thinking, tool-call, or done/error frames begin flowing, the

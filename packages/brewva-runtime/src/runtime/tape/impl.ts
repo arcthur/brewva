@@ -1,16 +1,9 @@
 import { randomUUID } from "node:crypto";
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readdirSync,
-  writeSync,
-} from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, writeSync } from "node:fs";
 import { resolve } from "node:path";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { toJsonValue } from "@brewva/brewva-std/json";
+import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
 import { isSupportedToolOutcomeVersion } from "@brewva/brewva-std/tool-outcome-version";
 import type {
   Baseline,
@@ -642,16 +635,15 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
         continue;
       }
       const filePath = resolve(root, entry.name);
-      const text = readFileSync(filePath, "utf8");
-      for (const line of text.split("\n")) {
+      forEachUtf8LineSync(filePath, (line) => {
         const trimmed = line.trim();
         if (!trimmed) {
-          continue;
+          return;
         }
         const event = parsePersistedEvent(trimmed, filePath);
         appendEventToMemory(event);
         recovered.add(event.sessionId);
-      }
+      });
     }
     recoveredSessions = [...recovered].toSorted();
     return recoveredSessions;

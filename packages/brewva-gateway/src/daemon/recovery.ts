@@ -1,13 +1,7 @@
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { asBrewvaWalId, type BrewvaWalId } from "@brewva/brewva-runtime/core";
+import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
 import type {
   BrewvaEventQuery,
   BrewvaEventRecord,
@@ -394,18 +388,17 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
     if (!existsSync(walFilePath)) {
       return;
     }
-    const lines = readFileSync(walFilePath, "utf8").split(/\r?\n/u);
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index]?.trim();
+    forEachUtf8LineSync(walFilePath, (rawLine, lineNumber) => {
+      const line = rawLine.trim();
       if (!line) {
-        continue;
+        return;
       }
       try {
-        applyLoadedLine(JSON.parse(line), index + 1);
+        applyLoadedLine(JSON.parse(line), lineNumber);
       } catch {
-        integrityIssues.push(`${walFilePath}:${index + 1}:invalid_json`);
+        integrityIssues.push(`${walFilePath}:${lineNumber}:invalid_json`);
       }
-    }
+    });
   }
 
   function refreshFromDisk(): void {

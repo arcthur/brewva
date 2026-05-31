@@ -93,12 +93,15 @@ export interface StreamOptions {
   cachePolicy?: ProviderCachePolicy;
   onCacheRender?: (render: ProviderCacheRenderResult, model: Model<Api>) => void | Promise<void>;
   sessionId?: string;
+  timeoutMs?: number;
+  websocketConnectTimeoutMs?: number;
   onPayload?: (
     payload: unknown,
     model: Model<Api>,
     metadata?: ProviderPayloadMetadata,
   ) => unknown | undefined | Promise<unknown | undefined>;
   headers?: Record<string, string>;
+  maxRetries?: number;
   maxRetryDelayMs?: number;
   metadata?: Record<string, unknown>;
   resolveFile?: (part: FileContent, model: Model<Api>) => ResolvedFileContent | undefined;
