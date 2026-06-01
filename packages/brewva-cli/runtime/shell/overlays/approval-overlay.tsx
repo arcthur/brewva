@@ -9,8 +9,81 @@ import type { CliApprovalOverlayPayload } from "../../../src/shell/domain/overla
 import { TextAttributes } from "../../opentui/index.js";
 import { DiffView } from "../diff-view.js";
 import type { SessionPalette } from "../palette.js";
+import { useShellRenderContext } from "../render-context.js";
 import { asRecord } from "../tool-render.js";
 import { OverlaySurface } from "./frame.js";
+
+type ApprovalDecisionShortcut = "allow" | "always" | "deny";
+
+function approvalDetailValue(
+  details: ReturnType<typeof buildOperatorSafetyShellAskView>["details"],
+  key: "summary",
+): string | undefined {
+  return details.find((detail) => detail.key === key)?.value;
+}
+
+function approvalSummaryLabel(toolName: string): string {
+  return toolName === "exec" ? "Command" : "Request";
+}
+
+function approvalShortcutInput(shortcut: ApprovalDecisionShortcut) {
+  if (shortcut === "allow") {
+    return {
+      type: "keymap.effect" as const,
+      effect: { type: "overlay.primary" as const },
+    };
+  }
+  if (shortcut === "always") {
+    return {
+      key: "character",
+      text: "w",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    };
+  }
+  return {
+    key: "character",
+    text: "r",
+    ctrl: false,
+    meta: false,
+    shift: false,
+  };
+}
+
+function ApprovalActionButton(input: {
+  label: string;
+  shortcut: ApprovalDecisionShortcut;
+  theme: SessionPalette;
+  tone: "primary" | "secondary" | "danger";
+}) {
+  const ctx = useShellRenderContext();
+  const backgroundColor =
+    input.tone === "primary" ? input.theme.primary : input.theme.backgroundElement;
+  const foregroundColor =
+    input.tone === "primary"
+      ? input.theme.selectionText
+      : input.tone === "secondary"
+        ? input.theme.success
+        : input.theme.error;
+
+  return (
+    <box
+      flexShrink={0}
+      paddingLeft={1}
+      paddingRight={1}
+      backgroundColor={backgroundColor}
+      onMouseUp={(event) => {
+        event.stopPropagation();
+        void ctx.runtime.handleInput(approvalShortcutInput(input.shortcut));
+      }}
+    >
+      <text fg={foregroundColor} attributes={TextAttributes.BOLD}>
+        {input.label}
+      </text>
+    </box>
+  );
+}
 
 export function ApprovalOverlay(input: {
   payload: CliApprovalOverlayPayload;
@@ -52,9 +125,10 @@ export function ApprovalOverlay(input: {
   const footer = createMemo(() =>
     [
       diffPreview() ? `ctrl+f ${input.payload.previewExpanded ? "minimize" : "fullscreen"}` : "",
-      "enter confirm",
-      "r reject",
-      "esc close",
+      "Enter/A allow once",
+      "W always allow",
+      "R deny",
+      "Esc close",
     ]
       .filter(Boolean)
       .join(" | "),
@@ -90,17 +164,40 @@ export function ApprovalOverlay(input: {
           <Show when={safety()!.subline}>
             <text fg={input.theme.textMuted}>{safety()!.subline}</text>
           </Show>
-          <box flexDirection="row" gap={2}>
-            <text fg={input.theme.success}>{safety()!.primaryActionLabel}</text>
-            <text fg={input.theme.error}>{safety()!.denyActionLabel}</text>
-          </box>
-          <For each={safety()!.details}>
-            {(detail) => (
-              <text fg={input.theme.textMuted} wrapMode="word">
-                {detail.label}: {detail.value}
+          <Show when={approvalDetailValue(safety()!.details, "summary")}>
+            {(summary) => (
+              <text fg={input.theme.text} wrapMode="word">
+                {approvalSummaryLabel(safety()!.toolName)}: {summary()}
               </text>
             )}
-          </For>
+          </Show>
+          <text fg={input.theme.textMuted}>Tool: {safety()!.toolName}</text>
+          <Show when={safety()!.effectSummary}>
+            <text fg={input.theme.textMuted}>{safety()!.effectSummary}</text>
+          </Show>
+          <Show when={safety()!.riskSummary}>
+            <text fg={input.theme.textMuted}>{safety()!.riskSummary}</text>
+          </Show>
+          <box flexDirection="row" gap={2}>
+            <ApprovalActionButton
+              label={`[A] ${safety()!.primaryActionLabel}`}
+              shortcut="allow"
+              tone="primary"
+              theme={input.theme}
+            />
+            <ApprovalActionButton
+              label="[W] Always allow"
+              shortcut="always"
+              tone="secondary"
+              theme={input.theme}
+            />
+            <ApprovalActionButton
+              label={`[R] ${safety()!.denyActionLabel}`}
+              shortcut="deny"
+              tone="danger"
+              theme={input.theme}
+            />
+          </box>
           <Show when={diffPreview()}>
             {(preview) => (
               <box flexDirection="column" gap={1} marginTop={1}>

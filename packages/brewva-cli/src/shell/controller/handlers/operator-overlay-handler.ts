@@ -1,3 +1,4 @@
+import type { PendingEffectCommitmentRequest } from "@brewva/brewva-vocabulary/iteration";
 import type { ShellCommitOptions } from "../../domain/actions.js";
 import type { ShellEffect } from "../../domain/effects.js";
 import type { CliShellInput } from "../../domain/input.js";
@@ -15,6 +16,7 @@ export interface ShellOperatorOverlayHandlerContext {
   commit(action: CliShellAction, options?: ShellCommitOptions): void;
   runShellEffects(effects: readonly ShellEffect[]): Promise<void>;
   refreshOperatorSnapshot(): Promise<void>;
+  allowApprovalForRun(request: PendingEffectCommitmentRequest): Promise<void>;
   closeActiveOverlay(cancelled: boolean): void;
   openPagerOverlay(target: PagerTarget, options?: { scrollOffset?: number }): void;
   getExternalPagerTarget(): PagerTarget | undefined;
@@ -47,6 +49,10 @@ export class ShellOperatorOverlayHandler {
       }
       if (key === "a") {
         await this.decideApproval(item.requestId, "accept");
+        return true;
+      }
+      if (key === "w") {
+        await this.allowApprovalForRun(item);
         return true;
       }
       if (key === "r") {
@@ -198,6 +204,13 @@ export class ShellOperatorOverlayHandler {
       `${decision === "accept" ? "Allowed" : "Denied"} ${requestId}.`,
       decision === "accept" ? "info" : "warning",
     );
+    this.context.closeActiveOverlay(false);
+    await this.context.refreshOperatorSnapshot();
+  }
+
+  private async allowApprovalForRun(request: PendingEffectCommitmentRequest): Promise<void> {
+    await this.context.allowApprovalForRun(request);
+    this.context.notify(`Always allowing ${request.toolName} for this run.`, "info");
     this.context.closeActiveOverlay(false);
     await this.context.refreshOperatorSnapshot();
   }

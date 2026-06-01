@@ -164,6 +164,7 @@ describe("hosted runtime event query", () => {
         toolCallId: "call-exec",
         boundary: "effectful",
         effects: ["local_exec"],
+        argsSummary: "command=echo hello",
       },
     ]);
 

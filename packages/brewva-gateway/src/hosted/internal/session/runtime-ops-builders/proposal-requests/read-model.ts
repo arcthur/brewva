@@ -6,6 +6,7 @@ import type { HostedRuntimeOpsContext } from "../../runtime-ops-context.js";
 
 export type ApprovalRequestRow = EffectCommitmentRequestRecord & PendingEffectCommitmentRequest;
 type RequestState = ApprovalRequestRow["state"];
+const ARG_SUMMARY_MAX_LENGTH = 240;
 
 function readObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -21,6 +22,54 @@ function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string")
     : [];
+}
+
+function formatArgsSummaryValue(value: string): string | undefined {
+  const normalized = value.trim().replaceAll(/\s+/g, " ");
+  if (normalized.length === 0) {
+    return undefined;
+  }
+  return normalized.length > ARG_SUMMARY_MAX_LENGTH
+    ? `${normalized.slice(0, ARG_SUMMARY_MAX_LENGTH)}...`
+    : normalized;
+}
+
+function readNamedStringArg(
+  args: Record<string, unknown>,
+  names: readonly string[],
+): string | undefined {
+  for (const name of names) {
+    const value = formatArgsSummaryValue(readString(args[name]) ?? "");
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function formatApprovalArgsSummary(input: {
+  toolName: string;
+  args: Record<string, unknown>;
+  fallbackReason?: string;
+}): string | undefined {
+  if (input.toolName === "exec") {
+    const command = readNamedStringArg(input.args, ["command"]);
+    if (command) {
+      return `command=${command}`;
+    }
+  }
+
+  const path = readNamedStringArg(input.args, ["path", "filePath", "file_path", "targetPath"]);
+  if (path) {
+    return `path=${path}`;
+  }
+
+  const query = readNamedStringArg(input.args, ["query", "pattern"]);
+  if (query) {
+    return `query=${query}`;
+  }
+
+  return input.fallbackReason;
 }
 
 function proposalIdForRequest(input: {
@@ -77,6 +126,7 @@ function buildApprovalRequests(
   sessionId: string,
 ): ApprovalRequestRow[] {
   const proposedByToolCallId = new Map<string, string>();
+  const proposedCallsByToolCallId = new Map<string, Record<string, unknown>>();
   const rows = new Map<string, ApprovalRequestRow>();
   for (const event of ctx.listEvents(sessionId)) {
     const payload = readObject(event.payload);
@@ -86,6 +136,7 @@ function buildApprovalRequests(
       const toolCallId = readString(call.toolCallId);
       if (commitmentId && toolCallId) {
         proposedByToolCallId.set(toolCallId, commitmentId);
+        proposedCallsByToolCallId.set(toolCallId, call);
       }
       continue;
     }
@@ -97,6 +148,12 @@ function buildApprovalRequests(
       const authority = readObject(payload.authority);
       const toolName = readString(payload.toolName) ?? "unknown";
       const toolCallId = readString(payload.toolCallId);
+      const proposedCall = toolCallId ? proposedCallsByToolCallId.get(toolCallId) : undefined;
+      const argsSummary = formatApprovalArgsSummary({
+        toolName,
+        args: readObject(proposedCall?.args),
+        fallbackReason: readString(payload.reason),
+      });
       const proposalId = proposalIdForRequest({
         sessionId,
         turnId: readString(payload.turnId) ?? readString(event.turnId),
@@ -117,7 +174,7 @@ function buildApprovalRequests(
         evidenceRefs: [],
         ...(typeof event.turn === "number" ? { turn: event.turn } : {}),
         defaultRisk: readString(authority.riskLevel),
-        argsSummary: readString(payload.reason),
+        ...(argsSummary ? { argsSummary } : {}),
         argsDigest: readString(payload.id),
       });
       continue;

@@ -1420,10 +1420,19 @@ describe("opentui solid shell runtime: layout contract", () => {
         "Every code-changing action gets a reason, a receipt, and a recovery path.",
       );
       expect(frame).toContain("Allow once");
+      expect(frame).toContain("Always allow");
       expect(frame).toContain("Deny");
-      expect(frame).toContain("Summary: path=/tmp/output.ts");
+      expect(frame).toContain("[A] Allow once");
+      expect(frame).toContain("[W] Always allow");
+      expect(frame).toContain("[R] Deny");
+      expect(frame).toContain("Enter/A allow once | W always allow | R deny | Esc close");
+      expect(frame).toContain("Request: path=/tmp/output.ts");
       expect(frame).toContain("Tool: write");
-      expect(frame).toContain("Boundary: effectful");
+      expect(frame).toContain("Effects: workspace_write");
+      expect(frame).not.toContain("Boundary:");
+      expect(frame).not.toContain("Admission:");
+      expect(frame).not.toContain("Receipt:");
+      expect(frame).not.toContain("Recovery:");
       expect(frame).not.toContain("safety=authorize");
     } finally {
       runtime.dispose();

@@ -20,6 +20,7 @@ import type {
   SessionPhase,
 } from "@brewva/brewva-substrate/session";
 import { formatGoalUsage, type GoalCommand } from "@brewva/brewva-vocabulary/goal";
+import type { PendingEffectCommitmentRequest } from "@brewva/brewva-vocabulary/iteration";
 import { decideContinuationAnchorRelevance } from "@brewva/brewva-vocabulary/session";
 import {
   listPersistedPatchSets,
@@ -89,6 +90,7 @@ import {
 import { ShellOverlayLifecycleHandler } from "../overlays/lifecycle.js";
 import { createShellConfigPort } from "../ports/config-adapter.js";
 import { createOperatorSurfacePort } from "../ports/operator-adapter.js";
+import type { OperatorSurfacePort } from "../ports/operator-port.js";
 import { createCliShellPromptStore, createSessionViewPort } from "../ports/session-adapter.js";
 import type { CliShellSessionBundle, SessionViewPort } from "../ports/session-port.js";
 import { createCliShellUiPortController } from "../ports/ui-adapter.js";
@@ -138,6 +140,7 @@ export interface CliShellRuntimeOptions {
 const execFileAsync = promisify(execFile);
 const GIT_EVIDENCE_SECTION_MAX_LINES = 5_000;
 const GIT_EVIDENCE_SECTION_MAX_CHARS = 200_000;
+const RUN_APPROVAL_REASON = "always_allow_for_current_run";
 
 function isShellKeymapInput(
   input: ShellInput,
@@ -197,6 +200,11 @@ function trimProcessOutput(value: unknown): string {
 
 function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function runApprovalAllowKey(request: PendingEffectCommitmentRequest): string {
+  const effects = [...new Set(request.effects ?? [])].toSorted().join(",");
+  return [request.toolName, request.boundary, effects].join("\u001f");
 }
 
 function formatBoundedGitOutput(text: string, emptyMessage: string): string[] {
@@ -334,7 +342,8 @@ export class CliShellRuntime {
   #cockpitSync: ShellCockpitSync;
   readonly #listeners = new Set<() => void>();
   readonly #uiController;
-  readonly #operatorPort;
+  readonly #operatorPort: OperatorSurfacePort;
+  readonly #runApprovalAllowKeys = new Set<string>();
   #store: CliShellRuntimeState = createShellRuntimeState();
   #bundle: CliShellSessionBundle;
   #sessionPort: SessionViewPort;
@@ -393,11 +402,16 @@ export class CliShellRuntime {
     });
     this.#sessionPort = createSessionViewPort(bundle);
     const promptStore = options.promptStore ?? createCliShellPromptStore();
-    this.#operatorPort = createOperatorSurfacePort({
+    const operatorPort = createOperatorSurfacePort({
       getSessionBundle: () => this.#bundle,
       openSession: (sessionId) => options.openSession(sessionId),
       createSession: () => options.createSession(),
     });
+    this.#operatorPort = {
+      ...operatorPort,
+      getSnapshot: async () =>
+        this.applyRunApprovalAllowList(await operatorPort.getSnapshot(), operatorPort),
+    };
     registerShellCommands(this.#commandProvider, { cwd: options.cwd, loadFileCommands: true });
     const commandKeymapBindings = this.#commandProvider.keymapCommandBindings();
     const knownKeymapIds = new Set([
@@ -505,6 +519,7 @@ export class CliShellRuntime {
       commit: (action, commitOptions) => this.commit(action, commitOptions),
       runShellEffects: (effects) => this.runShellEffects(effects),
       refreshOperatorSnapshot: () => this.refreshOperatorSnapshotEffect(),
+      allowApprovalForRun: (request) => this.allowApprovalForRun(request),
       closeActiveOverlay: (cancelled) => this.#overlayHandler.closeActiveOverlay(cancelled),
       openPagerOverlay: (target, pagerOptions) =>
         this.#overlayHandler.openPagerOverlay(target, pagerOptions),
@@ -763,6 +778,46 @@ export class CliShellRuntime {
       },
     ]);
     await this.refreshOperatorSnapshotEffect();
+  }
+
+  private async allowApprovalForRun(request: PendingEffectCommitmentRequest): Promise<void> {
+    const key = runApprovalAllowKey(request);
+    const alreadyAllowed = this.#runApprovalAllowKeys.has(key);
+    this.#runApprovalAllowKeys.add(key);
+    try {
+      await this.#operatorPort.decideApproval(request.requestId, {
+        decision: "accept",
+        actor: "brewva-cli",
+        reason: RUN_APPROVAL_REASON,
+      });
+    } catch (error) {
+      if (!alreadyAllowed) {
+        this.#runApprovalAllowKeys.delete(key);
+      }
+      throw error;
+    }
+  }
+
+  private async applyRunApprovalAllowList(
+    snapshot: OperatorSurfaceSnapshot,
+    operatorPort: OperatorSurfacePort,
+  ): Promise<OperatorSurfaceSnapshot> {
+    const allowedApprovals = snapshot.approvals.filter((approval) =>
+      this.#runApprovalAllowKeys.has(runApprovalAllowKey(approval)),
+    );
+    if (allowedApprovals.length === 0) {
+      return snapshot;
+    }
+
+    for (const approval of allowedApprovals) {
+      await operatorPort.decideApproval(approval.requestId, {
+        decision: "accept",
+        actor: "brewva-cli",
+        reason: RUN_APPROVAL_REASON,
+      });
+    }
+
+    return await operatorPort.getSnapshot();
   }
 
   prefillQuestionAnswer(questionId: string): void {

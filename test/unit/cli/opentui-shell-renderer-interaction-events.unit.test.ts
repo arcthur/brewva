@@ -6,6 +6,10 @@ import type {
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import type {
+  DecideEffectCommitmentInput,
+  PendingEffectCommitmentRequest,
+} from "@brewva/brewva-vocabulary/iteration";
 import type { BrewvaReplaySession, SkillDocument } from "@brewva/brewva-vocabulary/session";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { parseKeypress, type ParsedKey } from "@opentui/core";
@@ -395,6 +399,8 @@ function createFakeBundle(
     replaySessions?: BrewvaReplaySession[];
     sessionWireBySessionId?: Record<string, SessionWireFrame[]>;
     toolDefinitions?: Map<string, BrewvaToolDefinition>;
+    approvalRequests?: PendingEffectCommitmentRequest[];
+    onApprovalDecision?: (requestId: string, input: DecideEffectCommitmentInput) => void;
     providers?: ProviderConnectionDescriptor[];
     authMethods?: Record<string, ProviderAuthMethod[]>;
     authorizeOAuth?: (
@@ -412,19 +418,21 @@ function createFakeBundle(
   let attachedUi: BrewvaToolUiPort | undefined;
   let sessionListener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
   let queuedPrompts = [...(options.queuedPrompts ?? [])];
-  const approvals = Array.from({ length: options.approvals ?? 0 }, (_, index) => ({
-    requestId: `approval-${index + 1}`,
-    proposalId: `proposal-${index + 1}`,
-    toolName: "write_file",
-    toolCallId: `tool-call-${index + 1}`,
-    subject: `write file ${index + 1}`,
-    boundary: "effectful",
-    effects: ["workspace_write"],
-    argsDigest: `digest-${index + 1}`,
-    evidenceRefs: [],
-    turn: index + 1,
-    createdAt: Date.now(),
-  }));
+  let approvals =
+    options.approvalRequests ??
+    Array.from({ length: options.approvals ?? 0 }, (_, index) => ({
+      requestId: `approval-${index + 1}`,
+      proposalId: `proposal-${index + 1}`,
+      toolName: "write_file",
+      toolCallId: `tool-call-${index + 1}`,
+      subject: `write file ${index + 1}`,
+      boundary: "effectful",
+      effects: ["workspace_write"],
+      argsDigest: `digest-${index + 1}`,
+      evidenceRefs: [],
+      turn: index + 1,
+      createdAt: Date.now(),
+    }));
   const sessionId = options.sessionId ?? "session-1";
   const modelKey = (model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">) =>
     `${model.provider}/${model.id}`;
@@ -602,7 +610,10 @@ function createFakeBundle(
         },
         proposals: {
           requests: {
-            decide() {},
+            decide(_sessionId: string, requestId: string, input: DecideEffectCommitmentInput) {
+              options.onApprovalDecision?.(requestId, input);
+              approvals = approvals.filter((approval) => approval.requestId !== requestId);
+            },
             listPending() {
               return approvals;
             },
@@ -669,6 +680,9 @@ function createFakeBundle(
   return {
     bundle,
     getAttachedUi: () => attachedUi,
+    setApprovalRequests(nextApprovals: PendingEffectCommitmentRequest[]) {
+      approvals = nextApprovals;
+    },
     emitSessionEvent(event: BrewvaPromptSessionEvent) {
       sessionListener?.(event);
     },
@@ -1053,6 +1067,101 @@ describe("opentui solid shell runtime: interaction events", () => {
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
+    }
+  });
+
+  test("always allow accepts current and future approvals for the same tool in this runtime", async () => {
+    const decisions: { requestId: string; input: DecideEffectCommitmentInput }[] = [];
+    const now = Date.now();
+    const fake = createFakeBundle({
+      approvalRequests: [
+        {
+          requestId: "approval-exec-1",
+          proposalId: "proposal-exec-1",
+          toolName: "exec",
+          toolCallId: "tool-call-exec-1",
+          subject: "exec",
+          boundary: "effectful",
+          effects: ["local_exec"],
+          argsDigest: "digest-exec-1",
+          argsSummary: "command=echo first",
+          evidenceRefs: [],
+          turn: 1,
+          createdAt: now,
+        },
+      ],
+      onApprovalDecision(requestId, input) {
+        decisions.push({ requestId, input });
+      },
+    });
+    const { bundle } = fake;
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    try {
+      expect(runtime.getViewState().overlay.active?.kind).toBe("approval");
+
+      await runtime.handleInput({
+        key: "character",
+        text: "w",
+        ctrl: false,
+        meta: false,
+        shift: false,
+      });
+
+      fake.setApprovalRequests([
+        {
+          requestId: "approval-exec-2",
+          proposalId: "proposal-exec-2",
+          toolName: "exec",
+          toolCallId: "tool-call-exec-2",
+          subject: "exec",
+          boundary: "effectful",
+          effects: ["local_exec"],
+          argsDigest: "digest-exec-2",
+          argsSummary: "command=echo second",
+          evidenceRefs: [],
+          turn: 2,
+          createdAt: now + 1,
+        },
+        {
+          requestId: "approval-write-1",
+          proposalId: "proposal-write-1",
+          toolName: "write",
+          toolCallId: "tool-call-write-1",
+          subject: "write",
+          boundary: "effectful",
+          effects: ["workspace_write"],
+          argsDigest: "digest-write-1",
+          argsSummary: "path=/tmp/output.ts",
+          evidenceRefs: [],
+          turn: 3,
+          createdAt: now + 2,
+        },
+      ]);
+
+      await (
+        runtime as unknown as {
+          handleShellIntent(intent: { type: "operator.refresh" }): Promise<boolean>;
+        }
+      ).handleShellIntent({ type: "operator.refresh" });
+
+      expect(decisions.map((decision) => decision.requestId)).toEqual([
+        "approval-exec-1",
+        "approval-exec-2",
+      ]);
+      expect(decisions.map((decision) => decision.input.decision)).toEqual(["accept", "accept"]);
+      expect(runtime.getOperatorSnapshot().approvals.map((approval) => approval.requestId)).toEqual(
+        ["approval-write-1"],
+      );
+    } finally {
+      runtime.dispose();
     }
   });
 
