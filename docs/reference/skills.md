@@ -84,6 +84,9 @@ Skill taxonomy is split by role:
 Runtime/control-plane workflow semantics are not public skills. Verification,
 finishing, recovery, and distribution behavior belong to runtime or operator
 surfaces unless a skill explicitly owns a semantic work contract.
+The `goal-loop` skill remains an advisory loop pattern for bounded improvement;
+it does not own `/goal` lifecycle state, budgets, continuation queues, or tool
+visibility.
 
 ## SkillCard Semantics
 

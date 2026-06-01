@@ -125,6 +125,14 @@ const builtInShellCommands: readonly ShellCommand[] = [
     slash: { name: "export" },
   },
   {
+    id: "session.goal",
+    title: "Goal",
+    description: "Start, inspect, pause, resume, or clear the active Brewva goal.",
+    category: "Session",
+    slash: { name: "goal", argumentMode: "optional" },
+    suggested: true,
+  },
+  {
     id: "session.handoff",
     title: "Create handoff",
     description:

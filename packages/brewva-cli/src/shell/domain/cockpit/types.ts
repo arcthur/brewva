@@ -295,6 +295,15 @@ export interface ShellCockpitCurrentWorkCard {
   readonly pinned: boolean;
   readonly summary: {
     readonly goal: string | null;
+    readonly persistentGoal?: {
+      readonly objective: string | null;
+      readonly status: string | null;
+      readonly tokensUsed: number;
+      readonly tokenBudget: number | null;
+      readonly latestContinuationRef: string | null;
+      readonly latestCompletionEvidenceRef: string | null;
+      readonly latestBlockEvidenceRef: string | null;
+    };
     readonly phase: string | null;
     readonly health: string | null;
     readonly contextPressure: TaskWorkCardProjection["context"]["pressure"];

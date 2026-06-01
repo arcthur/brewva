@@ -29,7 +29,18 @@ run stays `completed`; `worker_results_apply` moves its card to `prepared`,
 - ledger, observability, cost, and iteration-fact inspection
 - rollback-last-patch
 - reasoning checkpoint and revert
+- active goal state read/update
 - workflow status
+
+## Goal Control
+
+`get_goal` and `update_goal` are model-facing control-plane tools for the
+built-in `/goal` lifecycle. They are not task-ledger tools and do not mutate
+`TaskSpec.goal`. `update_goal` can mark an active goal `complete`; `blocked`
+requires a reason, evidence, and the runtime's three-observation blocker gate.
+The tools are hidden whenever no active goal exists. Goal usage is charged from
+queued continuation turns, not from unrelated user turns that happen while a goal
+is active.
 
 ## Scheduling
 

@@ -71,6 +71,15 @@ describe("channel command router", () => {
       top: 3,
       details: undefined,
     });
+    expect(router.match("/goal @jack --tokens 3000 finish rollout")).toEqual({
+      kind: "goal",
+      agentId: "jack",
+      command: {
+        kind: "start",
+        objective: "finish rollout",
+        tokenBudget: 3000,
+      },
+    });
     expect(router.match("/status dir=src/runtime top=7")).toEqual({
       kind: "status",
       agentId: undefined,
@@ -169,7 +178,7 @@ describe("channel command router", () => {
     expect(router.match("/unknown")).toEqual({
       kind: "error",
       message:
-        "Unknown command. Use /status, /steer, /answer, /agents, /agent, /focus, /run, or /discuss.",
+        "Unknown command. Use /status, /goal, /steer, /answer, /agents, /agent, /focus, /run, or /discuss.",
     });
     expect(router.match("/steer @jack stay focused")).toEqual({
       kind: "steer",

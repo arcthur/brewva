@@ -118,6 +118,24 @@ function createAclRouterFixture() {
   };
 }
 
+function createLiveSessionFixture(runtime = createRuntimeFixture()) {
+  const prompts: Array<{ text: string; source?: string }> = [];
+  return {
+    scopeKey: "scope-1",
+    agentId: "worker",
+    agentSessionId: "worker-session",
+    runtime,
+    operatorRuntime: runtime,
+    getCostSummary: () => runtime.ops.cost.summary.get("worker-session"),
+    subscribe: () => () => undefined,
+    prompt: async (parts: Array<{ type: "text"; text: string }>, options?: { source?: string }) => {
+      prompts.push({ text: parts.map((part) => part.text).join("\n"), source: options?.source });
+    },
+    steer: async () => ({ status: "no_active_run" as const }),
+    prompts,
+  };
+}
+
 describe("channel control router ownership", () => {
   test("given an agents command, when handleCommand runs, then the router replies through the controller writer without touching the model path", async () => {
     const replies: string[] = [];
@@ -164,6 +182,76 @@ describe("channel control router ownership", () => {
 
     expect(result).toEqual({ handled: true });
     expect(replies).toEqual(["active agents snapshot"]);
+  });
+
+  test("given a goal command, when the owner is authorized, then the router applies it to the focused live agent session", async () => {
+    const replies: Array<{ text: string; meta?: Record<string, unknown> }> = [];
+    const runtime = createRuntimeFixture();
+    const liveSession = createLiveSessionFixture(runtime);
+    const router = createChannelControlRouter({
+      runtime,
+      registry: {
+        resolveFocus: () => "worker",
+        isActive: () => true,
+      } as never,
+      orchestrationConfig: {
+        enabled: true,
+        owners: { telegram: ["@owner"] },
+        aclModeWhenOwnersEmpty: "closed",
+      } as never,
+      replyWriter: {
+        sendControllerReply: async (_turn, _scopeKey, text, meta) => {
+          replies.push({ text, meta });
+        },
+        sendAgentOutputs: async () => 0,
+      },
+      coordinator: {
+        fanOut: async () => ({ ok: true, results: [] }),
+        discuss: async () => ({ ok: true, rounds: [], stoppedEarly: false }),
+      },
+      renderAgentsSnapshot: () => "active agents snapshot",
+      openLiveSession: () => liveSession,
+      resolveQuestionSurface: async () => undefined,
+      cleanupAgentSessions: async () => undefined,
+      disposeAgentRuntime: () => true,
+      updateLock: createChannelUpdateLockManager({
+        updateExecutionScope: {
+          lockKey: "workspace-update",
+          lockTarget: "workspace",
+        },
+      }),
+      updateExecutionScope: {
+        lockKey: "workspace-update",
+        lockTarget: "workspace",
+      },
+    });
+
+    const result = await router.handleCommand(
+      {
+        kind: "goal",
+        command: { kind: "start", objective: "ship channel goal", tokenBudget: 500 },
+      },
+      createUserTurn("/goal ship channel goal", { senderUsername: "owner" }),
+      "scope-1",
+    );
+
+    expect(result).toEqual({ handled: true });
+    expect(runtime.ops.goal.state.get("worker-session")).toMatchObject({
+      objective: "ship channel goal",
+      tokenBudget: 500,
+      status: "active",
+    });
+    expect(liveSession.prompts[0]).toMatchObject({
+      source: "channel",
+    });
+    expect(liveSession.prompts[0]?.text).toContain("ship channel goal");
+    expect(replies[0]).toMatchObject({
+      meta: {
+        command: "goal",
+        agentId: "worker",
+        status: "active",
+      },
+    });
   });
 
   test("given a status command, when component handlers return structured meta, then the router preserves section meta in the status reply", async () => {
@@ -401,6 +489,14 @@ describe("channel control router ownership", () => {
         agentIds: ["worker", "worker-2"],
         topic: "design this",
         maxRounds: 2,
+      },
+      {
+        kind: "goal",
+        command: {
+          kind: "start",
+          objective: "should be denied",
+          tokenBudget: null,
+        },
       },
       { kind: "agent-create", agentId: "worker-2", model: "openai/gpt-5.3-codex" },
       { kind: "agent-delete", agentId: "worker-2" },

@@ -231,6 +231,17 @@ interface InspectReport {
     blockers: number;
     updatedAt: string | null;
   };
+  goalControl: {
+    objective: string | null;
+    status: string | null;
+    tokenBudget: number | null;
+    tokensUsed: number;
+    elapsedMs: number;
+    lastLifecycleEvent: string | null;
+    latestContinuationRef: string | null;
+    latestCompletionEvidenceRef: string | null;
+    latestBlockEvidenceRef: string | null;
+  };
   claim: {
     totalClaims: number;
     activeClaims: number;
@@ -697,6 +708,7 @@ function buildInspectReport(
   const taskEvents = eventsByType.get(TASK_EVENT_TYPE) ?? [];
   const claimEvents = eventsByType.get(CLAIM_EVENT_TYPE) ?? [];
   const taskState = foldTaskLedgerEvents(taskEvents);
+  const goalControlState = runtime.ops.goal.state.get(sessionId);
   const claimState = foldClaimLedgerEvents(claimEvents);
   const tapeStatus = getCliRuntimeTapeStatus(runtime, sessionId);
   const hydration = getCliRuntimeLifecycleHydration(runtime, sessionId);
@@ -956,6 +968,17 @@ function buildInspectReport(
       items: taskState.items.length,
       blockers: taskState.blockers.length,
       updatedAt: toIso(taskState.updatedAt),
+    },
+    goalControl: {
+      objective: goalControlState?.objective ?? null,
+      status: goalControlState?.status ?? null,
+      tokenBudget: goalControlState?.tokenBudget ?? null,
+      tokensUsed: goalControlState?.usage.tokens ?? 0,
+      elapsedMs: goalControlState?.usage.elapsedMs ?? 0,
+      lastLifecycleEvent: goalControlState?.lastLifecycleEvent ?? null,
+      latestContinuationRef: goalControlState?.latestContinuationRef ?? null,
+      latestCompletionEvidenceRef: goalControlState?.latestCompletionEvidenceRef ?? null,
+      latestBlockEvidenceRef: goalControlState?.latestBlockEvidenceRef ?? null,
     },
     claim: {
       totalClaims: claimState.claims.length,

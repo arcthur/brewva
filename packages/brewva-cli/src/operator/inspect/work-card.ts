@@ -45,6 +45,17 @@ export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCard
       taskItemCount: report.task.items,
       blockerCount: report.task.blockers,
     },
+    persistentGoal: {
+      objective: report.goalControl.objective,
+      status: report.goalControl.status,
+      tokenBudget: report.goalControl.tokenBudget,
+      tokensUsed: report.goalControl.tokensUsed,
+      elapsedMs: report.goalControl.elapsedMs,
+      lastLifecycleEvent: report.goalControl.lastLifecycleEvent,
+      latestContinuationRef: report.goalControl.latestContinuationRef,
+      latestCompletionEvidenceRef: report.goalControl.latestCompletionEvidenceRef,
+      latestBlockEvidenceRef: report.goalControl.latestBlockEvidenceRef,
+    },
     context: {
       pressure: resolveContextPressure(report),
       workbenchEntryCount: report.contextCockpit.workbench.activeCount,
@@ -116,6 +127,7 @@ export function formatTaskWorkCardText(
   const lines = [
     `Work Card: schema=${projection.schema} session=${projection.sessionId}`,
     `Goal: ${projection.goal.current ?? "n/a"} phase=${projection.goal.phase ?? "n/a"} health=${projection.goal.health ?? "n/a"} refs=${renderList(projection.goal.targetRoots)}`,
+    `Goal control: ${projection.persistentGoal?.objective ?? "n/a"} status=${projection.persistentGoal?.status ?? "none"} tokens=${projection.persistentGoal?.tokensUsed ?? 0}${projection.persistentGoal?.tokenBudget === null || projection.persistentGoal?.tokenBudget === undefined ? "" : `/${projection.persistentGoal.tokenBudget}`}`,
     `Context: pressure=${projection.context.pressure} workbench=${projection.context.workbenchEntryCount} skills=${projection.context.skillInvocationRefs.length} recall=${projection.context.recallResultRefs.length} baseline=${projection.context.compactBaselineRef ?? "none"}`,
     `Options: generated=${projection.options.generatedCount} consumed=${projection.options.consumedRefs.length} pinned=${projection.options.pinnedRefs.length} ignored=${projection.options.ignoredRefs.length} verifyPlans=${projection.options.verifyPlanRefs.length}`,
     `Authority: capabilities=${renderList(projection.authority.selectedCapabilities)} pendingAsks=${projection.authority.pendingAskCount} denials=${projection.authority.denialCount} receipts=${renderList(projection.authority.capabilityReceiptRefs)}`,

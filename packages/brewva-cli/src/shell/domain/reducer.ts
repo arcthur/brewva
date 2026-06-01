@@ -1,3 +1,4 @@
+import { parseGoalCommand } from "@brewva/brewva-vocabulary/goal";
 import type { ShellAction, ShellRuntimeResult } from "./actions.js";
 import type { SessionHandoffDraft, ShellEffect } from "./effects.js";
 import type { ShellIntent } from "./intent.js";
@@ -137,6 +138,20 @@ function updateCommandIntent(
       return handled({ effects: [{ type: "transcript.copyLatestAnswer" }] });
     case "session.export":
       return handled({ effects: [{ type: "session.exportBundle" }] });
+    case "session.goal": {
+      const result = parseGoalCommand(intent.args);
+      return result.ok
+        ? handled({ effects: [{ type: "session.goal", command: result.command }] })
+        : handled({
+            effects: [
+              {
+                type: "notification.show",
+                message: result.error,
+                level: "warning",
+              },
+            ],
+          });
+    }
     case "session.handoff":
       return handled({
         effects: [{ type: "session.handoff", handoff: parseSessionHandoffDraft(intent.args) }],

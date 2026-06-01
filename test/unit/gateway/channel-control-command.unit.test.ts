@@ -1,7 +1,29 @@
 import { describe, expect, test } from "bun:test";
+import { CommandRouter } from "../../../packages/brewva-gateway/src/channels/command/parser.js";
 import { resolveChannelControlCommand } from "../../../packages/brewva-gateway/src/channels/control-command.js";
 
 describe("channel control command seam", () => {
+  test("parses channel goal commands with optional target agent", () => {
+    const router = new CommandRouter();
+
+    expect(router.match("/goal @agent-b --tokens 20k ship channel parity")).toEqual({
+      kind: "goal",
+      agentId: "agent-b",
+      command: {
+        kind: "start",
+        objective: "ship channel parity",
+        tokenBudget: 20_000,
+      },
+    });
+    expect(router.match("/goal @agent-b status")).toEqual({
+      kind: "goal",
+      agentId: "agent-b",
+      command: {
+        kind: "status",
+      },
+    });
+  });
+
   test("maps route-agent match into a typed control command", () => {
     expect(
       resolveChannelControlCommand(
@@ -41,6 +63,32 @@ describe("channel control command seam", () => {
       directory: "/tmp/demo",
       top: 3,
       details: true,
+    });
+  });
+
+  test("maps goal match into a typed control command with target agent and shared grammar", () => {
+    expect(
+      resolveChannelControlCommand(
+        {
+          kind: "goal",
+          agentId: "agent-b",
+          command: {
+            kind: "start",
+            objective: "ship channel parity",
+            tokenBudget: 20_000,
+          },
+        },
+        "scope-2",
+      ),
+    ).toEqual({
+      kind: "goal",
+      scopeKey: "scope-2",
+      targetAgentId: "agent-b",
+      command: {
+        kind: "start",
+        objective: "ship channel parity",
+        tokenBudget: 20_000,
+      },
     });
   });
 

@@ -45,6 +45,7 @@ runtime, product, and session contracts.
 - [`rfc-substrate-domain-slicing-and-agent-engine-removal.md`](./rfc-substrate-domain-slicing-and-agent-engine-removal.md)
 - [`rfc-deliberation-home-and-compounding-intelligence.md`](./rfc-deliberation-home-and-compounding-intelligence.md)
 - [`rfc-effect-governance-and-contract-vnext.md`](./rfc-effect-governance-and-contract-vnext.md)
+- [`rfc-goal-control-plane.md`](./rfc-goal-control-plane.md)
 - [`rfc-invocation-spine-and-posture-runtime-vnext.md`](./rfc-invocation-spine-and-posture-runtime-vnext.md)
 - [`rfc-runtime-decomposition-and-deliberation-thickening.md`](./rfc-runtime-decomposition-and-deliberation-thickening.md)
 - [`rfc-session-wire-v2-attempt-scoped-live-tool-frames.md`](./rfc-session-wire-v2-attempt-scoped-live-tool-frames.md)

@@ -5,6 +5,7 @@ import { buildContextRuntimeOps } from "./runtime-ops-builders/context.js";
 import { buildCostRuntimeOps } from "./runtime-ops-builders/cost.js";
 import { buildDelegationRuntimeOps } from "./runtime-ops-builders/delegation.js";
 import { buildEventsRuntimeOps } from "./runtime-ops-builders/events.js";
+import { buildGoalRuntimeOps } from "./runtime-ops-builders/goal.js";
 import { buildLedgerRuntimeOps } from "./runtime-ops-builders/ledger.js";
 import { buildLifecycleRuntimeOps } from "./runtime-ops-builders/lifecycle.js";
 import { buildProposalsRuntimeOps } from "./runtime-ops-builders/proposals.js";
@@ -28,6 +29,7 @@ export const HOSTED_RUNTIME_OPS_NAMESPACE_LABELS = {
   cost: "A",
   delegation: "C",
   events: "A",
+  goal: "B",
   ledger: "B",
   lifecycle: "A",
   proposals: "B",
@@ -56,6 +58,7 @@ export function createHostedRuntimeOps(options: {
   const ctx = createHostedRuntimeOpsContext(options);
   const ops: HostedRuntimeOpsPort = {
     events: buildEventsRuntimeOps(ctx),
+    goal: buildGoalRuntimeOps(ctx),
     cost: buildCostRuntimeOps(ctx),
     task: buildTaskRuntimeOps(ctx),
     claim: buildClaimRuntimeOps(ctx),

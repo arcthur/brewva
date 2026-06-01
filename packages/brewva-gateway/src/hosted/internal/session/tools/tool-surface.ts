@@ -63,6 +63,11 @@ export interface ToolSurfaceRuntime {
         recordResolved(sessionId: string, payload: object): unknown;
       };
     };
+    goal: {
+      state: {
+        get(sessionId: string): { readonly status?: string } | null;
+      };
+    };
   };
 }
 
@@ -148,6 +153,10 @@ function isOperatorTool(toolName: string): boolean {
   return getBrewvaToolSurface(toolName) === "operator";
 }
 
+function isGoalTool(toolName: string): boolean {
+  return toolName === "get_goal" || toolName === "update_goal";
+}
+
 function resolveToolActionClass(input: {
   toolName: string;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
@@ -179,11 +188,15 @@ function shouldExposeManagedTool(input: {
   toolName: string;
   operatorProfile: boolean;
   hasUI: boolean;
+  goalActive: boolean;
   actionClass?: ToolActionClass;
   selectedCapabilityReceipt?: CapabilitySelectionReceipt;
   capabilityManifests: readonly CapabilityManifest[];
 }): boolean {
   if (!input.hasUI && toolRequiresInteractiveUi(input.toolName)) {
+    return false;
+  }
+  if (isGoalTool(input.toolName) && !input.goalActive) {
     return false;
   }
   const capabilityAccess = resolveCapabilityAccessForTool({
@@ -239,6 +252,7 @@ function registerMissingManagedTools(input: {
   knownToolNames: Set<string>;
   operatorProfile: boolean;
   hasUI: boolean;
+  goalActive: boolean;
   selectedCapabilityReceipt?: CapabilitySelectionReceipt;
   capabilityManifests: readonly CapabilityManifest[];
 }): void {
@@ -257,6 +271,7 @@ function registerMissingManagedTools(input: {
         toolName,
         operatorProfile: input.operatorProfile,
         hasUI: input.hasUI,
+        goalActive: input.goalActive,
         actionClass: resolveToolActionClass({
           toolName,
           dynamicToolDefinitions: input.dynamicToolDefinitions,
@@ -296,6 +311,7 @@ function resolveAndActivateToolSurface(input: {
   }
 
   const operatorProfile = isOperatorProfile(input.runtime);
+  const goalActive = input.runtime.ops.goal.state.get(input.sessionId)?.status === "active";
   const requestedToolNames = extractRequestedToolNames(input.prompt);
   const requestedToolNameSet = new Set(requestedToolNames);
   const initialTools = allToolsGetter.call(input.extensionApi);
@@ -309,6 +325,7 @@ function resolveAndActivateToolSurface(input: {
     knownToolNames,
     operatorProfile,
     hasUI: input.hasUI,
+    goalActive,
     selectedCapabilityReceipt: input.selectedCapabilityReceipt,
     capabilityManifests: input.capabilityManifests,
   });
@@ -338,6 +355,7 @@ function resolveAndActivateToolSurface(input: {
         toolName,
         operatorProfile,
         hasUI: input.hasUI,
+        goalActive,
         actionClass: resolveToolActionClass({
           toolName,
           dynamicToolDefinitions: input.dynamicToolDefinitions,

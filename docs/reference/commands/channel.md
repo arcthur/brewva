@@ -33,7 +33,13 @@ default channel experience.
 
 When `channels.orchestration.enabled=true`, channel orchestration commands add
 agent list/status, steer, answer, update, create/delete/focus, run, discuss,
-and direct `@agent` task routing.
+goal lifecycle, and direct `@agent` task routing.
+
+`/goal [@agent] ...` uses the same shared parser as the interactive shell:
+`/goal [@agent] [--tokens <count>] <objective>`, `/goal [@agent] status`,
+`pause`, `resume`, and `clear`. The target agent defaults to the current focus.
+Owner ACL matches `/update`. The command mutates the target live session's
+runtime goal ops; it does not create channel-local goal truth.
 
 These commands coordinate live sessions; they do not create hidden planner
 state or a second command authority model.

@@ -1,5 +1,6 @@
 export { createCostViewTool, formatCostViewText } from "./cost-view.js";
 export { createFollowUpTool } from "./follow-up.js";
+export { createGoalTools } from "./goal.js";
 export { createIterationFactTool } from "./iteration-fact.js";
 export { createLedgerQueryTool } from "./ledger-query.js";
 export { createObsQueryTool } from "./observability/obs-query.js";

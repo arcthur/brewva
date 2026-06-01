@@ -840,6 +840,16 @@ function buildCurrentWorkCard(
     pinned: isCockpitPinned(source.observation, workCardRef),
     summary: {
       goal: source.workCard.goal.current,
+      persistentGoal: {
+        objective: source.workCard.persistentGoal?.objective ?? null,
+        status: source.workCard.persistentGoal?.status ?? null,
+        tokensUsed: source.workCard.persistentGoal?.tokensUsed ?? 0,
+        tokenBudget: source.workCard.persistentGoal?.tokenBudget ?? null,
+        latestContinuationRef: source.workCard.persistentGoal?.latestContinuationRef ?? null,
+        latestCompletionEvidenceRef:
+          source.workCard.persistentGoal?.latestCompletionEvidenceRef ?? null,
+        latestBlockEvidenceRef: source.workCard.persistentGoal?.latestBlockEvidenceRef ?? null,
+      },
       phase: source.workCard.goal.phase,
       health: source.workCard.goal.health,
       contextPressure: source.workCard.context.pressure,

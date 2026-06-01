@@ -15,6 +15,11 @@ import type {
   BrewvaStructuredEvent,
 } from "@brewva/brewva-vocabulary/events";
 import type {
+  GoalContinuationPayload,
+  GoalLifecycleInput,
+  GoalState,
+} from "@brewva/brewva-vocabulary/goal";
+import type {
   ActiveReasoningBranchState,
   ClaimState,
   DecideEffectCommitmentInput,
@@ -146,6 +151,7 @@ export const BREWVA_TOOL_RUNTIME_COMMAND_NAMESPACES = [
   "cost",
   "delegation",
   "events",
+  "goal",
   "proposals",
   "reasoning",
   "schedule",
@@ -162,6 +168,7 @@ export const BREWVA_TOOL_RUNTIME_QUERY_NAMESPACES = [
   "context",
   "cost",
   "events",
+  "goal",
   "ledger",
   "lifecycle",
   "proposals",
@@ -183,6 +190,7 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES = [
   "cost",
   "delegation",
   "events",
+  "goal",
   "ledger",
   "lifecycle",
   "proposals",
@@ -232,6 +240,22 @@ export interface WorkerResultsClearInput {
   readonly reason?: string;
 }
 
+export type GoalRuntimeMutationResult =
+  | {
+      readonly ok: true;
+      readonly goal: GoalState | null;
+      readonly eventType: string;
+      readonly eventId: string;
+      readonly count?: number;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly goal?: GoalState | null;
+      readonly count?: number;
+      readonly requiredCount?: number;
+    };
+
 export interface BrewvaToolRuntimeCommandPort {
   readonly claim: {
     readonly facts: {
@@ -260,6 +284,22 @@ export interface BrewvaToolRuntimeCommandPort {
       input: MetricObservationInput,
     ): BrewvaEventRecord | undefined;
     recordGuardResult(sessionId: string, input: GuardResultInput): BrewvaEventRecord | undefined;
+  };
+  readonly goal: {
+    readonly lifecycle: {
+      start(sessionId: string, input: GoalLifecycleInput): GoalRuntimeMutationResult;
+      pause(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
+      resume(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
+      clear(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
+      complete(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
+      block(sessionId: string, input: GoalLifecycleInput): GoalRuntimeMutationResult;
+    };
+    readonly usage: {
+      observe(sessionId: string, input: GoalLifecycleInput): GoalRuntimeMutationResult;
+    };
+    readonly continuation: {
+      recordQueued(sessionId: string, input: GoalContinuationPayload): GoalRuntimeMutationResult;
+    };
   };
   readonly proposals: {
     readonly proposals: {
@@ -592,6 +632,11 @@ export interface BrewvaToolRuntimeQueryPort {
       queryStructured(sessionId: string, query?: BrewvaEventQuery): BrewvaStructuredEvent[];
       subscribe(listener: (event: BrewvaEventRecord) => void): () => void;
       toStructured(event: BrewvaEventRecord): BrewvaStructuredEvent;
+    };
+  };
+  readonly goal: {
+    readonly state: {
+      get(sessionId: string): GoalState | null;
     };
   };
   readonly ledger: {

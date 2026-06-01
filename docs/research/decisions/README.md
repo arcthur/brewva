@@ -65,6 +65,7 @@ Every accepted decision inherits these rules:
 - [model-interface-attention-contract](./model-interface-attention-contract.md)
 - [tools-family-slicing-and-capability-contracts](./tools-family-slicing-and-capability-contracts.md)
 - [workflow-artifacts-and-posture-control-plane](./workflow-artifacts-and-posture-control-plane.md)
+- [goal-control-plane](./goal-control-plane.md)
 
 ### Delegation, Product, And Knowledge
 

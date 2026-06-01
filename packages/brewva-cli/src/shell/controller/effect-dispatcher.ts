@@ -1,3 +1,4 @@
+import type { GoalCommand } from "@brewva/brewva-vocabulary/goal";
 import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
 import type { SessionHandoffDraft, ShellEffect } from "../domain/effects.js";
 import type { CliShellInput } from "../domain/input.js";
@@ -65,6 +66,7 @@ export interface ShellEffectDispatcherContext {
   exportSessionBundle(): Promise<void>;
   exportInspectBundle(): Promise<void>;
   recordSessionHandoff(handoff?: SessionHandoffDraft): Promise<void>;
+  handleGoalCommand(command: GoalCommand): Promise<void>;
   steerSession(effect: Extract<ShellEffect, { type: "session.steer" }>): Promise<void>;
   undoSession(): Promise<void>;
   rewindSession(argument?: string): Promise<void>;
@@ -292,6 +294,9 @@ export async function dispatchShellEffect(
       return;
     case "session.handoff":
       await context.recordSessionHandoff(effect.handoff);
+      return;
+    case "session.goal":
+      await context.handleGoalCommand(effect.command);
       return;
     case "session.steer":
       await context.steerSession(effect);

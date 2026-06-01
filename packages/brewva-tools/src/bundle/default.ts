@@ -42,6 +42,7 @@ import { createDiscoverSkillsTool } from "../families/skills/api.js";
 import {
   createCostViewTool,
   createFollowUpTool,
+  createGoalTools,
   createIterationFactTool,
   createLedgerQueryTool,
   createObsQueryTool,
@@ -100,6 +101,7 @@ export function buildDefaultBundledBrewvaTools(
     createOutputSearchTool({ runtime }),
     createWorkflowStatusTool({ runtime }),
     createFollowUpTool({ runtime }),
+    ...createGoalTools({ runtime }),
     createScheduleIntentTool({ runtime }),
     ...createTapeTools({ runtime }),
     createReasoningCheckpointTool({ runtime }),

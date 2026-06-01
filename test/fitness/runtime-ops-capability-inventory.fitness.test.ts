@@ -22,6 +22,7 @@ const RUNTIME_OPS_BUILDER_FILES = {
   cost: "cost.ts",
   delegation: "delegation.ts",
   events: "events.ts",
+  goal: "goal.ts",
   ledger: "ledger.ts",
   lifecycle: "lifecycle.ts",
   proposals: "proposals.ts",

@@ -8,6 +8,10 @@ import {
   type BoundaryIntervalHandle,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import {
+  enqueueGoalContinuation,
+  recordRuntimeGoalContinuationQueued,
+} from "@brewva/brewva-gateway/hosted";
 import { safeParseJson, type JsonObject } from "@brewva/brewva-std/json";
 import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate/host-api";
 import type {
@@ -15,6 +19,7 @@ import type {
   BrewvaQueuedPromptView,
   SessionPhase,
 } from "@brewva/brewva-substrate/session";
+import { formatGoalUsage, type GoalCommand } from "@brewva/brewva-vocabulary/goal";
 import {
   listPersistedPatchSets,
   resolveSessionPatchHistoryPath,
@@ -1441,6 +1446,7 @@ export class CliShellRuntime {
       exportSessionBundle: () => this.exportSessionBundle(),
       exportInspectBundle: () => this.exportInspectBundle(),
       recordSessionHandoff: (handoff) => this.recordSessionHandoff(handoff),
+      handleGoalCommand: (command) => this.handleGoalCommand(command),
       steerSession: async (steerEffect) => {
         if (steerEffect.sessionGeneration !== this.#sessionGeneration) {
           return;
@@ -2087,6 +2093,70 @@ export class CliShellRuntime {
       return;
     }
     this.ui.notify(`Handoff recorded: ${result.eventId ?? "anchor recorded"}.`, "info");
+  }
+
+  private async handleGoalCommand(command: GoalCommand): Promise<void> {
+    const sessionId = this.#sessionPort.getSessionId();
+    const goalOps = this.#bundle.runtime.ops.goal;
+    if (command.kind === "status") {
+      const goal = goalOps.state.get(sessionId);
+      if (!goal) {
+        this.ui.notify("No active goal is set.", "info");
+        return;
+      }
+      this.ui.notify(
+        `Goal: ${goal.status} · ${formatGoalUsage(goal.usage)} · ${goal.objective}`,
+        "info",
+      );
+      return;
+    }
+    if (command.kind === "pause") {
+      const result = goalOps.lifecycle.pause(sessionId, { reason: "interactive" });
+      this.ui.notify(
+        result.ok ? "Goal paused." : `Goal pause rejected: ${result.reason}`,
+        result.ok ? "info" : "warning",
+      );
+      return;
+    }
+    if (command.kind === "resume") {
+      const result = goalOps.lifecycle.resume(sessionId, { reason: "interactive" });
+      this.ui.notify(
+        result.ok ? "Goal resumed." : `Goal resume rejected: ${result.reason}`,
+        result.ok ? "info" : "warning",
+      );
+      return;
+    }
+    if (command.kind === "clear") {
+      const result = goalOps.lifecycle.clear(sessionId, { reason: "interactive" });
+      this.ui.notify(
+        result.ok ? "Goal cleared." : `Goal clear rejected: ${result.reason}`,
+        result.ok ? "info" : "warning",
+      );
+      return;
+    }
+
+    const result = goalOps.lifecycle.start(sessionId, {
+      objective: command.objective,
+      tokenBudget: command.tokenBudget,
+    });
+    if (!result.ok || !result.goal) {
+      this.ui.notify(
+        `Goal start rejected: ${result.ok ? "missing_goal_state" : result.reason}`,
+        "warning",
+      );
+      return;
+    }
+    await enqueueGoalContinuation({
+      sessionId,
+      goal: result.goal,
+      recordQueued: (targetSessionId, payload) =>
+        recordRuntimeGoalContinuationQueued(this.#bundle.runtime, targetSessionId, payload),
+      prompt: (parts, options) => this.#sessionPort.prompt(parts, options),
+      promptOptions: {
+        source: "interactive",
+      },
+    });
+    this.ui.notify("Goal started.", "info");
   }
 
   private async exportInspectBundle(): Promise<void> {

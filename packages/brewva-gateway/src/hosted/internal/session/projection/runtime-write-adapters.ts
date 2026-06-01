@@ -78,6 +78,22 @@ export function recordRuntimeReasoningCheckpoint(
   return runtime.ops.reasoning.checkpoints.record(sessionId, input);
 }
 
+export function recordRuntimeGoalContinuationQueued(
+  runtime: Pick<HostedRuntimeAdapterPort, "ops">,
+  sessionId: string,
+  input: Parameters<HostedRuntimeAdapterPort["ops"]["goal"]["continuation"]["recordQueued"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["goal"]["continuation"]["recordQueued"]> {
+  return runtime.ops.goal.continuation.recordQueued(sessionId, input);
+}
+
+export function queryRuntimeEventRecords(
+  runtime: Pick<HostedRuntimeAdapterPort, "ops">,
+  sessionId: string,
+  query: Parameters<HostedRuntimeAdapterPort["ops"]["events"]["records"]["query"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["events"]["records"]["query"]> {
+  return runtime.ops.events.records.query(sessionId, query);
+}
+
 export function recordHostedRuntimeEvent(
   runtime: Pick<HostedRuntimeAdapterPort, "ops">,
   input: {

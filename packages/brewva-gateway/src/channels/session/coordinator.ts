@@ -1,4 +1,6 @@
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
+  BrewvaPromptOptions,
   BrewvaPromptSessionEvent,
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
@@ -72,6 +74,7 @@ export interface ChannelRuntimeSessionPort {
   readonly agentSessionId: string;
   getCostSummary(): ChannelSessionCostSummary;
   subscribe(listener: (event: BrewvaPromptSessionEvent) => void): () => void;
+  prompt(parts: readonly BrewvaPromptContentPart[], options?: BrewvaPromptOptions): Promise<void>;
   steer(text: string): Promise<BrewvaSteerOutcome>;
 }
 
@@ -243,6 +246,12 @@ export function createChannelSessionCoordinator(input: {
     },
     subscribe(listener) {
       return state.result.session.subscribe(listener);
+    },
+    prompt(parts, options) {
+      return state.result.session.prompt(parts, {
+        ...options,
+        source: options?.source ?? "channel",
+      });
     },
     steer(text) {
       return state.result.session.steer(text, { source: "channel" });

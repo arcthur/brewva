@@ -25,6 +25,7 @@ export {
   resolveToolRuntimeTaskPort,
   type ToolRuntimeEventInput,
 } from "./extensions.js";
+export { blockGoal, completeGoal, getGoalState } from "./goal.js";
 export {
   getToolSessionId,
   readTextBatch,

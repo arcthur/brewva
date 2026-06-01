@@ -300,6 +300,49 @@ describe("shell runtime architecture", () => {
     });
   });
 
+  test("shell update routes goal slash commands to typed runtime effects", () => {
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "session.goal",
+        args: "--tokens 10k ship parity",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [
+        {
+          type: "session.goal",
+          command: {
+            kind: "start",
+            objective: "ship parity",
+            tokenBudget: 10_000,
+          },
+        },
+      ],
+    });
+
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "session.goal",
+        args: "statusbar",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [
+        {
+          type: "notification.show",
+          message: "Unsupported /goal subcommand: statusbar",
+          level: "warning",
+        },
+      ],
+    });
+  });
+
   test("shell update opens operator overlays through data actions", () => {
     const context = createUpdateContext({
       operatorSnapshot: {

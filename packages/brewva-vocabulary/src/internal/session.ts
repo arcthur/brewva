@@ -158,6 +158,17 @@ export interface TaskWorkCardProjection extends ProtocolRecord {
     readonly taskItemCount: number;
     readonly blockerCount: number;
   };
+  readonly persistentGoal?: {
+    readonly objective: string | null;
+    readonly status: string | null;
+    readonly tokenBudget: number | null;
+    readonly tokensUsed: number;
+    readonly elapsedMs: number;
+    readonly lastLifecycleEvent: string | null;
+    readonly latestContinuationRef: string | null;
+    readonly latestCompletionEvidenceRef: string | null;
+    readonly latestBlockEvidenceRef: string | null;
+  };
   readonly context: {
     readonly pressure: TaskWorkCardContextPressure;
     readonly workbenchEntryCount: number;

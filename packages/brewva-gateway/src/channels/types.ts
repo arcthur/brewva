@@ -1,3 +1,4 @@
+import type { GoalCommand } from "@brewva/brewva-vocabulary/goal";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import type { ChannelModeConfig } from "./launcher.js";
@@ -27,6 +28,7 @@ export type ChannelControlCommand =
       top?: number;
       details?: boolean;
     }
+  | { kind: "goal"; scopeKey: string; targetAgentId?: string; command: GoalCommand }
   | {
       kind: "answer";
       scopeKey: string;

@@ -29,6 +29,7 @@ import type {
   ChannelQuestionsCommandResult,
 } from "./contracts.js";
 import type { ChannelCommandDispatchResult, ChannelPreparedCommand } from "./dispatch.js";
+import { handleChannelGoalCommand } from "./goal.js";
 import { type ChannelCommandMatch } from "./parser.js";
 import { handleChannelStatusCommand } from "./status.js";
 import { handleChannelSteerCommand } from "./steer.js";
@@ -100,6 +101,17 @@ export function createChannelControlRouter(input: {
         openLiveSession,
         resolveQuestionSurface,
         dependencies: input.dependencies,
+      });
+    },
+    goal: (command, turn) => {
+      const targetAgentId = command.targetAgentId ?? input.registry.resolveFocus(command.scopeKey);
+      return handleChannelGoalCommand({
+        command,
+        turn,
+        replyWriter: input.replyWriter,
+        targetAgentId,
+        isTargetActive: input.registry.isActive(targetAgentId),
+        openLiveSession,
       });
     },
     steer: (command, turn) => {
@@ -269,9 +281,11 @@ export function createChannelControlRouter(input: {
           actionKind:
             command.kind === "status"
               ? "status_summary"
-              : command.kind === "answer"
-                ? "answer_question"
-                : null,
+              : command.kind === "goal"
+                ? "goal_command"
+                : command.kind === "answer"
+                  ? "answer_question"
+                  : null,
           turnId: turn.turnId,
           conversationId: turn.conversationId,
         },

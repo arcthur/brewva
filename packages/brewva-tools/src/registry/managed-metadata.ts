@@ -177,6 +177,12 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   reasoning_revert: metadata("control_plane", "control_state_mutation", [
     "capabilities.reasoning.reverts.revert",
   ]),
+  get_goal: metadata("control_plane", "runtime_observe", ["capabilities.goal.state.get"]),
+  update_goal: metadata("control_plane", "control_state_mutation", [
+    "capabilities.goal.state.get",
+    "capabilities.goal.lifecycle.complete",
+    "capabilities.goal.lifecycle.block",
+  ]),
   workbench_compact: metadata("base", "memory_write", [
     "capabilities.context.compaction.getInstructions",
     "capabilities.context.usage.getRatio",

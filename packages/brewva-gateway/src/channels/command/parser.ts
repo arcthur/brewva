@@ -1,3 +1,4 @@
+import { parseGoalCommand, type GoalCommand } from "@brewva/brewva-vocabulary/goal";
 import { normalizeAgentId } from "@brewva/brewva-vocabulary/session";
 
 export type ChannelCommandMatch =
@@ -5,6 +6,7 @@ export type ChannelCommandMatch =
   | { kind: "error"; message: string }
   | { kind: "agents" }
   | { kind: "status"; agentId?: string; directory?: string; top?: number; details?: boolean }
+  | { kind: "goal"; agentId?: string; command: GoalCommand }
   | { kind: "steer"; agentId?: string; text: string }
   | { kind: "answer"; agentId?: string; questionId: string; answerText: string }
   | { kind: "update"; instructions?: string }
@@ -146,6 +148,27 @@ export class CommandRouter {
 
     if (command === "/status") {
       return parseStatusCommand(body, "Usage: /status [@agent] [dir] [top=N] [details]");
+    }
+
+    if (command === "/goal") {
+      const tokens = body.split(/\s+/u).filter((token) => token.length > 0);
+      let agentId: string | undefined;
+      let commandBody = body;
+      if ((tokens[0] ?? "").startsWith("@")) {
+        agentId = parseAgentRef(tokens[0] ?? "");
+        if (!agentId) {
+          return {
+            kind: "error",
+            message:
+              "Usage: /goal [@agent] [--tokens <count>] <objective>|status|pause|resume|clear",
+          };
+        }
+        commandBody = tokens.slice(1).join(" ").trim();
+      }
+      const parsed = parseGoalCommand(commandBody);
+      return parsed.ok
+        ? { kind: "goal", agentId, command: parsed.command }
+        : { kind: "error", message: parsed.error };
     }
 
     if (command === "/steer") {
@@ -326,7 +349,7 @@ export class CommandRouter {
     return {
       kind: "error",
       message:
-        "Unknown command. Use /status, /steer, /answer, /agents, /agent, /focus, /run, or /discuss.",
+        "Unknown command. Use /status, /goal, /steer, /answer, /agents, /agent, /focus, /run, or /discuss.",
     };
   }
 }

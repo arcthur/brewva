@@ -401,6 +401,8 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
     effectClasses: ["workspace_read", "runtime_observe"],
   }),
   workflow_status: runtimeObserve(),
+  get_goal: runtimeObserve(),
+  update_goal: controlStateMutation(),
   attention_options: workspaceRead(),
   attention_consume: memoryWrite(),
   attention_pin: memoryWrite(),

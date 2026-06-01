@@ -23,6 +23,12 @@
       "import": "./dist/events.js",
       "default": "./dist/events.js"
     },
+    "./goal": {
+      "types": "./dist/goal.d.ts",
+      "bun": "./src/goal.ts",
+      "import": "./dist/goal.js",
+      "default": "./dist/goal.js"
+    },
     "./outcome": {
       "types": "./dist/outcome.d.ts",
       "bun": "./src/outcome.ts",

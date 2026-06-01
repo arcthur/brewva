@@ -18,6 +18,7 @@ import {
   registerTurnLifecyclePorts,
   type TurnLifecyclePort,
 } from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
+import { createGoalContinuationLifecycle } from "./goal-continuation.js";
 import {
   createHostedRuntimeAdapter,
   getRuntimeOpsPort,
@@ -266,6 +267,7 @@ function installHostedBehavior(
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
   });
   const readPathRecovery = createReadPathRecoveryLifecycle(runtime);
+  const goalContinuation = createGoalContinuationLifecycle(hostApi, runtime);
 
   hostApi.on("tool_call", qualityGate.toolCall);
   hostApi.on("context", contextTransform.context);
@@ -299,6 +301,7 @@ function installHostedBehavior(
       toolResult: toolSurface.toolResult,
       sessionShutdown: toolSurface.sessionShutdown,
     },
+    goalContinuation,
     ...userPorts,
   ]);
 }

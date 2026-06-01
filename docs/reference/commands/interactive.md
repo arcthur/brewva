@@ -51,6 +51,11 @@ Stable interactive slash commands include:
 - `/diff`
 - `/archive`
 - `/attention`
+- `/goal [--tokens <count>] <objective>`
+- `/goal status`
+- `/goal pause`
+- `/goal resume`
+- `/goal clear`
 - `/handoff [name :: summary :: next]`
 - `/copy`
 - `/export`
@@ -91,6 +96,15 @@ output into the base surface.
 token estimate, pinned/consumed/evicted/stale refs, recall refs, compact
 baseline, and runway. Opening it does not mutate workbench, recall, compaction,
 provider routing, or model-visible context.
+
+`/goal` is the built-in long-running objective control plane. It records goal
+lifecycle through hosted runtime ops, exposes `get_goal` and `update_goal` only
+while the current session goal is active, and queues runtime-owned follow-up
+continuation messages after agent turns. Usage and token budgets are charged
+only to queued goal-continuation turns. `clear` records a lifecycle event and
+then projects no current goal; `blocked` is a terminal model update status
+guarded by repeated blocker evidence. File-backed slash commands named `goal`
+are retained only as shadow diagnostics.
 
 `/diff` opens Git working-tree status/diff together with replay-derived turn
 attribution and recorded Brewva patch-set identifiers. Git failures render as

@@ -17,6 +17,9 @@ export {
   runHostedTurnEnvelope,
 } from "./turn-adapter.js";
 export { createHostedRuntimeAdapter } from "./internal/session/runtime-ports.js";
+export { enqueueGoalContinuation } from "../utils/goal-continuation.js";
+export type { EnqueueGoalContinuationInput } from "../utils/goal-continuation.js";
+export { recordRuntimeGoalContinuationQueued } from "./internal/session/projection/runtime-write-adapters.js";
 export {
   acquireRuntimeParallelSlot,
   adoptRuntimeLineageOutcome,

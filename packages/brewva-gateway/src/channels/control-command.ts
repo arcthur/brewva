@@ -20,6 +20,13 @@ export function resolveChannelControlCommand(
         top: match.top,
         details: match.details,
       };
+    case "goal":
+      return {
+        kind: "goal",
+        scopeKey,
+        targetAgentId: match.agentId,
+        command: match.command,
+      };
     case "steer":
       return {
         kind: "steer",
@@ -94,6 +101,7 @@ export function isPublicChannelControlCommand(command: ChannelControlCommand): b
     case "route-agent":
       return true;
     case "status":
+    case "goal":
     case "steer":
     case "answer":
     case "update":

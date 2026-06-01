@@ -303,6 +303,7 @@ describe("shell command provider", () => {
       },
     });
     expect(provider.slashCommands().map((command) => command.id)).toContain("agent.model");
+    expect(provider.slashCommands().map((command) => command.id)).toContain("session.goal");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.handoff");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.lineage");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.tree");
@@ -331,6 +332,17 @@ describe("shell command provider", () => {
       type: "command.invoke",
       commandId: "session.transcript",
       args: "",
+      source: "slash",
+    });
+    expect(
+      provider.createSlashCommandIntent("goal", {
+        args: "--tokens 10k ship parity",
+        source: "slash",
+      }),
+    ).toEqual({
+      type: "command.invoke",
+      commandId: "session.goal",
+      args: "--tokens 10k ship parity",
       source: "slash",
     });
     expect(provider.slashCommands().map((command) => command.id)).toContain("operator.inbox");
@@ -392,6 +404,16 @@ describe("shell command provider", () => {
       "utf8",
     );
     writeFileSync(
+      join(projectCommands, "goal.md"),
+      [
+        "---",
+        "description: Shadow goal",
+        "---",
+        "Project goal should not replace built-in goal.",
+      ].join("\n"),
+      "utf8",
+    );
+    writeFileSync(
       join(projectCommands, "optional.md"),
       [
         "---",
@@ -428,6 +450,12 @@ describe("shell command provider", () => {
       type: "command.invoke",
       commandId: "app.help",
     });
+    expect(provider.createSlashCommandIntent("goal", { args: "status", source: "slash" })).toEqual({
+      type: "command.invoke",
+      commandId: "session.goal",
+      args: "status",
+      source: "slash",
+    });
 
     expect(provider.slashCommands()).toEqual(
       expect.arrayContaining([
@@ -446,6 +474,10 @@ describe("shell command provider", () => {
         expect.objectContaining({
           id: "file-command.brewva.project.help",
           shadowedBy: "app.help",
+        }),
+        expect.objectContaining({
+          id: "file-command.brewva.project.goal",
+          shadowedBy: "session.goal",
         }),
       ]),
     );
