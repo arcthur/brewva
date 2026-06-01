@@ -34,29 +34,11 @@ Projection-bearing active notes share one product discipline:
 RFC-specific documents should only add narrower invariants on top of this shared
 discipline.
 
-## Runtime Fidelity
+## Current Active Notes
 
-- [`event-stream-consistency-and-replay-fidelity.md`](./event-stream-consistency-and-replay-fidelity.md)
-- [`recovery-robustness-under-interrupt-conditions.md`](./recovery-robustness-under-interrupt-conditions.md)
-- [`model-operated-working-memory-evaluation.md`](./model-operated-working-memory-evaluation.md)
-- [`prefix-stable-context-management-and-progressive-compaction.md`](./prefix-stable-context-management-and-progressive-compaction.md)
-- [`recovery-first-context-governance-and-history-view-baselines.md`](./recovery-first-context-governance-and-history-view-baselines.md)
+No active research notes are currently open.
 
-## Operator And Control Surfaces
-
-- [`cost-observability-and-budget-governance.md`](./cost-observability-and-budget-governance.md)
-- [`rollback-ergonomics-and-patch-lifecycle-safety.md`](./rollback-ergonomics-and-patch-lifecycle-safety.md)
-- [`convention-projectors-and-substrate-review.md`](./convention-projectors-and-substrate-review.md)
-- [`context-control-plane-simplification.md`](./context-control-plane-simplification.md)
-
-## Model-Operated Product Ergonomics
-
-- [`model-operated-context-skills-and-memory-ergonomics.md`](./model-operated-context-skills-and-memory-ergonomics.md)
-
-## Tooling And Source Intelligence
-
-- [`multi-language-source-intelligence.md`](./multi-language-source-intelligence.md)
-
-## Execution Substrate
-
-- [`provider-transport-ownership-and-substrate-driver-boundary.md`](./provider-transport-ownership-and-substrate-driver-boundary.md)
+When new unresolved design work starts, add one focused note here and link it
+from this README. If the stable docs already carry the accepted contract, create
+or update a decision/archive record instead of reopening this directory as a
+secondary source of truth.

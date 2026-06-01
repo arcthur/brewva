@@ -7,13 +7,13 @@
 - Last reviewed: `2026-05-08`
 - Promotion target:
   - `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
-  - `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
+  - `docs/research/decisions/prefix-stable-context-management-and-progressive-compaction.md`
   - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/token-cache.md`
 - Archived on: `2026-05-08`
 - Superseded by:
   - `docs/research/decisions/model-operated-working-memory-and-context-governance-reset.md`
-  - `docs/research/active/prefix-stable-context-management-and-progressive-compaction.md`
+  - `docs/research/decisions/prefix-stable-context-management-and-progressive-compaction.md`
   - `docs/reference/hosted-dynamic-context.md`
   - `docs/reference/token-cache.md`
 

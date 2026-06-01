@@ -30,7 +30,7 @@
 - Convention state is rebuilt from event tape. Claim ledger entries may expose inspectable operational claims, but they are not a second lifecycle authority.
 - Approved convention mutations use first-class convention mutation receipts and target writers for registered writable surfaces only.
 - Project guidance metadata carries convention strength, scope, kind, retirement sensitivity, and owner metadata where required; unsupported or missing frontmatter remains fail-closed.
-- Automatic health, conflict, and substrate-change projectors are not part of this accepted foundation. Their reserved event producers remain active research under `docs/research/active/convention-projectors-and-substrate-review.md`.
+- Automatic health, conflict, and substrate-change projectors are not part of this accepted foundation. Their reserved event producers remain deferred; historical rationale is archived under `docs/research/archive/convention-projectors-and-substrate-review.md`.
 
 ## Superseded by
 

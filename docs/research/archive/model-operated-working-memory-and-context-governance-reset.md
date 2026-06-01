@@ -27,7 +27,7 @@ The implemented cutover deleted or demoted the old default path:
 - typed deliberation, optimization, and narrative memory artifacts
 - pressure-service ownership of cognitive decisions
 
-The active work moved to
-`docs/research/active/model-operated-working-memory-evaluation.md`, which tracks
-long-session cache evidence, compaction drift, on-demand recall quality, and
-operator validation for degraded recovery.
+The follow-up validation tracker is archived at
+`docs/research/archive/model-operated-working-memory-evaluation.md`. The
+accepted ergonomic contract now lives in
+`docs/research/decisions/model-operated-context-skills-and-memory-ergonomics.md`.

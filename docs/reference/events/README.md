@@ -136,11 +136,12 @@ names. Producer maturity is intentionally uneven:
   `convention_change_decided`, `convention_decision_receipt_recorded`,
   `convention_change_applied`, `convention_emergency_applied`
 - explicit-request writer only: `convention_contested`
-- reserved projector outputs until the follow-up research note lands:
+- reserved projector outputs without active producers:
   `convention_health_degraded`, `convention_conflict_detected`
 
-The reserved projector work is tracked in
-`docs/research/active/convention-projectors-and-substrate-review.md`.
+Historical projector rationale is archived in
+`docs/research/archive/convention-projectors-and-substrate-review.md`. New
+producer work should start from a focused active research note.
 
 ## Generated Event Catalog
 

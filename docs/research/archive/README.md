@@ -36,9 +36,12 @@ These notes capture superseded migration steps that shaped today's stable
 runtime, product, and session contracts.
 
 - [`context-budget-behavior-in-long-running-sessions.md`](./context-budget-behavior-in-long-running-sessions.md)
+- [`convention-projectors-and-substrate-review.md`](./convention-projectors-and-substrate-review.md)
 - [`interactive-command-surface-refinement.md`](./interactive-command-surface-refinement.md)
 - [`model-operated-working-memory-and-context-governance-reset.md`](./model-operated-working-memory-and-context-governance-reset.md)
+- [`model-operated-working-memory-evaluation.md`](./model-operated-working-memory-evaluation.md)
 - [`product-semantic-compression-and-decision-surface-subtraction.md`](./product-semantic-compression-and-decision-surface-subtraction.md)
+- [`provider-transport-ownership-and-substrate-driver-boundary.md`](./provider-transport-ownership-and-substrate-driver-boundary.md)
 - [`rfc-substrate-domain-slicing-and-agent-engine-removal.md`](./rfc-substrate-domain-slicing-and-agent-engine-removal.md)
 - [`rfc-deliberation-home-and-compounding-intelligence.md`](./rfc-deliberation-home-and-compounding-intelligence.md)
 - [`rfc-effect-governance-and-contract-vnext.md`](./rfc-effect-governance-and-contract-vnext.md)
