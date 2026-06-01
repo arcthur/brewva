@@ -1,5 +1,6 @@
 export {
   buildHarnessManifest,
+  buildHarnessTraceSnapshotId,
   clusterHarnessTraceSnapshots,
   HARNESS_EVAL_REPORT_SCHEMA,
   HARNESS_MANIFEST_RECORDED_EVENT_AUTHORITY,
@@ -10,6 +11,7 @@ export {
   HARNESS_PATTERN_CANDIDATE_SCHEMA,
   HARNESS_TRACE_SNAPSHOT_SCHEMA,
   redactHarnessManifest,
+  readHarnessManifestRecordedAdvisoryEvent,
   stableHarnessId,
   unwrapHarnessManifestRecordedAdvisoryPayload,
   wrapHarnessManifestRecordedAdvisoryPayload,
@@ -37,4 +39,5 @@ export type {
   HarnessTraceSignal,
   HarnessTraceSignalKind,
   HarnessTraceSnapshot,
+  HarnessTraceSnapshotIdentityInput,
 } from "./internal/harness.js";

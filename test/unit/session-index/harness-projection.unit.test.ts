@@ -6,12 +6,16 @@ import {
   type HarnessManifest,
   wrapHarnessManifestRecordedAdvisoryPayload,
 } from "@brewva/brewva-vocabulary/harness";
+import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
+import { listHarnessPatternCandidateRows } from "../../../packages/brewva-session-index/src/projection/harness.js";
+import type { SessionIndexQueryPort } from "../../../packages/brewva-session-index/src/query/port.js";
 
 function event(input: {
   id: string;
   type: string;
   timestamp: number;
   turn?: number;
+  turnId?: string;
   payload?: BrewvaEventRecord["payload"];
 }): BrewvaEventRecord {
   return {
@@ -20,6 +24,7 @@ function event(input: {
     type: input.type,
     timestamp: input.timestamp,
     ...(input.turn === undefined ? {} : { turn: input.turn }),
+    ...(input.turnId === undefined ? {} : { turnId: input.turnId }),
     payload: input.payload ?? {},
   };
 }
@@ -28,6 +33,7 @@ function harnessManifestEvent(input: {
   id: string;
   timestamp: number;
   turn?: number;
+  turnId?: string;
   payload: HarnessManifest;
 }): BrewvaEventRecord {
   return event({
@@ -35,6 +41,7 @@ function harnessManifestEvent(input: {
     type: "custom",
     timestamp: input.timestamp,
     turn: input.turn,
+    turnId: input.turnId,
     payload: wrapHarnessManifestRecordedAdvisoryPayload(
       input.payload,
     ) as unknown as BrewvaEventRecord["payload"],
@@ -129,7 +136,7 @@ describe("harness trace projection", () => {
         type: "turn.ended",
         timestamp: 1_040,
         turn: 3,
-        payload: { status: "error" },
+        payload: { status: "failed" },
       }),
     ];
 
@@ -159,7 +166,7 @@ describe("harness trace projection", () => {
         unexpectedBreak: true,
       },
       outcome: {
-        status: "error",
+        status: "failed",
       },
     });
     expect(snapshots[0]?.signals.map((signal) => signal.kind).toSorted()).toEqual([
@@ -216,5 +223,159 @@ describe("harness trace projection", () => {
       reason: "tool_contract:inconclusive_outcome",
       eventIds: ["event-tool-inconclusive"],
     });
+  });
+
+  test("uses exact verification and provider retry semantics", () => {
+    const manifest = buildHarnessManifest({
+      sessionId: "session-harness-projection",
+      turn: 5,
+      attempt: 1,
+      skillSelection: {
+        selectionId: "skill-selection-1",
+        mode: "shortlist_prompt_context",
+        selectedSkillIds: ["skill-a"],
+      },
+    });
+    const records = [
+      harnessManifestEvent({
+        id: "event-manifest",
+        timestamp: 3_000,
+        turn: 5,
+        payload: manifest,
+      }),
+      event({
+        id: "event-provider-word-only",
+        type: "runtime.suspended",
+        timestamp: 3_010,
+        turn: 5,
+        payload: { cause: "not_provider_related" },
+      }),
+      event({
+        id: "event-verification-word-only",
+        type: "custom",
+        timestamp: 3_020,
+        turn: 5,
+        payload: { kind: "verification_word_only", status: "weak" },
+      }),
+      event({
+        id: "event-verification-outcome",
+        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+        timestamp: 3_030,
+        turn: 5,
+        payload: {
+          outcome: "fail",
+          failedChecks: ["bun test"],
+          missingChecks: [],
+          missingEvidence: [],
+        },
+      }),
+    ];
+
+    const snapshots = projectSessionHarnessTraceSnapshots({
+      sessionId: "session-harness-projection",
+      records,
+    });
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]?.signals.map((signal) => signal.kind)).toEqual(["verification_hygiene"]);
+    expect(snapshots[0]?.signals[0]?.eventIds).toEqual(["event-verification-outcome"]);
+  });
+
+  test("folds evidence through turn indexes without crossing manifests", () => {
+    const first = buildHarnessManifest({
+      sessionId: "session-harness-projection",
+      turn: 6,
+      attempt: 1,
+    });
+    const second = buildHarnessManifest({
+      sessionId: "session-harness-projection",
+      turn: 7,
+      attempt: 1,
+    });
+    const records = [
+      harnessManifestEvent({
+        id: "event-manifest-6",
+        timestamp: 4_000,
+        turn: 6,
+        payload: first,
+      }),
+      harnessManifestEvent({
+        id: "event-manifest-7",
+        timestamp: 4_010,
+        turn: 7,
+        payload: second,
+      }),
+      event({
+        id: "event-tool-7",
+        type: "tool.committed",
+        timestamp: 4_020,
+        turn: 7,
+        payload: {
+          call: { toolName: "missing_tool" },
+          result: { outcome: { kind: "err", error: "failed" } },
+        },
+      }),
+    ];
+
+    const snapshots = projectSessionHarnessTraceSnapshots({
+      sessionId: "session-harness-projection",
+      records,
+    });
+
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots.find((snapshot) => snapshot.turn === 6)?.tools.committed).toBe(0);
+    expect(snapshots.find((snapshot) => snapshot.turn === 7)?.tools.committed).toBe(1);
+  });
+
+  test("patrol rows read only snapshots with projected signals", async () => {
+    let observedSql = "";
+    const snapshot = {
+      schema: "brewva.harness.trace_snapshot.v1" as const,
+      snapshotId: "snapshot-signal",
+      sessionId: "session-harness-projection",
+      attempt: 1,
+      manifestId: "manifest-signal",
+      eventIds: ["event-signal"],
+      provider: { attempts: 1, failures: 1, fallbackActive: false },
+      context: { usageRatio: null, gateRequired: false },
+      cache: { status: null, unexpectedBreak: false, changedFields: [] },
+      skills: { selectionId: null, selectedSkillIds: [], omittedCount: 0 },
+      tools: {
+        activeToolNames: [],
+        requestedUnknownToolNames: [],
+        committed: 0,
+        errors: 0,
+        inconclusive: 0,
+      },
+      verification: { weakEvidence: false },
+      outcome: { status: "failed" },
+      signals: [
+        {
+          kind: "provider_failure" as const,
+          severity: "high" as const,
+          reason: "provider_failure:detected",
+          eventIds: ["event-signal"],
+        },
+      ],
+    };
+    const port: SessionIndexQueryPort = {
+      async ensureAvailable() {},
+      async selectOne<T>() {
+        return undefined as T | undefined;
+      },
+      async selectRows<T>(sql: string) {
+        observedSql = sql;
+        return [{ snapshot_json: JSON.stringify(snapshot) }] as T[];
+      },
+    };
+
+    const candidates = await listHarnessPatternCandidateRows({
+      port,
+      sessionId: "session-harness-projection",
+      minOccurrences: 1,
+    });
+
+    expect(observedSql).toContain("signal_kinds_json <> '[]'");
+    expect(candidates).toMatchObject([{ kind: "provider_failure" }]);
   });
 });

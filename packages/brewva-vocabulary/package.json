@@ -79,6 +79,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-std": "workspace:*",
     "yaml": "^2.9.0"
   },
   "engines": {

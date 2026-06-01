@@ -1,3 +1,4 @@
+import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { isProtocolRecord } from "./shared.js";
 
 export const HARNESS_MANIFEST_SCHEMA = "brewva.harness.manifest.v1";
@@ -164,6 +165,14 @@ export interface HarnessTraceSnapshot {
   readonly signals: readonly HarnessTraceSignal[];
 }
 
+export interface HarnessTraceSnapshotIdentityInput {
+  readonly sessionId: string;
+  readonly turn?: number;
+  readonly turnId?: string;
+  readonly attempt: number;
+  readonly manifestId: string;
+}
+
 export interface HarnessPatternCandidate {
   readonly schema: typeof HARNESS_PATTERN_CANDIDATE_SCHEMA;
   readonly candidateId: string;
@@ -271,17 +280,15 @@ export function buildHarnessManifest(input: BuildHarnessManifestInput): HarnessM
     eventType: HARNESS_MANIFEST_RECORDED_EVENT_TYPE,
     manifestId: input.manifestId ?? "harness_manifest:pending",
   });
-  const canonicalForId = stableCanonicalize({
-    ...redacted,
-    manifestId: undefined,
-  });
-  const hash = stableDigest(canonicalForId);
   return {
     ...redacted,
     manifestId:
       input.manifestId && input.manifestId.length > 0
         ? input.manifestId
-        : `harness_manifest:${hash}`,
+        : stableHarnessId("harness_manifest", {
+            ...redacted,
+            manifestId: undefined,
+          }),
   };
 }
 
@@ -367,6 +374,14 @@ export function unwrapHarnessManifestRecordedAdvisoryPayload(input: {
   return isProtocolRecord(input.payload.payload) ? input.payload.payload : undefined;
 }
 
+export function readHarnessManifestRecordedAdvisoryEvent(input: {
+  readonly type?: unknown;
+  readonly payload?: unknown;
+}): HarnessManifest | undefined {
+  const payload = unwrapHarnessManifestRecordedAdvisoryPayload(input);
+  return payload ? redactHarnessManifest(payload) : undefined;
+}
+
 export function clusterHarnessTraceSnapshots(
   snapshots: readonly HarnessTraceSnapshot[],
   options: ClusterHarnessTraceSnapshotsOptions = {},
@@ -434,36 +449,17 @@ export function assertHarnessManifestPayloadSafe(input: unknown): void {
 }
 
 export function stableHarnessId(prefix: string, value: unknown): string {
-  return `${prefix}:${stableDigest(stableCanonicalize(value))}`;
+  return `${prefix}:${redactedStableJsonSha256Hex(value).slice(0, 32)}`;
 }
 
-export function stableCanonicalize(value: unknown): string {
-  return JSON.stringify(normalizeForStableJson(value));
-}
-
-function normalizeForStableJson(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(normalizeForStableJson);
-  }
-  if (!isProtocolRecord(value)) {
-    return value === undefined ? null : value;
-  }
-  const output: Record<string, unknown> = {};
-  for (const key of Object.keys(value).toSorted()) {
-    const entry = value[key];
-    if (entry === undefined) continue;
-    output[key] = normalizeForStableJson(entry);
-  }
-  return output;
-}
-
-function stableDigest(input: string): string {
-  let hash = 0xcbf29ce484222325n;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= BigInt(input.charCodeAt(index));
-    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
-  }
-  return hash.toString(16).padStart(16, "0");
+export function buildHarnessTraceSnapshotId(input: HarnessTraceSnapshotIdentityInput): string {
+  return stableHarnessId("harness_snapshot", {
+    sessionId: input.sessionId,
+    ...(input.turn === undefined ? {} : { turn: input.turn }),
+    ...(input.turnId === undefined ? {} : { turnId: input.turnId }),
+    attempt: input.attempt,
+    manifestId: input.manifestId,
+  });
 }
 
 function highestSeverity(values: readonly HarnessSeverity[]): HarnessSeverity {

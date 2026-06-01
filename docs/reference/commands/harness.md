@@ -43,6 +43,11 @@ target must be empty, so repeated runs should pass an explicit fresh
 `real` mode uses hosted provider/tool/authority ports, requires a target
 session, and refuses to run against the source session.
 
+Replay-backed compare modes choose a continuation prompt from the first source
+turn after the divergence event, then the divergence turn itself, then a
+synthetic fallback. Reports include `promptSource` so operators can distinguish
+source-turn replay from synthetic comparison prompts.
+
 When a source session has multiple Harness snapshots, `--diverge-at` must match
 an event id in the intended snapshot evidence. This prevents compare from
 silently using the wrong base manifest.

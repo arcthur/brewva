@@ -3,14 +3,18 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  buildHarnessTraceSnapshot,
+  buildPreflightHarnessTraceSnapshot,
   clusterHarnessTraceSnapshots,
   compareHarnessCandidate,
   executeHarnessCandidateComparison,
 } from "@brewva/brewva-gateway/harness";
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import type { CanonicalEvent } from "@brewva/brewva-runtime";
-import { buildHarnessManifest, type HarnessTraceSnapshot } from "@brewva/brewva-vocabulary/harness";
+import {
+  buildHarnessManifest,
+  buildHarnessTraceSnapshotId,
+  type HarnessTraceSnapshot,
+} from "@brewva/brewva-vocabulary/harness";
 
 function snapshot(input: {
   id: string;
@@ -131,7 +135,7 @@ describe("harness patrol", () => {
   });
 
   test("does not infer active provider fallback from fallback identity hash", () => {
-    const inactive = buildHarnessTraceSnapshot({
+    const inactive = buildPreflightHarnessTraceSnapshot({
       manifest: buildHarnessManifest({
         sessionId: "source-session",
         attempt: 1,
@@ -140,7 +144,7 @@ describe("harness patrol", () => {
         },
       }),
     });
-    const active = buildHarnessTraceSnapshot({
+    const active = buildPreflightHarnessTraceSnapshot({
       manifest: buildHarnessManifest({
         sessionId: "source-session",
         attempt: 1,
@@ -153,6 +157,37 @@ describe("harness patrol", () => {
 
     expect(inactive.provider.fallbackActive).toBe(false);
     expect(active.provider.fallbackActive).toBe(true);
+  });
+
+  test("uses the shared Harness snapshot id basis for preflight snapshots", () => {
+    const manifest = buildHarnessManifest({
+      sessionId: "source-session",
+      turn: 2,
+      turnId: "turn-2",
+      attempt: 1,
+    });
+    const preflight = buildPreflightHarnessTraceSnapshot({
+      manifest,
+      eventIds: ["event-preflight"],
+      signals: [
+        {
+          kind: "provider_failure",
+          severity: "high",
+          reason: "provider_failure:detected",
+          eventIds: ["event-preflight"],
+        },
+      ],
+    });
+
+    expect(preflight.snapshotId).toBe(
+      buildHarnessTraceSnapshotId({
+        sessionId: manifest.sessionId,
+        turn: manifest.turn,
+        turnId: manifest.turnId,
+        attempt: manifest.attempt,
+        manifestId: manifest.manifestId,
+      }),
+    );
   });
 
   test("requires an explicit target session for real comparisons", () => {

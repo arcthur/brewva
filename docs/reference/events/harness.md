@@ -25,6 +25,10 @@ The manifest must not persist raw prompt text, raw tool schemas, credentials,
 environment values, or full provider payloads. Raw recovery belongs to existing
 forensics and artifacts, not the Harness manifest.
 
+Writers build manifests through the Harness vocabulary, and readers use the
+same advisory-event reader before projecting session-index rows. Invalid or
+unsafe manifest payloads are rejected at that vocabulary boundary.
+
 ## Projection Semantics
 
 `session_harness_trace_snapshots` is a DuckDB session-index projection table.
@@ -39,6 +43,11 @@ It stores `brewva.harness.trace_snapshot.v1` JSON rows derived from:
 The table is rebuildable. Event tape remains authoritative. Schema version `7`
 resets older session-index rows and rebuilds projections rather than migrating
 compatibility state.
+
+Gateway APIs can build preflight Harness snapshots from manifest-local metrics.
+Session-index projection builds folded Harness snapshots from replayed tape
+evidence. Both derive `snapshotId` from the same manifest identity basis so a
+preflight candidate and its folded projection can be compared by id.
 
 ## Pattern Candidates
 

@@ -89,6 +89,7 @@ describe("harness cli output", () => {
     expect(snapshots).toContain("snapshot=snapshot-1");
     expect(patrol).toContain("kind=provider_failure");
     expect(compare).toContain("sideEffectPolicy=no_provider_or_tool_execution");
+    expect(compare).toContain("promptSource=-");
   });
 
   test("compares recorded manifest identity against the current runtime identity", () => {

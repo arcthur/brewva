@@ -12,7 +12,7 @@ import { createActionPolicyRegistry, resolveToolAuthority } from "@brewva/brewva
 import {
   HARNESS_EVAL_REPORT_SCHEMA,
   HARNESS_TRACE_SNAPSHOT_SCHEMA,
-  stableHarnessId,
+  buildHarnessTraceSnapshotId,
   type HarnessComparisonReport,
   type HarnessManifest,
   type HarnessTraceSignal,
@@ -40,6 +40,8 @@ export interface BuildHarnessTraceSnapshotInput {
   readonly verificationWeakEvidence?: boolean;
   readonly outcomeStatus?: string | null;
 }
+
+export type BuildPreflightHarnessTraceSnapshotInput = BuildHarnessTraceSnapshotInput;
 
 export interface CompareHarnessCandidateInput {
   readonly mode?: "manifest" | "fixture" | "real";
@@ -79,25 +81,23 @@ export interface ExecuteHarnessCandidateComparisonInput {
   readonly prompt?: string;
 }
 
-// Builds an in-memory candidate snapshot from a manifest and explicit metrics.
+// Builds an in-memory preflight snapshot from a manifest and explicit metrics.
 // Tape-derived downstream evidence is owned by the session-index projection.
-export function buildHarnessTraceSnapshot(
-  input: BuildHarnessTraceSnapshotInput,
+export function buildPreflightHarnessTraceSnapshot(
+  input: BuildPreflightHarnessTraceSnapshotInput,
 ): HarnessTraceSnapshot {
   const manifest = input.manifest;
   const eventIds = [...new Set(input.eventIds ?? manifest.refs?.sourceEventIds ?? [])].toSorted();
   const signals = [...(input.signals ?? [])];
-  const snapshotCore = {
-    sessionId: manifest.sessionId,
-    turn: manifest.turn,
-    turnId: manifest.turnId,
-    attempt: manifest.attempt,
-    manifestId: manifest.manifestId,
-    eventIds,
-  };
   return {
     schema: HARNESS_TRACE_SNAPSHOT_SCHEMA,
-    snapshotId: stableHarnessId("harness_snapshot", snapshotCore),
+    snapshotId: buildHarnessTraceSnapshotId({
+      sessionId: manifest.sessionId,
+      ...(manifest.turn === undefined ? {} : { turn: manifest.turn }),
+      ...(manifest.turnId === undefined ? {} : { turnId: manifest.turnId }),
+      attempt: manifest.attempt,
+      manifestId: manifest.manifestId,
+    }),
     sessionId: manifest.sessionId,
     ...(manifest.turn === undefined ? {} : { turn: manifest.turn }),
     ...(manifest.turnId === undefined ? {} : { turnId: manifest.turnId }),
@@ -146,6 +146,8 @@ export function buildHarnessTraceSnapshot(
     signals,
   };
 }
+
+export const buildHarnessTraceSnapshot = buildPreflightHarnessTraceSnapshot;
 
 export function compareHarnessCandidate(
   input: CompareHarnessCandidateInput,

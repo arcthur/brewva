@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildHarnessTraceSnapshotId,
   buildHarnessManifest,
   clusterHarnessTraceSnapshots,
   HARNESS_MANIFEST_RECORDED_EVENT_AUTHORITY,
@@ -8,6 +9,8 @@ import {
   HARNESS_MANIFEST_RECORDED_EVENT_VERSION,
   HARNESS_MANIFEST_SCHEMA,
   redactHarnessManifest,
+  readHarnessManifestRecordedAdvisoryEvent,
+  stableHarnessId,
   unwrapHarnessManifestRecordedAdvisoryPayload,
   wrapHarnessManifestRecordedAdvisoryPayload,
   type HarnessTraceSnapshot,
@@ -72,7 +75,24 @@ describe("harness vocabulary", () => {
     expect(first.eventType).toBe(HARNESS_MANIFEST_RECORDED_EVENT_TYPE);
     expect(second.manifestId).toBe(first.manifestId);
     expect(first.manifestId).toStartWith("harness_manifest:");
+    expect(first.manifestId.split(":")[1]).toHaveLength(32);
     expect(JSON.stringify(first)).not.toContain("raw prompt");
+  });
+
+  test("derives Harness ids from redacted SHA-256 json fingerprints", () => {
+    const left = stableHarnessId("harness_candidate", {
+      sessionId: "session-harness",
+      apiKey: "secret-a",
+      nested: { z: 1, a: 2 },
+    });
+    const right = stableHarnessId("harness_candidate", {
+      nested: { a: 2, z: 1 },
+      apiKey: "secret-b",
+      sessionId: "session-harness",
+    });
+
+    expect(left).toBe(right);
+    expect(left).toMatch(/^harness_candidate:[a-f0-9]{32}$/);
   });
 
   test("rejects unsafe raw payload fields at the manifest boundary", () => {
@@ -130,11 +150,36 @@ describe("harness vocabulary", () => {
       }),
     ).toMatchObject({ manifestId: manifest.manifestId });
     expect(
+      readHarnessManifestRecordedAdvisoryEvent({
+        type: "custom",
+        payload: envelope,
+      }),
+    ).toMatchObject({ manifestId: manifest.manifestId });
+    expect(
       unwrapHarnessManifestRecordedAdvisoryPayload({
         type: "custom",
         payload: { ...envelope, authority: "canonical" },
       }),
     ).toEqual(undefined);
+  });
+
+  test("builds snapshot ids from manifest identity rather than folded signals", () => {
+    const manifest = buildHarnessManifest({
+      sessionId: "session-harness",
+      turn: 1,
+      turnId: "turn-1",
+      attempt: 1,
+    });
+
+    expect(
+      buildHarnessTraceSnapshotId({
+        sessionId: manifest.sessionId,
+        turn: manifest.turn,
+        turnId: manifest.turnId,
+        attempt: manifest.attempt,
+        manifestId: manifest.manifestId,
+      }),
+    ).toMatch(/^harness_snapshot:[a-f0-9]{32}$/);
   });
 
   test("clusters trace snapshots with a low confidence single-occurrence candidate", () => {

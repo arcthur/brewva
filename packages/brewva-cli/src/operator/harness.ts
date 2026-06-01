@@ -169,6 +169,9 @@ export function formatHarnessComparisonText(report: HarnessComparisonReport): st
     report.metrics.execution
       ? `targetEvents=${report.metrics.execution.targetEventCount}`
       : "targetEvents=-",
+    report.metrics.execution
+      ? `promptSource=${report.metrics.execution.promptSource}`
+      : "promptSource=-",
     `recommendation=${report.promotion.recommendation}`,
   ].join(" ");
 }
@@ -613,5 +616,8 @@ function printHarnessHelp(): void {
 Usage:
   brewva harness snapshots [--session <id>] [--limit <n>] [--json]
   brewva harness patrol [--limit <n>] [--min-occurrences <n>] [--json]
-  brewva harness compare --source-session <id> --diverge-at <event-id> [--mode manifest|fixture|real] [--target-session <id>] [--candidate-manifest <path>] [--json]`);
+  brewva harness compare --source-session <id> --diverge-at <event-id> [--mode manifest|fixture|real] [--target-session <id>] [--candidate-manifest <path>] [--json]
+
+Replay compare prompt source:
+  fixture and real modes continue from the first source turn after divergence, the divergence turn itself, or a synthetic continuation prompt when no recorded turn prompt is available. The selected source is reported as promptSource.`);
 }

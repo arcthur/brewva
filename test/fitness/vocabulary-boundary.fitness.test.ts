@@ -30,6 +30,7 @@ const requiredVocabularyInternalModules = [
   "workbench",
 ] as const;
 const vocabularyInternalLineBudget = 800;
+const allowedVocabularyBrewvaDeps = ["@brewva/brewva-std"] as const;
 
 function readRepoFile(path: string): string {
   return readFileSync(resolve(repoRoot, path), "utf8");
@@ -94,7 +95,7 @@ describe("vocabulary boundary fitness", () => {
     const brewvaDeps = Object.keys(packageJson.dependencies ?? {}).filter((name) =>
       name.startsWith("@brewva/"),
     );
-    expect(brewvaDeps).toEqual([]);
+    expect(brewvaDeps).toEqual([...allowedVocabularyBrewvaDeps]);
   });
 
   test("runtime remains vocabulary-independent", () => {
