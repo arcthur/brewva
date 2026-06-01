@@ -34,6 +34,25 @@ interface RuntimePackageJson {
   };
 }
 
+interface PackageManifest {
+  readonly dependencies?: Record<string, string>;
+  readonly devDependencies?: Record<string, string>;
+}
+
+function readPinnedDependencyVersion(manifestPath: string, packageName: string): string {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as PackageManifest;
+  const version = manifest.dependencies?.[packageName] ?? manifest.devDependencies?.[packageName];
+  if (!version) {
+    throw new Error(`${packageName} is missing from ${manifestPath}`);
+  }
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(version)) {
+    throw new Error(
+      `${packageName} must use an exact pinned version for binary packaging, got ${version}`,
+    );
+  }
+  return version;
+}
+
 export const PLATFORMS: PlatformTarget[] = [
   {
     dir: "brewva-darwin-arm64",
@@ -92,8 +111,24 @@ const BREWVA_BINARY_TARGETS_ENV = "BREWVA_BINARY_TARGETS";
 const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 const BREWVA_OPENTUI_SUPPORTED_ENV = "BREWVA_OPENTUI_SUPPORTED";
 const BREWVA_OPENTUI_ENV_PREFIX = "BREWVA_OPENTUI_*";
-const OPEN_TUI_VERSION = "0.2.14";
-const DUCKDB_NODE_API_VERSION = "1.5.2-r.1";
+const ROOT_PACKAGE_JSON_PATH = join(process.cwd(), "package.json");
+const BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH = join(
+  process.cwd(),
+  "packages",
+  "brewva-session-index",
+  "package.json",
+);
+const BREWVA_TOOLS_PACKAGE_JSON_PATH = join(
+  process.cwd(),
+  "packages",
+  "brewva-tools",
+  "package.json",
+);
+const OPEN_TUI_VERSION = readPinnedDependencyVersion(ROOT_PACKAGE_JSON_PATH, "@opentui/core");
+const DUCKDB_NODE_API_VERSION = readPinnedDependencyVersion(
+  BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH,
+  "@duckdb/node-api",
+);
 const BOXLITE_VERSION = "0.9.3";
 
 const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
@@ -116,7 +151,10 @@ const BOXLITE_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"],
   "bun-linux-arm64": "@boxlite-ai/boxlite-linux-arm64-gnu",
 };
 
-const OXC_PARSER_VERSION = "0.128.0";
+const OXC_PARSER_VERSION = readPinnedDependencyVersion(
+  BREWVA_TOOLS_PACKAGE_JSON_PATH,
+  "oxc-parser",
+);
 const OXC_PARSER_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
   "bun-darwin-arm64": "@oxc-parser/binding-darwin-arm64",
   "bun-darwin-x64": "@oxc-parser/binding-darwin-x64",
@@ -128,8 +166,14 @@ const OXC_PARSER_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target
 const DUCKDB_RUNTIME_PACKAGES = ["@duckdb/node-api", "@duckdb/node-bindings"] as const;
 const BOXLITE_RUNTIME_PACKAGES = ["@boxlite-ai/boxlite"] as const;
 const OXC_PARSER_RUNTIME_PACKAGES = ["oxc-parser", "@oxc-project/types"] as const;
-const WEB_TREE_SITTER_VERSION = "0.25.10";
-const TREE_SITTER_WASM_VERSION = "0.3.1";
+const WEB_TREE_SITTER_VERSION = readPinnedDependencyVersion(
+  BREWVA_TOOLS_PACKAGE_JSON_PATH,
+  "web-tree-sitter",
+);
+const TREE_SITTER_WASM_VERSION = readPinnedDependencyVersion(
+  BREWVA_TOOLS_PACKAGE_JSON_PATH,
+  "@vscode/tree-sitter-wasm",
+);
 const TREE_SITTER_RUNTIME_PACKAGES = ["web-tree-sitter"] as const;
 const TREE_SITTER_GRAMMAR_PACKAGE = "@vscode/tree-sitter-wasm";
 const TREE_SITTER_GRAMMAR_MANIFEST_PATH = join(

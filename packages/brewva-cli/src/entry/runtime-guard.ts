@@ -25,7 +25,7 @@ function parseSemver(versionText: string | undefined): Semver | null {
 function isSupportedNodeVersion(version: Semver): boolean {
   if (version.major === 20) return version.minor >= 19;
   if (version.major === 21) return false;
-  if (version.major === 22) return version.minor >= 12;
+  if (version.major === 22) return version.minor >= 13;
   return version.major > 22;
 }
 

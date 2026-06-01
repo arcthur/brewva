@@ -141,7 +141,7 @@ function parseArgs(argv: readonly string[]): CliOptions | null {
 function main(): void {
   const options = parseArgs(process.argv.slice(2));
   if (!options) {
-    process.exit(1);
+    process.exit(0);
   }
 
   const runtime = createHostedRuntimeAdapter({

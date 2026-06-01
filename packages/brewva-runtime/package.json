@@ -38,8 +38,7 @@
     "@brewva/brewva-token-estimation": "workspace:*",
     "ajv": "^8.20.0",
     "date-fns": "^4.3.0",
-    "jsonc-parser": "^3.3.1",
-    "yaml": "^2.9.0"
+    "jsonc-parser": "^3.3.1"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

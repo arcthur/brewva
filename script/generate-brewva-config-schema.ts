@@ -1,7 +1,9 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 type Schema = Record<string, unknown>;
 
@@ -52,7 +54,30 @@ function stableStringify(value: unknown): string {
   return `${JSON.stringify(normalize(value), null, 2)}\n`;
 }
 
-async function main(): Promise<void> {
+function formatJsonSource(source: string, outputPath: string): string {
+  const result = spawnSync("bunx", ["oxfmt", "--stdin-filepath", outputPath], {
+    encoding: "utf8",
+    input: source,
+  });
+
+  if (result.error) {
+    throw new Error(`Unable to run oxfmt for generated schema: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const details = [result.stderr.trim(), result.stdout.trim()]
+      .filter((part) => part.length > 0)
+      .join("\n");
+    throw new Error(
+      `Generated schema formatting failed with exit code ${result.status}${
+        details ? `\n${details}` : ""
+      }`,
+    );
+  }
+
+  return result.stdout.endsWith("\n") ? result.stdout : `${result.stdout}\n`;
+}
+
+async function buildSchemaSource(): Promise<{ outputPath: string; source: string }> {
   const require = createRequire(import.meta.url);
   const { createGenerator } =
     require("ts-json-schema-generator") as typeof import("ts-json-schema-generator");
@@ -78,9 +103,37 @@ async function main(): Promise<void> {
   schema.title = "brewva BrewvaConfigFile";
   schema.description = "JSON Schema for .brewva/brewva.json (Brewva config patch file).";
 
+  return {
+    outputPath,
+    source: formatJsonSource(stableStringify(schema), outputPath),
+  };
+}
+
+async function main(): Promise<void> {
+  const { values } = parseArgs({
+    options: {
+      check: { type: "boolean", default: false },
+      write: { type: "boolean", default: false },
+    },
+  });
+
+  if (values.write === values.check) {
+    throw new Error("Use exactly one mode: --write or --check.");
+  }
+
+  const { outputPath, source } = await buildSchemaSource();
+
+  if (values.check) {
+    const current = readFileSync(outputPath, "utf8");
+    if (current !== source) {
+      throw new Error("Brewva config schema is stale. Run `bun run generate:schema`.");
+    }
+    return;
+  }
+
   const parent = dirname(outputPath);
   mkdirSync(parent, { recursive: true });
-  writeFileSync(outputPath, stableStringify(schema), "utf8");
+  writeFileSync(outputPath, source, "utf8");
 }
 
 await main();

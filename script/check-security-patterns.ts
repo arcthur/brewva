@@ -5,8 +5,10 @@ const ROOT = join(import.meta.dir, "..");
 const DEFAULT_SCAN_PATHS = [
   "packages/brewva-runtime/src/security/boundary-policy.ts",
   "packages/brewva-runtime/src/security/command-policy.ts",
-  "packages/brewva-runtime/src/domain/tools/tool-gate.ts",
+  "packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts",
+  "packages/brewva-runtime/src/runtime/kernel/policy/tool-decision.ts",
   "packages/brewva-tools/src/families/execution/exec.ts",
+  "packages/brewva-tools/src/families/execution/exec/box-dispatch.ts",
 ] as const;
 
 export interface SecurityPatternViolation {
@@ -114,7 +116,7 @@ export function scanSecurityPatterns(
   for (const path of paths) {
     const absolutePath = join(ROOT, path);
     if (!existsSync(absolutePath)) {
-      continue;
+      throw new Error(`Security pattern scan path is missing: ${path}`);
     }
     violations.push(...scanSecurityPatternContent(path, readFileSync(absolutePath, "utf8")));
   }

@@ -61,8 +61,7 @@
     "ajv-formats": "^3.0.1",
     "eventsource-parser": "^3.0.8",
     "openai": "6.39.0",
-    "partial-json": "^0.1.7",
-    "proxy-agent": "^8.0.1"
+    "partial-json": "^0.1.7"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

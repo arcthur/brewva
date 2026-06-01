@@ -93,7 +93,9 @@ resolve_platform_dir() {
       local libc
       libc="$(detect_linux_libc)"
       if [[ "${libc}" == "musl" ]]; then
-        echo "brewva-linux-${arch}-musl"
+        echo "Error: musl Linux binaries are not published because BoxLite native bindings are unavailable for musl targets." >&2
+        echo "Hint: use a glibc-based Linux environment or build/run from source with Bun." >&2
+        exit 1
       else
         echo "brewva-linux-${arch}"
       fi
@@ -173,8 +175,10 @@ if [[ ! -x "${TARGET_BINARY}" ]]; then
 fi
 
 if [[ ! -x "${TARGET_BINARY}" ]]; then
-  echo "Error: platform binary still missing after build: ${TARGET_BINARY}" >&2
-  exit 1
+  if [[ "${DRY_RUN}" -ne 1 ]]; then
+    echo "Error: platform binary still missing after build: ${TARGET_BINARY}" >&2
+    exit 1
+  fi
 fi
 
 if [[ -e "${INSTALL_PATH}" && ! -L "${INSTALL_PATH}" ]]; then

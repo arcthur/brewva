@@ -62,6 +62,22 @@ describe("binary packaging contract", () => {
       "stageRootForPackage(NATIVE_PACKAGE_STAGE_ROOT, packageName, version)",
     );
     expect(buildScriptSource).toContain("function readPackagedDependencyVersion(packageRoot");
+    expect(buildScriptSource).toContain("function readPinnedDependencyVersion(manifestPath");
+    expect(buildScriptSource).toContain(
+      'readPinnedDependencyVersion(ROOT_PACKAGE_JSON_PATH, "@opentui/core")',
+    );
+    expect(buildScriptSource).toContain("BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH");
+    expect(buildScriptSource).toContain(
+      "const DUCKDB_NODE_API_VERSION = readPinnedDependencyVersion(",
+    );
+    expect(buildScriptSource).toContain('"@duckdb/node-api"');
+    expect(buildScriptSource).toContain("BREWVA_TOOLS_PACKAGE_JSON_PATH");
+    expect(buildScriptSource).toContain('"oxc-parser"');
+    expect(buildScriptSource).not.toContain('const OPEN_TUI_VERSION = "');
+    expect(buildScriptSource).not.toContain(
+      'readPinnedDependencyVersion(ROOT_PACKAGE_JSON_PATH, "@duckdb/node-api")',
+    );
+    expect(buildScriptSource).not.toContain('const OXC_PARSER_VERSION = "');
   });
 
   test("packages only BoxLite-supported binary targets and stages native bindings", () => {
@@ -93,9 +109,11 @@ describe("binary packaging contract", () => {
     const workflowPath = resolve(repoRoot, ".github", "workflows", "ci.yml");
     const launcherPackagePath = resolve(repoRoot, "distribution", "brewva", "package.json");
     const platformResolverPath = resolve(repoRoot, "distribution", "brewva", "bin", "platform.js");
+    const localInstallerPath = resolve(repoRoot, "script", "install-local.sh");
     const workflowSource = readFileSync(workflowPath, "utf8");
     const launcherPackageSource = readFileSync(launcherPackagePath, "utf8");
     const platformResolverSource = readFileSync(platformResolverPath, "utf8");
+    const localInstallerSource = readFileSync(localInstallerPath, "utf8");
 
     for (const supported of ["brewva-darwin-arm64", "brewva-linux-x64", "brewva-linux-arm64"]) {
       expect(workflowSource).toContain(`target: ${supported}`);
@@ -116,6 +134,9 @@ describe("binary packaging contract", () => {
     expect(platformResolverSource).not.toContain('"windows-x64"');
     expect(platformResolverSource).not.toContain('"linux-x64-musl"');
     expect(platformResolverSource).not.toContain('"linux-arm64-musl"');
+    expect(localInstallerSource).not.toContain('echo "brewva-linux-${arch}-musl"');
+    expect(localInstallerSource).toContain("musl Linux binaries are not published");
+    expect(localInstallerSource).toContain('if [[ "${DRY_RUN}" -ne 1 ]]; then');
   });
 
   test("uses the baseline Bun runtime for the glibc Linux x64 binary", () => {
