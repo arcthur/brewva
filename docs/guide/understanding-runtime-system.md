@@ -42,10 +42,10 @@ kernel decisions, model attention, or runtime physics instead of becoming a new
 public root domain.
 
 Product surfaces may still use a short loop:
-`receive -> orient -> authorize -> act -> verify -> handoff`. That loop is a
+`receive -> orient -> authorize -> act -> verify -> continue`. That loop is a
 projection over the four ports. Work Cards, attention options, SkillCards,
-handoff anchors, and inspect renderers make evidence easier to use, but they do
-not add root ports or authority domains.
+continuation anchors, and inspect renderers make evidence easier to use, but
+they do not add root ports or authority domains.
 
 ## What Stays Internal
 

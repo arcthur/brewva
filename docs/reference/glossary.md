@@ -8,7 +8,8 @@
   Work Card, decision lane, effect ledger, attention glance, recovery lane, and
   composer policy
 - Work Card: the default schema-tagged inspect projection for goal, context,
-  options, authority, work, evidence, and handoff; it is a view, not truth
+  options, authority, work, evidence, and continuation anchors; it is a view,
+  not truth
 - Decision Lane: cockpit region that ranks active approvals, questions, cost
   gates, adoption asks, recovery confirmations, and manual gates before
   ordinary transcript history
@@ -19,8 +20,9 @@
 - Attention Option: a bounded model-facing candidate card for unbounded
   evidence sources; content enters the answer path only through explicit
   consume or pin actions
-- Handoff Anchor: a replayable tape anchor containing continuation summary and
-  next steps for another actor
+- Continuation Anchor: a replayable tape anchor containing continuation
+  summary and next steps for another actor; `/handoff`, `tape_handoff`, and
+  `tape.handoff` remain stable input/event names for this concept
 - Verification Gate: manifest-bound kernel policy input that can defer or abort
   a tool proposal when required evidence is missing, stale, or failed
 - Checkpoint: machine-generated tape baseline event used to accelerate replay

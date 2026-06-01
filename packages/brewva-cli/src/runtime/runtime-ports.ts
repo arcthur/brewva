@@ -120,7 +120,7 @@ export function getCliRuntimeTapeStatus(
   return runtime.ops.tape.status.get(sessionId);
 }
 
-export function recordCliRuntimeTapeHandoff(
+export function recordCliRuntimeContinuationAnchor(
   runtime: AuthorityRuntime,
   sessionId: string,
   input: Parameters<HostedRuntimeAdapterPort["ops"]["tape"]["handoff"]["record"]>[1],

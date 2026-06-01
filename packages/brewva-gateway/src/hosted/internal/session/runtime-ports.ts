@@ -651,6 +651,6 @@ export {
   recordRuntimeLineageContextEntry,
   recordRuntimeLineageSummary,
   recordRuntimeReasoningCheckpoint,
-  recordRuntimeTapeHandoff,
+  recordRuntimeContinuationAnchor,
   startRuntimeToolInvocation,
 } from "./projection/runtime-write-adapters.js";

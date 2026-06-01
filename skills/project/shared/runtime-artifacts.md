@@ -14,8 +14,9 @@ Primary artifact families:
 - `.orchestrator/ledger/evidence.jsonl`: evidence ledger with hash chain
 - `.orchestrator/projection/*`: working projection units and snapshots
 - `.orchestrator/recovery-wal/*.jsonl`: turn durability and recovery state
-- `tape_handoff` events in the session event tape: replayable handoff anchors
-  with name, summary, next steps, and evidence references
+- `tape_handoff` / `tape.handoff` events in the session event tape:
+  replayable continuation anchors with name, summary, next steps, and evidence
+  references
 - `.brewva/session-index/session-index.duckdb`: rebuildable DuckDB query plane
   for typed recall and insights queries; safe to delete and rebuild from event
   tape
@@ -30,4 +31,5 @@ pointers back to event tape, not as runtime truth.
 
 Work Card output is a product projection over these artifacts. Use it to orient
 quickly, then drill down to event tape, WAL, ledger, projection units, or raw
-replay before making a forensic claim about handoff, authority, or execution.
+replay before making a forensic claim about continuation anchors, authority, or
+execution.

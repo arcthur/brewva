@@ -3,7 +3,10 @@ import type {
   ScheduleContinuityMode,
   ScheduleIntentProjectionRecord,
 } from "@brewva/brewva-vocabulary/schedule";
-import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
+import {
+  decideContinuationAnchorRelevance,
+  type ManagedToolMode,
+} from "@brewva/brewva-vocabulary/session";
 import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import {
@@ -35,6 +38,12 @@ function clampText(value: string | undefined, maxChars: number): string | undefi
   return `${compact.slice(0, Math.max(1, maxChars - 3))}...`;
 }
 
+function hasScheduleContinuationAnchorMetadata(
+  anchor: SchedulePromptAnchor | null | undefined,
+): anchor is SchedulePromptAnchor {
+  return Boolean(anchor && decideContinuationAnchorRelevance(anchor).include);
+}
+
 export function buildScheduleWorkerSessionId(input: {
   intentId: string;
   runIndex: number;
@@ -60,7 +69,7 @@ export function collectScheduleContinuationSnapshot(
   return {
     taskSpec: parentTask.spec ?? null,
     claims: parentClaim.claims.map((fact: OperationalClaim) => structuredClone(fact)),
-    parentAnchor: parentAnchor ?? null,
+    parentAnchor: hasScheduleContinuationAnchorMetadata(parentAnchor) ? parentAnchor : null,
   };
 }
 

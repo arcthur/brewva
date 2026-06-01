@@ -25,7 +25,7 @@ efficiently through ordinary tools:
 - numeric context status and forced-compaction state
 - active model-authored workbench entries
 - pending or newly completed delegation handoffs
-- latest replayable session handoff summary when present
+- latest replayable continuation anchor when present
 - the previous completed turn's bounded consequence digest
 - explicitly requested capability details
 - bounded read-path recovery hints
@@ -65,9 +65,9 @@ A hosted turn has one stable request shape:
 
 Attention options are not a hidden dynamic-tail admission source. The baseline
 request may include bounded facts such as the current request, project guidance,
-target roots, capability posture, diff posture, latest handoff, and context
-pressure. Unbounded or cross-session evidence is exposed as option cards and
-only enters the answer path when the model consumes or pins it.
+target roots, capability posture, diff posture, latest continuation anchor, and
+context pressure. Unbounded or cross-session evidence is exposed as option
+cards and only enters the answer path when the model consumes or pins it.
 
 `Available Brewva SkillCards` and `[CapabilitySelection]` are not part of the
 dynamic-tail renderer. `Available Brewva SkillCards` is an advisory
@@ -88,6 +88,7 @@ The dynamic tail is a fixed ordered list. Empty blocks are omitted:
 
 - `[ContextCompactionGate]` or `[ContextCompactionAdvisory]`
 - `[Context Status]`
+- `[LatestContinuationAnchor]`
 - `[Workbench]`
 - `[PendingDelegations]`
 - `[CompletedDelegationOutcomes]`

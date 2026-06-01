@@ -1,5 +1,6 @@
 import {
-  TASK_WORK_CARD_PROJECTION_SCHEMA_V1,
+  decideContinuationAnchorRelevance,
+  TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
   type SessionCompactionAttentionRefs,
   type TaskWorkCardContextPressure,
   type TaskWorkCardProjection,
@@ -9,8 +10,19 @@ import type { InspectReport } from "./report.js";
 const ACTIVE_DELEGATION_LIFECYCLES = new Set(["pending", "running", "blocked"]);
 const DEFAULT_MAX_WORK_CARD_LINES = 24;
 
+type InspectReplayAnchor = NonNullable<InspectReport["replay"]["lastAnchor"]>;
+
+function hasContinuationAnchorMetadata(
+  anchor: InspectReport["replay"]["lastAnchor"],
+): anchor is InspectReplayAnchor {
+  return Boolean(anchor && decideContinuationAnchorRelevance(anchor).include);
+}
+
 export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCardProjection {
   const attention = report.contextCockpit.compaction.inputProvenance?.attention;
+  const continuationAnchor = hasContinuationAnchorMetadata(report.replay.lastAnchor)
+    ? report.replay.lastAnchor
+    : null;
   const selectedCapabilities =
     report.contextCockpit.capabilities.latest?.selectedCapabilities ?? [];
   const skillInvocationRefs = report.contextCockpit.skills.invocationRecords.map(
@@ -25,8 +37,8 @@ export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCard
   const latestPatchSetRef = pendingWorkerPatches[0]?.canonicalRefs[0] ?? null;
 
   return {
-    schema: TASK_WORK_CARD_PROJECTION_SCHEMA_V1,
-    version: 1,
+    schema: TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
+    version: 2,
     sessionId: report.sessionId,
     refs: collectStableRefs([
       ...skillInvocationRefs,
@@ -34,7 +46,7 @@ export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCard
       ...recallResultRefs,
       ...report.operatorSafety.receiptIds,
       ...report.delegation.runCards.flatMap((card) => card.canonicalRefs),
-      report.replay.lastAnchor?.id ?? null,
+      continuationAnchor?.id ?? null,
       compactBaselineRef,
     ]),
     goal: {
@@ -69,7 +81,7 @@ export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCard
         "target_roots",
         "capability_posture",
         "diff_posture",
-        report.replay.lastAnchor?.id ?? null,
+        continuationAnchor?.id ?? null,
         "context_pressure",
       ]),
     },
@@ -106,11 +118,11 @@ export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCard
       verificationDebtCount: report.delegation.workboard.verificationDebt.length,
       latestPatchSetRef,
     },
-    handoff: {
-      anchorId: report.replay.lastAnchor?.id ?? null,
-      name: report.replay.lastAnchor?.name ?? null,
-      summary: report.replay.lastAnchor?.summary ?? null,
-      nextSteps: report.replay.lastAnchor?.nextSteps ?? null,
+    continuationAnchor: {
+      anchorId: continuationAnchor?.id ?? null,
+      name: continuationAnchor?.name ?? null,
+      summary: continuationAnchor?.summary ?? null,
+      nextSteps: continuationAnchor?.nextSteps ?? null,
     },
   };
 }
@@ -133,7 +145,7 @@ export function formatTaskWorkCardText(
     `Authority: capabilities=${renderList(projection.authority.selectedCapabilities)} pendingAsks=${projection.authority.pendingAskCount} denials=${projection.authority.denialCount} receipts=${renderList(projection.authority.capabilityReceiptRefs)}`,
     `Work: activeRuns=${projection.work.activeRunCount} workerPatches=${projection.work.pendingWorkerPatchCount} knowledge=${projection.work.pendingKnowledgeAdoptionCount} unreadEvidence=${projection.work.unreadEvidenceCount} blockedOrFailed=${projection.work.blockedOrFailedRunCount} nextReceiptOwner=${projection.work.recoveryNextOwner}`,
     `Evidence: outcome=${projection.evidence.verificationOutcome ?? "n/a"} level=${projection.evidence.verificationLevel ?? "n/a"} failed=${renderList(projection.evidence.failedChecks)} missing=${renderList([...projection.evidence.missingChecks, ...projection.evidence.missingEvidence])} verificationDebt=${projection.evidence.verificationDebtCount} patch=${projection.evidence.latestPatchSetRef ?? "none"}`,
-    `Handoff: anchor=${projection.handoff.anchorId ?? "none"} name=${projection.handoff.name ?? "n/a"} summary=${projection.handoff.summary ?? "n/a"} next=${projection.handoff.nextSteps ?? "n/a"}`,
+    `Continuation Anchor: anchor=${projection.continuationAnchor.anchorId ?? "none"} name=${projection.continuationAnchor.name ?? "n/a"} summary=${projection.continuationAnchor.summary ?? "n/a"} next=${projection.continuationAnchor.nextSteps ?? "n/a"}`,
     `Refs: ${renderList(projection.refs.slice(0, 8))}${projection.refs.length > 8 ? ` (+${projection.refs.length - 8} more)` : ""}`,
   ];
 

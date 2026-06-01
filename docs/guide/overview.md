@@ -23,7 +23,7 @@ reference.
 
 - Skill catalog discovery and refresh
 - Work Card projection over goal, context, options, authority, work, evidence,
-  and handoff
+  and continuation anchors
 - Evidence ledger recording, digest generation, and query
 - Verification-gate policy input and command-based verification checks
 - Context budget planning and compaction signaling

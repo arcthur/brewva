@@ -112,16 +112,16 @@ unavailable diagnostics rather than diff content. Large Git sections are
 bounded before pager rendering; use the matching Git command in the shell for
 full output when a section is truncated.
 
-`/export` opens a narrow session handoff bundle: inspect report, projected
+`/export` opens a narrow session continuation bundle: inspect report, projected
 transcript archive Markdown, turn attribution, patch-set identifiers, and Git
 evidence.
 `Session: export inspect bundle` remains inspect-only in the command palette.
 
-`/handoff` records a replayable session handoff anchor through the same tape
-handoff authority path used by managed tools. The optional argument can be split
-as `name :: summary :: next`; omitted fields use narrow defaults. Work Cards,
-transcripts, export bundles, and channel inspect show the latest anchor,
-summary, and next steps.
+`/handoff` records a replayable continuation anchor through the same
+`tape_handoff` authority path used by managed tools. The optional argument can
+be split as `name :: summary :: next`; omitted fields use narrow defaults. This
+does not compact context. Work Cards, transcripts, export bundles, and channel
+inspect show the latest anchor, summary, and next steps.
 
 `/context`, `/authority`, and `/skills` are read-only drill-downs behind the
 cockpit default. `/safety` opens the request-local operator safety queue for
@@ -192,7 +192,7 @@ Palette-only actions include:
 - `Attention drawer`
 - `Context: request compaction`
 - `Transcript: copy latest answer`
-- `Session: create handoff`
+- `Session: record continuation anchor`
 - `Session: export inspect bundle`
 - `Diff: export patch evidence` emits replay turn attribution, patch-set
   identifiers, and a compact Git diff stat without the full diff body.

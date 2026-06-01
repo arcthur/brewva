@@ -498,7 +498,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     expect(text).toContain("Status @default");
     expect(text).toContain("Inspect");
     expect(text).toContain("  Inspect @default -");
-    expect(text).toContain("  Work Card: schema=brewva.task-work-card.projection.v1");
+    expect(text).toContain("  Work Card: schema=brewva.task-work-card.projection.v2");
     expect(text).toContain("  Goal: n/a phase=pending health=n/a refs=src");
   });
 
@@ -1238,7 +1238,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     expect(text).toContain("Status @default (focus @analyst)");
     expect(text).toContain("  Inspect @default -");
     expect(text).toContain("  Focus: @analyst · explicit target: @default");
-    expect(text).toContain("  Work Card: schema=brewva.task-work-card.projection.v1");
+    expect(text).toContain("  Work Card: schema=brewva.task-work-card.projection.v2");
     expect(text).toContain("  Goal: n/a phase=pending health=n/a refs=src");
   });
 

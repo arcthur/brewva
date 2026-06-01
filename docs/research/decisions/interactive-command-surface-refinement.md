@@ -32,9 +32,9 @@
 - `/skills` is catalog-only until a future accepted decision defines a
   user-invocable skill product contract. The shell must not simulate invocation
   by prompt submission or workflow-specific command IDs.
-- `/handoff` records a replayable session handoff anchor through the tape
+- `/handoff` records a replayable continuation anchor through the stable tape
   handoff authority path and surfaces it in Work Cards, transcripts, export
-  bundles, and channel inspect.
+  bundles, and channel inspect. It does not compact context.
 - `/diff` and `/export` are evidence surfaces. They combine bounded Git working-tree evidence with replay-visible turn attribution, patch-set identifiers, inspect reports, and transcript projection rather than submitting prompts.
 - `/init` is a read-only project-guidance preview. It must never overwrite `AGENTS.md` or Brewva metadata without an explicit confirmation flow owned by a later command.
 
@@ -42,3 +42,4 @@
 
 - `docs/research/decisions/four-port-runtime-simplification-rfc.md`
 - `docs/research/decisions/bub-shaped-brewva-blueprint.md`
+- `docs/research/decisions/future-model-context-lifecycle.md`

@@ -7,7 +7,7 @@ import type { GoalCommand } from "@brewva/brewva-vocabulary/goal";
 import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
 import type { CliShellInput } from "./input.js";
 
-export interface SessionHandoffDraft {
+export interface ContinuationAnchorDraft {
   readonly name?: string;
   readonly summary?: string;
   readonly nextSteps?: string;
@@ -70,8 +70,8 @@ export type ShellEffect =
   | { type: "session.diffExternalPager" }
   | { type: "session.exportBundle" }
   | { type: "session.exportInspectBundle" }
-  | { type: "session.handoff"; handoff?: SessionHandoffDraft }
   | { type: "session.goal"; command: GoalCommand }
+  | { type: "session.continuationAnchor"; continuationAnchor?: ContinuationAnchorDraft }
   | { type: "session.steer"; sessionGeneration: number; text: string }
   | { type: "session.undo" }
   | { type: "session.rewind"; argument?: string }

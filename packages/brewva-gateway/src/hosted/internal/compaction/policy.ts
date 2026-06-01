@@ -1,7 +1,6 @@
 import type {
   ContextCompactionGateStatus,
   ContextCompactionReason,
-  ContextStatus,
 } from "@brewva/brewva-vocabulary/context";
 
 export type CompactionPolicyCaller = "manual" | "auto" | "model_downshift";
@@ -41,11 +40,13 @@ export type CompactionPolicyDecision =
       reason: CompactionPolicySkipReason;
     };
 
-function pressureReason(
-  status: ContextStatus,
+export function resolveCompactionPressureReason(
+  gateStatus: ContextCompactionGateStatus,
   pendingReason?: ContextCompactionReason | null,
 ): ContextCompactionReason | null {
   if (pendingReason) return pendingReason;
+  if (gateStatus.reason) return gateStatus.reason;
+  const status = gateStatus.status;
   if (status.forcedCompaction) return "hard_limit";
   if (status.predictedOverflow) return "predicted_overflow";
   if (status.compactionAdvised) return "usage_threshold";
@@ -70,7 +71,7 @@ export function decideCompaction(input: CompactionPolicyInputs): CompactionPolic
     if (input.usageKnown === false) {
       return { decision: "skip", caller: input.caller, reason: "usage_unknown" };
     }
-    const reason = pressureReason(input.gateStatus.status, input.pendingReason);
+    const reason = resolveCompactionPressureReason(input.gateStatus, input.pendingReason);
     if (!reason) {
       return { decision: "skip", caller: input.caller, reason: "no_request" };
     }
@@ -80,7 +81,7 @@ export function decideCompaction(input: CompactionPolicyInputs): CompactionPolic
     return { decision: "execute", caller: input.caller, reason };
   }
 
-  const reason = pressureReason(input.gateStatus.status, input.pendingReason);
+  const reason = resolveCompactionPressureReason(input.gateStatus, input.pendingReason);
   if (!reason) {
     return { decision: "skip", caller: input.caller, reason: "no_request" };
   }

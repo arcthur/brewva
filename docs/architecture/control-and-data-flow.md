@@ -35,11 +35,11 @@ flowchart LR
   ORIENT --> AUTHORIZE["authorize: capabilities + asks + sandbox"]
   AUTHORIZE --> ACT["act: kernel tool transaction"]
   ACT --> VERIFY["verify: advisory evidence or gate policy"]
-  VERIFY --> HANDOFF["handoff: tape anchor + next steps"]
+  VERIFY --> CONTINUE["continue: optional anchor + next steps"]
 
   ORIENT -. "candidate refs" .-> OPTIONS["attention options"]
   OPTIONS -. "consume or pin" .-> ORIENT
-  HANDOFF -. "latest anchor" .-> ORIENT
+  CONTINUE -. "latest continuation anchor" .-> ORIENT
 ```
 
 ## Shared Inspect Projection
@@ -51,7 +51,7 @@ flowchart TD
   CAP["capability receipts"] --> WC
   WB["workbench + recall provenance"] --> WC
   VERIFY["verification evidence"] --> WC
-  HANDOFF["handoff anchors"] --> WC
+  ANCHORS["continuation anchors"] --> WC
 
   WC --> CLI["brewva inspect"]
   WC --> SHELL["/inspect shell overlay"]

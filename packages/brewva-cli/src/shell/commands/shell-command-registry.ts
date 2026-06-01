@@ -120,7 +120,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
   {
     id: "session.export",
     title: "Export session",
-    description: "Export a replay-visible session handoff bundle.",
+    description: "Export a replay-visible session continuation bundle.",
     category: "Session",
     slash: { name: "export" },
   },
@@ -133,13 +133,12 @@ const builtInShellCommands: readonly ShellCommand[] = [
     suggested: true,
   },
   {
-    id: "session.handoff",
-    title: "Create handoff",
+    id: "session.continuationAnchor",
+    title: "Record continuation anchor",
     description:
-      "Record a replayable tape handoff anchor (usage: /handoff [name :: summary :: next]).",
+      "Record a replayable continuation anchor; this does not compact context (usage: /handoff [name :: summary :: next]).",
     category: "Session",
     slash: { name: "handoff", argumentMode: "optional" },
-    suggested: true,
   },
   {
     id: "session.lineage",

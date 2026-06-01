@@ -12,12 +12,12 @@ Runtime authority decides whether an effect may commit.
 
 The default product loop makes that split visible:
 
-`receive -> orient -> authorize -> act -> verify -> handoff`
+`receive -> orient -> authorize -> act -> verify -> continue`
 
 Orienting artifacts such as Work Cards, SkillCards, attention options, context
-cockpit details, and handoff summaries are evidence projections. They help the
-model and operator decide what to inspect next, but they do not carry effect
-authority.
+cockpit details, and continuation-anchor summaries are evidence projections.
+They help the model and operator decide what to inspect next, but they do not
+carry effect authority.
 
 The boundary is practical:
 

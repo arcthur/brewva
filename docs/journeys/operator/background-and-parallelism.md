@@ -119,7 +119,8 @@ flowchart TD
 - internal review lanes remain parent-orchestrated fan-out behind the review
   ensemble and run as `consult/review` delegates under the explorer envelope
   family
-- same-turn `returnMode=supplemental` and durable handoff state are separate:
+- same-turn `returnMode=supplemental` and durable detached delivery state are
+  separate:
   - same-turn supplemental append affects the current parent-turn hidden tail
   - detached delivery still remains durable control-plane state with
     `handoffState` progression such as `pending_parent_turn -> surfaced`

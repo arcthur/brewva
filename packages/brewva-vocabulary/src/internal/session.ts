@@ -141,13 +141,13 @@ export interface SessionCompactionResourceRef extends ProtocolRecord {
   readonly path: string;
 }
 
-export const TASK_WORK_CARD_PROJECTION_SCHEMA_V1 = "brewva.task-work-card.projection.v1" as const;
+export const TASK_WORK_CARD_PROJECTION_SCHEMA_V2 = "brewva.task-work-card.projection.v2" as const;
 
 export type TaskWorkCardContextPressure = "low" | "medium" | "high" | "forced" | "unknown";
 
 export interface TaskWorkCardProjection extends ProtocolRecord {
-  readonly schema: typeof TASK_WORK_CARD_PROJECTION_SCHEMA_V1;
-  readonly version: 1;
+  readonly schema: typeof TASK_WORK_CARD_PROJECTION_SCHEMA_V2;
+  readonly version: 2;
   readonly sessionId: string;
   readonly refs: readonly string[];
   readonly goal: {
@@ -209,7 +209,7 @@ export interface TaskWorkCardProjection extends ProtocolRecord {
     readonly verificationDebtCount: number;
     readonly latestPatchSetRef: string | null;
   };
-  readonly handoff: {
+  readonly continuationAnchor: {
     readonly anchorId: string | null;
     readonly name: string | null;
     readonly summary: string | null;
@@ -326,6 +326,39 @@ export interface TapeStatusState extends ProtocolRecord {
   } | null;
   readonly lastCheckpointId?: string | null;
   readonly outputSearch?: OutputSearchTelemetryState | null;
+}
+
+export interface ContinuationAnchorRelevanceDecision {
+  readonly include: boolean;
+  readonly reason: "missing" | "checkpoint_only" | "available";
+  readonly anchorId: string | null;
+}
+
+export interface ContinuationAnchorCandidate {
+  readonly id: string;
+  readonly name?: string | null;
+  readonly summary?: string | null;
+  readonly nextSteps?: string | null;
+}
+
+function hasContinuationAnchorText(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function decideContinuationAnchorRelevance(
+  anchor?: ContinuationAnchorCandidate | null,
+): ContinuationAnchorRelevanceDecision {
+  if (!anchor) {
+    return { include: false, reason: "missing", anchorId: null };
+  }
+  if (
+    !hasContinuationAnchorText(anchor.name) &&
+    !hasContinuationAnchorText(anchor.summary) &&
+    !hasContinuationAnchorText(anchor.nextSteps)
+  ) {
+    return { include: false, reason: "checkpoint_only", anchorId: anchor.id };
+  }
+  return { include: true, reason: "available", anchorId: anchor.id };
 }
 
 export interface SessionUncleanShutdownDiagnostic extends ProtocolRecord {

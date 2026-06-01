@@ -706,7 +706,7 @@ function buildFoldedToolLedgerItems(
         expandable: true,
         rollbackRef:
           source.workCard.evidence.latestPatchSetRef ??
-          source.workCard.handoff.anchorId ??
+          source.workCard.continuationAnchor.anchorId ??
           undefined,
         sourceRef: tool.latestRef,
         stateChangedAt: tool.latestAt,

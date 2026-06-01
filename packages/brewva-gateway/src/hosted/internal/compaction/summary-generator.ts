@@ -103,7 +103,7 @@ const INITIAL_SUMMARY_INSTRUCTIONS = [
   "- Current Objective: preserve exact recent user corrections when they change the task.",
   "- Current State: name active files, symbols, decisions, and still-relevant workbench notes.",
   '- Failed Attempts: include failed commands, errors, rejected approaches, and fixes already tried; write "None observed" only when true.',
-  "- Next Step: include the literal next action and quote the most recent task handoff text when available.",
+  "- Next Step: include the literal next action and quote the most recent continuation anchor text when available.",
   "- Dropped Digests: list only digest values that appear in the transcript or omitted-prefix marker; do not invent digests.",
 ].join("\n");
 

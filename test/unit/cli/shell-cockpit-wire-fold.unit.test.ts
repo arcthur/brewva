@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { RuntimeCostPosture } from "@brewva/brewva-tools/contracts";
 import {
-  TASK_WORK_CARD_PROJECTION_SCHEMA_V1,
+  TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
   type TaskWorkCardProjection,
 } from "@brewva/brewva-vocabulary/session";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
@@ -27,8 +27,8 @@ function frame(
 
 function workCard(): TaskWorkCardProjection {
   return {
-    schema: TASK_WORK_CARD_PROJECTION_SCHEMA_V1,
-    version: 1,
+    schema: TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
+    version: 2,
     sessionId: "session-1",
     refs: [],
     goal: {
@@ -79,7 +79,7 @@ function workCard(): TaskWorkCardProjection {
       verificationDebtCount: 0,
       latestPatchSetRef: null,
     },
-    handoff: {
+    continuationAnchor: {
       anchorId: null,
       name: null,
       summary: null,

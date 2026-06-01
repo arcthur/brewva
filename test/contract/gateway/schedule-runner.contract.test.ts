@@ -317,6 +317,85 @@ describe("gateway contract: schedule runner", () => {
     }
   });
 
+  test("inherit schedule runs do not promote checkpoint-only anchors", async () => {
+    const workspace = createTestWorkspace("schedule-runner-checkpoint-anchor");
+    const runtime = createHostedTestRuntime({ cwd: workspace });
+    const parentSessionId = "parent-session";
+    const originalTapeStatusGet = runtime.ops.tape.status.get.bind(runtime.ops.tape.status);
+    Object.assign(runtime.ops.tape.status, {
+      get(sessionId: string) {
+        const status = originalTapeStatusGet(sessionId);
+        return sessionId === parentSessionId
+          ? {
+              ...status,
+              lastAnchor: {
+                id: "checkpoint-only-anchor",
+                name: "   ",
+              },
+            }
+          : status;
+      },
+    });
+
+    let sentPrompt:
+      | {
+          sessionId: string;
+          prompt: string;
+          options?: SendPromptOptions;
+        }
+      | undefined;
+
+    const backend: SessionBackend = {
+      start: async () => undefined,
+      stop: async () => undefined,
+      openSession: async (input) => ({
+        sessionId: input.sessionId,
+        created: true,
+        workerPid: 4321,
+        agentSessionId: "agent-schedule-checkpoint",
+      }),
+      sendPrompt: async (sessionId, prompt, options) => {
+        sentPrompt = { sessionId, prompt, options };
+        return {
+          sessionId,
+          agentSessionId: "agent-schedule-checkpoint",
+          turnId: "turn-1",
+          accepted: true,
+          output: {
+            attemptId: "attempt-1",
+            assistantText: "done",
+            toolOutputs: [],
+          },
+        };
+      },
+      steerSession: async () => ({ status: "no_active_run" }),
+      abortSession: async () => false,
+      stopSession: async () => true,
+      listWorkers: () => [],
+      querySessionWire: async () => [],
+      querySessionContextStatus: async () => undefined,
+      querySessionLifecycle: async () => undefined,
+    };
+
+    try {
+      await executeScheduleIntentRun({
+        runtime,
+        backend,
+        intent: createScheduleIntent(),
+      });
+
+      expect(sentPrompt?.options?.trigger).toMatchObject({
+        kind: "schedule",
+        continuityMode: "inherit",
+        parentAnchor: null,
+      });
+      expect(sentPrompt?.prompt).not.toContain("parent_anchor_summary:");
+      expect(sentPrompt?.prompt).not.toContain("parent_anchor_next_steps:");
+    } finally {
+      cleanupTestWorkspace(workspace);
+    }
+  });
+
   test("records schedule failure and still stops the worker session when the shared backend errors", async () => {
     const workspace = createTestWorkspace("schedule-runner-failure");
     const runtime = createHostedTestRuntime({ cwd: workspace });

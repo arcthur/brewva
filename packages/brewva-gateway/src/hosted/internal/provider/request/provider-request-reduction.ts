@@ -10,6 +10,10 @@ import type {
   ExpectedProviderCacheBreak,
   TransientReductionObservationInput,
 } from "@brewva/brewva-vocabulary/context";
+import {
+  decideTransientReductionEligibility,
+  type ContextTransientReductionDecision,
+} from "../../context/context-lifecycle.js";
 import { recordTransientReductionEvidence } from "../../context/evidence/context-evidence.js";
 import {
   getRuntimeCompactionGateStatus,
@@ -29,14 +33,6 @@ import {
 
 const DEFAULT_PROVIDER_CACHE_STALENESS_MS = 5 * 60 * 1000;
 const expectedCacheBreakByPayload = new WeakMap<object, ExpectedProviderCacheBreak>();
-
-interface ReductionEligibility {
-  allowed: boolean;
-  detail: string | null;
-  compactionAdvised: boolean;
-  forcedCompaction: boolean;
-  cacheCold: boolean;
-}
 
 function asWeakMapKey(value: unknown): object | null {
   return value && typeof value === "object" ? value : null;
@@ -177,117 +173,46 @@ export function resolveTransientOutboundReductionEligibility(
     api?: string;
     modelId?: string;
   },
-): ReductionEligibility {
-  if (!runtime.config.infrastructure.contextBudget.enabled) {
-    return {
-      allowed: false,
-      detail: "context budget is disabled",
-      compactionAdvised: false,
-      forcedCompaction: false,
-      cacheCold: false,
-    };
-  }
+): ContextTransientReductionDecision {
+  const contextBudgetEnabled = runtime.config.infrastructure.contextBudget.enabled;
+  const postureBlockReason = contextBudgetEnabled
+    ? resolveReductionPostureBlockReason(runtime, sessionId)
+    : null;
 
-  const postureBlockReason = resolveReductionPostureBlockReason(runtime, sessionId);
-  if (postureBlockReason) {
-    return {
-      allowed: false,
-      detail: postureBlockReason,
-      compactionAdvised: false,
-      forcedCompaction: false,
-      cacheCold: false,
-    };
-  }
+  const usage =
+    contextBudgetEnabled && !postureBlockReason
+      ? buildEffectiveReductionUsage(payload, getRuntimeContextUsage(runtime, sessionId), metadata)
+      : undefined;
 
-  const usage = buildEffectiveReductionUsage(
-    payload,
-    getRuntimeContextUsage(runtime, sessionId),
-    metadata,
-  );
-  if (!usage) {
-    return {
-      allowed: false,
-      detail: "context usage is unavailable",
-      compactionAdvised: false,
-      forcedCompaction: false,
-      cacheCold: false,
-    };
-  }
+  const gateStatus = usage ? getRuntimeCompactionGateStatus(runtime, sessionId, usage) : null;
+  const pendingReason = usage ? getRuntimePendingCompactionReason(runtime, sessionId) : null;
+  const eligibility = gateStatus
+    ? resolveRuntimeContextCompactionEligibility(runtime, {
+        status: gateStatus.status,
+        pendingReason,
+        recentCompaction: gateStatus.recentCompaction,
+        hasUI: true,
+        idle: true,
+        recoveryPosture: "idle",
+        autoCompactionInFlight: false,
+        gateMode: "transient_reduction",
+      })
+    : null;
 
-  const gateStatus = getRuntimeCompactionGateStatus(runtime, sessionId, usage);
-  const cacheCold = isProviderCacheLikelyCold(runtime, sessionId);
-  const pendingReason = getRuntimePendingCompactionReason(runtime, sessionId);
-  const eligibility = resolveRuntimeContextCompactionEligibility(runtime, {
-    status: gateStatus.status,
-    pendingReason,
-    recentCompaction: gateStatus.recentCompaction,
-    hasUI: true,
-    idle: true,
-    recoveryPosture: "idle",
-    autoCompactionInFlight: false,
-    gateMode: "transient_reduction",
-  });
-
-  const compactionAdvised = gateStatus.status.compactionAdvised;
-  const forcedCompaction = gateStatus.status.forcedCompaction;
-
-  if (gateStatus.required || gateStatus.reason === "hard_limit" || forcedCompaction) {
-    return {
-      allowed: false,
-      detail: "hard-limit posture requires replay-visible compaction handling",
-      compactionAdvised,
-      forcedCompaction,
-      cacheCold,
-    };
-  }
-
-  if (pendingReason === "hard_limit") {
-    return {
-      allowed: false,
-      detail: "hard-limit compaction is already pending",
-      compactionAdvised,
-      forcedCompaction,
-      cacheCold,
-    };
-  }
-
-  if (eligibility.decision === "skip" && eligibility.reason === "recent_compaction") {
-    return {
-      allowed: false,
-      detail: "recent compaction cooldown is active",
-      compactionAdvised,
-      forcedCompaction,
-      cacheCold,
-    };
-  }
-
-  if (eligibility.decision === "advisory_only" && compactionAdvised) {
-    return {
-      allowed: true,
-      detail: null,
-      compactionAdvised,
-      forcedCompaction,
-      cacheCold,
-    };
-  }
-
-  if (cacheCold) {
-    return {
-      allowed: true,
-      detail: null,
-      compactionAdvised,
-      forcedCompaction,
-      cacheCold,
-    };
-  }
-
-  return {
-    allowed: false,
-    detail: "context status is below the transient reduction threshold",
-    compactionAdvised,
-    forcedCompaction,
-    cacheCold,
+  const transientReduction = {
+    contextBudgetEnabled,
+    usageAvailable: usage !== undefined,
+    postureBlockReason,
+    gateStatus,
+    pendingCompactionReason: pendingReason,
+    compactionEligibilityDecision:
+      typeof eligibility?.decision === "string" ? eligibility.decision : undefined,
+    compactionEligibilityReason:
+      typeof eligibility?.reason === "string" ? eligibility.reason : undefined,
+    cacheCold: usage ? isProviderCacheLikelyCold(runtime, sessionId) : false,
   };
+
+  return decideTransientReductionEligibility(transientReduction);
 }
 
 function observeAndRecordTransientReduction(

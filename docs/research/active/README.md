@@ -36,7 +36,7 @@ discipline.
 
 ## Current Active Notes
 
-None.
+No active research notes are currently tracked.
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

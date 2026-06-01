@@ -304,7 +304,9 @@ describe("shell command provider", () => {
     });
     expect(provider.slashCommands().map((command) => command.id)).toContain("agent.model");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.goal");
-    expect(provider.slashCommands().map((command) => command.id)).toContain("session.handoff");
+    expect(provider.slashCommands().map((command) => command.id)).toContain(
+      "session.continuationAnchor",
+    );
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.lineage");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.tree");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.transcript");
@@ -324,10 +326,18 @@ describe("shell command provider", () => {
       provider.createSlashCommandIntent("handoff", { args: "ready for review", source: "slash" }),
     ).toEqual({
       type: "command.invoke",
-      commandId: "session.handoff",
+      commandId: "session.continuationAnchor",
       args: "ready for review",
       source: "slash",
     });
+    const continuationAnchorCommand = provider
+      .paletteCommands()
+      .find((command) => command.id === "session.continuationAnchor");
+    expect(continuationAnchorCommand).toMatchObject({
+      title: "Record continuation anchor",
+      suggested: false,
+    });
+    expect(continuationAnchorCommand?.description).toContain("does not compact context");
     expect(provider.createSlashCommandIntent("transcript", { args: "", source: "slash" })).toEqual({
       type: "command.invoke",
       commandId: "session.transcript",

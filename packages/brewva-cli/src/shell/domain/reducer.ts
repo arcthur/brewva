@@ -1,6 +1,6 @@
 import { parseGoalCommand } from "@brewva/brewva-vocabulary/goal";
 import type { ShellAction, ShellRuntimeResult } from "./actions.js";
-import type { SessionHandoffDraft, ShellEffect } from "./effects.js";
+import type { ContinuationAnchorDraft, ShellEffect } from "./effects.js";
 import type { ShellIntent } from "./intent.js";
 import type { OperatorSurfaceSnapshot } from "./operator-snapshot.js";
 import type { CliShellViewState } from "./state.js";
@@ -48,7 +48,7 @@ function unhandled(
   };
 }
 
-function parseSessionHandoffDraft(args: string): SessionHandoffDraft | undefined {
+function parseContinuationAnchorDraft(args: string): ContinuationAnchorDraft | undefined {
   const trimmed = args.trim();
   if (!trimmed) {
     return undefined;
@@ -152,9 +152,14 @@ function updateCommandIntent(
             ],
           });
     }
-    case "session.handoff":
+    case "session.continuationAnchor":
       return handled({
-        effects: [{ type: "session.handoff", handoff: parseSessionHandoffDraft(intent.args) }],
+        effects: [
+          {
+            type: "session.continuationAnchor",
+            continuationAnchor: parseContinuationAnchorDraft(intent.args),
+          },
+        ],
       });
     case "session.lineage":
       return handled({ effects: [{ type: "overlay.openLineage" }] });

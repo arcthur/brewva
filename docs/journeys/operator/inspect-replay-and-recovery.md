@@ -126,7 +126,7 @@ flowchart TD
   - `brewva --undo`
   - `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)`
 - key report sections:
-  - Work Card goal/context/options/authority/work/evidence/handoff
+  - Work Card goal/context/options/authority/work/evidence/continuation anchor
   - hydration status
   - integrity issues
   - latest verification outcome

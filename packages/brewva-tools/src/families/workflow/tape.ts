@@ -12,7 +12,7 @@ import {
   getContextStatus,
   getContextUsage,
   getTapeStatus,
-  recordTapeHandoff,
+  recordTapeContinuationAnchor,
   searchTape,
 } from "../../runtime-port/tape.js";
 import { errTextResult, okTextResult } from "../../utils/result.js";
@@ -22,7 +22,7 @@ const TAPE_SEARCH_SCOPE_VALUES = ["current_phase", "all_phases", "anchors_only"]
 const TapeSearchScopeSchema = buildStringEnumSchema(TAPE_SEARCH_SCOPE_VALUES, {
   recommendedValue: "current_phase",
   guidance:
-    "Use current_phase by default. Use all_phases for a full-history scan and anchors_only when you only need phase handoff or checkpoint anchors.",
+    "Use current_phase by default. Use all_phases for a full-history scan and anchors_only when you only need continuation or checkpoint anchors.",
 });
 
 function normalizeQuery(value: unknown): string | undefined {
@@ -154,9 +154,9 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
   const tapeHandoff = tapeHandoffTool.define(
     {
       name: "tape_handoff",
-      label: "Tape Handoff",
+      label: "Continuation Anchor",
       description:
-        "Create a tape anchor for semantic phase handoff. This does not compact message history.",
+        "Create a tape-backed continuation anchor. This does not compact context or reduce message history.",
       parameters: Type.Object({
         name: Type.String({ minLength: 1, maxLength: 120 }),
         summary: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
@@ -164,31 +164,31 @@ export function createTapeTools(options: BrewvaToolOptions): ToolDefinition[] {
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
-        const handoff = recordTapeHandoff(tapeHandoffTool.runtime, sessionId, {
+        const anchor = recordTapeContinuationAnchor(tapeHandoffTool.runtime, sessionId, {
           name: params.name,
           summary: params.summary,
           nextSteps: params.next_steps,
         });
-        if (!handoff.ok) {
+        if (!anchor.ok) {
           return errTextResult(
-            `Tape handoff rejected (${handoff.reason ?? "unknown_error"}).`,
-            handoff,
+            `Continuation anchor rejected (${anchor.reason ?? "unknown_error"}).`,
+            anchor,
           );
         }
 
-        const status = handoff.tapeStatus ?? getTapeStatus(tapeHandoffTool.runtime, sessionId);
+        const status = anchor.tapeStatus ?? getTapeStatus(tapeHandoffTool.runtime, sessionId);
         const text = [
-          "Tape handoff recorded.",
+          "Continuation anchor recorded.",
           `name: ${params.name}`,
-          `anchor_id: ${handoff.eventId ?? "unknown"}`,
+          `anchor_id: ${anchor.eventId ?? "unknown"}`,
           `tape_pressure: ${status.tapePressure}`,
           `entries_since_anchor: ${status.entriesSinceAnchor}`,
           `total_entries: ${status.totalEntries}`,
         ].join("\n");
         return okTextResult(text, {
           ok: true,
-          anchorId: handoff.eventId ?? null,
-          createdAt: handoff.createdAt ?? null,
+          anchorId: anchor.eventId ?? null,
+          createdAt: anchor.createdAt ?? null,
           tapePressure: status.tapePressure,
           entriesSinceAnchor: status.entriesSinceAnchor,
           totalEntries: status.totalEntries,

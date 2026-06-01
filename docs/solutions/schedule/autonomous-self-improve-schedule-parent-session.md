@@ -37,14 +37,14 @@ session that owns:
 - the durable recurring schedule intent
 
 Then make inherited schedule continuity carry the parent session's advisory
-context alongside TaskSpec, truth facts, and tape handoff context into the
+context alongside TaskSpec, truth facts, and tape continuation anchor context into the
 child run.
 
 ## Why This Matters
 
 If the schedule only passes freeform reason text, the child run has to rediscover
-the intended producer contract from prose. That weakens handoff fidelity and makes
-the automation look like a second hidden control path.
+the intended producer contract from prose. That weakens continuation fidelity and
+makes the automation look like a second hidden control path.
 
 By contrast, parent-session seeding keeps the autonomous loop inside Brewva's
 existing semantic contract:

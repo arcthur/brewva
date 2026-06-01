@@ -35,9 +35,9 @@ artifacts for claims that need forensic precision.
 
 Prefer event families and artifact joins that explain routing, workflow,
 context, and verification decisions.
-For handoff questions, anchor on `tape_handoff` events and compare the Work
-Card, transcript, export bundle, and hosted context rendering against the same
-event evidence.
+For continuation-anchor questions, anchor on `tape_handoff` events and compare
+the Work Card, transcript, export bundle, and hosted context rendering against
+the same event evidence.
 
 ## Overlay Questions
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import type { RuntimeCostPosture } from "@brewva/brewva-tools/contracts";
-import { TASK_WORK_CARD_PROJECTION_SCHEMA_V1 } from "@brewva/brewva-vocabulary/session";
+import { TASK_WORK_CARD_PROJECTION_SCHEMA_V2 } from "@brewva/brewva-vocabulary/session";
 import type {
   SessionRewindTargetView,
   TaskWorkCardProjection,
@@ -21,8 +21,8 @@ import { projectShellViewModel } from "../../../packages/brewva-cli/src/shell/do
 
 function workCard(overrides: Partial<TaskWorkCardProjection> = {}): TaskWorkCardProjection {
   return {
-    schema: TASK_WORK_CARD_PROJECTION_SCHEMA_V1,
-    version: 1,
+    schema: TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
+    version: 2,
     sessionId: "session-1",
     refs: ["task:1", "receipt:capability"],
     goal: {
@@ -73,7 +73,7 @@ function workCard(overrides: Partial<TaskWorkCardProjection> = {}): TaskWorkCard
       verificationDebtCount: 1,
       latestPatchSetRef: null,
     },
-    handoff: {
+    continuationAnchor: {
       anchorId: "anchor:1",
       name: "TUI cockpit",
       summary: "Runtime cockpit refactor is in progress.",

@@ -1,7 +1,7 @@
 import type { ContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
-export function recordTapeHandoff(
+export function recordTapeContinuationAnchor(
   runtime: BrewvaToolRuntime,
   sessionId: string,
   input: Parameters<BrewvaToolRuntime["capabilities"]["tape"]["handoff"]["record"]>[1],

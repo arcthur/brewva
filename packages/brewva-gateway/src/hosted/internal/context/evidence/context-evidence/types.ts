@@ -1,5 +1,5 @@
 export const CONTEXT_EVIDENCE_SAMPLE_SCHEMA = "brewva.context_evidence.sample.v2";
-export const CONTEXT_EVIDENCE_REPORT_SCHEMA = "brewva.context_evidence.report.v1";
+export const CONTEXT_EVIDENCE_REPORT_SCHEMA = "brewva.context_evidence.report.v2";
 
 export interface PromptStabilityEvidenceSample {
   schema: typeof CONTEXT_EVIDENCE_SAMPLE_SCHEMA;
@@ -110,6 +110,10 @@ export interface ContextEvidenceSessionReport {
   compactionAdvisedReductionTurns: number;
   forcedCompactionPromptTurns: number;
   forcedCompactionReductionTurns: number;
+  continuationAnchorEvents: number;
+  continuationAnchorsWithPressureEvidence: number;
+  continuationAnchorsDuringPressure: number;
+  continuationAnchorsFollowedByCompaction: number;
   latestProviderCacheStatus: "cold" | "warm" | "break" | "limited" | null;
   latestProviderCacheBreakReason: string | null;
   latestProviderCacheUnexpectedBreak: boolean;
@@ -158,6 +162,10 @@ export interface ContextEvidenceAggregateReport {
   totalCompactionGenerationTokens: number;
   totalCompactionGenerationCostUsd: number;
   sessionsWithCompactionGenerationCacheAccounting: number;
+  totalContinuationAnchorEvents: number;
+  totalContinuationAnchorsWithPressureEvidence: number;
+  totalContinuationAnchorsDuringPressure: number;
+  totalContinuationAnchorsFollowedByCompaction: number;
   sessionsMeetingStablePrefixTarget: number;
   sessionsWithCompletedReduction: number;
   sessionsWithReductionBeforeCompaction: number;

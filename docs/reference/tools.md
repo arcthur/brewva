@@ -173,7 +173,7 @@ expand the available tool surface.
 - Delegation, subagents, A2A, questions, and review synthesis:
   `docs/reference/tools/delegation.md`
 - Workflow, worker results, task state, scheduling, follow-up, resource leases,
-  tape handoff, ledger, observability, cost, rollback, and reasoning continuity:
+  tape continuation anchors, ledger, observability, cost, rollback, and reasoning continuity:
   `docs/reference/tools/workflow-and-scheduling.md`
 
 ## Generated Inventory

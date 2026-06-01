@@ -7,7 +7,6 @@ import type {
   SessionCompactionGenerationMetadata,
   SessionCompactionInputProvenance,
 } from "@brewva/brewva-vocabulary/session";
-import { decideCompaction } from "../compaction/policy.js";
 import {
   commitRuntimeSessionCompaction,
   getRuntimeCompactionGateStatus,
@@ -31,6 +30,11 @@ import {
   RECALL_USAGE_EVENT_TYPES,
 } from "./compaction-input-provenance.js";
 import {
+  createContextNudgeCadenceTracker,
+  decideAutoCompactionEligibility,
+  type ContextNudgeCadenceTracker,
+} from "./context-lifecycle.js";
+import {
   extractCompactionEntryId,
   extractCompactionSummary,
   resolveContextScopeId,
@@ -50,6 +54,7 @@ export type HostedManualCompact = ((options: HostedManualCompactOptions) => void
 
 export interface HostedContextGateStatePort {
   getTurnIndex: (sessionId: string) => number;
+  readonly nudgeTracker: ContextNudgeCadenceTracker;
 }
 
 export interface HostedCompactionController extends HostedContextGateStatePort {
@@ -289,6 +294,7 @@ export function createHostedCompactionController(
   options: HostedCompactionControllerOptions = {},
 ): HostedCompactionController {
   const gateStateBySession = new Map<string, CompactionGateState>();
+  const nudgeTracker = createContextNudgeCadenceTracker();
   const autoCompactionWatchdogMs = Math.max(
     1,
     Math.trunc(options.autoCompactionWatchdogMs ?? DEFAULT_AUTO_COMPACTION_WATCHDOG_MS),
@@ -298,6 +304,7 @@ export function createHostedCompactionController(
   };
 
   return {
+    nudgeTracker,
     getTurnIndex(sessionId) {
       return getSessionState(sessionId).turnIndex;
     },
@@ -317,10 +324,9 @@ export function createHostedCompactionController(
       runtime.ops.context.compaction.checkAndRequest(input.sessionId, input.usage);
       const gateStatus = getRuntimeCompactionGateStatus(runtime, input.sessionId, input.usage);
       const pendingReason = getRuntimePendingCompactionReason(runtime, input.sessionId);
-      const eligibility = decideCompaction({
-        caller: "auto",
+      const eligibility = decideAutoCompactionEligibility({
         gateStatus,
-        pendingReason,
+        pendingCompactionReason: pendingReason,
         hasUI: input.hasUI,
         idle: input.idle,
         recoveryPosture: "idle",
@@ -514,6 +520,7 @@ export function createHostedCompactionController(
         clearAutoCompactionExecutionState(state);
       }
       gateStateBySession.delete(input.sessionId);
+      nudgeTracker.clearSession(input.sessionId);
       turnClock.clearSession(input.sessionId);
     },
   };

@@ -264,24 +264,12 @@ describe("shell runtime architecture", () => {
     });
   });
 
-  test("shell update routes handoff commands to a replayable tape anchor effect", () => {
+  test("shell update routes continuation anchor commands to a replayable tape anchor effect", () => {
     expect(
       updateShellIntent(createUpdateContext(), {
         type: "command.invoke",
-        commandId: "session.handoff",
+        commandId: "session.continuationAnchor",
         args: "ready for review",
-        source: "slash",
-      }),
-    ).toEqual({
-      handled: true,
-      actions: [],
-      effects: [{ type: "session.handoff", handoff: { summary: "ready for review" } }],
-    });
-    expect(
-      updateShellIntent(createUpdateContext(), {
-        type: "command.invoke",
-        commandId: "session.handoff",
-        args: "Implementation handoff :: ready for review :: run inspect tests",
         source: "slash",
       }),
     ).toEqual({
@@ -289,9 +277,26 @@ describe("shell runtime architecture", () => {
       actions: [],
       effects: [
         {
-          type: "session.handoff",
-          handoff: {
-            name: "Implementation handoff",
+          type: "session.continuationAnchor",
+          continuationAnchor: { summary: "ready for review" },
+        },
+      ],
+    });
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "session.continuationAnchor",
+        args: "Implementation anchor :: ready for review :: run inspect tests",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [
+        {
+          type: "session.continuationAnchor",
+          continuationAnchor: {
+            name: "Implementation anchor",
             summary: "ready for review",
             nextSteps: "run inspect tests",
           },

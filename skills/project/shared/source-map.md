@@ -22,8 +22,8 @@ retirement_sensitivity: auto_decay_allowed
 - Work Card inspect projection: `packages/brewva-cli/src/operator/inspect/work-card.ts`
 - Shell, CLI, and channel inspect consumers: `packages/brewva-cli/src/operator/inspect/work-card.ts`, `packages/brewva-cli/src/commands/inspect.ts`, `packages/brewva-gateway/src/channels/control-router.ts`
 - Attention Options tool family: `packages/brewva-tools/src/families/memory/attention-options.ts`, `packages/brewva-tools/src/runtime-port/four-port/iteration-facts.ts`
-- Handoff command and tape bridge: `packages/brewva-cli/src/shell/interactive-command-surfaces.ts`, `packages/brewva-cli/src/runtime/cli-runtime-tape.ts`
-- Hosted latest handoff context: `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
+- Continuation-anchor command and tape bridge: `packages/brewva-cli/src/shell/commands/shell-command-registry.ts`, `packages/brewva-cli/src/runtime/cli-runtime-tape.ts`
+- Hosted latest continuation-anchor context: `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 - Advisory extension and verification gate manifests: `packages/brewva-gateway/src/extensions/api.ts`
 - Runtime turn verification gate bridge: `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-verification-gates.ts`
 

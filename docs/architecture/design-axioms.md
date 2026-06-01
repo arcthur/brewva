@@ -50,7 +50,7 @@ public contracts.
     evidence projections where practical, but approval, capability, sandbox,
     adoption, verification-gate, and kernel authority stay separate.
 12. `Product loops are projections, not runtime state machines.`
-    `receive -> orient -> authorize -> act -> verify -> handoff` is product
+    `receive -> orient -> authorize -> act -> verify -> continue` is product
     grammar over existing receipts and projections. It must not become a hidden
     planner, prompt choreography engine, or second session lifecycle owner.
 13. `Repository governance stays adjacent to the kernel.`
@@ -83,8 +83,8 @@ Implementation note:
 - model-facing memory is a workbench: free-form notes, evictions, source refs,
   preserved quotes, and reversible edits until the next baseline
 - product-facing inspection is a Work Card projection: it may summarize goal,
-  context, options, authority, work, evidence, and handoff, but it remains a
-  view over existing owners
+  context, options, authority, work, evidence, and continuation anchors, but it
+  remains a view over existing owners
 - attention options expose bounded candidate cards before unbounded content;
   consume, pin, ignore, and verify-plan actions are distinct effects with
   distinct authority posture

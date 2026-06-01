@@ -29,7 +29,7 @@ contract can make those refs authoritative.
 
 The default loop is:
 
-`receive -> orient -> authorize -> act -> verify -> handoff`
+`receive -> orient -> authorize -> act -> verify -> continue`
 
 This is the product grammar for shell, CLI, channels, and headless sessions. It
 is not a planner ontology and not a session state machine. Each step reads or
@@ -42,14 +42,14 @@ renders existing facts:
 - `act`: single-tool-call kernel transactions and managed-tool execution
 - `verify`: advisory verification evidence or explicit verification gate
   policy input
-- `handoff`: replayable tape anchor, summary, and next steps
+- `continue`: optional replayable continuation anchor, summary, and next steps
 
 ## Work Card Product
 
 The Work Card is the default inspect projection. It covers goal, context,
-options, authority, work, evidence, and handoff by aggregating existing runtime
+options, authority, work, evidence, and continuation anchors by aggregating existing runtime
 inspect reports, context cockpit facts, operator safety posture, delegation
-inspection, task ledger state, tape status, verification outcome, and handoff
+inspection, task ledger state, tape status, verification outcome, and continuation
 anchors.
 
 It is deliberately a product projection:
@@ -110,8 +110,8 @@ payload JSON.
 
 Bounded baseline context still materializes directly when it is already part of
 the ordinary request shape: current request, project guidance, target roots,
-selected capability posture, current diff posture, latest handoff, and context
-pressure. Those facts do not pay an options round trip.
+selected capability posture, current diff posture, latest continuation anchor,
+and context pressure. Those facts do not pay an options round trip.
 
 ## Context Product
 
@@ -144,13 +144,14 @@ composer policy. Transcript, raw event tape, receipt detail, context,
 authority, skills, inbox, diff, and timeline views are explicit-pull drill-downs
 from that shared product projection.
 
-## Handoff Product
+## Continuation Anchor Product
 
-Handoff is a replayable continuation anchor, not an informal transcript note.
-Shell and palette actions record the handoff through the tape handoff authority
-path. Transcripts, export bundles, Work Cards, and channel inspect views show
-the latest handoff anchor, summary, and next steps so another actor can resume
-from the same evidence trail.
+Continuation anchors are replayable tape anchors, not informal transcript notes
+and not context compaction. The `/handoff` slash input and `tape_handoff` tool
+keep their stable names, but the internal product effect is
+`session.continuationAnchor`. Transcripts, export bundles, Work Cards, and
+channel inspect views show the latest anchor, summary, and next steps so
+another actor can resume from the same evidence trail.
 
 ## Kernel Product
 

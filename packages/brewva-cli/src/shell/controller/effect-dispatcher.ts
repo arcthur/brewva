@@ -1,6 +1,6 @@
 import type { GoalCommand } from "@brewva/brewva-vocabulary/goal";
 import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
-import type { SessionHandoffDraft, ShellEffect } from "../domain/effects.js";
+import type { ContinuationAnchorDraft, ShellEffect } from "../domain/effects.js";
 import type { CliShellInput } from "../domain/input.js";
 import { buildTextTranscriptMessage } from "../domain/transcript.js";
 
@@ -65,8 +65,8 @@ export interface ShellEffectDispatcherContext {
   openSessionDiffExternalPager(): Promise<void>;
   exportSessionBundle(): Promise<void>;
   exportInspectBundle(): Promise<void>;
-  recordSessionHandoff(handoff?: SessionHandoffDraft): Promise<void>;
   handleGoalCommand(command: GoalCommand): Promise<void>;
+  recordContinuationAnchor(continuationAnchor?: ContinuationAnchorDraft): Promise<void>;
   steerSession(effect: Extract<ShellEffect, { type: "session.steer" }>): Promise<void>;
   undoSession(): Promise<void>;
   rewindSession(argument?: string): Promise<void>;
@@ -292,8 +292,8 @@ export async function dispatchShellEffect(
     case "session.exportInspectBundle":
       await context.exportInspectBundle();
       return;
-    case "session.handoff":
-      await context.recordSessionHandoff(effect.handoff);
+    case "session.continuationAnchor":
+      await context.recordContinuationAnchor(effect.continuationAnchor);
       return;
     case "session.goal":
       await context.handleGoalCommand(effect.command);

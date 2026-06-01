@@ -66,7 +66,7 @@ Surface violations of the migration matrix, skill DoD, or artifact contract clar
 - reviewing only code style while missing kernel boundary drift
 - ignoring docs and exported surface changes in catalog refactors
 - treating a clean renderer diff as safe without checking Work Card, attention
-  option, handoff, and channel/CLI/shell parity
+  option, continuation anchor, and channel/CLI/shell parity
 
 ## Example
 

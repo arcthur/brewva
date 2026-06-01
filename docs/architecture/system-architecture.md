@@ -34,14 +34,14 @@ authority, durable control state, or default-path prescriptions.
 
 The default product loop is:
 
-`receive -> orient -> authorize -> act -> verify -> handoff`
+`receive -> orient -> authorize -> act -> verify -> continue`
 
 This loop is a projection grammar over existing owners, not a runtime state
 machine. `receive` comes from operator, channel, or hosted ingress; `orient`
 renders Work Card and bounded baseline context; `authorize` presents capability
 receipts, asks, and sandbox posture; `act` flows through kernel tool
 transactions; `verify` surfaces advisory evidence or explicit verification
-gates; `handoff` records replayable tape anchors for continuation.
+gates; `continue` may record replayable continuation anchors.
 
 Shell, CLI, channel, and embedder inspect surfaces should share the same
 schema-tagged projection payload where practical. Renderers may impose different
@@ -49,9 +49,9 @@ line budgets, but they should preserve canonical refs for drill-down instead of
 creating separate product facts.
 
 The rule is `same evidence, different authority`. A Work Card, SkillCard,
-attention option, hook receipt, renderer, or handoff summary can make evidence
-visible. None of them grants tool access, account authority, budget, model
-routing, sandbox bypass, approval, adoption, or kernel admission.
+attention option, hook receipt, renderer, or continuation-anchor summary can
+make evidence visible. None of them grants tool access, account authority,
+budget, model routing, sandbox bypass, approval, adoption, or kernel admission.
 
 ## Authority Rings
 

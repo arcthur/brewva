@@ -17,7 +17,7 @@ For generated inventories, use:
 Brewva is organized around replay-visible runtime capabilities:
 
 - Work Card projections for the default
-  `receive -> orient -> authorize -> act -> verify -> handoff` product loop
+  `receive -> orient -> authorize -> act -> verify -> continue` product loop
 - attention options for bounded discovery before unbounded memory admission
 - advisory SkillCards, ProducerContracts, and capability selection receipts
 - tool access policy, effect boundaries, and budget gates
@@ -29,8 +29,8 @@ Brewva is organized around replay-visible runtime capabilities:
 - event-first persistence, replay, and deterministic recovery
 - cost observability and budget alerts
 - derived workflow artifacts and advisory workflow inspection
-- typed planning, delegated-worker handoff artifacts, and replayable session
-  handoff anchors
+- typed planning, delegated-worker delivery artifacts, and replayable session
+  continuation anchors
 - durable stall adjudication through explicit inspection
 - iteration-fact persistence for bounded optimization loops
 - narrative, deliberation, recall, and precedent surfaces with provenance
@@ -96,7 +96,7 @@ implementation detail behind `explorer`.
 - Use `brewva inspect` for persisted session truth.
 - Use `docs/guide/category-and-skills.md` for skill category orientation.
 - Use `docs/reference/skill-routing.md` for advisory skill selection,
-  removed active-skill gates, capability-selection priority, and handoff
+  removed active-skill gates, capability-selection priority, and continuation
   semantics.
 
 ## Related Docs

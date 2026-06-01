@@ -22,8 +22,8 @@ the credentials subcommand is the lower-level operational surface.
 
 `brewva inspect` is the canonical replay-first operator view for a persisted
 session. Its default output is a schema-tagged Work Card that renders goal,
-context, options, authority, active work, evidence, and latest handoff from
-runtime tape plus nearby artifact diagnostics. Context cockpit, authority,
+context, options, authority, active work, evidence, and latest continuation
+anchor from runtime tape plus nearby artifact diagnostics. Context cockpit, authority,
 skills, inbox, diff, timeline, and raw replay details are explicit drill-downs
 or diagnostic modes rather than the default product shape.
 

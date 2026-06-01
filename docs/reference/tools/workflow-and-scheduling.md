@@ -25,7 +25,7 @@ run stays `completed`; `worker_results_apply` moves its card to `prepared`,
 - worker result merge and SourcePatchPlan-backed apply
 - worker result rejection through explicit parent receipt
 - task spec, item, blocker, acceptance, and state views
-- tape handoff, information, and search
+- tape continuation anchors, information, and search
 - ledger, observability, cost, and iteration-fact inspection
 - rollback-last-patch
 - reasoning checkpoint and revert
@@ -48,7 +48,7 @@ Schedule tools create, update, or cancel intent. Execution is performed by the
 scheduler control plane and remains inspectable through event tape, schedule
 projection, and child-session records.
 
-## Handoff
+## Continuation Anchor
 
 `tape_handoff` records a replayable session continuation anchor. It carries
 name, summary, next steps, and source refs so transcripts, export bundles, Work

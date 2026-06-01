@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TapeStatusState } from "@brewva/brewva-vocabulary/session";
-import { buildLatestHandoffBlock } from "../../../packages/brewva-gateway/src/hosted/internal/context/workbench-context.js";
+import { buildLatestContinuationAnchorBlock } from "../../../packages/brewva-gateway/src/hosted/internal/context/workbench-context.js";
 import type { HostedRuntimeAdapterPort } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 
 function runtimeWithTapeStatus(status: TapeStatusState): HostedRuntimeAdapterPort {
@@ -31,13 +31,13 @@ function tapeStatus(lastAnchor: TapeStatusState["lastAnchor"]): TapeStatusState 
   };
 }
 
-describe("hosted workbench context handoff block", () => {
-  test("renders latest handoff metadata as bounded baseline context", () => {
-    const block = buildLatestHandoffBlock(
+describe("hosted workbench context continuation anchor block", () => {
+  test("renders latest continuation anchor metadata as bounded baseline context", () => {
+    const block = buildLatestContinuationAnchorBlock(
       runtimeWithTapeStatus(
         tapeStatus({
-          id: "handoff-1",
-          name: "Review handoff",
+          id: "anchor-1",
+          name: "Review anchor",
           summary: "The Work Card path is wired.",
           nextSteps: "Run docs verification.",
         }),
@@ -45,15 +45,15 @@ describe("hosted workbench context handoff block", () => {
       "sess_1",
     );
 
-    expect(block?.id).toBe("latest-handoff");
-    expect(block?.content).toContain("[LatestHandoff]");
-    expect(block?.content).toContain("anchor: handoff-1");
+    expect(block?.id).toBe("latest-continuation-anchor");
+    expect(block?.content).toContain("[LatestContinuationAnchor]");
+    expect(block?.content).toContain("anchor: anchor-1");
     expect(block?.content).toContain("summary: The Work Card path is wired.");
     expect(block?.content).toContain("next_steps: Run docs verification.");
   });
 
-  test("does not render checkpoint-only anchors as handoff context", () => {
-    const block = buildLatestHandoffBlock(
+  test("does not render checkpoint-only anchors as continuation anchor context", () => {
+    const block = buildLatestContinuationAnchorBlock(
       runtimeWithTapeStatus(tapeStatus({ id: "checkpoint-1" })),
       "sess_1",
     );

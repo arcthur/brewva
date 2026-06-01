@@ -12,7 +12,7 @@ owner: runtime-maintainers
 - Keep runtime public APIs domain-based, not a flat method bag.
 - Do not reintroduce `skills.packs`-style filtering or legacy `base/pack/project` taxonomy.
 - Keep runtime governance deterministic and avoid embedding adaptive cognition in the kernel.
-- Treat `receive -> orient -> authorize -> act -> verify -> handoff` as the
+- Treat `receive -> orient -> authorize -> act -> verify -> continue` as the
   default product-loop grammar for operator and model-facing surfaces, not as a
   runtime state machine.
 - Use workspace package imports across package boundaries.
@@ -33,9 +33,10 @@ owner: runtime-maintainers
   workbench pins, `attention_ignore` is session-scoped advisory suppression, and
   `attention_verify_plan` returns only a verification recipe. Do not add a
   second memory store or hidden context admission path.
-- Keep handoff replayable: `session.handoff` and `tape_handoff` record anchors
-  that Work Cards, transcripts, export bundles, channel inspect, and hosted
-  context can display without becoming new truth stores.
+- Keep continuation anchors replayable: `session.continuationAnchor` and
+  `tape_handoff` record anchors that Work Cards, transcripts, export bundles,
+  channel inspect, and hosted context can display without becoming new truth
+  stores.
 - Keep SkillCards advisory catalog cards with authority posture `none`. A
   SkillCard, `$skill` mention, or `/skills` catalog entry must not grant tools,
   accounts, budgets, model routes, or a `Run skill` execution path.

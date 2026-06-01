@@ -14,6 +14,7 @@ import {
   resolveEvidenceDir,
 } from "./context-evidence/store.js";
 import {
+  CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
   CONTEXT_EVIDENCE_REPORT_SCHEMA,
   type ContextEvidenceAggregateReport,
   type ContextEvidenceArtifactRef,
@@ -39,6 +40,8 @@ export type {
   TransientReductionEvidenceSample,
 } from "./context-evidence/types.js";
 
+export { CONTEXT_EVIDENCE_SAMPLE_SCHEMA };
+
 export {
   readContextEvidenceRecords,
   readContextEvidenceSamples,
@@ -52,6 +55,8 @@ const DEFAULT_LONG_SESSION_USEFUL_TURNS = 10;
 const DEFAULT_PROMPT_CACHE_HIT_TARGET = 0.8;
 const DEFAULT_PROMPT_CACHE_HIT_STOP_LOSS_FLOOR = 0.7;
 const DEFAULT_INPUT_COST_REGRESSION_LIMIT = 0.4;
+const CONTINUATION_ANCHOR_FOLLOWUP_WINDOW_MS = 5 * 60 * 1000;
+const CONTINUATION_ANCHOR_FOLLOWUP_WINDOW_TURNS = 2;
 
 function ratio(numerator: number, denominator: number): number | null {
   return denominator > 0 ? numerator / denominator : null;
@@ -408,6 +413,123 @@ function resolveLatestProviderCacheEvidence(
   );
 }
 
+interface RuntimeEventProjection {
+  id: string | null;
+  type: string;
+  timestamp: number;
+  turn: number | null;
+  payload?: unknown;
+}
+
+function projectRuntimeEvent(event: {
+  id?: unknown;
+  type?: unknown;
+  timestamp?: unknown;
+  turn?: unknown;
+  payload?: unknown;
+}): RuntimeEventProjection | null {
+  if (typeof event.type !== "string") {
+    return null;
+  }
+  const timestamp =
+    typeof event.timestamp === "number" && Number.isFinite(event.timestamp) ? event.timestamp : 0;
+  const turn =
+    typeof event.turn === "number" && Number.isFinite(event.turn) ? Math.trunc(event.turn) : null;
+  return {
+    id: typeof event.id === "string" && event.id.length > 0 ? event.id : null,
+    type: event.type,
+    timestamp,
+    turn,
+    payload: event.payload,
+  };
+}
+
+function uniqueRuntimeEvents(events: readonly RuntimeEventProjection[]): RuntimeEventProjection[] {
+  const seen = new Set<string>();
+  const unique: RuntimeEventProjection[] = [];
+  for (const event of events) {
+    const key =
+      event.id ??
+      `${event.type}:${event.timestamp}:${event.turn ?? "none"}:${JSON.stringify(event.payload)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(event);
+  }
+  return unique;
+}
+
+function latestPromptSampleAtOrBeforeAnchor(
+  promptSamples: readonly PromptStabilityEvidenceSample[],
+  anchor: RuntimeEventProjection,
+): PromptStabilityEvidenceSample | null {
+  return (
+    promptSamples
+      .filter((sample) => {
+        if (anchor.turn !== null) {
+          return sample.turn <= anchor.turn;
+        }
+        return sample.timestamp <= anchor.timestamp;
+      })
+      .toSorted((left, right) => {
+        if (left.timestamp !== right.timestamp) {
+          return left.timestamp - right.timestamp;
+        }
+        return left.turn - right.turn;
+      })
+      .at(-1) ?? null
+  );
+}
+
+function hasPressure(sample: PromptStabilityEvidenceSample | null): boolean {
+  if (!sample) {
+    return false;
+  }
+  return (
+    sample.compactionAdvised ||
+    sample.forcedCompaction ||
+    sample.gateRequired ||
+    sample.pendingCompactionReason !== null
+  );
+}
+
+function isCompactionRequiredEvent(event: RuntimeEventProjection): boolean {
+  if (event.type === "compaction_required") {
+    return true;
+  }
+  if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
+    return false;
+  }
+  const payload = event.payload as Record<string, unknown>;
+  return event.type === "checkpoint.committed" && payload.cause === "compaction_required";
+}
+
+function isFollowupCompactionEvent(input: {
+  anchor: RuntimeEventProjection;
+  event: RuntimeEventProjection;
+}): boolean {
+  if (input.event.timestamp < input.anchor.timestamp) {
+    return false;
+  }
+  if (input.anchor.turn !== null && input.event.turn !== null) {
+    return (
+      input.event.turn >= input.anchor.turn &&
+      input.event.turn - input.anchor.turn <= CONTINUATION_ANCHOR_FOLLOWUP_WINDOW_TURNS
+    );
+  }
+  return input.event.timestamp - input.anchor.timestamp <= CONTINUATION_ANCHOR_FOLLOWUP_WINDOW_MS;
+}
+
+function countContinuationAnchorsFollowedByCompaction(input: {
+  anchors: readonly RuntimeEventProjection[];
+  compactionSignals: readonly RuntimeEventProjection[];
+}): number {
+  return input.anchors.filter((anchor) =>
+    input.compactionSignals.some((event) => isFollowupCompactionEvent({ anchor, event })),
+  ).length;
+}
+
 export function buildContextEvidenceReport(
   runtime: Pick<HostedRuntimeAdapterPort, "identity" | "ops">,
   options: ContextEvidenceReportOptions = {},
@@ -464,6 +586,36 @@ export function buildContextEvidenceReport(
       const latestReduction = reductionSamples.at(-1) ?? null;
       const compactionEvents = queryRuntimeEvents(runtime, sessionId, {
         type: "session_compact",
+      });
+      const continuationAnchorEvents = queryRuntimeEvents(runtime, sessionId, {
+        type: "tape.handoff",
+      })
+        .map((event) => projectRuntimeEvent(event))
+        .filter((event): event is RuntimeEventProjection => event !== null);
+      const uniqueContinuationAnchorEvents = uniqueRuntimeEvents(continuationAnchorEvents);
+      const runtimeEventProjections = queryRuntimeEvents(runtime, sessionId)
+        .map((event) => projectRuntimeEvent(event))
+        .filter((event): event is RuntimeEventProjection => event !== null);
+      const compactionSignals = [
+        ...compactionEvents
+          .map((event) => projectRuntimeEvent(event))
+          .filter((event): event is RuntimeEventProjection => event !== null),
+        ...queryRuntimeEvents(runtime, sessionId, { type: "session.compaction.committed" })
+          .map((event) => projectRuntimeEvent(event))
+          .filter((event): event is RuntimeEventProjection => event !== null),
+        ...runtimeEventProjections.filter((event) => isCompactionRequiredEvent(event)),
+      ];
+      const continuationAnchorPressureSamples = uniqueContinuationAnchorEvents.map((anchor) =>
+        latestPromptSampleAtOrBeforeAnchor(promptSamples, anchor),
+      );
+      const continuationAnchorsWithPressureEvidence =
+        continuationAnchorPressureSamples.filter(Boolean).length;
+      const continuationAnchorsDuringPressure = continuationAnchorPressureSamples.filter((sample) =>
+        hasPressure(sample),
+      ).length;
+      const continuationAnchorsFollowedByCompaction = countContinuationAnchorsFollowedByCompaction({
+        anchors: uniqueContinuationAnchorEvents,
+        compactionSignals,
       });
       const compactionGeneration = sumCompactionGenerationMetrics(compactionEvents);
       const messageEndEvents = queryRuntimeEvents(runtime, sessionId, {
@@ -589,6 +741,10 @@ export function buildContextEvidenceReport(
         compactionAdvisedReductionTurns,
         forcedCompactionPromptTurns,
         forcedCompactionReductionTurns,
+        continuationAnchorEvents: uniqueContinuationAnchorEvents.length,
+        continuationAnchorsWithPressureEvidence,
+        continuationAnchorsDuringPressure,
+        continuationAnchorsFollowedByCompaction,
         latestProviderCacheStatus: latestProviderCacheEvidence?.status ?? null,
         latestProviderCacheBreakReason: latestProviderCacheEvidence?.reason ?? null,
         latestProviderCacheUnexpectedBreak: latestProviderCacheEvidence?.unexpectedBreak ?? false,
@@ -600,6 +756,7 @@ export function buildContextEvidenceReport(
         session.promptObservedTurns > 0 ||
         session.reductionObservedTurns > 0 ||
         session.compactionEvents > 0 ||
+        session.continuationAnchorEvents > 0 ||
         session.latestProviderCacheStatus !== null ||
         session.cacheReadReported ||
         session.cacheWriteReported ||
@@ -706,6 +863,22 @@ export function buildContextEvidenceReport(
     sessionsWithCompactionGenerationCacheAccounting: sessions.filter(
       (session) => session.compactionGenerationCacheAccountingObserved,
     ).length,
+    totalContinuationAnchorEvents: sessions.reduce(
+      (sum, session) => sum + session.continuationAnchorEvents,
+      0,
+    ),
+    totalContinuationAnchorsWithPressureEvidence: sessions.reduce(
+      (sum, session) => sum + session.continuationAnchorsWithPressureEvidence,
+      0,
+    ),
+    totalContinuationAnchorsDuringPressure: sessions.reduce(
+      (sum, session) => sum + session.continuationAnchorsDuringPressure,
+      0,
+    ),
+    totalContinuationAnchorsFollowedByCompaction: sessions.reduce(
+      (sum, session) => sum + session.continuationAnchorsFollowedByCompaction,
+      0,
+    ),
     sessionsMeetingStablePrefixTarget: sessions.filter(
       (session) => (session.stablePrefixRate ?? 0) >= 0.95,
     ).length,

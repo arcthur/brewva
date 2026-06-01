@@ -37,6 +37,7 @@ Every accepted decision inherits these rules:
 - [effect-authority-manifest](./effect-authority-manifest.md)
 - [four-port-runtime-simplification-rfc](./four-port-runtime-simplification-rfc.md)
 - [event-stream-consistency-and-replay-fidelity](./event-stream-consistency-and-replay-fidelity.md)
+- [future-model-context-lifecycle](./future-model-context-lifecycle.md)
 - [iteration-facts-and-model-native-optimization-protocols](./iteration-facts-and-model-native-optimization-protocols.md)
 - [kernel-first-subtraction-and-control-plane-deferral](./kernel-first-subtraction-and-control-plane-deferral.md)
 - [model-operated-working-memory-and-context-governance-reset](./model-operated-working-memory-and-context-governance-reset.md)

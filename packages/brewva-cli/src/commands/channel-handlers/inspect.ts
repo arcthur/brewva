@@ -2,7 +2,7 @@ import type {
   ChannelInspectCommandInput,
   ChannelInspectCommandResult,
 } from "@brewva/brewva-gateway";
-import { TASK_WORK_CARD_PROJECTION_SCHEMA_V1 } from "@brewva/brewva-vocabulary/session";
+import { TASK_WORK_CARD_PROJECTION_SCHEMA_V2 } from "@brewva/brewva-vocabulary/session";
 import { resolveInspectDirectory } from "../../operator/inspect-analysis.js";
 import {
   buildSessionInspectReport,
@@ -83,7 +83,7 @@ export async function handleInspectChannelCommand(
       agentSessionId: input.targetSession.sessionId,
       directory: report.directory,
       verdict: report.verdict,
-      workCardSchema: TASK_WORK_CARD_PROJECTION_SCHEMA_V1,
+      workCardSchema: TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
     },
   };
 }

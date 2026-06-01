@@ -156,12 +156,12 @@ describe("skill authored behavior coverage", () => {
     const reviewOverlay = readRepoFile("skills/project/overlays/review/SKILL.md");
     const forensicsOverlay = readRepoFile("skills/project/overlays/runtime-forensics/SKILL.md");
 
-    expect(criticalRules).toContain("receive -> orient -> authorize -> act -> verify -> handoff");
+    expect(criticalRules).toContain("receive -> orient -> authorize -> act -> verify -> continue");
     expect(criticalRules).toContain("same evidence, different authority");
     expect(criticalRules).toContain("Work Card");
     expect(criticalRules).toContain("attention_options");
     expect(criticalRules).toContain("attention_consume");
-    expect(criticalRules).toContain("session.handoff");
+    expect(criticalRules).toContain("session.continuationAnchor");
     expect(criticalRules).toContain("SkillCards");
     expect(criticalRules).toContain("authority posture `none`");
     expect(criticalRules).toContain("verification gate manifest");
@@ -185,11 +185,11 @@ describe("skill authored behavior coverage", () => {
 
     expect(runtimeArtifacts).toContain("tape_handoff");
     expect(runtimeArtifacts).toContain("Work Card");
-    expect(runtimeArtifacts).toContain("handoff");
+    expect(runtimeArtifacts).toContain("continuation anchors");
 
     expect(implementationOverlay).toContain("Work Card");
     expect(implementationOverlay).toContain("Attention Options");
-    expect(implementationOverlay).toContain("handoff");
+    expect(implementationOverlay).toContain("continuation");
 
     expect(reviewOverlay).toContain("Work Card");
     expect(reviewOverlay).toContain("attention option");

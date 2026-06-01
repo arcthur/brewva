@@ -1,7 +1,7 @@
 import type { SchedulePromptTrigger } from "../../../daemon/api.js";
 import {
   hasRuntimeOpsAdapter,
-  recordRuntimeTapeHandoff,
+  recordRuntimeContinuationAnchor,
   setRuntimeTaskSpec,
   type HostedRuntimeAdapterPort,
   upsertRuntimeClaimFact,
@@ -73,7 +73,7 @@ export function applySchedulePromptTrigger(
 
   let anchorApplied = false;
   if (trigger.parentAnchor) {
-    recordRuntimeTapeHandoff(runtime, sessionId, {
+    recordRuntimeContinuationAnchor(runtime, sessionId, {
       name: `schedule:inherit:${trigger.parentAnchor.name ?? "parent"}`,
       summary: trigger.parentAnchor.summary,
       nextSteps: trigger.parentAnchor.nextSteps,

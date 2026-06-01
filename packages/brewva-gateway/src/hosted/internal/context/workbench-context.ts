@@ -6,6 +6,7 @@ import type {
   ContextCompactionGateStatus,
 } from "@brewva/brewva-vocabulary/context";
 import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import { decideContinuationAnchorRelevance } from "@brewva/brewva-vocabulary/session";
 import {
   buildContextBundle,
   renderContextBundle,
@@ -22,6 +23,7 @@ import {
 } from "../session/runtime-ports.js";
 import { renderCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import { applyContextContract } from "./context-contract.js";
+import { decideContextNudge, decideContextPressure } from "./context-lifecycle.js";
 import { resolveContextScopeId } from "./context-shared.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
 import {
@@ -38,18 +40,6 @@ import {
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
-const COMPACTION_NUDGE_FULL_EVERY_TURNS = 5;
-
-type CompactionNudgeMode = "full" | "brief";
-
-interface CompactionNudgeState {
-  key: string;
-  firstTurn: number;
-  lastTurn: number;
-  renderCount: number;
-}
-
-const compactionNudgeStateBySession = new Map<string, CompactionNudgeState>();
 
 export interface HostedContextSessionManager {
   getLeafId?: () => string | null | undefined;
@@ -253,47 +243,9 @@ function buildHiddenContextResult(input: {
   };
 }
 
-function resolveCompactionNudgeMode(input: {
-  sessionId: string;
-  turn: number;
-  gateRequired: boolean;
-  pendingCompactionReason: string | null;
-}): CompactionNudgeMode | null {
-  const key = input.gateRequired
-    ? "gate:required"
-    : input.pendingCompactionReason
-      ? `advisory:${input.pendingCompactionReason}`
-      : null;
-  if (!key) {
-    compactionNudgeStateBySession.delete(input.sessionId);
-    return null;
-  }
-
-  const previous = compactionNudgeStateBySession.get(input.sessionId);
-  const next =
-    previous?.key === key
-      ? {
-          ...previous,
-          lastTurn: input.turn,
-          renderCount: previous.renderCount + 1,
-        }
-      : {
-          key,
-          firstTurn: input.turn,
-          lastTurn: input.turn,
-          renderCount: 1,
-        };
-  compactionNudgeStateBySession.set(input.sessionId, next);
-
-  if (next.renderCount === 1 || (next.renderCount - 1) % COMPACTION_NUDGE_FULL_EVERY_TURNS === 0) {
-    return "full";
-  }
-  return "brief";
-}
-
 function buildCompactionGateBlock(input: {
   status: ContextCompactionGateStatus["status"];
-  mode: CompactionNudgeMode;
+  mode: "full" | "brief";
 }): HostedContextBlock {
   const content =
     input.mode === "brief"
@@ -317,7 +269,7 @@ function buildCompactionGateBlock(input: {
 function buildCompactionAdvisoryBlock(input: {
   reason: string;
   status: ContextCompactionGateStatus["status"];
-  mode: CompactionNudgeMode;
+  mode: "full" | "brief";
 }): HostedContextBlock {
   const content =
     input.mode === "brief"
@@ -400,22 +352,23 @@ function buildContextStatusBlock(
   return makeHostedContextBlock("context-status", lines.join("\n"))!;
 }
 
-export function buildLatestHandoffBlock(
+export function buildLatestContinuationAnchorBlock(
   runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): HostedContextBlock | null {
   const anchor = getRuntimeTapeStatus(runtime, sessionId).lastAnchor;
-  if (!anchor || (!anchor.name && !anchor.summary && !anchor.nextSteps)) {
+  const relevance = decideContinuationAnchorRelevance(anchor);
+  if (!relevance.include || !anchor) {
     return null;
   }
   const lines = [
-    "[LatestHandoff]",
+    "[LatestContinuationAnchor]",
     `anchor: ${anchor.id}`,
     ...(anchor.name ? [`name: ${anchor.name}`] : []),
     ...(anchor.summary ? [`summary: ${anchor.summary}`] : []),
     ...(anchor.nextSteps ? [`next_steps: ${anchor.nextSteps}`] : []),
   ];
-  return makeHostedContextBlock("latest-handoff", lines.join("\n"));
+  return makeHostedContextBlock("latest-continuation-anchor", lines.join("\n"));
 }
 
 function buildCapabilityBlocks(capabilityView: BuildCapabilityViewResult): HostedContextBlock[] {
@@ -471,40 +424,50 @@ async function buildHostedDynamicTail(input: {
   pendingCompactionReason: string | null;
   capabilityView: BuildCapabilityViewResult;
   delegationStore?: HostedDelegationStore;
+  statePort: HostedContextGateStatePort;
 }): Promise<HostedDynamicTail> {
   const completed = await buildCompletedDelegationOutcomes({
     delegationStore: input.delegationStore,
     sessionId: input.sessionId,
   });
-  const compactionNudgeMode = resolveCompactionNudgeMode({
-    sessionId: input.sessionId,
-    turn: input.turn,
-    gateRequired: input.gateStatus.required ?? false,
+  const pressure = decideContextPressure({
+    gateStatus: input.gateStatus,
     pendingCompactionReason: input.pendingCompactionReason,
   });
+  const nudge = decideContextNudge({
+    sessionId: input.sessionId,
+    turn: input.turn,
+    pressure,
+    tracker: input.statePort.nudgeTracker,
+  });
+  const continuationAnchor = decideContinuationAnchorRelevance(
+    getRuntimeTapeStatus(input.runtime, input.sessionId).lastAnchor,
+  );
   const pendingDelegationsBlock = await buildPendingDelegationsBlock(
     input.delegationStore,
     input.sessionId,
   );
   const blocks = [
-    input.gateStatus.required && compactionNudgeMode
+    nudge.kind === "gate" && nudge.mode
       ? buildCompactionGateBlock({
           status: input.gateStatus.status,
-          mode: compactionNudgeMode,
+          mode: nudge.mode,
         })
       : null,
-    !input.gateStatus.required && input.pendingCompactionReason
+    nudge.kind === "advisory" && nudge.mode
       ? buildCompactionAdvisoryBlock({
-          reason: input.pendingCompactionReason,
+          reason: pressure.reason ?? input.pendingCompactionReason ?? "unknown",
           status: input.gateStatus.status,
-          mode: compactionNudgeMode ?? "full",
+          mode: nudge.mode,
         })
       : null,
     buildContextStatusBlock(input.runtime, {
       sessionId: input.sessionId,
       usage: input.usage,
     }),
-    buildLatestHandoffBlock(input.runtime, input.sessionId),
+    continuationAnchor.include
+      ? buildLatestContinuationAnchorBlock(input.runtime, input.sessionId)
+      : null,
     buildWorkbenchBlock(input.runtime, input.sessionId),
     pendingDelegationsBlock,
     completed.block,
@@ -585,6 +548,7 @@ export function createHostedWorkbenchContextController(
         pendingCompactionReason,
         capabilityView,
         delegationStore: options.delegationStore,
+        statePort,
       });
       const rendered = dynamicTail.rendered;
       const materializationReceipt = buildContextMaterializationReceipt({

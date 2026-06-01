@@ -1,7 +1,7 @@
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 
-export function recordRuntimeTapeHandoff(
+export function recordRuntimeContinuationAnchor(
   runtime: Pick<HostedRuntimeAdapterPort, "ops">,
   sessionId: string,
   input: Parameters<HostedRuntimeAdapterPort["ops"]["tape"]["handoff"]["record"]>[1],

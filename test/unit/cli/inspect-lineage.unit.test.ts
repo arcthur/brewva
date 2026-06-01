@@ -13,6 +13,8 @@ import {
   buildTaskWorkCardProjection,
   formatInspectDiagnosticText,
   formatInspectText,
+  formatTaskWorkCardText,
+  type InspectReport,
 } from "../../../packages/brewva-cli/src/operator/inspect.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
@@ -47,7 +49,7 @@ describe("cli inspect lineage reporting", () => {
 
     expect(text).toContain("Lineage: root=lineage:main current=lineage:review nodes=2 edges=1");
     expect(text).toContain("Lineage: selected=cli:lineage:review");
-    expect(workCardText).toContain("Work Card: schema=brewva.task-work-card.projection.v1");
+    expect(workCardText).toContain("Work Card: schema=brewva.task-work-card.projection.v2");
     expect(workCardText).not.toContain("Lineage: root=");
   });
 
@@ -173,7 +175,7 @@ describe("cli inspect lineage reporting", () => {
     expect(cockpit.skills.invocationRecords[0]?.skillName).toBe("architecture");
     expect(cockpit.recall.results[0]?.sourceFamily).toBe("repository_precedent");
     expect(cockpit.cachePosture.status).toBe("warm");
-    expect(workCard.schema).toBe("brewva.task-work-card.projection.v1");
+    expect(workCard.schema).toBe("brewva.task-work-card.projection.v2");
     expect(workCard.context.workbenchEntryCount).toBe(1);
     expect(workCard.context.skillInvocationRefs).toEqual(["skill-selection-1:architecture"]);
     expect(workCard.context.recallResultRefs).toEqual(["precedent:docs/solutions/runtime.md"]);
@@ -302,34 +304,67 @@ describe("cli inspect lineage reporting", () => {
     expect(report.operatorSafety.receiptIds).not.toContain(unrelated.itemId);
   });
 
-  test("projects latest handoff anchor into the default work card", () => {
+  test("projects latest continuation anchor into the default work card", () => {
     const runtime = createRuntimeInstanceFixture({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-handoff-")),
+      cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-anchor-")),
     });
-    const sessionId = "inspect-handoff-session";
-    const handoff = runtime.ops.tape.handoff.record(sessionId, {
-      name: "Implementation handoff",
+    const sessionId = "inspect-anchor-session";
+    const anchor = runtime.ops.tape.handoff.record(sessionId, {
+      name: "Implementation anchor",
       summary: "Work card cutover is ready for follow-up.",
       nextSteps: "Run focused inspect tests.",
     });
-    expect(handoff.ok).toBe(true);
-    if (!handoff.ok) {
-      throw new Error("expected_handoff_recorded");
+    expect(anchor.ok).toBe(true);
+    if (!anchor.ok) {
+      throw new Error("expected_continuation_anchor_recorded");
     }
-    const anchorId = handoff.eventId;
+    const anchorId = anchor.eventId;
     if (!anchorId) {
-      throw new Error("expected_handoff_anchor_id");
+      throw new Error("expected_continuation_anchor_id");
     }
 
     const report = buildInspectReport(runtime, sessionId);
     const workCard = buildTaskWorkCardProjection(report);
     const text = formatInspectText(report);
 
-    expect(workCard.handoff.anchorId).toBe(anchorId);
-    expect(workCard.handoff.name).toBe("Implementation handoff");
-    expect(workCard.handoff.summary).toBe("Work card cutover is ready for follow-up.");
-    expect(workCard.handoff.nextSteps).toBe("Run focused inspect tests.");
-    expect(text).toContain(`Handoff: anchor=${anchorId}`);
+    expect(workCard.continuationAnchor.anchorId).toBe(anchorId);
+    expect(workCard.continuationAnchor.name).toBe("Implementation anchor");
+    expect(workCard.continuationAnchor.summary).toBe("Work card cutover is ready for follow-up.");
+    expect(workCard.continuationAnchor.nextSteps).toBe("Run focused inspect tests.");
+    expect(text).toContain(`Continuation Anchor: anchor=${anchorId}`);
     expect(text).toContain("summary=Work card cutover is ready for follow-up.");
+  });
+
+  test("does not project checkpoint-only anchors as continuation anchors", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-cli-inspect-checkpoint-anchor-")),
+    });
+    const sessionId = "inspect-checkpoint-anchor-session";
+    const report = buildInspectReport(runtime, sessionId);
+    const checkpointOnlyReport: InspectReport = {
+      ...report,
+      replay: {
+        ...report.replay,
+        lastAnchor: {
+          id: "checkpoint-only-anchor",
+          name: "   ",
+          summary: null,
+          nextSteps: null,
+        },
+      },
+    };
+
+    const workCard = buildTaskWorkCardProjection(checkpointOnlyReport);
+    const text = formatTaskWorkCardText(workCard);
+
+    expect(workCard.continuationAnchor).toEqual({
+      anchorId: null,
+      name: null,
+      summary: null,
+      nextSteps: null,
+    });
+    expect(workCard.refs).not.toContain("checkpoint-only-anchor");
+    expect(workCard.context.automaticallyAvailableRefs).not.toContain("checkpoint-only-anchor");
+    expect(text).toContain("Continuation Anchor: anchor=none");
   });
 });

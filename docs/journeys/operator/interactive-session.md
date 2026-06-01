@@ -27,7 +27,7 @@ session-history actions stay in the shell slash surface. `/inspect` opens the
 shared Work Card first; `/context`, `/authority`, `/skills`, `/inbox`, `/diff`,
 and raw replay are drill-downs. `/diff` and `/export` are read-only evidence
 surfaces: `/diff` combines Git state with replay/patch attribution, while
-`/export` assembles a session handoff bundle. Confirming or mutating actions
+`/export` assembles a session continuation bundle. Confirming or mutating actions
 such as manual compaction live in the command palette or view-local actions,
 while headless and channel command grammars remain separate control planes.
 
@@ -38,7 +38,7 @@ while headless and channel command grammars remain separate control planes.
 - workbench note and eviction flow
 - ledger / event persistence
 - workflow inspection surfaces derived from session activity
-- Work Card, attention option, and handoff product surfaces
+- Work Card, attention option, and continuation-anchor product surfaces
 - final assistant-answer presentation in the interactive transcript
 
 ## Out Of Scope
@@ -63,7 +63,7 @@ flowchart TD
   I --> J["Ledger and event tape record durable outcomes"]
   J --> K["Verification and task surfaces update from receipts"]
   K --> L["Inspect via Work Card and drill-down views"]
-  L --> M["Optional handoff anchor records resume point"]
+  L --> M["Optional continuation anchor records resume point"]
 ```
 
 ## Key Steps
@@ -75,7 +75,7 @@ flowchart TD
 3. Hosted control-plane logic does not hold the model at a bootstrap gate. The
    model sees useful non-operator tools immediately.
 4. The workbench context tail renders bounded baseline facts, model-authored
-   notes, compacted baseline references, latest handoff, and numeric context
+   notes, compacted baseline references, latest continuation anchor, and numeric context
    status.
 5. The model reads local instructions, repository files, recall results, or
    repository precedents only when it decides they are relevant. Unbounded

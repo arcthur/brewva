@@ -86,7 +86,7 @@ describe("tool action policy", () => {
     });
   });
 
-  test("tape handoff is a control-plane mutation because it records durable handoff state", () => {
+  test("tape_handoff is a control-plane mutation because it records a durable continuation anchor", () => {
     const policy = requireDefined(
       TOOL_ACTION_POLICY_BY_NAME.tape_handoff,
       "missing tape_handoff policy",

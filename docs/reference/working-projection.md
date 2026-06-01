@@ -13,8 +13,8 @@ rebuildable execution snapshot for task, claim, and workflow-facing context.
 
 The Work Card may read working projection data, but it is a product projection
 payload, not the working projection storage contract. It can render the active
-snapshot alongside capability, verification, workbench, and handoff refs without
-making any of those refs replay truth.
+snapshot alongside capability, verification, workbench, and continuation-anchor
+refs without making any of those refs replay truth.
 
 The interactive shell cockpit is another product projection. It composes the
 Work Card, context cockpit, operator snapshot, session wire, runtime events,

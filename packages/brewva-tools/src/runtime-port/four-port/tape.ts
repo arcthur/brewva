@@ -19,14 +19,17 @@ function lastAnchorFor(
   readonly summary?: string;
   readonly nextSteps?: string;
 } | null {
-  const handoff = listFourPortRuntimeEvents(context.runtime, sessionId, {
+  const anchorEvent = listFourPortRuntimeEvents(context.runtime, sessionId, {
     type: "tape.handoff",
     last: 1,
   })[0];
-  if (handoff) {
-    const payload = readRecord(handoff.payload);
+  if (anchorEvent) {
+    const payload = readRecord(anchorEvent.payload);
     return {
-      id: typeof payload.id === "string" && payload.id.trim().length > 0 ? payload.id : handoff.id,
+      id:
+        typeof payload.id === "string" && payload.id.trim().length > 0
+          ? payload.id
+          : anchorEvent.id,
       ...(typeof payload.name === "string" ? { name: payload.name } : {}),
       ...(typeof payload.summary === "string" ? { summary: payload.summary } : {}),
       ...(typeof payload.nextSteps === "string" ? { nextSteps: payload.nextSteps } : {}),
