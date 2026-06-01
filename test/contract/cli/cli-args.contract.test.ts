@@ -14,6 +14,7 @@ describe("brewva cli args", () => {
     expect(output).toContain("brewva harness ...");
     expect(output).toContain("brewva inspect ...");
     expect(output).toContain("--agent <id>");
+    expect(output).toContain("--acp");
     expect(output).not.toContain("brewva config");
     expect(output).not.toContain("same flow as pi");
     expect(output).toContain("Run channel host mode");
@@ -156,6 +157,17 @@ describe("brewva cli args", () => {
     expect(parsed!.daemon).toBe(true);
     expect(parsed!.mode).toBe("interactive");
     expect(parsed!.prompt).toBe(undefined);
+  });
+
+  test("given --acp, when parsing args, then ACP mode is enabled without compatibility aliases", () => {
+    const parsed = parseArgs(["--acp", "--model", "openai:gpt-5.1"]);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.acp).toBe(true);
+    expect(parsed!.model).toBe("openai:gpt-5.1");
+
+    const { result, errors } = captureConsole(() => parseArgs(["--experimental-acp"]));
+    expect(result).toBeNull();
+    expect(errors.join("\n")).toContain("Unknown option '--experimental-acp'");
   });
 
   test("given telegram channel flags, when parsing args, then telegram channel config is populated", () => {

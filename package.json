@@ -72,6 +72,7 @@
     "uninstall:local": "bash script/install-local.sh --uninstall"
   },
   "devDependencies": {
+    "@brewva/brewva-acp-adapter": "workspace:*",
     "@brewva/brewva-capabilities": "workspace:*",
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-cli": "workspace:*",

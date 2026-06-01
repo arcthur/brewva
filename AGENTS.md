@@ -9,7 +9,7 @@
 ## Repo At A Glance
 
 - `Brewva` is a Bun + TypeScript monorepo for an AI-native coding-agent runtime.
-- Workspace packages live under `packages/*`; primary surfaces include `capabilities`, `channels-telegram`, `cli`, `effect`, `gateway`, `ingress-telegram`, `mcp-adapter`, `provider-core`, `recall`, `runtime`, `search`, `session-index`, `std`, `substrate`, `token-estimation`, `tools`, and `vocabulary`.
+- Workspace packages live under `packages/*`; primary surfaces include `acp-adapter`, `capabilities`, `channels-telegram`, `cli`, `effect`, `gateway`, `ingress-telegram`, `mcp-adapter`, `provider-core`, `recall`, `runtime`, `search`, `session-index`, `std`, `substrate`, `token-estimation`, `tools`, and `vocabulary`.
 - Release artifacts live under `distribution/brewva`, `distribution/brewva-*`, and `distribution/worker`.
 - Support roots: `script/` for build and verification, `docs/` for design/reference material, `test/` for workspace coverage, and `docs/solutions/**` for repository-native precedent.
 - Project guidance is authored in `skills/project/shared/*.md` with metadata-only `strength` and `scope` frontmatter. It is context/provenance metadata, not runtime authority.

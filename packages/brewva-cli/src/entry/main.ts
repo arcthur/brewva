@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
+import { runAcpGatewayStdioAgent } from "@brewva/brewva-acp-adapter";
 import { startBoundaryTimeout, type BoundaryTimeoutHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
@@ -89,6 +90,17 @@ async function runHarnessCli(argv: string[]): Promise<number> {
 
 function cliValueError(error: string): CliValueResult<never> {
   return { ok: false, reason: error };
+}
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error === undefined || error === null) return "unknown error";
+  try {
+    return JSON.stringify(error) ?? "unknown error";
+  } catch {
+    return "non-serializable error";
+  }
 }
 
 function resolveSessionRewindSession(
@@ -378,6 +390,41 @@ export async function runCliRootOperation(): Promise<void> {
     return;
   }
   const parsed = parseResult.args;
+
+  if (parsed.acp) {
+    if (
+      parsed.channel ||
+      parsed.daemon ||
+      parsed.undo ||
+      parsed.redo ||
+      parsed.replay ||
+      parsed.taskJson ||
+      parsed.taskFile ||
+      parsed.prompt ||
+      parsed.sessionId ||
+      parsed.modeExplicit ||
+      parsed.backend !== "auto"
+    ) {
+      console.error(
+        "Error: --acp cannot be combined with prompt text, --channel, --daemon, --undo/--redo/--replay, --task/--task-file, --session, --backend, or explicit output modes.",
+      );
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      await runAcpGatewayStdioAgent({
+        cwd: parsed.cwd,
+        configPath: parsed.configPath,
+        model: parsed.model,
+        agentId: parsed.agentId,
+        managedToolMode: parsed.managedToolMode,
+      });
+    } catch (error) {
+      console.error(`Error: ${formatUnknownError(error)}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
 
   if (parsed.channel) {
     if (parsed.backend === "gateway") {

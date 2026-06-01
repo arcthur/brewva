@@ -39,6 +39,7 @@ Options:
   --replay              Inspect persisted runtime events as raw replay records
   --replay-timeline     Inspect persisted runtime events as a redacted replay timeline
   --daemon              Run scheduler daemon (no interactive session)
+  --acp                 Run ACP agent over stdio through the Brewva gateway
   --channel <name>      Run channel host mode (currently: telegram)
   --telegram-token <t>  Telegram bot token for --channel telegram
   --telegram-callback-secret <s>
@@ -74,6 +75,7 @@ Examples:
   brewva --replay --mode json --session <session-id>
   brewva --replay-timeline --session <session-id>
   brewva onboard --install-daemon
+  brewva --acp
   brewva --channel telegram --telegram-token <bot-token>
   brewva --daemon`);
 }

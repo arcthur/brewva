@@ -54,6 +54,7 @@
     }
   },
   "dependencies": {
+    "@brewva/brewva-acp-adapter": "workspace:*",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-gateway": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
