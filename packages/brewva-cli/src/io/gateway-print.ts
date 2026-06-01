@@ -6,6 +6,7 @@ import { startBoundaryTimeout, type BoundaryTimeoutHandle } from "@brewva/brewva
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { connectGatewayClient, readGatewayToken } from "@brewva/brewva-gateway";
 import { queryGatewayStatus, resolveGatewayPaths } from "@brewva/brewva-gateway/admin";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 
 export type CliBackendKind = "auto" | "embedded" | "gateway";
@@ -33,27 +34,6 @@ export interface TryGatewayPrintInput {
   managedToolMode: ManagedToolMode;
   prompt: string;
   verbose: boolean;
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  if (error === undefined || error === null) {
-    return "unknown error";
-  }
-  try {
-    const serialized = JSON.stringify(error);
-    if (typeof serialized === "string") {
-      return serialized;
-    }
-  } catch {
-    // fall through
-  }
-  return "non-serializable error";
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

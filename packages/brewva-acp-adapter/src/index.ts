@@ -20,7 +20,13 @@ import {
   readGatewayToken,
   resolveGatewayPaths,
 } from "@brewva/brewva-gateway/ingress";
-import type { GatewayMethod, GatewayParamsByMethod } from "@brewva/brewva-gateway/protocol";
+import {
+  validateSessionWireFramePayload,
+  type GatewayMethod,
+  type GatewayParamsByMethod,
+} from "@brewva/brewva-gateway/protocol";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
+import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 
 type SessionsAbortParams = GatewayParamsByMethod["sessions.abort"];
 type SessionsCloseParams = GatewayParamsByMethod["sessions.close"];
@@ -75,27 +81,7 @@ export interface AcpGatewayClientLike {
   readonly onEvent: (listener: (event: AcpGatewayClientEventLike) => void) => () => void;
 }
 
-export interface AcpGatewaySessionWireFrame {
-  readonly sessionId: string;
-  readonly type: string;
-  readonly turnId?: string;
-  readonly attemptId?: string;
-  readonly lane?: string;
-  readonly delta?: string;
-  readonly status?: string;
-  readonly assistantText?: string;
-  readonly toolOutputs?: readonly unknown[];
-  readonly toolCallId?: string;
-  readonly toolName?: string;
-  readonly verdict?: string;
-  readonly isError?: boolean;
-  readonly text?: string;
-  readonly details?: unknown;
-  readonly display?: unknown;
-  readonly requestId?: string;
-  readonly subject?: string;
-  readonly detail?: string;
-}
+export type AcpGatewaySessionWireFrame = SessionWireFrame;
 
 export type AcpGatewaySessionWireListener = (frame: AcpGatewaySessionWireFrame) => void;
 
@@ -118,6 +104,7 @@ export interface AcpGatewayAgentOptions {
   readonly agentName?: string;
   readonly agentVersion?: string;
   readonly promptTimeoutMs?: number;
+  readonly shutdownSignal?: AbortSignal;
 }
 
 export interface AcpGatewayStdioOptions {
@@ -141,10 +128,14 @@ type TextPromptBlock = {
   readonly type: "text";
   readonly text: string;
 };
+type ToolSessionWireFrame = Extract<
+  AcpGatewaySessionWireFrame,
+  { readonly type: "tool.started" | "tool.progress" | "tool.finished" }
+>;
 
 const DEFAULT_AGENT_VERSION = "0.1.0";
 const DEFAULT_PROMPT_TIMEOUT_MS = 5 * 60_000;
-const DEFAULT_CONNECT_TIMEOUT_MS = 1_000;
+const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 5 * 60_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -163,17 +154,6 @@ function requireNonEmptyString(value: unknown, label: string): string {
     throw new Error(`${label} is required`);
   }
   return normalized;
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  if (error === undefined || error === null) return "unknown error";
-  try {
-    return JSON.stringify(error) ?? "unknown error";
-  } catch {
-    return "non-serializable error";
-  }
 }
 
 function formatPromptBlockType(value: unknown): string {
@@ -224,9 +204,9 @@ function assertGatewayAccepted(payload: unknown): void {
   }
 }
 
-function isSessionWireFrame(payload: unknown): payload is AcpGatewaySessionWireFrame {
-  if (!isRecord(payload)) return false;
-  return typeof payload.sessionId === "string" && typeof payload.type === "string";
+function readSessionWireFrame(payload: unknown): AcpGatewaySessionWireFrame | undefined {
+  const result = validateSessionWireFramePayload(payload);
+  return result.ok ? result.frame : undefined;
 }
 
 function toStopReason(status: unknown): StopReason {
@@ -235,11 +215,16 @@ function toStopReason(status: unknown): StopReason {
   return "end_turn";
 }
 
-function toToolStatus(frame: AcpGatewaySessionWireFrame): ToolCallStatus {
+function toToolStatus(frame: ToolSessionWireFrame): ToolCallStatus {
   if (frame.type === "tool.started") return "pending";
   if (frame.type === "tool.progress") return "in_progress";
   if (frame.isError || frame.verdict === "failed") return "failed";
   return "completed";
+}
+
+function assertNeverSessionWireFrame(frame: never): never {
+  const type = (frame as { readonly type?: unknown }).type;
+  throw new Error(`unhandled session wire frame: ${typeof type === "string" ? type : "unknown"}`);
 }
 
 function resolveGatewayEnv(input: { readonly env: Record<string, string | undefined> }): {
@@ -293,11 +278,11 @@ async function emitTextUpdate(input: {
 
 async function emitToolUpdate(input: {
   readonly connection: AcpGatewayConnection;
-  readonly frame: AcpGatewaySessionWireFrame;
+  readonly frame: ToolSessionWireFrame;
 }): Promise<void> {
-  const toolCallId = readNonEmptyString(input.frame.toolCallId);
+  const toolCallId = input.frame.toolCallId.trim();
   if (!toolCallId) return;
-  const toolName = readNonEmptyString(input.frame.toolName) ?? "tool";
+  const toolName = input.frame.toolName.trim() || "tool";
   if (input.frame.type === "tool.started") {
     await input.connection.sessionUpdate({
       sessionId: input.frame.sessionId,
@@ -313,7 +298,7 @@ async function emitToolUpdate(input: {
     return;
   }
 
-  const text = readNonEmptyString(input.frame.text);
+  const text = input.frame.text.trim();
   await input.connection.sessionUpdate({
     sessionId: input.frame.sessionId,
     update: {
@@ -406,10 +391,13 @@ export function createAcpGatewayClientSessionPort(
   return {
     onSessionWireFrame(listener) {
       return client.onEvent((event) => {
-        if (event.event !== "session.wire.frame" || !isSessionWireFrame(event.payload)) {
+        if (event.event !== "session.wire.frame") {
           return;
         }
-        listener(event.payload);
+        const frame = readSessionWireFrame(event.payload);
+        if (frame) {
+          listener(frame);
+        }
       });
     },
     async openSession(input) {
@@ -436,6 +424,47 @@ export function createAcpGatewayClientSessionPort(
 
 export function createAcpGatewayAgent(options: AcpGatewayAgentOptions): Agent {
   const promptTimeoutMs = options.promptTimeoutMs ?? DEFAULT_PROMPT_TIMEOUT_MS;
+  const openSessionIds = new Set<string>();
+  const pendingPrompts = new Set<{
+    readonly sessionId: string;
+    readonly reject: (error: unknown) => void;
+  }>();
+  let shutdownStarted = false;
+
+  const shutdownOpenSessions = async (): Promise<void> => {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
+
+    const error = new Error("ACP connection closed");
+    const prompts = [...pendingPrompts];
+    for (const prompt of prompts) {
+      prompt.reject(error);
+    }
+
+    await Promise.allSettled(
+      prompts.map((prompt) =>
+        options.sessions.abortSession({ sessionId: prompt.sessionId, reason: "user_submit" }),
+      ),
+    );
+    await Promise.allSettled(
+      [...openSessionIds].map((sessionId) => options.sessions.closeSession({ sessionId })),
+    );
+    openSessionIds.clear();
+  };
+
+  if (options.shutdownSignal) {
+    if (options.shutdownSignal.aborted) {
+      void shutdownOpenSessions();
+    } else {
+      options.shutdownSignal.addEventListener(
+        "abort",
+        () => {
+          void shutdownOpenSessions();
+        },
+        { once: true },
+      );
+    }
+  }
 
   return {
     async initialize(): Promise<InitializeResponse> {
@@ -456,20 +485,28 @@ export function createAcpGatewayAgent(options: AcpGatewayAgentOptions): Agent {
       return {};
     },
     async newSession(params) {
+      if (shutdownStarted || options.shutdownSignal?.aborted) {
+        throw new Error("ACP connection closed");
+      }
       if (params.mcpServers.length > 0) {
         throw new Error("ACP MCP servers are not supported by Brewva gateway sessions");
       }
       const payload = await options.sessions.openSession({ cwd: params.cwd });
       const sessionId = readGatewaySessionId(payload);
       await options.sessions.subscribeSession(sessionId);
+      openSessionIds.add(sessionId);
       return { sessionId };
     },
     async prompt(params): Promise<PromptResponse> {
+      if (shutdownStarted || options.shutdownSignal?.aborted) {
+        throw new Error("ACP connection closed");
+      }
       const sessionId = requireNonEmptyString(params.sessionId, "ACP sessionId");
       const requestedTurnId = randomUUID();
       let expectedTurnId: string = requestedTurnId;
       let emittedAnswer = false;
       let settled = false;
+      let updateQueue: Promise<void> = Promise.resolve();
       let resolveCompletion: ((response: PromptResponse) => void) | undefined;
       let rejectCompletion: ((error: unknown) => void) | undefined;
 
@@ -485,41 +522,37 @@ export function createAcpGatewayAgent(options: AcpGatewayAgentOptions): Agent {
           reject(error);
         };
       });
+      const pendingPrompt = {
+        sessionId,
+        reject: (error: unknown) => {
+          rejectCompletion?.(error);
+        },
+      };
+      pendingPrompts.add(pendingPrompt);
 
-      const dispose = options.sessions.onSessionWireFrame((frame) => {
-        if (settled || frame.sessionId !== sessionId) return;
-        if (frame.turnId && frame.turnId !== expectedTurnId) return;
+      const handleSessionWireFrame = async (frame: AcpGatewaySessionWireFrame): Promise<void> => {
+        if (settled) return;
+        switch (frame.type) {
+          case "assistant.delta": {
+            emittedAnswer = emittedAnswer || frame.lane === "answer";
+            await emitTextUpdate({
+              connection: options.connection,
+              sessionId,
+              sessionUpdate:
+                frame.lane === "thinking" ? "agent_thought_chunk" : "agent_message_chunk",
+              text: frame.delta,
+            });
+            return;
+          }
 
-        void (async () => {
-          try {
-            if (frame.type === "assistant.delta") {
-              const delta = readNonEmptyString(frame.delta);
-              if (!delta) return;
-              emittedAnswer = emittedAnswer || frame.lane === "answer";
-              await emitTextUpdate({
-                connection: options.connection,
-                sessionId,
-                sessionUpdate:
-                  frame.lane === "thinking" ? "agent_thought_chunk" : "agent_message_chunk",
-                text: delta,
-              });
-              return;
-            }
+          case "tool.started":
+          case "tool.progress":
+          case "tool.finished":
+            await emitToolUpdate({ connection: options.connection, frame });
+            return;
 
-            if (
-              frame.type === "tool.started" ||
-              frame.type === "tool.progress" ||
-              frame.type === "tool.finished"
-            ) {
-              await emitToolUpdate({ connection: options.connection, frame });
-              return;
-            }
-
-            if (frame.type !== "turn.committed") {
-              return;
-            }
-
-            const assistantText = readNonEmptyString(frame.assistantText);
+          case "turn.committed": {
+            const assistantText = frame.assistantText.trim();
             if (!emittedAnswer && assistantText) {
               emittedAnswer = true;
               await emitTextUpdate({
@@ -530,10 +563,45 @@ export function createAcpGatewayAgent(options: AcpGatewayAgentOptions): Agent {
               });
             }
             resolveCompletion?.({ stopReason: toStopReason(frame.status) });
-          } catch (error) {
-            rejectCompletion?.(error);
+            return;
           }
-        })();
+
+          case "turn.transition":
+            if (frame.status === "cancelled" || frame.status === "failed") {
+              resolveCompletion?.({ stopReason: toStopReason(frame.status) });
+            }
+            return;
+
+          case "session.closed":
+            resolveCompletion?.({ stopReason: "cancelled" });
+            return;
+
+          case "replay.begin":
+          case "replay.complete":
+          case "session.status":
+          case "turn.input":
+          case "attempt.started":
+          case "attempt.superseded":
+          case "approval.requested":
+          case "approval.decided":
+            return;
+
+          default:
+            assertNeverSessionWireFrame(frame);
+        }
+      };
+
+      const dispose = options.sessions.onSessionWireFrame((frame) => {
+        if (settled || frame.sessionId !== sessionId) return;
+        if (frame.turnId && frame.turnId !== expectedTurnId) return;
+
+        updateQueue = updateQueue.then(
+          () => handleSessionWireFrame(frame),
+          () => handleSessionWireFrame(frame),
+        );
+        void updateQueue.catch((error) => {
+          rejectCompletion?.(error);
+        });
       });
 
       try {
@@ -552,6 +620,7 @@ export function createAcpGatewayAgent(options: AcpGatewayAgentOptions): Agent {
         rejectCompletion?.(error);
         throw error;
       } finally {
+        pendingPrompts.delete(pendingPrompt);
         dispose();
       }
     },
@@ -560,14 +629,6 @@ export function createAcpGatewayAgent(options: AcpGatewayAgentOptions): Agent {
     },
     async setSessionMode() {
       return {};
-    },
-    async extNotification(method, params) {
-      if (method !== "brewva/session/close") {
-        return;
-      }
-      await options.sessions.closeSession({
-        sessionId: isRecord(params) ? params.sessionId : undefined,
-      });
     },
   };
 }
@@ -640,6 +701,7 @@ export async function runAcpGatewayStdioAgent(options: AcpGatewayStdioOptions = 
           connection: conn,
           sessions: connected.sessions,
           agentVersion: options.agentVersion,
+          shutdownSignal: conn.signal,
         }),
       stream,
     );

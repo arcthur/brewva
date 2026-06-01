@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.14.1",
-    "@brewva/brewva-gateway": "workspace:*"
+    "@brewva/brewva-gateway": "workspace:*",
+    "@brewva/brewva-std": "workspace:*",
+    "@brewva/brewva-vocabulary": "workspace:*"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

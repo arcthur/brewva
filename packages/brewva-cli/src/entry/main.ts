@@ -15,6 +15,7 @@ import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
 import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { normalizeTaskSpec } from "@brewva/brewva-vocabulary/task";
 import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
@@ -90,17 +91,6 @@ async function runHarnessCli(argv: string[]): Promise<number> {
 
 function cliValueError(error: string): CliValueResult<never> {
   return { ok: false, reason: error };
-}
-
-function formatUnknownError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  if (error === undefined || error === null) return "unknown error";
-  try {
-    return JSON.stringify(error) ?? "unknown error";
-  } catch {
-    return "non-serializable error";
-  }
 }
 
 function resolveSessionRewindSession(
@@ -420,7 +410,7 @@ export async function runCliRootOperation(): Promise<void> {
         managedToolMode: parsed.managedToolMode,
       });
     } catch (error) {
-      console.error(`Error: ${formatUnknownError(error)}`);
+      console.error(`Error: ${toErrorMessage(error)}`);
       process.exitCode = 1;
     }
     return;
