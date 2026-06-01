@@ -37,6 +37,9 @@ export function selectableItemCount(payload: CliShellOverlayPayload): number | u
   if (payload.kind === "lineage") {
     return payload.nodes.length;
   }
+  if (payload.kind === "tree") {
+    return payload.nodes.length;
+  }
   if (payload.kind === "queue") {
     return payload.items.length;
   }

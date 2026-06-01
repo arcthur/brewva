@@ -22,7 +22,7 @@ export interface ShellEffectDispatcherContext {
   moveCompletion(delta: -1 | 1): void;
   dismissCompletion(): void;
   refreshCompletion(): void;
-  handleDialogInput(input: CliShellInput): void;
+  handleDialogInput(input: CliShellInput): Promise<void> | void;
   handleQuestionInput(input: CliShellInput): Promise<void>;
   handlePickerInput(input: CliShellInput): Promise<void>;
   handleOverlayInput(input: CliShellInput): Promise<void>;
@@ -37,6 +37,7 @@ export interface ShellEffectDispatcherContext {
   openInbox(): void;
   openSessions(): void;
   openLineage(): void;
+  openTree(query?: string, lineageNodeId?: string): void;
   openQueue(): void;
   openInspect(): Promise<void>;
   openNotifications(): void;
@@ -160,7 +161,7 @@ export async function dispatchShellEffect(
       context.refreshCompletion();
       return;
     case "dialog.input":
-      context.handleDialogInput(effect.input);
+      await context.handleDialogInput(effect.input);
       return;
     case "question.input":
       await context.handleQuestionInput(effect.input);
@@ -203,6 +204,9 @@ export async function dispatchShellEffect(
       return;
     case "overlay.openLineage":
       context.openLineage();
+      return;
+    case "overlay.openTree":
+      context.openTree(effect.query, effect.lineageNodeId);
       return;
     case "overlay.openQueue":
       context.openQueue();

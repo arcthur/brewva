@@ -125,6 +125,12 @@ export function cloneOverlayPayload(payload: CliShellOverlayPayload): CliShellOv
         ...payload,
         nodes: [...payload.nodes],
       };
+    case "tree":
+      return {
+        ...payload,
+        collapsedEntryIds: [...payload.collapsedEntryIds],
+        nodes: [...payload.nodes],
+      };
     case "confirm":
       return {
         ...payload,

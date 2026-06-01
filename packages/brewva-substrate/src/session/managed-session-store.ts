@@ -136,6 +136,9 @@ export interface BrewvaSessionContext {
   activeModelPreset: BrewvaModelPreset;
 }
 
+const BRANCH_SUMMARY_CONTEXT_CHAR_BUDGET = 2_400;
+const BRANCH_SUMMARY_CONTEXT_TRUNCATION_SUFFIX = "\n[branch summary truncated for context budget]";
+
 function createSyntheticDefaultModelPreset(): BrewvaModelPreset {
   return {
     name: "Default",
@@ -159,12 +162,14 @@ function modelPresetFromSelectionEntry(entry: BrewvaModelPresetSelectEntry): Bre
 function createBranchSummaryMessage(
   summary: string,
   fromId: string,
+  details: unknown,
   timestamp: string,
 ): BrewvaStoredBranchSummaryMessage {
   return {
     role: "branchSummary",
     summary,
     fromId,
+    details,
     timestamp: new Date(timestamp).getTime(),
   };
 }
@@ -227,12 +232,123 @@ function appendMessage(entry: BrewvaSessionEntry, messages: BrewvaStoredAgentMes
       return;
     case "branch_summary":
       if (entry.summary) {
-        messages.push(createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp));
+        messages.push(
+          createBranchSummaryMessage(entry.summary, entry.fromId, entry.details, entry.timestamp),
+        );
       }
       return;
     default:
       return;
   }
+}
+
+function readActiveSummaryKey(details: unknown): string | null {
+  if (typeof details !== "object" || details === null || Array.isArray(details)) {
+    return null;
+  }
+  const value = (details as { activeSummaryKey?: unknown }).activeSummaryKey;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function isBranchSummaryMessage(
+  message: BrewvaStoredAgentMessage,
+): message is BrewvaStoredBranchSummaryMessage {
+  return (
+    message.role === "branchSummary" &&
+    typeof (message as { summary?: unknown }).summary === "string" &&
+    typeof (message as { fromId?: unknown }).fromId === "string"
+  );
+}
+
+function trimBranchSummaryForBudget(
+  message: BrewvaStoredBranchSummaryMessage,
+  budget: number,
+): BrewvaStoredBranchSummaryMessage | null {
+  if (budget <= 0) {
+    return null;
+  }
+  if (message.summary.length <= budget) {
+    return message;
+  }
+  const bodyBudget = budget - BRANCH_SUMMARY_CONTEXT_TRUNCATION_SUFFIX.length;
+  if (bodyBudget <= 0) {
+    return null;
+  }
+  return {
+    ...message,
+    summary: `${message.summary.slice(0, bodyBudget).trimEnd()}${BRANCH_SUMMARY_CONTEXT_TRUNCATION_SUFFIX}`,
+  };
+}
+
+function enforceBranchSummaryContextPolicy(
+  messages: readonly BrewvaStoredAgentMessage[],
+): BrewvaStoredAgentMessage[] {
+  const latestIndexByActiveKey = new Map<string, number>();
+  for (const [index, message] of messages.entries()) {
+    if (!isBranchSummaryMessage(message)) {
+      continue;
+    }
+    const activeSummaryKey = readActiveSummaryKey(message.details);
+    if (!activeSummaryKey) {
+      continue;
+    }
+    const previousIndex = latestIndexByActiveKey.get(activeSummaryKey);
+    if (previousIndex === undefined) {
+      latestIndexByActiveKey.set(activeSummaryKey, index);
+      continue;
+    }
+    const previousTimestamp = messages[previousIndex]?.timestamp ?? 0;
+    const isNewerSummary =
+      message.timestamp > previousTimestamp ||
+      (message.timestamp === previousTimestamp && index > previousIndex);
+    if (isNewerSummary) {
+      latestIndexByActiveKey.set(activeSummaryKey, index);
+    }
+  }
+
+  const candidateIndexes = messages.flatMap((message, index) => {
+    if (!isBranchSummaryMessage(message)) {
+      return [];
+    }
+    const activeSummaryKey = readActiveSummaryKey(message.details);
+    if (activeSummaryKey && latestIndexByActiveKey.get(activeSummaryKey) !== index) {
+      return [];
+    }
+    return [index];
+  });
+  if (candidateIndexes.length === 0) {
+    return [...messages];
+  }
+
+  let remainingBudget = BRANCH_SUMMARY_CONTEXT_CHAR_BUDGET;
+  const kept = new Map<number, BrewvaStoredBranchSummaryMessage>();
+  for (let index = candidateIndexes.length - 1; index >= 0; index -= 1) {
+    const messageIndex = candidateIndexes[index];
+    if (messageIndex === undefined) {
+      continue;
+    }
+    const message = messages[messageIndex];
+    if (!message || !isBranchSummaryMessage(message)) {
+      continue;
+    }
+    const budgeted = trimBranchSummaryForBudget(message, remainingBudget);
+    if (!budgeted) {
+      continue;
+    }
+    kept.set(messageIndex, budgeted);
+    remainingBudget -= budgeted.summary.length;
+    if (remainingBudget <= 0) {
+      break;
+    }
+  }
+
+  return messages.flatMap((message, index) => {
+    if (!isBranchSummaryMessage(message)) {
+      return [message];
+    }
+    const replacement = kept.get(index);
+    return replacement ? [replacement] : [];
+  });
 }
 
 export function buildManagedSessionContext(
@@ -357,7 +473,7 @@ export function buildManagedSessionContext(
   }
 
   return {
-    messages,
+    messages: enforceBranchSummaryContextPolicy(messages),
     thinkingLevel,
     model,
     activeModelPresetName,
@@ -609,14 +725,15 @@ export class BrewvaManagedSessionStore {
     branchFromId: string | null,
     summary: string,
     details?: unknown,
-    fromHook?: boolean,
+    replaceCurrent?: boolean,
   ): string {
+    void replaceCurrent;
     return this.appendBranchSummaryEntry(
       branchFromId,
       branchFromId ?? "root",
       summary,
       details,
-      fromHook,
+      false,
     );
   }
 

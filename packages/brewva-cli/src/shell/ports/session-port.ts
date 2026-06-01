@@ -48,6 +48,67 @@ export interface SessionLineageStatusView {
   unsupportedReason: string | null;
 }
 
+export interface SessionTreeEntryView {
+  entryId: string;
+  parentEntryId: string | null;
+  lineageNodeId: string;
+  sourceEventId: string;
+  sourceEventType: string;
+  entryKind: string;
+  admission: string;
+  presentTo: string;
+  timestamp: number;
+  role: string | null;
+  preview: string;
+  searchableText: string;
+  workspaceEffectPatchSetCount: number;
+  restorablePromptText: string | null;
+  hasRestorationAdvisory: boolean;
+  restorationAdvisory: string | null;
+}
+
+export interface SessionTreeProjectionView {
+  sessionId: string;
+  currentEntryId: string | null;
+  currentLineageNodeId: string | null;
+  entries: readonly SessionTreeEntryView[];
+}
+
+export interface SessionTreeCheckoutInput {
+  entryId: string;
+  channelId?: string;
+  reason?: string;
+  carry?: {
+    mode: "none" | "summary";
+    instructions?: string;
+  };
+}
+
+export interface SessionTreeCheckoutResult {
+  entryId: string;
+  activeLeafEntryId: string | null;
+  lineageNodeId: string | null;
+  restoredPrompt?: {
+    text: string;
+  };
+  restorationAdvisory?: string;
+  summaryRecordedId?: string;
+}
+
+export type SessionTreeRewindTargetResolution =
+  | {
+      kind: "none";
+      entryId: string;
+    }
+  | {
+      kind: "checkpoint";
+      entryId: string;
+      checkpointId: string;
+      turn: number;
+      exact: boolean;
+      crossedEntryCount: number;
+    };
+
 export interface SessionWireFrameReadOptions {
   readonly refreshDurable?: boolean;
 }
@@ -74,6 +135,9 @@ export interface SessionViewPort {
     channelId?: string;
     reason?: string;
   }): Promise<SessionLineageStatusView>;
+  getTreeProjection(): SessionTreeProjectionView;
+  checkoutTreeEntry(input: SessionTreeCheckoutInput): Promise<SessionTreeCheckoutResult>;
+  resolveTreeRewindTarget(entryId: string): SessionTreeRewindTargetResolution;
   getModelLabel(): string;
   getThinkingLevel(): string;
   listModels(options?: {

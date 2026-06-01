@@ -56,6 +56,8 @@ Stable interactive slash commands include:
 - `/export`
 - `/init`
 - `/transcript`
+- `/tree`
+- `/lineage`
 - `/undo`
 - `/rewind`
 - `/redo`
@@ -65,6 +67,20 @@ Stable interactive slash commands include:
 `/transcript` opens a read-only snapshot of the current session transcript in the
 configured external pager. Transcript is archive evidence; it is not the
 default cockpit surface.
+
+`/tree` opens context-entry navigation for the active session. It is the
+micro-level browser for exact prompt/tool/message context entries. Checkout is
+conversation-only by default; when checkout leaves the current branch tail, the
+overlay asks for no summary, a generated branch-carry summary, or a generated
+summary with operator instructions. Workspace rollback requires the explicit
+rewind shortcut or `/rewind`. Inside `/tree`, `/` opens interactive search, `F`
+cycles filters, `f` folds the selected subtree, `l` focuses `/lineage`, and `r`
+opens conversation/code rewind choices when a prior checkpoint exists. Entries
+show whether later workspace patch sets exist so conversation-only checkout is
+visibly separate from file rollback.
+
+`/lineage` opens work-branch topology. It remains the macro-level browser for
+delegation, recovery, adoption, branch summaries, and channel selection.
 
 `/archive` opens bounded details for refs visible in the runtime cockpit:
 transcript, event tape, context, Work Card, active decisions, effect receipts,

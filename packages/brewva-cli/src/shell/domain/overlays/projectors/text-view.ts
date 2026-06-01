@@ -131,7 +131,7 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
       const lines = [
         `Lineage: ${payload.nodes.length}`,
         `Current: ${payload.currentLineageNodeId ?? "none"} root=${payload.rootNodeId}`,
-        "Use Up/Down to choose, Enter to checkout, Esc to close.",
+        "Use Up/Down to choose, Enter to checkout, t for scoped tree, Esc to close.",
       ];
       for (const [index, item] of payload.nodes.entries()) {
         const marker = index === payload.selectedIndex ? ">" : " ";
@@ -147,6 +147,35 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
         lines.push("No lineage nodes found.");
       }
       return { title: "Lineage", lines };
+    }
+    case "tree": {
+      const lines = [
+        `Tree: ${payload.nodes.length}/${payload.totalEntryCount}`,
+        `Current: ${payload.currentEntryId ?? "root"} lineage=${payload.currentLineageNodeId ?? "none"}`,
+        `Scope: ${payload.scopeLineageNodeId ?? "all"} search=${payload.query} filter=${payload.filter}`,
+        "Use Up/Down to choose, Enter to checkout, / to search, F to filter, c to quick carry, f to fold, l for lineage, r to rewind, Esc to close.",
+      ];
+      for (const [index, item] of payload.nodes.entries()) {
+        const marker = index === payload.selectedIndex ? ">" : " ";
+        const current = item.current ? " current" : "";
+        const active = item.activePath ? " active" : "";
+        const fold = item.childCount > 0 ? (item.collapsed ? "+" : "-") : " ";
+        const role = item.role ?? item.entryKind;
+        const indent = "  ".repeat(item.depth);
+        const workspaceEffects =
+          item.workspaceEffectPatchSetCount > 0
+            ? ` patchSetsAfter=${item.workspaceEffectPatchSetCount}`
+            : "";
+        lines.push(
+          `${marker} ${indent}${fold} ${role} [${item.entryId}] ${item.preview}${workspaceEffects}${current}${active}`,
+        );
+      }
+      if (payload.nodes.length === 0) {
+        lines.push(
+          payload.query.trim() ? "No matching tree entries." : "No context entries found.",
+        );
+      }
+      return { title: "Tree", lines };
     }
     case "queue": {
       const lines = [
@@ -200,10 +229,13 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
       };
     case "select":
       return {
-        title: "Select",
-        lines: payload.options.map(
-          (item, index) => `${index === payload.selectedIndex ? ">" : " "} ${item}`,
-        ),
+        title: payload.title ?? "Select",
+        lines: [
+          ...(payload.message ? [payload.message, ""] : []),
+          ...payload.options.map(
+            (item, index) => `${index === payload.selectedIndex ? ">" : " "} ${item}`,
+          ),
+        ],
       };
     case "modelPicker":
       return {

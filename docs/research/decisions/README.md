@@ -115,6 +115,7 @@ Every accepted decision inherits these rules:
 - [runtime-owned-session-lifecycle-aggregate-and-authority-gate](./runtime-owned-session-lifecycle-aggregate-and-authority-gate.md)
 - [schedule-intent-hardening-and-control-plane-ergonomics](./schedule-intent-hardening-and-control-plane-ergonomics.md)
 - [session-lineage-and-context-admission](./session-lineage-and-context-admission.md)
+- [session-tree-navigation](./session-tree-navigation.md)
 - [session-rewind-as-conversation-fork-primitive](./session-rewind-as-conversation-fork-primitive.md)
 - [token-cache-fidelity-and-provider-prefix-stability](./token-cache-fidelity-and-provider-prefix-stability.md)
 - [typebox-derived-provider-streaming-parse-boundary](./typebox-derived-provider-streaming-parse-boundary.md)

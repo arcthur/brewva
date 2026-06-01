@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
+import type { SessionRewindMode, SessionRewindSummary } from "@brewva/brewva-vocabulary/session";
 import type { OverlayPriority } from "../../internal/tui/index.js";
 import {
   buildInspectReport,
@@ -41,6 +42,7 @@ import {
   buildNotificationDetailLines,
   buildNotificationsOverlayPayload,
   buildSkillsOverlayPayload,
+  buildTreeOverlayPayload,
 } from "../domain/overlays/projectors/index.js";
 import {
   cloneCliShellPromptParts,
@@ -218,6 +220,54 @@ interface TranscriptProjectorDelegate {
   refreshFromSession(): void;
 }
 
+type TreeOverlayPayload = Extract<CliShellOverlayPayload, { kind: "tree" }>;
+type TreeOverlayNode = TreeOverlayPayload["nodes"][number];
+type TreeRewindTarget = Extract<
+  ReturnType<SessionViewPort["resolveTreeRewindTarget"]>,
+  { kind: "checkpoint" }
+>;
+
+const TREE_FILTER_ORDER: readonly TreeOverlayPayload["filter"][] = [
+  "default",
+  "noTools",
+  "user",
+  "all",
+];
+
+const TREE_REWIND_OPTIONS = [
+  "Conversation only",
+  "Code only",
+  "Conversation and code",
+  "Conversation and code with carried summary",
+] as const;
+
+function isTreeCarrySelectDialogId(dialogId: string | undefined): boolean {
+  return typeof dialogId === "string" && dialogId.startsWith("tree-carry:");
+}
+
+function isTreeCarryInstructionsDialogId(dialogId: string | undefined): boolean {
+  return typeof dialogId === "string" && dialogId.startsWith("tree-carry-instructions:");
+}
+
+function isTreeRewindSelectDialogId(dialogId: string | undefined): boolean {
+  return typeof dialogId === "string" && dialogId.startsWith("tree-rewind:");
+}
+
+function isTreeSearchInputDialogId(dialogId: string | undefined): boolean {
+  return typeof dialogId === "string" && dialogId.startsWith("tree-search:");
+}
+
+function buildTreeWorkspaceEffectWarning(node: TreeOverlayNode): string | undefined {
+  return node.workspaceEffectPatchSetCount > 0
+    ? `Workspace effects after this entry: ${node.workspaceEffectPatchSetCount} patch set(s). Conversation-only checkout will not roll back files.`
+    : undefined;
+}
+
+function nextTreeFilter(current: TreeOverlayPayload["filter"]): TreeOverlayPayload["filter"] {
+  const currentIndex = TREE_FILTER_ORDER.indexOf(current);
+  return TREE_FILTER_ORDER[(currentIndex + 1) % TREE_FILTER_ORDER.length] ?? "default";
+}
+
 export interface ShellOverlayLifecycleHandlerContext {
   getState(): CliShellViewState;
   getViewportRows(): number;
@@ -254,6 +304,18 @@ export interface ShellOverlayLifecycleHandlerContext {
 
 export class ShellOverlayLifecycleHandler {
   readonly #sessionsProjector = new ShellSessionsOverlayProjector();
+  #pendingTreeCheckout: {
+    active: TreeOverlayPayload;
+    node: TreeOverlayNode;
+  } | null = null;
+  #pendingTreeRewind: {
+    active: TreeOverlayPayload;
+    node: TreeOverlayNode;
+    target: TreeRewindTarget;
+  } | null = null;
+  #pendingTreeSearch: {
+    active: TreeOverlayPayload;
+  } | null = null;
 
   constructor(private readonly context: ShellOverlayLifecycleHandlerContext) {}
 
@@ -322,6 +384,18 @@ export class ShellOverlayLifecycleHandler {
       return;
     }
     if (cancelled) {
+      if (
+        (payload.kind === "select" && isTreeCarrySelectDialogId(payload.dialogId)) ||
+        (payload.kind === "input" && isTreeCarryInstructionsDialogId(payload.dialogId))
+      ) {
+        this.#pendingTreeCheckout = null;
+      }
+      if (payload.kind === "select" && isTreeRewindSelectDialogId(payload.dialogId)) {
+        this.#pendingTreeRewind = null;
+      }
+      if (payload.kind === "input" && isTreeSearchInputDialogId(payload.dialogId)) {
+        this.#pendingTreeSearch = null;
+      }
       if (payload.kind === "confirm") {
         this.context.resolveDialog(payload.dialogId, false);
       } else if (payload.kind === "input" || payload.kind === "select") {
@@ -423,12 +497,20 @@ export class ShellOverlayLifecycleHandler {
     });
   }
 
-  handleInputOverlayInput(
+  async handleInputOverlayInput(
     active: Extract<CliShellOverlayPayload, { kind: "input" }>,
     input: CliShellInput,
-  ): boolean {
+  ): Promise<boolean> {
     const key = normalizeShellInputKey(input.key);
     if (key === "enter") {
+      if (isTreeCarryInstructionsDialogId(active.dialogId)) {
+        await this.handleTreeCarryInstructionsPrimary(active);
+        return true;
+      }
+      if (isTreeSearchInputDialogId(active.dialogId)) {
+        this.handleTreeSearchInputPrimary(active);
+        return true;
+      }
       this.context.resolveDialog(
         active.dialogId,
         active.value.trim().length > 0 ? active.value : undefined,
@@ -531,6 +613,75 @@ export class ShellOverlayLifecycleHandler {
       return true;
     }
 
+    if (active.kind === "lineage" && key === "t") {
+      const node = active.nodes[active.selectedIndex];
+      if (node) {
+        this.openTreeOverlay("", node.lineageNodeId, node.leafEntryId ?? undefined);
+      }
+      return true;
+    }
+
+    if (active.kind === "tree" && key === "/") {
+      this.openTreeSearchOverlay(active);
+      return true;
+    }
+
+    if (active.kind === "tree" && key === "f" && input.shift) {
+      const node = active.nodes[active.selectedIndex];
+      this.replaceActiveOverlay(
+        this.buildTreeOverlayPayload({
+          entryId: node?.entryId,
+          index: active.selectedIndex,
+          query: active.query,
+          filter: nextTreeFilter(active.filter),
+          collapsedEntryIds: new Set(active.collapsedEntryIds),
+          lineageNodeId: active.scopeLineageNodeId ?? undefined,
+        }),
+      );
+      return true;
+    }
+
+    if (active.kind === "tree" && key === "f") {
+      const node = active.nodes[active.selectedIndex];
+      if (!node || node.childCount === 0) {
+        return true;
+      }
+      const collapsed = new Set(active.collapsedEntryIds);
+      if (collapsed.has(node.entryId)) {
+        collapsed.delete(node.entryId);
+      } else {
+        collapsed.add(node.entryId);
+      }
+      this.replaceActiveOverlay(
+        this.buildTreeOverlayPayload({
+          query: active.query,
+          filter: active.filter,
+          collapsedEntryIds: collapsed,
+          entryId: node.entryId,
+          lineageNodeId: active.scopeLineageNodeId ?? undefined,
+        }),
+      );
+      return true;
+    }
+
+    if (active.kind === "tree" && key === "c") {
+      await this.handleTreePrimary(active, { carrySummary: true });
+      return true;
+    }
+
+    if (active.kind === "tree" && key === "l") {
+      const node = active.nodes[active.selectedIndex];
+      if (node) {
+        this.openOverlay(this.buildLineageOverlayPayload({ lineageNodeId: node.lineageNodeId }));
+      }
+      return true;
+    }
+
+    if (active.kind === "tree" && key === "r") {
+      await this.handleTreeRewind(active);
+      return true;
+    }
+
     if (active.kind === "oauthWait" && key === "c") {
       await this.context.providerAuth.copyOAuthWaitText(active);
       return true;
@@ -573,6 +724,10 @@ export class ShellOverlayLifecycleHandler {
         this.closeActiveOverlay(false);
         return;
       case "input":
+        if (isTreeCarryInstructionsDialogId(active.dialogId)) {
+          await this.handleTreeCarryInstructionsPrimary(active);
+          return;
+        }
         this.context.resolveDialog(
           active.dialogId,
           active.value.trim().length > 0 ? active.value : undefined,
@@ -580,6 +735,14 @@ export class ShellOverlayLifecycleHandler {
         this.closeActiveOverlay(false);
         return;
       case "select":
+        if (isTreeCarrySelectDialogId(active.dialogId)) {
+          await this.handleTreeCarrySelectPrimary(active);
+          return;
+        }
+        if (isTreeRewindSelectDialogId(active.dialogId)) {
+          await this.handleTreeRewindSelectPrimary(active);
+          return;
+        }
         this.context.resolveDialog(active.dialogId, active.options[active.selectedIndex]);
         this.closeActiveOverlay(false);
         return;
@@ -591,6 +754,9 @@ export class ShellOverlayLifecycleHandler {
         return;
       case "lineage":
         await this.handleLineagePrimary(active);
+        return;
+      case "tree":
+        await this.handleTreePrimary(active);
         return;
       case "inbox":
         await this.handleInboxPrimary(active);
@@ -721,6 +887,16 @@ export class ShellOverlayLifecycleHandler {
 
   openLineageOverlay(): void {
     this.openOverlay(this.buildLineageOverlayPayload());
+  }
+
+  openTreeOverlay(query = "", lineageNodeId?: string, entryId?: string): void {
+    this.openOverlay(
+      this.buildTreeOverlayPayload({
+        query,
+        lineageNodeId,
+        entryId,
+      }),
+    );
   }
 
   openQueueOverlay(): void {
@@ -960,6 +1136,19 @@ export class ShellOverlayLifecycleHandler {
           index: active.selectedIndex,
         }),
       );
+      return;
+    }
+    if (active.kind === "tree") {
+      this.replaceActiveOverlay(
+        this.buildTreeOverlayPayload({
+          entryId: active.nodes[active.selectedIndex]?.entryId,
+          index: active.selectedIndex,
+          query: active.query,
+          filter: active.filter,
+          collapsedEntryIds: new Set(active.collapsedEntryIds),
+          lineageNodeId: active.scopeLineageNodeId ?? undefined,
+        }),
+      );
     }
   }
 
@@ -1136,6 +1325,310 @@ export class ShellOverlayLifecycleHandler {
     ]);
   }
 
+  private async handleTreePrimary(
+    active: TreeOverlayPayload,
+    options: { carrySummary?: boolean } = {},
+  ): Promise<void> {
+    const node = active.nodes[active.selectedIndex];
+    if (!node) {
+      return;
+    }
+    if (options.carrySummary) {
+      await this.completeTreeCheckout(active, node, { mode: "summary" });
+      return;
+    }
+    const checkoutLeafEntryId =
+      node.restorablePromptText !== null ? node.parentEntryId : node.entryId;
+    if (checkoutLeafEntryId === active.currentEntryId) {
+      await this.completeTreeCheckout(active, node, { mode: "none" });
+      return;
+    }
+    this.#pendingTreeCheckout = { active, node };
+    this.openOverlayWithOptions(
+      {
+        kind: "select",
+        dialogId: `tree-carry:${randomUUID()}`,
+        title: "Tree checkout",
+        message: buildTreeWorkspaceEffectWarning(node),
+        options: ["No summary", "Generated summary", "Generated summary with instructions"],
+        selectedIndex: 0,
+      },
+      { priority: "queued", suspendCurrent: true },
+    );
+  }
+
+  private async completeTreeCheckout(
+    active: TreeOverlayPayload,
+    node: TreeOverlayNode,
+    carry: { mode: "none" | "summary"; instructions?: string },
+  ): Promise<void> {
+    const result = await this.context.getSessionPort().checkoutTreeEntry({
+      entryId: node.entryId,
+      channelId: "cli",
+      reason: "tui_tree_checkout",
+      carry,
+    });
+    this.context.transcriptProjector.refreshFromSession();
+    const actions: ShellAction[] = [...this.context.buildSessionStatusActions()];
+    if (result.restoredPrompt) {
+      actions.push({
+        type: "composer.setPromptState",
+        text: result.restoredPrompt.text,
+        cursor: result.restoredPrompt.text.length,
+        parts: [],
+      });
+    }
+    this.context.commit(actions, {
+      debounceStatus: false,
+    });
+    this.replaceActiveOverlay(
+      this.buildTreeOverlayPayload({
+        entryId: node.entryId,
+        index: active.selectedIndex,
+        query: active.query,
+        filter: active.filter,
+        collapsedEntryIds: new Set(active.collapsedEntryIds),
+        lineageNodeId: active.scopeLineageNodeId ?? undefined,
+      }),
+    );
+    this.context.commit([
+      {
+        type: "notification.add",
+        notification: {
+          id: `tree-info:${randomUUID()}`,
+          level: result.restorationAdvisory ? "warning" : "info",
+          message:
+            result.restorationAdvisory ??
+            (result.summaryRecordedId
+              ? `Checked out tree entry ${node.entryId} with branch carry summary ${result.summaryRecordedId}.`
+              : undefined) ??
+            `Checked out tree entry ${node.entryId} on lineage ${result.lineageNodeId ?? "none"}.`,
+          createdAt: Date.now(),
+        },
+      },
+    ]);
+  }
+
+  private async handleTreeCarrySelectPrimary(
+    active: Extract<CliShellOverlayPayload, { kind: "select" }>,
+  ): Promise<void> {
+    const pending = this.#pendingTreeCheckout;
+    if (!pending) {
+      this.closeActiveOverlay(false);
+      return;
+    }
+    const choice = active.options[active.selectedIndex];
+    if (choice === "Generated summary with instructions") {
+      this.closeActiveOverlay(false);
+      this.openOverlayWithOptions(
+        {
+          kind: "input",
+          dialogId: `tree-carry-instructions:${randomUUID()}`,
+          title: "Branch carry instructions",
+          message: "Optional instructions for the generated carry summary.",
+          value: "",
+          compact: true,
+        },
+        { priority: "queued", suspendCurrent: true },
+      );
+      return;
+    }
+
+    this.#pendingTreeCheckout = null;
+    this.closeActiveOverlay(false);
+    await this.completeTreeCheckout(
+      pending.active,
+      pending.node,
+      choice === "Generated summary" ? { mode: "summary" } : { mode: "none" },
+    );
+  }
+
+  private async handleTreeCarryInstructionsPrimary(
+    active: Extract<CliShellOverlayPayload, { kind: "input" }>,
+  ): Promise<void> {
+    const pending = this.#pendingTreeCheckout;
+    const instructions = active.value.trim();
+    this.#pendingTreeCheckout = null;
+    this.closeActiveOverlay(false);
+    if (!pending) {
+      return;
+    }
+    await this.completeTreeCheckout(pending.active, pending.node, {
+      mode: "summary",
+      ...(instructions.length > 0 ? { instructions } : {}),
+    });
+  }
+
+  private handleTreeSearchInputPrimary(
+    active: Extract<CliShellOverlayPayload, { kind: "input" }>,
+  ): void {
+    const pending = this.#pendingTreeSearch;
+    this.#pendingTreeSearch = null;
+    this.closeActiveOverlay(false);
+    if (!pending) {
+      return;
+    }
+    const selectedEntryId = pending.active.nodes[pending.active.selectedIndex]?.entryId;
+    this.replaceActiveOverlay(
+      this.buildTreeOverlayPayload({
+        entryId: selectedEntryId,
+        index: pending.active.selectedIndex,
+        query: active.value,
+        filter: pending.active.filter,
+        collapsedEntryIds: new Set(pending.active.collapsedEntryIds),
+        lineageNodeId: pending.active.scopeLineageNodeId ?? undefined,
+      }),
+    );
+  }
+
+  private openTreeSearchOverlay(active: TreeOverlayPayload): void {
+    this.#pendingTreeSearch = { active };
+    this.openOverlayWithOptions(
+      {
+        kind: "input",
+        dialogId: `tree-search:${randomUUID()}`,
+        title: "Tree search",
+        message: "Search entry text, summaries, tool names, kinds, roles, and ids.",
+        value: active.query,
+        compact: true,
+      },
+      { priority: "queued", suspendCurrent: true },
+    );
+  }
+
+  private async handleTreeRewind(
+    active: Extract<CliShellOverlayPayload, { kind: "tree" }>,
+  ): Promise<void> {
+    const node = active.nodes[active.selectedIndex];
+    if (!node) {
+      return;
+    }
+    const target = this.context.getSessionPort().resolveTreeRewindTarget(node.entryId);
+    if (target.kind !== "checkpoint") {
+      this.context.commit([
+        {
+          type: "notification.add",
+          notification: {
+            id: `tree-rewind:${randomUUID()}`,
+            level: "warning",
+            message:
+              "No rewind checkpoint exists at or before the selected tree entry; use Enter for conversation-only checkout.",
+            createdAt: Date.now(),
+          },
+        },
+      ]);
+      return;
+    }
+
+    this.#pendingTreeRewind = { active, node, target };
+    const floorMessage = target.exact
+      ? `Effective checkpoint ${target.checkpointId} at turn ${target.turn}.`
+      : `Selected entry ${node.entryId} floors to checkpoint ${target.checkpointId} at turn ${target.turn}; crosses ${target.crossedEntryCount} context entr${target.crossedEntryCount === 1 ? "y" : "ies"}.`;
+    this.openOverlayWithOptions(
+      {
+        kind: "select",
+        dialogId: `tree-rewind:${randomUUID()}`,
+        title: "Tree rewind",
+        message: [buildTreeWorkspaceEffectWarning(node), floorMessage]
+          .filter((part): part is string => Boolean(part))
+          .join(" "),
+        options: [...TREE_REWIND_OPTIONS],
+        selectedIndex: 0,
+      },
+      { priority: "queued", suspendCurrent: true },
+    );
+  }
+
+  private async handleTreeRewindSelectPrimary(
+    active: Extract<CliShellOverlayPayload, { kind: "select" }>,
+  ): Promise<void> {
+    const pending = this.#pendingTreeRewind;
+    this.#pendingTreeRewind = null;
+    this.closeActiveOverlay(false);
+    if (!pending) {
+      return;
+    }
+
+    const choice = active.options[active.selectedIndex];
+    if (choice === "Conversation only") {
+      await this.completeTreeCheckout(pending.active, pending.node, { mode: "none" });
+      return;
+    }
+
+    const rewindMode: SessionRewindMode = choice === "Code only" ? "code" : "both";
+    const summaryMode: SessionRewindSummary =
+      choice === "Conversation and code with carried summary" ? "carry" : "none";
+    await this.completeTreeRewind(pending, rewindMode, summaryMode);
+  }
+
+  private async completeTreeRewind(
+    pending: {
+      active: TreeOverlayPayload;
+      node: TreeOverlayNode;
+      target: TreeRewindTarget;
+    },
+    mode: SessionRewindMode,
+    summary: SessionRewindSummary,
+  ): Promise<void> {
+    const { active, node, target } = pending;
+    const result = await this.context.getSessionPort().rewindSession({
+      checkpointId: target.checkpointId,
+      mode,
+      summary,
+    });
+    if (!result.ok) {
+      this.context.commit([
+        {
+          type: "notification.add",
+          notification: {
+            id: `tree-rewind:${randomUUID()}`,
+            level: "warning",
+            message: `Tree rewind unavailable (${result.reason}) for selected entry ${node.entryId}.`,
+            createdAt: Date.now(),
+          },
+        },
+      ]);
+      return;
+    }
+
+    this.context.transcriptProjector.refreshFromSession();
+    const actions: ShellAction[] = [...this.context.buildSessionStatusActions()];
+    if (result.restoredPrompt) {
+      actions.push({
+        type: "composer.setPromptState",
+        text: result.restoredPrompt.text,
+        cursor: result.restoredPrompt.text.length,
+        parts: cloneCliShellPromptParts(
+          result.restoredPrompt.parts as unknown as CliShellPromptPart[],
+        ),
+      });
+    }
+    this.context.commit(actions, { debounceStatus: false });
+    this.replaceActiveOverlay(
+      this.buildTreeOverlayPayload({
+        entryId: node.entryId,
+        index: active.selectedIndex,
+        query: active.query,
+        filter: active.filter,
+        collapsedEntryIds: new Set(active.collapsedEntryIds),
+        lineageNodeId: active.scopeLineageNodeId ?? undefined,
+      }),
+    );
+    this.context.commit([
+      {
+        type: "notification.add",
+        notification: {
+          id: `tree-rewind:${randomUUID()}`,
+          level: target.exact ? "info" : "warning",
+          message: target.exact
+            ? `Tree rewind applied (${mode}/${summary}): selected entry ${node.entryId}; effective checkpoint ${target.checkpointId} at turn ${target.turn}.`
+            : `Tree rewind applied (${mode}/${summary}): selected entry ${node.entryId}; floored to checkpoint ${target.checkpointId} at turn ${target.turn}; crossed ${target.crossedEntryCount} context entr${target.crossedEntryCount === 1 ? "y" : "ies"}.`,
+          createdAt: Date.now(),
+        },
+      },
+    ]);
+  }
+
   private buildNotificationsOverlayPayload(
     selection: {
       id?: string;
@@ -1299,4 +1792,49 @@ export class ShellOverlayLifecycleHandler {
       selection,
     });
   }
+
+  private buildTreeOverlayPayload(
+    selection: {
+      entryId?: string;
+      index?: number;
+      query?: string;
+      filter?: Extract<CliShellOverlayPayload, { kind: "tree" }>["filter"];
+      collapsedEntryIds?: ReadonlySet<string>;
+      lineageNodeId?: string;
+    } = {},
+  ): CliShellOverlayPayload {
+    const projection = this.context.getSessionPort().getTreeProjection();
+    const scopedEntries = selection.lineageNodeId
+      ? entriesWithAncestors(projection.entries, selection.lineageNodeId)
+      : projection.entries;
+    return buildTreeOverlayPayload({
+      sessionId: projection.sessionId,
+      currentEntryId: projection.currentEntryId,
+      currentLineageNodeId: projection.currentLineageNodeId,
+      scopeLineageNodeId: selection.lineageNodeId ?? null,
+      entries: scopedEntries,
+      query: selection.query ?? "",
+      filter: selection.filter ?? "default",
+      collapsedEntryIds: selection.collapsedEntryIds ?? new Set(),
+      selection,
+    });
+  }
+}
+
+function entriesWithAncestors<
+  TEntry extends { entryId: string; parentEntryId: string | null; lineageNodeId: string },
+>(entries: readonly TEntry[], lineageNodeId: string): TEntry[] {
+  const byId = new Map(entries.map((entry) => [entry.entryId, entry] as const));
+  const keep = new Set<string>();
+  for (const entry of entries) {
+    if (entry.lineageNodeId !== lineageNodeId) {
+      continue;
+    }
+    let cursor: TEntry | undefined = entry;
+    while (cursor && !keep.has(cursor.entryId)) {
+      keep.add(cursor.entryId);
+      cursor = cursor.parentEntryId ? byId.get(cursor.parentEntryId) : undefined;
+    }
+  }
+  return entries.filter((entry) => keep.has(entry.entryId));
 }

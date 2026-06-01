@@ -13,6 +13,7 @@ import type {
   CliQueueOverlayPayload,
   CliSessionsOverlayPayload,
   CliTasksOverlayPayload,
+  CliTreeOverlayPayload,
 } from "../../../src/shell/domain/overlays/payloads.js";
 import { buildNotificationDetailLines } from "../../../src/shell/domain/overlays/projectors/notifications.js";
 import {
@@ -668,6 +669,86 @@ function LineageSidebarList(input: {
   );
 }
 
+function TreeSidebarList(input: {
+  payload: CliTreeOverlayPayload;
+  theme: SessionPalette;
+  sidebarWidth: number;
+  maxVisible: number;
+}) {
+  const selectionWindow = createMemo(() =>
+    windowSelection(input.payload.nodes, input.payload.selectedIndex, input.maxVisible),
+  );
+  const labelMaxWidth = createMemo(() =>
+    Math.max(4, input.sidebarWidth - DIALOG_HORIZONTAL_PADDING * 2 - SIDEBAR_MARKER_WIDTH),
+  );
+  return (
+    <box width="100%" flexDirection="column" backgroundColor={input.theme.backgroundPanel}>
+      <For each={selectionWindow().items}>
+        {(item, index) => {
+          const absoluteIndex = createMemo(() => selectionWindow().startIndex + index());
+          const selected = createMemo(() => absoluteIndex() === input.payload.selectedIndex);
+          const markerFg = createMemo(() =>
+            selected()
+              ? input.theme.selectionText
+              : item.current
+                ? input.theme.primary
+                : item.activePath
+                  ? input.theme.text
+                  : input.theme.textMuted,
+          );
+          const label = createMemo(() => {
+            const indent = "  ".repeat(item.depth);
+            return truncateDialogText(`${indent}${item.preview}`, labelMaxWidth());
+          });
+          const marker = createMemo(() => {
+            if (item.current) {
+              return "● ";
+            }
+            if (item.activePath) {
+              return "│ ";
+            }
+            if (item.childCount > 0) {
+              return item.collapsed ? "+ " : "- ";
+            }
+            return "  ";
+          });
+          return (
+            <box
+              width="100%"
+              flexDirection="row"
+              alignItems="center"
+              backgroundColor={selected() ? input.theme.primary : undefined}
+              paddingLeft={DIALOG_HORIZONTAL_PADDING - SIDEBAR_MARKER_WIDTH}
+              paddingRight={DIALOG_HORIZONTAL_PADDING}
+              flexShrink={0}
+              gap={0}
+            >
+              <box width={SIDEBAR_MARKER_WIDTH} flexShrink={0}>
+                <text
+                  fg={markerFg()}
+                  wrapMode="none"
+                  attributes={item.current ? TextAttributes.BOLD : undefined}
+                >
+                  {marker()}
+                </text>
+              </box>
+              <text
+                flexGrow={1}
+                fg={selected() ? input.theme.selectionText : input.theme.text}
+                attributes={selected() ? TextAttributes.BOLD : undefined}
+                overflow="hidden"
+                wrapMode="none"
+              >
+                {label()}
+              </text>
+            </box>
+          );
+        }}
+      </For>
+    </box>
+  );
+}
+
 export function SessionsOverlay(input: {
   payload: CliSessionsOverlayPayload;
   theme: SessionPalette;
@@ -718,6 +799,74 @@ export function SessionsOverlay(input: {
   );
 }
 
+export function TreeOverlay(input: {
+  payload: CliTreeOverlayPayload;
+  theme: SessionPalette;
+  width: number;
+  height: number;
+}) {
+  const node = createMemo(() => input.payload.nodes[input.payload.selectedIndex]);
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.nodes.length),
+  );
+  const sidebarWidth = 40;
+  const detailLines = createMemo(() => {
+    const entry = node();
+    if (!entry) {
+      return ["No context entries found."];
+    }
+    return [
+      `id: ${entry.entryId}`,
+      `parent: ${entry.parentEntryId ?? "none"}`,
+      `lineage: ${entry.lineageNodeId}`,
+      `kind: ${entry.entryKind}`,
+      `role: ${entry.role ?? "n/a"}`,
+      `presentTo: ${entry.presentTo}`,
+      `admission: ${entry.admission}`,
+      `source: ${entry.sourceEventType}`,
+      `current: ${entry.current ? "yes" : "no"}`,
+      `active path: ${entry.activePath ? "yes" : "no"}`,
+      `children: ${entry.childCount}`,
+      `workspace effects after this entry: ${entry.workspaceEffectPatchSetCount} patch set(s)`,
+      `prompt restore: ${entry.restorablePromptText === null ? "no" : "literal text"}`,
+      `preview: ${entry.preview}`,
+    ];
+  });
+  const footer = createMemo(() => {
+    const search = input.payload.query.trim() ? ` · search ${input.payload.query.trim()}` : "";
+    return `Enter checkout · / search · F filter ${input.payload.filter} · c quick carry · f fold · l lineage · r rewind · Esc close${search}`;
+  });
+  return (
+    <OverlaySurface
+      title="Tree"
+      width={input.width}
+      height={input.height}
+      theme={input.theme}
+      footer={footer()}
+      splitContent
+    >
+      <box flexDirection="row" gap={1} flexGrow={1}>
+        <box width={sidebarWidth} flexShrink={0}>
+          <Show
+            when={input.payload.nodes.length > 0}
+            fallback={<text fg={input.theme.textMuted}>No context entries found.</text>}
+          >
+            <TreeSidebarList
+              payload={input.payload}
+              theme={input.theme}
+              sidebarWidth={sidebarWidth}
+              maxVisible={sidebarRows()}
+            />
+          </Show>
+        </box>
+        <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
+          <TextLineBlock lines={detailLines()} color={input.theme.text} />
+        </box>
+      </box>
+    </OverlaySurface>
+  );
+}
+
 export function LineageOverlay(input: {
   payload: CliLineageOverlayPayload;
   theme: SessionPalette;
@@ -754,7 +903,7 @@ export function LineageOverlay(input: {
       width={input.width}
       height={input.height}
       theme={input.theme}
-      footer="Enter checkout · Esc close"
+      footer="Enter checkout · t scoped tree · Esc close"
       splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>

@@ -16,6 +16,7 @@ import {
   QueueOverlay,
   SessionsOverlay,
   TasksOverlay,
+  TreeOverlay,
 } from "./data-overlays.js";
 import {
   ConfirmDialogOverlay,
@@ -132,6 +133,16 @@ export function ModalOverlay(input: {
       <Show when={overlayPayloadOf(payload(), "lineage")}>
         {(current) => (
           <LineageOverlay
+            payload={current()}
+            theme={input.theme}
+            width={input.width}
+            height={input.height}
+          />
+        )}
+      </Show>
+      <Show when={overlayPayloadOf(payload(), "tree")}>
+        {(current) => (
+          <TreeOverlay
             payload={current()}
             theme={input.theme}
             width={input.width}

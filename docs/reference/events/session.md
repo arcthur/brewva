@@ -62,6 +62,19 @@ context-entry tree with `lineageNodeId`, `parentEntryId`, `admission`, and
 `presentTo`; source message, compaction, summary, and tool-result events keep
 their own event shapes.
 
+The interactive `/tree` surface is a projection over these context-entry
+records. It does not introduce a new runtime root, session-index truth source,
+or hidden memory plane. Tree checkout records through the same lineage
+selection and branch-summary event paths used by other session lifecycle
+operations.
+
+Branch carry summaries may include an `activeSummaryKey` in their event
+details. The summary body carries bounded textual continuity from the abandoned
+branch path; abandoned entries are not copied into the new path as raw replay
+messages. Context materialization uses that key to keep the latest active carry
+summary for a fork point and applies the branch-summary context budget at read
+time; the tape record itself remains unchanged and inspectable.
+
 Capability state events persist capability-owned state for reload and
 inspection. They are state-only, fail-closed against declared capability
 owners, and must use artifact references when inline data would exceed the

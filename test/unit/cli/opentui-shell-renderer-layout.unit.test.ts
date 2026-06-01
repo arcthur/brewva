@@ -1660,6 +1660,97 @@ describe("opentui solid shell runtime: layout contract", () => {
     }
   });
 
+  test("renders tree sidebar with active path markers and indentation", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.openOverlay({
+      kind: "tree",
+      sessionId: "tree-session",
+      currentEntryId: "entry-assistant",
+      currentLineageNodeId: "lineage:main",
+      scopeLineageNodeId: null,
+      selectedIndex: 1,
+      query: "",
+      filter: "all",
+      collapsedEntryIds: [],
+      totalEntryCount: 2,
+      nodes: [
+        {
+          entryId: "entry-user",
+          parentEntryId: null,
+          lineageNodeId: "lineage:main",
+          sourceEventId: "event-user",
+          sourceEventType: "message.end",
+          entryKind: "message",
+          admission: "context_required",
+          presentTo: "llm",
+          timestamp: 1,
+          role: "user",
+          preview: "Plan the tree",
+          workspaceEffectPatchSetCount: 0,
+          depth: 0,
+          current: false,
+          activePath: true,
+          childCount: 1,
+          collapsed: false,
+          restorablePromptText: "Plan the tree",
+          restorationAdvisory: null,
+        },
+        {
+          entryId: "entry-assistant",
+          parentEntryId: "entry-user",
+          lineageNodeId: "lineage:main",
+          sourceEventId: "event-assistant",
+          sourceEventType: "message.end",
+          entryKind: "message",
+          admission: "context_required",
+          presentTo: "llm",
+          timestamp: 2,
+          role: "assistant",
+          preview: "Tree answer",
+          workspaceEffectPatchSetCount: 0,
+          depth: 1,
+          current: true,
+          activePath: true,
+          childCount: 0,
+          collapsed: false,
+          restorablePromptText: null,
+          restorationAdvisory: null,
+        },
+      ],
+    });
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      {
+        width: 100,
+        height: 28,
+      },
+    );
+
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      const titleColumn = findRenderedColumn(frame, "Tree");
+
+      expect(frame).toContain("Plan the tree");
+      expect(frame).toContain("Tree answer");
+      expect(findRenderedColumn(frame, "Plan the tree")).toBe(titleColumn);
+      expect(findRenderedColumn(frame, "Tree answer")).toBeGreaterThan(titleColumn);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
   test("opens selected task overlay rows in the subagent footer inspector", async () => {
     const { bundle } = createFakeBundle({
       sessionWireBySessionId: {

@@ -305,11 +305,18 @@ describe("shell command provider", () => {
     expect(provider.slashCommands().map((command) => command.id)).toContain("agent.model");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.handoff");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.lineage");
+    expect(provider.slashCommands().map((command) => command.id)).toContain("session.tree");
     expect(provider.slashCommands().map((command) => command.id)).toContain("session.transcript");
     expect(provider.createSlashCommandIntent("lineage", { args: "", source: "slash" })).toEqual({
       type: "command.invoke",
       commandId: "session.lineage",
       args: "",
+      source: "slash",
+    });
+    expect(provider.createSlashCommandIntent("tree", { args: "branch", source: "slash" })).toEqual({
+      type: "command.invoke",
+      commandId: "session.tree",
+      args: "branch",
       source: "slash",
     });
     expect(
@@ -480,6 +487,7 @@ describe("shell command provider", () => {
         "diff",
         "copy",
         "export",
+        "tree",
         "skills",
         "init",
       ]),

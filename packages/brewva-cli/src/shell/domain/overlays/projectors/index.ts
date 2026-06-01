@@ -7,3 +7,4 @@ export * from "./notifications.js";
 export * from "./queue.js";
 export * from "./sessions.js";
 export * from "./text-view.js";
+export * from "./tree.js";

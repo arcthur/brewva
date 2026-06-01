@@ -1385,10 +1385,10 @@ export class CliShellRuntime {
       moveCompletion: (delta) => this.#completionHandler.move(delta),
       dismissCompletion: () => this.#completionHandler.dismiss(),
       refreshCompletion: () => this.#completionHandler.refresh(),
-      handleDialogInput: (input) => {
+      handleDialogInput: async (input) => {
         const active = this.#state.overlay.active?.payload;
         if (active?.kind === "input") {
-          this.#overlayHandler.handleInputOverlayInput(active, input);
+          await this.#overlayHandler.handleInputOverlayInput(active, input);
         }
       },
       handleQuestionInput: (input) => this.#overlayHandler.handleQuestionInput(input),
@@ -1405,6 +1405,8 @@ export class CliShellRuntime {
       openInbox: () => this.#overlayHandler.openInboxOverlay(),
       openSessions: () => this.#overlayHandler.openSessionsOverlay(),
       openLineage: () => this.#overlayHandler.openLineageOverlay(),
+      openTree: (query, lineageNodeId) =>
+        this.#overlayHandler.openTreeOverlay(query, lineageNodeId),
       openQueue: () => this.#overlayHandler.openQueueOverlay(),
       openInspect: () => this.#overlayHandler.openInspectOverlay(),
       openNotifications: () => this.#overlayHandler.openNotificationsOverlay(),

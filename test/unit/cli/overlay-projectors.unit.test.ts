@@ -15,6 +15,7 @@ import {
   buildSessionsOverlayPayload,
   buildSessionsOverlayRows,
   buildSkillsOverlayPayload,
+  buildTreeOverlayPayload,
   mergeSessionsOverlayRows,
   orderSessionsByStableIds,
   reconcileSessionsOverlayStableIds,
@@ -696,6 +697,190 @@ describe("buildLineageOverlayPayload", () => {
         expect.stringContaining("Experiment"),
       ]),
     );
+  });
+});
+
+describe("buildTreeOverlayPayload", () => {
+  const entries = [
+    {
+      entryId: "entry-user-1",
+      parentEntryId: null,
+      lineageNodeId: "lineage:main",
+      sourceEventId: "event-user-1",
+      sourceEventType: "message.end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "llm",
+      timestamp: 1,
+      role: "user",
+      preview: "Start from here",
+      restorablePromptText: "Start from here",
+      hasRestorationAdvisory: false,
+    },
+    {
+      entryId: "entry-assistant-1",
+      parentEntryId: "entry-user-1",
+      lineageNodeId: "lineage:main",
+      sourceEventId: "event-assistant-1",
+      sourceEventType: "message.end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "llm",
+      timestamp: 2,
+      role: "assistant",
+      preview: "Main answer",
+      restorablePromptText: null,
+      hasRestorationAdvisory: false,
+    },
+    {
+      entryId: "entry-user-2",
+      parentEntryId: "entry-assistant-1",
+      lineageNodeId: "lineage:main",
+      sourceEventId: "event-user-2",
+      sourceEventType: "message.end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "llm",
+      timestamp: 3,
+      role: "user",
+      preview: "Continue on main",
+      restorablePromptText: "Continue on main",
+      hasRestorationAdvisory: false,
+    },
+    {
+      entryId: "entry-branch",
+      parentEntryId: "entry-assistant-1",
+      lineageNodeId: "lineage:experiment",
+      sourceEventId: "event-branch",
+      sourceEventType: "message.end",
+      entryKind: "message",
+      admission: "context_required",
+      presentTo: "llm",
+      timestamp: 4,
+      role: "user",
+      preview: "Branch prompt",
+      restorablePromptText: "Branch prompt",
+      hasRestorationAdvisory: false,
+    },
+  ];
+
+  test("renders entry tree order and marks the active path", () => {
+    const payload = buildTreeOverlayPayload({
+      sessionId: "tree-session",
+      entries,
+      currentEntryId: "entry-branch",
+      query: "",
+      filter: "all",
+      collapsedEntryIds: new Set(),
+      selection: { entryId: "entry-user-2" },
+    });
+
+    expect(
+      payload.nodes.map((node) => ({
+        id: node.entryId,
+        depth: node.depth,
+        current: node.current,
+        activePath: node.activePath,
+      })),
+    ).toEqual([
+      { id: "entry-user-1", depth: 0, current: false, activePath: true },
+      { id: "entry-assistant-1", depth: 1, current: false, activePath: true },
+      { id: "entry-user-2", depth: 2, current: false, activePath: false },
+      { id: "entry-branch", depth: 2, current: true, activePath: true },
+    ]);
+    expect(payload.selectedIndex).toBe(2);
+    expect(buildOverlayView(payload).lines.join("\n")).toContain("Branch prompt");
+  });
+
+  test("keeps ancestors for search results and hides folded descendants", () => {
+    const searched = buildTreeOverlayPayload({
+      sessionId: "tree-session",
+      entries,
+      currentEntryId: "entry-branch",
+      query: "branch",
+      filter: "all",
+      collapsedEntryIds: new Set(),
+    });
+
+    expect(searched.nodes.map((node) => node.entryId)).toEqual([
+      "entry-user-1",
+      "entry-assistant-1",
+      "entry-branch",
+    ]);
+
+    const folded = buildTreeOverlayPayload({
+      sessionId: "tree-session",
+      entries,
+      currentEntryId: "entry-branch",
+      query: "",
+      filter: "all",
+      collapsedEntryIds: new Set(["entry-assistant-1"]),
+    });
+
+    expect(folded.nodes.map((node) => node.entryId)).toEqual(["entry-user-1", "entry-assistant-1"]);
+  });
+
+  test("matches tree search against hidden full text and carries workspace effect counts", () => {
+    const payload = buildTreeOverlayPayload({
+      sessionId: "tree-session",
+      entries: [
+        {
+          ...entries[0]!,
+          preview: "short preview",
+          searchableText: `${"prefix ".repeat(30)}deep-search-token`,
+          workspaceEffectPatchSetCount: 3,
+        },
+      ],
+      currentEntryId: "entry-user-1",
+      query: "deep-search-token",
+    });
+
+    expect(payload.nodes).toHaveLength(1);
+    expect(payload.nodes[0]).toMatchObject({
+      entryId: "entry-user-1",
+      workspaceEffectPatchSetCount: 3,
+    });
+  });
+
+  test("default tree filter keeps tool entries while noTools hides them", () => {
+    const withToolEntry = [
+      ...entries,
+      {
+        entryId: "entry-tool",
+        parentEntryId: "entry-assistant-1",
+        lineageNodeId: "lineage:main",
+        sourceEventId: "event-tool",
+        sourceEventType: "tool.finished",
+        entryKind: "tool_result",
+        admission: "context_required",
+        presentTo: "llm",
+        timestamp: 5,
+        role: null,
+        preview: "read_file result",
+        restorablePromptText: null,
+        hasRestorationAdvisory: false,
+      },
+    ];
+
+    const defaultPayload = buildTreeOverlayPayload({
+      sessionId: "tree-session",
+      entries: withToolEntry,
+      currentEntryId: "entry-tool",
+      query: "read_file",
+    });
+    const noToolsPayload = buildTreeOverlayPayload({
+      sessionId: "tree-session",
+      entries: withToolEntry,
+      currentEntryId: "entry-tool",
+      filter: "noTools",
+    });
+
+    expect(defaultPayload.nodes.map((node) => node.entryId)).toEqual([
+      "entry-user-1",
+      "entry-assistant-1",
+      "entry-tool",
+    ]);
+    expect(noToolsPayload.nodes.map((node) => node.entryId)).not.toContain("entry-tool");
   });
 });
 

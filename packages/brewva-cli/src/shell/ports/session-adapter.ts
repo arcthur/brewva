@@ -5,8 +5,11 @@ import type {
   BrewvaPromptSessionEvent,
   BrewvaModelPresetState,
   BrewvaPromptThinkingLevel,
+  BrewvaSessionEntry,
   SessionPhase,
 } from "@brewva/brewva-substrate/session";
+import type { ContextEntryRecord } from "@brewva/brewva-vocabulary/context";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { buildReasoningRevertSummaryDetails } from "@brewva/brewva-vocabulary/iteration";
 import type { BrewvaOutcome } from "@brewva/brewva-vocabulary/outcome";
 import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-vocabulary/session";
@@ -16,6 +19,7 @@ import {
   getCliRuntimeLineageTree,
   getCliRuntimeRewindState,
   getCliRuntimeSessionWire,
+  listCliRuntimeEvents,
   listCliRuntimeRewindTargets,
   recordCliRuntimeLineageSelection,
   recordCliRuntimeRewindCheckpoint,
@@ -27,50 +31,215 @@ import type {
   CliShellSessionBundle,
   SessionLineageStatusView,
   SessionProjectionMode,
+  SessionTreeCheckoutResult,
+  SessionTreeEntryView,
+  SessionTreeProjectionView,
+  SessionTreeRewindTargetResolution,
   SessionViewPort,
   SessionWireFrameReadOptions,
 } from "./session-port.js";
 export { createCliShellPromptStore } from "../domain/prompt-store.js";
 
-function readSessionManagerLineageNodeId(sessionManager: unknown): string | null {
-  const getLineageNodeId = (sessionManager as { getLineageNodeId?: unknown } | null | undefined)
-    ?.getLineageNodeId;
-  if (typeof getLineageNodeId !== "function") {
-    return null;
+const BRANCH_CARRY_SUMMARY_SCHEMA = "brewva.session.tree.branch-carry-summary.v1";
+const BRANCH_CARRY_SUMMARY_MAX_CHARS = 1_600;
+const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+interface TreeCapableSessionManager {
+  getSessionId(): string;
+  getLeafId(): string | null | undefined;
+  getLineageNodeId(): string;
+  getBranch(fromId?: string | null): BrewvaSessionEntry[];
+  buildSessionContext(): {
+    messages: unknown;
+  };
+  branch(entryId: string): void;
+  resetLeaf(): void;
+  branchWithSummary(
+    targetLeafEntryId: string | null,
+    summaryText: string,
+    summaryDetails: Record<string, unknown>,
+    replaceCurrent: boolean,
+  ): string;
+  checkoutLineageNode(lineageNodeId: string, leafEntryId?: string | null): void;
+  resolveLineageLeafEntryId(lineageNodeId: string): string | null;
+}
+
+const TREE_SESSION_MANAGER_METHODS = [
+  "getSessionId",
+  "getLeafId",
+  "getLineageNodeId",
+  "getBranch",
+  "buildSessionContext",
+  "branch",
+  "resetLeaf",
+  "branchWithSummary",
+  "checkoutLineageNode",
+  "resolveLineageLeafEntryId",
+] satisfies readonly (keyof TreeCapableSessionManager)[];
+
+function readTreeSessionManager(bundle: CliShellSessionBundle): TreeCapableSessionManager {
+  const sessionManager = bundle.session.sessionManager as
+    | Partial<TreeCapableSessionManager>
+    | null
+    | undefined;
+  for (const method of TREE_SESSION_MANAGER_METHODS) {
+    if (typeof sessionManager?.[method] !== "function") {
+      throw new Error(`session_manager_tree_contract_missing:${method}`);
+    }
   }
-  const value = getLineageNodeId.call(sessionManager);
+  return sessionManager as TreeCapableSessionManager;
+}
+
+function readSessionManagerLineageNodeId(sessionManager: TreeCapableSessionManager): string {
+  const value = sessionManager.getLineageNodeId();
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("session_manager_tree_contract_invalid:getLineageNodeId");
+  }
+  return value;
+}
+
+function readSessionManagerLeafEntryId(sessionManager: TreeCapableSessionManager): string | null {
+  const value = sessionManager.getLeafId();
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function readSessionManagerLeafEntryId(sessionManager: unknown): string | null {
-  const getLeafId = (sessionManager as { getLeafId?: unknown } | null | undefined)?.getLeafId;
-  if (typeof getLeafId !== "function") {
-    return null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function takeGraphemes(text: string, maxChars: number): { text: string; truncated: boolean } {
+  if (maxChars <= 0) {
+    return { text: "", truncated: text.length > 0 };
   }
-  const value = getLeafId.call(sessionManager);
-  return typeof value === "string" && value.trim() ? value : null;
+  const segments: string[] = [];
+  let count = 0;
+  for (const part of GRAPHEME_SEGMENTER.segment(text)) {
+    if (count >= maxChars) {
+      return { text: segments.join(""), truncated: true };
+    }
+    segments.push(part.segment);
+    count += 1;
+  }
+  return { text, truncated: false };
 }
 
-function readSessionManagerCheckoutLineageNode(
-  sessionManager: unknown,
-): ((lineageNodeId: string, leafEntryId?: string | null) => void) | undefined {
-  const checkoutLineageNode = (
-    sessionManager as { checkoutLineageNode?: unknown } | null | undefined
-  )?.checkoutLineageNode;
-  return typeof checkoutLineageNode === "function"
-    ? checkoutLineageNode.bind(sessionManager)
-    : undefined;
+function truncatePreview(text: string, maxChars = 96): string {
+  const normalized = text.replace(/\s+/gu, " ").trim();
+  const head = takeGraphemes(normalized, maxChars - 3);
+  if (!head.truncated) {
+    return normalized;
+  }
+  return `${head.text.trimEnd()}...`;
 }
 
-function readSessionManagerResolveLineageLeafEntryId(
-  sessionManager: unknown,
-): ((lineageNodeId: string) => string | null) | undefined {
-  const resolveLineageLeafEntryId = (
-    sessionManager as { resolveLineageLeafEntryId?: unknown } | null | undefined
-  )?.resolveLineageLeafEntryId;
-  return typeof resolveLineageLeafEntryId === "function"
-    ? resolveLineageLeafEntryId.bind(sessionManager)
-    : undefined;
+function truncateText(text: string, maxChars: number): string {
+  return takeGraphemes(text, maxChars).text.trimEnd();
+}
+
+function normalizeSummaryText(text: string): string {
+  return text.replace(/\s+/gu, " ").trim();
+}
+
+function readMessageText(content: unknown): {
+  text: string;
+  omittedNonText: boolean;
+  fileReference: boolean;
+} {
+  if (typeof content === "string") {
+    return { text: content, omittedNonText: false, fileReference: false };
+  }
+  if (!Array.isArray(content)) {
+    return { text: "", omittedNonText: true, fileReference: false };
+  }
+  let text = "";
+  let omittedNonText = false;
+  let fileReference = false;
+  for (const part of content) {
+    if (!isRecord(part)) {
+      omittedNonText = true;
+      continue;
+    }
+    if (part.type === "text" && typeof part.text === "string") {
+      text += part.text;
+      continue;
+    }
+    if (part.type === "file") {
+      fileReference = true;
+      text +=
+        readString(part.displayText) ?? readString(part.name) ?? readString(part.uri) ?? "[file]";
+      continue;
+    }
+    omittedNonText = true;
+  }
+  return { text, omittedNonText, fileReference };
+}
+
+function readTreeEntryText(input: {
+  sourceEvent?: BrewvaEventRecord;
+  contextEntry: ContextEntryRecord;
+}): {
+  role: string | null;
+  preview: string;
+  searchableText: string;
+  restorablePromptText: string | null;
+  restorationAdvisory: string | null;
+} {
+  const payload = isRecord(input.sourceEvent?.payload) ? input.sourceEvent.payload : {};
+  const message = isRecord(payload.message) ? payload.message : null;
+  if (message) {
+    const role = readString(message.role);
+    const content = readMessageText(message.content);
+    const preview = truncatePreview(content.text || role || input.contextEntry.entryKind);
+    const restorablePromptText = role === "user" ? content.text : null;
+    const referenceAdvisory =
+      restorablePromptText &&
+      (content.fileReference ||
+        /(^|\s)@\S+/u.test(restorablePromptText) ||
+        restorablePromptText.trimStart().startsWith("/"));
+    const restorationAdvisory =
+      role === "user" && (content.omittedNonText || referenceAdvisory)
+        ? [
+            "Restored literal prompt text.",
+            referenceAdvisory
+              ? "References will be re-resolved against the current workspace."
+              : "",
+            content.omittedNonText ? "One or more non-text prompt parts were omitted." : "",
+          ]
+            .filter((part) => part.length > 0)
+            .join(" ")
+        : null;
+    return {
+      role,
+      preview,
+      searchableText: content.text,
+      restorablePromptText,
+      restorationAdvisory,
+    };
+  }
+
+  const summary = readString(payload.summary) ?? readString(payload.sanitizedSummary);
+  if (summary) {
+    return {
+      role: input.contextEntry.entryKind === "compaction" ? "compactionSummary" : "branchSummary",
+      preview: truncatePreview(summary),
+      searchableText: summary,
+      restorablePromptText: null,
+      restorationAdvisory: null,
+    };
+  }
+
+  const fallbackText = input.contextEntry.text ?? input.contextEntry.entryKind;
+  return {
+    role: null,
+    preview: truncatePreview(fallbackText),
+    searchableText: fallbackText,
+    restorablePromptText: null,
+    restorationAdvisory: null,
+  };
 }
 
 async function ensureSessionInitialPersistence(session: unknown): Promise<void> {
@@ -84,13 +253,11 @@ async function ensureSessionInitialPersistence(session: unknown): Promise<void> 
 }
 
 function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusView {
-  const sessionId = bundle.session.sessionManager.getSessionId();
   try {
+    const sessionManager = readTreeSessionManager(bundle);
+    const sessionId = sessionManager.getSessionId();
     const tree = getCliRuntimeLineageTree(bundle.runtime, sessionId);
-    const lineageNodeId =
-      readSessionManagerLineageNodeId(bundle.session.sessionManager) ??
-      tree.selectedByChannel["cli"] ??
-      tree.rootNodeId;
+    const lineageNodeId = readSessionManagerLineageNodeId(sessionManager);
     const node = tree.nodes.find((candidate) => candidate.lineageNodeId === lineageNodeId) ?? null;
     const childCount = tree.edges.filter(
       (edge) => edge.parentLineageNodeId === lineageNodeId,
@@ -114,6 +281,344 @@ function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusV
       unsupportedReason: reason,
     };
   }
+}
+
+function buildTreeProjection(bundle: CliShellSessionBundle): SessionTreeProjectionView {
+  const sessionManager = readTreeSessionManager(bundle);
+  const sessionId = sessionManager.getSessionId();
+  const contextEntries: ContextEntryRecord[] =
+    bundle.runtime.ops.session.lineage.getContextEntryPath(sessionId, {});
+  const eventsById = new Map(
+    listCliRuntimeEvents(bundle.runtime, sessionId).map((event) => [event.id, event] as const),
+  );
+  const entries: SessionTreeEntryView[] = contextEntries.map((contextEntry) => {
+    const sourceEvent = eventsById.get(contextEntry.sourceEventId);
+    const text = readTreeEntryText({ sourceEvent, contextEntry });
+    return {
+      entryId: contextEntry.entryId,
+      parentEntryId: contextEntry.parentEntryId,
+      lineageNodeId: contextEntry.lineageNodeId,
+      sourceEventId: contextEntry.sourceEventId,
+      sourceEventType: contextEntry.sourceEventType,
+      entryKind: contextEntry.entryKind,
+      admission: contextEntry.admission,
+      presentTo: contextEntry.presentTo,
+      timestamp: contextEntry.timestamp,
+      role: text.role,
+      preview: text.preview,
+      searchableText: text.searchableText,
+      workspaceEffectPatchSetCount: 0,
+      restorablePromptText: text.restorablePromptText,
+      hasRestorationAdvisory: text.restorationAdvisory !== null,
+      restorationAdvisory: text.restorationAdvisory,
+    };
+  });
+  const workspaceEffectCounts = buildWorkspaceEffectPatchSetCounts(bundle, sessionId, entries);
+  for (const entry of entries) {
+    entry.workspaceEffectPatchSetCount = workspaceEffectCounts.get(entry.entryId) ?? 0;
+  }
+  return {
+    sessionId,
+    currentEntryId: readSessionManagerLeafEntryId(sessionManager),
+    currentLineageNodeId: readSessionManagerLineageNodeId(sessionManager),
+    entries,
+  };
+}
+
+function buildWorkspaceEffectPatchSetCounts(
+  bundle: CliShellSessionBundle,
+  sessionId: string,
+  entries: readonly SessionTreeEntryView[],
+): Map<string, number> {
+  const entriesById = new Map(entries.map((entry) => [entry.entryId, entry] as const));
+  const activeTargetsByCheckpointId = new Map(
+    listCliRuntimeRewindTargets(bundle.runtime, sessionId)
+      .filter((target) => target.lineage.kind === "active")
+      .map((target) => [target.checkpointId, target] as const),
+  );
+  const checkpoints = getCliRuntimeRewindState(bundle.runtime, sessionId).checkpoints;
+  const counts = new Map<string, number>();
+
+  for (const entry of entries) {
+    const path = entryPath(entry.entryId, entriesById);
+    let best:
+      | {
+          pathIndex: number;
+          timestamp: number;
+          patchSetCountAfter: number;
+        }
+      | undefined;
+    for (const checkpoint of checkpoints) {
+      if (!checkpoint.leafEntryId) {
+        continue;
+      }
+      const target = activeTargetsByCheckpointId.get(checkpoint.checkpointId);
+      if (!target) {
+        continue;
+      }
+      const pathIndex = path.findIndex((pathEntry) => pathEntry.entryId === checkpoint.leafEntryId);
+      if (pathIndex < 0) {
+        continue;
+      }
+      if (
+        !best ||
+        pathIndex > best.pathIndex ||
+        (pathIndex === best.pathIndex && target.timestamp > best.timestamp)
+      ) {
+        best = {
+          pathIndex,
+          timestamp: target.timestamp,
+          patchSetCountAfter: target.patchSetCountAfter,
+        };
+      }
+    }
+    counts.set(entry.entryId, best?.patchSetCountAfter ?? 0);
+  }
+
+  return counts;
+}
+
+function entryPath(
+  entryId: string | null,
+  entriesById: ReadonlyMap<string, SessionTreeEntryView>,
+): SessionTreeEntryView[] {
+  const path: SessionTreeEntryView[] = [];
+  const seen = new Set<string>();
+  let cursor = entryId ? entriesById.get(entryId) : undefined;
+  while (cursor && !seen.has(cursor.entryId)) {
+    seen.add(cursor.entryId);
+    path.unshift(cursor);
+    cursor = cursor.parentEntryId ? entriesById.get(cursor.parentEntryId) : undefined;
+  }
+  return path;
+}
+
+function resolveTreeRewindTargetForProjection(
+  bundle: CliShellSessionBundle,
+  projection: SessionTreeProjectionView,
+  entryId: string,
+): SessionTreeRewindTargetResolution {
+  const entriesById = new Map(projection.entries.map((entry) => [entry.entryId, entry] as const));
+  const path = entryPath(entryId, entriesById);
+  if (path.length === 0) {
+    return { kind: "none", entryId };
+  }
+  const activeTargetsByCheckpointId = new Map(
+    listCliRuntimeRewindTargets(bundle.runtime, projection.sessionId)
+      .filter((target) => target.lineage.kind === "active")
+      .map((target) => [target.checkpointId, target] as const),
+  );
+  const checkpoints = getCliRuntimeRewindState(bundle.runtime, projection.sessionId).checkpoints;
+  let best:
+    | {
+        checkpointId: string;
+        turn: number;
+        pathIndex: number;
+      }
+    | undefined;
+  for (const checkpoint of checkpoints) {
+    const target = activeTargetsByCheckpointId.get(checkpoint.checkpointId);
+    if (!target || !checkpoint.leafEntryId) {
+      continue;
+    }
+    const pathIndex = path.findIndex((entry) => entry.entryId === checkpoint.leafEntryId);
+    if (pathIndex < 0) {
+      continue;
+    }
+    if (
+      !best ||
+      pathIndex > best.pathIndex ||
+      (pathIndex === best.pathIndex &&
+        target.timestamp > activeTargetsByCheckpointId.get(best.checkpointId)!.timestamp)
+    ) {
+      best = {
+        checkpointId: checkpoint.checkpointId,
+        turn: target.turn,
+        pathIndex,
+      };
+    }
+  }
+  if (!best) {
+    return { kind: "none", entryId };
+  }
+  return {
+    kind: "checkpoint",
+    entryId,
+    checkpointId: best.checkpointId,
+    turn: best.turn,
+    exact: path[best.pathIndex]?.entryId === entryId,
+    crossedEntryCount: Math.max(0, path.length - 1 - best.pathIndex),
+  };
+}
+
+function buildGeneratedBranchCarrySummary(input: {
+  abandonedEntries: readonly BrewvaSessionEntry[];
+  fromEntryId: string | null;
+  toEntryId: string | null;
+  instructions?: string;
+}): string {
+  const contentLines = input.abandonedEntries
+    .map(formatAbandonedEntrySummaryLine)
+    .filter((line): line is string => line !== null);
+  const lines = [
+    "Branch carry summary",
+    `from: ${input.fromEntryId ?? "root"}`,
+    `to: ${input.toEntryId ?? "root"}`,
+    input.instructions ? `operator_instructions: ${input.instructions}` : "",
+    "abandoned_branch_content:",
+    ...(contentLines.length > 0
+      ? contentLines.map((line) => `- ${line}`)
+      : ["- No textual content found."]),
+  ].filter((line) => line.length > 0);
+  return truncateText(lines.join("\n"), BRANCH_CARRY_SUMMARY_MAX_CHARS);
+}
+
+function formatAbandonedEntrySummaryLine(entry: BrewvaSessionEntry): string | null {
+  if (entry.type === "message") {
+    const message = entry.message as unknown as Record<string, unknown>;
+    const role = readString(message.role) ?? "message";
+    const content = readMessageText(message.content);
+    const text = normalizeSummaryText(content.text);
+    return text.length > 0
+      ? `${entry.id} ${role}: ${text}`
+      : `${entry.id} ${role}: [non-text message omitted]`;
+  }
+  if (entry.type === "custom_message") {
+    const content = readMessageText(entry.content);
+    const text = normalizeSummaryText(content.text);
+    return text.length > 0
+      ? `${entry.id} custom:${entry.customType}: ${text}`
+      : `${entry.id} custom:${entry.customType}: [non-text message omitted]`;
+  }
+  if (entry.type === "branch_summary") {
+    return `${entry.id} branch_summary: ${normalizeSummaryText(entry.summary)}`;
+  }
+  if (entry.type === "compaction") {
+    return `${entry.id} compaction: ${normalizeSummaryText(entry.summary)}`;
+  }
+  if (entry.type === "model_change") {
+    return `${entry.id} model_change: ${entry.provider}/${entry.modelId}`;
+  }
+  if (entry.type === "model_preset_select") {
+    return `${entry.id} model_preset_select: ${entry.presetName}`;
+  }
+  if (entry.type === "thinking_level_change") {
+    return `${entry.id} thinking_level_change: ${entry.thinkingLevel}`;
+  }
+  return null;
+}
+
+function abandonedEntriesBetween(input: {
+  sessionManager: TreeCapableSessionManager;
+  oldLeafEntryId: string | null;
+  targetLeafEntryId: string | null;
+}): BrewvaSessionEntry[] {
+  const oldPath = input.sessionManager.getBranch(input.oldLeafEntryId);
+  const targetPath = input.sessionManager.getBranch(input.targetLeafEntryId);
+  const targetIds = new Set(targetPath.map((entry) => entry.id));
+  let commonIndex = -1;
+  for (const [index, entry] of oldPath.entries()) {
+    if (targetIds.has(entry.id)) {
+      commonIndex = index;
+    }
+  }
+  return oldPath.slice(commonIndex + 1);
+}
+
+async function checkoutTreeEntryInSession(
+  bundle: CliShellSessionBundle,
+  input: {
+    entryId: string;
+    channelId?: string;
+    reason?: string;
+    carry?: {
+      mode: "none" | "summary";
+      instructions?: string;
+    };
+  },
+): Promise<SessionTreeCheckoutResult> {
+  const sessionManager = readTreeSessionManager(bundle);
+  const projection = buildTreeProjection(bundle);
+  const target = projection.entries.find((entry) => entry.entryId === input.entryId);
+  if (!target) {
+    throw new Error(`session_tree_entry_missing:${input.entryId}`);
+  }
+
+  const oldLeafEntryId = sessionManager.getLeafId() ?? null;
+  const targetLeafEntryId =
+    target.restorablePromptText !== null ? target.parentEntryId : target.entryId;
+  const previousLineageNodeId = readSessionManagerLineageNodeId(sessionManager);
+
+  const abandonedEntries =
+    input.carry?.mode === "summary"
+      ? abandonedEntriesBetween({
+          sessionManager,
+          oldLeafEntryId,
+          targetLeafEntryId,
+        })
+      : [];
+
+  if (targetLeafEntryId) {
+    sessionManager.branch(targetLeafEntryId);
+  } else {
+    sessionManager.resetLeaf();
+  }
+
+  let summaryRecordedId: string | undefined;
+  if (input.carry?.mode === "summary" && abandonedEntries.length > 0) {
+    const summary = buildGeneratedBranchCarrySummary({
+      abandonedEntries,
+      fromEntryId: oldLeafEntryId,
+      toEntryId: targetLeafEntryId,
+      instructions: input.carry.instructions,
+    });
+    summaryRecordedId = sessionManager.branchWithSummary(
+      targetLeafEntryId,
+      summary,
+      {
+        schema: BRANCH_CARRY_SUMMARY_SCHEMA,
+        source: "tree_checkout",
+        activeSummaryKey: `context_entry:${targetLeafEntryId ?? "root"}`,
+        forkPointEntryId: targetLeafEntryId,
+        fromEntryId: oldLeafEntryId,
+        toEntryId: targetLeafEntryId,
+        abandonedEntryIds: abandonedEntries.map((entry) => entry.id),
+        abandonedRange: {
+          fromEntryId: oldLeafEntryId,
+          toEntryId: targetLeafEntryId,
+          entryIds: abandonedEntries.map((entry) => entry.id),
+        },
+        generation: {
+          kind: "deterministic",
+          maxChars: BRANCH_CARRY_SUMMARY_MAX_CHARS,
+          generatedAt: new Date().toISOString(),
+        },
+        ...(input.carry.instructions ? { instructions: input.carry.instructions } : {}),
+      },
+      false,
+    );
+  }
+
+  await replaceSessionMessagesFromCurrentContext(bundle);
+  const lineageNodeId = readSessionManagerLineageNodeId(sessionManager);
+  recordCliRuntimeLineageSelection(bundle.runtime, projection.sessionId, {
+    selectionId: `cli:${randomUUID()}`,
+    channelId: input.channelId ?? "cli",
+    lineageNodeId,
+    previousLineageNodeId,
+    reason: input.reason ?? "tree_checkout",
+  });
+
+  return {
+    entryId: target.entryId,
+    activeLeafEntryId: sessionManager.getLeafId() ?? null,
+    lineageNodeId,
+    ...(target.restorablePromptText !== null
+      ? { restoredPrompt: { text: target.restorablePromptText } }
+      : {}),
+    ...(target.restorationAdvisory ? { restorationAdvisory: target.restorationAdvisory } : {}),
+    ...(summaryRecordedId ? { summaryRecordedId } : {}),
+  };
 }
 
 function buildDivergenceSummaryDetails(note: SessionRewindDivergenceNote): Record<string, unknown> {
@@ -868,33 +1373,20 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return getCliRuntimeLineageTree(bundle.runtime, bundle.session.sessionManager.getSessionId());
     },
     resolveLineageLeafEntryId(lineageNodeId) {
-      const resolveLineageLeafEntryId = readSessionManagerResolveLineageLeafEntryId(
-        bundle.session.sessionManager,
-      );
-      if (!resolveLineageLeafEntryId) {
-        throw new Error(
-          "Session lineage overlay requires sessionManager.resolveLineageLeafEntryId().",
-        );
-      }
-      return resolveLineageLeafEntryId(lineageNodeId);
+      return readTreeSessionManager(bundle).resolveLineageLeafEntryId(lineageNodeId);
     },
     async checkoutLineageNode(input) {
-      const sessionId = bundle.session.sessionManager.getSessionId();
-      const previousLineageNodeId = readSessionManagerLineageNodeId(bundle.session.sessionManager);
-      const previousLeafEntryId = readSessionManagerLeafEntryId(bundle.session.sessionManager);
-      const checkoutLineageNode = readSessionManagerCheckoutLineageNode(
-        bundle.session.sessionManager,
-      );
-      if (!checkoutLineageNode) {
-        throw new Error("Session lineage checkout requires sessionManager.checkoutLineageNode().");
-      }
-      checkoutLineageNode(input.lineageNodeId, input.leafEntryId);
+      const sessionManager = readTreeSessionManager(bundle);
+      const sessionId = sessionManager.getSessionId();
+      const previousLineageNodeId = readSessionManagerLineageNodeId(sessionManager);
+      const previousLeafEntryId = readSessionManagerLeafEntryId(sessionManager);
+      sessionManager.checkoutLineageNode(input.lineageNodeId, input.leafEntryId);
       try {
         await replaceSessionMessagesFromCurrentContext(bundle);
       } catch (error) {
         if (previousLineageNodeId) {
           try {
-            checkoutLineageNode(previousLineageNodeId, previousLeafEntryId);
+            sessionManager.checkoutLineageNode(previousLineageNodeId, previousLeafEntryId);
           } catch {
             // Preserve the transcript replacement failure; rollback is best-effort controller state.
           }
@@ -905,10 +1397,19 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         selectionId: `cli:${randomUUID()}`,
         channelId: input.channelId ?? "cli",
         lineageNodeId: input.lineageNodeId,
-        ...(previousLineageNodeId ? { previousLineageNodeId } : {}),
+        previousLineageNodeId,
         reason: input.reason ?? "cli_checkout",
       });
       return readLineageStatus(bundle);
+    },
+    getTreeProjection() {
+      return buildTreeProjection(bundle);
+    },
+    async checkoutTreeEntry(input) {
+      return await checkoutTreeEntryInSession(bundle, input);
+    },
+    resolveTreeRewindTarget(entryId) {
+      return resolveTreeRewindTargetForProjection(bundle, buildTreeProjection(bundle), entryId);
     },
     getModelLabel() {
       return bundle.session.model?.provider && bundle.session.model?.id

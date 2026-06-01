@@ -42,6 +42,7 @@ export type ShellEffect =
   | { type: "overlay.openInbox" }
   | { type: "overlay.openSessions" }
   | { type: "overlay.openLineage" }
+  | { type: "overlay.openTree"; query?: string; lineageNodeId?: string }
   | { type: "overlay.openQueue" }
   | { type: "overlay.openInspect" }
   | { type: "overlay.openNotifications" }

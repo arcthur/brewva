@@ -146,13 +146,20 @@ export function SelectOverlay(input: {
   );
   return (
     <OverlaySurface
-      title="Select"
+      title={input.payload.title ?? "Select"}
       width={input.width}
       height={input.height}
       theme={input.theme}
       size="medium"
       footer="Enter confirm · Esc cancel"
     >
+      <Show when={input.payload.message}>
+        {(message) => (
+          <box paddingBottom={1}>
+            <text fg={input.theme.textMuted}>{message()}</text>
+          </box>
+        )}
+      </Show>
       <SelectionList
         items={input.payload.options}
         selectedIndex={input.payload.selectedIndex}

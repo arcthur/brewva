@@ -246,6 +246,7 @@ describe("cli shell import graph", () => {
       "queue.ts",
       "sessions.ts",
       "text-view.ts",
+      "tree.ts",
     ]) {
       expect(existsSync(resolve(projectorRoot, path)), path).toBe(true);
     }

@@ -87,6 +87,44 @@ export interface CliLineageOverlayPayload {
   nodes: CliLineageOverlayNode[];
 }
 
+export type CliTreeOverlayFilter = "default" | "all" | "noTools" | "user";
+
+export interface CliTreeOverlayNode {
+  entryId: string;
+  parentEntryId: string | null;
+  lineageNodeId: string;
+  sourceEventId: string;
+  sourceEventType: string;
+  entryKind: string;
+  admission: string;
+  presentTo: string;
+  timestamp: number;
+  role: string | null;
+  preview: string;
+  workspaceEffectPatchSetCount: number;
+  depth: number;
+  current: boolean;
+  activePath: boolean;
+  childCount: number;
+  collapsed: boolean;
+  restorablePromptText: string | null;
+  restorationAdvisory: string | null;
+}
+
+export interface CliTreeOverlayPayload {
+  kind: "tree";
+  selectedIndex: number;
+  sessionId: string;
+  currentEntryId: string | null;
+  currentLineageNodeId: string | null;
+  scopeLineageNodeId: string | null;
+  query: string;
+  filter: CliTreeOverlayFilter;
+  collapsedEntryIds: string[];
+  totalEntryCount: number;
+  nodes: CliTreeOverlayNode[];
+}
+
 export interface CliOverlayNotification {
   id: string;
   level: "info" | "warning" | "error";
@@ -213,6 +251,7 @@ export interface CliSelectOverlayPayload {
   kind: "select";
   dialogId?: string;
   title?: string;
+  message?: string;
   options: string[];
   selectedIndex: number;
 }
@@ -344,6 +383,7 @@ export interface OverlayPayloadMap {
   queue: CliQueueOverlayPayload;
   sessions: CliSessionsOverlayPayload;
   lineage: CliLineageOverlayPayload;
+  tree: CliTreeOverlayPayload;
   inbox: CliInboxOverlayPayload;
   notifications: CliNotificationsOverlayPayload;
   pager: CliPagerOverlayPayload;

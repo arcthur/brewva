@@ -143,6 +143,15 @@ function updateCommandIntent(
       });
     case "session.lineage":
       return handled({ effects: [{ type: "overlay.openLineage" }] });
+    case "session.tree":
+      return handled({
+        effects: [
+          {
+            type: "overlay.openTree",
+            query: intent.args.trim() ? intent.args.trim() : undefined,
+          },
+        ],
+      });
     case "session.queue":
       return handled({ effects: [{ type: "overlay.openQueue" }] });
     case "session.undo":

@@ -242,9 +242,32 @@ canonical runtime events and tape projections directly.
     inspect, lineage checkout, session switching, and pager drill-down remain
     presentation over Brewva-owned session state
     rather than a second lifecycle authority
+  - `/tree` opens a context-entry micro tree over the existing event tape and
+    lineage context-entry records; checkout is conversation-only unless the
+    operator explicitly escalates to rewind
+  - tree prompt restoration restores literal user text only. File mentions and
+    slash text are re-resolved on submit against the current workspace; image,
+    blob, and other non-lossless payloads are not restored automatically.
+  - branch carry from `/tree` records an ordinary branch-summary event with a
+    stable details schema. Checkout that leaves the current branch tail offers
+    no summary, generated summary, or generated summary with operator
+    instructions. Generated carry summaries deterministically extract bounded
+    textual continuity from the abandoned path rather than copying raw
+    context-entry messages. Context materialization admits only the latest
+    active carry summary per fork point and keeps total branch-summary context
+    inside the internal budget; older or over-budget summaries remain
+    inspectable from tape/history.
+  - tree rewind targets floor context entries to the nearest prior checkpoint
+    when no exact checkpoint exists. The UI reports selected entry, effective
+    checkpoint, and crossed context-entry count before applying rewind. The
+    rewind escalation menu keeps conversation-only, code-only, conversation and
+    code, and conversation and code with carried summary as separate choices.
   - `/lineage` opens the channel-local lineage tree, records advisory selection
     on checkout, and refreshes the visible transcript from the selected
     context-entry path
+  - `/lineage` remains necessary as the macro topology surface for work
+    branches, recovery, delegation, adoption, and channel-local selection; it is
+    not replaced by `/tree`
   - unsupported interactive targets and low-capability full-screen terminals
     fail before shell boot instead of reviving a parallel renderer path
 - `brewva inspect`: builds a schema-tagged work card for one replayable session

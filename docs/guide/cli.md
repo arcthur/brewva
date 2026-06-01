@@ -34,13 +34,21 @@ Key ideas:
 - streaming presentation is a renderer concern, not a runtime authority change
 - slash completion starts with `/`
 - workspace path completion starts with `@`
-- `/model`, `/inspect`, `/transcript`, `/inbox`, `/undo`, `/rewind`, `/redo`,
-  `/handoff`, `/answer`, and `/theme` are interactive veneers over runtime or
-  host state
+- `/model`, `/inspect`, `/transcript`, `/inbox`, `/tree`, `/lineage`,
+  `/undo`, `/rewind`, `/redo`, `/handoff`, `/answer`, and `/theme` are
+  interactive veneers over runtime or host state
 - `/inspect` opens the shared Work Card first; context, authority, skills,
   inbox, diff, and raw replay are drill-downs
 - `/transcript` opens a read-only snapshot of the current session transcript in
   the configured external pager
+- `/tree` opens the context-entry micro tree. `Enter` checks out the selected
+  entry as conversation-only state and asks whether to carry a summary when
+  leaving the current branch tail. `/` refines search, `F` cycles filters, `c`
+  quick-carries a bounded branch summary, `r` opens explicit rewind choices for
+  conversation/code rollback, and `l` focuses the owning lineage node.
+- `/lineage` remains the macro topology view for work branches, recovery,
+  delegation, adoption, and channel-local selection. `t` opens `/tree` scoped
+  to the selected lineage node.
 
 Keyboard details are in `docs/reference/commands/interactive.md`.
 

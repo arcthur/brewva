@@ -142,6 +142,14 @@ const builtInShellCommands: readonly ShellCommand[] = [
     suggested: true,
   },
   {
+    id: "session.tree",
+    title: "Session tree",
+    description: "Browse and checkout exact context entries.",
+    category: "Session",
+    slash: { name: "tree", argumentMode: "optional" },
+    suggested: true,
+  },
+  {
     id: "session.queue",
     title: "Queued prompts",
     description: "Inspect and delete queued prompts for the current session.",
