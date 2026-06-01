@@ -12,6 +12,10 @@ import {
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import { createHostedProviderStreamFunction } from "../../../packages/brewva-gateway/src/hosted/internal/provider/stream.js";
 import { createHostedRuntimeProviderPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.js";
+import {
+  fauxAssistantMessage,
+  registerFauxProvider,
+} from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 import { createProviderEventStream } from "../../helpers/effect-stream.js";
 
 const SOURCE_ID = "hosted-provider-stream-unit-test";
@@ -773,5 +777,77 @@ describe("hosted provider stream", () => {
 
     unregisterApiProviders(SOURCE_ID);
     clearApiProviders();
+  });
+
+  test("passes turn identity and provider context summary to provider payload hooks", async () => {
+    const fauxProvider = registerFauxProvider({
+      provider: "faux-provider-context-hook",
+      api: "faux-provider-context-hook",
+      tokenSize: { min: 1, max: 1 },
+    });
+    let observedPrepare: unknown;
+    fauxProvider.setResponses([fauxAssistantMessage("ok")]);
+
+    try {
+      const model = fauxProvider.getModel();
+      const session = {
+        model,
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeModelCatalog() {
+          return {
+            getAll() {
+              return [model];
+            },
+            async getApiKeyAndHeaders() {
+              return { ok: true as const, apiKey: "unit-key" };
+            },
+          };
+        },
+        async prepareRuntimeProviderPayload(input: {
+          payload: unknown;
+          turn: { sessionId: string; turnId?: string };
+          providerContext: {
+            systemPromptHash: string;
+            messageHashes: readonly string[];
+            activeToolNames: readonly string[];
+            toolSurfaceHash: string;
+          };
+        }) {
+          observedPrepare = {
+            turn: input.turn,
+            providerContext: input.providerContext,
+          };
+          return input.payload;
+        },
+        createRuntimeToolContext() {
+          return {
+            getSystemPrompt() {
+              return "Test system prompt.";
+            },
+          };
+        },
+      };
+
+      const provider = createHostedRuntimeProviderPort(session as never);
+      for await (const frame of provider.stream(
+        createRuntimeProviderInput("payload-hook-session"),
+      )) {
+        void frame;
+      }
+
+      expect(observedPrepare).toMatchObject({
+        turn: { sessionId: "payload-hook-session" },
+        providerContext: {
+          systemPromptHash: expect.any(String),
+          messageHashes: [expect.any(String)],
+          activeToolNames: [],
+          toolSurfaceHash: expect.any(String),
+        },
+      });
+    } finally {
+      fauxProvider.unregister();
+    }
   });
 });

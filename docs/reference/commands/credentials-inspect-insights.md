@@ -40,6 +40,19 @@ create new runtime authority.
 directory scope. It should surface friction hotspots, verification posture,
 notable sessions, and repeated delivery patterns without hiding provenance.
 
+## Harness
+
+`brewva harness` reads trace-driven Harness projections through explicit
+subcommands:
+
+- `snapshots`
+- `patrol`
+- `compare`
+
+It is intentionally advisory. It can report repeated Harness patterns and
+manifest-only comparisons against the current runtime or an explicit candidate
+manifest file, but it does not promote behavior changes by itself.
+
 ## Onboard
 
 `brewva onboard` is a convenience wrapper around gateway daemon install and

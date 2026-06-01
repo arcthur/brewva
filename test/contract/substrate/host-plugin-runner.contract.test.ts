@@ -420,7 +420,7 @@ describe("substrate host plugin runner", () => {
       { type: "context", messages: [{ role: "user", value: "root" }] },
       createHostContext(),
     );
-    const payload = await runner.emitBeforeProviderRequest(
+    const result = await runner.emitBeforeProviderRequest(
       { type: "before_provider_request", payload: { base: true } },
       createHostContext(),
     );
@@ -430,7 +430,49 @@ describe("substrate host plugin runner", () => {
       { role: "custom", value: "a" },
       { role: "custom", value: "b" },
     ]);
-    expect(payload).toEqual({ base: true, stepA: true, stepB: true });
+    expect(result).toEqual({
+      payload: { base: true, stepA: true, stepB: true },
+      mutatingHookIds: [
+        "before_provider_request:context-provider-plugin-a",
+        "before_provider_request:context-provider-plugin-b",
+      ],
+    });
+  });
+
+  test("reports provider request mutation by structural change instead of reference equality", async () => {
+    const runner = await createBrewvaHostPluginRunner({
+      plugins: [
+        testPlugin("same-structure-provider-plugin", ["provider_payload.write"], (api) => {
+          api.on("before_provider_request", async (event) => ({
+            ...(event.payload as Record<string, unknown>),
+          }));
+        }),
+        testPlugin("in-place-provider-plugin", ["provider_payload.write"], (api) => {
+          api.on("before_provider_request", async (event) => {
+            (event.payload as Record<string, unknown>).inPlace = true;
+            return undefined;
+          });
+        }),
+      ],
+      actions: {
+        sendMessage: () => undefined,
+        sendUserMessage: () => undefined,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        setActiveTools: () => undefined,
+        refreshTools: () => undefined,
+      },
+    });
+
+    const result = await runner.emitBeforeProviderRequest(
+      { type: "before_provider_request", payload: { base: true } },
+      createHostContext(),
+    );
+
+    expect(result).toEqual({
+      payload: { base: true, inPlace: true },
+      mutatingHookIds: ["before_provider_request:in-place-provider-plugin"],
+    });
   });
 
   test("collects before-agent-start messages and keeps the latest system prompt override", async () => {

@@ -4,36 +4,19 @@ import type {
   Api,
   AssistantMessageEvent,
   AssistantMessage,
-  Context as ProviderContext,
   Model as ProviderModel,
   SimpleStreamOptions as ProviderStreamOptions,
 } from "@brewva/brewva-provider-core/contracts";
 import { providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
-import type {
-  Message as ProviderMessage,
-  ToolCall as ProviderToolCall,
-} from "@brewva/brewva-provider-core/contracts";
-import type {
-  PromptContent,
-  PromptContentPart,
-  PromptMessage,
-  PromptToolCall,
-  RuntimeProviderFrame,
-  RuntimeProviderPort,
-} from "@brewva/brewva-runtime";
+import type { RuntimeProviderFrame, RuntimeProviderPort } from "@brewva/brewva-runtime";
 import { createAsyncBridge, linkAbortSignal } from "@brewva/brewva-std/async";
 import type { JsonValue } from "@brewva/brewva-std/json";
-import type {
-  BrewvaAgentProtocolAssistantMessage,
-  BrewvaAgentProtocolMessage,
-  BrewvaAgentProtocolToolCall,
-} from "@brewva/brewva-substrate/agent-protocol";
+import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type {
   BrewvaModelPresetState,
   BrewvaModelRoleAlias,
 } from "@brewva/brewva-substrate/session";
-import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   resolveBrewvaModelSelection,
   selectBrewvaFallbackModel,
@@ -41,7 +24,7 @@ import {
 import { streamProviderMessage } from "../provider/execution-port.js";
 import { isBrewvaModelRoleAlias as isHostedModelRoleAlias } from "../session/settings/model-presets.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
-import { getHostedRuntimeTurnContextMessages } from "./runtime-turn-prelude.js";
+import { summarizeProviderContext, toProviderContext } from "./runtime-provider-context.js";
 import {
   isRuntimeAdapterSession,
   resolveRuntimeProviderCachePolicy,
@@ -72,253 +55,6 @@ function toProviderModel(model: BrewvaRegisteredModel): ProviderModel<Api> {
       model.api === "openai-completions" || model.api === "openai-responses"
         ? model.compat
         : undefined,
-  };
-}
-
-function toProviderTools(
-  tools: readonly BrewvaToolDefinition[],
-): NonNullable<ProviderContext["tools"]> {
-  return tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.parameters,
-  }));
-}
-
-function providerToolCallFromTurnLoop(part: BrewvaAgentProtocolToolCall): ProviderToolCall {
-  return {
-    type: "toolCall",
-    id: part.id,
-    name: part.name,
-    arguments: part.arguments,
-    ...(part.thoughtSignature ? { thoughtSignature: part.thoughtSignature } : {}),
-  };
-}
-
-function providerMessageFromTurnLoop(message: BrewvaAgentProtocolMessage): ProviderMessage | null {
-  if (message.excludeFromContext === true) {
-    return null;
-  }
-  if (message.role === "user") {
-    return {
-      role: "user",
-      content: message.content.map((part) => ({ ...part })),
-      timestamp: message.timestamp,
-    };
-  }
-  if (message.role === "assistant") {
-    return {
-      role: "assistant",
-      content: message.content.map((part) =>
-        part.type === "toolCall" ? providerToolCallFromTurnLoop(part) : { ...part },
-      ),
-      api: message.api,
-      provider: message.provider,
-      model: message.model,
-      ...(message.responseModel ? { responseModel: message.responseModel } : {}),
-      ...(message.responseId ? { responseId: message.responseId } : {}),
-      usage: {
-        input: message.usage.input,
-        output: message.usage.output,
-        cacheRead: message.usage.cacheRead,
-        cacheWrite: message.usage.cacheWrite,
-        totalTokens: message.usage.totalTokens,
-        cost: { ...message.usage.cost },
-      },
-      stopReason: message.stopReason,
-      ...(message.errorMessage ? { errorMessage: message.errorMessage } : {}),
-      timestamp: message.timestamp,
-    };
-  }
-  if (message.role === "toolResult") {
-    return {
-      role: "toolResult",
-      toolCallId: message.toolCallId,
-      toolName: message.toolName,
-      content: message.content.map((part) => ({ ...part })),
-      ...(message.details !== undefined ? { details: message.details } : {}),
-      isError: message.isError,
-      timestamp: message.timestamp,
-    };
-  }
-  if (message.role === "custom") {
-    const content =
-      typeof message.content === "string"
-        ? [{ type: "text" as const, text: message.content }]
-        : message.content.map((part) => ({ ...part }));
-    return {
-      role: "user",
-      content,
-      timestamp: message.timestamp,
-    };
-  }
-  if (message.role === "branchSummary") {
-    return {
-      role: "user",
-      content: [{ type: "text", text: message.summary }],
-      timestamp: message.timestamp,
-    };
-  }
-  return {
-    role: "user",
-    content: [{ type: "text", text: message.summary }],
-    timestamp: message.timestamp,
-  };
-}
-
-function textFromPromptContent(content: PromptContent): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  return content
-    .map((part) => {
-      if (part.type === "text") {
-        return part.text;
-      }
-      if (part.type === "file") {
-        return part.displayText ?? part.name ?? part.uri;
-      }
-      return "";
-    })
-    .join("");
-}
-
-function clonePromptContentPart(part: PromptContentPart): PromptContentPart {
-  return { ...part };
-}
-
-function userContentFromPromptContent(
-  content: PromptContent,
-): Extract<ProviderMessage, { role: "user" }>["content"] {
-  if (typeof content === "string") {
-    return [{ type: "text", text: content }];
-  }
-  return content.map((part) => clonePromptContentPart(part));
-}
-
-function toolResultContentFromPromptContent(
-  content: PromptContent,
-): Extract<ProviderMessage, { role: "toolResult" }>["content"] {
-  if (typeof content === "string") {
-    return [{ type: "text", text: content }];
-  }
-  return content.map((part) => {
-    if (part.type === "text") {
-      return { type: "text" as const, text: part.text };
-    }
-    if (part.type === "image") {
-      return { type: "image" as const, data: part.data, mimeType: part.mimeType };
-    }
-    if (part.type === "file") {
-      return {
-        type: "text" as const,
-        text: part.displayText ?? part.name ?? part.uri,
-      };
-    }
-    return part;
-  });
-}
-
-function providerToolCallFromPromptToolCall(toolCall: PromptToolCall): ProviderToolCall {
-  return {
-    type: "toolCall",
-    id: toolCall.toolCallId,
-    name: toolCall.toolName,
-    arguments: toolCall.args ? { ...toolCall.args } : {},
-  };
-}
-
-function providerMessageFromPromptMessage(message: PromptMessage): ProviderMessage | null {
-  if (message.role === "system") {
-    return null;
-  }
-  if (message.role === "user") {
-    return {
-      role: "user",
-      content: userContentFromPromptContent(message.content),
-      timestamp: Date.now(),
-    };
-  }
-  if (message.role === "assistant") {
-    const text = textFromPromptContent(message.content);
-    const toolCalls = message.toolCalls?.map(providerToolCallFromPromptToolCall) ?? [];
-    const content: Extract<ProviderMessage, { role: "assistant" }>["content"] = [
-      ...(text.length > 0 ? [{ type: "text" as const, text }] : []),
-      ...toolCalls,
-    ];
-    if (content.length === 0) {
-      return null;
-    }
-    return {
-      role: "assistant",
-      content,
-      api: "faux",
-      provider: "faux",
-      model: "runtime-adapter-history",
-      usage: {
-        input: 0,
-        output: 0,
-        cacheRead: 0,
-        cacheWrite: 0,
-        totalTokens: 0,
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-      },
-      stopReason: toolCalls.length > 0 ? "toolUse" : "stop",
-      timestamp: Date.now(),
-    };
-  }
-  if (!message.toolCallId || !message.toolName) {
-    return {
-      role: "user",
-      content: userContentFromPromptContent(message.content),
-      timestamp: Date.now(),
-    };
-  }
-  return {
-    role: "toolResult",
-    toolCallId: message.toolCallId,
-    toolName: message.toolName,
-    content: toolResultContentFromPromptContent(message.content),
-    isError: message.isError === true,
-    timestamp: Date.now(),
-  };
-}
-
-function toProviderContext(
-  session: RuntimeAdapterSession,
-  input: Parameters<RuntimeProviderPort["stream"]>[0],
-): ProviderContext {
-  const toolContext = session.createRuntimeToolContext();
-  const systemMessages = input.prompt.messages
-    .filter((message) => message.role === "system")
-    .map((message) => textFromPromptContent(message.content));
-  const systemPrompt = [toolContext.getSystemPrompt(), ...systemMessages]
-    .filter((message) => message.trim().length > 0)
-    .join("\n\n");
-  const messages: ProviderContext["messages"] = [];
-  for (const message of input.prompt.messages) {
-    const providerMessage = providerMessageFromPromptMessage(message);
-    if (providerMessage) {
-      messages.push(providerMessage);
-    }
-  }
-  for (const message of getHostedRuntimeTurnContextMessages(session)) {
-    const providerMessage = providerMessageFromTurnLoop(message);
-    if (providerMessage) {
-      messages.push(providerMessage);
-    }
-  }
-  if (messages.length === 0) {
-    messages.push({
-      role: "user",
-      content: userContentFromPromptContent(input.turn.prompt),
-      timestamp: Date.now(),
-    });
-  }
-  return {
-    systemPrompt,
-    messages,
-    tools: toProviderTools(session.getRegisteredTools()),
   };
 }
 
@@ -565,6 +301,8 @@ async function* streamRuntimeProviderAttempt(
   }
   const providerAbort = new AbortController();
   const unlinkAbort = linkAbortSignal(input.turn.signal, providerAbort);
+  const providerContext = toProviderContext(session, input);
+  const providerContextSummary = summarizeProviderContext(providerContext);
   const options: ProviderStreamOptions = {
     signal: providerAbort.signal,
     apiKey: resolvedAuth.apiKey,
@@ -578,6 +316,11 @@ async function* streamRuntimeProviderAttempt(
         payload,
         model: providerModel,
         metadata,
+        turn: {
+          sessionId: input.turn.sessionId,
+          ...(input.turn.turnId ? { turnId: input.turn.turnId } : {}),
+        },
+        providerContext: providerContextSummary,
       }) ?? payload,
     onCacheRender: (render, providerModel) =>
       session.observeRuntimeCacheRender?.({
@@ -585,11 +328,7 @@ async function* streamRuntimeProviderAttempt(
         model: providerModel,
       }),
   };
-  const providerStream = streamProviderMessage(
-    toProviderModel(model),
-    toProviderContext(session, input),
-    options,
-  );
+  const providerStream = streamProviderMessage(toProviderModel(model), providerContext, options);
   let sawIncrementalFrame = false;
   const bridge = createAsyncBridge<RuntimeProviderQueueItem>({
     onCancel() {

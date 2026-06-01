@@ -23,6 +23,8 @@ Implementation anchors:
   `docs/reference/events/tools.md`
 - Skill catalog, recall, workbench memory, semantic extraction, and
   iteration-fact events: `docs/reference/events/skills-and-memory.md`
+- Harness advisory manifest events and trace-driven projections:
+  `docs/reference/events/harness.md`
 - Schedule, subagent, worker, and workflow-derived events:
   `docs/reference/events/workers.md`
 

@@ -32,6 +32,7 @@ describe("gateway domain top-level allowed files", () => {
 
   test("single-purpose public facades stay explicit", () => {
     expect(listDomainTopLevelFiles("extensions")).toEqual(["api.ts"]);
+    expect(listDomainTopLevelFiles("harness")).toEqual(["api.ts"]);
   });
 
   test("policy domains expose stable seam files", () => {

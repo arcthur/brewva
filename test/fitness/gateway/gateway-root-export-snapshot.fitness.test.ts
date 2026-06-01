@@ -9,6 +9,7 @@ const expectedExportKeys = [
   "./admin",
   "./ingress",
   "./extensions",
+  "./harness",
   "./delegation",
   "./policy/model-routing",
   "./protocol",

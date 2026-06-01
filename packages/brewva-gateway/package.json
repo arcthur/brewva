@@ -49,6 +49,12 @@
       "import": "./dist/extensions/api.js",
       "default": "./dist/extensions/api.js"
     },
+    "./harness": {
+      "types": "./dist/harness/api.d.ts",
+      "bun": "./src/harness/api.ts",
+      "import": "./dist/harness/api.js",
+      "default": "./dist/harness/api.js"
+    },
     "./delegation": {
       "types": "./dist/delegation/api.d.ts",
       "bun": "./src/delegation/api.ts",

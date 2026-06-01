@@ -1,3 +1,5 @@
+import type { HarnessEvalTelemetry } from "@brewva/brewva-vocabulary/harness";
+
 export interface OutputContract {
   kind: "text" | "enum" | "json";
   min_words?: number;
@@ -8,7 +10,7 @@ export interface OutputContract {
   required_fields?: string[];
 }
 
-export type EvalScenarioKind = "generic" | "recall";
+export type EvalScenarioKind = "generic" | "recall" | "harness";
 
 export interface EvalScenario {
   id: string;
@@ -58,7 +60,7 @@ export interface RecallEvalTelemetry {
   metrics: RecallEvalMetrics;
 }
 
-export type EvalTelemetry = RecallEvalTelemetry;
+export type EvalTelemetry = RecallEvalTelemetry | HarnessEvalTelemetry;
 
 export interface RecallEvalWorkspaceFile {
   path: string;

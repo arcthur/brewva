@@ -1,3 +1,4 @@
+import { SESSION_INDEX_SCHEMA_VERSION } from "../api.js";
 import { SESSION_INDEX_SCHEMA_SQL } from "../schema/sql.js";
 import type { DuckDBConnection } from "./instance.js";
 import { selectOne, selectRows } from "./query.js";
@@ -14,6 +15,10 @@ interface StatusRow {
   indexed_sessions: bigint | number;
   indexed_events: bigint | number;
   last_indexed_at?: number | null;
+}
+
+interface SchemaMismatchRow {
+  mismatched_rows: bigint | number;
 }
 
 export interface IndexedSessionState {
@@ -53,6 +58,7 @@ const DELETE_SESSION_TABLES = [
   "session_delegation_runs",
   "session_worker_results",
   "session_projection_cursors",
+  "session_harness_trace_snapshots",
   "events",
   "sessions",
   "index_state",
@@ -60,6 +66,7 @@ const DELETE_SESSION_TABLES = [
 
 export async function ensureSessionIndexSchema(connection: DuckDBConnection): Promise<void> {
   await connection.run(SESSION_INDEX_SCHEMA_SQL);
+  await clearIndexRowsIfSchemaChanged(connection);
 }
 
 export async function readSessionIndexStatusCounts(
@@ -107,6 +114,17 @@ export async function clearSessionIndexRows(connection: DuckDBConnection): Promi
       await connection.run(`delete from ${table}`);
     }
   });
+}
+
+async function clearIndexRowsIfSchemaChanged(connection: DuckDBConnection): Promise<void> {
+  const row = await selectOne<SchemaMismatchRow>(
+    connection,
+    "select count(*) as mismatched_rows from index_state where schema_version <> $schemaVersion",
+    { schemaVersion: SESSION_INDEX_SCHEMA_VERSION },
+  );
+  if (Number(row?.mismatched_rows ?? 0) > 0) {
+    await clearSessionIndexRows(connection);
+  }
 }
 
 export async function runSessionIndexTransaction<T>(

@@ -91,6 +91,7 @@ const CLI_PARSE_OPTIONS = {
 const ROOT_SUBCOMMANDS = new Set([
   "credentials",
   "gateway",
+  "harness",
   "inspect",
   "insights",
   "onboard",

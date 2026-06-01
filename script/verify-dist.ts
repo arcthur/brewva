@@ -296,6 +296,7 @@ function main(): void {
       "@brewva/brewva-vocabulary/context",
       "@brewva/brewva-vocabulary/delegation",
       "@brewva/brewva-vocabulary/events",
+      "@brewva/brewva-vocabulary/harness",
       "@brewva/brewva-vocabulary/iteration",
       "@brewva/brewva-vocabulary/schedule",
       "@brewva/brewva-vocabulary/session",
@@ -307,6 +308,7 @@ function main(): void {
       "@brewva/brewva-gateway/hosted",
       "@brewva/brewva-gateway/policy/model-routing",
       "@brewva/brewva-gateway/extensions",
+      "@brewva/brewva-gateway/harness",
       "@brewva/brewva-cli",
       "@brewva/brewva-cli/entry",
       "@brewva/brewva-cli/commands",
@@ -345,6 +347,7 @@ function main(): void {
       channelsModule,
       hostModule,
       extensionsModule,
+      harnessModule,
       gatewayModule,
     ] = await Promise.all([
       import("@brewva/brewva-cli"),
@@ -356,6 +359,7 @@ function main(): void {
       import("@brewva/brewva-gateway/channels"),
       import("@brewva/brewva-gateway/hosted"),
       import("@brewva/brewva-gateway/extensions"),
+      import("@brewva/brewva-gateway/harness"),
       import("@brewva/brewva-gateway"),
       ...packages
         .filter(
@@ -369,6 +373,7 @@ function main(): void {
             name !== "@brewva/brewva-gateway/channels" &&
             name !== "@brewva/brewva-gateway/hosted" &&
             name !== "@brewva/brewva-gateway/extensions" &&
+            name !== "@brewva/brewva-gateway/harness" &&
             name !== "@brewva/brewva-gateway",
         )
         .map((name) => import(name)),
@@ -381,6 +386,9 @@ function main(): void {
     }
     if (typeof extensionsModule.defineHostedExtensionPlugin !== "function") {
       throw new Error("gateway extensions subpath missing defineHostedExtensionPlugin export");
+    }
+    if (typeof harnessModule.clusterHarnessTraceSnapshots !== "function") {
+      throw new Error("gateway harness subpath missing clusterHarnessTraceSnapshots export");
     }
     if (typeof cliModule.parseArgs !== "function") {
       throw new Error("cli root entry missing parseArgs export");

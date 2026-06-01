@@ -1,7 +1,11 @@
 import type { BrewvaEventQuery, BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import type {
+  HarnessPatternCandidate,
+  HarnessTraceSnapshot,
+} from "@brewva/brewva-vocabulary/harness";
 import type { SESSION_INDEX_UNAVAILABLE } from "./unavailable.js";
 
-export const SESSION_INDEX_SCHEMA_VERSION = 6;
+export const SESSION_INDEX_SCHEMA_VERSION = 7;
 
 export type SessionIndexScope = "session_local" | "user_repository_root" | "workspace_wide";
 
@@ -159,6 +163,9 @@ export interface SessionIndexDelegationProjection {
   parallelBudget: SessionIndexParallelBudgetView;
 }
 
+export type SessionIndexHarnessTraceSnapshot = HarnessTraceSnapshot;
+export type SessionIndexHarnessPatternCandidate = HarnessPatternCandidate;
+
 export type SessionIndexStatus =
   | {
       ok: true;
@@ -210,6 +217,18 @@ export interface SessionIndex {
     limit?: number;
   }): Promise<SessionIndexWorkerResult[]>;
   getParallelBudgetView(input: { sessionId: string }): Promise<SessionIndexParallelBudgetView>;
+  listHarnessTraceSnapshots(input?: {
+    sessionId?: string;
+    limit?: number;
+  }): Promise<SessionIndexHarnessTraceSnapshot[]>;
+  getHarnessTraceSnapshot(input: {
+    snapshotId: string;
+  }): Promise<SessionIndexHarnessTraceSnapshot | undefined>;
+  listHarnessPatternCandidates(input?: {
+    sessionId?: string;
+    minOccurrences?: number;
+    limit?: number;
+  }): Promise<SessionIndexHarnessPatternCandidate[]>;
   close(): Promise<void>;
 }
 

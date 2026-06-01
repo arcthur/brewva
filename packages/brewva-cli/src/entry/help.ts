@@ -10,6 +10,7 @@ Usage:
 Subcommands:
   brewva credentials ...  Encrypted credential vault management
   brewva gateway ...   Local control-plane daemon commands
+  brewva harness ...   Trace-driven Harness snapshots, patrol, and comparisons
   brewva inspect ...   Replay-first session inspection with deterministic analysis
   brewva insights ...  Multi-session aggregated project insights
   brewva onboard ...   One-shot onboarding helpers (daemon install/uninstall)
@@ -62,6 +63,9 @@ Examples:
   brewva --mode json "Summarize recent changes"
   brewva --task-file ./task.json
   brewva inspect --session <session-id>
+  brewva harness snapshots --session <session-id>
+  brewva harness patrol --min-occurrences 2
+  brewva harness compare --source-session <session-id> --diverge-at <event-id>
   brewva inspect packages/brewva-runtime/src
   brewva credentials list
   brewva credentials add --ref vault://openai/apiKey --from-env OPENAI_API_KEY

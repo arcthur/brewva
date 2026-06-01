@@ -21,6 +21,10 @@ export { enqueueGoalContinuation } from "../utils/goal-continuation.js";
 export type { EnqueueGoalContinuationInput } from "../utils/goal-continuation.js";
 export { recordRuntimeGoalContinuationQueued } from "./internal/session/projection/runtime-write-adapters.js";
 export {
+  createHostedHarnessRuntimeExecutionPorts,
+  type HostedHarnessRuntimeExecutionPorts,
+} from "./internal/turn-adapter/runtime-turn-execution-ports.js";
+export {
   acquireRuntimeParallelSlot,
   adoptRuntimeLineageOutcome,
   createRuntimeLineageNode,

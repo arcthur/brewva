@@ -6,6 +6,7 @@ import type {
   ProviderPayloadMetadata,
 } from "@brewva/brewva-provider-core/contracts";
 import { clearApiProviderSessions } from "@brewva/brewva-provider-core/registry";
+import { toJsonValue } from "@brewva/brewva-std/json";
 import {
   type BrewvaAgentProtocolController,
   type BrewvaAgentProtocolEvent,
@@ -67,6 +68,12 @@ import {
   BrewvaToolDefinition,
 } from "@brewva/brewva-substrate/tools";
 import {
+  buildHarnessManifest,
+  stableHarnessId,
+  wrapHarnessManifestRecordedAdvisoryPayload,
+  type HarnessManifest,
+} from "@brewva/brewva-vocabulary/harness";
+import {
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
   STEER_QUEUED_EVENT_TYPE,
@@ -110,6 +117,7 @@ import {
 import { consumeProviderRequestReductionExpectedCacheBreak } from "../../provider/request/provider-request-reduction.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
 import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../turn-adapter/hosted-prompt-attempt.js";
+import type { RuntimeProviderContextSummary } from "../../turn-adapter/runtime-provider-context.js";
 import {
   HOSTED_RUNTIME_TURN_CONTEXT,
   HOSTED_RUNTIME_TURN_PRELUDE,
@@ -259,7 +267,10 @@ function promptPartsFromCustomMessage(
 }
 
 export const MANAGED_AGENT_SESSION_TEST_ONLY = {
+  nextHarnessProviderAttemptSequence,
+  recordRuntimeHarnessManifest,
   resolveWorkbenchContextFingerprint,
+  turnNumberFromTurnId,
 } as const;
 
 export type {
@@ -284,11 +295,112 @@ interface RuntimeProviderPayloadInput {
   readonly payload: unknown;
   readonly model: ProviderModel<Api>;
   readonly metadata?: ProviderPayloadMetadata;
+  readonly turn: {
+    readonly sessionId: string;
+    readonly turnId?: string;
+  };
+  readonly providerContext: RuntimeProviderContextSummary;
 }
 
 interface RuntimeProviderCacheRenderInput {
   readonly render: ProviderCacheRenderResult;
   readonly model: ProviderModel<Api>;
+}
+
+function recordRuntimeHarnessManifest(input: {
+  readonly runtime: HostedRuntimeAdapterPort;
+  readonly manifest: HarnessManifest;
+  readonly turnId?: string;
+}): void {
+  const advisoryPayload = wrapHarnessManifestRecordedAdvisoryPayload(input.manifest);
+  input.runtime.runtime.kernel.recordAdvisoryEvent({
+    sessionId: input.manifest.sessionId,
+    ...(input.turnId ? { turnId: input.turnId } : {}),
+    namespace: advisoryPayload.namespace,
+    kind: advisoryPayload.kind,
+    version: advisoryPayload.version,
+    payload: toJsonValue(advisoryPayload.payload),
+  });
+}
+
+function readRecordValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readStringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readProviderFallbackActive(value: unknown): boolean {
+  return readRecordValue(value)?.active === true;
+}
+
+function turnNumberFromTurnId(turnId: string | undefined): number | undefined {
+  if (!turnId) return undefined;
+  const numeric = Number(turnId);
+  if (Number.isFinite(numeric)) return numeric;
+  const structured = /^turn[-_](\d+)$/u.exec(turnId);
+  if (!structured) return undefined;
+  const structuredNumeric = Number(structured[1]);
+  return Number.isFinite(structuredNumeric) ? structuredNumeric : undefined;
+}
+
+function nextHarnessProviderAttemptSequence(input: {
+  readonly turnId?: string;
+  readonly currentTurnKey?: string;
+  readonly currentSequence: number;
+  readonly update: (next: { readonly turnKey: string; readonly sequence: number }) => void;
+}): number {
+  const turnKey = input.turnId ?? "__unknown_turn__";
+  const sequence = input.currentTurnKey === turnKey ? input.currentSequence + 1 : 1;
+  input.update({ turnKey, sequence });
+  return sequence;
+}
+
+function readHarnessSkillSelection(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): HarnessManifest["skillSelection"] | undefined {
+  const receipt = readRecordValue(runtime.ops.skills.selection.latest(sessionId));
+  if (!receipt) return undefined;
+  const invocationRecords = Array.isArray(receipt.skillInvocationRecords)
+    ? receipt.skillInvocationRecords
+    : [];
+  const selectedSkillIds = invocationRecords
+    .map((entry) => readStringValue(readRecordValue(entry)?.name))
+    .filter((entry): entry is string => entry !== undefined)
+    .toSorted();
+  return {
+    selectionId: readStringValue(receipt.selectionId),
+    mode: readStringValue(receipt.selectionMode),
+    selectedSkillIds,
+    renderedContextHash: stableHarnessId("skill_context", {
+      selectionId: receipt.selectionId,
+      renderedSkillCount: receipt.renderedSkillCount,
+      omittedSkillCount: receipt.omittedSkillCount,
+      promptPaths: receipt.promptPaths,
+    }),
+  };
+}
+
+function readHarnessCapabilitySelection(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): HarnessManifest["capabilitySelection"] | undefined {
+  const receipt = readRecordValue(runtime.ops.tools.capabilitySelection.latest(sessionId));
+  if (!receipt) return undefined;
+  const selected = Array.isArray(receipt.selected_capabilities)
+    ? receipt.selected_capabilities
+    : [];
+  return {
+    selectionId: readStringValue(receipt.selection_id),
+    selectedCapabilityNames: selected
+      .map((entry) => readStringValue(readRecordValue(entry)?.name))
+      .filter((entry): entry is string => entry !== undefined)
+      .toSorted(),
+  };
 }
 
 class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
@@ -593,6 +705,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         lastCacheRender: providerCacheRuntime.lastCacheRender,
       }),
     });
+    let harnessProviderAttemptTurnKey: string | undefined;
+    let harnessProviderAttemptSequence = 0;
 
     session = new BrewvaManagedAgentSession({
       cwd: options.cwd,
@@ -611,11 +725,17 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       ui: options.ui,
       runtime: options.runtime,
       logger: options.logger,
-      prepareRuntimeProviderPayload: async ({ payload, model, metadata }) => {
+      prepareRuntimeProviderPayload: async ({
+        payload,
+        model,
+        metadata,
+        turn,
+        providerContext,
+      }) => {
         if (!session) {
           return payload;
         }
-        let nextPayload = await runner.emitBeforeProviderRequest(
+        const providerPayloadResult = await runner.emitBeforeProviderRequest(
           {
             type: "before_provider_request",
             payload,
@@ -625,6 +745,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           },
           session.createHostContext(),
         );
+        const nextPayload = providerPayloadResult.payload;
         providerCacheRuntime.lastExpectedProviderCacheBreak =
           consumeProviderRequestReductionExpectedCacheBreak(nextPayload);
         const channelContext = session.resolveProviderCacheChannelContext();
@@ -670,7 +791,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           expectedCacheBreak: providerCacheRuntime.lastExpectedProviderCacheBreak !== undefined,
         };
         const workbenchContext = session.#lastWorkbenchContextFingerprint;
-        providerCacheRuntime.lastProviderFingerprint = createProviderRequestFingerprint({
+        const providerFallback = metadata?.providerFallback ?? { active: false };
+        const providerFingerprint = createProviderRequestFingerprint({
           provider: model.provider,
           api: model.api,
           model: model.id,
@@ -696,8 +818,81 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           extraBody: metadata?.extraBody,
           visibleHistoryReduction,
           workbenchContext,
-          providerFallback: metadata?.providerFallback ?? { active: false },
+          providerFallback,
           payload: nextPayload,
+        });
+        providerCacheRuntime.lastProviderFingerprint = providerFingerprint;
+        const harnessManifest = buildHarnessManifest({
+          sessionId,
+          ...(() => {
+            const numericTurn = turnNumberFromTurnId(turn.turnId);
+            return numericTurn === undefined ? {} : { turn: numericTurn };
+          })(),
+          ...(turn.turnId ? { turnId: turn.turnId } : {}),
+          attempt: nextHarnessProviderAttemptSequence({
+            turnId: turn.turnId,
+            currentTurnKey: harnessProviderAttemptTurnKey,
+            currentSequence: harnessProviderAttemptSequence,
+            update(next) {
+              harnessProviderAttemptTurnKey = next.turnKey;
+              harnessProviderAttemptSequence = next.sequence;
+            },
+          }),
+          runtime: {
+            configHash: stableHarnessId("runtime_config", options.runtime.config),
+            runtimeIdentityHash: stableHarnessId("runtime_identity", options.runtime.identity),
+          },
+          prompt: {
+            systemPromptHash: providerContext.systemPromptHash,
+            blockHashes: providerContext.messageHashes,
+            stabilityHash: providerFingerprint.stablePrefixHash,
+          },
+          tools: {
+            activeToolNames: toolSchemaSnapshot.tools.map((tool) => tool.name).toSorted(),
+            toolSchemaSnapshotHash: toolSchemaSnapshot.hash,
+          },
+          skillSelection: readHarnessSkillSelection(options.runtime, sessionId),
+          capabilitySelection: readHarnessCapabilitySelection(options.runtime, sessionId),
+          context: {
+            materializationPolicyHash: stableHarnessId("context_materialization_policy", {
+              transport: options.settings.getTransport(),
+              cachePolicy,
+            }),
+            compactionPolicyHash: stableHarnessId("context_compaction_policy", {
+              thinkingLevel: metadata?.reasoning ?? agent.state.thinkingLevel,
+              thinkingBudgets: metadata?.thinkingBudgets ?? options.settings.getThinkingBudgets(),
+              visibleHistoryReduction,
+            }),
+            promptStablePrefixHash: providerFingerprint.stablePrefixHash,
+            promptDynamicTailHash: providerFingerprint.dynamicTailHash,
+            contextEvidenceHashes: [
+              providerFingerprint.channelContextHash,
+              providerFingerprint.visibleHistoryReductionHash,
+              providerFingerprint.workbenchContextHash,
+            ],
+          },
+          provider: {
+            provider: model.provider,
+            api: model.api,
+            model: model.id,
+            transport: options.settings.getTransport(),
+            cachePolicyHash: providerFingerprint.cachePolicyHash,
+            requestHash: providerFingerprint.requestHash,
+            providerFallbackHash: providerFingerprint.providerFallbackHash,
+            providerFallbackActive: readProviderFallbackActive(providerFallback),
+            status: "prepared",
+          },
+          plugins: {
+            mutatingHookIds: providerPayloadResult.mutatingHookIds,
+          },
+          refs: {
+            sourceEventIds: [],
+          },
+        });
+        recordRuntimeHarnessManifest({
+          runtime: options.runtime,
+          manifest: harnessManifest,
+          turnId: turn.turnId,
         });
         return nextPayload;
       },

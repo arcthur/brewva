@@ -10,6 +10,7 @@ import type { SqlParams } from "../sql/params.js";
 import { compactText } from "../text.js";
 import { rebuildSessionBoxProjection } from "./box.js";
 import { rebuildSessionDelegationProjection } from "./delegation.js";
+import { rebuildSessionHarnessProjection } from "./harness.js";
 import { rebuildSessionLineageProjection } from "./lineage.js";
 import { rebuildSessionRewindTargetProjection } from "./rewind.js";
 import { rowToEventRecord, type EventRow } from "./rows.js";
@@ -110,6 +111,11 @@ export async function rebuildSessionProjection(input: {
     records,
   });
   await rebuildSessionDelegationProjection({
+    connection: input.connection,
+    sessionId: input.sessionId,
+    records,
+  });
+  await rebuildSessionHarnessProjection({
     connection: input.connection,
     sessionId: input.sessionId,
     records,

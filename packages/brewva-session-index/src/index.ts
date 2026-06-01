@@ -3,7 +3,9 @@ export {
   SESSION_INDEX_UNAVAILABLE,
   SessionIndexUnavailableError,
   createSessionIndex,
+  clusterHarnessPatternCandidates,
   projectDelegationInspectionState,
+  projectSessionHarnessTraceSnapshots,
   projectSessionDelegationState,
 } from "./public/index.js";
 export type {
@@ -19,6 +21,8 @@ export type {
   SessionIndexDelegationRun,
   SessionIndexDigest,
   SessionIndexEventSource,
+  SessionIndexHarnessPatternCandidate,
+  SessionIndexHarnessTraceSnapshot,
   SessionIndexParallelBudgetView,
   SessionIndexRecentSession,
   SessionIndexRewindTarget,

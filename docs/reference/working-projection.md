@@ -26,6 +26,22 @@ The interactive shell transcript lane is bounded live UI state, not a
 full-history projection. Older transcript evidence stays in explicit archive,
 transcript, export, and pager surfaces.
 
+## Session-Index Harness Projection
+
+`HarnessTraceSnapshot` is a session-index projection over canonical tape and
+hosted advisory evidence. It is stored in DuckDB table
+`session_harness_trace_snapshots` and is rebuilt from events; it is not a
+durable source of truth.
+
+Schema version `7` intentionally resets older indexed rows. Rebuild is the
+compatibility strategy because the event tape remains authoritative and Harness
+snapshot rows are derived state.
+
+Trace patrol reads these snapshots and emits pattern candidates. Candidate
+reports remain explicit-pull control-plane artifacts; they do not mutate
+runtime prompt construction, provider routing, recall ranking, skill
+selection, or tool policy.
+
 ## Runtime Behavior
 
 ```mermaid

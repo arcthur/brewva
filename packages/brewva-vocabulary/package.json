@@ -29,6 +29,12 @@
       "import": "./dist/goal.js",
       "default": "./dist/goal.js"
     },
+    "./harness": {
+      "types": "./dist/harness.d.ts",
+      "bun": "./src/harness.ts",
+      "import": "./dist/harness.js",
+      "default": "./dist/harness.js"
+    },
     "./outcome": {
       "types": "./dist/outcome.d.ts",
       "bun": "./src/outcome.ts",

@@ -14,6 +14,8 @@ import {
   type SessionIndexDelegationRun,
   type SessionIndexDigest,
   type SessionIndexEventSource,
+  type SessionIndexHarnessPatternCandidate,
+  type SessionIndexHarnessTraceSnapshot,
   type SessionIndexParallelBudgetView,
   type SessionIndexRecentSession,
   type SessionIndexRewindTarget,
@@ -48,6 +50,11 @@ import {
   listWorkerResultRows,
 } from "./projection/delegation.js";
 import { upsertSessionEvents } from "./projection/events.js";
+import {
+  getHarnessTraceSnapshotRow,
+  listHarnessPatternCandidateRows,
+  listHarnessTraceSnapshotRows,
+} from "./projection/harness.js";
 import { listSessionRewindTargets as listProjectedSessionRewindTargets } from "./projection/rewind.js";
 import { rebuildSessionProjection } from "./projection/session.js";
 import {
@@ -228,6 +235,18 @@ class UnavailableSessionIndex implements SessionIndex {
   }
 
   async getParallelBudgetView(): Promise<SessionIndexParallelBudgetView> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async listHarnessTraceSnapshots(): Promise<SessionIndexHarnessTraceSnapshot[]> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async getHarnessTraceSnapshot(): Promise<SessionIndexHarnessTraceSnapshot | undefined> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async listHarnessPatternCandidates(): Promise<SessionIndexHarnessPatternCandidate[]> {
     throw new SessionIndexUnavailableError(this.message);
   }
 
@@ -509,6 +528,40 @@ class DuckDBSessionIndex implements SessionIndex {
     sessionId: string;
   }): Promise<SessionIndexParallelBudgetView> {
     return await getParallelBudgetViewRow({
+      ...input,
+      port: this.queryPort(),
+    });
+  }
+
+  async listHarnessTraceSnapshots(
+    input: {
+      sessionId?: string;
+      limit?: number;
+    } = {},
+  ): Promise<SessionIndexHarnessTraceSnapshot[]> {
+    return await listHarnessTraceSnapshotRows({
+      ...input,
+      port: this.queryPort(),
+    });
+  }
+
+  async getHarnessTraceSnapshot(input: {
+    snapshotId: string;
+  }): Promise<SessionIndexHarnessTraceSnapshot | undefined> {
+    return await getHarnessTraceSnapshotRow({
+      ...input,
+      port: this.queryPort(),
+    });
+  }
+
+  async listHarnessPatternCandidates(
+    input: {
+      sessionId?: string;
+      minOccurrences?: number;
+      limit?: number;
+    } = {},
+  ): Promise<SessionIndexHarnessPatternCandidate[]> {
+    return await listHarnessPatternCandidateRows({
       ...input,
       port: this.queryPort(),
     });

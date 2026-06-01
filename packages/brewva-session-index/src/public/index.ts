@@ -5,6 +5,10 @@ export {
   projectDelegationInspectionState,
   projectSessionDelegationState,
 } from "../projection/delegation.js";
+export {
+  clusterHarnessPatternCandidates,
+  projectSessionHarnessTraceSnapshots,
+} from "../projection/harness.js";
 export type {
   CreateSessionIndexInput,
   FilterSessionIdsByScopeInput,
@@ -18,6 +22,8 @@ export type {
   SessionIndexDelegationRun,
   SessionIndexDigest,
   SessionIndexEventSource,
+  SessionIndexHarnessPatternCandidate,
+  SessionIndexHarnessTraceSnapshot,
   SessionIndexParallelBudgetView,
   SessionIndexRecentSession,
   SessionIndexRewindTarget,

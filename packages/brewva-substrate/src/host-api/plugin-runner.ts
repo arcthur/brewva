@@ -129,6 +129,11 @@ export interface CreateBrewvaHostPluginRunnerOptions {
   registrations?: BrewvaHostPluginRunnerRegistrationPort;
 }
 
+export interface BrewvaHostBeforeProviderRequestEmission {
+  readonly payload: unknown;
+  readonly mutatingHookIds: readonly string[];
+}
+
 export interface BrewvaHostPluginRunner {
   readonly api: InternalHostPluginApi;
   hasHandlers(event: keyof BrewvaHostPluginEventMap): boolean;
@@ -149,7 +154,7 @@ export interface BrewvaHostPluginRunner {
   emitBeforeProviderRequest(
     payload: BrewvaHostBeforeProviderRequestEvent,
     ctx: BrewvaHostContext,
-  ): Promise<unknown>;
+  ): Promise<BrewvaHostBeforeProviderRequestEmission>;
   emitBeforeAgentStart(
     payload: BrewvaHostBeforeAgentStartEvent,
     ctx: BrewvaHostContext,
@@ -304,6 +309,34 @@ async function runHostPluginHandler<TKey extends keyof BrewvaHostPluginEventMap>
   );
 }
 
+function stablePluginPayloadFingerprint(value: unknown): string | null {
+  try {
+    return JSON.stringify(normalizeStablePluginPayload(value));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeStablePluginPayload(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeStablePluginPayload);
+  }
+  if (!isPlainRecord(value)) {
+    return value === undefined ? null : value;
+  }
+  const output: Record<string, unknown> = {};
+  for (const key of Object.keys(value).toSorted()) {
+    const entry = value[key];
+    if (entry === undefined) continue;
+    output[key] = normalizeStablePluginPayload(entry);
+  }
+  return output;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export async function createBrewvaHostPluginRunner(
   options: CreateBrewvaHostPluginRunnerOptions,
 ): Promise<BrewvaHostPluginRunner> {
@@ -451,13 +484,24 @@ export async function createBrewvaHostPluginRunner(
     },
     async emitBeforeProviderRequest(payload, ctx) {
       let currentPayload = payload.payload;
+      const mutatingHookIds: string[] = [];
       for (const record of handlers.before_provider_request) {
+        const beforeFingerprint = stablePluginPayloadFingerprint(currentPayload);
         const result = await runHostPluginHandler(
           record,
           "before_provider_request",
           { ...payload, payload: currentPayload },
           ctx,
         );
+        const candidatePayload = result === undefined ? currentPayload : result;
+        const afterFingerprint = stablePluginPayloadFingerprint(candidatePayload);
+        const mutated =
+          beforeFingerprint === null || afterFingerprint === null
+            ? result !== undefined
+            : beforeFingerprint !== afterFingerprint;
+        if (mutated) {
+          mutatingHookIds.push(`before_provider_request:${record.pluginName}`);
+        }
         if (result !== undefined) {
           assertHandlerCapability(
             options.actions,
@@ -467,9 +511,17 @@ export async function createBrewvaHostPluginRunner(
             "before_provider_request",
           );
           currentPayload = result;
+        } else if (mutated) {
+          assertHandlerCapability(
+            options.actions,
+            record,
+            "provider_payload.write",
+            "before_provider_request.payload",
+            "before_provider_request",
+          );
         }
       }
-      return currentPayload;
+      return { payload: currentPayload, mutatingHookIds };
     },
     async emitBeforeAgentStart(payload, ctx) {
       const messages: BrewvaHostCustomMessage[] = [];

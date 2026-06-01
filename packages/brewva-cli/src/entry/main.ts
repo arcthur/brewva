@@ -82,6 +82,11 @@ async function runInsightsCli(argv: string[]): Promise<number> {
   return loadedRunInsightsCli(argv);
 }
 
+async function runHarnessCli(argv: string[]): Promise<number> {
+  const { runHarnessCli: loadedRunHarnessCli } = await import("../operator/harness.js");
+  return loadedRunHarnessCli(argv);
+}
+
 function cliValueError(error: string): CliValueResult<never> {
   return { ok: false, reason: error };
 }
@@ -326,7 +331,7 @@ export async function runCliRootOperation(): Promise<void> {
   const rawArgs = process.argv.slice(2);
   if (rawArgs[0] === "insight") {
     console.error(
-      "Error: unknown subcommand. Use 'brewva credentials', 'brewva inspect', 'brewva insights', 'brewva onboard', or 'brewva gateway'.",
+      "Error: unknown subcommand. Use 'brewva credentials', 'brewva harness', 'brewva inspect', 'brewva insights', 'brewva onboard', or 'brewva gateway'.",
     );
     process.exitCode = 1;
     return;
@@ -349,6 +354,10 @@ export async function runCliRootOperation(): Promise<void> {
   }
   if (subcommand?.name === "inspect") {
     process.exitCode = await runInspectCli(subcommand.args);
+    return;
+  }
+  if (subcommand?.name === "harness") {
+    process.exitCode = await runHarnessCli(subcommand.args);
     return;
   }
   if (subcommand?.name === "insights") {

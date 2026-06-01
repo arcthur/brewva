@@ -149,6 +149,21 @@ export const SESSION_INDEX_SCHEMA_SQL = `
     updated_at double not null
   );
 
+  create table if not exists session_harness_trace_snapshots (
+    snapshot_id varchar primary key,
+    session_id varchar not null,
+    turn integer,
+    turn_id varchar,
+    attempt integer not null,
+    manifest_id varchar not null,
+    event_ids_json varchar not null,
+    signal_kinds_json varchar not null,
+    manifest_json varchar not null,
+    snapshot_json varchar not null,
+    updated_at double not null,
+    schema_version integer not null
+  );
+
   create table if not exists events (
     event_id varchar primary key,
     session_id varchar not null,
@@ -214,6 +229,10 @@ export const SESSION_INDEX_SCHEMA_SQL = `
     on session_worker_results(session_id);
   create index if not exists session_projection_cursors_session_idx
     on session_projection_cursors(session_id);
+  create index if not exists session_harness_trace_snapshots_session_idx
+    on session_harness_trace_snapshots(session_id);
+  create index if not exists session_harness_trace_snapshots_manifest_idx
+    on session_harness_trace_snapshots(manifest_id);
   create index if not exists event_tokens_token_idx
     on event_tokens(token);
   create index if not exists event_tokens_session_idx

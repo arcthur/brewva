@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { compareHarnessCandidate } from "@brewva/brewva-gateway/harness";
 import { parse } from "yaml";
 import { gradeRubric } from "./graders/rubric-grader.js";
 import { gradeShape } from "./graders/shape-grader.js";
@@ -93,12 +94,65 @@ export class RuntimeExecutor implements SkillExecutor {
         workspaceRoot: this.workspaceRoot,
       });
     }
+    if (scenario.kind === "harness") {
+      const artifacts = isRecord(scenario.context.available_artifacts)
+        ? scenario.context.available_artifacts
+        : {};
+      const report = compareHarnessCandidate({
+        mode: "manifest",
+        sourceSessionId: readRequiredArtifactString(artifacts, "sourceSessionId", scenario.id),
+        targetSessionId: readOptionalArtifactString(artifacts, "targetSessionId"),
+        divergeAt: readRequiredArtifactString(artifacts, "divergeAt", scenario.id),
+        baseManifestId: readRequiredArtifactString(artifacts, "baseManifestId", scenario.id),
+        candidateManifestId: readRequiredArtifactString(
+          artifacts,
+          "candidateManifestId",
+          scenario.id,
+        ),
+        changedFields: readStringListArtifact(artifacts.changedFields),
+      });
+      return {
+        outputs: {
+          report,
+        },
+        telemetry: {
+          kind: "harness",
+          report,
+        },
+      };
+    }
     throw new Error(
       `Runtime evaluation is not wired for scenario ${scenario.id} (model=${this.model}). ` +
         `Refusing to fall back to fixture outputs because that would contaminate grading. ` +
         `Use --mode fixture only for grader or contract development.`,
     );
   }
+}
+
+function readRequiredArtifactString(
+  artifacts: Record<string, unknown>,
+  key: string,
+  scenarioId: string,
+): string {
+  const value = artifacts[key];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Scenario ${scenarioId}: harness runtime artifact ${key} is required`);
+  }
+  return value;
+}
+
+function readOptionalArtifactString(
+  artifacts: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = artifacts[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readStringListArtifact(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
+    : [];
 }
 
 export function loadScenarios(scenariosDir: string): EvalScenario[] {

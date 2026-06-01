@@ -20,6 +20,7 @@ import type {
 import type { HostedModelRoutingSettings } from "../session/settings/settings-store.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
 import { hasHostedPromptAttemptDispatch } from "./hosted-prompt-attempt.js";
+import type { RuntimeProviderContextSummary } from "./runtime-provider-context.js";
 import { hasHostedRuntimeTurnPrelude } from "./runtime-turn-prelude.js";
 
 export interface RuntimeAdapterSession extends CollectSessionPromptOutputSession {
@@ -65,6 +66,11 @@ export interface RuntimeAdapterSession extends CollectSessionPromptOutputSession
     readonly payload: unknown;
     readonly model: ProviderModel<Api>;
     readonly metadata?: ProviderPayloadMetadata;
+    readonly turn: {
+      readonly sessionId: string;
+      readonly turnId?: string;
+    };
+    readonly providerContext: RuntimeProviderContextSummary;
   }): Promise<unknown>;
   observeRuntimeCacheRender?(input: {
     readonly render: ProviderCacheRenderResult;
