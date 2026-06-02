@@ -6,24 +6,32 @@ import {
   TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/task";
-import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
-import { readStringArrayRecord } from "../runtime-ops-context.js";
+import { rememberCommittedCompactionContextState } from "../runtime-ops-compaction-state.js";
+import { type HostedRuntimeOpsContext, readStringArrayRecord } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 import { lineageTreeFor, listContextEntryPath } from "./session-lineage.js";
-
 export function buildSessionRuntimeOps(
   ctx: HostedRuntimeOpsContext,
 ): HostedRuntimeOpsPort["session"] {
   return {
     state: {
       clear(sessionId) {
-        ctx.state.taskSpecs.delete(sessionId);
-        ctx.state.taskItems.delete(sessionId);
-        ctx.state.taskBlockers.delete(sessionId);
-        ctx.state.taskProgressAt.delete(sessionId);
-        ctx.state.latestContextEvidence.delete(sessionId);
-        ctx.state.activeTaskStalls.delete(sessionId);
-        ctx.state.workerResults.delete(sessionId);
+        for (const map of [
+          ctx.state.taskSpecs,
+          ctx.state.taskItems,
+          ctx.state.taskBlockers,
+          ctx.state.taskProgressAt,
+          ctx.state.latestContextEvidence,
+          ctx.state.latestContextUsage,
+          ctx.state.latestCompactionGateStatus,
+          ctx.state.pendingContextCompactionReasons,
+          ctx.state.contextPredictedGrowthEmaTokens,
+          ctx.state.contextTurnIndexes,
+          ctx.state.activeTaskStalls,
+          ctx.state.workerResults,
+        ]) {
+          map.delete(sessionId);
+        }
         for (const listener of ctx.state.clearListeners) listener(sessionId);
       },
       onClear(listener) {
@@ -49,10 +57,7 @@ export function buildSessionRuntimeOps(
         latestEventId: null,
         issues: [],
       }),
-      getIntegrity: () => ({
-        status: "healthy",
-        issues: [],
-      }),
+      getIntegrity: () => ({ status: "healthy", issues: [] }),
       getOpenToolCalls: () => [],
       getUncleanShutdownDiagnostic: () => undefined,
       inputObserved: ctx.recordSemanticEvent("session_input_observed"),
@@ -116,8 +121,10 @@ export function buildSessionRuntimeOps(
     },
     lineage: {
       getNode(sessionId, lineageNodeId) {
-        return lineageTreeFor(ctx, sessionId).nodes.find(
-          (node) => node.lineageNodeId === lineageNodeId,
+        return (
+          lineageTreeFor(ctx, sessionId).nodes.find(
+            (node) => node.lineageNodeId === lineageNodeId,
+          ) ?? undefined
         );
       },
       getTree: (sessionId) => lineageTreeFor(ctx, sessionId),
@@ -160,6 +167,7 @@ export function buildSessionRuntimeOps(
     },
     compaction: {
       commit(sessionId, payload) {
+        rememberCommittedCompactionContextState(ctx, sessionId, payload);
         return ctx.emit(sessionId, RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND, payload);
       },
     },

@@ -163,6 +163,12 @@ surfaced recall result provenance, compact baseline provenance, and normalized
 provider cache posture. Opening it must not change event counts or the next
 model attention input for the same session evidence.
 
+`brewva inspect --compaction --session <id>` narrows that projection to the
+compaction timeline, latest cut point, summary digest, input provenance v2,
+cache impact, resume/gate outcome, and economic verdicts. It is an
+explicit-pull operator view over existing receipts and evidence, not a new
+context admission path.
+
 ## Token-Cache Boundary
 
 Hosted dynamic context is deliberately outside the stable Brewva-owned prefix.

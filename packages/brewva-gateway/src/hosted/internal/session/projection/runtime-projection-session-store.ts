@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import {
+  estimateBrewvaSessionEntryTokens,
+  selectBrewvaSessionCompactionCutPoint,
+} from "@brewva/brewva-substrate/compaction";
+import {
   DEFAULT_CONTEXT_STATE,
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
@@ -39,7 +43,7 @@ import type {
 import {
   MESSAGE_END_EVENT_TYPE,
   readSessionRewindCompletedEventPayload,
-  SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
+  SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
 import {
@@ -159,7 +163,7 @@ function readCompactionGenerationMetadata(
 
 function readCompactionInputProvenance(value: unknown): unknown {
   return isRecord(value) &&
-    value.schema === SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1 &&
+    value.schema === SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2 &&
     value.hiddenRecallSearch === false
     ? value
     : undefined;
@@ -214,19 +218,6 @@ function sortEvents(events: BrewvaEventRecord[]): BrewvaEventRecord[] {
       return left.index - right.index;
     })
     .map(({ event }) => event);
-}
-
-function selectFirstKeptEntryId(branchEntries: readonly BrewvaSessionEntry[]): string | null {
-  const keepable = branchEntries.filter(
-    (entry) =>
-      entry.type === "message" ||
-      entry.type === "custom_message" ||
-      entry.type === "branch_summary",
-  );
-  if (keepable.length === 0) {
-    return null;
-  }
-  return keepable[Math.max(0, keepable.length - 2)]?.id ?? null;
 }
 
 export class HostedRuntimeTapeSessionStore {
@@ -351,6 +342,17 @@ export class HostedRuntimeTapeSessionStore {
 
   readLifecycle(): SessionLifecycleSnapshot {
     return getRuntimeLifecycleSnapshot(this.runtime, this.sessionId);
+  }
+
+  #selectCompactionCutPoint(branchEntries: readonly BrewvaSessionEntry[]) {
+    const usage = getRuntimeContextUsage(this.runtime, this.sessionId);
+    return selectBrewvaSessionCompactionCutPoint(branchEntries, {
+      tailProtectTokens:
+        this.runtime.config.infrastructure.contextBudget.compaction.tailProtectTokens,
+      targetContextWindow: usage?.contextWindow,
+      reserveTokens: usage?.maxOutputTokens,
+      estimateEntryTokens: estimateBrewvaSessionEntryTokens,
+    });
   }
 
   resetLeaf(): void {
@@ -507,8 +509,8 @@ export class HostedRuntimeTapeSessionStore {
     summary: string;
   } {
     const branchEntries = this.#getLlmBranch(sourceLeafEntryId);
-    const firstKeptEntryId = selectFirstKeptEntryId(branchEntries);
-    if (!firstKeptEntryId) {
+    const cutPoint = this.#selectCompactionCutPoint(branchEntries);
+    if (!cutPoint) {
       throw new Error("Hosted compaction requires at least one message entry to keep.");
     }
 
@@ -519,8 +521,11 @@ export class HostedRuntimeTapeSessionStore {
       parentId: previewParentId,
       timestamp: new Date().toISOString(),
       summary,
-      firstKeptEntryId,
+      firstKeptEntryId: cutPoint.firstKeptEntryId,
       tokensBefore,
+      details: {
+        cutPoint,
+      },
       fromHook: true,
     };
     const previewEntries = [...branchEntries, previewEntry];
@@ -530,7 +535,7 @@ export class HostedRuntimeTapeSessionStore {
     return {
       compactId,
       sourceLeafEntryId,
-      firstKeptEntryId,
+      firstKeptEntryId: cutPoint.firstKeptEntryId,
       context: buildManagedSessionContext(previewEntries, previewEntry.id, previewIndex),
       tokensBefore,
       summary,
@@ -1231,8 +1236,8 @@ export class HostedRuntimeTapeSessionStore {
         return undefined;
       }
       const branchEntries = this.#getLlmBranch(compaction.leafEntryId ?? this.#leafId);
-      const firstKeptEntryId = selectFirstKeptEntryId(branchEntries);
-      if (!firstKeptEntryId) {
+      const cutPoint = this.#selectCompactionCutPoint(branchEntries);
+      if (!cutPoint) {
         return undefined;
       }
       const payloadFirstKeptEntryId = readOptionalString(payload.firstKeptEntryId);
@@ -1246,7 +1251,7 @@ export class HostedRuntimeTapeSessionStore {
           payloadFirstKeptEntryId &&
           branchEntries.some((entry) => entry.id === payloadFirstKeptEntryId)
             ? payloadFirstKeptEntryId
-            : firstKeptEntryId,
+            : cutPoint.firstKeptEntryId,
         tokensBefore: compaction.fromTokens ?? 0,
         details: payload.importedDetails ?? {
           compactId: compaction.compactId,

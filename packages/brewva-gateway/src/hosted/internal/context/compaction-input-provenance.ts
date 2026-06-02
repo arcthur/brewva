@@ -1,7 +1,4 @@
-import {
-  normalizeStringList as readStringArray,
-  readNonEmptyString as readString,
-} from "@brewva/brewva-std/text";
+import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   RUNTIME_OPS_TOOL_CALL_ENDED_KIND,
@@ -9,11 +6,11 @@ import {
   RUNTIME_OPS_TOOL_CALL_STARTED_KIND,
   RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
   RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND,
+  type ProtocolRecord,
 } from "@brewva/brewva-vocabulary/events";
-import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
-  SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
+  SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2,
   type SessionCompactionAttentionRefs,
   type SessionCompactionInputProvenance,
   type SessionCompactionRecallResultRef,
@@ -54,10 +51,18 @@ const MAX_COMPACTION_RECALL_RESULT_REFS = 8;
 // One used recall ref is budgeted as a compact provenance pointer plus its projected summary.
 const RECALL_RESULT_REF_TOKEN_AMORTIZATION = 400;
 
+function stringOrNull(value: unknown): string | null {
+  return readNonEmptyString(value) ?? null;
+}
+
+function readStringArray(value: unknown): string[] {
+  return [...new Set(normalizeStringList(value))];
+}
+
 function readRecallSourceFamily(
   value: unknown,
 ): SessionCompactionRecallResultRef["sourceFamily"] | null {
-  const normalized = readString(value);
+  const normalized = stringOrNull(value);
   return normalized && (RECALL_SOURCE_FAMILIES as readonly string[]).includes(normalized)
     ? (normalized as SessionCompactionRecallResultRef["sourceFamily"])
     : null;
@@ -66,10 +71,60 @@ function readRecallSourceFamily(
 function readRecallSessionScope(
   value: unknown,
 ): SessionCompactionRecallResultRef["sessionScope"] | null {
-  const normalized = readString(value);
+  const normalized = stringOrNull(value);
   return normalized && (RECALL_SESSION_SCOPES as readonly string[]).includes(normalized)
     ? (normalized as SessionCompactionRecallResultRef["sessionScope"])
     : null;
+}
+
+function decodeUriComponentSafely(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeStructuredFilePath(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  let candidate = trimmed;
+  if (candidate.startsWith("brewva-resource:///file/")) {
+    const decoded = decodeUriComponentSafely(candidate.slice("brewva-resource:///file/".length));
+    if (decoded === null) return null;
+    candidate = decoded;
+  } else if (candidate.startsWith("brewva-resource:///")) {
+    return null;
+  } else if (candidate.startsWith("file://")) {
+    const decoded = decodeUriComponentSafely(candidate.slice("file://".length));
+    if (decoded === null) return null;
+    candidate = decoded;
+  } else if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(candidate)) {
+    return null;
+  } else {
+    candidate = candidate.replace(/^(?:precedent|file|repo|workspace|source|modified|patch):/u, "");
+  }
+  const normalized = candidate.replace(/^\/repo\//u, "").replace(/^\/workspace\//u, "");
+  if (!/[/.]/u.test(normalized)) {
+    return null;
+  }
+  if (!/\.[A-Za-z0-9]{1,12}(?:$|[#?])/u.test(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
+function readFilePath(value: unknown): string | null {
+  const raw = stringOrNull(value);
+  return raw ? normalizeStructuredFilePath(raw) : null;
+}
+
+function readFilePathArray(value: unknown): string[] {
+  return readStringArray(value)
+    .map(normalizeStructuredFilePath)
+    .filter((entry): entry is string => entry !== null);
 }
 
 function dedupeRecords<T extends ProtocolRecord>(
@@ -95,17 +150,17 @@ function readSkillInvocationRecords(skillSelection: unknown): ProtocolRecord[] {
 
 function readSelectedSkillInvocationIds(skillSelection: unknown): string[] {
   return readSkillInvocationRecords(skillSelection)
-    .map((record) => readString(record.invocationId))
-    .filter((entry): entry is string => entry !== undefined);
+    .map((record) => stringOrNull(record.invocationId))
+    .filter((entry): entry is string => entry !== null);
 }
 
 function readResourceRef(value: unknown): SessionCompactionResourceRef | null {
   if (!isRecord(value)) {
     return null;
   }
-  const kind = readString(value.kind);
-  const path = readString(value.path);
-  if ((kind !== "reference" && kind !== "script" && kind !== "invariant") || !path) {
+  const kind = stringOrNull(value.kind);
+  const path = stringOrNull(value.path);
+  if ((kind !== "reference" && kind !== "script" && kind !== "invariant") || path === null) {
     return null;
   }
   return { kind, path };
@@ -124,11 +179,17 @@ function readSurfacedResourceRefs(skillSelection: unknown): SessionCompactionRes
   );
 }
 
+function readSkillResourceFiles(skillSelection: unknown): string[] {
+  return readSurfacedResourceRefs(skillSelection)
+    .map((ref) => normalizeStructuredFilePath(ref.path))
+    .filter((entry): entry is string => entry !== null);
+}
+
 function readCapabilityReceiptRefs(capabilitySelection: unknown): string[] {
   if (!isRecord(capabilitySelection)) {
     return [];
   }
-  const selectionId = readString(capabilitySelection.selectionId);
+  const selectionId = stringOrNull(capabilitySelection.selectionId);
   if (selectionId) {
     return [selectionId];
   }
@@ -139,10 +200,10 @@ function readRecallResultRef(value: unknown): SessionCompactionRecallResultRef |
   if (!isRecord(value)) {
     return null;
   }
-  const stableId = readString(value.stableId);
+  const stableId = stringOrNull(value.stableId);
   const sourceFamily = readRecallSourceFamily(value.sourceFamily);
   const sessionScope = readRecallSessionScope(value.sessionScope);
-  const rootRef = readString(value.rootRef);
+  const rootRef = stringOrNull(value.rootRef);
   if (!stableId || !sourceFamily || !sessionScope || !rootRef) {
     return null;
   }
@@ -175,9 +236,9 @@ function extractRecallStableIdsFromSourceRefs(value: unknown): string[] {
   return [];
 }
 
-function readRecallStableId(value: unknown): string | undefined {
-  const stableId = readString(value);
-  return stableId && /^(?:tape:|precedent:)\S+$/u.test(stableId) ? stableId : undefined;
+function readRecallStableId(value: unknown): string | null {
+  const stableId = stringOrNull(value);
+  return stableId && /^(?:tape:|precedent:)\S+$/u.test(stableId) ? stableId : null;
 }
 
 function readRecallStableIdsFromStableIdValues(value: unknown): string[] {
@@ -213,8 +274,103 @@ function readRecallStableIdsFromWorkbench(workbenchEntries: readonly WorkbenchEn
   );
 }
 
-function readAttentionOptionRef(value: unknown): string | undefined {
-  return readString(value);
+function readFilePathsFromWorkbench(workbenchEntries: readonly WorkbenchEntry[]): string[] {
+  return readStringArray(
+    workbenchEntries.flatMap((entry) => entry.sourceRefs).map(normalizeStructuredFilePath),
+  );
+}
+
+function readReadFilesFromPayload(payload: unknown): string[] {
+  if (!isRecord(payload)) {
+    return [];
+  }
+  const direct = readFilePathArray(payload.readFiles);
+  const primaryPath = readFilePath(payload.path);
+  const primaryUri = readFilePath(payload.uri);
+  const sourceSnapshotPath = isRecord(payload.sourceSnapshot)
+    ? (readFilePath(payload.sourceSnapshot.path) ?? readFilePath(payload.sourceSnapshot.uri))
+    : null;
+  const sourceResourcePath = isRecord(payload.sourceResource)
+    ? (readFilePath(payload.sourceResource.path) ?? readFilePath(payload.sourceResource.uri))
+    : null;
+  return readStringArray([
+    ...direct,
+    ...(primaryPath ? [primaryPath] : []),
+    ...(primaryUri ? [primaryUri] : []),
+    ...(sourceSnapshotPath ? [sourceSnapshotPath] : []),
+    ...(sourceResourcePath ? [sourceResourcePath] : []),
+  ]);
+}
+
+function readReadFilesFromEvents(events: readonly CompactionProvenanceEvent[]): string[] {
+  return readStringArray(events.flatMap((event) => readReadFilesFromPayload(event.payload)));
+}
+
+function readFilePathFromRecallRef(ref: SessionCompactionRecallResultRef): string | null {
+  const fromStableId = normalizeStructuredFilePath(ref.stableId);
+  if (fromStableId) {
+    return fromStableId;
+  }
+  return normalizeStructuredFilePath(ref.rootRef);
+}
+
+function readModifiedFilesFromPayload(payload: unknown): string[] {
+  if (!isRecord(payload)) {
+    return [];
+  }
+  const direct = readFilePathArray(payload.modifiedFiles);
+  const applied = readFilePathArray(payload.appliedPaths);
+  const created = readFilePathArray(payload.createdFiles);
+  const deleted = readFilePathArray(payload.deletedFiles);
+  const patched = readFilePathArray(payload.patchedFiles);
+  const written = readFilePathArray(payload.writtenFiles);
+  const sourcePatchFiles = isRecord(payload.sourcePatch)
+    ? readStringArray([
+        ...readFilePathArray(payload.sourcePatch.modifiedFiles),
+        ...readFilePathArray(payload.sourcePatch.appliedPaths),
+        ...readFilePathArray(payload.sourcePatch.createdFiles),
+        ...readFilePathArray(payload.sourcePatch.deletedFiles),
+      ])
+    : [];
+  const paths = Array.isArray(payload.files)
+    ? payload.files.flatMap((entry) => {
+        if (!isRecord(entry)) {
+          return [];
+        }
+        const action = stringOrNull(entry.action) ?? stringOrNull(entry.status);
+        if (
+          action !== "modified" &&
+          action !== "written" &&
+          action !== "patched" &&
+          action !== "created" &&
+          action !== "added" &&
+          action !== "deleted" &&
+          action !== "renamed"
+        ) {
+          return [];
+        }
+        const path = readFilePath(entry.path);
+        return path ? [path] : [];
+      })
+    : [];
+  return readStringArray([
+    ...direct,
+    ...applied,
+    ...created,
+    ...deleted,
+    ...patched,
+    ...written,
+    ...sourcePatchFiles,
+    ...paths,
+  ]);
+}
+
+function readModifiedFilesFromEvents(events: readonly CompactionProvenanceEvent[]): string[] {
+  return readStringArray(events.flatMap((event) => readModifiedFilesFromPayload(event.payload)));
+}
+
+function readAttentionOptionRef(value: unknown): string | null {
+  return stringOrNull(value);
 }
 
 function readAttentionOptionRefFromPayload(payload: unknown): string | null {
@@ -262,7 +418,7 @@ function readAttentionPinnedRefsFromWorkbench(
 ): string[] {
   const pinnedRefs = new Set<string>();
   for (const entry of workbenchEntries) {
-    const retentionHint = readString((entry as ProtocolRecord).retentionHint);
+    const retentionHint = stringOrNull((entry as ProtocolRecord).retentionHint);
     if (entry.reason !== "attention_pin" && retentionHint !== "attention_pin") {
       continue;
     }
@@ -334,17 +490,34 @@ export function buildCompactionInputProvenance(
     return ref ? [ref] : [];
   });
   const attention = buildAttentionRefs(input);
+  const workbenchReferencedFiles = readFilePathsFromWorkbench(input.workbenchEntries);
+  const recallFilesUsedInSummaryInput = readStringArray(
+    recallResultRefs
+      .map(readFilePathFromRecallRef)
+      .filter((entry): entry is string => entry !== null),
+  );
+  const modifiedFiles = readModifiedFilesFromEvents(input.usageEvents ?? []);
+  const readFiles = readStringArray([
+    ...readReadFilesFromEvents(input.usageEvents ?? []),
+    ...workbenchReferencedFiles,
+    ...readSkillResourceFiles(input.skillSelection),
+    ...recallFilesUsedInSummaryInput,
+  ]);
 
   return {
-    schema: SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
+    schema: SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2,
     hiddenRecallSearch: false,
     activeWorkbenchEntryIds: input.workbenchEntries
-      .map((entry) => readString(entry.id))
-      .filter((entry): entry is string => entry !== undefined),
+      .map((entry) => stringOrNull(entry.id))
+      .filter((entry): entry is string => entry !== null),
     selectedSkillInvocationIds: readSelectedSkillInvocationIds(input.skillSelection),
     surfacedResourceRefs: readSurfacedResourceRefs(input.skillSelection),
     capabilityReceiptRefs: readCapabilityReceiptRefs(input.capabilitySelection),
     recallResultRefs,
+    readFiles,
+    modifiedFiles,
+    workbenchReferencedFiles,
+    recallFilesUsedInSummaryInput,
     compactBaseline: input.compactBaseline ?? null,
     usedRecallSelection: {
       maxResults,

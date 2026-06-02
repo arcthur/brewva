@@ -20,6 +20,8 @@ import {
   CONTEXT_EVIDENCE_REPORT_SCHEMA,
   type ContextEvidenceAggregateReport,
   type ContextEvidenceArtifactRef,
+  type ContextEvidenceEconomicVerdict,
+  type ContextEvidenceEconomicVerdictKind,
   type ContextEvidencePromotionReadiness,
   type ContextEvidenceReport,
   type ContextEvidenceReportOptions,
@@ -32,6 +34,8 @@ import {
 export type {
   ContextEvidenceAggregateReport,
   ContextEvidenceArtifactRef,
+  ContextEvidenceEconomicVerdict,
+  ContextEvidenceEconomicVerdictKind,
   ContextEvidencePromotionReadiness,
   ContextEvidenceReport,
   ContextEvidenceReportOptions,
@@ -57,6 +61,9 @@ const DEFAULT_LONG_SESSION_USEFUL_TURNS = 10;
 const DEFAULT_PROMPT_CACHE_HIT_TARGET = 0.8;
 const DEFAULT_PROMPT_CACHE_HIT_STOP_LOSS_FLOOR = 0.7;
 const DEFAULT_INPUT_COST_REGRESSION_LIMIT = 0.4;
+const CACHE_REGRESSION_ABSOLUTE_MISS_RATIO_DELTA = 0.15;
+const CACHE_REGRESSION_RELATIVE_MISS_RATIO_DELTA = 0.25;
+const WASTEFUL_CACHE_CREATION_RATIO = 0.35;
 const CONTINUATION_ANCHOR_FOLLOWUP_WINDOW_MS = 5 * 60 * 1000;
 const CONTINUATION_ANCHOR_FOLLOWUP_WINDOW_TURNS = 2;
 
@@ -129,26 +136,20 @@ function emptyMessageUsageMetrics(): MessageUsageMetrics {
 
 function extractMessageUsageMetrics(payload: unknown): MessageUsageMetrics {
   const metrics = emptyMessageUsageMetrics();
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return metrics;
   }
-  const record = payload as { role?: unknown; stopReason?: unknown; usage?: unknown };
-  if (typeof record.role === "string" && record.role !== "assistant") {
+  if (typeof payload.role === "string" && payload.role !== "assistant") {
     return metrics;
   }
-  if (record.stopReason === "error" || record.stopReason === "aborted") {
+  if (payload.stopReason === "error" || payload.stopReason === "aborted") {
     return metrics;
   }
-  if (!record.usage || typeof record.usage !== "object" || Array.isArray(record.usage)) {
+  if (!isRecord(payload.usage)) {
     return metrics;
   }
 
-  const usage = record.usage as {
-    input?: unknown;
-    output?: unknown;
-    cacheRead?: unknown;
-    cacheWrite?: unknown;
-  };
+  const usage = payload.usage;
   metrics.uncachedInputTokens = readNonNegativeFiniteNumber(usage.input);
   metrics.cachedInputTokens = readNonNegativeFiniteNumber(usage.cacheRead);
   metrics.providerInputTokens = metrics.uncachedInputTokens + metrics.cachedInputTokens;
@@ -213,48 +214,35 @@ function readNonNegativeFiniteNumber(value: unknown): number {
 
 function readCompactionGenerationMetrics(payload: unknown): CompactionGenerationMetrics {
   const metrics = emptyCompactionGenerationMetrics();
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return metrics;
   }
 
-  const summaryGeneration = (payload as { summaryGeneration?: unknown }).summaryGeneration;
+  const summaryGeneration = payload.summaryGeneration;
+  if (!isRecord(summaryGeneration)) {
+    return metrics;
+  }
+
   if (
-    !summaryGeneration ||
-    typeof summaryGeneration !== "object" ||
-    Array.isArray(summaryGeneration)
+    typeof summaryGeneration.strategy !== "string" ||
+    summaryGeneration.strategy.trim().length === 0
   ) {
-    return metrics;
-  }
-
-  const generation = summaryGeneration as { strategy?: unknown; usage?: unknown };
-  if (typeof generation.strategy !== "string" || generation.strategy.trim().length === 0) {
     return metrics;
   }
 
   metrics.events = 1;
-  if (generation.strategy === "llm_primary_compaction") {
+  if (summaryGeneration.strategy === "llm_primary_compaction") {
     metrics.llmPrimaryEvents = 1;
   }
-  if (generation.strategy === "deterministic_emergency_compaction") {
+  if (summaryGeneration.strategy === "deterministic_emergency_compaction") {
     metrics.deterministicEmergencyEvents = 1;
   }
 
-  if (
-    !generation.usage ||
-    typeof generation.usage !== "object" ||
-    Array.isArray(generation.usage)
-  ) {
+  if (!isRecord(summaryGeneration.usage)) {
     return metrics;
   }
 
-  const usage = generation.usage as {
-    input?: unknown;
-    output?: unknown;
-    cacheRead?: unknown;
-    cacheWrite?: unknown;
-    totalTokens?: unknown;
-    cost?: unknown;
-  };
+  const usage = summaryGeneration.usage;
   metrics.inputTokens = readNonNegativeFiniteNumber(usage.input);
   metrics.outputTokens = readNonNegativeFiniteNumber(usage.output);
   metrics.cacheReadTokens = readNonNegativeFiniteNumber(usage.cacheRead);
@@ -262,10 +250,7 @@ function readCompactionGenerationMetrics(payload: unknown): CompactionGeneration
   metrics.totalTokens =
     readNonNegativeFiniteNumber(usage.totalTokens) ||
     metrics.inputTokens + metrics.outputTokens + metrics.cacheWriteTokens;
-  metrics.costUsd =
-    usage.cost && typeof usage.cost === "object" && !Array.isArray(usage.cost)
-      ? readNonNegativeFiniteNumber((usage.cost as { total?: unknown }).total)
-      : 0;
+  metrics.costUsd = isRecord(usage.cost) ? readNonNegativeFiniteNumber(usage.cost.total) : 0;
   metrics.cacheAccountingObserved = metrics.cacheReadTokens > 0 || metrics.cacheWriteTokens > 0;
   return metrics;
 }
@@ -289,6 +274,135 @@ function sumCompactionGenerationMetrics(
       cacheAccountingObserved: sum.cacheAccountingObserved || current.cacheAccountingObserved,
     };
   }, emptyCompactionGenerationMetrics());
+}
+
+interface CacheImpactSnapshotMetrics {
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+interface CacheImpactMetrics {
+  before: CacheImpactSnapshotMetrics | null;
+  after: CacheImpactSnapshotMetrics | null;
+  explicitEpochChanges: number;
+  prefixBytesChanged: number | null;
+}
+
+function readCacheImpactSnapshotMetrics(value: unknown): CacheImpactSnapshotMetrics | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    cacheReadTokens: readNonNegativeFiniteNumber(value.cacheReadTokens),
+    cacheWriteTokens: readNonNegativeFiniteNumber(value.cacheWriteTokens),
+  };
+}
+
+function readCacheImpactMetrics(payload: unknown): CacheImpactMetrics | null {
+  if (!isRecord(payload) || !isRecord(payload.cacheImpact)) {
+    return null;
+  }
+  const cacheImpact = payload.cacheImpact;
+  return {
+    before: readCacheImpactSnapshotMetrics(cacheImpact.before),
+    after: readCacheImpactSnapshotMetrics(cacheImpact.after),
+    explicitEpochChanges: readNonNegativeFiniteNumber(cacheImpact.explicitEpochChanges),
+    prefixBytesChanged:
+      typeof cacheImpact.prefixBytesChanged === "number" &&
+      Number.isFinite(cacheImpact.prefixBytesChanged)
+        ? cacheImpact.prefixBytesChanged
+        : null,
+  };
+}
+
+function cacheMissRatio(snapshot: CacheImpactSnapshotMetrics | null): number | null {
+  if (!snapshot) {
+    return null;
+  }
+  return ratio(snapshot.cacheWriteTokens, snapshot.cacheReadTokens + snapshot.cacheWriteTokens);
+}
+
+function buildCompactionEconomicVerdicts(input: {
+  compactionEvents: readonly { payload?: unknown }[];
+  compactionGeneration: CompactionGenerationMetrics;
+  messageUsage: MessageUsageMetrics;
+}): ContextEvidenceEconomicVerdict[] {
+  const verdicts = new Map<ContextEvidenceEconomicVerdictKind, ContextEvidenceEconomicVerdict>();
+  const remember = (verdict: ContextEvidenceEconomicVerdict): void => {
+    if (!verdicts.has(verdict.kind)) {
+      verdicts.set(verdict.kind, verdict);
+    }
+  };
+
+  for (const event of input.compactionEvents) {
+    const cacheImpact = readCacheImpactMetrics(event.payload);
+    if (!cacheImpact) {
+      continue;
+    }
+    const beforeMissRatio = cacheMissRatio(cacheImpact.before);
+    const afterMissRatio = cacheMissRatio(cacheImpact.after);
+    if (beforeMissRatio !== null && afterMissRatio !== null) {
+      const absoluteDelta = afterMissRatio - beforeMissRatio;
+      const relativeDelta = beforeMissRatio > 0 ? absoluteDelta / beforeMissRatio : null;
+      if (
+        absoluteDelta > CACHE_REGRESSION_ABSOLUTE_MISS_RATIO_DELTA ||
+        (relativeDelta !== null && relativeDelta > CACHE_REGRESSION_RELATIVE_MISS_RATIO_DELTA)
+      ) {
+        remember({
+          kind: "cache_regression",
+          reason: "prefix cache miss ratio regressed after compaction",
+          metrics: {
+            beforeMissRatio,
+            afterMissRatio,
+            absoluteDelta,
+            relativeDelta,
+          },
+        });
+      }
+    }
+    if (cacheImpact.explicitEpochChanges > 1 && cacheImpact.prefixBytesChanged === null) {
+      remember({
+        kind: "unaccounted_break",
+        reason: "explicit cache epoch changed without changed prefix byte evidence",
+        metrics: {
+          explicitEpochChanges: cacheImpact.explicitEpochChanges,
+          prefixBytesChanged: null,
+        },
+      });
+    }
+  }
+
+  const compactionGenerationInputTokens =
+    input.compactionGeneration.inputTokens +
+    input.compactionGeneration.cacheReadTokens +
+    input.compactionGeneration.cacheWriteTokens;
+  const nextTurnInputTokens =
+    input.messageUsage.providerInputTokens + input.messageUsage.cacheWriteTokens;
+  const compactionCacheCreationRatio = ratio(
+    input.compactionGeneration.cacheWriteTokens,
+    compactionGenerationInputTokens,
+  );
+  const nextTurnCacheCreationRatio = ratio(
+    input.messageUsage.cacheWriteTokens,
+    nextTurnInputTokens,
+  );
+  if (
+    (compactionCacheCreationRatio ?? 0) > WASTEFUL_CACHE_CREATION_RATIO ||
+    (nextTurnCacheCreationRatio ?? 0) > WASTEFUL_CACHE_CREATION_RATIO
+  ) {
+    remember({
+      kind: "wasteful",
+      reason: "cache creation tokens exceeded the economic waste threshold",
+      metrics: {
+        compactionCacheCreationRatio,
+        compactionGenerationInputTokens,
+        nextTurnCacheCreationRatio,
+        nextTurnInputTokens,
+      },
+    });
+  }
+
+  return [...verdicts.values()].toSorted((left, right) => left.kind.localeCompare(right.kind));
 }
 
 function countScopeAwareStablePrefixTurns(
@@ -496,11 +610,10 @@ function isCompactionRequiredEvent(event: RuntimeEventProjection): boolean {
   if (event.type === "compaction_required") {
     return true;
   }
-  if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
+  if (!isRecord(event.payload)) {
     return false;
   }
-  const payload = event.payload as Record<string, unknown>;
-  return event.type === "checkpoint.committed" && payload.cause === "compaction_required";
+  return event.type === "checkpoint.committed" && event.payload.cause === "compaction_required";
 }
 
 function isFollowupCompactionEvent(input: {
@@ -582,9 +695,13 @@ export function buildContextEvidenceReport(
       );
       const latestPrompt = promptSamples.at(-1) ?? null;
       const latestReduction = reductionSamples.at(-1) ?? null;
-      const compactionEvents = queryRuntimeEvents(runtime, sessionId, {
+      const legacyCompactionEvents = queryRuntimeEvents(runtime, sessionId, {
         type: "session_compact",
       });
+      const committedCompactionEvents = queryRuntimeEvents(runtime, sessionId, {
+        type: RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND,
+      });
+      const compactionEvents = [...legacyCompactionEvents, ...committedCompactionEvents];
       const continuationAnchorEvents = queryRuntimeEvents(runtime, sessionId, {
         type: "tape.handoff",
       })
@@ -596,11 +713,6 @@ export function buildContextEvidenceReport(
         .filter((event): event is RuntimeEventProjection => event !== null);
       const compactionSignals = [
         ...compactionEvents
-          .map((event) => projectRuntimeEvent(event))
-          .filter((event): event is RuntimeEventProjection => event !== null),
-        ...queryRuntimeEvents(runtime, sessionId, {
-          type: RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND,
-        })
           .map((event) => projectRuntimeEvent(event))
           .filter((event): event is RuntimeEventProjection => event !== null),
         ...runtimeEventProjections.filter((event) => isCompactionRequiredEvent(event)),
@@ -683,6 +795,11 @@ export function buildContextEvidenceReport(
         providerCacheSamples,
         getRuntimeContextEvidenceLatest(runtime, sessionId, "provider_cache_observation"),
       );
+      const economicVerdicts = buildCompactionEconomicVerdicts({
+        compactionEvents,
+        compactionGeneration,
+        messageUsage,
+      });
 
       return {
         sessionId,
@@ -749,15 +866,18 @@ export function buildContextEvidenceReport(
         latestProviderCacheBreakReason: latestProviderCacheEvidence?.reason ?? null,
         latestProviderCacheUnexpectedBreak: latestProviderCacheEvidence?.unexpectedBreak ?? false,
         latestProviderCacheChangedFields: latestProviderCacheEvidence?.changedFields ?? [],
+        economicVerdicts,
       };
     })
     .filter(
       (session) =>
         session.promptObservedTurns > 0 ||
         session.reductionObservedTurns > 0 ||
+        session.messageUsageTurns > 0 ||
         session.compactionEvents > 0 ||
         session.continuationAnchorEvents > 0 ||
         session.latestProviderCacheStatus !== null ||
+        session.economicVerdicts.length > 0 ||
         session.cacheReadReported ||
         session.cacheWriteReported ||
         session.cacheReadTokens > 0 ||
@@ -910,6 +1030,25 @@ export function buildContextEvidenceReport(
     providerCacheChangedFieldCounts: countByString(
       sessions.flatMap((session) => session.latestProviderCacheChangedFields),
     ),
+    economicVerdictCounts: {
+      cache_regression: sessions.reduce(
+        (sum, session) =>
+          sum +
+          session.economicVerdicts.filter((verdict) => verdict.kind === "cache_regression").length,
+        0,
+      ),
+      unaccounted_break: sessions.reduce(
+        (sum, session) =>
+          sum +
+          session.economicVerdicts.filter((verdict) => verdict.kind === "unaccounted_break").length,
+        0,
+      ),
+      wasteful: sessions.reduce(
+        (sum, session) =>
+          sum + session.economicVerdicts.filter((verdict) => verdict.kind === "wasteful").length,
+        0,
+      ),
+    },
   };
   aggregate.stablePrefixRate = ratio(aggregate.stablePrefixTurns, aggregate.promptObservedTurns);
   aggregate.dynamicTailStableRate = ratio(

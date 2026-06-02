@@ -254,22 +254,21 @@ export interface SessionCompactionAttentionRefs extends ProtocolRecord {
   readonly verifyPlanRefs: readonly string[];
 }
 
-/**
- * Persisted compaction provenance schema discriminator. Future revisions should widen
- * the reader type to a version union and keep a v1 compatibility reader instead of
- * rewriting historical receipts.
- */
-export const SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1 =
-  "brewva.compaction.input-provenance.v1" as const;
+export const SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2 =
+  "brewva.compaction.input-provenance.v2" as const;
 
 export interface SessionCompactionInputProvenance extends ProtocolRecord {
-  readonly schema: typeof SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1;
+  readonly schema: typeof SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2;
   readonly hiddenRecallSearch: false;
   readonly activeWorkbenchEntryIds: readonly string[];
   readonly selectedSkillInvocationIds: readonly string[];
   readonly surfacedResourceRefs: readonly SessionCompactionResourceRef[];
   readonly capabilityReceiptRefs: readonly string[];
   readonly recallResultRefs: readonly SessionCompactionRecallResultRef[];
+  readonly readFiles: readonly string[];
+  readonly modifiedFiles: readonly string[];
+  readonly workbenchReferencedFiles: readonly string[];
+  readonly recallFilesUsedInSummaryInput: readonly string[];
   readonly compactBaseline: unknown;
   readonly usedRecallSelection: {
     readonly maxResults: number;

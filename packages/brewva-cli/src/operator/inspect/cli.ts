@@ -2,7 +2,13 @@ import { parseArgs as parseNodeArgs } from "node:util";
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config";
 import { resolveInspectDirectory, type InspectDirectory } from "../inspect-analysis.js";
-import { formatInspectDiagnosticText, formatInspectText, printInspectText } from "./output.js";
+import {
+  buildInspectCompactionProjection,
+  formatInspectCompactionText,
+  formatInspectDiagnosticText,
+  formatInspectText,
+  printInspectText,
+} from "./output.js";
 import {
   buildContextCockpitReport,
   buildInspectReport,
@@ -21,6 +27,7 @@ const INSPECT_PARSE_OPTIONS = {
   session: { type: "string" },
   dir: { type: "string" },
   json: { type: "boolean" },
+  compaction: { type: "boolean" },
   diagnostic: { type: "boolean" },
   raw: { type: "boolean" },
 } as const;
@@ -37,6 +44,7 @@ Options:
   --session <id>     Inspect a specific replay session
   --dir <path>       Target directory for deterministic analysis (alternative to positional argument)
   --json             Emit schema-tagged work card JSON
+  --compaction       Emit focused compaction timeline and economics
   --diagnostic       Emit diagnostic drill-down text instead of the work card
   --raw              Emit the full diagnostic report JSON with --json, or diagnostic text otherwise
   -h, --help         Show help
@@ -46,6 +54,7 @@ Examples:
   brewva inspect packages/brewva-runtime/src
   brewva inspect --dir packages/brewva-cli/src
   brewva inspect --session <session-id>
+  brewva inspect --session <session-id> --compaction
   brewva inspect --json --session <session-id>
   brewva inspect --diagnostic --session <session-id>`);
 }
@@ -122,9 +131,21 @@ export async function runInspectCli(argv: string[]): Promise<number> {
   });
   const workCard = buildTaskWorkCardProjection(report);
   if (parsed.values.json === true) {
-    console.log(JSON.stringify(parsed.values.raw === true ? report : workCard, null, 2));
+    console.log(
+      JSON.stringify(
+        parsed.values.raw === true
+          ? report
+          : parsed.values.compaction === true
+            ? buildInspectCompactionProjection(report)
+            : workCard,
+        null,
+        2,
+      ),
+    );
   } else if (parsed.values.raw === true || parsed.values.diagnostic === true) {
     console.log(formatInspectDiagnosticText(report));
+  } else if (parsed.values.compaction === true) {
+    console.log(formatInspectCompactionText(report));
   } else {
     printInspectText(report);
   }
@@ -136,6 +157,8 @@ export {
   buildInspectReport,
   buildSessionInspectReport,
   buildTaskWorkCardProjection,
+  buildInspectCompactionProjection,
+  formatInspectCompactionText,
   formatInspectDiagnosticText,
   formatInspectText,
   formatTaskWorkCardText,

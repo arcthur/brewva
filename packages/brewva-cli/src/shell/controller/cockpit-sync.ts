@@ -90,7 +90,7 @@ function fallbackContextCockpit(): ContextCockpitReport {
     skills: { selectionId: null, invocationRecords: [], resourceRefs: [] },
     capabilities: { receiptRefs: [], latest: null },
     recall: { results: [] },
-    compaction: { latestBaseline: null, inputProvenance: null },
+    compaction: { timeline: [], latestBaseline: null, inputProvenance: null },
     cachePosture: {
       status: "unknown",
       bucketKey: null,

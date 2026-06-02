@@ -48,6 +48,7 @@ export type {
   ResolvedBoundaryPolicy,
   ToolBoundaryClassification,
 } from "./security/boundary-policy.js";
+export { CONTEXT_CRITICAL_ALLOWED_TOOLS } from "./security/control-plane-tools.js";
 export { checkToolAccess } from "./security/tool-policy.js";
 export type { ToolPolicyOptions } from "./security/tool-policy.js";
 export {

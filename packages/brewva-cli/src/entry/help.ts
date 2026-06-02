@@ -64,6 +64,7 @@ Examples:
   brewva --mode json "Summarize recent changes"
   brewva --task-file ./task.json
   brewva inspect --session <session-id>
+  brewva inspect --session <session-id> --compaction
   brewva harness snapshots --session <session-id>
   brewva harness patrol --min-occurrences 2
   brewva harness compare --source-session <session-id> --diverge-at <event-id>

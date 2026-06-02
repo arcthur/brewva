@@ -120,4 +120,91 @@ describe("context evidence report continuation anchor metrics", () => {
       continuationAnchorsFollowedByCompaction: 0,
     });
   });
+
+  test("emits compaction economic verdicts from receipt fixture data", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-context-evidence-economics-")),
+    });
+    const sessionId = "economic-verdict-session";
+
+    runtime.ops.session.compaction.commit(sessionId, {
+      compactId: "compact-economic",
+      sanitizedSummary: "summary",
+      cacheImpact: {
+        before: {
+          cacheReadTokens: 900,
+          cacheWriteTokens: 100,
+        },
+        after: {
+          cacheReadTokens: 500,
+          cacheWriteTokens: 500,
+        },
+        explicitEpochChanges: 2,
+        prefixBytesChanged: null,
+      },
+      summaryGeneration: {
+        strategy: "llm_primary_compaction",
+        usage: {
+          input: 100,
+          output: 20,
+          cacheRead: 0,
+          cacheWrite: 80,
+          totalTokens: 200,
+        },
+      },
+    });
+
+    const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
+    const session = report.sessions.find((entry) => entry.sessionId === sessionId);
+
+    expect(session?.economicVerdicts.map((entry) => entry.kind).toSorted()).toEqual([
+      "cache_regression",
+      "unaccounted_break",
+      "wasteful",
+    ]);
+    expect(report.aggregate.economicVerdictCounts).toEqual({
+      cache_regression: 1,
+      unaccounted_break: 1,
+      wasteful: 1,
+    });
+  });
+
+  test("uses total input-side tokens for next-turn cache waste verdicts", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-context-evidence-next-turn-economics-")),
+    });
+    const sessionId = "next-turn-economic-verdict-session";
+
+    runtime.runtime.kernel.recordAdvisoryEvent({
+      sessionId,
+      namespace: "runtime.ops",
+      kind: "message_end",
+      version: 1,
+      payload: {
+        role: "assistant",
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 80,
+        },
+      },
+    });
+
+    const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
+    const session = report.sessions.find((entry) => entry.sessionId === sessionId);
+
+    expect(session?.economicVerdicts).toEqual([
+      {
+        kind: "wasteful",
+        reason: "cache creation tokens exceeded the economic waste threshold",
+        metrics: {
+          compactionCacheCreationRatio: null,
+          compactionGenerationInputTokens: 0,
+          nextTurnCacheCreationRatio: 1,
+          nextTurnInputTokens: 80,
+        },
+      },
+    ]);
+  });
 });

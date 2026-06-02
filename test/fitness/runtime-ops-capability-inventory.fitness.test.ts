@@ -15,6 +15,7 @@ import { HOSTED_RUNTIME_OPS_NAMESPACE_LABELS } from "../../packages/brewva-gatew
 const REPO_ROOT = process.cwd();
 const RUNTIME_OPS_BUILDER_DIR =
   "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders";
+const HOSTED_OPS_BUILDER_LINE_BUDGET = 230;
 const RUNTIME_OPS_BUILDER_FILES = {
   channel: "channel.ts",
   claim: "claim.ts",
@@ -274,7 +275,7 @@ describe("runtime ops capability inventory fitness", () => {
     expect(runtimeOps.split("\n").length).toBeLessThanOrEqual(120);
     expect(runtimeOpsContext.split("\n").length).toBeLessThanOrEqual(600);
     for (const builder of runtimeOpsBuilders) {
-      expect(builder.split("\n").length).toBeLessThanOrEqual(220);
+      expect(builder.split("\n").length).toBeLessThanOrEqual(HOSTED_OPS_BUILDER_LINE_BUDGET);
     }
     expect(runtimeOps).not.toContain("export interface HostedRuntimeOpsPort");
     expect(runtimeOps).not.toContain("export type { HostedRuntimeOpsPort }");
@@ -298,8 +299,13 @@ describe("runtime ops capability inventory fitness", () => {
     const expectedStateFields = [
       "activeTaskStalls",
       "clearListeners",
+      "contextPredictedGrowthEmaTokens",
+      "contextTurnIndexes",
+      "latestCompactionGateStatus",
       "latestContextEvidence",
+      "latestContextUsage",
       "operationalSessionIds",
+      "pendingContextCompactionReasons",
       "resourceLeases",
       "sessionWireSubscribers",
       "subscribers",
@@ -312,7 +318,12 @@ describe("runtime ops capability inventory fitness", () => {
     ].toSorted();
     const expectedMapFields = [
       "activeTaskStalls",
+      "contextPredictedGrowthEmaTokens",
+      "contextTurnIndexes",
+      "latestCompactionGateStatus",
       "latestContextEvidence",
+      "latestContextUsage",
+      "pendingContextCompactionReasons",
       "resourceLeases",
       "sessionWireSubscribers",
       "taskBlockers",

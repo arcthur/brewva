@@ -1,5 +1,10 @@
 import { sha256Hex } from "@brewva/brewva-std/hash";
-import type { ContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
+import { readAutoCompactionBreakerOpen } from "@brewva/brewva-substrate/context-budget";
+import {
+  CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
+  CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE,
+  type ContextBudgetUsage,
+} from "@brewva/brewva-vocabulary/context";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type {
   SessionCompactionCacheImpact,
@@ -7,6 +12,11 @@ import type {
   SessionCompactionGenerationMetadata,
   SessionCompactionInputProvenance,
 } from "@brewva/brewva-vocabulary/session";
+import {
+  SOURCE_PATCH_APPLIED_EVENT_TYPE,
+  SOURCE_RESOURCE_READ_EVENT_TYPE,
+  SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/workbench";
 import {
   commitRuntimeSessionCompaction,
   getRuntimeCompactionGateStatus,
@@ -98,7 +108,6 @@ interface CompactionGateState {
 }
 
 export const DEFAULT_AUTO_COMPACTION_WATCHDOG_MS = 30_000;
-export const AUTO_COMPACTION_BREAKER_THRESHOLD = 3;
 
 function normalizeUsageTokens(usage: ContextBudgetUsage | undefined): number | null {
   return typeof usage?.tokens === "number" && Number.isFinite(usage.tokens) && usage.tokens >= 0
@@ -210,7 +219,14 @@ function readEventId(event: { readonly id?: unknown }): string {
   return typeof event.id === "string" ? event.id : "";
 }
 
-function queryRecallUsageEvents(input: {
+const COMPACTION_INPUT_PROVENANCE_EVENT_TYPES = [
+  ...RECALL_USAGE_EVENT_TYPES,
+  SOURCE_PATCH_APPLIED_EVENT_TYPE,
+  SOURCE_RESOURCE_READ_EVENT_TYPE,
+  SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
+] as const;
+
+function queryCompactionInputProvenanceEvents(input: {
   readonly runtime: HostedRuntimeAdapterPort;
   readonly sessionId: string;
   readonly compactBaseline?: { readonly timestamp?: unknown } | null;
@@ -220,7 +236,7 @@ function queryRecallUsageEvents(input: {
     typeof baselineTimestamp === "number" && Number.isFinite(baselineTimestamp)
       ? baselineTimestamp
       : undefined;
-  return RECALL_USAGE_EVENT_TYPES.flatMap((type) =>
+  return COMPACTION_INPUT_PROVENANCE_EVENT_TYPES.flatMap((type) =>
     queryRuntimeEvents(input.runtime, input.sessionId, {
       type,
       ...(since === undefined ? {} : { since }),
@@ -230,6 +246,21 @@ function queryRecallUsageEvents(input: {
       readEventTimestamp(left) - readEventTimestamp(right) ||
       readEventId(left).localeCompare(readEventId(right)),
   );
+}
+
+function isAutoCompactionBreakerOpen(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): boolean {
+  const events = [
+    ...queryRuntimeEvents(runtime, sessionId, {
+      type: CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE,
+    }),
+    ...queryRuntimeEvents(runtime, sessionId, {
+      type: CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
+    }),
+  ];
+  return readAutoCompactionBreakerOpen(events);
 }
 
 function buildRuntimeCompactionInputProvenance(input: {
@@ -246,7 +277,7 @@ function buildRuntimeCompactionInputProvenance(input: {
     recallEvents: queryRuntimeEvents(input.runtime, input.sessionId, {
       type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
     }),
-    usageEvents: queryRecallUsageEvents({
+    usageEvents: queryCompactionInputProvenanceEvents({
       runtime: input.runtime,
       sessionId: input.sessionId,
       compactBaseline,
@@ -331,6 +362,7 @@ export function createHostedCompactionController(
         idle: input.idle,
         recoveryPosture: "idle",
         autoCompactionInFlight: state.autoCompactionInFlight,
+        autoCompactionBreakerOpen: isAutoCompactionBreakerOpen(runtime, input.sessionId),
       });
 
       if (eligibility.decision === "skip" && eligibility.reason === "no_request") {
@@ -370,6 +402,18 @@ export function createHostedCompactionController(
           sessionId: input.sessionId,
           turn: state.turnIndex,
           reason: "auto_compaction_in_flight",
+        });
+        return;
+      }
+
+      if (
+        eligibility.decision === "skip" &&
+        eligibility.reason === "auto_compaction_breaker_open"
+      ) {
+        telemetry.emitCompactionSkipped({
+          sessionId: input.sessionId,
+          turn: state.turnIndex,
+          reason: "auto_compaction_breaker_open",
         });
         return;
       }

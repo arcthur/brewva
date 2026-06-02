@@ -59,6 +59,22 @@ flowchart TD
   WC --> BUNDLE["export bundle + transcript"]
 ```
 
+## Context Compaction Gate
+
+```mermaid
+flowchart LR
+  USAGE["usage observations"] --> DERIVE["substrate ContextBudgetState"]
+  RECEIPTS["session_compact receipts"] --> DERIVE
+  EMA["growth EMA + request estimate"] --> DERIVE
+  DERIVE --> STATUS["ContextStatus"]
+  DERIVE --> GATE["ContextCompactionGateStatus"]
+  GATE --> TOOLS["hosted tool-access filter"]
+  GATE --> AUTO["manual / auto / model-downshift policy"]
+  TOOLS --> COMPACT["workbench_compact"]
+  AUTO --> COMPACT
+  COMPACT --> RECEIPTS
+```
+
 ## Verification Gate Bridge
 
 ```mermaid

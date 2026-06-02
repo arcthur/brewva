@@ -4,7 +4,7 @@ import { resolveCachePosture, type CachePosture } from "@brewva/brewva-token-est
 import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
-  SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
+  SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2,
   type SessionCompactionInputProvenance,
   type SkillInvocationRecord,
   type SkillResourceRef,
@@ -38,8 +38,18 @@ export interface ContextCockpitCapabilityProjection {
 
 export interface ContextCockpitCompactionBaselineProjection {
   readonly compactId: string | null;
+  readonly reason: string | null;
+  readonly caller: string | null;
+  readonly fromTokens: number | null;
+  readonly toTokens: number | null;
+  readonly firstKeptEntryId: string | null;
   readonly summaryDigest: string | null;
   readonly inputProvenance: SessionCompactionInputProvenance | null;
+  readonly cacheImpact: unknown;
+  readonly summaryGeneration: unknown;
+  readonly droppedDigestStatus: string | null;
+  readonly resumeOutcome: string | null;
+  readonly gateClearOutcome: string | null;
 }
 
 export interface ContextCockpitReport {
@@ -69,6 +79,7 @@ export interface ContextCockpitReport {
     readonly results: readonly ContextCockpitRecallResult[];
   };
   readonly compaction: {
+    readonly timeline: readonly ContextCockpitCompactionBaselineProjection[];
     readonly latestBaseline: ContextCockpitCompactionBaselineProjection | null;
     readonly inputProvenance: SessionCompactionInputProvenance | null;
   };
@@ -233,7 +244,7 @@ function readRecallResults(payload: unknown): ContextCockpitRecallResult[] {
 
 function readCompactionInputProvenance(value: unknown): SessionCompactionInputProvenance | null {
   return isRecord(value) &&
-    value.schema === SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1 &&
+    value.schema === SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2 &&
     value.hiddenRecallSearch === false
     ? (value as unknown as SessionCompactionInputProvenance)
     : null;
@@ -249,22 +260,43 @@ function dedupeRecallResults(
   return [...deduped.values()];
 }
 
-function readLatestCompaction(events: readonly { readonly payload?: unknown }[]): {
+function projectCompactionEvent(event: {
+  readonly payload?: unknown;
+}): ContextCockpitCompactionBaselineProjection | null {
+  const payload = event.payload;
+  if (!isRecord(payload)) {
+    return null;
+  }
+  return {
+    compactId: readString(payload.compactId),
+    reason: readString(payload.reason),
+    caller: readString(payload.origin) ?? readString(payload.caller),
+    fromTokens: typeof payload.fromTokens === "number" ? payload.fromTokens : null,
+    toTokens: typeof payload.toTokens === "number" ? payload.toTokens : null,
+    firstKeptEntryId: readString(payload.firstKeptEntryId),
+    summaryDigest: readString(payload.summaryDigest),
+    inputProvenance: readCompactionInputProvenance(payload.inputProvenance),
+    cacheImpact: payload.cacheImpact ?? null,
+    summaryGeneration: payload.summaryGeneration ?? null,
+    droppedDigestStatus: readString(payload.droppedDigestStatus),
+    resumeOutcome: readString(payload.resumeOutcome),
+    gateClearOutcome: readString(payload.gateClearOutcome),
+  };
+}
+
+function readCompactionTimeline(events: readonly { readonly payload?: unknown }[]): {
+  readonly timeline: readonly ContextCockpitCompactionBaselineProjection[];
   readonly latestBaseline: ContextCockpitCompactionBaselineProjection | null;
   readonly inputProvenance: SessionCompactionInputProvenance | null;
 } {
-  const latest = events.at(-1)?.payload;
-  if (!isRecord(latest)) {
-    return { latestBaseline: null, inputProvenance: null };
-  }
-  const latestBaseline = {
-    compactId: readString(latest.compactId),
-    summaryDigest: readString(latest.summaryDigest),
-    inputProvenance: readCompactionInputProvenance(latest.inputProvenance),
-  };
+  const timeline = events
+    .map(projectCompactionEvent)
+    .filter((entry): entry is ContextCockpitCompactionBaselineProjection => entry !== null);
+  const latestBaseline = timeline.at(-1) ?? null;
   return {
+    timeline,
     latestBaseline,
-    inputProvenance: latestBaseline.inputProvenance,
+    inputProvenance: latestBaseline?.inputProvenance ?? null,
   };
 }
 
@@ -349,7 +381,7 @@ export function buildContextCockpitReport(
     ),
   );
   const workbenchEntries = listCliRuntimeWorkbenchEntries(runtime, sessionId);
-  const latestCompaction = readLatestCompaction(
+  const compaction = readCompactionTimeline(
     queryCliRuntimeEvents(runtime, sessionId, {
       type: RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND,
     }),
@@ -386,7 +418,7 @@ export function buildContextCockpitReport(
     recall: {
       results: recallResults,
     },
-    compaction: latestCompaction,
+    compaction,
     cachePosture: resolveCachePosture(
       isRecord(cacheObservation?.payload) ? cacheObservation.payload : undefined,
     ),

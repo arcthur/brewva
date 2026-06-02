@@ -1,8 +1,10 @@
 export {
   buildContextCockpitReport,
+  buildInspectCompactionProjection,
   buildInspectReport,
   buildSessionInspectReport,
   buildTaskWorkCardProjection,
+  formatInspectCompactionText,
   formatInspectDiagnosticText,
   formatInspectText,
   formatTaskWorkCardText,

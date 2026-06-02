@@ -55,8 +55,71 @@ export interface HostedLlmCompactionSummaryGeneratorOptions {
   resolveAuth: (model: BrewvaRegisteredModel) => Promise<BrewvaResolvedRequestAuth>;
 }
 
+export const MAX_COMPACTION_PROMPT_TOO_LARGE_ATTEMPTS = 3;
+
 const MAX_COMPACTION_TRANSCRIPT_CHARS = 120_000;
 const DEFAULT_RETAINED_TAIL_MESSAGES = 2;
+const COMPACTION_PROMPT_TOO_LARGE_RETRY_TOKEN_RATIO = 0.35;
+
+export function isCompactionPromptTooLargeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return /(?:context_length_exceeded|prompt too large|prompt_too_large|maximum context|too many tokens)/iu.test(
+    message,
+  );
+}
+
+function estimateCompactionRetryMessageTokens(message: unknown): number {
+  const serialized = typeof message === "string" ? message : JSON.stringify(message);
+  return Math.max(1, Math.ceil((serialized ?? "").length / 4));
+}
+
+function reduceMessagesForCompactionRetry(messages: readonly unknown[]): readonly unknown[] {
+  if (messages.length <= 1) {
+    return messages;
+  }
+  const tokenCounts = messages.map(estimateCompactionRetryMessageTokens);
+  const totalTokens = tokenCounts.reduce((sum, tokens) => sum + tokens, 0);
+  const targetTokens = Math.max(
+    1,
+    Math.floor(totalTokens * COMPACTION_PROMPT_TOO_LARGE_RETRY_TOKEN_RATIO),
+  );
+  let retainedTokens = 0;
+  let firstRetainedIndex = messages.length - 1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const nextTokens = tokenCounts[index] ?? 1;
+    if (index !== messages.length - 1 && retainedTokens + nextTokens > targetTokens) {
+      break;
+    }
+    retainedTokens += nextTokens;
+    firstRetainedIndex = index;
+  }
+  return messages.slice(firstRetainedIndex);
+}
+
+export async function generateCompactionSummaryWithPromptTooLargeRetry(input: {
+  readonly input: BrewvaCompactionSummaryGenerationInput;
+  readonly generate: BrewvaCompactionSummaryGenerator;
+  readonly maxAttempts?: number;
+}): Promise<BrewvaCompactionSummaryGenerationResult> {
+  const maxAttempts = Math.max(
+    1,
+    Math.trunc(input.maxAttempts ?? MAX_COMPACTION_PROMPT_TOO_LARGE_ATTEMPTS),
+  );
+  let generationInput: BrewvaCompactionSummaryGenerationInput = input.input;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await input.generate(generationInput);
+    } catch (error) {
+      if (!isCompactionPromptTooLargeError(error) || attempt >= maxAttempts) {
+        throw error;
+      }
+      generationInput = Object.assign({}, generationInput, {
+        messages: reduceMessagesForCompactionRetry(generationInput.messages),
+      });
+    }
+  }
+  return input.generate(generationInput);
+}
 
 function findLastCompactionSummaryIndex(messages: readonly unknown[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -291,7 +354,7 @@ function lineDigestValues(line: string): string[] {
   return collectDigestValues(line);
 }
 
-function sanitizeDroppedDigestLines(
+export function sanitizeDroppedDigestLines(
   summary: string,
   allowedDroppedDigests: ReadonlySet<string>,
 ): string {

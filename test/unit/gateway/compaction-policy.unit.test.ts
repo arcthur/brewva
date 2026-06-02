@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { decideCompaction } from "@brewva/brewva-substrate/context-budget";
 import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-vocabulary/context";
-import { decideCompaction } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/policy.js";
 
 const baseStatus: ContextStatus = {
   tokensUsed: null,
@@ -78,6 +78,21 @@ describe("decideCompaction", () => {
       decision: "skip",
       caller: "auto",
       reason: "agent_active_manual_compaction_unsafe",
+    });
+
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: gate({ compactionAdvised: true }),
+        hasUI: true,
+        idle: true,
+        recoveryPosture: "idle",
+        autoCompactionBreakerOpen: true,
+      }),
+    ).toEqual({
+      decision: "skip",
+      caller: "auto",
+      reason: "auto_compaction_breaker_open",
     });
   });
 

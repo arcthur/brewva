@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
 import {
   classifyToolBoundaryRequest,
+  CONTEXT_CRITICAL_ALLOWED_TOOLS,
   evaluateBoundaryClassification,
   resolveBoundaryPolicy,
 } from "@brewva/brewva-runtime/security";
@@ -48,6 +49,11 @@ export type HostedRuntimeOpsState = {
   readonly taskBlockers: Map<string, ProtocolRecord[]>;
   readonly taskProgressAt: Map<string, number>;
   readonly latestContextEvidence: Map<string, Map<string, ContextEvidenceSample>>;
+  readonly latestContextUsage: Map<string, ContextBudgetUsage>;
+  readonly latestCompactionGateStatus: Map<string, ContextCompactionGateStatus>;
+  readonly pendingContextCompactionReasons: Map<string, string>;
+  readonly contextPredictedGrowthEmaTokens: Map<string, number>;
+  readonly contextTurnIndexes: Map<string, number>;
   readonly resourceLeases: Map<string, ResourceLeaseRecord[]>;
   readonly workbenchEntries: Map<string, WorkbenchEntry[]>;
   readonly activeTaskStalls: Map<
@@ -201,6 +207,11 @@ export function createHostedRuntimeOpsContext(options: {
     taskBlockers: new Map<string, ProtocolRecord[]>(),
     taskProgressAt: new Map<string, number>(),
     latestContextEvidence: new Map<string, Map<string, ContextEvidenceSample>>(),
+    latestContextUsage: new Map<string, ContextBudgetUsage>(),
+    latestCompactionGateStatus: new Map<string, ContextCompactionGateStatus>(),
+    pendingContextCompactionReasons: new Map<string, string>(),
+    contextPredictedGrowthEmaTokens: new Map<string, number>(),
+    contextTurnIndexes: new Map<string, number>(),
     resourceLeases: new Map<string, ResourceLeaseRecord[]>(),
     workbenchEntries: new Map<string, WorkbenchEntry[]>(),
     activeTaskStalls: new Map(),
@@ -217,6 +228,13 @@ export function createHostedRuntimeOpsContext(options: {
     const toolName = typeof input.toolName === "string" ? input.toolName : "";
     if (toolName.trim().length === 0) {
       return { allowed: false, reason: "missing_tool_name" };
+    }
+    if (input.sessionId) {
+      const gateStatus = state.latestCompactionGateStatus.get(input.sessionId);
+      const criticalTool = CONTEXT_CRITICAL_ALLOWED_TOOLS.includes(toolName);
+      if (gateStatus?.required === true && !criticalTool) {
+        return { allowed: false, reason: "context_compaction_gate_required" };
+      }
     }
     const boundary = evaluateBoundaryClassification(
       resolveBoundaryPolicy(options.runtime.config.security),

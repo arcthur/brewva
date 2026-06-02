@@ -94,8 +94,13 @@ flowchart TD
   - they do not participate in hidden provider selection or arena budget floors
 - composer policy blocks are provenance-tagged render artifacts rather than
   source-typed admission objects
-- the effective compaction threshold is derived from the configured advisory
-  ratio, hard ratio, fixed headroom tokens, and predicted turn growth
+- the effective compaction threshold is derived by
+  `@brewva/brewva-substrate/context-budget` from the configured advisory ratio,
+  hard ratio, fixed headroom tokens, context window, recent compaction receipts,
+  and effective predicted growth
+- effective predicted growth is the maximum of configured
+  `predictedTurnGrowthTokens`, model/provider observations, recent growth EMA,
+  and request-local estimates, clamped to the target model window
 - those live ratios drive turn-scoped gate and advisory guidance; the hosted
   system-prompt contract stays static and does not cache window-derived
   percentages
@@ -222,7 +227,10 @@ flowchart TD
 - Context-critical allowlist: `packages/brewva-runtime/src/security/control-plane-tools.ts`
 - Context budget policy: `packages/brewva-runtime/src/runtime/model/impl.ts`
 - Compaction integrity: `packages/brewva-runtime/src/runtime/model/impl.ts`
-- Pure compaction policy: `packages/brewva-gateway/src/hosted/internal/compaction/policy.ts`
+- Pure context budget and compaction policy:
+  `packages/brewva-substrate/src/context-budget/api.ts`
+- Token-aware compaction cut point:
+  `packages/brewva-substrate/src/compaction/session-cut-point.ts`
 - Hosted compaction controller: `packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.ts`
 - Hosted context shell: `packages/brewva-gateway/src/hosted/internal/context/context-transform.ts`
 - Context evidence sidecar/report: `packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.ts`
@@ -230,6 +238,8 @@ flowchart TD
 - Provider request recovery: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
 - Compaction telemetry: `packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.ts`
 - Turn resume path: owned by `packages/brewva-runtime/src/runtime/turn/impl.ts`
+- Focused compaction inspect surface:
+  `packages/brewva-cli/src/operator/inspect/output.ts`
 
 ## Related Docs
 

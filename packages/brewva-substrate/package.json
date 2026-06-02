@@ -49,6 +49,12 @@
       "import": "./dist/compaction/index.js",
       "default": "./dist/compaction/index.js"
     },
+    "./context-budget": {
+      "types": "./dist/context-budget/index.d.ts",
+      "bun": "./src/context-budget/index.ts",
+      "import": "./dist/context-budget/index.js",
+      "default": "./dist/context-budget/index.js"
+    },
     "./tools": {
       "types": "./dist/tools/index.d.ts",
       "bun": "./src/tools/index.ts",

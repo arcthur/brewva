@@ -17,7 +17,7 @@
   - `packages/brewva-gateway/src/delegation/run-finalization.ts`
   - `packages/brewva-gateway/src/delegation/background/detached-run-adapter.ts`
   - `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`
-  - `packages/brewva-gateway/src/hosted/internal/compaction/policy.ts`
+  - `packages/brewva-substrate/src/context-budget/api.ts`
   - `packages/brewva-session-index/src/projection/delegation.ts`
   - `test/unit/gateway/context-bundle.unit.test.ts`
   - `test/unit/gateway/context-materialization.unit.test.ts`

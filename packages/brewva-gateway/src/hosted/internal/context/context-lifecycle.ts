@@ -1,3 +1,8 @@
+import {
+  decideCompaction,
+  resolveCompactionPressureReason,
+  type CompactionPolicyDecision,
+} from "@brewva/brewva-substrate/context-budget";
 import type {
   ContextCompactionGateStatus,
   ContextCompactionReason,
@@ -7,14 +12,8 @@ import {
   type ContinuationAnchorRelevanceDecision,
   type TapeStatusState,
 } from "@brewva/brewva-vocabulary/session";
-import {
-  decideCompaction,
-  resolveCompactionPressureReason,
-  type CompactionPolicyDecision,
-} from "../compaction/policy.js";
 
 export const DEFAULT_COMPACTION_NUDGE_FULL_EVERY_TURNS = 5;
-
 export type ContextLifecyclePressureAction =
   | "none"
   | "workbench_compact_soon"
@@ -70,6 +69,7 @@ export interface ContextAutoCompactionEligibilityInput {
   readonly idle?: boolean;
   readonly recoveryPosture?: "idle" | "active";
   readonly autoCompactionInFlight?: boolean;
+  readonly autoCompactionBreakerOpen?: boolean;
 }
 
 export interface ContextLifecycleDecision {
@@ -95,6 +95,7 @@ export interface ContextLifecycleDecisionInput {
     readonly idle?: boolean;
     readonly recoveryPosture?: "idle" | "active";
     readonly autoCompactionInFlight?: boolean;
+    readonly autoCompactionBreakerOpen?: boolean;
   };
   readonly transientReduction?: ContextTransientReductionEligibilityInput;
 }
@@ -324,6 +325,7 @@ export function decideAutoCompactionEligibility(
     idle: input.idle,
     recoveryPosture: input.recoveryPosture,
     autoCompactionInFlight: input.autoCompactionInFlight,
+    autoCompactionBreakerOpen: input.autoCompactionBreakerOpen,
   });
 }
 
@@ -364,6 +366,7 @@ export function decideContextLifecycle(
             idle: input.autoCompaction.idle,
             recoveryPosture: input.autoCompaction.recoveryPosture,
             autoCompactionInFlight: input.autoCompaction.autoCompactionInFlight,
+            autoCompactionBreakerOpen: input.autoCompaction.autoCompactionBreakerOpen,
           })
         : null,
     transientReduction: input.transientReduction

@@ -247,13 +247,13 @@ compatibility story.
   `@brewva/brewva-effect/primitives` subpath.
 - `@brewva/brewva-substrate`: contract-only root vocabulary plus explicit
   mechanism subpaths for session lifecycle, prompt/resource loading,
-  provenance, sequential execution primitives, pure compaction mechanics,
+  provenance, sequential execution primitives, pure context-budget derivation,
+  token-aware compaction cut-point selection, pure compaction mechanics,
   host-facing tools, tool protocol vocabulary, host plugin ports, persistence
   helpers, the turn-loop substrate, and a thin in-memory SDK composition
   entrypoint. The SDK assembles substrate mechanisms for direct hosts; it is not
-  the gateway hosted policy
-  owner, does not execute model calls, and does not own compaction trigger or
-  recovery policy.
+  the gateway hosted effect owner, does not execute model calls, and does not
+  own compaction trigger or recovery policy.
 - `@brewva/brewva-provider-core`: provider contracts, model catalog lookup,
   provider registration, stream normalization, cache rendering, and driver
   adapters. It is mechanism, not replay or credential authority.

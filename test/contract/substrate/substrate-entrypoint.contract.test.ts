@@ -98,6 +98,14 @@ describe("substrate entrypoint surface", () => {
     );
   });
 
+  test("exports context-budget derivation only from the explicit context-budget subpath", async () => {
+    const contextBudget = await import("@brewva/brewva-substrate/context-budget");
+
+    expect(typeof contextBudget.deriveContextBudgetState).toBe("function");
+    expect(typeof contextBudget.decideCompaction).toBe("function");
+    expect("deriveContextBudgetState" in (await import("@brewva/brewva-substrate"))).toBe(false);
+  });
+
   test("exports tool mechanisms only from the explicit tools subpath", async () => {
     const tools = await import("@brewva/brewva-substrate/tools");
 

@@ -26,3 +26,11 @@ export {
   serializeBrewvaCompactionConversation,
   summarizeBrewvaCompactionMessage,
 } from "./transcript-format.js";
+export {
+  estimateBrewvaSessionEntryTokens,
+  selectBrewvaSessionCompactionCutPoint,
+  type BrewvaSessionCompactionCutPoint,
+  type BrewvaSessionCompactionCutPointOptions,
+  type BrewvaSessionCompactionEntryLike,
+  type BrewvaSessionCompactionTokenEstimateEntry,
+} from "./session-cut-point.js";

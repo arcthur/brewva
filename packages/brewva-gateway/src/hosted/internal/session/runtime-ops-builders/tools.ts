@@ -21,10 +21,13 @@ import {
   SOURCE_RESOURCE_READ_EVENT_TYPE,
   SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/workbench";
+import { createContextBudgetRuntimeController } from "../runtime-ops-context-budget.js";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 
 export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["tools"] {
+  const budget = createContextBudgetRuntimeController(ctx);
+
   return {
     access: {
       getActionPolicy: (toolName: string) => getToolActionPolicy(toolName),
@@ -34,31 +37,34 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
     },
     invocation: {
       start(inputValue) {
+        const sessionId = inputValue.sessionId ?? "default";
+        const toolName = typeof inputValue.toolName === "string" ? inputValue.toolName : "";
+        const gateStatus =
+          toolName.length > 0 ? budget.checkGate(sessionId, toolName, inputValue.usage) : null;
+        const gateBlocked =
+          gateStatus?.required === true && gateStatus.reason === "context_compaction_gate_required";
         const access = inputValue.runtimeCapabilityAccess;
-        const allowed = access?.allowed ?? true;
-        const event = ctx.emit(
-          inputValue.sessionId ?? "default",
-          RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-          {
-            ...inputValue,
-            allowed,
-            ...(access?.reason ? { reason: access.reason } : {}),
-            ...(access?.advisory ? { advisory: access.advisory } : {}),
-            ...(access?.receiptId ? { receiptId: access.receiptId } : {}),
-            ...(access?.source ? { source: access.source } : {}),
-            ...(access?.selectedCapabilityNames
-              ? { selectedCapabilityNames: access.selectedCapabilityNames }
-              : {}),
-          },
-        );
+        const allowed = gateBlocked ? false : (access?.allowed ?? true);
+        const reason = gateBlocked ? "context_compaction_gate_required" : access?.reason;
+        const event = ctx.emit(sessionId, RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND, {
+          ...inputValue,
+          allowed,
+          ...(reason ? { reason } : {}),
+          ...(!gateBlocked && access?.advisory ? { advisory: access.advisory } : {}),
+          ...(!gateBlocked && access?.receiptId ? { receiptId: access.receiptId } : {}),
+          ...(!gateBlocked && access?.source ? { source: access.source } : {}),
+          ...(!gateBlocked && access?.selectedCapabilityNames
+            ? { selectedCapabilityNames: access.selectedCapabilityNames }
+            : {}),
+        });
         return {
           ...event,
           allowed,
-          ...(access?.reason ? { reason: access.reason } : {}),
-          ...(access?.advisory ? { advisory: access.advisory } : {}),
-          ...(access?.receiptId ? { receiptId: access.receiptId } : {}),
-          ...(access?.source ? { source: access.source } : {}),
-          ...(access?.selectedCapabilityNames
+          ...(reason ? { reason } : {}),
+          ...(!gateBlocked && access?.advisory ? { advisory: access.advisory } : {}),
+          ...(!gateBlocked && access?.receiptId ? { receiptId: access.receiptId } : {}),
+          ...(!gateBlocked && access?.source ? { source: access.source } : {}),
+          ...(!gateBlocked && access?.selectedCapabilityNames
             ? { selectedCapabilityNames: access.selectedCapabilityNames }
             : {}),
         };

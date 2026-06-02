@@ -36,7 +36,10 @@ discipline.
 
 ## Current Active Notes
 
-No active research notes are currently tracked.
+- [RFC: Context Operating System And Compaction Physics](./rfc-context-operating-system-and-compaction-physics.md):
+  active RFC for closing Brewva's context-budget loop, making compaction cut
+  points token-aware, and promoting workbench-gated compaction into a runtime
+  contract.
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

@@ -1,3 +1,4 @@
+import type { SessionCompactionInputProvenance } from "@brewva/brewva-vocabulary/session";
 import { formatInspectAnalysisText } from "../inspect-analysis.js";
 import {
   formatCockpitCompactionBaseline,
@@ -8,6 +9,89 @@ import {
 } from "./context-cockpit.js";
 import type { InspectReport } from "./report.js";
 import { buildTaskWorkCardProjection, formatTaskWorkCardText } from "./work-card.js";
+
+export const INSPECT_COMPACTION_PROJECTION_SCHEMA = "brewva.inspect.compaction.v1" as const;
+
+export interface InspectCompactionProjection {
+  readonly schema: typeof INSPECT_COMPACTION_PROJECTION_SCHEMA;
+  readonly sessionId: string;
+  readonly workspaceRoot: string;
+  readonly timeline: Array<{
+    readonly compactId: string | null;
+    readonly reason: string | null;
+    readonly caller: string | null;
+    readonly fromTokens: number | null;
+    readonly toTokens: number | null;
+    readonly firstKeptEntryId: string | null;
+    readonly summaryDigest: string | null;
+    readonly droppedDigestStatus: string | null;
+    readonly resumeOutcome: string | null;
+    readonly gateClearOutcome: string | null;
+    readonly provenance: SessionCompactionInputProvenance | null;
+    readonly cacheImpact: unknown;
+  }>;
+  readonly latestProvenance: SessionCompactionInputProvenance | null;
+  readonly economicVerdictCounts: Record<string, number>;
+  readonly cache: {
+    readonly status: string;
+    readonly cacheReadTokens: number;
+    readonly cacheWriteTokens: number;
+  };
+}
+
+export function buildInspectCompactionProjection(
+  report: InspectReport,
+): InspectCompactionProjection {
+  return {
+    schema: INSPECT_COMPACTION_PROJECTION_SCHEMA,
+    sessionId: report.sessionId,
+    workspaceRoot: report.workspaceRoot,
+    timeline: report.contextCockpit.compaction.timeline.map((entry) => ({
+      compactId: entry.compactId,
+      reason: entry.reason,
+      caller: entry.caller,
+      fromTokens: entry.fromTokens,
+      toTokens: entry.toTokens,
+      firstKeptEntryId: entry.firstKeptEntryId,
+      summaryDigest: entry.summaryDigest,
+      droppedDigestStatus: entry.droppedDigestStatus,
+      resumeOutcome: entry.resumeOutcome,
+      gateClearOutcome: entry.gateClearOutcome,
+      provenance: entry.inputProvenance,
+      cacheImpact: entry.cacheImpact,
+    })),
+    latestProvenance: report.contextCockpit.compaction.inputProvenance,
+    economicVerdictCounts: report.contextEvidence.economicVerdictCounts,
+    cache: {
+      status: report.contextCockpit.cachePosture.status,
+      cacheReadTokens: report.contextCockpit.cachePosture.cacheReadTokens,
+      cacheWriteTokens: report.contextCockpit.cachePosture.cacheWriteTokens,
+    },
+  };
+}
+
+export function formatInspectCompactionText(report: InspectReport): string {
+  const projection = buildInspectCompactionProjection(report);
+  const latest = projection.timeline.at(-1);
+  const provenance = report.contextCockpit.compaction.inputProvenance;
+  const verdicts = Object.entries(projection.economicVerdictCounts)
+    .filter(([, count]) => count > 0)
+    .map(([kind, count]) => `${kind}=${count}`)
+    .join(" ");
+  const lines = [
+    `Session: ${projection.sessionId}`,
+    `Compaction timeline: events=${projection.timeline.length}`,
+    latest
+      ? `Compaction latest: compact=${latest.compactId ?? "n/a"} caller=${latest.caller ?? "n/a"} reason=${latest.reason ?? "n/a"} tokens=${latest.fromTokens ?? "n/a"}->${latest.toTokens ?? "n/a"} firstKept=${latest.firstKeptEntryId ?? "n/a"} summaryDigest=${latest.summaryDigest ?? "n/a"}`
+      : "Compaction latest: none",
+    `Compaction economics: ${verdicts || "none"}`,
+    `Compaction cache: status=${projection.cache.status} read=${projection.cache.cacheReadTokens} write=${projection.cache.cacheWriteTokens}`,
+    provenance
+      ? `Compaction provenance: schema=${provenance.schema} readFiles=${renderList([...provenance.readFiles])} modifiedFiles=${renderList([...provenance.modifiedFiles])} workbenchFiles=${renderList([...provenance.workbenchReferencedFiles])} recallFiles=${renderList([...provenance.recallFilesUsedInSummaryInput])}`
+      : "Compaction provenance: none",
+  ];
+  return lines.join("\n");
+}
 
 export function formatInspectText(report: InspectReport): string {
   return formatTaskWorkCardText(buildTaskWorkCardProjection(report));

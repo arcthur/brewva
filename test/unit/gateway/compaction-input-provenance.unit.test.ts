@@ -68,7 +68,7 @@ describe("compaction input provenance", () => {
     });
 
     expect(provenance).toEqual({
-      schema: "brewva.compaction.input-provenance.v1",
+      schema: "brewva.compaction.input-provenance.v2",
       hiddenRecallSearch: false,
       activeWorkbenchEntryIds: ["workbench-1"],
       selectedSkillInvocationIds: ["skill-selection-1:architecture"],
@@ -82,6 +82,10 @@ describe("compaction input provenance", () => {
           rootRef: "/repo",
         },
       ],
+      readFiles: ["docs/solutions/runtime.md", "references/design.md"],
+      modifiedFiles: [],
+      workbenchReferencedFiles: ["docs/solutions/runtime.md"],
+      recallFilesUsedInSummaryInput: ["docs/solutions/runtime.md"],
       compactBaseline: {
         compactId: "compact-previous",
         summaryDigest: "summary-digest",
@@ -162,6 +166,12 @@ describe("compaction input provenance", () => {
           },
         },
         {
+          type: "tool.result.recorded",
+          payload: {
+            modifiedFiles: ["packages/brewva-gateway/src/index.ts"],
+          },
+        },
+        {
           type: "recall.curation.recorded",
           payload: { stableIds: ["precedent:docs/solutions/unused.md"] },
         },
@@ -182,6 +192,13 @@ describe("compaction input provenance", () => {
       maxResults: 1,
       selectedStableIds: ["precedent:docs/solutions/latest.md"],
     });
+    expect(provenance.readFiles).toEqual([
+      "docs/solutions/missing-provenance.md",
+      "docs/solutions/latest.md",
+    ]);
+    expect(provenance.modifiedFiles).toEqual(["packages/brewva-gateway/src/index.ts"]);
+    expect(provenance.workbenchReferencedFiles).toEqual(["docs/solutions/missing-provenance.md"]);
+    expect(provenance.recallFilesUsedInSummaryInput).toEqual(["docs/solutions/latest.md"]);
     expect(provenance.attention).toEqual({
       generationIds: [],
       consumedRefs: [],
@@ -189,6 +206,49 @@ describe("compaction input provenance", () => {
       ignoredRefs: [],
       verifyPlanRefs: [],
     });
+  });
+
+  test("normalizes structured file resource URIs without admitting non-file resources", () => {
+    const provenance = buildCompactionInputProvenance({
+      workbenchEntries: [
+        {
+          id: "workbench-resource-file",
+          digest: "digest-resource-file",
+          reason: "manual note",
+          sourceRefs: [
+            "brewva-resource:///file/src/local.ts",
+            "brewva-resource:///memory/not-a-file.md",
+            "mcp://resources/not-a-file.ts",
+          ],
+        },
+      ],
+      skillSelection: undefined,
+      capabilitySelection: undefined,
+      recallEvents: [],
+      usageEvents: [
+        {
+          type: "tool.result.recorded",
+          payload: {
+            uri: "file:///workspace/spec.md",
+            readFiles: ["brewva-resource:///conflict/not-a-file.md"],
+            sourceResource: {
+              uri: "brewva-resource:///file/packages/brewva-gateway/src/context.ts",
+            },
+          },
+        },
+      ],
+      compactBaseline: null,
+      recallTokenBudget: 400,
+    });
+
+    expect(provenance.readFiles).toEqual([
+      "spec.md",
+      "packages/brewva-gateway/src/context.ts",
+      "src/local.ts",
+    ]);
+    expect(provenance.workbenchReferencedFiles).toEqual(["src/local.ts"]);
+    expect(provenance.modifiedFiles).toEqual([]);
+    expect(provenance.recallFilesUsedInSummaryInput).toEqual([]);
   });
 
   test("records attention consumed, pinned, and ignored refs as compaction provenance", () => {
@@ -239,6 +299,10 @@ describe("compaction input provenance", () => {
       ignoredRefs: ["precedent:docs/solutions/stale.md"],
       verifyPlanRefs: ["skill:runtime-orientation"],
     });
+    expect(provenance.readFiles).toEqual([]);
+    expect(provenance.modifiedFiles).toEqual([]);
+    expect(provenance.workbenchReferencedFiles).toEqual([]);
+    expect(provenance.recallFilesUsedInSummaryInput).toEqual([]);
   });
 
   test("attaches active-set provenance to committed session compaction receipts", async () => {
@@ -291,6 +355,22 @@ describe("compaction input provenance", () => {
         ],
       },
     });
+    runtime.ops.tools.sourcePatch.snapshots.record(sessionId, {
+      id: "snapshot-read-1",
+      uri: "packages/brewva-gateway/src/context.ts",
+      path: "packages/brewva-gateway/src/context.ts",
+      contentHash: "hash-read-1",
+      createdAt: 1,
+      lineCount: 1,
+      anchors: [],
+    });
+    runtime.ops.tools.sourcePatch.plans.apply(sessionId, {
+      ok: true,
+      planId: "plan-1",
+      patchSetId: "patch-1",
+      appliedPaths: ["packages/brewva-gateway/src/index.ts"],
+      failedPaths: [],
+    });
 
     await controller.sessionCompact({
       sessionId,
@@ -309,7 +389,7 @@ describe("compaction input provenance", () => {
     expect(committed).toMatchObject({
       compactId: "compact-1",
       inputProvenance: {
-        schema: "brewva.compaction.input-provenance.v1",
+        schema: "brewva.compaction.input-provenance.v2",
         hiddenRecallSearch: false,
         selectedSkillInvocationIds: ["skill-selection-1:architecture"],
         surfacedResourceRefs: [{ kind: "reference", path: "references/design.md" }],
@@ -322,6 +402,14 @@ describe("compaction input provenance", () => {
             rootRef: runtime.identity.workspaceRoot,
           },
         ],
+        readFiles: [
+          "packages/brewva-gateway/src/context.ts",
+          "docs/solutions/runtime.md",
+          "references/design.md",
+        ],
+        modifiedFiles: ["packages/brewva-gateway/src/index.ts"],
+        workbenchReferencedFiles: ["docs/solutions/runtime.md"],
+        recallFilesUsedInSummaryInput: ["docs/solutions/runtime.md"],
       },
     });
   });

@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  estimateBrewvaSessionEntryTokens,
+  selectBrewvaSessionCompactionCutPoint,
+} from "../compaction/session-cut-point.js";
 import type {
   BrewvaModelPreset,
   BrewvaModelRoleMap,
@@ -138,6 +142,7 @@ export interface BrewvaSessionContext {
 
 const BRANCH_SUMMARY_CONTEXT_CHAR_BUDGET = 2_400;
 const BRANCH_SUMMARY_CONTEXT_TRUNCATION_SUFFIX = "\n[branch summary truncated for context budget]";
+const DEFAULT_SESSION_COMPACTION_TAIL_PROTECT_TOKENS = 40_000;
 
 function createSyntheticDefaultModelPreset(): BrewvaModelPreset {
   return {
@@ -549,14 +554,11 @@ export class BrewvaManagedSessionStore {
     summary: string;
   } {
     const branchEntries = this.getBranch(sourceLeafEntryId);
-    const keepable = branchEntries.filter(
-      (entry) =>
-        entry.type === "message" ||
-        entry.type === "custom_message" ||
-        entry.type === "branch_summary",
-    );
-    const firstKeptEntryId = keepable[Math.max(0, keepable.length - 2)]?.id;
-    if (!firstKeptEntryId) {
+    const cutPoint = selectBrewvaSessionCompactionCutPoint(branchEntries, {
+      tailProtectTokens: DEFAULT_SESSION_COMPACTION_TAIL_PROTECT_TOKENS,
+      estimateEntryTokens: estimateBrewvaSessionEntryTokens,
+    });
+    if (!cutPoint) {
       throw new Error("Hosted compaction requires at least one message entry to keep.");
     }
 
@@ -566,8 +568,11 @@ export class BrewvaManagedSessionStore {
       parentId: sourceLeafEntryId,
       timestamp: new Date().toISOString(),
       summary,
-      firstKeptEntryId,
+      firstKeptEntryId: cutPoint.firstKeptEntryId,
       tokensBefore,
+      details: {
+        cutPoint,
+      },
       fromHook: true,
     };
     const previewEntries = [...this.#entries, previewEntry];
@@ -577,7 +582,7 @@ export class BrewvaManagedSessionStore {
     return {
       compactId,
       sourceLeafEntryId,
-      firstKeptEntryId,
+      firstKeptEntryId: cutPoint.firstKeptEntryId,
       context: buildManagedSessionContext(previewEntries, previewEntry.id, previewIndex),
       tokensBefore,
       summary,

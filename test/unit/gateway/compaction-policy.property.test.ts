@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
+import { decideCompaction } from "@brewva/brewva-substrate/context-budget";
 import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-vocabulary/context";
 import fc from "fast-check";
-import { decideCompaction } from "../../../packages/brewva-gateway/src/hosted/internal/compaction/policy.js";
 import { propertyTest } from "../../helpers/property.js";
 
 const baseStatus: ContextStatus = {

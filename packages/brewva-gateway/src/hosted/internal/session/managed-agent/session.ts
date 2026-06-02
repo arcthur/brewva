@@ -16,6 +16,7 @@ import {
   buildBrewvaDeterministicCompactionSummary,
   estimateBrewvaCompactionTokens,
 } from "@brewva/brewva-substrate/compaction";
+import { decideCompaction } from "@brewva/brewva-substrate/context-budget";
 import {
   createBrewvaHostPluginRunner,
   type BrewvaHostCommandContext,
@@ -99,10 +100,10 @@ import {
   requestCompactionAndWait,
   shouldCompactForModelDownshift,
 } from "../../compaction/model-downshift-policy.js";
-import { decideCompaction } from "../../compaction/policy.js";
 import {
   createHostedLlmCompactionSummaryGenerator,
   DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
+  generateCompactionSummaryWithPromptTooLargeRetry,
   LLM_PRIMARY_COMPACTION_STRATEGY,
   normalizeCompactionSummaryForStorage,
   type BrewvaCompactionSummaryGenerator,
@@ -1728,13 +1729,16 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       if (!model) {
         throw new Error("compaction_summary_model_unavailable");
       }
-      const generated = await this.#compactionSummaryGenerator({
-        sessionId: input.sessionId,
-        cwd: this.#cwd,
-        model,
-        messages: input.messages,
-        systemPrompt: this.#agent.state.systemPrompt,
-        customInstructions: input.customInstructions,
+      const generated = await generateCompactionSummaryWithPromptTooLargeRetry({
+        input: {
+          sessionId: input.sessionId,
+          cwd: this.#cwd,
+          model,
+          messages: input.messages,
+          systemPrompt: this.#agent.state.systemPrompt,
+          customInstructions: input.customInstructions,
+        },
+        generate: this.#compactionSummaryGenerator,
       });
       return {
         summary: normalizeCompactionSummaryForStorage(generated.summary),

@@ -47,7 +47,10 @@ sets. The provenance records active workbench entry ids, selected skill
 invocation ids, surfaced resource refs, capability receipt refs, bounded used
 recall refs, consumed attention refs, pinned attention refs, ignored attention
 refs, verify-plan refs, compact baseline metadata, and
-`hiddenRecallSearch=false`.
+`hiddenRecallSearch=false`. The v2 provenance schema also carries structured
+file arrays for `readFiles`, `modifiedFiles`, `workbenchReferencedFiles`, and
+`recallFilesUsedInSummaryInput`; these arrays come from existing structured
+refs rather than shell-text parsing.
 Compaction does not run recall search behind the model.
 
 ## Deliberation And Semantic Extraction

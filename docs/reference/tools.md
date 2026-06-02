@@ -285,6 +285,16 @@ Tool count: 99.
 - `workflow_status`
 <!-- generated:tools-inventory end -->
 
+## Context Compaction Gate
+
+When the derived context budget state requires compaction, hosted tool access
+fails closed for non-critical tools with
+`context_compaction_gate_required`. `workbench_compact` remains available so the
+model can repair context pressure, alongside the minimal context-critical
+allowlist required for safe continuation. The gate is derived from
+`@brewva/brewva-substrate/context-budget`; managed tools cannot bypass it by
+declaring broader runtime capabilities.
+
 ## Runtime Contract
 
 `buildBrewvaTools()` builds the repo-owned default managed-tool bundle. Managed

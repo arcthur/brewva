@@ -206,8 +206,11 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
   output/growth headroom before ratio checks.
 - `dynamicTailTokens` (`number`, default `4800`) caps hosted dynamic-tail
   context blocks.
-- `predictedTurnGrowthTokens` (`number`, default `35000`) is the fixed
-  projected next-turn growth used by gate/advisory evaluation.
+- `predictedTurnGrowthTokens` (`number`, default `35000`) is the configured
+  floor for projected next-turn growth. Gate/advisory evaluation derives the
+  effective prediction from this floor plus model/provider observations,
+  request-local estimates, and recent growth EMA, clamped to the target model
+  window.
 - `providerCacheStalenessMs` (`number`, default `300000`) bounds how long
   provider-cache evidence is considered warm for request reduction policy.
 - `consequenceDigestMaxChars` (`number`, default `1200`) caps the

@@ -19,6 +19,36 @@ function trimCompactionSummaryLine(line: string, maxLineChars: number): string {
   return `${line.slice(0, maxLineChars - 1).trimEnd()}…`;
 }
 
+function isWorkbenchContinuityLine(line: string): boolean {
+  return (
+    line.startsWith("custom(workbench):") ||
+    line.startsWith("branchSummary:") ||
+    line.startsWith("compactionSummary:") ||
+    /\[Workbench\]/u.test(line)
+  );
+}
+
+function selectEmergencySummaryLines(summarized: readonly string[], maxLines: number): string[] {
+  const selected: string[] = [];
+  const seen = new Set<string>();
+  const continuity = summarized.toReversed().find(isWorkbenchContinuityLine);
+  if (continuity) {
+    selected.push(continuity);
+    seen.add(continuity);
+  }
+  for (const line of summarized.toReversed()) {
+    if (selected.length >= maxLines) {
+      break;
+    }
+    if (seen.has(line)) {
+      continue;
+    }
+    selected.push(line);
+    seen.add(line);
+  }
+  return selected.toReversed();
+}
+
 export function buildBrewvaDeterministicCompactionSummary(
   messages: readonly unknown[],
   options: BrewvaCompactionSummaryOptions = {},
@@ -28,9 +58,9 @@ export function buildBrewvaDeterministicCompactionSummary(
   const summarized = messages
     .map((message) => summarizeBrewvaCompactionMessage(message))
     .filter((line): line is string => typeof line === "string" && line.length > 0);
-  const selected = summarized
-    .slice(-maxLines)
-    .map((line) => trimCompactionSummaryLine(line, maxLineChars));
+  const selected = selectEmergencySummaryLines(summarized, maxLines).map((line) =>
+    trimCompactionSummaryLine(line, maxLineChars),
+  );
   const lines = [BREWVA_EMERGENCY_COMPACTION_SUMMARY_HEADER];
 
   if (selected.length === 0) {

@@ -62,6 +62,17 @@ export interface ContextEvidenceArtifactRef {
   absolutePath: string;
 }
 
+export type ContextEvidenceEconomicVerdictKind =
+  | "cache_regression"
+  | "unaccounted_break"
+  | "wasteful";
+
+export interface ContextEvidenceEconomicVerdict {
+  kind: ContextEvidenceEconomicVerdictKind;
+  reason: string;
+  metrics: Record<string, number | null>;
+}
+
 export interface ContextEvidenceSessionReport {
   sessionId: string;
   promptObservedTurns: number;
@@ -118,6 +129,7 @@ export interface ContextEvidenceSessionReport {
   latestProviderCacheBreakReason: string | null;
   latestProviderCacheUnexpectedBreak: boolean;
   latestProviderCacheChangedFields: string[];
+  economicVerdicts: ContextEvidenceEconomicVerdict[];
 }
 
 export interface ContextEvidenceAggregateReport {
@@ -175,6 +187,7 @@ export interface ContextEvidenceAggregateReport {
   providerCacheTtlExpiryBreakSessions: number;
   providerCacheBreakReasonCounts: Record<string, number>;
   providerCacheChangedFieldCounts: Record<string, number>;
+  economicVerdictCounts: Record<ContextEvidenceEconomicVerdictKind, number>;
 }
 
 export interface ContextEvidencePromotionReadiness {

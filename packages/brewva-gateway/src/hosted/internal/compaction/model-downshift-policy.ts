@@ -1,3 +1,4 @@
+import { decideCompaction } from "@brewva/brewva-substrate/context-budget";
 import type { BrewvaSessionModelDescriptor } from "@brewva/brewva-substrate/session";
 import type { BrewvaCompactionRequest } from "@brewva/brewva-substrate/tools";
 import {
@@ -5,7 +6,6 @@ import {
   getRuntimeContextUsage,
   type HostedRuntimeAdapterPort,
 } from "../session/runtime-ports.js";
-import { decideCompaction } from "./policy.js";
 
 export const MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS =
   "Compact before switching to a model with a smaller context window. Preserve the current objective, latest user correction, failed attempt, and next step.";

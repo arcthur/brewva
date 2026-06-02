@@ -1,48 +1,32 @@
+import { createContextBudgetRuntimeController } from "../runtime-ops-context-budget.js";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
-import type { RuntimeCompactionRequestInput } from "../runtime-ops-port.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 
 export function buildContextRuntimeOps(
   ctx: HostedRuntimeOpsContext,
 ): HostedRuntimeOpsPort["context"] {
+  const budget = createContextBudgetRuntimeController(ctx);
+
   return {
     usage: {
-      get: (): typeof ctx.emptyContextUsage | undefined => ctx.emptyContextUsage,
-      getStatus: () => ctx.emptyContextStatus,
-      getRatio: () => null,
-      observe: ctx.recordSessionPayload("context_usage_observed"),
+      get: (sessionId) => budget.getUsage(sessionId),
+      getStatus: (sessionId, usage) => budget.getStatus(sessionId, usage),
+      getRatio: (usage) => budget.getRatio(usage),
+      observe: (sessionId, payload) => budget.observe(sessionId, payload),
     },
     compaction: {
-      getGateStatus: () => ctx.emptyCompactionGateStatus,
-      getPendingReason: () => null,
-      getInstructions: () => "",
-      getHardLimitRatio: () => ctx.emptyContextStatus.hardLimitRatio ?? 1,
-      getThresholdRatio: () => ctx.emptyContextStatus.compactionThresholdRatio ?? 1,
-      resolveEligibility: () => ({
-        eligible: false,
-        reason: "disabled",
-        decision: "skip",
-      }),
-      getWindowTurns: () => 0,
-      rememberDeferredReason(sessionId, reason) {
-        return ctx.emit(sessionId, "context_compaction_deferred", { reason });
-      },
-      checkGate: () => ctx.emptyCompactionGateStatus,
-      request(sessionId, inputValue?: RuntimeCompactionRequestInput) {
-        const payload =
-          typeof inputValue === "string"
-            ? { reason: inputValue }
-            : inputValue && typeof inputValue === "object"
-              ? inputValue
-              : {};
-        return ctx.emit(sessionId, "checkpoint.committed", payload);
-      },
-      checkAndRequest: () => ({
-        requested: false,
-        required: false,
-        reason: "not_required",
-        status: ctx.emptyContextStatus,
-      }),
+      getGateStatus: (sessionId, usage) => budget.getGateStatus(sessionId, usage),
+      getPendingReason: (sessionId) => budget.getPendingReason(sessionId),
+      getInstructions: () => budget.getInstructions(),
+      getHardLimitRatio: (sessionId, usage) => budget.getHardLimitRatio(sessionId, usage),
+      getThresholdRatio: (sessionId, usage) => budget.getThresholdRatio(sessionId, usage),
+      resolveEligibility: (input) => budget.resolveEligibility(input),
+      getWindowTurns: () => budget.getWindowTurns(),
+      rememberDeferredReason: (sessionId, reason) =>
+        budget.rememberDeferredReason(sessionId, reason),
+      checkGate: (sessionId, toolName, usage) => budget.checkGate(sessionId, toolName, usage),
+      request: (sessionId, inputValue) => budget.request(sessionId, inputValue),
+      checkAndRequest: (sessionId, inputValue) => budget.checkAndRequest(sessionId, inputValue),
     },
     evidence: {
       latest(sessionId, kind) {
@@ -76,10 +60,7 @@ export function buildContextRuntimeOps(
     sanitizeInput: (text: string) => text,
     lifecycle: {
       onUserInput: ctx.recordSessionPayload("context_user_input"),
-      onTurnStart(sessionId) {
-        ctx.clearStallIfProgressResumed(sessionId);
-        return ctx.emit(sessionId, "turn.started", {});
-      },
+      onTurnStart: (sessionId, turn) => budget.onTurnStart(sessionId, turn),
       onTurnEnd: ctx.recordSessionPayload("turn.ended"),
     },
     telemetry: {
@@ -90,7 +71,18 @@ export function buildContextRuntimeOps(
       compactionSkipped: ctx.recordInputPayload("context.compaction.skipped"),
       contextComposed: ctx.recordInputPayload("context.composed"),
       criticalWithoutCompact: ctx.recordInputPayload("context.critical_without_compact"),
-      gateCleared: ctx.recordInputPayload("context.compaction.gate.cleared"),
+      gateCleared(inputValue) {
+        const { sessionId, timestamp, turn, payload, ...rest } = inputValue;
+        const resolvedSessionId = typeof sessionId === "string" ? sessionId : "default";
+        ctx.state.pendingContextCompactionReasons.delete(resolvedSessionId);
+        ctx.state.latestCompactionGateStatus.delete(resolvedSessionId);
+        const eventPayload =
+          payload && typeof payload === "object" && !Array.isArray(payload) ? payload : rest;
+        return ctx.emit(resolvedSessionId, "context.compaction.gate.cleared", eventPayload, {
+          timestamp: typeof timestamp === "number" ? timestamp : undefined,
+          turn: typeof turn === "number" ? turn : undefined,
+        });
+      },
       hardGateRequired: ctx.recordInputPayload("context.compaction.gate.armed"),
       sessionCompact: ctx.recordInputPayload("session.compact"),
     },

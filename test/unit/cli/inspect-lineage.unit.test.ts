@@ -9,8 +9,10 @@ import {
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   buildContextCockpitReport,
+  buildInspectCompactionProjection,
   buildInspectReport,
   buildTaskWorkCardProjection,
+  formatInspectCompactionText,
   formatInspectDiagnosticText,
   formatInspectText,
   formatTaskWorkCardText,
@@ -127,10 +129,18 @@ describe("cli inspect lineage reporting", () => {
       },
     });
     runtime.ops.session.compaction.commit(sessionId, {
+      compactId: "compact-0",
+      summaryDigest: "summary-digest-0",
+      firstKeptEntryId: "entry-0",
+      fromTokens: 1000,
+      toTokens: 500,
+      origin: "hosted_recovery",
+    });
+    runtime.ops.session.compaction.commit(sessionId, {
       compactId: "compact-1",
       summaryDigest: "summary-digest",
       inputProvenance: {
-        schema: "brewva.compaction.input-provenance.v1",
+        schema: "brewva.compaction.input-provenance.v2",
         hiddenRecallSearch: false,
         activeWorkbenchEntryIds: ["workbench-1"],
         selectedSkillInvocationIds: ["skill-selection-1:architecture"],
@@ -144,6 +154,10 @@ describe("cli inspect lineage reporting", () => {
             rootRef: runtime.identity.workspaceRoot,
           },
         ],
+        readFiles: ["docs/solutions/runtime.md", "references/design.md"],
+        modifiedFiles: [],
+        workbenchReferencedFiles: ["docs/solutions/runtime.md"],
+        recallFilesUsedInSummaryInput: ["docs/solutions/runtime.md"],
         compactBaseline: null,
         usedRecallSelection: {
           maxResults: 1,
@@ -160,6 +174,8 @@ describe("cli inspect lineage reporting", () => {
     const cockpit = buildContextCockpitReport(runtime, sessionId);
     const report = buildInspectReport(runtime, sessionId);
     const text = formatInspectDiagnosticText(report);
+    const compactionText = formatInspectCompactionText(report);
+    const compactionProjection = buildInspectCompactionProjection(report);
     const workCard = buildTaskWorkCardProjection(report);
     const workCardText = formatInspectText(report);
     const afterEventCount = runtime.ops.events.records.query(sessionId).length;
@@ -189,9 +205,24 @@ describe("cli inspect lineage reporting", () => {
     expect(text).toContain("Context cockpit capabilities: receipts=capability-selection-1");
     expect(text).toContain("Context cockpit recall: results=precedent:docs/solutions/runtime.md");
     expect(text).toContain(
-      "Context cockpit compaction: baseline=compact-1 provenance=brewva.compaction.input-provenance.v1:hiddenRecallSearch=false:attention=0/0/0/0",
+      "Context cockpit compaction: baseline=compact-1 provenance=brewva.compaction.input-provenance.v2:hiddenRecallSearch=false:attention=0/0/0/0",
     );
     expect(text).toContain("Context cockpit cache: status=warm read=42 write=0");
+    expect(compactionText).toContain(
+      "Compaction provenance: schema=brewva.compaction.input-provenance.v2",
+    );
+    expect(compactionText).toContain("readFiles=docs/solutions/runtime.md,references/design.md");
+    expect(compactionText).toContain("Compaction timeline: events=2");
+    expect(compactionText).toContain("Compaction latest: compact=compact-1");
+    expect(compactionProjection.timeline).toHaveLength(2);
+    expect(compactionProjection.timeline.map((entry) => entry.compactId)).toEqual([
+      "compact-0",
+      "compact-1",
+    ]);
+    expect(compactionProjection.latestProvenance?.readFiles).toEqual([
+      "docs/solutions/runtime.md",
+      "references/design.md",
+    ]);
   });
 
   test("prints delegation workboard, timeline, and recovery preview", () => {
