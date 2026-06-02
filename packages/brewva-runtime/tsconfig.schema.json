@@ -1,11 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "rootDir": "..",
     "outDir": "dist",
     "composite": false,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "baseUrl": ".",
+    "paths": {
+      "@brewva/brewva-std/*": ["../brewva-std/src/*.ts"],
+      "@brewva/brewva-token-estimation": ["../brewva-token-estimation/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts"]
 }
