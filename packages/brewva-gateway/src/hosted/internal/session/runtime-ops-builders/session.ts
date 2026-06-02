@@ -1,4 +1,5 @@
 import type { WorkerMergeReport } from "@brewva/brewva-vocabulary/delegation";
+import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   TASK_STALL_ADJUDICATED_EVENT_TYPE,
@@ -115,10 +116,8 @@ export function buildSessionRuntimeOps(
     },
     lineage: {
       getNode(sessionId, lineageNodeId) {
-        return (
-          lineageTreeFor(ctx, sessionId).nodes.find(
-            (node) => node.lineageNodeId === lineageNodeId,
-          ) ?? undefined
+        return lineageTreeFor(ctx, sessionId).nodes.find(
+          (node) => node.lineageNodeId === lineageNodeId,
         );
       },
       getTree: (sessionId) => lineageTreeFor(ctx, sessionId),
@@ -161,7 +160,7 @@ export function buildSessionRuntimeOps(
     },
     compaction: {
       commit(sessionId, payload) {
-        return ctx.emit(sessionId, "session.compaction.committed", payload);
+        return ctx.emit(sessionId, RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND, payload);
       },
     },
     mcp: {

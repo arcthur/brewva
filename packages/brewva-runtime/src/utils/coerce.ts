@@ -1,17 +1,9 @@
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+import { normalizeStringList } from "@brewva/brewva-std/text";
 
-export function normalizeNonEmptyString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
+export { readNonEmptyString as normalizeNonEmptyString } from "@brewva/brewva-std/text";
+export { isRecord } from "@brewva/brewva-std/unknown";
 
 export function normalizeStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const items = value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter((item) => item.length > 0);
+  const items = normalizeStringList(value);
   return items.length > 0 ? items : undefined;
 }

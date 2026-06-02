@@ -21,6 +21,7 @@ export {
   STEER_QUEUED_EVENT_TYPE,
   TURN_ENVELOPE_SCHEMA,
 } from "./internal/wire.js";
+export { validateSessionWireFramePayload } from "./internal/wire-validation.js";
 
 export type {
   AdapterSendResult,

@@ -1,4 +1,8 @@
-import type { TurnEnvelope, TurnPart } from "@brewva/brewva-vocabulary/wire";
+import {
+  TURN_ENVELOPE_SCHEMA,
+  type TurnEnvelope,
+  type TurnPart,
+} from "@brewva/brewva-vocabulary/wire";
 
 export type BuildTurnEnvelopeInput = Partial<TurnEnvelope> & {
   readonly channelId?: string;
@@ -17,7 +21,7 @@ function normalizeTurnParts(parts: readonly TurnPart[] | string | undefined): re
 
 export function buildTurnEnvelope(input: BuildTurnEnvelopeInput): TurnEnvelope {
   const envelope = {
-    schema: "brewva.turn.v1",
+    schema: TURN_ENVELOPE_SCHEMA,
     channel: input.channel ?? input.channelId ?? "",
     conversationId: input.conversationId ?? "",
     sessionId: input.sessionId ?? "",

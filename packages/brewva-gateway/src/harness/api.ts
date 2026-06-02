@@ -9,6 +9,7 @@ import type {
   TurnFrame,
 } from "@brewva/brewva-runtime";
 import { createActionPolicyRegistry, resolveToolAuthority } from "@brewva/brewva-runtime/security";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   HARNESS_EVAL_REPORT_SCHEMA,
   HARNESS_TRACE_SNAPSHOT_SCHEMA,
@@ -460,8 +461,4 @@ function observeExecutionFrame(counters: ExecutionFrameCounters, frame: TurnFram
 function classifyExecutionError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replaceAll(/[^a-zA-Z0-9_.:-]+/gu, "_").slice(0, 120) || "unknown";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -1,3 +1,5 @@
+import { stableJsonStringify } from "@brewva/brewva-std/json";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   AbortToolCallInput,
   AdvisoryEventInput,
@@ -267,27 +269,7 @@ function resolveBlockAdmission(input: {
 
 function readPayload(event: CanonicalEvent): Record<string, unknown> {
   const payload = event.payload;
-  return typeof payload === "object" && payload !== null && !Array.isArray(payload)
-    ? (payload as Record<string, unknown>)
-    : {};
-}
-
-function stableValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(stableValue);
-  }
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .toSorted(([left], [right]) => left.localeCompare(right))
-        .map(([key, entry]) => [key, stableValue(entry)]),
-    );
-  }
-  return value;
-}
-
-function stableJson(value: unknown): string {
-  return JSON.stringify(stableValue(value));
+  return isRecord(payload) ? payload : {};
 }
 
 function requireNonEmptyText(value: string, field: string): string {
@@ -313,7 +295,7 @@ function sameToolCall(left: ToolCallProposal, right: ToolCallProposal): boolean 
     left.cwd === right.cwd &&
     left.approval?.required === right.approval?.required &&
     left.approval?.reason === right.approval?.reason &&
-    stableJson(left.args ?? {}) === stableJson(right.args ?? {})
+    stableJsonStringify(left.args ?? {}) === stableJsonStringify(right.args ?? {})
   );
 }
 
@@ -321,12 +303,7 @@ function readCommitmentFromEvent(event: CanonicalEvent): ToolCommitment | null {
   const payload = readPayload(event);
   const commitmentId = payload.commitmentId;
   const call = payload.call;
-  if (
-    typeof commitmentId !== "string" ||
-    typeof call !== "object" ||
-    call === null ||
-    Array.isArray(call)
-  ) {
+  if (typeof commitmentId !== "string" || !isRecord(call)) {
     return null;
   }
   const candidate = call as Partial<ToolCallProposal>;

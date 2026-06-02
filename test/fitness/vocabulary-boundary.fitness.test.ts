@@ -1,14 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import type {
+  ProviderCacheCapability as ProviderCoreCacheCapability,
+  ProviderCacheRenderResult as ProviderCoreCacheRenderResult,
+} from "@brewva/brewva-provider-core/contracts";
+import type {
+  ProviderCacheCapability as VocabularyProviderCacheCapability,
+  ProviderCacheRenderState as VocabularyProviderCacheRenderState,
+} from "@brewva/brewva-vocabulary/context";
 
 const repoRoot = resolve(import.meta.dir, "../..");
 const requiredVocabularySubpaths = [
   "./context",
   "./delegation",
   "./events",
+  "./goal",
   "./harness",
   "./iteration",
+  "./outcome",
   "./schedule",
   "./session",
   "./task",
@@ -27,10 +37,26 @@ const requiredVocabularyInternalModules = [
   "skills",
   "task",
   "wire",
+  "wire-validation",
   "workbench",
 ] as const;
 const vocabularyInternalLineBudget = 800;
 const allowedVocabularyBrewvaDeps = ["@brewva/brewva-std"] as const;
+
+type Extends<Left, Right> = [Left] extends [Right] ? true : false;
+type Assert<T extends true> = T;
+type _ProviderCacheCapabilityBridge = Assert<
+  Extends<ProviderCoreCacheCapability, VocabularyProviderCacheCapability>
+>;
+type _VocabularyProviderCacheCapabilityBridge = Assert<
+  Extends<VocabularyProviderCacheCapability, ProviderCoreCacheCapability>
+>;
+type _ProviderCacheRenderBridge = Assert<
+  Extends<ProviderCoreCacheRenderResult, VocabularyProviderCacheRenderState>
+>;
+type _VocabularyProviderCacheRenderBridge = Assert<
+  Extends<VocabularyProviderCacheRenderState, ProviderCoreCacheRenderResult>
+>;
 
 function readRepoFile(path: string): string {
   return readFileSync(resolve(repoRoot, path), "utf8");
@@ -91,6 +117,11 @@ describe("vocabulary boundary fitness", () => {
     for (const subpath of requiredVocabularySubpaths) {
       expect(Object.hasOwn(packageJson.exports ?? {}, subpath), subpath).toBe(true);
     }
+    expect(
+      Object.keys(packageJson.exports ?? {})
+        .filter((subpath) => subpath !== ".")
+        .toSorted(),
+    ).toEqual([...requiredVocabularySubpaths].toSorted());
 
     const brewvaDeps = Object.keys(packageJson.dependencies ?? {}).filter((name) =>
       name.startsWith("@brewva/"),
@@ -203,6 +234,130 @@ describe("vocabulary boundary fitness", () => {
         }),
       )
       .toSorted();
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("consumer aliases reuse vocabulary unions instead of copying product literals", () => {
+    const offenders: string[] = [];
+    const checks: readonly { path: string; pattern: RegExp; message: string }[] = [
+      {
+        path: "packages/brewva-tools/src/contracts/subagent.ts",
+        pattern: /export\s+type\s+SubagentResultMode\s*=\s*["']/u,
+        message: "SubagentResultMode must alias DelegationResultMode",
+      },
+      {
+        path: "packages/brewva-tools/src/utils/result.ts",
+        pattern:
+          /export\s+type\s+ToolTextOutcomeKind\s*=\s*["']ok["']\s*\|\s*["']err["']\s*\|\s*["']inconclusive["']/u,
+        message: "ToolTextOutcomeKind must alias BrewvaOutcomeKind",
+      },
+      {
+        path: "packages/brewva-acp-adapter/src/index.ts",
+        pattern: /managedToolMode\?:\s*["']hosted["']\s*\|\s*["']direct["']/u,
+        message: "AcpGatewayStdioOptions.managedToolMode must use ManagedToolMode",
+      },
+      {
+        path: "packages/brewva-cli/src/operator/inspect/report.ts",
+        pattern: /managedToolMode(?:\?)?:\s*["']hosted["']\s*\|\s*["']direct["']/u,
+        message: "inspect bootstrap managedToolMode must use ManagedToolMode",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/session/tools/tool-output-display.ts",
+        pattern:
+          /export\s+type\s+ToolDisplayVerdict\s*=\s*["']pass["']\s*\|\s*["']fail["']\s*\|\s*["']inconclusive["']/u,
+        message: "ToolDisplayVerdict must alias OutcomeVerdict",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/context/evidence/ledger-writer.ts",
+        pattern:
+          /type\s+ToolOutcomeVerdict\s*=\s*["']pass["']\s*\|\s*["']fail["']\s*\|\s*["']inconclusive["']/u,
+        message: "ToolOutcomeVerdict must alias OutcomeVerdict",
+      },
+      {
+        path: "packages/brewva-gateway/src/protocol/turn-envelope.ts",
+        pattern: /schema:\s*["']brewva\.turn\.v1["']/u,
+        message: "turn envelope schema must use TURN_ENVELOPE_SCHEMA",
+      },
+    ];
+
+    for (const check of checks) {
+      if (check.pattern.test(readRepoFile(check.path))) {
+        offenders.push(`${check.path}: ${check.message}`);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("closed vocabulary arrays derive their public union types", () => {
+    const delegation = readRepoFile("packages/brewva-vocabulary/src/internal/delegation.ts");
+
+    expect(delegation).not.toMatch(/export\s+type\s+ReviewLaneName\s*=\s*string/u);
+    expect(delegation).toMatch(
+      /export\s+type\s+ReviewLaneName\s*=\s*\(?typeof\s+REVIEW_LANE_NAMES\)?\[number\]/u,
+    );
+  });
+
+  test("runtime ops event aliases stay documented in vocabulary instead of naked consumer strings", () => {
+    const publicEvents = readRepoFile("packages/brewva-vocabulary/src/events.ts");
+    const internalEvents = readRepoFile("packages/brewva-vocabulary/src/internal/events.ts");
+
+    expect(publicEvents).toContain("RUNTIME_OPS_EVENT_NAMESPACE");
+    expect(publicEvents).toContain("RUNTIME_OPS_TO_TAPE_EVENT_TYPE");
+    expect(internalEvents).toContain("reasoning_checkpoint_recorded");
+    expect(internalEvents).toContain("session.compaction.committed");
+
+    const offenders: string[] = [];
+    const checks: readonly { path: string; pattern: RegExp; message: string }[] = [
+      {
+        path: "packages/brewva-tools/src/runtime-port/four-port/types.ts",
+        pattern: /\["runtime\.ops"\]/u,
+        message: "runtime ops namespace must come from vocabulary events",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/reasoning.ts",
+        pattern: /"reasoning_(?:checkpoint|revert)_recorded"/u,
+        message: "reasoning ops kinds must come from vocabulary events",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/session.ts",
+        pattern: /"session\.compaction\.committed"/u,
+        message: "session compaction ops kind must come from vocabulary events",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/tools.ts",
+        pattern:
+          /"tool\.(?:invocation\.(?:started|finished)|result\.recorded)"|"tool_call_observed"/u,
+        message: "tool ops kinds must come from vocabulary events",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.ts",
+        pattern: /"tool\.(?:invocation\.started|result\.recorded)"|"tool_call_observed"/u,
+        message: "recall usage event types must reuse vocabulary ops constants",
+      },
+      {
+        path: "packages/brewva-cli/src/operator/inspect/context-cockpit.ts",
+        pattern: /"session\.compaction\.committed"/u,
+        message: "CLI context cockpit must query the vocabulary-owned ops kind",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.ts",
+        pattern: /"session\.compaction\.committed"/u,
+        message: "context evidence must query the vocabulary-owned ops kind",
+      },
+      {
+        path: "packages/brewva-session-index/src/projection/delegation.ts",
+        pattern: /"tool_call_ended"/u,
+        message: "session delegation projection must query the vocabulary-owned ops kind",
+      },
+    ];
+
+    for (const check of checks) {
+      if (check.pattern.test(readRepoFile(check.path))) {
+        offenders.push(`${check.path}: ${check.message}`);
+      }
+    }
 
     expect(offenders).toEqual([]);
   });

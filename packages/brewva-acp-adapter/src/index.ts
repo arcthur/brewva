@@ -25,7 +25,9 @@ import {
   type GatewayMethod,
   type GatewayParamsByMethod,
 } from "@brewva/brewva-gateway/protocol";
-import { toErrorMessage } from "@brewva/brewva-std/unknown";
+import { readNonEmptyString } from "@brewva/brewva-std/text";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
+import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 
 type SessionsAbortParams = GatewayParamsByMethod["sessions.abort"];
@@ -112,7 +114,7 @@ export interface AcpGatewayStdioOptions {
   readonly configPath?: string;
   readonly model?: string;
   readonly agentId?: string;
-  readonly managedToolMode?: "hosted" | "direct";
+  readonly managedToolMode?: ManagedToolMode;
   readonly env?: Record<string, string | undefined>;
   readonly connectTimeoutMs?: number;
   readonly requestTimeoutMs?: number;
@@ -137,16 +139,6 @@ const DEFAULT_AGENT_VERSION = "0.1.0";
 const DEFAULT_PROMPT_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 5 * 60_000;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readNonEmptyString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
 
 function requireNonEmptyString(value: unknown, label: string): string {
   const normalized = readNonEmptyString(value);

@@ -6,7 +6,7 @@ export {
   isSupportedToolOutcomeVersion,
   type SupportedToolOutcomeVersion,
 } from "@brewva/brewva-std/tool-outcome-version";
-import type { BrewvaOutcome } from "@brewva/brewva-vocabulary/outcome";
+import type { BrewvaOutcome, OutcomeVerdict } from "@brewva/brewva-vocabulary/outcome";
 import { outcomeIsError, outcomeVerdict } from "@brewva/brewva-vocabulary/outcome";
 import { Type, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
@@ -44,7 +44,7 @@ export function outcomeIsWireError(outcome: BrewvaOutcome): boolean {
   return outcomeIsError(outcome);
 }
 
-export function outcomeDisplayVerdict(outcome: BrewvaOutcome): "pass" | "fail" | "inconclusive" {
+export function outcomeDisplayVerdict(outcome: BrewvaOutcome): OutcomeVerdict {
   return outcomeVerdict(outcome);
 }
 

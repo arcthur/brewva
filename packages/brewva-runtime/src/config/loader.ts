@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { DEFAULT_BREWVA_CONFIG } from "./defaults.js";
 import type { BrewvaConfig } from "./types.js";
 export {
@@ -45,10 +46,6 @@ export interface BrewvaConfigResolution {
 export interface BrewvaForensicConfigResolution extends BrewvaConfigResolution {
   consultedPaths: string[];
   warnings: BrewvaForensicConfigWarning[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function createDefaultBrewvaConfigMetadata(): BrewvaConfigMetadata {

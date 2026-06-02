@@ -149,6 +149,19 @@ describe("brewva std utility boundary", () => {
     expect(offenders).toEqual([]);
   });
 
+  test("production packages reuse std isRecord", () => {
+    const offenders = listFiles("packages")
+      .filter((path) => path.endsWith(".ts"))
+      .filter((path) => !path.startsWith("packages/brewva-std/"))
+      .filter((path) =>
+        /\b(?:export\s+)?function\s+isRecord\s*\(|\b(?:export\s+)?const\s+isRecord\s*=/u.test(
+          readRepoFile(path),
+        ),
+      );
+
+    expect(offenders).toEqual([]);
+  });
+
   test("generic production SHA-256 hashing stays behind std", () => {
     const allowedLocalSha256Files = new Set([
       "packages/brewva-runtime/src/credentials/credential-vault.ts",
@@ -164,6 +177,155 @@ describe("brewva std utility boundary", () => {
         offenders.push(`${file} -> ${match[0]}`);
       }
     }
+    expect(offenders).toEqual([]);
+  });
+
+  test("known production leaf readers use std text and unknown primitives", () => {
+    const offenders: string[] = [];
+    const checks: readonly { path: string; pattern: RegExp; message: string }[] = [
+      {
+        path: "packages/brewva-acp-adapter/src/index.ts",
+        pattern: /function\s+isRecord\s*\(/u,
+        message: "use @brewva/brewva-std/unknown isRecord",
+      },
+      {
+        path: "packages/brewva-acp-adapter/src/index.ts",
+        pattern: /function\s+readNonEmptyString\s*\(/u,
+        message: "use @brewva/brewva-std/text readNonEmptyString",
+      },
+      {
+        path: "packages/brewva-recall/src/knowledge/search.ts",
+        pattern: /function\s+readTrimmedString\s*\(/u,
+        message: "use package std-backed text helper",
+      },
+      {
+        path: "packages/brewva-recall/src/knowledge/search.ts",
+        pattern: /function\s+compactWhitespace\s*\(/u,
+        message: "use package std-backed text helper",
+      },
+      {
+        path: "packages/brewva-runtime/src/utils/coerce.ts",
+        pattern: /function\s+isRecord\s*\(/u,
+        message: "re-export @brewva/brewva-std/unknown isRecord",
+      },
+      {
+        path: "packages/brewva-runtime/src/utils/coerce.ts",
+        pattern: /function\s+normalizeNonEmptyString\s*\(/u,
+        message: "re-export @brewva/brewva-std/text readNonEmptyString",
+      },
+      {
+        path: "packages/brewva-recall/src/broker/runtime-port.ts",
+        pattern: /function\s+isRecord\s*\(/u,
+        message: "re-export @brewva/brewva-std/unknown isRecord",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.ts",
+        pattern: /function\s+isRecord\s*\(/u,
+        message: "use @brewva/brewva-std/unknown isRecord",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.ts",
+        pattern: /function\s+readString\s*\(/u,
+        message: "use @brewva/brewva-std/text readers",
+      },
+      {
+        path: "packages/brewva-substrate/src/persistence/session-bundle.ts",
+        pattern: /function\s+isRecord\s*\(/u,
+        message: "use @brewva/brewva-std/unknown isRecord",
+      },
+      {
+        path: "packages/brewva-substrate/src/persistence/session-bundle.ts",
+        pattern: /function\s+readNonEmptyString\s*\(/u,
+        message: "use @brewva/brewva-std/text readNonEmptyString",
+      },
+      {
+        path: "packages/brewva-provider-core/src/providers/openai-codex-responses/request.ts",
+        pattern: /function\s+readNonEmptyString\s*\(/u,
+        message: "use @brewva/brewva-std/text readNonEmptyString",
+      },
+      {
+        path: "packages/brewva-tools/src/families/memory/knowledge-capture.ts",
+        pattern: /function\s+readTrimmedString\s*\(/u,
+        message: "use @brewva/brewva-std/unknown readTrimmedString",
+      },
+      {
+        path: "packages/brewva-tools/src/families/memory/precedent-audit/support.ts",
+        pattern: /function\s+readTrimmedString\s*\(/u,
+        message: "re-export @brewva/brewva-std/unknown readTrimmedString",
+      },
+      {
+        path: "packages/brewva-tools/src/families/memory/workbench.ts",
+        pattern: /function\s+readNonEmptyString\s*\(/u,
+        message: "use @brewva/brewva-std/text readNonEmptyString",
+      },
+      {
+        path: "packages/brewva-tools/src/families/memory/attention-options.ts",
+        pattern: /function\s+readNonEmptyString\s*\(/u,
+        message: "use @brewva/brewva-std/text readNonEmptyString",
+      },
+      {
+        path: "packages/brewva-runtime/src/runtime/kernel/impl.ts",
+        pattern: /function\s+stableValue\s*\(|function\s+stableJson\s*\(/u,
+        message: "use @brewva/brewva-std/json stableJsonStringify",
+      },
+      {
+        path: "packages/brewva-runtime/src/runtime/kernel/impl.ts",
+        pattern: /typeof\s+(?:payload|call)\s+[!=]==\s+["']object["']/u,
+        message: "use @brewva/brewva-std/unknown isRecord for kernel payload records",
+      },
+      {
+        path: "packages/brewva-runtime/src/runtime/tape/impl.ts",
+        pattern: /payload\s+&&\s+typeof\s+payload\s+===\s+["']object["']/u,
+        message: "use @brewva/brewva-std/unknown isRecord for tape payload records",
+      },
+      {
+        path: "packages/brewva-tools/src/utils/result.ts",
+        pattern: /typeof\s+normalized\s+===\s+["']object["']/u,
+        message: "use @brewva/brewva-std/unknown isRecord for normalized JSON records",
+      },
+      {
+        path: "packages/brewva-tools/src/families/memory/attention-options.ts",
+        pattern: /typeof\s+value\s+===\s+["']object["']\s+&&\s+!Array\.isArray\(value\)/u,
+        message: "use @brewva/brewva-std/unknown isRecord for memory attention records",
+      },
+      {
+        path: "packages/brewva-vocabulary/src/internal/skills.ts",
+        pattern: /function\s+readYamlFrontmatter\s*\(|\/\^---/u,
+        message: "use @brewva/brewva-std/markdown parseMarkdownFrontmatter",
+      },
+      {
+        path: "packages/brewva-cli/src/io/skills-migrate.ts",
+        pattern: /parse\s+as\s+parseYaml|\/\^---\\n/u,
+        message: "use @brewva/brewva-std/markdown parseMarkdownFrontmatter",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/session/managed-agent/prompt-content.ts",
+        pattern: /replace\(\s*\/\^---|\/\^---/u,
+        message: "use @brewva/brewva-std/markdown parseMarkdownFrontmatter",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/context/evidence/ledger-writer.ts",
+        pattern: /typeof\s+(?:input|raw|value|result)\s+[!=]==\s+["']object["']/u,
+        message: "use @brewva/brewva-std/unknown isRecord for ledger record guards",
+      },
+      {
+        path: "packages/brewva-gateway/src/hosted/internal/session/tools/tool-output-display.ts",
+        pattern: /typeof\s+(?:result|outcome|display|item)\s+[!=]==\s+["']object["']/u,
+        message: "use @brewva/brewva-std/unknown isRecord for tool display record guards",
+      },
+      {
+        path: "packages/brewva-substrate/src/persistence/session-bundle.ts",
+        pattern: /typeof\s+input\s+[!=]==\s+["']object["']/u,
+        message: "use @brewva/brewva-std/unknown isRecord for session bundle manifests",
+      },
+    ];
+
+    for (const check of checks) {
+      if (check.pattern.test(readRepoFile(check.path))) {
+        offenders.push(`${check.path}: ${check.message}`);
+      }
+    }
+
     expect(offenders).toEqual([]);
   });
 });

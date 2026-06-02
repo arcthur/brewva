@@ -61,7 +61,7 @@ export const REVIEW_CHANGE_CATEGORIES: readonly string[] = [
   "storage_churn",
 ];
 
-export const REVIEW_LANE_NAMES: readonly string[] = [
+export const REVIEW_LANE_NAMES = [
   "review-correctness",
   "review-boundaries",
   "review-operability",
@@ -69,7 +69,9 @@ export const REVIEW_LANE_NAMES: readonly string[] = [
   "review-concurrency",
   "review-compatibility",
   "review-performance",
-];
+] as const;
+
+export type ReviewLaneName = (typeof REVIEW_LANE_NAMES)[number];
 
 export type DelegationRunStatus =
   | "pending"
@@ -420,8 +422,6 @@ export function evaluateDelegationAdoption(input: ProtocolRecord): DelegationAdo
   return Object.freeze({ adopt: true, ...input });
 }
 
-export type ReviewLaneName = string;
-
 export type ReviewPrecedentConsultStatus = string;
 
 export interface ReviewReportArtifact extends ProtocolRecord {}
@@ -432,8 +432,14 @@ export interface DesignImplementationTarget extends ProtocolRecord {}
 
 export interface DesignRiskItem extends ProtocolRecord {}
 
-export function normalizeReviewLaneName(value: unknown): string {
-  return typeof value === "string" ? value.trim().toLowerCase() : "general";
+export function normalizeReviewLaneName(value: unknown): ReviewLaneName | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  return (REVIEW_LANE_NAMES as readonly string[]).includes(normalized)
+    ? (normalized as ReviewLaneName)
+    : undefined;
 }
 
 export function deriveParallelBudgetStateFromEvents(

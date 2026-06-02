@@ -1,3 +1,7 @@
+import {
+  RUNTIME_OPS_REASONING_CHECKPOINT_RECORDED_KIND,
+  RUNTIME_OPS_REASONING_REVERT_RECORDED_KIND,
+} from "@brewva/brewva-vocabulary/events";
 import type {
   ActiveReasoningBranchState,
   ReasoningCheckpointRecord,
@@ -15,7 +19,7 @@ export function buildReasoningRuntimeOps(
       list: () => [],
       record(sessionId, input) {
         const record = makeReasoningCheckpointRecord(input);
-        ctx.emit(sessionId, "reasoning_checkpoint_recorded", record);
+        ctx.emit(sessionId, RUNTIME_OPS_REASONING_CHECKPOINT_RECORDED_KIND, record);
         return record;
       },
     },
@@ -24,7 +28,7 @@ export function buildReasoningRuntimeOps(
       list: () => [],
       revert(sessionId, input) {
         const record = makeReasoningRevertRecord(input);
-        ctx.emit(sessionId, "reasoning_revert_recorded", record);
+        ctx.emit(sessionId, RUNTIME_OPS_REASONING_REVERT_RECORDED_KIND, record);
         return record;
       },
     },

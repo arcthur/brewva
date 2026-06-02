@@ -2,6 +2,12 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
 import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
+import {
+  compactWhitespace,
+  normalizeStringList as readStringArray,
+  readNonEmptyString as readTrimmedString,
+  truncateText,
+} from "@brewva/brewva-std/text";
 import Fuse from "fuse.js";
 import type { FuseResultMatch } from "fuse.js";
 
@@ -132,32 +138,13 @@ interface RankedKnowledgeDoc extends ScoredKnowledgeDoc {
   filterBoost: number;
 }
 
-function readTrimmedString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => readTrimmedString(entry))
-    .filter((entry): entry is string => typeof entry === "string");
-}
-
 function extractHeadingTitle(body: string): string | undefined {
   const match = /^#\s+(.+)$/m.exec(body);
   return readTrimmedString(match?.[1]);
 }
 
-function compactWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
 function truncate(value: string, maxChars: number): string {
-  const compacted = compactWhitespace(value);
-  if (compacted.length <= maxChars) return compacted;
-  return `${compacted.slice(0, Math.max(1, maxChars - 3))}...`;
+  return truncateText(compactWhitespace(value), maxChars, { marker: "..." });
 }
 
 function readUpdatedAt(data: Record<string, unknown>): string | undefined {

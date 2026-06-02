@@ -23,6 +23,7 @@ import {
 } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId, asBrewvaWalId } from "@brewva/brewva-runtime/core";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 import { FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES } from "@brewva/brewva-tools/runtime-port";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
@@ -94,16 +95,12 @@ const DEFAULT_RECOVERY_WAL_COMPACT_INTERVAL_MS = 120_000;
 
 type LoggerLike = Pick<StructuredLogger, "debug" | "info" | "warn" | "error" | "log">;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
 function isContextStatusView(value: unknown): value is ContextStatusView {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return false;
   }
   const candidate = value as Partial<ContextStatusView>;

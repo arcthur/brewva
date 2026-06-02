@@ -4,6 +4,7 @@ import type {
   BrewvaStructuredEvent,
   ProtocolRecord,
 } from "@brewva/brewva-vocabulary/events";
+import { RUNTIME_OPS_EVENT_NAMESPACE } from "@brewva/brewva-vocabulary/events";
 
 export type FourPortRuntimeEventRecord = BrewvaStructuredEvent & BrewvaEventRecord & ProtocolRecord;
 export type FourPortRuntimeEventListener = (event: FourPortRuntimeEventRecord) => void;
@@ -17,4 +18,4 @@ export interface FourPortRuntimeCapabilityContext {
   rememberSessionId?(sessionId: string): void;
 }
 
-export const FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES = ["runtime.ops"] as const;
+export const FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES = [RUNTIME_OPS_EVENT_NAMESPACE] as const;

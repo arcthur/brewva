@@ -4,6 +4,7 @@ import {
   createCredentialVaultService,
   type CredentialVaultService,
 } from "@brewva/brewva-runtime/security";
+import { isRecord } from "@brewva/brewva-std/unknown";
 
 export interface ChildRegistryEntry {
   sessionId: string;
@@ -44,10 +45,6 @@ function pointerFilesMatch(left: GatewayTokenPointerFile, right: GatewayTokenPoi
     left.masterKeyEnv === right.masterKeyEnv &&
     left.allowDerivedKeyFallback === right.allowDerivedKeyFallback
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function parseGatewayTokenPointer(raw: string): GatewayTokenPointerFile | undefined {
@@ -102,7 +99,7 @@ function parseChildRegistryEntries(raw: unknown): ChildRegistryEntry[] {
 
   const entries: ChildRegistryEntry[] = [];
   for (const row of raw) {
-    if (!row || typeof row !== "object") {
+    if (!isRecord(row)) {
       continue;
     }
     const candidate = row as Partial<ChildRegistryEntry>;

@@ -216,13 +216,15 @@ describe("runtime ops capability inventory fitness", () => {
   test("four-port ops replay readers share the same ops event namespace contract", () => {
     const runtimePort = readRepoFile("packages/brewva-tools/src/runtime-port/four-port/types.ts");
     const runtimePortIndex = readRepoFile("packages/brewva-tools/src/runtime-port/index.ts");
+    const vocabularyEvents = readRepoFile("packages/brewva-vocabulary/src/internal/events.ts");
     const sessionSupervisor = readRepoFile(
       "packages/brewva-gateway/src/daemon/session-supervisor/index.ts",
     );
     const retiredGatewayOpsNamespace = ["gateway", "ops"].join(".");
 
     expect(runtimePort).toContain("export const FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES");
-    expect(runtimePort).toContain('"runtime.ops"');
+    expect(runtimePort).toContain("RUNTIME_OPS_EVENT_NAMESPACE");
+    expect(vocabularyEvents).toContain('RUNTIME_OPS_EVENT_NAMESPACE = "runtime.ops"');
     expect(runtimePort).not.toContain(`"${retiredGatewayOpsNamespace}"`);
     expect(runtimePortIndex).toContain("FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES");
     expect(sessionSupervisor).toContain("FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES");

@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { resolveWorkspaceRootDir } from "../config/paths.js";
 import { resolveRuntimeConfigState } from "./config/state.js";
 import { createKernelPort } from "./kernel/impl.js";
@@ -141,10 +142,6 @@ function resolveRuntimeIdentity(options: BrewvaRuntimeOptions): BrewvaRuntime["i
   const workspaceRoot = resolveWorkspaceRootDir(cwd);
   const agentId = normalizeRuntimeAgentId(options.agentId ?? process.env["BREWVA_AGENT_ID"]);
   return { cwd, workspaceRoot, agentId };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function createFourPortRuntimeAssembly(input: {

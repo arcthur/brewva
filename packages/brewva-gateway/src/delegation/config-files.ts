@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
-import { isRecord as isUnknownRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
+import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import type {
   ExplorerConsultKind,
   SubagentContextBudget,
@@ -26,9 +26,7 @@ export interface HostedWorkspaceSubagentConfigFile {
   parsed: Record<string, unknown>;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return isUnknownRecord(value);
-}
+export { isRecord };
 
 export function asString(value: unknown): string | undefined {
   return readNonEmptyString(value);

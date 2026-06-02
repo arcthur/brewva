@@ -1,12 +1,14 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   outcomeIsError,
   outcomeVerdict,
   type BrewvaOutcome,
+  type OutcomeVerdict,
 } from "@brewva/brewva-vocabulary/outcome";
 import type { ToolOutputDisplayView } from "@brewva/brewva-vocabulary/wire";
 import { distillToolOutput } from "./tool-output-distiller.js";
 
-export type ToolDisplayVerdict = "pass" | "fail" | "inconclusive";
+export type ToolDisplayVerdict = OutcomeVerdict;
 
 export interface ResolveToolDisplayTextInput {
   toolName: string;
@@ -22,50 +24,48 @@ export interface ResolvedToolDisplay {
 const SUMMARY_CHAR_LIMIT = 1_200;
 
 function extractResultOutcome(result: unknown): BrewvaOutcome | undefined {
-  if (!result || typeof result !== "object" || Array.isArray(result)) {
+  if (!isRecord(result)) {
     return undefined;
   }
-  const outcome = (result as { outcome?: unknown }).outcome;
-  if (!outcome || typeof outcome !== "object" || Array.isArray(outcome)) {
+  const outcome = result.outcome;
+  if (!isRecord(outcome)) {
     return undefined;
   }
-  const record = outcome as Record<string, unknown>;
-  if (record.kind === "ok") {
-    return { kind: "ok", value: record.value ?? null };
+  if (outcome.kind === "ok") {
+    return { kind: "ok", value: outcome.value ?? null };
   }
-  if (record.kind === "err") {
-    return { kind: "err", error: record.error ?? null };
+  if (outcome.kind === "err") {
+    return { kind: "err", error: outcome.error ?? null };
   }
-  if (record.kind === "inconclusive") {
+  if (outcome.kind === "inconclusive") {
     return {
       kind: "inconclusive",
-      ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
-      ...(record.value !== undefined ? { value: record.value } : {}),
+      ...(typeof outcome.reason === "string" ? { reason: outcome.reason } : {}),
+      ...(outcome.value !== undefined ? { value: outcome.value } : {}),
     };
   }
   return undefined;
 }
 
 function extractExplicitDisplay(result: unknown): ToolOutputDisplayView | undefined {
-  if (!result || typeof result !== "object" || Array.isArray(result)) {
+  if (!isRecord(result)) {
     return undefined;
   }
-  const display = (result as { display?: unknown }).display;
-  if (!display || typeof display !== "object" || Array.isArray(display)) {
+  const display = result.display;
+  if (!isRecord(display)) {
     return undefined;
   }
-  const record = display as Record<string, unknown>;
   const summaryText =
-    typeof record.summaryText === "string" && record.summaryText.trim().length > 0
-      ? record.summaryText
+    typeof display.summaryText === "string" && display.summaryText.trim().length > 0
+      ? display.summaryText
       : undefined;
   const detailsText =
-    typeof record.detailsText === "string" && record.detailsText.trim().length > 0
-      ? record.detailsText
+    typeof display.detailsText === "string" && display.detailsText.trim().length > 0
+      ? display.detailsText
       : undefined;
   const rawText =
-    typeof record.rawText === "string" && record.rawText.trim().length > 0
-      ? record.rawText
+    typeof display.rawText === "string" && display.rawText.trim().length > 0
+      ? display.rawText
       : undefined;
   const normalized: ToolOutputDisplayView = {};
   if (summaryText) {
@@ -115,16 +115,16 @@ export function extractToolResultText(result: unknown): string {
   if (typeof result === "string") {
     return result.trim();
   }
-  if (!result || typeof result !== "object") {
+  if (!isRecord(result)) {
     return "";
   }
 
-  const content = (result as { content?: unknown }).content;
+  const content = result.content;
   if (Array.isArray(content)) {
     const texts: string[] = [];
     for (const item of content) {
-      if (!item || typeof item !== "object") continue;
-      const text = (item as { text?: unknown }).text;
+      if (!isRecord(item)) continue;
+      const text = item.text;
       if (typeof text === "string" && text.trim()) {
         texts.push(text.trim());
       }

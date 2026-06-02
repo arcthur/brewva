@@ -1,7 +1,23 @@
-export { makeEvent, payloadOf } from "./internal/events.js";
+export {
+  makeEvent,
+  payloadOf,
+  RUNTIME_OPS_EVENT_NAMESPACE,
+  RUNTIME_OPS_REASONING_CHECKPOINT_RECORDED_KIND,
+  RUNTIME_OPS_REASONING_REVERT_RECORDED_KIND,
+  RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND,
+  RUNTIME_OPS_TOOL_CALL_ENDED_KIND,
+  RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND,
+  RUNTIME_OPS_TOOL_CALL_STARTED_KIND,
+  RUNTIME_OPS_TOOL_INVOCATION_FINISHED_KIND,
+  RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+  RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND,
+  RUNTIME_OPS_TO_TAPE_EVENT_TYPE,
+} from "./internal/events.js";
 export type {
   BrewvaEventQuery,
   BrewvaEventRecord,
   BrewvaStructuredEvent,
   ProtocolRecord,
+  RuntimeOpsEventKind,
+  RuntimeOpsMappedTapeEventType,
 } from "./internal/events.js";

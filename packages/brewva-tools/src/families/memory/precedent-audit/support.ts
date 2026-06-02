@@ -5,6 +5,7 @@ import {
   type ExecutedKnowledgeSearch,
   type ScoredKnowledgeDoc,
 } from "@brewva/brewva-recall/knowledge";
+export { readTrimmedString } from "@brewva/brewva-std/unknown";
 import {
   isPathInsideRoots,
   resolveScopedPath,
@@ -29,12 +30,6 @@ const PROMOTION_CANDIDATE_PREFIXES = [
   ".brewva/knowledge/materialized/",
   ".brewva/knowledge/",
 ] as const;
-
-export function readTrimmedString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
 
 function normalizePathRef(
   ref: string,

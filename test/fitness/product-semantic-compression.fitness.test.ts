@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "../..");
@@ -26,17 +26,17 @@ const BANNED_NEEDLES = [
 function listFiles(relativeDir: string): string[] {
   const absoluteDir = resolve(repoRoot, relativeDir);
   const files: string[] = [];
-  for (const entry of readdirSync(absoluteDir)) {
-    if (entry === "node_modules" || entry === ".git" || entry === "dist") continue;
-    const absolutePath = join(absoluteDir, entry);
+  for (const entry of readdirSync(absoluteDir, { withFileTypes: true })) {
+    const name = entry.name;
+    if (name === "node_modules" || name === ".git" || name === "dist") continue;
+    const absolutePath = join(absoluteDir, name);
     const relativePath = relative(repoRoot, absolutePath);
-    const stats = statSync(absolutePath);
-    if (stats.isDirectory()) {
+    if (entry.isDirectory()) {
       files.push(...listFiles(relativePath));
       continue;
     }
-    if (!stats.isFile()) continue;
-    if (/\.(ts|tsx|md|json|jsonc)$/u.test(entry)) {
+    if (!entry.isFile()) continue;
+    if (/\.(ts|tsx|md|json|jsonc)$/u.test(name)) {
       files.push(relativePath);
     }
   }
@@ -67,5 +67,5 @@ describe("product semantic compression guardrails", () => {
       violations,
       `Semantic compression guardrail violations:\n${violations.join("\n")}`,
     ).toEqual([]);
-  });
+  }, 15_000);
 });

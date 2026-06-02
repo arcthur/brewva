@@ -15,7 +15,11 @@ import {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
-import { outcomeVerdict, type BrewvaOutcome } from "@brewva/brewva-vocabulary/outcome";
+import {
+  outcomeVerdict,
+  type BrewvaOutcome,
+  type OutcomeVerdict,
+} from "@brewva/brewva-vocabulary/outcome";
 import { SESSION_INDEX_SCHEMA_VERSION } from "../api.js";
 import type { DuckDBConnection } from "../duckdb/instance.js";
 import type { JsonRow } from "../duckdb/query.js";
@@ -589,7 +593,7 @@ function readTurnEndedStatus(value: unknown): string | null {
   return value === "completed" || value === "failed" || value === "cancelled" ? value : null;
 }
 
-function readToolOutcomeVerdict(value: unknown): "pass" | "fail" | "inconclusive" | null {
+function readToolOutcomeVerdict(value: unknown): OutcomeVerdict | null {
   if (!isRecord(value)) return null;
   if (value.kind !== "ok" && value.kind !== "err" && value.kind !== "inconclusive") return null;
   return outcomeVerdict(value as BrewvaOutcome);

@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ContextEntryRecord } from "@brewva/brewva-vocabulary/context";
 import type { DelegationForkTurns } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
@@ -13,10 +14,6 @@ interface StoredContextMessage {
   role: string;
   content?: unknown;
   excludeFromContext?: unknown;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readTextParts(content: unknown): string {

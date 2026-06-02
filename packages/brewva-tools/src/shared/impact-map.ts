@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ReviewChangeCategory, ReviewChangedFileClass } from "./review-classification.js";
 import {
   classifyReviewChangedFiles,
@@ -12,10 +13,6 @@ export interface ImpactMapArtifact {
   high_risk_touchpoints: string[];
   change_categories: ReviewChangeCategory[];
   changed_file_classes: ReviewChangedFileClass[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function hasOwn(record: Record<string, unknown>, key: string): boolean {

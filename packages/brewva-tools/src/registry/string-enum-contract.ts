@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { Type, type TSchema } from "@sinclair/typebox";
 
 export const BREWVA_STRING_ENUM_CONTRACT = Symbol.for("brewva.stringEnumContract");
@@ -33,10 +34,6 @@ type EnumSchemaLike = TSchema & {
   [BREWVA_STRING_ENUM_CONTRACT]?: StringEnumContractMetadata;
   [BREWVA_STRING_ENUM_CONTRACT_PATHS]?: readonly StringEnumContractPathMetadataEntry[];
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function attachStringEnumContractMetadata<TSchemaLike extends TSchema>(
   schema: TSchemaLike,

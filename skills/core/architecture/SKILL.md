@@ -138,10 +138,6 @@ If you catch yourself thinking any of these, stop and return to Phase 2:
 - "The module is deep because the implementation is complicated"
 - "This is architecture because it crosses many files"
 
-## Common Rationalizations
-
-See `references/rationalizations.md` for the anti-pattern table.
-
 ## Handoff Expectations
 
 Hand off to `plan` after one deepening candidate has been selected and the

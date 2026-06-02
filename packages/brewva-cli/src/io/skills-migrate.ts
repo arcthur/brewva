@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
+import { isRecord } from "@brewva/brewva-std/unknown";
+import { stringify as stringifyYaml } from "yaml";
 
 const REMOVED_SKILL_CARD_KEYS = new Set([
   "routing",
@@ -80,24 +82,20 @@ function walkSkillFiles(root: string): string[] {
 
 function parseSkillFile(filePath: string): ParsedSkillFile {
   const raw = readFileSync(filePath, "utf8");
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/u.exec(raw);
-  if (!match) {
+  const parsed = parseMarkdownFrontmatter(raw);
+  if (!parsed.hasFrontmatter) {
     throw new Error(`${filePath}: missing YAML frontmatter.`);
-  }
-  const parsed = parseYaml(match[1] ?? "");
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`${filePath}: frontmatter must be an object.`);
   }
   return {
     filePath,
-    data: parsed as Record<string, unknown>,
-    body: match[2] ?? "",
+    data: parsed.data,
+    body: parsed.body,
   };
 }
 
 function readOutputNames(value: unknown): string[] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  const outputs = (value as Record<string, unknown>).outputs;
+  if (!isRecord(value)) return [];
+  const outputs = value.outputs;
   if (!Array.isArray(outputs)) return [];
   return outputs.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
 }
@@ -124,8 +122,8 @@ function buildSkillCardFrontmatter(
 }
 
 function normalizeSelection(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const selection = { ...(value as Record<string, unknown>) };
+  if (!isRecord(value)) return value;
+  const selection = { ...value };
   if (selection.paths !== undefined && selection.path_globs === undefined) {
     selection.path_globs = selection.paths;
     delete selection.paths;
@@ -138,26 +136,18 @@ function buildProducerContract(parsed: ParsedSkillFile): Record<string, unknown>
     typeof parsed.data.name === "string" ? parsed.data.name.trim() : basename(parsed.filePath);
   if (!name) return undefined;
   const intent = parsed.data.intent;
-  if (!intent || typeof intent !== "object" || Array.isArray(intent)) return undefined;
-  const intentRecord = intent as Record<string, unknown>;
+  if (!isRecord(intent)) return undefined;
+  const intentRecord = intent;
   const outputs = readOutputNames(intent);
   if (outputs.length === 0) return undefined;
   const producer: Record<string, unknown> = {
     producer: name,
     outputs,
   };
-  if (
-    intentRecord.output_contracts &&
-    typeof intentRecord.output_contracts === "object" &&
-    !Array.isArray(intentRecord.output_contracts)
-  ) {
+  if (isRecord(intentRecord.output_contracts)) {
     producer.output_contracts = intentRecord.output_contracts;
   }
-  if (
-    intentRecord.semantic_bindings &&
-    typeof intentRecord.semantic_bindings === "object" &&
-    !Array.isArray(intentRecord.semantic_bindings)
-  ) {
+  if (isRecord(intentRecord.semantic_bindings)) {
     producer.semantic_bindings = intentRecord.semantic_bindings;
   }
   return producer;

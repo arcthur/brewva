@@ -30,6 +30,7 @@ export type {
   ExpectedProviderCacheBreak,
   PromptStabilityState,
   ProviderCacheBreakObservation,
+  ProviderCacheCapability,
   ProviderCacheObservationInput,
   ProviderCacheObservationState,
   ProviderCacheRenderState,

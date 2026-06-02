@@ -18,6 +18,7 @@ import {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
 import {
+  type ManagedToolMode,
   TAPE_ANCHOR_EVENT_TYPE,
   TAPE_CHECKPOINT_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
@@ -69,7 +70,7 @@ function createEmptySessionTransitionSnapshot(): SessionTransitionSnapshot {
 }
 
 interface InspectBootstrapPayload {
-  managedToolMode?: "hosted" | "direct";
+  managedToolMode?: ManagedToolMode;
   runtimeConfig?: {
     workspaceRoot?: string;
     configPath?: string | null;
@@ -215,7 +216,7 @@ interface InspectReport {
     unsupportedReason: string | null;
   };
   bootstrap: {
-    managedToolMode: "hosted" | "direct" | null;
+    managedToolMode: ManagedToolMode | null;
     workspaceRoot: string | null;
     configPath: string | null;
     tapeDir: string | null;

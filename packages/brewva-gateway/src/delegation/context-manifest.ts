@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ContextBundle } from "../context/api.js";
 
 export interface DelegationContextBundleManifest {
@@ -47,10 +48,6 @@ function writeJsonFile(filePath: string, value: unknown): void {
     }
     throw error;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readJsonFile(filePath: string): unknown {

@@ -1,5 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { isRecord } from "@brewva/brewva-std/unknown";
+import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
 import {
   getRuntimeContextEvidenceLatest,
   getRuntimeCostSummary,
@@ -80,28 +82,24 @@ function extractReportedCacheFieldFlags(payload: unknown): {
   cacheReadReported: boolean;
   cacheWriteReported: boolean;
 } {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return {
       cacheReadReported: false,
       cacheWriteReported: false,
     };
   }
 
-  const usage = (payload as { usage?: unknown }).usage;
-  if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
+  const usage = payload.usage;
+  if (!isRecord(usage)) {
     return {
       cacheReadReported: false,
       cacheWriteReported: false,
     };
   }
 
-  const record = usage as {
-    cacheReadReported?: unknown;
-    cacheWriteReported?: unknown;
-  };
   return {
-    cacheReadReported: record.cacheReadReported === true,
-    cacheWriteReported: record.cacheWriteReported === true,
+    cacheReadReported: usage.cacheReadReported === true,
+    cacheWriteReported: usage.cacheWriteReported === true,
   };
 }
 
@@ -600,7 +598,9 @@ export function buildContextEvidenceReport(
         ...compactionEvents
           .map((event) => projectRuntimeEvent(event))
           .filter((event): event is RuntimeEventProjection => event !== null),
-        ...queryRuntimeEvents(runtime, sessionId, { type: "session.compaction.committed" })
+        ...queryRuntimeEvents(runtime, sessionId, {
+          type: RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND,
+        })
           .map((event) => projectRuntimeEvent(event))
           .filter((event): event is RuntimeEventProjection => event !== null),
         ...runtimeEventProjections.filter((event) => isCompactionRequiredEvent(event)),

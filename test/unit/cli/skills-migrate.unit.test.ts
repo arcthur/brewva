@@ -81,4 +81,20 @@ describe("skills migrate CLI", () => {
     expect(producer).toContain("review_report:");
     expect(producer).toContain("min_words: 3");
   });
+
+  test("migrate parses SkillCard frontmatter through the shared markdown parser", async () => {
+    const workspace = createTestWorkspace("skills-migrate-shared-frontmatter");
+    const skillDir = join(workspace, "skills", "core", "bom-crlf");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, "SKILL.md"),
+      "\uFEFF---\r\nname: bom-crlf\r\ndescription: BOM CRLF skill.\r\nintent:\r\n  outputs:\r\n    - report\r\n---\r\n# BOM CRLF\r\n",
+      "utf8",
+    );
+
+    const exitCode = await runSkillsMigrateCli(["migrate", "--check", "--root", workspace]);
+
+    expect(exitCode).toBe(0);
+    expect(existsSync(join(workspace, "skills", "producers", "bom-crlf.yaml"))).toBe(false);
+  });
 });

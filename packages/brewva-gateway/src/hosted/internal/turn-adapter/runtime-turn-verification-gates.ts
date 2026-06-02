@@ -3,6 +3,7 @@ import type {
   RuntimeProviderFrame,
   RuntimeProviderPort,
 } from "@brewva/brewva-runtime";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
@@ -15,10 +16,6 @@ export interface RuntimeVerificationGateSource {
   getRuntimeVerificationGateManifests?(): readonly VerificationGateManifest[];
   getRuntimeVerificationGateEvidence?(sessionId: string): readonly VerificationGateEvidence[];
   getRuntimeVerificationGateNow?(): number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readString(value: unknown): string | null {

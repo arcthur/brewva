@@ -1,3 +1,4 @@
+import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   listInvalidWorkbenchEvictionSpanRefs,
@@ -14,25 +15,8 @@ import {
 import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
-function readNonEmptyString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : undefined;
-}
-
 function readStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return [
-    ...new Set(
-      value
-        .map((entry) => readNonEmptyString(entry))
-        .filter((entry): entry is string => Boolean(entry)),
-    ),
-  ];
+  return [...new Set(normalizeStringList(value))];
 }
 
 function formatEntryHeader(entry: WorkbenchEntry): string {

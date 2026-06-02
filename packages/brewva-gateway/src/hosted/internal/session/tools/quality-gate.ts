@@ -6,6 +6,7 @@ import {
   resolveToolAuthority,
 } from "@brewva/brewva-runtime/security";
 import { truncateText } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   BrewvaHostInputEventResult as InputEventResult,
   InternalHostPluginApi,
@@ -73,10 +74,6 @@ type PendingToolState = {
   toolName: string;
   args?: Record<string, unknown>;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isPathInside(basePath: string, targetPath: string): boolean {
   const relativePath = relative(resolve(basePath), resolve(targetPath));

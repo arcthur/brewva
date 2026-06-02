@@ -1,3 +1,15 @@
+import {
+  normalizeStringList as readStringArray,
+  readNonEmptyString as readString,
+} from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
+import {
+  RUNTIME_OPS_TOOL_CALL_ENDED_KIND,
+  RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND,
+  RUNTIME_OPS_TOOL_CALL_STARTED_KIND,
+  RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+  RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND,
+} from "@brewva/brewva-vocabulary/events";
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
@@ -29,11 +41,11 @@ const RECALL_SOURCE_FAMILIES = ["tape_evidence", "repository_precedent"] as cons
 const RECALL_SESSION_SCOPES = ["current_session", "prior_session", "cross_workspace"] as const;
 const RECALL_STABLE_ID_PATTERN = /\b(?:tape:[^\s'",\]}]+|precedent:[^\s'",\]}]+)/gu;
 export const RECALL_USAGE_EVENT_TYPES = [
-  "tool.invocation.started",
-  "tool.result.recorded",
-  "tool_call_observed",
-  "tool_call_started",
-  "tool_call_ended",
+  RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+  RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND,
+  RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND,
+  RUNTIME_OPS_TOOL_CALL_STARTED_KIND,
+  RUNTIME_OPS_TOOL_CALL_ENDED_KIND,
 ] as const;
 const RECALL_USAGE_EVENT_TYPE_SET = new Set<string>(RECALL_USAGE_EVENT_TYPES);
 export const ATTENTION_METRIC_EVENT_TYPE = "iteration.metric.observed" as const;
@@ -41,14 +53,6 @@ const MAX_COMPACTION_RECALL_RESULT_REFS = 8;
 
 // One used recall ref is budgeted as a compact provenance pointer plus its projected summary.
 const RECALL_RESULT_REF_TOKEN_AMORTIZATION = 400;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
 
 function readRecallSourceFamily(
   value: unknown,
@@ -66,17 +70,6 @@ function readRecallSessionScope(
   return normalized && (RECALL_SESSION_SCOPES as readonly string[]).includes(normalized)
     ? (normalized as SessionCompactionRecallResultRef["sessionScope"])
     : null;
-}
-
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return [
-    ...new Set(
-      value.map((entry) => readString(entry)).filter((entry): entry is string => entry !== null),
-    ),
-  ];
 }
 
 function dedupeRecords<T extends ProtocolRecord>(
@@ -103,7 +96,7 @@ function readSkillInvocationRecords(skillSelection: unknown): ProtocolRecord[] {
 function readSelectedSkillInvocationIds(skillSelection: unknown): string[] {
   return readSkillInvocationRecords(skillSelection)
     .map((record) => readString(record.invocationId))
-    .filter((entry): entry is string => entry !== null);
+    .filter((entry): entry is string => entry !== undefined);
 }
 
 function readResourceRef(value: unknown): SessionCompactionResourceRef | null {
@@ -112,7 +105,7 @@ function readResourceRef(value: unknown): SessionCompactionResourceRef | null {
   }
   const kind = readString(value.kind);
   const path = readString(value.path);
-  if ((kind !== "reference" && kind !== "script" && kind !== "invariant") || path === null) {
+  if ((kind !== "reference" && kind !== "script" && kind !== "invariant") || !path) {
     return null;
   }
   return { kind, path };
@@ -182,9 +175,9 @@ function extractRecallStableIdsFromSourceRefs(value: unknown): string[] {
   return [];
 }
 
-function readRecallStableId(value: unknown): string | null {
+function readRecallStableId(value: unknown): string | undefined {
   const stableId = readString(value);
-  return stableId && /^(?:tape:|precedent:)\S+$/u.test(stableId) ? stableId : null;
+  return stableId && /^(?:tape:|precedent:)\S+$/u.test(stableId) ? stableId : undefined;
 }
 
 function readRecallStableIdsFromStableIdValues(value: unknown): string[] {
@@ -220,7 +213,7 @@ function readRecallStableIdsFromWorkbench(workbenchEntries: readonly WorkbenchEn
   );
 }
 
-function readAttentionOptionRef(value: unknown): string | null {
+function readAttentionOptionRef(value: unknown): string | undefined {
   return readString(value);
 }
 
@@ -347,7 +340,7 @@ export function buildCompactionInputProvenance(
     hiddenRecallSearch: false,
     activeWorkbenchEntryIds: input.workbenchEntries
       .map((entry) => readString(entry.id))
-      .filter((entry): entry is string => entry !== null),
+      .filter((entry): entry is string => entry !== undefined),
     selectedSkillInvocationIds: readSelectedSkillInvocationIds(input.skillSelection),
     surfacedResourceRefs: readSurfacedResourceRefs(input.skillSelection),
     capabilityReceiptRefs: readCapabilityReceiptRefs(input.capabilitySelection),

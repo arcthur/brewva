@@ -1,4 +1,5 @@
 import { toJsonValue, type JsonValue } from "@brewva/brewva-std/json";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   ToolErrorRecordSchema,
   ToolJsonRecordSchema,
@@ -6,17 +7,16 @@ import {
   type BrewvaToolResult as AgentToolResult,
   type BrewvaToolResultDisplay,
 } from "@brewva/brewva-substrate/tools";
+import type { BrewvaOutcomeKind } from "@brewva/brewva-vocabulary/outcome";
 
-export type ToolTextOutcomeKind = "ok" | "err" | "inconclusive";
+export type ToolTextOutcomeKind = BrewvaOutcomeKind;
 export { ToolErrorRecordSchema, ToolJsonRecordSchema, ToolJsonValueSchema };
 
 export type ToolJsonRecord = Record<string, JsonValue>;
 
 function jsonRecord(value: Record<string, unknown>): ToolJsonRecord {
   const normalized = toJsonValue(value);
-  return normalized && typeof normalized === "object" && !Array.isArray(normalized)
-    ? normalized
-    : {};
+  return isRecord(normalized) ? (normalized as ToolJsonRecord) : {};
 }
 
 export function toolOutcomeRecord(payload: object): ToolJsonRecord {

@@ -84,6 +84,19 @@ references:
     expect(parsed.resources.references).toEqual(["references/example.md"]);
   });
 
+  test("parses SkillCard frontmatter through the shared markdown parser", () => {
+    const path = tempFile(
+      "SKILL.md",
+      "\uFEFF---\r\nname: bom-crlf\r\ndescription: Shared parser skill.\r\n---\r\n# Shared Parser\r\n",
+    );
+
+    const parsed = parseSkillDocument(path, "core");
+
+    expect(parsed.card.name).toBe("bom-crlf");
+    expect(parsed.card.description).toBe("Shared parser skill.");
+    expect(parsed.markdown).toBe("# Shared Parser\n");
+  });
+
   test("parses producer contracts independently from SkillCard", () => {
     const path = tempFile(
       "producer.yaml",

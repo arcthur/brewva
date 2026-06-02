@@ -1,4 +1,5 @@
 import { relative, resolve } from "node:path";
+import { isRecord } from "@brewva/brewva-std/unknown";
 
 const DEFAULT_PATHISH_KEY_PATTERN = /(path|paths|file|files|cwd|workdir|dir|directory)/i;
 
@@ -13,10 +14,6 @@ interface ResolveWorkspacePathInput {
   workspaceRoot: string;
   allowWorkspaceRoot?: boolean;
   ignoredPrefixes?: readonly string[];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export function normalizeWorkspaceRelativePath(path: string): string {

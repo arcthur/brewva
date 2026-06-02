@@ -5,4 +5,9 @@ export {
   outcomeVerdict,
 } from "./internal/outcome.js";
 
-export type { BrewvaOutcome, BrewvaOutcomeKind, ToolOutcomePayload } from "./internal/outcome.js";
+export type {
+  BrewvaOutcome,
+  BrewvaOutcomeKind,
+  OutcomeVerdict,
+  ToolOutcomePayload,
+} from "./internal/outcome.js";

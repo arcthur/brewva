@@ -7,6 +7,7 @@ import {
   toWorkspaceRelativePath,
 } from "@brewva/brewva-runtime/config";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
@@ -154,10 +155,6 @@ function toIso(timestamp: number | null | undefined): string | null {
 function normalizePathForDisplay(path: string): string {
   const normalized = path.replaceAll("\\", "/").trim();
   return normalized.length > 0 ? normalized : ".";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function pathExists(path: string): boolean {

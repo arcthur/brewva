@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { parse as parseYaml } from "yaml";
 
 export type CapabilityRiskLevel = "read" | "draft" | "write" | "destructive" | "cross_system";
@@ -123,10 +124,6 @@ const RISK_LEVELS = new Set<CapabilityRiskLevel>([
   "destructive",
   "cross_system",
 ]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function failCapabilityManifest(filePath: string, message: string): never {
   throw new Error(`[capability_manifest] ${filePath}: ${message}`);

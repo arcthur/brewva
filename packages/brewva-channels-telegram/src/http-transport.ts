@@ -1,4 +1,5 @@
 import { sleepAtBoundary } from "@brewva/brewva-effect";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { TelegramChannelTransport, TelegramChannelTransportSendResult } from "./adapter.js";
 import type { TelegramOutboundRequest, TelegramUpdate } from "./types.js";
 
@@ -130,10 +131,6 @@ function normalizeInitialOffset(value: number | undefined): number {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeRetryAfterMs(value: unknown): number | undefined {

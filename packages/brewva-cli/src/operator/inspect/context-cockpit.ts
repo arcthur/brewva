@@ -1,5 +1,7 @@
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { resolveCachePosture, type CachePosture } from "@brewva/brewva-token-estimation";
+import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V1,
@@ -71,10 +73,6 @@ export interface ContextCockpitReport {
     readonly inputProvenance: SessionCompactionInputProvenance | null;
   };
   readonly cachePosture: CachePosture;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readString(value: unknown): string | null {
@@ -352,7 +350,9 @@ export function buildContextCockpitReport(
   );
   const workbenchEntries = listCliRuntimeWorkbenchEntries(runtime, sessionId);
   const latestCompaction = readLatestCompaction(
-    queryCliRuntimeEvents(runtime, sessionId, { type: "session.compaction.committed" }),
+    queryCliRuntimeEvents(runtime, sessionId, {
+      type: RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND,
+    }),
   );
   const cacheObservation = getCliRuntimeContextEvidenceLatest(
     runtime,

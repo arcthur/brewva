@@ -1,15 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isRecord } from "@brewva/brewva-std/unknown";
 
 type SchemaObject = Record<string, unknown>;
 
 let cachedSchema: { schema: SchemaObject; schemaPath: string } | null = null;
 let cachedError: Error | null = null;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function resolveSchemaPath(): string | undefined {
   const overridePath =

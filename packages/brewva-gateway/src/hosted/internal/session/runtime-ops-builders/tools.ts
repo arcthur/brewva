@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { getToolActionPolicy } from "@brewva/brewva-runtime/security";
 import {
+  RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND,
+  RUNTIME_OPS_TOOL_CALL_ENDED_KIND,
+  RUNTIME_OPS_TOOL_CALL_STARTED_KIND,
+  RUNTIME_OPS_TOOL_INVOCATION_FINISHED_KIND,
+  RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+  RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND,
+} from "@brewva/brewva-vocabulary/events";
+import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
@@ -28,17 +36,21 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
       start(inputValue) {
         const access = inputValue.runtimeCapabilityAccess;
         const allowed = access?.allowed ?? true;
-        const event = ctx.emit(inputValue.sessionId ?? "default", "tool.invocation.started", {
-          ...inputValue,
-          allowed,
-          ...(access?.reason ? { reason: access.reason } : {}),
-          ...(access?.advisory ? { advisory: access.advisory } : {}),
-          ...(access?.receiptId ? { receiptId: access.receiptId } : {}),
-          ...(access?.source ? { source: access.source } : {}),
-          ...(access?.selectedCapabilityNames
-            ? { selectedCapabilityNames: access.selectedCapabilityNames }
-            : {}),
-        });
+        const event = ctx.emit(
+          inputValue.sessionId ?? "default",
+          RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+          {
+            ...inputValue,
+            allowed,
+            ...(access?.reason ? { reason: access.reason } : {}),
+            ...(access?.advisory ? { advisory: access.advisory } : {}),
+            ...(access?.receiptId ? { receiptId: access.receiptId } : {}),
+            ...(access?.source ? { source: access.source } : {}),
+            ...(access?.selectedCapabilityNames
+              ? { selectedCapabilityNames: access.selectedCapabilityNames }
+              : {}),
+          },
+        );
         return {
           ...event,
           allowed,
@@ -54,16 +66,16 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
       finish(inputValue) {
         const payload = ctx.readObjectPayload(inputValue);
         const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "default";
-        return ctx.emit(sessionId, "tool.invocation.finished", payload);
+        return ctx.emit(sessionId, RUNTIME_OPS_TOOL_INVOCATION_FINISHED_KIND, payload);
       },
       recordResult(inputValue) {
         const payload = ctx.readObjectPayload(inputValue);
         const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "default";
-        return ctx.emit(sessionId, "tool.result.recorded", payload);
+        return ctx.emit(sessionId, RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND, payload);
       },
     },
     lifecycle: {
-      callObserved: ctx.recordInputPayload("tool_call_observed"),
+      callObserved: ctx.recordInputPayload(RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND),
       callBlocked: ctx.recordInputPayload("tool_call_blocked"),
       boxReleased: ctx.recordInputPayload("tool_box_released"),
       executionStarted: ctx.recordInputPayload("tool_execution_started"),
@@ -185,8 +197,8 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
       markCall(sessionId, inputValue): void {
         ctx.emit(sessionId, "tool_call_marked", ctx.readObjectPayload(inputValue));
       },
-      trackCallStart: ctx.recordInputPayload("tool_call_started"),
-      trackCallEnd: ctx.recordInputPayload("tool_call_ended"),
+      trackCallStart: ctx.recordInputPayload(RUNTIME_OPS_TOOL_CALL_STARTED_KIND),
+      trackCallEnd: ctx.recordInputPayload(RUNTIME_OPS_TOOL_CALL_ENDED_KIND),
     },
     outputs: {
       observed: ctx.recordInputPayload("tool_output_observed"),

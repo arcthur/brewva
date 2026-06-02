@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   InternalHostPlugin,
   InternalHostPluginApi,
@@ -208,10 +209,6 @@ const ADVISORY_SLOT_EVENTS: Record<AdvisoryExtensionSlot, readonly string[]> = {
   "channel.renderer": ["message_end", "turn_end", "session_shutdown"],
   "capability.manifest_provider": ["session_start", "session_shutdown"],
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

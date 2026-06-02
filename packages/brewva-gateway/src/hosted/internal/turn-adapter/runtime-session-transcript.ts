@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaSessionMessageEntry } from "@brewva/brewva-substrate/session";
 
 export const THINKING_LEVEL_SELECTED_EVENT_TYPE = "thinking_level_select";
@@ -13,10 +14,6 @@ type StoredMessageUsage = {
   totalTokens?: number;
   cost?: { total?: number };
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function summarizeContent(content: unknown): { items: number; textChars: number } {
   if (!Array.isArray(content)) {

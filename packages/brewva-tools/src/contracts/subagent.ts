@@ -3,6 +3,7 @@ import type {
   DelegationForkTurns,
   DelegationGateReason,
   DelegationModelCategory,
+  DelegationResultMode,
   PublicSubagentRole,
 } from "@brewva/brewva-vocabulary/delegation";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
@@ -23,7 +24,7 @@ import type {
   VerifierSubagentOutcomeData,
 } from "./explorer.js";
 
-export type SubagentResultMode = "evidence" | "consult" | "verifier" | "patch" | "knowledge";
+export type SubagentResultMode = DelegationResultMode;
 export type SubagentAgent = PublicSubagentRole;
 export type SubagentGateReason = DelegationGateReason;
 export type SubagentModelCategory = DelegationModelCategory;

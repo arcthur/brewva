@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaPromptAssistantMessageEvent,
   BrewvaPromptSessionEvent,
@@ -101,10 +102,6 @@ function readSessionManagerLineageNodeId(sessionManager: TreeCapableSessionManag
 function readSessionManagerLeafEntryId(sessionManager: TreeCapableSessionManager): string | null {
   const value = sessionManager.getLeafId();
   return typeof value === "string" && value.trim() ? value : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readString(value: unknown): string | null {

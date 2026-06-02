@@ -1,6 +1,8 @@
 import { readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
+import { readNonEmptyString } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
@@ -79,16 +81,12 @@ type ReplayableSessionStore = Pick<
   | "appendBranchSummaryEntry"
 >;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readNonEmptyString(
+function requireManifestString(
   record: Record<string, unknown>,
   key: keyof BrewvaSessionBundleManifest,
 ): string {
-  const value = record[key];
-  if (typeof value !== "string" || value.trim().length === 0) {
+  const value = readNonEmptyString(record[key]);
+  if (!value) {
     throw new Error(`invalid session bundle manifest: missing ${key}`);
   }
   return value;
@@ -491,12 +489,12 @@ export function isLegacyPiSessionArtifactPath(path: string): boolean {
 }
 
 export function assertSessionBundleManifest(input: unknown): BrewvaSessionBundleManifest {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!isRecord(input)) {
     throw new Error("invalid session bundle manifest: expected object");
   }
 
-  const record = input as Record<string, unknown>;
-  const format = readNonEmptyString(record, "format");
+  const record = input;
+  const format = requireManifestString(record, "format");
   if (format !== "brewva.session.bundle.v1") {
     if (format.startsWith("pi.")) {
       throw new Error("legacy Pi session artifacts are not supported");
@@ -506,14 +504,14 @@ export function assertSessionBundleManifest(input: unknown): BrewvaSessionBundle
 
   return {
     format: "brewva.session.bundle.v1",
-    sessionId: readNonEmptyString(record, "sessionId"),
-    workspaceRoot: readNonEmptyString(record, "workspaceRoot"),
-    tapePath: readNonEmptyString(record, "tapePath"),
-    checkpointPath: readNonEmptyString(record, "checkpointPath"),
-    recoveryWalPath: readNonEmptyString(record, "recoveryWalPath"),
-    projectionsDir: readNonEmptyString(record, "projectionsDir"),
-    createdAt: readNonEmptyString(record, "createdAt"),
-    updatedAt: readNonEmptyString(record, "updatedAt"),
+    sessionId: requireManifestString(record, "sessionId"),
+    workspaceRoot: requireManifestString(record, "workspaceRoot"),
+    tapePath: requireManifestString(record, "tapePath"),
+    checkpointPath: requireManifestString(record, "checkpointPath"),
+    recoveryWalPath: requireManifestString(record, "recoveryWalPath"),
+    projectionsDir: requireManifestString(record, "projectionsDir"),
+    createdAt: requireManifestString(record, "createdAt"),
+    updatedAt: requireManifestString(record, "updatedAt"),
   };
 }
 

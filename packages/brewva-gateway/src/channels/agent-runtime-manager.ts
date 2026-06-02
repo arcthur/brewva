@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { parseJsonc } from "@brewva/brewva-runtime/config";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { normalizeAgentId } from "@brewva/brewva-vocabulary/session";
 import { createHostedRuntimeAdapter } from "../hosted/api.js";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
@@ -26,10 +27,6 @@ export interface AgentRuntimeManagerOptions {
   controllerRuntime: HostedRuntimeAdapterPort;
   maxLiveRuntimes: number;
   idleRuntimeTtlMs: number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function deepMerge(base: unknown, overlay: unknown): unknown {

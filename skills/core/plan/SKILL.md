@@ -138,10 +138,6 @@ If you catch yourself thinking any of these, STOP and return to Phase 2:
 - "I'll figure out the rollback story later"
 - "The boundary question doesn't matter for this change"
 
-## Common Rationalizations
-
-See `references/rationalizations.md` for the anti-pattern table.
-
 ## Concrete Example
 
 See `references/example.md` for the grounded example output shape.

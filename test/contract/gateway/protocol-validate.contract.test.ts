@@ -217,6 +217,64 @@ describe("gateway protocol validator", () => {
     expect(result.ok).toBe(true);
   });
 
+  test("given open vocabulary turn transition strings, when validating payload, then validation succeeds", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "event:turn-transition-cancelled",
+      ts: 1,
+      source: "replay",
+      durability: "durable",
+      sourceEventId: "event-1",
+      sourceEventType: "runtime.transition",
+      type: "turn.transition",
+      turnId: "turn-1",
+      reason: "operator_cancelled",
+      status: "cancelled",
+      family: "operator",
+      attemptId: "attempt-1",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("given open vocabulary turn input trigger, when validating payload, then validation succeeds", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "event:turn-input-trigger",
+      ts: 1,
+      source: "replay",
+      durability: "durable",
+      sourceEventId: "event-1",
+      sourceEventType: "turn.input.recorded",
+      type: "turn.input",
+      turnId: "turn-1",
+      promptText: "Continue",
+      trigger: "operator_retry",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("given open vocabulary tool verdict, when validating payload, then validation succeeds", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "live:tool-progress-custom-verdict",
+      ts: 1,
+      source: "live",
+      durability: "cache",
+      type: "tool.progress",
+      turnId: "turn-1",
+      attemptId: "attempt-1",
+      toolCallId: "tool-call-1",
+      toolName: "verify",
+      verdict: "deferred",
+      isError: false,
+      text: "waiting for external check",
+    });
+    expect(result.ok).toBe(true);
+  });
+
   test("given session wire tool frame without attemptId, when validating payload, then validation fails", () => {
     const result = validateSessionWireFramePayload({
       schema: "brewva.session-wire.v2",

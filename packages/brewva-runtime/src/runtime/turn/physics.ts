@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaRuntime,
   BrewvaRuntimeOptions,
@@ -12,10 +13,6 @@ import type {
   TurnFrame,
 } from "../runtime-api.js";
 import { createTurnRunner } from "./impl.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function isProviderPort(value: unknown): value is RuntimeProviderPort {
   return isRecord(value) && typeof value.stream === "function";

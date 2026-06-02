@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   readToolResultRecordedEventPayload,
@@ -99,10 +100,6 @@ export interface MaybeAdjudicateTaskStallInput {
   sessionId: string;
   adjudicator?: TaskStallAdjudicator;
   now?: () => number;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function lastEvent(events: BrewvaEventRecord[]): BrewvaEventRecord | undefined {

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-vocabulary/delegation";
 import {
@@ -48,10 +49,6 @@ import {
   writeDetachedSubagentLiveState,
   writeDetachedSubagentOutcome,
 } from "./protocol.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 const hostedSessionLogger = {
   warn(message: string, fields?: Record<string, unknown>) {

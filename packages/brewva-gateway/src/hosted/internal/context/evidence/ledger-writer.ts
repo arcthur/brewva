@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
   outcomeIsError,
   outcomeVerdict,
   type BrewvaOutcome,
+  type OutcomeVerdict,
 } from "@brewva/brewva-vocabulary/outcome";
 import { LRUCache } from "lru-cache";
 import {
@@ -23,7 +25,7 @@ interface ToolLifecycleState {
   sawResult: boolean;
 }
 
-type ToolOutcomeVerdict = "pass" | "fail" | "inconclusive";
+type ToolOutcomeVerdict = OutcomeVerdict;
 
 interface ArtifactOverride {
   artifactRef: string;
@@ -43,8 +45,7 @@ interface ToolOutcomeRecordingResult {
 }
 
 function normalizeArgs(input: unknown): Record<string, unknown> | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
-  return input as Record<string, unknown>;
+  return isRecord(input) ? input : undefined;
 }
 
 function normalizeToolResultStatus(
@@ -60,29 +61,28 @@ function normalizeArtifactOverride(
   details: Record<string, unknown> | undefined,
 ): ArtifactOverride | undefined {
   const raw = details?.artifactOverride;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     return undefined;
   }
 
-  const candidate = raw as Record<string, unknown>;
-  if (typeof candidate.artifactRef !== "string" || candidate.artifactRef.trim().length === 0) {
+  if (typeof raw.artifactRef !== "string" || raw.artifactRef.trim().length === 0) {
     return undefined;
   }
-  if (typeof candidate.sha256 !== "string" || candidate.sha256.trim().length === 0) {
+  if (typeof raw.sha256 !== "string" || raw.sha256.trim().length === 0) {
     return undefined;
   }
-  if (typeof candidate.rawChars !== "number" || !Number.isFinite(candidate.rawChars)) {
+  if (typeof raw.rawChars !== "number" || !Number.isFinite(raw.rawChars)) {
     return undefined;
   }
-  if (typeof candidate.rawBytes !== "number" || !Number.isFinite(candidate.rawBytes)) {
+  if (typeof raw.rawBytes !== "number" || !Number.isFinite(raw.rawBytes)) {
     return undefined;
   }
 
   return {
-    artifactRef: candidate.artifactRef.trim(),
-    rawChars: Math.max(0, Math.floor(candidate.rawChars)),
-    rawBytes: Math.max(0, Math.floor(candidate.rawBytes)),
-    sha256: candidate.sha256.trim(),
+    artifactRef: raw.artifactRef.trim(),
+    rawChars: Math.max(0, Math.floor(raw.rawChars)),
+    rawBytes: Math.max(0, Math.floor(raw.rawBytes)),
+    sha256: raw.sha256.trim(),
   };
 }
 
@@ -141,21 +141,20 @@ function resolveToolOutcome(input: { isError: boolean; outcome?: BrewvaOutcome }
 }
 
 function readToolOutcome(value: unknown): BrewvaOutcome | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
-  const record = value as Record<string, unknown>;
-  if (record.kind === "ok") {
-    return { kind: "ok", value: record.value ?? null };
+  if (value.kind === "ok") {
+    return { kind: "ok", value: value.value ?? null };
   }
-  if (record.kind === "err") {
-    return { kind: "err", error: record.error ?? null };
+  if (value.kind === "err") {
+    return { kind: "err", error: value.error ?? null };
   }
-  if (record.kind === "inconclusive") {
+  if (value.kind === "inconclusive") {
     return {
       kind: "inconclusive",
-      ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
-      ...(record.value !== undefined ? { value: record.value } : {}),
+      ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
+      ...(value.value !== undefined ? { value: value.value } : {}),
     };
   }
   return undefined;
@@ -169,17 +168,15 @@ function outcomeDetailsRecord(
   }
   const value =
     outcome.kind === "err" ? outcome.error : outcome.kind === "ok" ? outcome.value : outcome.value;
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? value : undefined;
 }
 
 function extractToolExecutionResultText(result: unknown): string {
   if (typeof result === "string") return result;
-  if (!result || typeof result !== "object") return "";
-  const content = (result as { content?: unknown }).content;
+  if (!isRecord(result)) return "";
+  const content = result.content;
   if (Array.isArray(content)) return extractTextContent(content);
-  const text = (result as { text?: unknown }).text;
+  const text = result.text;
   return typeof text === "string" ? text : "";
 }
 

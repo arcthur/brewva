@@ -130,10 +130,6 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 - "Let's plan implementation before naming the specific human"
 - "I'll be encouraging now and ask hard questions later"
 
-## Common Rationalizations
-
-See `references/rationalizations.md` for the anti-pattern table.
-
 ## Concrete Example
 
 See `references/example.md` for the grounded example output shape.

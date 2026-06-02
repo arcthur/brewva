@@ -81,12 +81,18 @@ describe("model-operated Phase A architecture guard", () => {
       expect(source).not.toContain("getPressureLevel");
     }
     const gatewayProtocol = readRepoFile("packages/brewva-gateway/src/protocol/validate.ts");
-    for (const source of [gatewayProtocol]) {
+    const sessionWireValidation = readRepoFile(
+      "packages/brewva-vocabulary/src/internal/wire-validation.ts",
+    );
+    for (const source of [gatewayProtocol, sessionWireValidation]) {
       expect(source).not.toContain("ContextPressureView");
       expect(source).not.toContain("contextPressure");
     }
-    expect(gatewayProtocol).toContain("tokensUntilForcedCompact");
-    expect(gatewayProtocol).toContain("forcedCompaction");
+    expect(gatewayProtocol).toContain(
+      'export { validateSessionWireFramePayload } from "@brewva/brewva-vocabulary/wire";',
+    );
+    expect(sessionWireValidation).toContain("tokensUntilForcedCompact");
+    expect(sessionWireValidation).toContain("forcedCompaction");
   });
 
   test("context budget config exposes contracted threshold and dynamic-tail naming", () => {

@@ -1,7 +1,13 @@
 import { executeKnowledgeSearch } from "@brewva/brewva-recall/knowledge";
 import { scoreDocumentsByTfIdf } from "@brewva/brewva-search";
 import { sha256Hex } from "@brewva/brewva-std/hash";
-import { compactWhitespace, truncateText } from "@brewva/brewva-std/text";
+import {
+  compactWhitespace,
+  normalizeStringList,
+  readNonEmptyString,
+  truncateText,
+} from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { estimateModelTokens } from "@brewva/brewva-token-estimation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
@@ -117,29 +123,12 @@ interface AttentionOptionDocument {
   readonly card: AttentionOptionProjection;
 }
 
-function readNonEmptyString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
 function readRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  return isRecord(value) ? value : null;
 }
 
 function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return [
-    ...new Set(
-      value.map(readNonEmptyString).filter((entry): entry is string => typeof entry === "string"),
-    ),
-  ];
+  return [...new Set(normalizeStringList(value))];
 }
 
 function isAttentionSourceFamily(value: string): value is AttentionOptionSourceFamily {

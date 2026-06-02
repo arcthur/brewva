@@ -1,1 +1,34 @@
-export * from "./internal/goal.js";
+export {
+  GOAL_BLOCKED_EVENT_TYPE,
+  GOAL_BLOCKER_OBSERVED_EVENT_TYPE,
+  GOAL_BUDGET_LIMITED_EVENT_TYPE,
+  GOAL_CLEARED_EVENT_TYPE,
+  GOAL_COMPLETED_EVENT_TYPE,
+  GOAL_CONTINUATION_QUEUED_EVENT_TYPE,
+  GOAL_EVENT_TYPES,
+  GOAL_PAUSED_EVENT_TYPE,
+  GOAL_REPLACED_EVENT_TYPE,
+  GOAL_RESUMED_EVENT_TYPE,
+  GOAL_SCHEMA,
+  GOAL_STARTED_EVENT_TYPE,
+  GOAL_STATUS_VALUES,
+  GOAL_USAGE_OBSERVED_EVENT_TYPE,
+  buildGoalBudgetLimitMessage,
+  buildGoalContinuationMessage,
+  buildGoalContinuationPayload,
+  foldGoalEvents,
+  formatGoalUsage,
+  normalizeGoalBlockerKey,
+  parseGoalCommand,
+} from "./internal/goal.js";
+
+export type {
+  GoalCommand,
+  GoalCommandParseResult,
+  GoalContinuationPayload,
+  GoalLifecycleInput,
+  GoalState,
+  GoalStatus,
+  GoalUpdateInput,
+  GoalUsage,
+} from "./internal/goal.js";

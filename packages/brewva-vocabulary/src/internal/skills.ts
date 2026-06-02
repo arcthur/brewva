@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { parse as parseYaml } from "yaml";
 import { optionalStringField, readStringArray } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
@@ -139,21 +140,6 @@ function readDocumentSource(sourceOrPath: string): {
   return { source: sourceOrPath, baseDir: process.cwd() };
 }
 
-function readYamlFrontmatter(source: string): {
-  readonly frontmatter: ProtocolRecord;
-  readonly markdown: string;
-} {
-  const match = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n?/u.exec(source);
-  if (!match) {
-    return { frontmatter: {}, markdown: source };
-  }
-  const parsed = parseYaml(match[1] ?? "");
-  return {
-    frontmatter: typeof parsed === "object" && parsed !== null ? (parsed as ProtocolRecord) : {},
-    markdown: source.slice(match[0].length),
-  };
-}
-
 function readSkillSelection(value: unknown): SkillSelectionPolicy | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const record = value as ProtocolRecord;
@@ -185,7 +171,9 @@ export function parseSkillDocument(
   category: SkillCategory = "core",
 ): ParsedSkillDocument {
   const { source, baseDir } = readDocumentSource(sourceOrPath);
-  const { frontmatter, markdown } = readYamlFrontmatter(source);
+  const parsedFrontmatter = parseMarkdownFrontmatter(source);
+  const frontmatter = parsedFrontmatter.data;
+  const markdown = parsedFrontmatter.body;
   if ("intent" in frontmatter) {
     throw new Error("SkillCard field 'intent' has been removed");
   }

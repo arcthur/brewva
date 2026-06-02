@@ -1,4 +1,5 @@
 import { stableJsonStringify } from "@brewva/brewva-std/json";
+import { readNonEmptyString } from "@brewva/brewva-std/text";
 import type { ResponseInput } from "openai/resources/responses/responses.js";
 import { resolveOpenAIResponsesCacheRender } from "../../cache/render/openai-responses.js";
 import type { Context, Model } from "../../contracts/index.js";
@@ -165,10 +166,6 @@ function responseInputItemsHaveSameProtocolIdentity(
   }
 
   return false;
-}
-
-function readNonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function normalizeContinuationComparableItem(item: ResponseInput[number]): unknown {

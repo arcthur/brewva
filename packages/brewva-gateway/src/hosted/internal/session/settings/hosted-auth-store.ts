@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
-import { readFiniteNumberValue } from "@brewva/brewva-std/unknown";
+import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import { resolveHostedConfigValue } from "./hosted-config-value.js";
 
 const OPENAI_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
@@ -304,10 +304,6 @@ function isProviderCredentials(value: unknown): value is HostedAuthProviderCrede
     typeof (value as { slots?: unknown }).slots === "object" &&
     !Array.isArray((value as { slots?: unknown }).slots)
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function isHostedAuthCredential(value: unknown): value is HostedAuthCredential {

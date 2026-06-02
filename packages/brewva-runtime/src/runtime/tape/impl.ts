@@ -5,6 +5,7 @@ import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { toJsonValue } from "@brewva/brewva-std/json";
 import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
 import { isSupportedToolOutcomeVersion } from "@brewva/brewva-std/tool-outcome-version";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   Baseline,
   CanonicalEvent,
@@ -162,9 +163,9 @@ function extractCause(event: CanonicalEvent): RuntimeRecoveryCause | null {
     event.type === "checkpoint.committed"
   ) {
     const payload = event.payload;
-    if (payload && typeof payload === "object" && "cause" in payload) {
-      const cause = (payload as { cause?: unknown }).cause;
-      return typeof cause === "string" ? (cause as RuntimeRecoveryCause) : null;
+    if (isRecord(payload) && "cause" in payload) {
+      const cause = payload.cause;
+      return typeof cause === "string" ? cause : null;
     }
   }
   return null;
@@ -401,10 +402,6 @@ function parsePersistedEvent(line: string, filePath: string): CanonicalEvent {
     );
   }
   return event;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isCustomEventPayload(value: unknown): value is CustomEventPayload {

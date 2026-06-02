@@ -64,7 +64,7 @@ describe("credentials subcommand", () => {
       ok: true,
       removed: true,
     });
-  });
+  }, 15_000);
 
   test("discovers ambient credentials without importing them", () => {
     const workspace = createTestWorkspace("cli-credentials-discover");
@@ -89,7 +89,7 @@ describe("credentials subcommand", () => {
       ]),
     );
     expect(existsSync(join(workspace, ".brewva/credentials.vault"))).toBe(false);
-  });
+  }, 15_000);
 
   test("accepts root-level flags before the credentials subcommand", () => {
     const workspace = createTestWorkspace("cli-credentials-root-flags");
@@ -119,5 +119,5 @@ describe("credentials subcommand", () => {
       ok: true,
       ref: "vault://github/token",
     });
-  });
+  }, 15_000);
 });

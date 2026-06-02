@@ -1,6 +1,7 @@
 export const TOOL_OUTCOME_SCHEMA = "brewva.tool-outcome.v1" as const;
 
 export type BrewvaOutcomeKind = "ok" | "err" | "inconclusive";
+export type OutcomeVerdict = "pass" | "fail" | "inconclusive";
 
 export type BrewvaOutcome<TOutput = unknown, TError = unknown> =
   | {
@@ -32,7 +33,7 @@ export function outcomeIsError(outcome: BrewvaOutcome): boolean {
   return outcome.kind === "err";
 }
 
-export function outcomeVerdict(outcome: BrewvaOutcome): "pass" | "fail" | "inconclusive" {
+export function outcomeVerdict(outcome: BrewvaOutcome): OutcomeVerdict {
   if (outcome.kind === "err") {
     return "fail";
   }

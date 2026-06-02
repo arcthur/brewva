@@ -1,4 +1,5 @@
 import { estimateTokenCount, truncateTextToTokenBudget } from "@brewva/brewva-token-estimation";
+import type { OutcomeVerdict } from "@brewva/brewva-vocabulary/outcome";
 
 const DEFAULT_MAX_SUMMARY_TOKENS = 220;
 const MAX_LINE_CHARS = 240;
@@ -9,7 +10,7 @@ export interface ToolOutputDistillationInput {
   toolName: string;
   isError: boolean;
   outputText: string;
-  verdict?: "pass" | "fail" | "inconclusive";
+  verdict?: OutcomeVerdict;
   maxSummaryTokens?: number;
 }
 
@@ -158,7 +159,7 @@ function countPattern(text: string, pattern: RegExp): number {
 
 function resolveExecStatus(input: {
   isError: boolean;
-  verdict?: "pass" | "fail" | "inconclusive";
+  verdict?: OutcomeVerdict;
 }): "failed" | "inconclusive" | "completed" {
   if (input.verdict === "fail" || input.isError) {
     return "failed";
@@ -171,7 +172,7 @@ function resolveExecStatus(input: {
 
 function buildExecSummary(input: {
   isError: boolean;
-  verdict?: "pass" | "fail" | "inconclusive";
+  verdict?: OutcomeVerdict;
   lines: string[];
 }): string {
   const highlights = selectExecHighlights(input.lines);
@@ -374,7 +375,7 @@ function shouldKeepDistillation(input: {
   rawTokens: number;
   summaryTokens: number;
   isError: boolean;
-  verdict?: "pass" | "fail" | "inconclusive";
+  verdict?: OutcomeVerdict;
 }): boolean {
   if (input.strategy === "none") return false;
   if (input.rawTokens <= 0 || input.summaryTokens <= 0) return false;

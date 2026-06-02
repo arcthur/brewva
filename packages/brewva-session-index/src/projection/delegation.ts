@@ -1,4 +1,5 @@
 import { chunkArray } from "@brewva/brewva-std/collections";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
@@ -29,6 +30,7 @@ import type {
   RecoveryPreview,
   RecoveryPrimitive,
 } from "@brewva/brewva-vocabulary/delegation";
+import { RUNTIME_OPS_TOOL_CALL_ENDED_KIND } from "@brewva/brewva-vocabulary/events";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   SOURCE_PATCH_APPLIED_EVENT_TYPE,
@@ -64,7 +66,7 @@ const ACTIVE_TRUST_TOOL_EVENT_TYPES: ReadonlySet<string> = new Set([
   "tool_execution_update",
   "tool_execution_phase_change",
   "tool_execution_end",
-  "tool_call_ended",
+  RUNTIME_OPS_TOOL_CALL_ENDED_KIND,
   "tool_result",
 ]);
 const ACTIVE_TRUST_APPROVAL_EVENT_TYPES: ReadonlySet<string> = new Set([
@@ -138,10 +140,6 @@ interface RunProjection {
 }
 
 type WorkerProjection = NonNullable<ReturnType<typeof buildWorkerRecord>>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function nullableString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;

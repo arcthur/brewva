@@ -6,6 +6,7 @@ import {
   resolvePathInput,
   resolveProjectBrewvaRootDir,
 } from "@brewva/brewva-runtime/config";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaShortcutValue,
   BrewvaTuiConfig,
@@ -85,10 +86,6 @@ export const DEFAULT_BREWVA_TUI_CONFIG: BrewvaTuiConfig = {
     },
   },
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function deepMerge<T>(base: T, patch: unknown): T {
   if (!isRecord(base) || !isRecord(patch)) {

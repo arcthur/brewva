@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
+import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import type {
   BrewvaAgentProtocolFileContent,
   BrewvaAgentProtocolMessage,
@@ -181,7 +182,7 @@ export function buildSkillCommandText(
 
   try {
     const content = readFileSync(skill.filePath, "utf8");
-    const body = content.replace(/^---[\s\S]*?---\n?/u, "").trim();
+    const body = parseMarkdownFrontmatter(content).body.trim();
     const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
     return rawArgs.length > 0 ? `${skillBlock}\n\n${rawArgs}` : skillBlock;
   } catch {

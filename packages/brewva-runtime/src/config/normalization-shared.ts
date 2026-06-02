@@ -1,8 +1,7 @@
-export type AnyRecord = Record<string, unknown>;
+import { isRecord } from "@brewva/brewva-std/unknown";
 
-export function isRecord(value: unknown): value is AnyRecord {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+export type { AnyRecord } from "@brewva/brewva-std/unknown";
+export { isRecord };
 
 export function normalizeBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
