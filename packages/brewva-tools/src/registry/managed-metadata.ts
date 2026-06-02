@@ -40,6 +40,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "extensions.tools.onClearState",
     "capabilities.tools.outputs.observed",
     "capabilities.tools.readPath.discoveryObserved",
+    "capabilities.tools.sourcePatch.snapshots.record",
   ]),
   git_status: metadata("base", "workspace_read", [
     "capabilities.events.records.query",
