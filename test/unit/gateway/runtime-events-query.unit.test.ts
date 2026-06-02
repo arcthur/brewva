@@ -211,6 +211,68 @@ describe("hosted runtime event query", () => {
     ).toThrow("approval_request_not_pending:approval:approval-request-replay:call-exec:denied");
   });
 
+  test("rebuilds turn-scoped approval request rows from durable tape", async () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("runtime-events-query-approval-turn-id"),
+    });
+    const sessionId = "approval-request-turn-id";
+
+    await runtime.runtime.kernel.beginToolCall({
+      sessionId,
+      turnId: "turn-approval",
+      toolCallId: "call-exec",
+      toolName: "exec",
+      args: { command: "echo hello" },
+    });
+
+    expect(runtime.ops.proposals.requests.listPending(sessionId)).toMatchObject([
+      {
+        requestId: "approval:approval-request-turn-id:turn-approval:call-exec",
+        proposalId: "tool:approval-request-turn-id:turn-approval:call-exec",
+        turnId: "turn-approval",
+      },
+    ]);
+  });
+
+  test("rebuilds custom runtime ops approval decisions from durable tape", async () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("runtime-events-query-custom-approval-decision"),
+    });
+    const sessionId = "approval-custom-decision";
+    const requestId = "approval:approval-custom-decision:turn-approval:call-exec";
+
+    await runtime.runtime.kernel.beginToolCall({
+      sessionId,
+      turnId: "turn-approval",
+      toolCallId: "call-exec",
+      toolName: "exec",
+      args: { command: "echo hello" },
+    });
+    runtime.runtime.kernel.recordAdvisoryEvent({
+      sessionId,
+      turnId: "turn-approval",
+      namespace: "runtime.ops",
+      kind: "approval.decided",
+      version: 1,
+      payload: {
+        id: requestId,
+        requestId,
+        decision: "accept",
+        actor: "arthur",
+      },
+    });
+
+    expect(runtime.ops.proposals.requests.list(sessionId, { state: "accepted" })).toMatchObject([
+      {
+        requestId,
+        proposalId: "tool:approval-custom-decision:turn-approval:call-exec",
+        state: "accepted",
+        turnId: "turn-approval",
+        actor: "arthur",
+      },
+    ]);
+  });
+
   test("does not consume denied approval requests from later commitment records", async () => {
     const runtime = createRuntimeInstanceFixture({
       cwd: createTestWorkspace("runtime-events-query-denied-not-consumed"),
@@ -246,6 +308,41 @@ describe("hosted runtime event query", () => {
         state: "denied",
       },
     ]);
+  });
+
+  test("consumes accepted approval requests from terminal abort records", async () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("runtime-events-query-accepted-abort-consumed"),
+    });
+    const sessionId = "approval-accepted-abort-consumed";
+
+    await runtime.runtime.kernel.beginToolCall({
+      sessionId,
+      turnId: "turn-approval",
+      toolCallId: "call-exec",
+      toolName: "exec",
+      args: { command: "echo hello" },
+    });
+    runtime.ops.proposals.requests.decide(
+      sessionId,
+      "approval:approval-accepted-abort-consumed:turn-approval:call-exec",
+      {
+        decision: "accept",
+        actor: "arthur",
+      },
+    );
+    await runtime.runtime.kernel.abortToolCall({
+      commitmentId: "tool:approval-accepted-abort-consumed:turn-approval:call-exec",
+      reason: "tool_execution_failed",
+    });
+
+    expect(runtime.ops.proposals.requests.list(sessionId)).toMatchObject([
+      {
+        requestId: "approval:approval-accepted-abort-consumed:turn-approval:call-exec",
+        state: "consumed",
+      },
+    ]);
+    expect(runtime.ops.proposals.requests.list(sessionId, { state: "accepted" })).toEqual([]);
   });
 
   test("rebuilds subagent activity records from durable lifecycle events", async () => {

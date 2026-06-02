@@ -61,6 +61,11 @@ export interface CommitToolResultInput {
   readonly result: ToolExecutionResult;
 }
 
+export interface ResolveApprovalDecisionInput {
+  readonly sessionId: SessionId;
+  readonly requestId: string;
+}
+
 export type ToolExecutionOutcome<TOutput = unknown, TError = unknown> =
   | {
       readonly kind: "ok";
@@ -179,6 +184,7 @@ export interface KernelInterceptPort {
 
 export interface KernelPort {
   beginToolCall(call: ToolCallProposal): Promise<ToolCommitmentDecision>;
+  resolveApprovalDecision(input: ResolveApprovalDecisionInput): Promise<ToolCommitmentDecision>;
   commitToolResult(input: CommitToolResultInput): Promise<ToolCommitReceipt>;
   abortToolCall(input: AbortToolCallInput): Promise<ToolAbortReceipt>;
   recordAdvisoryEvent(input: AdvisoryEventInput): AdvisoryEventReceipt;

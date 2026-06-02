@@ -4,6 +4,7 @@ import type { CliShellSessionBundle } from "./session-port.js";
 
 export interface OperatorPort {
   getSnapshot(): Promise<OperatorSurfaceSnapshot>;
+  recoverAcceptedApprovals(): Promise<void>;
   decideApproval(requestId: string, input: DecideEffectCommitmentInput): Promise<void>;
   answerQuestion(questionId: string, answerText: string): Promise<void>;
   answerQuestionRequest(requestId: string, answers: readonly (readonly string[])[]): Promise<void>;

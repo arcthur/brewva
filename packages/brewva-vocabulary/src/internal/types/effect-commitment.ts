@@ -144,6 +144,7 @@ export interface EffectCommitmentRequestRecord {
   readonly state: EffectCommitmentRequestState;
   readonly createdAt: number;
   readonly toolName: string;
+  readonly turnId?: string;
   readonly actor?: string;
   readonly reason?: string;
 }
@@ -161,6 +162,7 @@ export interface PendingEffectCommitmentRequest {
   readonly effects?: readonly string[];
   readonly evidenceRefs?: readonly EvidenceRef[];
   readonly turn?: number;
+  readonly turnId?: string;
   readonly createdAt?: number;
   readonly defaultRisk?: string;
   readonly argsSummary?: string;

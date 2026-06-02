@@ -7,6 +7,7 @@ import {
   DEFAULT_BREWVA_CONFIG,
   type ToolCommitmentDecision,
 } from "@brewva/brewva-runtime";
+import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 function expectAllow(decision: ToolCommitmentDecision): string {
   expect(decision.kind).toBe("allow");
@@ -174,6 +175,56 @@ describe("kernel tool transaction", () => {
       "tool.proposed",
       "tool.aborted",
     ]);
+  });
+
+  test("allows exact approved tool commitments to resolve without creating another approval", async () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-approval-resolve-")),
+    });
+    const sessionId = "kernel-approval-resolve";
+    const call = {
+      sessionId,
+      turnId: "turn-1",
+      toolCallId: "call-exec",
+      toolName: "exec",
+      args: { command: "echo hello" },
+    };
+
+    const deferred = await runtime.runtime.kernel.beginToolCall(call);
+    expect(deferred).toMatchObject({
+      kind: "defer",
+      commitmentId: "tool:kernel-approval-resolve:turn-1:call-exec",
+      request: {
+        id: "approval:kernel-approval-resolve:turn-1:call-exec",
+      },
+    });
+
+    runtime.ops.proposals.requests.decide(
+      sessionId,
+      "approval:kernel-approval-resolve:turn-1:call-exec",
+      {
+        decision: "accept",
+        actor: "arthur",
+        reason: "operator_accepted",
+      },
+    );
+
+    const resolved = await runtime.runtime.kernel.beginToolCall(call);
+
+    expect(resolved).toMatchObject({
+      kind: "allow",
+      commitment: {
+        id: "tool:kernel-approval-resolve:turn-1:call-exec",
+      },
+      events: [],
+    });
+    expect(runtime.runtime.tape.list(sessionId).map((event) => event.type)).toEqual([
+      "tool.proposed",
+      "approval.requested",
+      "custom",
+    ]);
+    expect(runtime.runtime.tape.list(sessionId, { type: "tool.proposed" })).toHaveLength(1);
+    expect(runtime.runtime.tape.list(sessionId, { type: "approval.requested" })).toHaveLength(1);
   });
 
   test("applies explicit verification gate policy input without making adapters authoritative", async () => {

@@ -91,6 +91,7 @@ export type {
   RuntimeToolAuthorityResolver,
   RuntimeToolExecutorInput,
   RuntimeToolExecutorPort,
+  ResolveApprovalDecisionInput,
   SessionId,
   StepProjectionAuthority,
   StepProjectionRecord,

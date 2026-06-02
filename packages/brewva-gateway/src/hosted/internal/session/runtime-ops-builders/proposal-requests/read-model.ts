@@ -4,7 +4,10 @@ import type {
 } from "@brewva/brewva-vocabulary/iteration";
 import type { HostedRuntimeOpsContext } from "../../runtime-ops-context.js";
 
-export type ApprovalRequestRow = EffectCommitmentRequestRecord & PendingEffectCommitmentRequest;
+export type ApprovalRequestRow = EffectCommitmentRequestRecord &
+  PendingEffectCommitmentRequest & {
+    readonly turnId?: string;
+  };
 type RequestState = ApprovalRequestRow["state"];
 const ARG_SUMMARY_MAX_LENGTH = 240;
 
@@ -148,6 +151,7 @@ function buildApprovalRequests(
       const authority = readObject(payload.authority);
       const toolName = readString(payload.toolName) ?? "unknown";
       const toolCallId = readString(payload.toolCallId);
+      const turnId = readString(payload.turnId) ?? readString(event.turnId);
       const proposedCall = toolCallId ? proposedCallsByToolCallId.get(toolCallId) : undefined;
       const argsSummary = formatApprovalArgsSummary({
         toolName,
@@ -156,7 +160,7 @@ function buildApprovalRequests(
       });
       const proposalId = proposalIdForRequest({
         sessionId,
-        turnId: readString(payload.turnId) ?? readString(event.turnId),
+        turnId,
         toolCallId,
         proposedByToolCallId,
       });
@@ -169,6 +173,7 @@ function buildApprovalRequests(
         subject: toolName,
         toolName,
         ...(toolCallId ? { toolCallId } : {}),
+        ...(turnId ? { turnId } : {}),
         boundary: readString(authority.boundary) ?? "effectful",
         effects: readStringArray(authority.effects),
         evidenceRefs: [],
@@ -197,7 +202,7 @@ function buildApprovalRequests(
       });
       continue;
     }
-    if (event.type === "tool.committed") {
+    if (event.type === "tool.committed" || event.type === "tool.aborted") {
       const commitmentId = readString(payload.commitmentId);
       if (!commitmentId) {
         continue;

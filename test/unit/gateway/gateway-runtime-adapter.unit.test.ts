@@ -54,6 +54,59 @@ describe("gateway runtime adapter", () => {
     ]);
   });
 
+  test("hosted adapter resolves approvals without preparing a new prompt", async () => {
+    let preludeCalled = false;
+    const turnInputs: unknown[] = [];
+    const runtime = {
+      async *turn(input: unknown) {
+        turnInputs.push(input);
+        yield {
+          type: "runtime.event",
+          event: {
+            id: "event-turn-ended",
+            type: "turn.ended",
+            timestamp: 1_030,
+            sessionId: "adapter-resolution-session",
+            turnId: "turn-approval",
+            payload: { status: "completed" },
+          },
+        };
+      },
+    } as never;
+    const session = {
+      async [HOSTED_RUNTIME_TURN_PRELUDE]() {
+        preludeCalled = true;
+        return {
+          status: "ready" as const,
+          promptContent: [{ type: "text" as const, text: "should not be used" }],
+        };
+      },
+    } as never;
+
+    const result = await runHostedRuntimeTurnAdapter({
+      runtime,
+      sessionId: "adapter-resolution-session",
+      turnId: "turn-approval",
+      session,
+      prompt: [],
+      profile: resolveHostedTurnAdapterProfile({ source: "interactive" }),
+      resolveApproval: { requestId: "approval:adapter-resolution-session:turn-approval:call-1" },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(preludeCalled).toBe(false);
+    expect(turnInputs).toMatchObject([
+      {
+        sessionId: "adapter-resolution-session",
+        turnId: "turn-approval",
+        prompt: [],
+        resolveApproval: {
+          requestId: "approval:adapter-resolution-session:turn-approval:call-1",
+        },
+      },
+    ]);
+  });
+
   test("hosted runtime adapter commits assistant segments around live tool frames", async () => {
     const observedFrames: SessionWireFrame[] = [];
 

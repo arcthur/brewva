@@ -1,4 +1,4 @@
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime, TurnInput } from "@brewva/brewva-runtime";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import {
@@ -60,6 +60,7 @@ export interface RunHostedTurnEnvelopeInput {
   readonly turnId?: string;
   readonly trigger?: unknown;
   readonly walReplayId?: string;
+  readonly resolveApproval?: TurnInput["resolveApproval"];
   readonly onFrame?: (frame: SessionWireFrame) => void;
   readonly classifyThrownError?: (error: unknown) => HostedTurnEnvelopeTerminalStatus;
   readonly runAdapter?: HostedTurnEnvelopeAdapter;
@@ -204,6 +205,7 @@ export async function runHostedTurnEnvelope(
       sessionId,
       turnId,
       runtimeTurn,
+      resolveApproval: input.resolveApproval,
       onFrame: input.onFrame,
     });
 

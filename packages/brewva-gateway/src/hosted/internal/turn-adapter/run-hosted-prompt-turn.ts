@@ -1,3 +1,4 @@
+import type { TurnInput } from "@brewva/brewva-runtime";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type { ToolOutputView } from "@brewva/brewva-vocabulary/wire";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
@@ -42,6 +43,7 @@ export async function runHostedPromptTurn(input: {
   readonly runtime: HostedRuntimeAdapterPort;
   readonly sessionId: string;
   readonly turnId?: string;
+  readonly resolveApproval?: TurnInput["resolveApproval"];
   readonly onFrame?: (frame: SessionWireFrame) => void;
 }): Promise<HostedPromptTurnResult> {
   const result = await runHostedTurnEnvelope({
@@ -50,6 +52,7 @@ export async function runHostedPromptTurn(input: {
     runtime: input.runtime,
     sessionId: input.sessionId,
     turnId: input.turnId,
+    resolveApproval: input.resolveApproval,
     source: input.source,
     onFrame: input.onFrame,
   });

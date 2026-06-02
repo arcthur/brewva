@@ -24,6 +24,7 @@ import type {
   ToolCommitmentDecision,
   ToolCommitReceipt,
   ToolAbortReceipt,
+  ResolveApprovalDecisionInput,
   RuntimeToolAuthorityResolver,
 } from "../runtime-api.js";
 import {
@@ -59,6 +60,7 @@ interface ShadowToolAuthorityInterceptor {
 }
 
 const MAX_SHADOW_EVIDENCE_ENTRIES = 512;
+const RUNTIME_OPS_EVENT_NAMESPACE = "runtime.ops";
 
 function commitmentIdFor(call: ToolCallProposal): string {
   if (call.turnId) {
@@ -353,6 +355,67 @@ function findApprovalRequestEvent(
   );
 }
 
+function readApprovalDecision(value: unknown): "accept" | "deny" | "cancel" | null {
+  return value === "accept" || value === "deny" || value === "cancel" ? value : null;
+}
+
+function findApprovalDecisionEvent(
+  tape: TapePort,
+  sessionId: string,
+  requestId: string,
+): CanonicalEvent | null {
+  return (
+    tape
+      .list(sessionId)
+      .toReversed()
+      .find((event) => {
+        const payload = readApprovalDecisionPayload(event);
+        return payload !== null && (payload.id === requestId || payload.requestId === requestId);
+      }) ?? null
+  );
+}
+
+function readApprovalDecisionPayload(event: CanonicalEvent): Record<string, unknown> | null {
+  if (event.type === "approval.decided") {
+    return readPayload(event);
+  }
+  if (event.type !== "custom") {
+    return null;
+  }
+  const payload = readPayload(event);
+  if (payload.namespace !== RUNTIME_OPS_EVENT_NAMESPACE || payload.kind !== "approval.decided") {
+    return null;
+  }
+  return isRecord(payload.payload) ? payload.payload : null;
+}
+
+function readApprovalRequestFromEvent(event: CanonicalEvent): ApprovalRequest | null {
+  const payload = readPayload(event);
+  const id = payload.id;
+  const sessionId = payload.sessionId;
+  const toolCallId = payload.toolCallId;
+  const toolName = payload.toolName;
+  const reason = payload.reason;
+  if (
+    typeof id !== "string" ||
+    typeof sessionId !== "string" ||
+    typeof toolCallId !== "string" ||
+    typeof toolName !== "string" ||
+    typeof reason !== "string"
+  ) {
+    return null;
+  }
+  const turnId = typeof payload.turnId === "string" ? payload.turnId : event.turnId;
+  return Object.freeze({
+    id,
+    sessionId,
+    ...(turnId ? { turnId } : {}),
+    toolCallId,
+    toolName,
+    reason,
+  });
+}
+
 function findProposedCommitmentEvent(
   tape: TapePort,
   commitmentId: string,
@@ -373,6 +436,15 @@ function findProposedCommitmentEvent(
 
 function findProposedCommitment(tape: TapePort, commitmentId: string): ToolCommitment | null {
   return findProposedCommitmentEvent(tape, commitmentId)?.commitment ?? null;
+}
+
+function commitmentIdForApprovalRequest(request: ApprovalRequest): string {
+  return commitmentIdFor({
+    sessionId: request.sessionId,
+    ...(request.turnId ? { turnId: request.turnId } : {}),
+    toolCallId: request.toolCallId,
+    toolName: request.toolName,
+  });
 }
 
 function requireInterceptorId(value: unknown): string {
@@ -653,6 +725,44 @@ export function createKernelPort(
           call.sessionId,
           approvalRequest.id,
         );
+        const approvalDecisionEvent = existingApprovalEvent
+          ? findApprovalDecisionEvent(projection, call.sessionId, approvalRequest.id)
+          : null;
+        const approvalDecisionPayload = approvalDecisionEvent
+          ? readApprovalDecisionPayload(approvalDecisionEvent)
+          : null;
+        const approvalDecision = readApprovalDecision(approvalDecisionPayload?.decision);
+        if (approvalDecision === "accept") {
+          const decision = {
+            kind: "allow" as const,
+            commitment,
+            events: emittedEvents,
+          };
+          recordShadowToolAuthorityEvidence(call, decision);
+          return decision;
+        }
+        if (approvalDecision === "deny" || approvalDecision === "cancel") {
+          const reason = `approval_request_${approvalDecision === "deny" ? "denied" : "cancelled"}`;
+          const event = tape.commit({
+            sessionId: commitment.call.sessionId,
+            ...(commitment.call.turnId ? { turnId: commitment.call.turnId } : {}),
+            type: "tool.aborted",
+            payload: {
+              commitmentId,
+              call: commitment.call,
+              reason,
+            },
+          });
+          commitments.delete(commitmentId);
+          const decision = {
+            kind: "block" as const,
+            commitmentId,
+            reason,
+            events: [...emittedEvents, event],
+          };
+          recordShadowToolAuthorityEvidence(call, decision);
+          return decision;
+        }
         const approvalEvent =
           existingApprovalEvent ??
           tape.commit({
@@ -685,6 +795,95 @@ export function createKernelPort(
       };
       recordShadowToolAuthorityEvidence(call, decision);
       return decision;
+    },
+
+    async resolveApprovalDecision(
+      input: ResolveApprovalDecisionInput,
+    ): Promise<ToolCommitmentDecision> {
+      const approvalEvent = findApprovalRequestEvent(projection, input.sessionId, input.requestId);
+      const approvalRequest = approvalEvent ? readApprovalRequestFromEvent(approvalEvent) : null;
+      if (!approvalRequest) {
+        return {
+          kind: "block" as const,
+          commitmentId: `approval:${input.sessionId}:${input.requestId}`,
+          reason: "approval_request_not_found",
+          events: [],
+        };
+      }
+
+      const commitmentId = commitmentIdForApprovalRequest(approvalRequest);
+      const terminal = findTerminalEvent(projection, input.sessionId, commitmentId);
+      if (terminal?.type === "tool.committed") {
+        return {
+          kind: "block" as const,
+          commitmentId,
+          reason: "tool_commitment_already_committed",
+          events: [terminal],
+        };
+      }
+      if (terminal?.type === "tool.aborted") {
+        return {
+          kind: "block" as const,
+          commitmentId,
+          reason: readAbortReason(terminal),
+          events: [terminal],
+        };
+      }
+
+      const proposed = findProposedCommitmentEvent(projection, commitmentId);
+      if (!proposed) {
+        return {
+          kind: "block" as const,
+          commitmentId,
+          reason: "tool_commitment_not_found",
+          events: [],
+        };
+      }
+
+      const approvalDecisionEvent = findApprovalDecisionEvent(
+        projection,
+        input.sessionId,
+        input.requestId,
+      );
+      const approvalDecisionPayload = approvalDecisionEvent
+        ? readApprovalDecisionPayload(approvalDecisionEvent)
+        : null;
+      const approvalDecision = readApprovalDecision(approvalDecisionPayload?.decision);
+      if (approvalDecision === "accept") {
+        commitments.set(commitmentId, proposed.commitment);
+        return {
+          kind: "allow" as const,
+          commitment: proposed.commitment,
+          events: [],
+        };
+      }
+      if (approvalDecision === "deny" || approvalDecision === "cancel") {
+        const reason = `approval_request_${approvalDecision === "deny" ? "denied" : "cancelled"}`;
+        const event = tape.commit({
+          sessionId: proposed.commitment.call.sessionId,
+          ...(proposed.commitment.call.turnId ? { turnId: proposed.commitment.call.turnId } : {}),
+          type: "tool.aborted",
+          payload: {
+            commitmentId,
+            call: proposed.commitment.call,
+            reason,
+          },
+        });
+        commitments.delete(commitmentId);
+        return {
+          kind: "block" as const,
+          commitmentId,
+          reason,
+          events: [event],
+        };
+      }
+
+      return {
+        kind: "defer" as const,
+        commitmentId,
+        request: approvalRequest,
+        events: [],
+      };
     },
 
     async commitToolResult(input: CommitToolResultInput): Promise<ToolCommitReceipt> {

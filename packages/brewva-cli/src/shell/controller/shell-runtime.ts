@@ -1675,6 +1675,7 @@ export class CliShellRuntime {
   private async refreshOperatorSnapshot(
     sessionGeneration = this.#sessionGeneration,
   ): Promise<void> {
+    await this.#operatorPort.recoverAcceptedApprovals();
     const changed = await this.#operatorSnapshotSync.refresh(sessionGeneration);
     if (changed) {
       this.#cockpitSync.requestSync();

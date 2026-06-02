@@ -439,6 +439,233 @@ describe("runtime turn loop", () => {
     });
   });
 
+  test("resolves accepted approval requests from a suspended turn", async () => {
+    let calls = 0;
+    let executed = 0;
+    const requestId = "approval:s1:turn-approval:call-approval";
+    const provider: RuntimeProviderPort = {
+      async *stream(input) {
+        calls += 1;
+        if (calls === 2) {
+          expect(input.prompt.messages).toEqual([
+            { role: "user", content: "write" },
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [
+                {
+                  toolCallId: "call-approval",
+                  toolName: "write_file",
+                  args: { path: "README.md" },
+                },
+              ],
+            },
+            {
+              role: "tool",
+              content: "executed:write_file:call-approval",
+              toolCallId: "call-approval",
+              toolName: "write_file",
+              isError: false,
+            },
+          ]);
+          yield { type: "text", delta: "write complete" };
+          return;
+        }
+        yield {
+          type: "tool",
+          call: {
+            toolCallId: "call-approval",
+            toolName: "write_file",
+            args: { path: "README.md" },
+            approval: {
+              required: true,
+              reason: "requires_operator_approval",
+            },
+          },
+        };
+      },
+    };
+    const toolExecutor: RuntimeToolExecutorPort = {
+      async execute(commitment) {
+        executed += 1;
+        return {
+          outcome: { kind: "ok", value: {} },
+          content: `executed:${commitment.call.toolName}:${commitment.call.toolCallId}`,
+        };
+      },
+    };
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-approval-resolve-")),
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
+    });
+
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        turnId: "turn-approval",
+        prompt: "write",
+      }),
+    );
+    runtime.kernel.recordAdvisoryEvent({
+      sessionId: "s1",
+      turnId: "turn-approval",
+      namespace: "runtime.ops",
+      kind: "approval.decided",
+      version: 1,
+      payload: {
+        id: requestId,
+        requestId,
+        decision: "accept",
+        actor: "test",
+      },
+    });
+
+    const resolvedFrames = await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        turnId: "turn-approval",
+        prompt: "",
+        resolveApproval: { requestId },
+      }),
+    );
+
+    expect(resolvedFrames.map((frame) => frame.type)).toEqual([
+      "runtime.event",
+      "text",
+      "runtime.event",
+      "runtime.event",
+    ]);
+    expect(calls).toBe(2);
+    expect(executed).toBe(1);
+    expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
+      "turn.started",
+      "tool.proposed",
+      "approval.requested",
+      "runtime.suspended",
+      "custom",
+      "tool.committed",
+      "msg.committed",
+      "turn.ended",
+    ]);
+    expect(runtime.tape.list("s1", { type: "turn.started" })).toHaveLength(1);
+    expect(runtime.tape.list("s1", { type: "tool.committed" })[0]?.payload).toMatchObject({
+      commitmentId: "tool:s1:turn-approval:call-approval",
+      result: {
+        outcome: { kind: "ok", value: {} },
+        content: "executed:write_file:call-approval",
+      },
+    });
+  });
+
+  test("resolves denied approval requests as aborted tool results", async () => {
+    const requestId = "approval:s1:turn-denied-approval:call-denied";
+    let calls = 0;
+    let executed = 0;
+    const provider: RuntimeProviderPort = {
+      async *stream(input) {
+        calls += 1;
+        if (calls === 2) {
+          expect(input.prompt.messages.at(-1)).toMatchObject({
+            role: "tool",
+            content: "approval_request_denied",
+            toolCallId: "call-denied",
+            toolName: "write_file",
+            isError: true,
+          });
+          yield { type: "text", delta: "write denied" };
+          return;
+        }
+        yield {
+          type: "tool",
+          call: {
+            toolCallId: "call-denied",
+            toolName: "write_file",
+            args: { path: "README.md" },
+            approval: {
+              required: true,
+              reason: "requires_operator_approval",
+            },
+          },
+        };
+      },
+    };
+    const toolExecutor: RuntimeToolExecutorPort = {
+      async execute() {
+        executed += 1;
+        return {
+          outcome: { kind: "ok", value: {} },
+          content: "should not execute",
+        };
+      },
+    };
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-approval-denied-")),
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
+    });
+
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        turnId: "turn-denied-approval",
+        prompt: "write",
+      }),
+    );
+    runtime.kernel.recordAdvisoryEvent({
+      sessionId: "s1",
+      turnId: "turn-denied-approval",
+      namespace: "runtime.ops",
+      kind: "approval.decided",
+      version: 1,
+      payload: {
+        id: requestId,
+        requestId,
+        decision: "deny",
+        actor: "test",
+      },
+    });
+
+    const resolvedFrames = await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        turnId: "turn-denied-approval",
+        prompt: "",
+        resolveApproval: { requestId },
+      }),
+    );
+
+    expect(resolvedFrames.map((frame) => frame.type)).toEqual([
+      "runtime.event",
+      "text",
+      "runtime.event",
+      "runtime.event",
+    ]);
+    expect(calls).toBe(2);
+    expect(executed).toBe(0);
+    expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
+      "turn.started",
+      "tool.proposed",
+      "approval.requested",
+      "runtime.suspended",
+      "custom",
+      "tool.aborted",
+      "msg.committed",
+      "turn.ended",
+    ]);
+    expect(runtime.tape.list("s1", { type: "tool.aborted" })[0]?.payload).toMatchObject({
+      commitmentId: "tool:s1:turn-denied-approval:call-denied",
+      reason: "approval_request_denied",
+    });
+    expect(runtime.tape.list("s1", { type: "turn.started" })).toHaveLength(1);
+  });
+
   test("suspends policy-gated tool calls before the executor can run", async () => {
     let executed = false;
     const provider: RuntimeProviderPort = {

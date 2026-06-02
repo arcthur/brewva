@@ -10,6 +10,7 @@ import type {
   RuntimeProviderPort,
   RuntimeToolExecutorPort,
   TapeCommitPort,
+  ToolCommitmentDecision,
   TurnFrame,
   TurnInput,
 } from "../runtime-api.js";
@@ -63,7 +64,15 @@ export function createTurnRunner(input: {
 }): (turn: TurnInput) => AsyncIterable<TurnFrame> {
   return async function* runTurn(turn: TurnInput): AsyncIterable<TurnFrame> {
     const provider = input.provider;
-    const turnId = turn.turnId ?? `turn_${randomUUID()}`;
+    type ToolOutcome = "continue" | "committed" | "suspend";
+    type AllowedToolDecision = Extract<ToolCommitmentDecision, { readonly kind: "allow" }>;
+    type ToolExecutionQueueItem =
+      | { readonly kind: "progress"; readonly frame: TurnFrame }
+      | {
+          readonly kind: "done";
+          readonly result: Awaited<ReturnType<RuntimeToolExecutorPort["execute"]>>;
+        };
+    let turnId = turn.turnId ?? `turn_${randomUUID()}`;
 
     function suspendForInterrupt(): TurnFrame {
       const suspended = input.tape.commit({
@@ -75,41 +84,9 @@ export function createTurnRunner(input: {
       return { type: "runtime.event", event: suspended };
     }
 
-    async function* handleProviderToolFrame(
-      frame: Extract<RuntimeProviderFrame, { type: "tool" }>,
-    ): AsyncGenerator<TurnFrame, "continue" | "committed" | "suspend", void> {
-      const decision = await input.kernel.beginToolCall({
-        sessionId: turn.sessionId,
-        turnId,
-        ...frame.call,
-      });
-      for (const event of decision.events) {
-        yield { type: "runtime.event", event };
-      }
-      if (decision.kind === "block") {
-        return "continue";
-      }
-      if (decision.kind === "defer") {
-        const suspended = input.tape.commit({
-          sessionId: turn.sessionId,
-          turnId,
-          type: "runtime.suspended",
-          payload: {
-            cause: "approval_pending",
-            commitmentId: decision.commitmentId,
-            approvalRequestId: decision.request.id,
-          },
-        });
-        yield { type: "runtime.event", event: suspended };
-        yield { type: "runtime.suspended", cause: "approval_pending" };
-        return "suspend";
-      }
-      type ToolExecutionQueueItem =
-        | { readonly kind: "progress"; readonly frame: TurnFrame }
-        | {
-            readonly kind: "done";
-            readonly result: Awaited<ReturnType<RuntimeToolExecutorPort["execute"]>>;
-          };
+    async function* executeAllowedToolDecision(
+      decision: AllowedToolDecision,
+    ): AsyncGenerator<TurnFrame, ToolOutcome, void> {
       const controller = new AbortController();
       const unlinkAbort = linkAbortSignal(turn.signal, controller);
       const bridge = createAsyncBridge<ToolExecutionQueueItem>({
@@ -166,6 +143,44 @@ export function createTurnRunner(input: {
         void producer.catch(() => undefined);
       }
       return "continue";
+    }
+
+    async function* handleToolDecision(
+      decision: ToolCommitmentDecision,
+    ): AsyncGenerator<TurnFrame, ToolOutcome, void> {
+      for (const event of decision.events) {
+        yield { type: "runtime.event", event };
+      }
+      if (decision.kind === "block") {
+        return "continue";
+      }
+      if (decision.kind === "defer") {
+        const suspended = input.tape.commit({
+          sessionId: turn.sessionId,
+          turnId,
+          type: "runtime.suspended",
+          payload: {
+            cause: "approval_pending",
+            commitmentId: decision.commitmentId,
+            approvalRequestId: decision.request.id,
+          },
+        });
+        yield { type: "runtime.event", event: suspended };
+        yield { type: "runtime.suspended", cause: "approval_pending" };
+        return "suspend";
+      }
+      return yield* executeAllowedToolDecision(decision);
+    }
+
+    async function* handleProviderToolFrame(
+      frame: Extract<RuntimeProviderFrame, { type: "tool" }>,
+    ): AsyncGenerator<TurnFrame, ToolOutcome, void> {
+      const decision = await input.kernel.beginToolCall({
+        sessionId: turn.sessionId,
+        turnId,
+        ...frame.call,
+      });
+      return yield* handleToolDecision(decision);
     }
 
     async function materializeReadyPrompt(): Promise<{
@@ -236,6 +251,10 @@ export function createTurnRunner(input: {
         : "runtime_turn_failed";
     }
 
+    function decisionIncludesAbortedToolResult(decision: ToolCommitmentDecision): boolean {
+      return decision.events.some((event) => event.type === "tool.aborted");
+    }
+
     function commitTurnEnded(
       inputValue: {
         status?: "completed" | "failed" | "cancelled";
@@ -257,13 +276,31 @@ export function createTurnRunner(input: {
       return { type: "runtime.event", event: ended };
     }
 
-    const started = input.tape.commit({
-      sessionId: turn.sessionId,
-      turnId,
-      type: "turn.started",
-      payload: turnStartedPayload(turn),
-    });
-    yield { type: "runtime.event", event: started };
+    const approvalDecision = turn.resolveApproval
+      ? await input.kernel.resolveApprovalDecision({
+          sessionId: turn.sessionId,
+          requestId: turn.resolveApproval.requestId,
+        })
+      : null;
+    const approvalTurnId =
+      approvalDecision?.kind === "allow"
+        ? approvalDecision.commitment.call.turnId
+        : approvalDecision?.kind === "defer"
+          ? approvalDecision.request.turnId
+          : undefined;
+    if (!turn.turnId && approvalTurnId) {
+      turnId = approvalTurnId;
+    }
+
+    if (!turn.resolveApproval) {
+      const started = input.tape.commit({
+        sessionId: turn.sessionId,
+        turnId,
+        type: "turn.started",
+        payload: turnStartedPayload(turn),
+      });
+      yield { type: "runtime.event", event: started };
+    }
 
     if (turn.signal?.aborted) {
       yield suspendForInterrupt();
@@ -275,6 +312,25 @@ export function createTurnRunner(input: {
       let retryProviderOnce = true;
       let committedToolThisTurn = false;
       let providerToolContinuations = 0;
+      if (approvalDecision) {
+        const approvalOutcome = yield* handleToolDecision(approvalDecision);
+        if (approvalOutcome === "suspend") {
+          return;
+        }
+        if (
+          approvalOutcome === "committed" ||
+          decisionIncludesAbortedToolResult(approvalDecision)
+        ) {
+          committedToolThisTurn = true;
+          providerToolContinuations = 1;
+        } else {
+          throw new Error(
+            approvalDecision.kind === "block"
+              ? `approval_resolution_blocked:${approvalDecision.reason}`
+              : "approval_resolution_did_not_commit_tool",
+          );
+        }
+      }
       for (;;) {
         const materialized = await materializeReadyPrompt();
         for (const event of materialized.events) {

@@ -209,6 +209,17 @@ export function listCliRuntimePendingProposalRequests(
   return runtime.ops.proposals.requests.listPending(sessionId);
 }
 
+export function listCliRuntimeProposalRequests(
+  runtime: InspectRuntime,
+  sessionId: string,
+  query?: Parameters<InspectRuntime["ops"]["proposals"]["requests"]["list"]>[1],
+): ReturnType<InspectRuntime["ops"]["proposals"]["requests"]["list"]> {
+  const requests = runtime.ops.proposals.requests as {
+    list?: InspectRuntime["ops"]["proposals"]["requests"]["list"];
+  };
+  return requests.list?.(sessionId, query) ?? [];
+}
+
 export function decideCliRuntimeProposalRequest(
   runtime: AuthorityRuntime,
   sessionId: string,

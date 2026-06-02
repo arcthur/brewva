@@ -34,6 +34,7 @@ export interface RunHostedRuntimeTurnAdapterInput {
   readonly sessionId?: string;
   readonly turnId?: string;
   readonly runtimeTurn?: number;
+  readonly resolveApproval?: TurnInput["resolveApproval"];
   readonly onFrame?: (frame: SessionWireFrame) => void;
 }
 
@@ -149,11 +150,13 @@ export async function runHostedRuntimeTurnAdapter(
     });
   }
 
-  const prompt = await resolveRuntimePrompt({
-    session: input.session,
-    prompt: input.prompt,
-    profile: input.profile,
-  });
+  const prompt = input.resolveApproval
+    ? { status: "ready" as const, prompt: [], prelude: null }
+    : await resolveRuntimePrompt({
+        session: input.session,
+        prompt: input.prompt,
+        profile: input.profile,
+      });
   if (prompt.status !== "ready") {
     return completedRuntimePreludeResult({
       sessionId,
@@ -188,6 +191,7 @@ export async function runHostedRuntimeTurnAdapter(
       ...(input.turnId ? { turnId: input.turnId } : {}),
       prompt: prompt.prompt,
       mode: input.profile.name,
+      ...(input.resolveApproval ? { resolveApproval: input.resolveApproval } : {}),
       ...(prompt.prelude?.signal ? { signal: prompt.prelude.signal } : {}),
     })) {
       const currentProjectionSequence = nextProjectionSequence();

@@ -60,6 +60,9 @@ export interface TurnInput {
   readonly mode?: string;
   readonly budget?: RuntimeBudget;
   readonly signal?: AbortSignal;
+  readonly resolveApproval?: {
+    readonly requestId: string;
+  };
 }
 
 export type TurnFrame =

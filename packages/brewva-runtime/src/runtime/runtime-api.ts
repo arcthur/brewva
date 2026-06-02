@@ -53,6 +53,7 @@ export type {
   KernelVerificationGatePolicyInput,
   KernelVerificationGatePosture,
   KernelVerificationGateStatus,
+  ResolveApprovalDecisionInput,
   ToolAbortReceipt,
   ToolCallProposal,
   ToolCommitment,
