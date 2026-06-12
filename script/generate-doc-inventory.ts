@@ -13,7 +13,7 @@ type InventoryBlock = {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RUNTIME_ROOT_MEMBER_BUDGET = 8;
-const CANONICAL_EVENT_TYPE_BUDGET = 14;
+const CANONICAL_EVENT_TYPE_BUDGET = 15;
 
 function readRepoFile(relativePath: string): string {
   return readFileSync(resolve(repoRoot, relativePath), "utf-8");

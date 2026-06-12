@@ -91,6 +91,8 @@ import type {
 } from "@brewva/brewva-vocabulary/task";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type {
+  PatchRollbackCandidateView,
+  PatchRollbackResult,
   SourcePatchApplyResult,
   SourcePatchPlan,
   SourcePatchStaleRecoveryRecord,
@@ -466,14 +468,9 @@ export interface BrewvaToolRuntimeCommandPort {
     };
     readonly patches: {
       redoLastPatchSet(sessionId: string): RuntimeMutationResult;
+      rollbackCandidate(sessionId: string): PatchRollbackCandidateView;
       rollbackLastMutation(sessionId: string): RuntimeMutationResult;
-      rollbackLastPatchSet(sessionId: string): {
-        ok: boolean;
-        patchSetId?: string;
-        restoredPaths: string[];
-        failedPaths: string[];
-        reason?: string;
-      };
+      rollbackLastPatchSet(sessionId: string): PatchRollbackResult;
     };
     readonly sourcePatch: {
       readonly snapshots: {

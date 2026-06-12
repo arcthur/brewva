@@ -518,6 +518,8 @@ export class CliShellRuntime {
       notify: (message, level) => this.ui.notify(message, level),
       commit: (action, commitOptions) => this.commit(action, commitOptions),
       runShellEffects: (effects) => this.runShellEffects(effects),
+      decideApproval: (requestId, decisionInput) =>
+        this.#operatorPort.decideApproval(requestId, decisionInput),
       refreshOperatorSnapshot: () => this.refreshOperatorSnapshotEffect(),
       allowApprovalForRun: (request) => this.allowApprovalForRun(request),
       closeActiveOverlay: (cancelled) => this.#overlayHandler.closeActiveOverlay(cancelled),

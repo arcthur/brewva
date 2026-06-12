@@ -1,5 +1,8 @@
 import type { GoalCommand } from "@brewva/brewva-vocabulary/goal";
-import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
+import type {
+  DecideEffectCommitmentInput,
+  DecideEffectCommitmentResult,
+} from "@brewva/brewva-vocabulary/iteration";
 import type { ContinuationAnchorDraft, ShellEffect } from "../domain/effects.js";
 import type { CliShellInput } from "../domain/input.js";
 import { buildTextTranscriptMessage } from "../domain/transcript.js";
@@ -83,7 +86,10 @@ export interface ShellEffectDispatcherContext {
   listThemes(): void;
   setTheme(selection: string): void;
   refreshOperator(sessionGeneration: number): Promise<void>;
-  decideApproval(requestId: string, input: DecideEffectCommitmentInput): Promise<void>;
+  decideApproval(
+    requestId: string,
+    input: DecideEffectCommitmentInput,
+  ): Promise<DecideEffectCommitmentResult>;
   answerQuestion(questionId: string, answerText: string): Promise<void>;
   answerQuestionRequest(requestId: string, answers: readonly (readonly string[])[]): Promise<void>;
   stopTask(runId: string): Promise<void>;

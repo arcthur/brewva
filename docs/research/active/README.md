@@ -40,6 +40,10 @@ discipline.
   active RFC for closing Brewva's context-budget loop, making compaction cut
   points token-aware, and promoting workbench-gated compaction into a runtime
   contract.
+- [RFC: Effect Approval And Rollback Closure](./rfc-effect-approval-and-rollback-closure.md):
+  active RFC for hardening approval-bound effect commitment, exact resume,
+  approval consumption, rollback capability wiring, and evidence-native
+  operator surfaces.
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

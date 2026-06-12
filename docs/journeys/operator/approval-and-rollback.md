@@ -93,11 +93,25 @@ flowchart TD
   approval-bound
 - pending approval is replay-hydrated from tape after restart; there is no
   process-local fallback
+- concurrent or late decisions resolve to the first durable decision on tape;
+  later attempts stay recorded as no-op receipts and never change the outcome
+- an approval-bound call may declare a closure bound (`approval.expiresAt`);
+  the bound restricts when execution may start, never whether a begun
+  execution may finish. Admission records a durable `tool.started` receipt;
+  decisions recorded at or after the bound do not bind, and a request or
+  acceptance with no pre-bound start receipt terminalizes as
+  `approval_request_expired` at the next authority touch — lazily, with a
+  durable abort receipt, never via a background timer
 - if an external effect completes before durable observation is recorded, the
   path still carries at-least-once semantics; backends should treat the request
   id as an idempotency key whenever possible
 - `rollback_last_patch` only covers tracked `PatchSet` artifacts, including
-  source patches that recorded rollback artifacts during apply
+  source patches that recorded rollback artifacts during apply; it reports
+  explicit `no_patchset`, `rollback_artifact_missing`, `conflict`, and
+  `partial_failure` states instead of implying universal undo
+- rollback preflight validates the simulated post-apply state per path before
+  touching any file, so workspace drift surfaces as `conflict` with zero
+  mutation
 - `rollbackLastMutation(...)` is the receipt-aware rollback surface and returns
   an explicit no-candidate result when no rollback receipt exists
 
@@ -109,14 +123,19 @@ flowchart TD
   - `HostedRuntimeAdapterPort.ops.proposals.requests.listPending(...)`
   - `HostedRuntimeAdapterPort.ops.proposals.proposals.list(...)`
   - `brewva inspect`
-- core durable events:
-  - `proposal_received`
-  - `proposal_decided`
-  - `decision_receipt_recorded`
-  - `effect_commitment_approval_requested`
-  - `effect_commitment_approval_decided`
-  - `effect_commitment_approval_consumed`
-  - `rollback`
+- core durable events (operator-facing prose names map onto the runtime event
+  family; the runtime names are the replay truth):
+  - proposal admission receipts — runtime event `proposal.submitted` (carries
+    the decision receipt)
+  - `effect_commitment_approval_requested` — runtime event `approval.requested`
+  - `effect_commitment_approval_decided` — runtime event `approval.decided`
+  - `effect_commitment_approval_consumed` — replay-derived from an accepted
+    approval plus its linked `tool.committed` result; there is no separate
+    consumed event
+  - proposed and committed effects — runtime events `tool.proposed`,
+    `tool.committed`, and `tool.aborted` (terminal closure receipts, including
+    `approval_request_expired`)
+  - rollback evidence — runtime event `rollback.recorded`
 
 ## Code Pointers
 

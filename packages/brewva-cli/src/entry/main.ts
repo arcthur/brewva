@@ -561,24 +561,48 @@ export async function runCliRootOperation(): Promise<void> {
       parsed.redo ? "redo" : "undo",
       parsed.sessionId,
     );
-    if (!targetSessionId) {
-      console.log(`No session ${parsed.redo ? "redo" : "undo"} applied (no_checkpoint).`);
-      return;
-    }
-    const result = parsed.redo
-      ? runtime.ops.session.rewind.redo(targetSessionId)
-      : runtime.ops.session.rewind.rewind(targetSessionId, {
-          mode: "both",
-          summary: "carry",
-        });
-    if (!result.ok) {
-      console.log(`No session ${parsed.redo ? "redo" : "undo"} applied (${result.reason}).`);
-    } else {
-      const promptSuffix = result.restoredPrompt?.text
-        ? ` Restored prompt: ${result.restoredPrompt.text.trim()}`
+    const lineageResult = targetSessionId
+      ? parsed.redo
+        ? runtime.ops.session.rewind.redo(targetSessionId)
+        : runtime.ops.session.rewind.rewind(targetSessionId, {
+            mode: "both",
+            summary: "carry",
+          })
+      : null;
+    if (lineageResult?.ok) {
+      const promptSuffix = lineageResult.restoredPrompt?.text
+        ? ` Restored prompt: ${lineageResult.restoredPrompt.text.trim()}`
         : "";
       console.log(
-        `Session ${parsed.redo ? "redo" : "undo"} applied in session ${targetSessionId} (${result.patchSetIds.length} patch set(s)).${promptSuffix}`,
+        `Session ${parsed.redo ? "redo" : "undo"} applied in session ${targetSessionId} (${lineageResult.patchSetIds.length} patch set(s)).${promptSuffix}`,
+      );
+      return;
+    }
+    const lineageReason =
+      lineageResult && !lineageResult.ok ? lineageResult.reason : "no_checkpoint";
+    if (parsed.redo) {
+      console.log(`No session redo applied (${lineageReason}).`);
+      return;
+    }
+    // Undo composes two recovery planes: lineage rewind (above) and patch
+    // rollback over tracked workspace mutations. When lineage has nothing to
+    // rewind, the workspace plane is still attempted and reported on its own
+    // terms.
+    const rollbackSessionId = parsed.sessionId ?? targetSessionId;
+    if (!rollbackSessionId) {
+      console.log(
+        `No session undo applied (lineage: ${lineageReason}; workspace: pass --session to target tracked patch rollback).`,
+      );
+      return;
+    }
+    const rollback = runtime.capabilities.tools.patches.rollbackLastPatchSet(rollbackSessionId);
+    if (rollback.ok) {
+      console.log(
+        `Workspace rollback applied in session ${rollbackSessionId}: restored patch set ${rollback.patchSetId ?? "unknown"} (${rollback.restoredPaths.length} file(s)). Lineage rewind unavailable (${lineageReason}).`,
+      );
+    } else {
+      console.log(
+        `No session undo applied (lineage: ${lineageReason}; workspace: ${rollback.reason ?? "no_patchset"}).`,
       );
     }
     return;

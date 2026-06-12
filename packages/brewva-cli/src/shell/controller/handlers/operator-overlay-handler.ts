@@ -1,4 +1,8 @@
-import type { PendingEffectCommitmentRequest } from "@brewva/brewva-vocabulary/iteration";
+import type {
+  DecideEffectCommitmentInput,
+  DecideEffectCommitmentResult,
+  PendingEffectCommitmentRequest,
+} from "@brewva/brewva-vocabulary/iteration";
 import type { ShellCommitOptions } from "../../domain/actions.js";
 import type { ShellEffect } from "../../domain/effects.js";
 import type { CliShellInput } from "../../domain/input.js";
@@ -15,6 +19,10 @@ export interface ShellOperatorOverlayHandlerContext {
   notify(message: string, level: "info" | "warning" | "error"): void;
   commit(action: CliShellAction, options?: ShellCommitOptions): void;
   runShellEffects(effects: readonly ShellEffect[]): Promise<void>;
+  decideApproval(
+    requestId: string,
+    input: DecideEffectCommitmentInput,
+  ): Promise<DecideEffectCommitmentResult>;
   refreshOperatorSnapshot(): Promise<void>;
   allowApprovalForRun(request: PendingEffectCommitmentRequest): Promise<void>;
   closeActiveOverlay(cancelled: boolean): void;
@@ -190,20 +198,21 @@ export class ShellOperatorOverlayHandler {
     requestId: string,
     decision: "accept" | "deny" | "cancel",
   ): Promise<void> {
-    await this.context.runShellEffects([
-      {
-        type: "operator.decideApproval",
-        requestId,
-        input: {
-          decision,
-          actor: "brewva-cli",
-        },
-      },
-    ]);
-    this.context.notify(
-      `${decision === "accept" ? "Allowed" : "Denied"} ${requestId}.`,
-      decision === "accept" ? "info" : "warning",
-    );
+    const result = await this.context.decideApproval(requestId, {
+      decision,
+      actor: "brewva-cli",
+    });
+    if (result.applied) {
+      this.context.notify(
+        `${decision === "accept" ? "Allowed" : "Denied"} ${requestId}.`,
+        decision === "accept" ? "info" : "warning",
+      );
+    } else {
+      this.context.notify(
+        `Request ${requestId} is already ${result.alreadyDecidedState ?? "decided"}; your ${decision} was recorded as a no-op receipt.`,
+        "warning",
+      );
+    }
     this.context.closeActiveOverlay(false);
     await this.context.refreshOperatorSnapshot();
   }

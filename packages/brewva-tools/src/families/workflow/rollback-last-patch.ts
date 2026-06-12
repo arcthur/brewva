@@ -17,7 +17,24 @@ function formatRollbackMessage(input: {
     if (input.reason === "no_patchset") {
       return "No tracked patch set is available to roll back.";
     }
+    if (input.reason === "rollback_artifact_missing") {
+      return "Rollback material is missing for the latest tracked patch set. Nothing was changed.";
+    }
+    if (input.reason === "rollback_artifact_invalid") {
+      return "Rollback material for the latest tracked patch set failed validation. Nothing was changed.";
+    }
+    if (input.reason === "conflict") {
+      const conflicted = input.failedPaths.join(", ");
+      return `Rollback blocked by workspace drift; files changed since the patch applied: ${conflicted}. Nothing was changed.`;
+    }
+    if (input.reason === "not_available") {
+      return "Patch rollback is not available in this runtime.";
+    }
     const failed = input.failedPaths.length > 0 ? input.failedPaths.join(", ") : "(unknown)";
+    if (input.reason === "partial_failure") {
+      const restored = input.restoredPaths.length;
+      return `Rollback partially failed. Restored ${restored} file(s); could not restore: ${failed}`;
+    }
     return `Rollback failed. Could not restore: ${failed}`;
   }
 

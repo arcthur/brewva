@@ -17,6 +17,8 @@ import { createHostedRuntimeOps } from "./runtime-ops.js";
 export type { BrewvaRuntimeOptions };
 export type HostedRuntimeAdapterOptions = Omit<BrewvaRuntimeOptions, "physics"> & {
   readonly physics?: RuntimePhysicsDeclaration;
+  /** Evaluation clock for display-time projections; defaults to Date.now. */
+  readonly clock?: () => number;
 };
 
 export type RuntimeAdapterOpsPort = HostedRuntimeOpsPort;
@@ -169,6 +171,7 @@ export function createHostedRuntimeAdapter(
       return runtimeTarget;
     },
     listSessionIds: () => [...observedSessionIds].toSorted(),
+    ...(options.clock ? { clock: options.clock } : {}),
   });
   const recoveryWal = createRecoveryWalStore({
     workspaceRoot: runtimeTarget.identity.workspaceRoot,

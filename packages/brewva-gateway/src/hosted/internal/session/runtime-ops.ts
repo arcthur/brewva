@@ -54,6 +54,7 @@ export type HostedRuntimeOpsNamespaceLabel =
 export function createHostedRuntimeOps(options: {
   readonly runtime: BrewvaRuntime;
   readonly listSessionIds?: () => readonly string[];
+  readonly clock?: () => number;
 }): HostedRuntimeOpsPort {
   const ctx = createHostedRuntimeOpsContext(options);
   const ops: HostedRuntimeOpsPort = {

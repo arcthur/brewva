@@ -24,9 +24,11 @@ import {
 import { createContextBudgetRuntimeController } from "../runtime-ops-context-budget.js";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
+import { buildHostedPatchRollbackOps } from "./patches/rollback.js";
 
 export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["tools"] {
   const budget = createContextBudgetRuntimeController(ctx);
+  const patchRollback = buildHostedPatchRollbackOps(ctx);
 
   return {
     access: {
@@ -159,12 +161,8 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
       list: (sessionId) => ctx.state.resourceLeases.get(sessionId) ?? [],
     },
     patches: {
-      rollbackLastPatchSet: () => ({
-        ok: false,
-        restoredPaths: [],
-        failedPaths: [],
-        reason: "not_available",
-      }),
+      rollbackLastPatchSet: (sessionId: string) => patchRollback.rollbackLastPatchSet(sessionId),
+      rollbackCandidate: (sessionId: string) => patchRollback.rollbackCandidate(sessionId),
       redoLastPatchSet: () => ({ ok: false, reason: "not_available" }),
       rollbackLastMutation: () => ({ ok: false, reason: "not_available" }),
     },

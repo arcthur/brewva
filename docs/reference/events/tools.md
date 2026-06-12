@@ -27,6 +27,13 @@ surface promotes them.
 Patch, reversible mutation, rollback, and redo events connect an effectful tool
 call to its receipt, recovery preparation, and commitment posture.
 
+Patch rollback records a `rollback.started` receipt before any file is
+touched and a `rollback.recorded` receipt for the executed attempt, so a
+crash between them leaves a visible started-without-completed gap instead of
+a silent one. Apply receipts carry the rollback artifact identity
+(`rollbackArtifactRef`); rollback discovery binds to that recorded identity
+rather than re-deriving paths from directory conventions.
+
 Source patch events add the read-before-write evidence chain for source edits:
 
 - `source_snapshot_recorded` records a bounded source read/search snapshot with

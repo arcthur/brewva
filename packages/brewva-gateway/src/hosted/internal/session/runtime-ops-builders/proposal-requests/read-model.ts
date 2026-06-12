@@ -114,9 +114,31 @@ function readRequestState(value: unknown): RequestState | undefined {
     value === "accepted" ||
     value === "denied" ||
     value === "cancelled" ||
-    value === "consumed"
+    value === "consumed" ||
+    value === "expired"
     ? value
     : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Display-time expiry projection mirroring the kernel's lazy rule: an open
+ * (pending or accepted, unconsumed) request whose `expiresAt` elapsed
+ * projects to `expired`. The kernel records the durable terminal receipt at
+ * its next authority touch; this projection never grants or revokes anything.
+ */
+function projectExpiry(row: ApprovalRequestRow, now: number): ApprovalRequestRow {
+  if (
+    (row.state === "pending" || row.state === "accepted") &&
+    row.expiresAt !== undefined &&
+    now >= row.expiresAt
+  ) {
+    return { ...row, state: "expired" };
+  }
+  return row;
 }
 
 function applyRequestListQuery(rows: ApprovalRequestRow[], query: unknown): ApprovalRequestRow[] {
@@ -132,6 +154,11 @@ function buildApprovalRequests(
   const proposedCallsByToolCallId = new Map<string, Record<string, unknown>>();
   const rows = new Map<string, ApprovalRequestRow>();
   for (const event of ctx.listEvents(sessionId)) {
+    if (event.source === "advisory") {
+      // Advisory ops events never bear approval authority, even when their
+      // kind reuses a canonical event name. Same rule as the kernel.
+      continue;
+    }
     const payload = readObject(event.payload);
     if (event.type === "tool.proposed") {
       const commitmentId = readString(payload.commitmentId);
@@ -180,7 +207,13 @@ function buildApprovalRequests(
         ...(typeof event.turn === "number" ? { turn: event.turn } : {}),
         defaultRisk: readString(authority.riskLevel),
         ...(argsSummary ? { argsSummary } : {}),
-        argsDigest: readString(payload.id),
+        // Canonical argument digest recorded by the kernel on the approval
+        // request. Request ids identify requests; this identifies the exact
+        // arguments the operator decided on.
+        ...(readString(payload.argsDigest) ? { argsDigest: readString(payload.argsDigest) } : {}),
+        ...(readNumber(payload.expiresAt) !== undefined
+          ? { expiresAt: readNumber(payload.expiresAt) }
+          : {}),
       });
       continue;
     }
@@ -192,6 +225,11 @@ function buildApprovalRequests(
       }
       const existing = rows.get(requestId);
       if (!existing || existing.state !== "pending") {
+        continue;
+      }
+      // A decision recorded at or after the closure bound does not bind
+      // authority; it stays on tape as a no-op receipt. Same rule as kernel.
+      if (existing.expiresAt !== undefined && event.timestamp >= existing.expiresAt) {
         continue;
       }
       rows.set(requestId, {
@@ -207,14 +245,37 @@ function buildApprovalRequests(
       if (!commitmentId) {
         continue;
       }
+      const abortReason = event.type === "tool.aborted" ? readString(payload.reason) : undefined;
+      const expiredAbort = abortReason === "approval_request_expired";
       for (const [requestId, row] of rows.entries()) {
-        if (row.proposalId === commitmentId && row.state === "accepted") {
+        if (row.proposalId !== commitmentId) {
+          continue;
+        }
+        if (expiredAbort && (row.state === "pending" || row.state === "accepted")) {
+          // Durable terminal expiry recorded by the kernel at an authority
+          // touch; the closure ended without a committed effect.
+          rows.set(requestId, { ...row, state: "expired" });
+        } else if (row.state === "accepted" && event.type === "tool.committed") {
+          // Consumed means exactly one thing: the accepted approval closed
+          // over its durable committed result.
           rows.set(requestId, { ...row, state: "consumed" });
+        } else if (
+          (row.state === "pending" || row.state === "accepted") &&
+          abortReason !== undefined
+        ) {
+          // The bound commitment terminated without a committed effect
+          // (digest mismatch, call mismatch, explicit abort): the request
+          // closes with it as cancelled, carrying the abort reason. Keeping
+          // it open would invite decisions the kernel can no longer honor.
+          rows.set(requestId, { ...row, state: "cancelled", reason: abortReason });
         }
       }
     }
   }
-  return [...rows.values()].toSorted((left, right) => left.createdAt - right.createdAt);
+  const now = ctx.clock();
+  return [...rows.values()]
+    .map((row) => projectExpiry(row, now))
+    .toSorted((left, right) => left.createdAt - right.createdAt);
 }
 
 export function buildApprovalRequestsForOptionalSession(

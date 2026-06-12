@@ -32,6 +32,7 @@ const PUBLIC_TOOLS_SUBPATHS = [
   "contracts",
   "registry",
   "runtime-port",
+  "patch-lifecycle",
   "navigation",
   "execution",
   "memory",

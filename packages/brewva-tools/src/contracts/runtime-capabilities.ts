@@ -147,6 +147,7 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "capabilities.tools.parallel.acquireAsync",
   "capabilities.tools.parallel.release",
   "capabilities.tools.patches.redoLastPatchSet",
+  "capabilities.tools.patches.rollbackCandidate",
   "capabilities.tools.patches.rollbackLastMutation",
   "capabilities.tools.patches.rollbackLastPatchSet",
   "capabilities.tools.readPath.discoveryObserved",

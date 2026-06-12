@@ -51,6 +51,6 @@ describe("docs/reference runtime coverage", () => {
       missing,
       `Missing runtime methods in generated runtime inventory: ${missing.join(", ")}`,
     ).toEqual([]);
-    expect(segment).toContain("Budget: root <= 8; canonical event types <= 14.");
+    expect(segment).toContain("Budget: root <= 8; canonical event types <= 15.");
   });
 });

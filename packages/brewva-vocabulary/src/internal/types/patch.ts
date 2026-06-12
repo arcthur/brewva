@@ -45,6 +45,40 @@ export interface PatchApplyResult {
   readonly reason?: PatchApplyFailureReason;
 }
 
+export type PatchRollbackFailureReason =
+  | "no_patchset"
+  | "rollback_artifact_missing"
+  | "rollback_artifact_invalid"
+  | "conflict"
+  | "partial_failure"
+  | "not_available";
+
+export interface PatchRollbackResult {
+  readonly ok: boolean;
+  readonly patchSetId?: string;
+  readonly restoredPaths: string[];
+  readonly failedPaths: string[];
+  readonly reason?: PatchRollbackFailureReason;
+}
+
+/**
+ * Narrow integration view over the latest rollback candidate: enough for an
+ * operator surface to render an honest recovery affordance without
+ * reconstructing the patch lifecycle from raw events. No-candidate and
+ * artifact-missing are first-class states, never an implied undo promise.
+ */
+export interface PatchRollbackCandidateView {
+  readonly available: boolean;
+  readonly patchSetId?: string;
+  readonly affectedPaths: readonly string[];
+  readonly artifactAvailable: boolean;
+  readonly noCandidateReason?:
+    | "no_patchset"
+    | "rollback_artifact_missing"
+    | "rollback_artifact_invalid"
+    | "not_available";
+}
+
 export type WorkerMergeStatus = "empty" | "ready" | "conflicts";
 export type WorkerApplyStatus = "empty" | "applied" | "conflicts" | "apply_failed";
 

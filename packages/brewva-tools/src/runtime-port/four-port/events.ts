@@ -88,6 +88,10 @@ export function canonicalEventToFourPortRuntimeEvent(
     timestamp: event.timestamp,
     isoTime: new Date(event.timestamp).toISOString(),
     ...turnFields(event.turnId),
+    // Unwrapped advisory ops events keep their provenance so authority-facing
+    // projections can refuse to treat them as canonical kernel events even
+    // when an ops kind reuses a canonical event name.
+    ...(customKind ? { source: "advisory" } : {}),
     payload: customKind ? customEventPayload(event) : readRecord(event.payload),
   } as FourPortRuntimeEventRecord;
 }

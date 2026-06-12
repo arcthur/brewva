@@ -14,6 +14,9 @@ export type {
   PatchConflict,
   PatchFileAction,
   PatchFileChange,
+  PatchRollbackCandidateView,
+  PatchRollbackFailureReason,
+  PatchRollbackResult,
   PatchSet,
   PersistedPatchChange,
   PersistedPatchHistory,
@@ -141,6 +144,7 @@ export const REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE =
   "reversible_mutation.rolled_back" as const;
 
 export const ROLLBACK_EVENT_TYPE = "rollback.recorded" as const;
+export const ROLLBACK_STARTED_EVENT_TYPE = "rollback.started" as const;
 
 export const SOURCE_PATCH_APPLIED_EVENT_TYPE = "source_patch_applied" as const;
 

@@ -6,6 +6,7 @@ import type {
   ToolAbortedPayload,
   ToolCommittedPayload,
   ToolProposedPayload,
+  ToolStartedPayload,
 } from "./kernel/events.js";
 import type { ResolvedToolAuthority } from "./kernel/policy/public-contract.js";
 import type { KernelPort } from "./kernel/port.js";
@@ -34,11 +35,14 @@ export type {
   ToolAuthorityDecisionPayload,
   ToolCommittedPayload,
   ToolProposedPayload,
+  ToolStartedPayload,
 } from "./kernel/events.js";
 export type {
   AbortToolCallInput,
   AdvisoryEventInput,
   AdvisoryEventReceipt,
+  ApprovalDecision,
+  ApprovalDecisionReceipt,
   ApprovalRequest,
   ApprovalRequestInput,
   CommitToolResultInput,
@@ -53,6 +57,7 @@ export type {
   KernelVerificationGatePolicyInput,
   KernelVerificationGatePosture,
   KernelVerificationGateStatus,
+  RecordApprovalDecisionInput,
   ResolveApprovalDecisionInput,
   ToolAbortReceipt,
   ToolCallProposal,
@@ -181,6 +186,7 @@ export const CANONICAL_EVENT_TYPES = [
   "msg.committed",
   "reason.committed",
   "tool.proposed",
+  "tool.started",
   "tool.committed",
   "tool.aborted",
   "checkpoint.committed",
@@ -220,6 +226,7 @@ export type CanonicalEvent =
   | CanonicalEventBase<"msg.committed", TextCommittedPayload>
   | CanonicalEventBase<"reason.committed", TextCommittedPayload>
   | CanonicalEventBase<"tool.proposed", ToolProposedPayload>
+  | CanonicalEventBase<"tool.started", ToolStartedPayload>
   | CanonicalEventBase<"tool.committed", ToolCommittedPayload>
   | CanonicalEventBase<"tool.aborted", ToolAbortedPayload>
   | CanonicalEventBase<"checkpoint.committed", CheckpointCommittedPayload>

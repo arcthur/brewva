@@ -96,6 +96,13 @@ export interface SourcePatchApplyResult {
   readonly appliedPaths: readonly string[];
   readonly failedPaths: readonly string[];
   readonly reason?: string;
+  /**
+   * Workspace-relative path of the rollback manifest captured before the
+   * mutations were applied. Carried on the durable apply receipt so rollback
+   * discovery binds to recorded artifact identity instead of re-deriving
+   * paths from directory conventions.
+   */
+  readonly rollbackArtifactRef?: string;
 }
 
 export interface SourcePatchStaleRecoveryRecord {

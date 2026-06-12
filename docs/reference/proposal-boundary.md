@@ -161,12 +161,38 @@ Proposal admission and request-local operator decisions use different enums:
 
 - proposal admission remains `accept`, `reject`, or `defer`
 - operator request decision is `accept`, `deny`, or `cancel`
-- request state is `pending`, `accepted`, `denied`, `cancelled`, or `consumed`
+- request state is `pending`, `accepted`, `denied`, `cancelled`, `consumed`,
+  or `expired`
 
 The split is intentional. Proposal admission answers whether a proposal can
 enter or resume the commitment boundary. Operator request decision records what
 the operator did for one pending ask. Neither path creates persistent
 preferences, regex permissions, or reusable source approval state.
+
+Concurrent and late decisions follow one rule: the first durable decision on
+tape wins. Deciding a request that already left `pending` records a durable
+no-op receipt (the `approval.decided` event carries `applied: false` with the
+prior state) and returns `applied: false` to the caller; authority derivation
+ignores it everywhere.
+
+Approval decisions enter the tape through exactly one writer: the kernel's
+canonical decision writer stamps decision timestamps from the kernel clock and
+enforces first-writer-wins at write time. Advisory events — including
+`runtime.ops` mirrors that reuse canonical event names — never bear decision
+authority, in the kernel or in any projection.
+
+The approval closure may carry a declared time bound, `approval.expiresAt` on
+the proposing call (distinct from the proposal-level `expiresAt` used at
+admission). The bound restricts when execution may start, never whether a
+begun execution may finish: admission of an accepted closure records a
+durable `tool.started` receipt, and a result whose execution started before
+the bound may still commit after it. A decision recorded at or after the
+bound does not bind authority, and any authority touch at or after the bound
+on a closure with no pre-bound start receipt records a terminal
+`tool.aborted` receipt with reason `approval_request_expired`. There is no
+background timer; expiry is enforced lazily at authority touches, and read
+models may project open rows past the bound as `expired` for display without
+granting or revoking anything.
 
 ## Operator Safety Projection
 

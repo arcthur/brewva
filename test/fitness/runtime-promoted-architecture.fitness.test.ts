@@ -132,7 +132,7 @@ describe("four-port runtime architecture fitness", () => {
         .match(/export const RUNTIME_RECOVERY_CAUSES = \[([\s\S]*?)\] as const;/u)?.[1]
         ?.match(/"[^"]+"/gu) ?? [];
 
-    expect(canonicalEventItems).toHaveLength(14);
+    expect(canonicalEventItems).toHaveLength(15);
     expect(recoveryCauseItems).toEqual([
       '"approval_pending"',
       '"compaction_required"',

@@ -72,6 +72,8 @@ export type HostedRuntimeOpsState = {
 export type HostedRuntimeOpsContext = {
   readonly runtime: BrewvaRuntime;
   readonly state: HostedRuntimeOpsState;
+  /** Evaluation clock for display-time projections; never authority-bearing. */
+  readonly clock: () => number;
   readonly emptyCostSummary: SessionCostSummary;
   readonly emptyContextStatus: ContextStatus;
   readonly emptyContextUsage: ContextBudgetUsage;
@@ -197,7 +199,9 @@ function readObjectPayload(value: unknown): ProtocolRecord {
 export function createHostedRuntimeOpsContext(options: {
   readonly runtime: BrewvaRuntime;
   readonly listSessionIds?: () => readonly string[];
+  readonly clock?: () => number;
 }): HostedRuntimeOpsContext {
+  const clock = options.clock ?? Date.now;
   const state: HostedRuntimeOpsState = {
     subscribers: new Set<RuntimeListener>(),
     sessionWireSubscribers: new Map<string, Set<SessionListener>>(),
@@ -433,6 +437,7 @@ export function createHostedRuntimeOpsContext(options: {
   return {
     runtime: options.runtime,
     state,
+    clock,
     emptyCostSummary: EMPTY_COST_SUMMARY,
     emptyContextStatus: EMPTY_CONTEXT_STATUS,
     emptyContextUsage: EMPTY_CONTEXT_USAGE,

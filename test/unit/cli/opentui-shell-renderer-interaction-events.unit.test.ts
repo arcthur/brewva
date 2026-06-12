@@ -613,6 +613,7 @@ function createFakeBundle(
             decide(_sessionId: string, requestId: string, input: DecideEffectCommitmentInput) {
               options.onApprovalDecision?.(requestId, input);
               approvals = approvals.filter((approval) => approval.requestId !== requestId);
+              return { requestId, decision: input.decision, applied: true };
             },
             listPending() {
               return approvals;

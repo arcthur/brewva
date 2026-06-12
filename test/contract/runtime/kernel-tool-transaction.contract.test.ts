@@ -216,12 +216,15 @@ describe("kernel tool transaction", () => {
       commitment: {
         id: "tool:kernel-approval-resolve:turn-1:call-exec",
       },
-      events: [],
+      // The only new event on exact resume is the durable execution-start
+      // receipt; no second approval request is created.
+      events: [{ type: "tool.started" }],
     });
     expect(runtime.runtime.tape.list(sessionId).map((event) => event.type)).toEqual([
       "tool.proposed",
       "approval.requested",
-      "custom",
+      "approval.decided",
+      "tool.started",
     ]);
     expect(runtime.runtime.tape.list(sessionId, { type: "tool.proposed" })).toHaveLength(1);
     expect(runtime.runtime.tape.list(sessionId, { type: "approval.requested" })).toHaveLength(1);
@@ -532,5 +535,263 @@ describe("kernel tool transaction", () => {
       expect((error as Error).message).toContain("unknown_tool_commitment");
     }
     expect(runtime.tape.list("unknown-session")).toEqual([]);
+  });
+});
+
+describe("kernel approval closure", () => {
+  const approvalCall = {
+    sessionId: "kernel-session",
+    toolCallId: "call-approval",
+    toolName: "write",
+    args: { path: "README.md", content: "updated" },
+    approval: {
+      required: true,
+      reason: "requires_operator_approval",
+    },
+  } as const;
+  const requestId = "approval:kernel-session:call-approval";
+  const commitmentId = "tool:kernel-session:call-approval";
+  const ARGS_DIGEST_PATTERN = /^stable-json-sha256\/v1:[0-9a-f]{64}$/u;
+
+  function recordDecision(
+    runtime: ReturnType<typeof createBrewvaRuntime>,
+    decision: "accept" | "deny" | "cancel",
+  ): void {
+    runtime.kernel.recordApprovalDecision({
+      sessionId: approvalCall.sessionId,
+      requestId,
+      decision,
+      actor: "operator",
+    });
+  }
+
+  test("approval requests bind to a canonical versioned argument digest", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-approval-digest-")),
+      physics: { mode: "noop" },
+    });
+
+    const deferred = await runtime.kernel.beginToolCall(approvalCall);
+    expect(deferred.kind).toBe("defer");
+    if (deferred.kind !== "defer") {
+      throw new Error("expected_defer");
+    }
+    expect(deferred.request.argsDigest).toMatch(ARGS_DIGEST_PATTERN);
+    const requested = runtime.tape.list(approvalCall.sessionId, {
+      type: "approval.requested",
+    })[0];
+    expect(requested?.payload).toMatchObject({
+      id: requestId,
+      argsDigest: deferred.request.argsDigest,
+    });
+  });
+
+  test("accepted approval allows exact resume and closes over one committed effect", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-approval-resume-")),
+      physics: { mode: "noop" },
+    });
+
+    expect((await runtime.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(runtime, "accept");
+
+    const resumed = await runtime.kernel.beginToolCall(approvalCall);
+    expect(resumed).toMatchObject({ kind: "allow" });
+    const receipt = await runtime.kernel.commitToolResult({
+      commitmentId,
+      result: { outcome: { kind: "ok", value: {} }, content: "done" },
+    });
+    expect(receipt.event.type).toBe("tool.committed");
+
+    // Consumption: the closed commitment is terminal; the accepted approval
+    // cannot admit a second execution of the same commitment.
+    const repeat = await runtime.kernel.commitToolResult({
+      commitmentId,
+      result: { outcome: { kind: "ok", value: {} }, content: "duplicate" },
+    });
+    expect(repeat.event.id).toBe(receipt.event.id);
+    expect(runtime.kernel.beginToolCall(approvalCall)).rejects.toThrow(
+      `tool_commitment_already_terminal:${commitmentId}`,
+    );
+  });
+
+  test("denied approval is terminal at the commit boundary", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-approval-denied-")),
+      physics: { mode: "noop" },
+    });
+
+    expect((await runtime.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(runtime, "deny");
+
+    expect(
+      runtime.kernel.commitToolResult({
+        commitmentId,
+        result: { outcome: { kind: "ok", value: {} }, content: "must not commit" },
+      }),
+    ).rejects.toThrow(`tool_commitment_approval_request_denied:${commitmentId}`);
+
+    const aborted = runtime.tape.list(approvalCall.sessionId, { type: "tool.aborted" });
+    expect(aborted).toHaveLength(1);
+    expect(aborted[0]?.payload).toMatchObject({
+      commitmentId,
+      reason: "approval_request_denied",
+    });
+    expect(runtime.tape.list(approvalCall.sessionId, { type: "tool.committed" })).toEqual([]);
+  });
+
+  test("cancelled approval blocks resume", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-approval-cancelled-")),
+      physics: { mode: "noop" },
+    });
+
+    expect((await runtime.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(runtime, "cancel");
+
+    const resumed = await runtime.kernel.beginToolCall(approvalCall);
+    expect(resumed).toMatchObject({
+      kind: "block",
+      commitmentId,
+      reason: "approval_request_cancelled",
+    });
+  });
+
+  test("the first durable decision wins over later concurrent decisions", async () => {
+    const acceptFirst = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-approval-first-accept-")),
+      physics: { mode: "noop" },
+    });
+    expect((await acceptFirst.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(acceptFirst, "accept");
+    recordDecision(acceptFirst, "deny");
+    expect(await acceptFirst.kernel.beginToolCall(approvalCall)).toMatchObject({ kind: "allow" });
+
+    const denyFirst = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-approval-first-deny-")),
+      physics: { mode: "noop" },
+    });
+    expect((await denyFirst.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(denyFirst, "deny");
+    recordDecision(denyFirst, "accept");
+    expect(await denyFirst.kernel.beginToolCall(approvalCall)).toMatchObject({
+      kind: "block",
+      reason: "approval_request_denied",
+    });
+  });
+
+  test("approval state hydrates from durable tape after restart", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-kernel-approval-restart-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.events.enabled = true;
+    config.tape.dir = ".brewva/events";
+
+    const writer = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
+    expect((await writer.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(writer, "accept");
+
+    const reader = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
+    expect(await reader.start()).toEqual({ recoveredSessions: [approvalCall.sessionId] });
+    const resolved = await reader.kernel.resolveApprovalDecision({
+      sessionId: approvalCall.sessionId,
+      requestId,
+    });
+    expect(resolved).toMatchObject({ kind: "allow" });
+    const receipt = await reader.kernel.commitToolResult({
+      commitmentId,
+      result: { outcome: { kind: "ok", value: {} }, content: "after restart" },
+    });
+    expect(receipt.event.type).toBe("tool.committed");
+  });
+
+  test("pending, cancelled, and consumed postures hydrate from durable tape", async () => {
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.events.enabled = true;
+    config.tape.dir = ".brewva/events";
+
+    // Pending: an undecided request stays decidable after restart.
+    const pendingCwd = mkdtempSync(join(tmpdir(), "brewva-kernel-approval-hydrate-pending-"));
+    const pendingWriter = createBrewvaRuntime({
+      cwd: pendingCwd,
+      config,
+      physics: { mode: "noop" },
+    });
+    expect((await pendingWriter.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    const pendingReader = createBrewvaRuntime({
+      cwd: pendingCwd,
+      config,
+      physics: { mode: "noop" },
+    });
+    await pendingReader.start();
+    expect(
+      await pendingReader.kernel.resolveApprovalDecision({
+        sessionId: approvalCall.sessionId,
+        requestId,
+      }),
+    ).toMatchObject({ kind: "defer", request: { id: requestId } });
+
+    // Cancelled: terminal before restart, terminal after.
+    const cancelledCwd = mkdtempSync(join(tmpdir(), "brewva-kernel-approval-hydrate-cancelled-"));
+    const cancelledWriter = createBrewvaRuntime({
+      cwd: cancelledCwd,
+      config,
+      physics: { mode: "noop" },
+    });
+    expect((await cancelledWriter.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(cancelledWriter, "cancel");
+    const cancelledReader = createBrewvaRuntime({
+      cwd: cancelledCwd,
+      config,
+      physics: { mode: "noop" },
+    });
+    await cancelledReader.start();
+    expect(await cancelledReader.kernel.beginToolCall(approvalCall)).toMatchObject({
+      kind: "block",
+      reason: "approval_request_cancelled",
+    });
+
+    // Consumed: a committed closure stays terminal across restart.
+    const consumedCwd = mkdtempSync(join(tmpdir(), "brewva-kernel-approval-hydrate-consumed-"));
+    const consumedWriter = createBrewvaRuntime({
+      cwd: consumedCwd,
+      config,
+      physics: { mode: "noop" },
+    });
+    expect((await consumedWriter.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(consumedWriter, "accept");
+    expect((await consumedWriter.kernel.beginToolCall(approvalCall)).kind).toBe("allow");
+    await consumedWriter.kernel.commitToolResult({
+      commitmentId,
+      result: { outcome: { kind: "ok", value: {} }, content: "done" },
+    });
+    const consumedReader = createBrewvaRuntime({
+      cwd: consumedCwd,
+      config,
+      physics: { mode: "noop" },
+    });
+    await consumedReader.start();
+    expect(consumedReader.kernel.beginToolCall(approvalCall)).rejects.toThrow(
+      `tool_commitment_already_terminal:${commitmentId}`,
+    );
+  });
+
+  test("denied approval state survives restart and blocks commit", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-kernel-approval-restart-denied-"));
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.infrastructure.events.enabled = true;
+    config.tape.dir = ".brewva/events";
+
+    const writer = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
+    expect((await writer.kernel.beginToolCall(approvalCall)).kind).toBe("defer");
+    recordDecision(writer, "deny");
+
+    const reader = createBrewvaRuntime({ cwd, config, physics: { mode: "noop" } });
+    expect(await reader.start()).toEqual({ recoveredSessions: [approvalCall.sessionId] });
+    expect(
+      reader.kernel.commitToolResult({
+        commitmentId,
+        result: { outcome: { kind: "ok", value: {} }, content: "must not commit" },
+      }),
+    ).rejects.toThrow(`tool_commitment_approval_request_denied:${commitmentId}`);
   });
 });

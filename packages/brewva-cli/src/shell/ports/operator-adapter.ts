@@ -167,7 +167,18 @@ export function createOperatorSurfacePort(input: {
       const request = listCliRuntimePendingProposalRequests(bundle.runtime, sessionId).find(
         (entry) => entry.requestId === requestId,
       );
-      decideCliRuntimeProposalRequest(bundle.runtime, sessionId, requestId, inputDecision);
+      const result = decideCliRuntimeProposalRequest(
+        bundle.runtime,
+        sessionId,
+        requestId,
+        inputDecision,
+      );
+      if (!result.applied) {
+        // The request was already terminal (decided, consumed, or expired);
+        // the attempt is a durable no-op receipt and there is nothing to
+        // resume.
+        return result;
+      }
       const turnId = resolveApprovalTurnId({
         turnId: request?.turnId,
         proposalId: request?.proposalId,
@@ -178,6 +189,7 @@ export function createOperatorSurfacePort(input: {
         requestId,
         turnId,
       });
+      return result;
     },
     async answerQuestion(questionId, answerText) {
       const bundle = input.getSessionBundle();

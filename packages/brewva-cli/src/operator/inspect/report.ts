@@ -507,6 +507,14 @@ function buildOperatorSafetyInspection(
       continue;
     }
     if (event.type === "approval.decided") {
+      if ((payload as Record<string, unknown>).applied === false) {
+        // Durable no-op receipt for a request that was already terminal; the
+        // first durable decision owns the authority outcome.
+        if (eventId) {
+          receiptIds.add(eventId);
+        }
+        continue;
+      }
       const requestId =
         readText((payload as Record<string, unknown>).id) ??
         readText((payload as Record<string, unknown>).requestId);
@@ -533,6 +541,18 @@ function buildOperatorSafetyInspection(
     }
     if (event.type === "tool.aborted") {
       const call = readPayloadObject(payload, "call");
+      // A terminal abort closes the approval request bound to the same call
+      // identity (denied, cancelled, expired, digest mismatch): the request
+      // is no longer pending operator attention.
+      const sessionId = readText(call.sessionId);
+      const toolCallId = readText(call.toolCallId);
+      if (sessionId && toolCallId) {
+        const turnId = readText(call.turnId);
+        const boundRequestId = turnId
+          ? `approval:${encodeURIComponent(sessionId)}:${encodeURIComponent(turnId)}:${encodeURIComponent(toolCallId)}`
+          : `approval:${encodeURIComponent(sessionId)}:${encodeURIComponent(toolCallId)}`;
+        pendingRequestIds.delete(boundRequestId);
+      }
       if (eventId) {
         receiptIds.add(eventId);
       }

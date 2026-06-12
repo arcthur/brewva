@@ -14,6 +14,14 @@ export interface ToolCallProposal {
   readonly approval?: {
     readonly required: boolean;
     readonly reason: string;
+    /**
+     * Optional epoch-ms bound on the whole approval closure. The closure must
+     * reach a durable committed result before this instant; any authority
+     * touch at or after it on an unconsumed approval-bound commitment
+     * resolves to a terminal `approval_request_expired` abort. Absent means
+     * the approval stays open until decided, cancelled, or consumed.
+     */
+    readonly expiresAt?: number;
   };
   readonly verificationGates?: readonly KernelVerificationGatePolicyInput[];
 }
@@ -66,6 +74,32 @@ export interface ResolveApprovalDecisionInput {
   readonly requestId: string;
 }
 
+export type ApprovalDecision = "accept" | "deny" | "cancel";
+
+export interface RecordApprovalDecisionInput {
+  readonly sessionId: SessionId;
+  readonly requestId: string;
+  readonly decision: ApprovalDecision;
+  readonly actor: string;
+  readonly reason?: string;
+}
+
+/**
+ * Receipt for the canonical approval decision writer. The kernel stamps the
+ * decision timestamp from its own clock and enforces first-writer-wins at
+ * write time: a decision against an already-terminal request is still
+ * recorded as a durable no-op receipt (`applied: false`) and never changes
+ * the authority outcome.
+ */
+export interface ApprovalDecisionReceipt {
+  readonly requestId: string;
+  readonly decision: ApprovalDecision;
+  readonly applied: boolean;
+  /** Terminal state that already owned the request when `applied` is false. */
+  readonly priorState?: "accepted" | "denied" | "cancelled" | "expired" | "consumed";
+  readonly event: CanonicalEvent;
+}
+
 export type ToolExecutionOutcome<TOutput = unknown, TError = unknown> =
   | {
       readonly kind: "ok";
@@ -115,6 +149,19 @@ export interface ApprovalRequestInput {
 
 export interface ApprovalRequest extends ApprovalRequestInput {
   readonly id: string;
+  /**
+   * Canonical argument digest of the proposed call this approval binds to,
+   * in the persisted `<algorithm>/v<version>:<hex>` form from
+   * `@brewva/brewva-std/tool-call-digest`. Request ids identify the request;
+   * this digest identifies the exact arguments the operator decided on.
+   */
+  readonly argsDigest: string;
+  /**
+   * Epoch-ms bound carried from the proposing call. Decisions recorded at or
+   * after this instant do not bind authority; an unconsumed request reaching
+   * it resolves to a terminal expired state at the next authority touch.
+   */
+  readonly expiresAt?: number;
 }
 
 export interface AdvisoryEventInput {
@@ -185,6 +232,7 @@ export interface KernelInterceptPort {
 export interface KernelPort {
   beginToolCall(call: ToolCallProposal): Promise<ToolCommitmentDecision>;
   resolveApprovalDecision(input: ResolveApprovalDecisionInput): Promise<ToolCommitmentDecision>;
+  recordApprovalDecision(input: RecordApprovalDecisionInput): ApprovalDecisionReceipt;
   commitToolResult(input: CommitToolResultInput): Promise<ToolCommitReceipt>;
   abortToolCall(input: AbortToolCallInput): Promise<ToolAbortReceipt>;
   recordAdvisoryEvent(input: AdvisoryEventInput): AdvisoryEventReceipt;

@@ -31,6 +31,12 @@
       "import": "./dist/runtime-port/index.js",
       "default": "./dist/runtime-port/index.js"
     },
+    "./patch-lifecycle": {
+      "types": "./dist/patch-lifecycle/index.d.ts",
+      "bun": "./src/patch-lifecycle/index.ts",
+      "import": "./dist/patch-lifecycle/index.js",
+      "default": "./dist/patch-lifecycle/index.js"
+    },
     "./navigation": {
       "types": "./dist/families/navigation/api.d.ts",
       "bun": "./src/families/navigation/api.ts",

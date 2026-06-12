@@ -1,3 +1,4 @@
+import { canonicalEventToFourPortRuntimeEvent } from "@brewva/brewva-tools/runtime-port";
 import type { DecisionReceipt } from "@brewva/brewva-vocabulary/iteration";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
@@ -14,24 +15,23 @@ export function buildProposalsRuntimeOps(
         ),
       list: (sessionId, query) => buildApprovalRequestsForOptionalSession(ctx, sessionId, query),
       decide(sessionId, requestId, input) {
-        const request = buildApprovalRequestsForOptionalSession(ctx, sessionId).find(
-          (entry) => entry.requestId === requestId,
-        );
-        if (!request || request.state !== "pending") {
-          throw new Error(
-            request
-              ? `approval_request_not_pending:${requestId}:${request.state}`
-              : `approval_request_not_found:${requestId}`,
-          );
-        }
-        ctx.emit(sessionId, "approval.decided", {
-          id: requestId,
+        // The kernel is the only canonical approval decision writer (kernel
+        // clock, first-writer-wins); the gateway routes and never authors
+        // authority events itself.
+        const receipt = ctx.runtime.kernel.recordApprovalDecision({
+          sessionId,
           requestId,
           decision: input.decision,
           actor: input.actor,
-          reason: input.reason,
+          ...(input.reason ? { reason: input.reason } : {}),
         });
-        return { requestId, decision: input.decision };
+        ctx.publishEvent(canonicalEventToFourPortRuntimeEvent(receipt.event));
+        return {
+          requestId: receipt.requestId,
+          decision: receipt.decision,
+          applied: receipt.applied,
+          ...(receipt.priorState !== undefined ? { alreadyDecidedState: receipt.priorState } : {}),
+        };
       },
     },
     proposals: {

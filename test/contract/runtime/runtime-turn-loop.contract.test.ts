@@ -510,18 +510,11 @@ describe("runtime turn loop", () => {
         prompt: "write",
       }),
     );
-    runtime.kernel.recordAdvisoryEvent({
+    runtime.kernel.recordApprovalDecision({
       sessionId: "s1",
-      turnId: "turn-approval",
-      namespace: "runtime.ops",
-      kind: "approval.decided",
-      version: 1,
-      payload: {
-        id: requestId,
-        requestId,
-        decision: "accept",
-        actor: "test",
-      },
+      requestId,
+      decision: "accept",
+      actor: "test",
     });
 
     const resolvedFrames = await Array.fromAsync(
@@ -535,6 +528,7 @@ describe("runtime turn loop", () => {
 
     expect(resolvedFrames.map((frame) => frame.type)).toEqual([
       "runtime.event",
+      "runtime.event",
       "text",
       "runtime.event",
       "runtime.event",
@@ -546,7 +540,8 @@ describe("runtime turn loop", () => {
       "tool.proposed",
       "approval.requested",
       "runtime.suspended",
-      "custom",
+      "approval.decided",
+      "tool.started",
       "tool.committed",
       "msg.committed",
       "turn.ended",
@@ -618,18 +613,11 @@ describe("runtime turn loop", () => {
         prompt: "write",
       }),
     );
-    runtime.kernel.recordAdvisoryEvent({
+    runtime.kernel.recordApprovalDecision({
       sessionId: "s1",
-      turnId: "turn-denied-approval",
-      namespace: "runtime.ops",
-      kind: "approval.decided",
-      version: 1,
-      payload: {
-        id: requestId,
-        requestId,
-        decision: "deny",
-        actor: "test",
-      },
+      requestId,
+      decision: "deny",
+      actor: "test",
     });
 
     const resolvedFrames = await Array.fromAsync(
@@ -654,7 +642,7 @@ describe("runtime turn loop", () => {
       "tool.proposed",
       "approval.requested",
       "runtime.suspended",
-      "custom",
+      "approval.decided",
       "tool.aborted",
       "msg.committed",
       "turn.ended",

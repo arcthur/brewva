@@ -156,7 +156,14 @@ function deriveDeniedCategory(input: ProjectOperatorSafetyDecisionInput): Denial
   if (input.capabilityBasis?.allowed === false) {
     return "missing_capability";
   }
-  if (input.kernelReason === "approval_cancelled") {
+  if (
+    input.kernelReason === "approval_request_cancelled" ||
+    input.kernelReason === "approval_request_expired" ||
+    input.kernelReason?.startsWith("approval_args_digest_")
+  ) {
+    // The approval closure ended without an exercisable acceptance (operator
+    // cancel, closure bound elapsed, or argument identity drifted); the path
+    // forward is a fresh approval request, not a different tool.
     return "approval_cancelled";
   }
   if (input.kernelReason === "missing_selected_capability") {

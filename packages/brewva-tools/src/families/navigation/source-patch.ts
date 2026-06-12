@@ -1540,6 +1540,7 @@ export function applyStoredSourcePatchPlan(input: {
     patchSetId: patchSet.id,
     appliedPaths,
     failedPaths: [],
+    ...(rollbackArtifactRef !== undefined ? { rollbackArtifactRef } : {}),
   };
   if (input.sessionId) {
     input.runtime?.capabilities.tools.sourcePatch.plans.apply(input.sessionId, appliedResult);

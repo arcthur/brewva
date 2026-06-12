@@ -60,6 +60,14 @@ export interface DecideEffectCommitmentInput {
 export interface DecideEffectCommitmentResult {
   readonly requestId: string;
   readonly decision: "accept" | "deny" | "cancel";
+  /**
+   * False when the request was already decided. The first durable decision on
+   * tape wins; the late attempt is still recorded as a no-op receipt with an
+   * explicit already-decided reason and never changes the authority outcome.
+   */
+  readonly applied: boolean;
+  /** Durable state that won when `applied` is false. */
+  readonly alreadyDecidedState?: EffectCommitmentRequestState;
   readonly receipt?: DecisionReceipt;
 }
 
@@ -124,7 +132,8 @@ export type EffectCommitmentRequestState =
   | "accepted"
   | "denied"
   | "cancelled"
-  | "consumed";
+  | "consumed"
+  | "expired";
 
 export interface EffectCommitmentProposalPayload {
   readonly proposal: EffectCommitmentProposal;
@@ -147,6 +156,8 @@ export interface EffectCommitmentRequestRecord {
   readonly turnId?: string;
   readonly actor?: string;
   readonly reason?: string;
+  /** Epoch-ms closure bound; absent means the request stays open until decided. */
+  readonly expiresAt?: number;
 }
 
 export interface PendingEffectCommitmentRequest {
@@ -167,6 +178,7 @@ export interface PendingEffectCommitmentRequest {
   readonly defaultRisk?: string;
   readonly argsSummary?: string;
   readonly argsDigest?: string;
+  readonly expiresAt?: number;
   readonly diffPreview?: EffectCommitmentDiffPreview;
 }
 

@@ -53,6 +53,12 @@
       "import": "./dist/text.js",
       "default": "./dist/text.js"
     },
+    "./tool-call-digest": {
+      "types": "./dist/tool-call-digest.d.ts",
+      "bun": "./src/tool-call-digest.ts",
+      "import": "./dist/tool-call-digest.js",
+      "default": "./dist/tool-call-digest.js"
+    },
     "./tool-outcome-version": {
       "types": "./dist/tool-outcome-version.d.ts",
       "bun": "./src/tool-outcome-version.ts",

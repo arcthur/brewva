@@ -82,7 +82,11 @@ function toJsonValueInner(value: unknown, seen: WeakSet<object>): JsonValue {
       }
       seen.add(value);
       if (Array.isArray(value)) {
-        return value.map((item) => toJsonValueInner(item, seen));
+        const out = value.map((item) => toJsonValueInner(item, seen));
+        // Remove from the path set so a shared (aliased) array elsewhere in
+        // the tree serializes as its value, not as a false "[Circular]".
+        seen.delete(value);
+        return out;
       }
       const out: Record<string, JsonValue> = {};
       for (const [key, item] of Object.entries(value as Record<string, unknown>)) {

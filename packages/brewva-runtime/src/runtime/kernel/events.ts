@@ -30,6 +30,19 @@ export interface ToolProposedPayload {
   readonly authority: ToolAuthorityDecisionPayload;
 }
 
+/**
+ * Durable execution-start receipt for approval-bound commitments. The kernel
+ * records it when an accepted closure is admitted for execution; an approval
+ * closure bound (`expiresAt`) restricts when execution may START, and this
+ * receipt is the replay-honest evidence that it started in time, so a result
+ * produced by an already-started execution can still commit after the bound.
+ */
+export interface ToolStartedPayload {
+  readonly commitmentId: string;
+  readonly call: ToolCallProposal;
+  readonly requestId: string;
+}
+
 export interface ToolCommittedPayload {
   readonly commitmentId: string;
   readonly call: ToolCallProposal;
@@ -52,7 +65,16 @@ export interface ApprovalRequestedPayload extends ApprovalRequest {
 
 export interface ApprovalDecidedPayload {
   readonly id: string;
+  readonly requestId?: string;
   readonly decision: "accept" | "deny" | "cancel";
   readonly actor?: string;
   readonly reason?: string;
+  /**
+   * Receipt-only annotations for decisions recorded after the request was
+   * already terminal (first durable decision wins, or the closure bound
+   * elapsed). They never participate in authority derivation.
+   */
+  readonly applied?: boolean;
+  readonly outcome?: "already_decided" | "expired";
+  readonly priorState?: "accepted" | "denied" | "cancelled" | "expired" | "consumed";
 }

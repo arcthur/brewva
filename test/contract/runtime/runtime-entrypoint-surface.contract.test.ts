@@ -81,6 +81,9 @@ describe("four-port runtime entrypoint surface", () => {
       "msg.committed",
       "reason.committed",
       "tool.proposed",
+      // Durable execution-start receipt: an approval closure bound restricts
+      // when execution may start, never whether a begun execution may finish.
+      "tool.started",
       "tool.committed",
       "tool.aborted",
       "checkpoint.committed",

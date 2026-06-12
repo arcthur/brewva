@@ -622,6 +622,6 @@ describe("canonical tape", () => {
   });
 
   test("keeps canonical event vocabulary intentionally small", () => {
-    expect(CANONICAL_EVENT_TYPES).toHaveLength(14);
+    expect(CANONICAL_EVENT_TYPES).toHaveLength(15);
   });
 });
