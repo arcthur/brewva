@@ -109,7 +109,12 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
     parameters: Type.Object({
       query: Type.String({ minLength: 1 }),
       paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { maxItems: 20 })),
-      glob: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { maxItems: 20 })),
+      glob: Type.Optional(
+        Type.Union([
+          Type.String({ minLength: 1 }),
+          Type.Array(Type.String({ minLength: 1 }), { maxItems: 20 }),
+        ]),
+      ),
       case: Type.Optional(GREP_CASE_SCHEMA),
       fixed: Type.Optional(Type.Boolean({ default: false })),
       max_lines: Type.Optional(Type.Number({ minimum: 1, maximum: 500, default: 200 })),

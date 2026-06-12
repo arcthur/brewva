@@ -54,7 +54,7 @@ describe("grep managed tool", () => {
       {
         query: "approval-and-rollback",
         glob: "**/*.md",
-      } as never,
+      },
       undefined,
       undefined,
       fakeContext("tc-grep-string-glob"),
