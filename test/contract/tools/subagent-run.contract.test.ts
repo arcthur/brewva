@@ -36,6 +36,66 @@ function buildBrief(decision = "What should the parent decide next?") {
 }
 
 describe("subagent_run public surface", () => {
+  test("derives the public role from gate reason for direct role mismatches", async () => {
+    let capturedRequest: SubagentRunRequest | undefined;
+    const tool = createSubagentRunTool({
+      runtime: {
+        orchestration: {
+          subagents: {
+            run: async (input: { request: SubagentRunRequest }) => {
+              capturedRequest = input.request;
+              return {
+                ok: true,
+                mode: input.request.mode,
+                delegate: input.request.agent,
+                outcomes: [
+                  {
+                    ok: true,
+                    runId: "run-gate-derived-1",
+                    agent: input.request.agent,
+                    taskName: "collect-routing-evidence",
+                    taskPath: "/collect-routing-evidence",
+                    nickname: "collect routing evidence",
+                    delegate: input.request.agent,
+                    kind: "evidence" as const,
+                    status: "ok" as const,
+                    workerSessionId: "worker-gate-derived-1",
+                    summary: "Evidence collection routed to the navigator.",
+                    data: {
+                      kind: "evidence" as const,
+                      summary: "Evidence collection routed to the navigator.",
+                      sourceRefs: [
+                        "packages/brewva-tools/src/families/delegation/subagent-run/api.ts",
+                      ],
+                    },
+                    metrics: { durationMs: 4 },
+                    evidenceRefs: [],
+                  },
+                ],
+              };
+            },
+          },
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-public-run-gate-derived-role",
+      {
+        agent: "explorer",
+        gateReason: "find_evidence",
+        objective: "collect evidence about public delegation routing",
+      },
+      undefined,
+      undefined,
+      fakeContext("session-public-run-gate-derived-role"),
+    );
+
+    expect(capturedRequest?.agent).toBe("navigator");
+    expect(capturedRequest?.gateReason).toBe("find_evidence");
+    expect(extractText(result)).toContain("delegate=navigator");
+  });
+
   test("forwards intent-first single-run packets without low-level routing fields", async () => {
     let capturedRequest: SubagentRunRequest | undefined;
     const tool = createSubagentRunTool({
@@ -562,6 +622,67 @@ describe("subagent_status V2 run-card surface", () => {
 });
 
 describe("subagent_fanout public surface", () => {
+  test("derives the public fanout role from gate reason for direct role mismatches", async () => {
+    let capturedRequest: SubagentRunRequest | undefined;
+    const tool = createSubagentFanoutTool({
+      runtime: {
+        orchestration: {
+          subagents: {
+            run: async (input: { request: SubagentRunRequest }) => {
+              capturedRequest = input.request;
+              return {
+                ok: true,
+                mode: input.request.mode,
+                delegate: input.request.agent,
+                outcomes: [
+                  {
+                    ok: true,
+                    runId: "fanout-gate-derived-1",
+                    label: "routing",
+                    delegate: input.request.agent,
+                    kind: "evidence" as const,
+                    status: "ok" as const,
+                    summary: "Fanout evidence collection routed to the navigator.",
+                    data: {
+                      kind: "evidence" as const,
+                      summary: "Fanout evidence collection routed to the navigator.",
+                      sourceRefs: [
+                        "packages/brewva-tools/src/families/delegation/subagent-run/api.ts",
+                      ],
+                    },
+                    metrics: { durationMs: 5 },
+                    evidenceRefs: [],
+                  },
+                ],
+              };
+            },
+          },
+        },
+      } as any,
+    });
+
+    const result = await tool.execute(
+      "tc-public-fanout-gate-derived-role",
+      {
+        agent: "explorer",
+        gateReason: "find_evidence",
+        objective: "compare approval and rollback evidence across repositories",
+        tasks: [
+          { label: "brewva", objective: "collect Brewva delegation evidence" },
+          { label: "external", objective: "collect external repository evidence" },
+        ],
+      },
+      undefined,
+      undefined,
+      fakeContext("session-public-fanout-gate-derived-role"),
+    );
+
+    expect(capturedRequest?.agent).toBe("navigator");
+    expect(capturedRequest?.gateReason).toBe("find_evidence");
+    expect(capturedRequest?.tasks?.map((task) => task.label)).toEqual(["brewva", "external"]);
+    expect(extractText(result)).toContain("subagent_fanout completed for delegate=navigator");
+  });
+
   test("forces parallel mode and forwards public task packets", async () => {
     let capturedRequest: SubagentRunRequest | undefined;
     const tool = createSubagentFanoutTool({

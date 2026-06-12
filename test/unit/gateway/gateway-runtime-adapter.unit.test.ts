@@ -107,6 +107,119 @@ describe("gateway runtime adapter", () => {
     ]);
   });
 
+  test("closes open tool calls with error finishes when runtime turn throws", async () => {
+    const observedFrames: SessionWireFrame[] = [];
+
+    const result = await runHostedRuntimeTurnAdapter({
+      runtime: {
+        async *turn() {
+          yield {
+            type: "tool.progress",
+            progress: {
+              toolCallId: "tool-exec-1",
+              toolName: "exec",
+              update: { outcome: { kind: "ok", value: {} }, content: "started" },
+            },
+          };
+          throw new Error("provider_tool_continuation_limit_exceeded");
+        },
+      } as never,
+      sessionId: "adapter-failed-tool-session",
+      turnId: "turn-failed-tool",
+      session: {} as never,
+      prompt: "run diagnostics",
+      profile: resolveHostedTurnAdapterProfile({ source: "interactive" }),
+      onFrame(frame) {
+        observedFrames.push(frame);
+      },
+    });
+
+    expect(result.status).toBe("failed");
+    if (result.status !== "failed") {
+      throw new Error("expected_failed_turn");
+    }
+    const finished = observedFrames.filter((frame) => frame.type === "tool.finished");
+    expect(finished).toHaveLength(1);
+    expect(finished[0]).toMatchObject({
+      type: "tool.finished",
+      turnId: "turn-failed-tool",
+      toolCallId: "tool-exec-1",
+      toolName: "exec",
+      verdict: "fail",
+      isError: true,
+      text: "Effectful tool failed before a committed receipt.",
+    });
+    expect(result.toolOutputs).toMatchObject([
+      {
+        toolCallId: "tool-exec-1",
+        toolName: "exec",
+        verdict: "fail",
+        isError: true,
+      },
+    ]);
+  });
+
+  test("closes open tools before failed turn commits", async () => {
+    const observedFrames: SessionWireFrame[] = [];
+
+    await runHostedRuntimeTurnAdapter({
+      runtime: {
+        async *turn() {
+          yield {
+            type: "runtime.event",
+            event: {
+              id: "event-tool-proposed",
+              type: "tool.proposed",
+              timestamp: 1_010,
+              sessionId: "adapter-failed-commit-session",
+              turnId: "turn-failed-commit",
+              payload: {
+                call: { toolCallId: "tool-exec-1", toolName: "exec" },
+              },
+            },
+          };
+          yield {
+            type: "runtime.event",
+            event: {
+              id: "event-turn-ended",
+              type: "turn.ended",
+              timestamp: 1_030,
+              sessionId: "adapter-failed-commit-session",
+              turnId: "turn-failed-commit",
+              payload: { status: "failed" },
+            },
+          };
+        },
+      } as never,
+      sessionId: "adapter-failed-commit-session",
+      turnId: "turn-failed-commit",
+      session: {} as never,
+      prompt: "run diagnostics",
+      profile: resolveHostedTurnAdapterProfile({ source: "interactive" }),
+      onFrame(frame) {
+        observedFrames.push(frame);
+      },
+    });
+
+    expect(observedFrames.map((frame) => frame.type)).toEqual([
+      "tool.started",
+      "tool.finished",
+      "turn.committed",
+    ]);
+    expect(observedFrames.at(-1)).toMatchObject({
+      type: "turn.committed",
+      status: "failed",
+      toolOutputs: [
+        {
+          toolCallId: "tool-exec-1",
+          toolName: "exec",
+          verdict: "fail",
+          isError: true,
+        },
+      ],
+    });
+  });
+
   test("hosted runtime adapter commits assistant segments around live tool frames", async () => {
     const observedFrames: SessionWireFrame[] = [];
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
+import { isSessionPhase } from "../../../packages/brewva-cli/src/shell/domain/session-phase.js";
 import {
   createLiveSessionWireFrameStore,
   createSessionViewPort,
@@ -171,5 +172,131 @@ describe("SessionViewPort session wire cache", () => {
     expect(frames).toHaveLength(5);
     expect(frames.some((candidate) => candidate.type === "turn.input")).toBe(true);
     expect(frames.at(-1)?.frameId).toBe("frame:delta:11");
+  });
+
+  test("returns the interactive projection to idle when a hosted prompt fails without a commit frame", async () => {
+    const sessionId = "session-1";
+    const session = {
+      isStreaming: false,
+      sessionManager: {
+        getSessionId: () => sessionId,
+      },
+      async prompt() {},
+      subscribe() {
+        return () => {};
+      },
+      getQueuedPrompts() {
+        return [];
+      },
+      removeQueuedPrompt() {
+        return false;
+      },
+      async steer() {
+        return { status: "no_active_run" };
+      },
+      async waitForIdle() {},
+      async abort() {},
+      getRegisteredTools() {
+        return [];
+      },
+      getRuntimeModelCatalog() {
+        return {
+          async getApiKeyAndHeaders() {
+            return { ok: true };
+          },
+        };
+      },
+      createRuntimeToolContext() {
+        return {
+          getSystemPrompt() {
+            return "";
+          },
+        };
+      },
+    };
+    const runtime = {
+      identity: {
+        agentId: "agent-1",
+        cwd: "/repo",
+        workspaceRoot: "/repo",
+      },
+      config: {
+        security: {
+          actionAdmissionOverrides: {},
+        },
+      },
+      ops: {
+        sessionWire: {
+          query() {
+            return [];
+          },
+        },
+      },
+      createRuntime() {
+        return {
+          identity: {
+            agentId: "agent-1",
+            cwd: "/repo",
+            workspaceRoot: "/repo",
+          },
+          config: {},
+          tape: {
+            list() {
+              return [];
+            },
+          },
+          kernel: {},
+          model: {},
+          async start() {
+            return { recoveredSessions: [] };
+          },
+          async *turn() {
+            yield {
+              type: "tool.progress",
+              progress: {
+                toolCallId: "tool-exec-1",
+                toolName: "exec",
+                update: {
+                  outcome: { kind: "ok", value: {} },
+                  content: "started",
+                },
+              },
+            };
+            throw new Error("provider_tool_continuation_limit_exceeded");
+          },
+          async close() {},
+        };
+      },
+    };
+    const port = createSessionViewPort({
+      session,
+      runtime,
+      toolDefinitions: new Map(),
+      initPhases: [],
+      phase: "ready",
+    } as never);
+    const phases: string[] = [];
+    const unsubscribe = port.subscribe((event) => {
+      if (event.type === "session_phase_change" && isSessionPhase(event.phase)) {
+        phases.push(event.phase.kind);
+      }
+    });
+
+    let thrown: unknown;
+    try {
+      await port.prompt([{ type: "text", text: "run diagnostics" }], { source: "interactive" });
+    } catch (error) {
+      thrown = error;
+    } finally {
+      unsubscribe();
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    if (!(thrown instanceof Error)) {
+      throw new Error("expected_prompt_error");
+    }
+    expect(thrown.message).toContain("provider_tool_continuation_limit_exceeded");
+    expect(phases).toContain("tool_executing");
+    expect(phases.at(-1)).toBe("idle");
   });
 });

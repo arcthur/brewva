@@ -26,6 +26,7 @@ import {
 } from "../families/memory/api.js";
 import {
   createBrowserTools,
+  createGlobTool,
   createGitDiffTool,
   createGitLogTool,
   createGitStatusTool,
@@ -74,6 +75,7 @@ export function buildDefaultBundledBrewvaTools(
     createResourceReadTool({ runtime }),
     createLookAtTool({ runtime }),
     createGrepTool({ runtime }),
+    createGlobTool({ runtime }),
     createDiscoverSkillsTool({ runtime }),
     createGitStatusTool({ runtime }),
     createGitDiffTool({ runtime }),

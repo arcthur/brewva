@@ -308,6 +308,78 @@ describe("shell cockpit wire fold", () => {
     });
   });
 
+  test("closes running tool effects when a turn commits failed without a tool finish", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "Run diagnostics",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "tool.started",
+        frameId: "frame:tool-start",
+        ts: 1_020,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        toolCallId: "tool-exec-1",
+        toolName: "exec",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "turn.committed",
+        frameId: "frame:commit",
+        ts: 1_040,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "failed",
+        assistantText: "",
+        toolOutputs: [],
+      }),
+    );
+
+    const snapshot = fold.snapshot("session-1");
+    expect(snapshot.runtimeActivity).toBeNull();
+    expect(snapshot.toolCalls).toHaveLength(1);
+    expect(snapshot.toolCalls[0]).toMatchObject({
+      toolCallId: "tool-exec-1",
+      toolName: "exec",
+      status: "failed",
+      latestRef: "frame:commit",
+      latestAt: 1_040,
+      isError: true,
+    });
+
+    const projection = projectShellCockpitProjection({
+      sessionId: "session-1",
+      phase: { kind: "idle" },
+      workCard: workCard(),
+      contextCockpit: contextCockpit(),
+      operator: operatorSnapshot(),
+      sessionWire: [],
+      wireFold: snapshot,
+      runtimeEvents: [],
+      cost: costPosture(),
+      rewindTargets: [],
+      observation: createDefaultCockpitObservationCursor(),
+    });
+
+    expect(projection.effectLedger.items).toHaveLength(1);
+    expect(projection.effectLedger.items[0]).toMatchObject({
+      kind: "failed_tool",
+      title: "exec failed",
+      status: "failed",
+      actionClass: "local_exec_effectful",
+      summary: "Effectful tool failed before a committed receipt.",
+    });
+  });
+
   test("normalizes raw legacy session wire frames through the same folded cockpit path", () => {
     const frames = [
       frame({

@@ -51,6 +51,26 @@ describe("substrate file tools", () => {
     cleanupTestWorkspace(workspace);
   });
 
+  test("read tool rejects legacy file field without throwing", async () => {
+    const workspace = createTestWorkspace("substrate-read-tool-legacy-file-field");
+    const filePath = join(workspace, "notes.txt");
+    writeFileSync(filePath, "alpha\nbeta\n", "utf8");
+
+    const tool = createBrewvaReadToolDefinition(workspace);
+    const result = await tool.execute(
+      "tool-call-legacy-file",
+      { file: "notes.txt" } as never,
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(extractText(result)).toContain("read rejected: path is required");
+    expect(result.outcome.kind).toBe("err");
+
+    cleanupTestWorkspace(workspace);
+  });
+
   test("edit tool applies exact replacements against the original content and returns diff details", async () => {
     const workspace = createTestWorkspace("substrate-edit-tool");
     const filePath = join(workspace, "src", "example.ts");

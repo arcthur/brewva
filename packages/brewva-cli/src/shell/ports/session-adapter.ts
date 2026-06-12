@@ -1535,9 +1535,6 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         state: projectionState,
         emit: emitLocalSessionEvent,
       });
-      if (output.status === "failed") {
-        throw output.error instanceof Error ? output.error : new Error(String(output.error));
-      }
       if (
         output.status === "completed" &&
         !projectionState.emittedAssistantMessage &&
@@ -1547,6 +1544,16 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
           type: "message_end",
           message: buildAssistantTextMessage(output.assistantText),
         });
+      }
+      if (output.status !== "suspended") {
+        emitRuntimeSessionPhase({
+          state: projectionState,
+          phase: { kind: "idle" },
+          emit: emitLocalSessionEvent,
+        });
+      }
+      if (output.status === "failed") {
+        throw output.error instanceof Error ? output.error : new Error(String(output.error));
       }
     },
     getQueuedPrompts() {

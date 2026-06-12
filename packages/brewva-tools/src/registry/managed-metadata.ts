@@ -42,6 +42,11 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.readPath.discoveryObserved",
     "capabilities.tools.sourcePatch.snapshots.record",
   ]),
+  glob: metadata("base", "workspace_read", [
+    "capabilities.events.records.query",
+    "capabilities.task.target.getDescriptor",
+    "capabilities.tools.readPath.discoveryObserved",
+  ]),
   git_status: metadata("base", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",

@@ -44,12 +44,53 @@ function readRecordPayload(record: unknown): unknown {
     : undefined;
 }
 
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function readPromptContentText(content: unknown): string | undefined {
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+  const text = content
+    .map((part) => {
+      if (!part || typeof part !== "object" || Array.isArray(part)) {
+        return "";
+      }
+      const record = part as {
+        type?: unknown;
+        text?: unknown;
+        displayText?: unknown;
+        name?: unknown;
+        uri?: unknown;
+      };
+      if (record.type === "text") {
+        return typeof record.text === "string" ? record.text : "";
+      }
+      if (record.type === "file") {
+        if (typeof record.displayText === "string") return record.displayText;
+        if (typeof record.name === "string") return record.name;
+        if (typeof record.uri === "string") return record.uri;
+      }
+      return "";
+    })
+    .join("");
+  return readString(text);
+}
+
 function readPromptText(payload: unknown): string | undefined {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return undefined;
   }
   const promptText = (payload as { promptText?: unknown }).promptText;
-  return typeof promptText === "string" && promptText.trim().length > 0 ? promptText : undefined;
+  if (typeof promptText === "string" && promptText.trim().length > 0) {
+    return promptText;
+  }
+  const prompt = (payload as { prompt?: unknown }).prompt;
+  if (typeof prompt === "string" && prompt.trim().length > 0) {
+    return prompt;
+  }
+  return readPromptContentText((payload as { content?: unknown }).content);
 }
 
 function queryLatestTurnPromptText(
@@ -64,8 +105,16 @@ function queryLatestTurnPromptText(
     type: TURN_INPUT_RECORDED_EVENT_TYPE,
     last: 1,
   });
-  const payload = queried?.at(-1);
-  return readPromptText(readRecordPayload(payload));
+  const semanticPayload = queried?.at(-1);
+  const semanticPrompt = readPromptText(readRecordPayload(semanticPayload));
+  if (semanticPrompt) {
+    return semanticPrompt;
+  }
+  const canonical = records?.query?.(sessionId, {
+    type: "turn.started",
+    last: 1,
+  });
+  return readPromptText(readRecordPayload(canonical?.at(-1)));
 }
 
 function decodeFilePath(value: string): string {

@@ -17,7 +17,7 @@ import {
   resolveScopedPath,
   resolveToolTargetScope,
 } from "../../runtime-port/target-scope.js";
-import { errTextResult, okTextResult } from "../../utils/result.js";
+import { errTextResult, okTextResult, textResultForOutcome } from "../../utils/result.js";
 import {
   buildAdvisorHeader,
   buildGrepSourceSuggestions,
@@ -71,6 +71,13 @@ function normalizeGrepCase(value: unknown): GrepCase {
 function clampInt(value: unknown, fallback: number, options: { min: number; max: number }): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
   return Math.max(options.min, Math.min(options.max, Math.trunc(value)));
+}
+
+function normalizeStringList(value: unknown, fallback: readonly string[]): string[] {
+  const entries = Array.isArray(value) ? value : typeof value === "string" ? [value] : fallback;
+  return entries
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter((entry) => entry.length > 0);
 }
 
 function parseGrepLocationLine(line: string): {
@@ -127,7 +134,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       const timeoutMs = clampInt(params.timeout_ms, 30_000, { min: 100, max: 120_000 });
 
       const query = params.query.trim();
-      const requestedPaths = (params.paths ?? ["."]).map((entry) => entry.trim()).filter(Boolean);
+      const requestedPaths = normalizeStringList(params.paths, ["."]);
       const paths: string[] = [];
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
         const absolutePath = resolveScopedPath(entry, scope, { relativeTo: cwd });
@@ -144,7 +151,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
           relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : absolutePath,
         );
       }
-      const globs = (params.glob ?? []).map((entry) => entry.trim()).filter(Boolean);
+      const globs = normalizeStringList(params.glob, []);
       const caseMode = normalizeGrepCase(params.case);
       const sessionId = getToolSessionId(ctx);
       registerSearchIntent({
@@ -451,6 +458,126 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
         const notFound = /ENOENT|not found|spawn rg/i.test(message);
         const hint = notFound ? " (install ripgrep: rg)" : "";
         return errTextResult(`grep failed: ${message}${hint}`, {
+          ok: false,
+          error: message,
+          hint,
+        });
+      }
+    },
+  });
+}
+
+export function createGlobTool(options: GrepToolOptions): ToolDefinition {
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "glob");
+
+  return define({
+    name: "glob",
+    label: "Glob",
+    description: "Find files by glob pattern with bounded output.",
+    parameters: Type.Object({
+      pattern: Type.String({ minLength: 1 }),
+      paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { maxItems: 20 })),
+      max_results: Type.Optional(Type.Number({ minimum: 1, maximum: 500, default: 200 })),
+      timeout_ms: Type.Optional(Type.Number({ minimum: 100, maximum: 120000, default: 30000 })),
+      workdir: Type.Optional(Type.String()),
+    }),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      const scope = resolveToolTargetScope(runtime, ctx);
+      const cwd = params.workdir ? resolve(scope.baseCwd, params.workdir) : scope.baseCwd;
+      if (!isPathInsideRoots(cwd, scope.allowedRoots)) {
+        return errTextResult(
+          `glob rejected: workdir escapes target roots (${scope.allowedRoots.join(", ")}).`,
+          {
+            ok: false,
+            reason: "workdir_outside_target",
+            workdir: cwd,
+            targetRoots: scope.allowedRoots,
+          },
+        );
+      }
+
+      const pattern = params.pattern.trim();
+      const maxResults = clampInt(params.max_results, 200, { min: 1, max: 500 });
+      const timeoutMs = clampInt(params.timeout_ms, 30_000, { min: 100, max: 120_000 });
+      const requestedPaths = normalizeStringList(params.paths, ["."]);
+      const paths: string[] = [];
+      for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
+        const absolutePath = resolveScopedPath(entry, scope, { relativeTo: cwd });
+        if (!absolutePath) {
+          return errTextResult(`glob rejected: path escapes target roots (${entry}).`, {
+            ok: false,
+            reason: "path_outside_target",
+            path: entry,
+            targetRoots: scope.allowedRoots,
+          });
+        }
+        const relativePath = relative(cwd, absolutePath);
+        paths.push(
+          relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : absolutePath,
+        );
+      }
+
+      try {
+        const result = await runRipgrep(
+          {
+            cwd,
+            args: ["--files", "--hidden", "--glob", pattern, ...paths],
+            maxLines: maxResults,
+            timeoutMs,
+            signal,
+          },
+          {
+            command: options.ripgrepCommand,
+          },
+        );
+        const sessionId = getToolSessionId(ctx);
+        const discoveryPayload = buildReadPathDiscoveryObservationPayload({
+          baseCwd: scope.baseCwd,
+          toolName: "glob",
+          evidenceKind: "file_glob",
+          observedPaths: result.lines,
+        });
+        if (sessionId && discoveryPayload) {
+          recordToolRuntimeEvent(runtime, {
+            sessionId,
+            type: TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+            payload: discoveryPayload,
+          });
+        }
+
+        const header = [
+          "# Glob",
+          `- pattern: ${pattern}`,
+          `- workdir: ${cwd}`,
+          `- paths: ${paths.length > 0 ? paths.join(", ") : "."}`,
+          `- exit_code: ${result.exitCode}`,
+          `- matches_shown: ${result.lines.length}`,
+          `- truncated: ${result.truncated}`,
+          `- timed_out: ${result.timedOut}`,
+        ];
+        if (result.exitCode === 0) {
+          return okTextResult([...header, "", ...result.lines].join("\n"), {
+            ok: true,
+            ...result,
+          });
+        }
+        if (result.exitCode === 1) {
+          return textResultForOutcome("inconclusive", [...header, "", "(no matches)"].join("\n"), {
+            ok: true,
+            ...result,
+          });
+        }
+
+        const stderr = result.stderr ? `\n\nstderr:\n${result.stderr}` : "";
+        return errTextResult([...header, "", "(rg failed)", stderr.trim()].join("\n").trim(), {
+          ok: false,
+          ...result,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const notFound = /ENOENT|not found|spawn rg/i.test(message);
+        const hint = notFound ? " (install ripgrep: rg)" : "";
+        return errTextResult(`glob failed: ${message}${hint}`, {
           ok: false,
           error: message,
           hint,

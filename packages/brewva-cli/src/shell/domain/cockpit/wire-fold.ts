@@ -37,7 +37,10 @@ type MutableAnswer = ShellCockpitFoldedAnswer & {
   committed: boolean;
 };
 
-type MutableToolCall = ShellCockpitFoldedToolCall;
+type MutableToolCall = ShellCockpitFoldedToolCall & {
+  readonly turnId: string;
+  readonly attemptId?: string;
+};
 
 type MutableTranscriptAssistantSegment = {
   readonly turnId: string;
@@ -210,6 +213,22 @@ function materializeRuntimeActivity(activity: MutableRuntimeActivity): ShellCock
   };
 }
 
+function materializeToolCall(toolCall: MutableToolCall): ShellCockpitFoldedToolCall {
+  return {
+    toolCallId: toolCall.toolCallId,
+    toolName: toolCall.toolName,
+    status: toolCall.status,
+    ...(toolCall.startedAt !== undefined ? { startedAt: toolCall.startedAt } : {}),
+    ...(toolCall.startedRef !== undefined ? { startedRef: toolCall.startedRef } : {}),
+    latestRef: toolCall.latestRef,
+    latestAt: toolCall.latestAt,
+    text: toolCall.text,
+    ...(toolCall.verdict !== undefined ? { verdict: toolCall.verdict } : {}),
+    isError: toolCall.isError,
+    ...(toolCall.display !== undefined ? { display: toolCall.display } : {}),
+  };
+}
+
 class ShellCockpitSessionWireFold {
   readonly #seenFrameKeys = new Set<string>();
   readonly #sourceClock = new Map<string, number>();
@@ -315,7 +334,7 @@ class ShellCockpitSessionWireFold {
       ...(this.#latestCommittedAnswer
         ? { latestCommittedAnswer: this.#latestCommittedAnswer }
         : {}),
-      toolCalls: [...this.#toolCalls.values()],
+      toolCalls: [...this.#toolCalls.values()].map(materializeToolCall),
       transcriptVersion: this.#transcriptVersion,
       transcriptMessages: [...this.#transcriptMessages],
     };
@@ -443,6 +462,8 @@ class ShellCockpitSessionWireFold {
       toolCallId: frame.toolCallId,
       toolName: frame.toolName,
       status: current?.status ?? "running",
+      turnId: current?.turnId ?? frame.turnId,
+      attemptId: current?.attemptId ?? frame.attemptId,
       startedAt: current?.startedAt ?? frame.ts,
       startedRef: current?.startedRef ?? ref,
       latestRef: current?.latestRef ?? ref,
@@ -468,6 +489,8 @@ class ShellCockpitSessionWireFold {
       toolCallId: frame.toolCallId,
       toolName: frame.toolName,
       status,
+      turnId: current?.turnId ?? frame.turnId,
+      attemptId: current?.attemptId ?? frame.attemptId,
       startedAt: current?.startedAt,
       startedRef: current?.startedRef,
       latestRef: ref,
@@ -483,6 +506,27 @@ class ShellCockpitSessionWireFold {
       return;
     }
     this.recordClock(ref, frame.ts);
+  }
+
+  private closeRunningToolsForCommittedTurn(
+    frame: Extract<SessionWireFrame, { type: "turn.committed" }>,
+  ): void {
+    if (frame.status === "completed") {
+      return;
+    }
+    const ref = frameRef(frame);
+    for (const [toolCallId, toolCall] of this.#toolCalls) {
+      if (toolCall.turnId !== frame.turnId || toolCall.status !== "running") {
+        continue;
+      }
+      this.#toolCalls.set(toolCallId, {
+        ...toolCall,
+        status: "failed",
+        latestRef: ref,
+        latestAt: frame.ts,
+        isError: true,
+      });
+    }
   }
 
   private clearTranscriptProjection(): void {
@@ -896,6 +940,7 @@ class ShellCockpitSessionWireFold {
           activity.committed = true;
           this.#activeTurnIds.delete(frame.turnId);
         }
+        this.closeRunningToolsForCommittedTurn(frame);
         this.commitAnswer(frame);
         if (options.projectTranscript) {
           this.commitTranscript(frame);

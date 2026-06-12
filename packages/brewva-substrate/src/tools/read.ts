@@ -144,6 +144,19 @@ function renderSummaryFromText(
   return text.length > 0 ? `\n${text}` : "";
 }
 
+function readRejectedResult(message: string): BrewvaToolResult<BrewvaReadToolDetails> {
+  return {
+    content: [{ type: "text", text: message }],
+    outcome: {
+      kind: "err",
+      error: {
+        code: "invalid_params",
+        message,
+      },
+    },
+  };
+}
+
 export function createBrewvaReadToolDefinition(
   cwd: string,
   readOptions?: BrewvaReadToolOptions,
@@ -161,7 +174,12 @@ export function createBrewvaReadToolDefinition(
     outputSchema: readOutputSchema,
     errorSchema: ToolErrorRecordSchema,
     outcomeVersion: DEFAULT_TOOL_OUTCOME_VERSION,
-    async execute(_toolCallId, { path, offset, limit }, signal) {
+    async execute(_toolCallId, params, signal) {
+      const path = typeof params.path === "string" ? params.path : "";
+      const { offset, limit } = params;
+      if (path.trim().length === 0) {
+        return readRejectedResult("read rejected: path is required.");
+      }
       const absolutePath = resolveReadPath(path, cwd);
       return new Promise<BrewvaToolResult<BrewvaReadToolDetails>>((resolve, reject) => {
         if (signal?.aborted) {

@@ -22,6 +22,11 @@ import {
   toolOutputFromRuntimeEvent,
 } from "../../../../utils/runtime-session-wire-projection.js";
 import type { HostedTurnAdapterProfile } from "../state.js";
+import {
+  closeOpenRuntimeWireTools,
+  emitRuntimeToolFinishedFrame,
+  RuntimeWireToolLifecycleTracker,
+} from "./runtime-wire-tool-lifecycle.js";
 
 export interface AssistantSegmentAccumulator {
   text: string;
@@ -204,10 +209,15 @@ export function emitRuntimeToolProgressFrame(input: {
   readonly sessionId: string;
   readonly turnId?: string;
   readonly attemptId: string;
+  readonly tracker: RuntimeWireToolLifecycleTracker;
   readonly onFrame?: (frame: SessionWireFrame) => void;
   readonly nextSequence: () => number;
 }): void {
   const toolProgress = toolProgressFromRuntimeFrame(input.frame);
+  input.tracker.noteOpen({
+    toolCallId: input.frame.progress.toolCallId,
+    toolName: input.frame.progress.toolName,
+  });
   emitRuntimeBranchFrame({
     sessionId: input.sessionId,
     turnId: input.turnId,
@@ -240,6 +250,7 @@ export function emitRuntimeEventFrame(input: {
   readonly turnId?: string;
   readonly attemptId: string;
   readonly profile: HostedTurnAdapterProfile;
+  readonly tracker: RuntimeWireToolLifecycleTracker;
   readonly onFrame?: (frame: SessionWireFrame) => void;
   readonly nextSequence: () => number;
   readonly assistantText: string;
@@ -290,6 +301,20 @@ export function emitRuntimeEventFrame(input: {
     return;
   }
   if (event.type === "turn.ended") {
+    const committedStatus = runtimeTurnCommittedStatusFromPayload(event.payload);
+    if (committedStatus !== "completed") {
+      closeOpenRuntimeWireTools({
+        tracker: input.tracker,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        attemptId: input.attemptId,
+        onFrame: input.onFrame,
+        nextSequence: input.nextSequence,
+        lifecycleFallbackReason: "turn_committed_without_tool_execution_end",
+        toolOutputs: input.toolOutputs,
+        sequence: input.sequence,
+      });
+    }
     emitRuntimeBranchFrame({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -307,7 +332,7 @@ export function emitRuntimeEventFrame(input: {
         type: "turn.committed",
         turnId: input.turnId ?? "",
         attemptId: input.attemptId,
-        status: runtimeTurnCommittedStatusFromPayload(event.payload),
+        status: committedStatus,
         assistantText: input.assistantText,
         assistantSegments: [...input.assistantSegments],
         toolOutputs: [...input.toolOutputs],
@@ -320,6 +345,7 @@ export function emitRuntimeEventFrame(input: {
     if (!toolCall) {
       return;
     }
+    input.tracker.noteOpen(toolCall);
     emitRuntimeBranchFrame({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -382,28 +408,19 @@ export function emitRuntimeEventFrame(input: {
     return;
   }
   input.toolOutputs.push({ ...toolOutput, sequence: input.sequence });
-  emitRuntimeBranchFrame({
+  input.tracker.noteFinished(toolOutput.toolCallId);
+  emitRuntimeToolFinishedFrame({
     sessionId: input.sessionId,
     turnId: input.turnId,
+    attemptId: input.attemptId,
+    toolCallId: asBrewvaToolCallId(toolOutput.toolCallId),
+    toolName: asBrewvaToolName(toolOutput.toolName),
+    verdict: toolOutput.verdict,
+    isError: toolOutput.isError,
+    text: toolOutput.text,
+    ...(toolOutput.details !== undefined ? { details: toolOutput.details } : {}),
+    ...(toolOutput.display ? { display: toolOutput.display } : {}),
     onFrame: input.onFrame,
     nextSequence: input.nextSequence,
-    build: (frameId, wireSessionId) => ({
-      schema: SESSION_WIRE_SCHEMA,
-      sessionId: wireSessionId,
-      frameId,
-      ts: Date.now(),
-      source: "live",
-      durability: "cache",
-      type: "tool.finished",
-      turnId: input.turnId ?? "",
-      attemptId: input.attemptId,
-      toolCallId: toolOutput.toolCallId,
-      toolName: toolOutput.toolName,
-      verdict: toolOutput.verdict,
-      isError: toolOutput.isError,
-      text: toolOutput.text,
-      ...(toolOutput.details !== undefined ? { details: toolOutput.details } : {}),
-      ...(toolOutput.display ? { display: toolOutput.display } : {}),
-    }),
   });
 }

@@ -203,6 +203,26 @@ function normalizeGateReason(value: unknown): SubagentGateReason | undefined {
     : undefined;
 }
 
+function resolvePublicAgentForGateReason(input: {
+  agent: SubagentAgent;
+  gateReason: SubagentGateReason | undefined;
+}): SubagentAgent {
+  switch (input.gateReason) {
+    case "find_evidence":
+      return "navigator";
+    case "make_judgment":
+      return "explorer";
+    case "implement_isolated":
+      return "worker";
+    case "verify_reproducibly":
+      return "verifier";
+    case "compound_knowledge":
+      return "librarian";
+    default:
+      return input.agent;
+  }
+}
+
 function normalizeForkTurns(value: unknown): SubagentForkTurns | undefined {
   if (value === "none" || value === "all") {
     return value;
@@ -342,13 +362,18 @@ export function buildRunRequestFromParams(input: {
 export function buildPublicRunRequestFromParams(input: {
   params: SubagentRunParams;
 }): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
-  const agent = normalizeAgent(input.params.agent);
-  if (!agent) {
+  const normalizedAgent = normalizeAgent(input.params.agent);
+  if (!normalizedAgent) {
     return {
       ok: false,
       message: "Error: agent is required for subagent_run.",
     };
   }
+  const gateReason = normalizeGateReason(input.params.gateReason);
+  const agent = resolvePublicAgentForGateReason({
+    agent: normalizedAgent,
+    gateReason,
+  });
   const skillName = input.params.skillName?.trim() || undefined;
   const packet = buildPublicPacket({ packet: input.params });
   if (!packet) {
@@ -365,7 +390,7 @@ export function buildPublicRunRequestFromParams(input: {
       taskName: input.params.taskName,
       nickname: input.params.nickname,
       forkTurns: normalizeForkTurns(input.params.forkTurns) ?? "none",
-      gateReason: normalizeGateReason(input.params.gateReason),
+      gateReason,
       mode: "single",
       timeoutMs: input.params.timeoutMs,
       packet,
@@ -376,13 +401,18 @@ export function buildPublicRunRequestFromParams(input: {
 export function buildPublicFanoutRequestFromParams(input: {
   params: SubagentFanoutParams;
 }): { ok: true; request: SubagentRunRequest } | { ok: false; message: string } {
-  const agent = normalizeAgent(input.params.agent);
-  if (!agent) {
+  const normalizedAgent = normalizeAgent(input.params.agent);
+  if (!normalizedAgent) {
     return {
       ok: false,
       message: "Error: agent is required for subagent_fanout.",
     };
   }
+  const gateReason = normalizeGateReason(input.params.gateReason);
+  const agent = resolvePublicAgentForGateReason({
+    agent: normalizedAgent,
+    gateReason,
+  });
   const skillName = input.params.skillName?.trim() || undefined;
   const sharedPacket = input.params.objective
     ? buildPublicPacket({
@@ -401,7 +431,7 @@ export function buildPublicFanoutRequestFromParams(input: {
         taskName: input.params.taskName,
         nickname: input.params.nickname,
         forkTurns: normalizeForkTurns(input.params.forkTurns) ?? "none",
-        gateReason: normalizeGateReason(input.params.gateReason),
+        gateReason,
         mode: "parallel",
         timeoutMs: input.params.timeoutMs,
         packet: sharedPacket,

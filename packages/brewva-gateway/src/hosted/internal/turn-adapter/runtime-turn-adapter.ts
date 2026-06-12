@@ -21,6 +21,10 @@ import {
   type AssistantSegmentAccumulator,
 } from "./session-mux/runtime-frame-projection.js";
 import {
+  closeOpenRuntimeWireTools,
+  RuntimeWireToolLifecycleTracker,
+} from "./session-mux/runtime-wire-tool-lifecycle.js";
+import {
   createMinimalHostedTurnAdapterDiagnostic,
   type HostedTurnAdapterProfile,
   type HostedTurnAdapterResult,
@@ -184,6 +188,7 @@ export async function runHostedRuntimeTurnAdapter(
     projectionSequence += 1;
     return projectionSequence;
   };
+  const toolLifecycle = new RuntimeWireToolLifecycleTracker();
 
   try {
     for await (const frame of input.runtime.turn({
@@ -198,6 +203,17 @@ export async function runHostedRuntimeTurnAdapter(
       if (frame.type === "runtime.suspended") {
         await prompt.prelude?.complete?.();
         if (frame.cause === "interrupt") {
+          closeOpenRuntimeWireTools({
+            tracker: toolLifecycle,
+            sessionId,
+            turnId: input.turnId,
+            attemptId,
+            onFrame: input.onFrame,
+            nextSequence: nextFrameSequence,
+            lifecycleFallbackReason: "turn_cancelled_before_tool_execution_end",
+            toolOutputs,
+            sequence: nextProjectionSequence(),
+          });
           return {
             status: "cancelled",
             diagnostic: createMinimalHostedTurnAdapterDiagnostic({
@@ -262,6 +278,7 @@ export async function runHostedRuntimeTurnAdapter(
           sessionId,
           turnId: input.turnId,
           attemptId,
+          tracker: toolLifecycle,
           onFrame: input.onFrame,
           nextSequence: nextFrameSequence,
         });
@@ -277,6 +294,7 @@ export async function runHostedRuntimeTurnAdapter(
         turnId: input.turnId,
         attemptId,
         profile: input.profile,
+        tracker: toolLifecycle,
         onFrame: input.onFrame,
         nextSequence: nextFrameSequence,
         assistantText,
@@ -300,6 +318,17 @@ export async function runHostedRuntimeTurnAdapter(
     };
   } catch (error) {
     await prompt.prelude?.complete?.();
+    closeOpenRuntimeWireTools({
+      tracker: toolLifecycle,
+      sessionId,
+      turnId: input.turnId,
+      attemptId,
+      onFrame: input.onFrame,
+      nextSequence: nextFrameSequence,
+      lifecycleFallbackReason: "turn_failed_before_tool_execution_end",
+      toolOutputs,
+      sequence: nextProjectionSequence(),
+    });
     return failedRuntimeResult({
       sessionId,
       turnId: input.turnId,
