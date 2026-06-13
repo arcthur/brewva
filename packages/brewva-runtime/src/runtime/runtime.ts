@@ -217,6 +217,7 @@ export function createBrewvaRuntime(options: BrewvaRuntimeOptions): BrewvaRuntim
         commit,
         kernel,
         model,
+        maxProviderToolContinuationsPerTurn: options.maxProviderToolContinuationsPerTurn,
       });
     },
   });

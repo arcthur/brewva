@@ -172,6 +172,13 @@ export interface BrewvaRuntimeOptions {
   config?: BrewvaConfig;
   agentId?: string;
   physics: RuntimePhysicsDeclaration;
+  /**
+   * Runaway-loop backstop: maximum provider tool-call continuation passes in
+   * a single turn before the turn is failed. Defaults to
+   * DEFAULT_MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN. This is not a task-size
+   * limit — context compaction and cost guards bound real per-turn work.
+   */
+  maxProviderToolContinuationsPerTurn?: number;
 }
 
 export interface BrewvaRuntimeIdentity {

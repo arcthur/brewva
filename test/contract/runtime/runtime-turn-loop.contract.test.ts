@@ -906,6 +906,7 @@ describe("runtime turn loop", () => {
         };
       },
     };
+    const toolLimit = 4;
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-tool-limit-")),
       physics: {
@@ -913,6 +914,7 @@ describe("runtime turn loop", () => {
         provider,
         toolExecutor,
       },
+      maxProviderToolContinuationsPerTurn: toolLimit,
     });
 
     try {
@@ -928,8 +930,8 @@ describe("runtime turn loop", () => {
       expect((error as Error).message).toContain("provider_tool_continuation_limit_exceeded");
     }
 
-    expect(calls).toBe(17);
-    expect(executedTools).toBe(16);
+    expect(calls).toBe(toolLimit + 1);
+    expect(executedTools).toBe(toolLimit);
     expect(
       runtime.tape
         .list("s1")

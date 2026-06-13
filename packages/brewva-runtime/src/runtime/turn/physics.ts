@@ -268,6 +268,7 @@ export function createRuntimePhysicsTurnRunner(input: {
   readonly commit: TapeCommitPort;
   readonly kernel: BrewvaRuntime["kernel"];
   readonly model: BrewvaRuntime["model"];
+  readonly maxProviderToolContinuationsPerTurn?: number;
 }): BrewvaRuntime["turn"] {
   if (input.physics.mode === "noop") {
     return createNoopTurnRunner();
@@ -282,6 +283,7 @@ export function createRuntimePhysicsTurnRunner(input: {
     model: input.model,
     provider: input.physics.provider,
     toolExecutor: input.physics.toolExecutor,
+    maxProviderToolContinuationsPerTurn: input.maxProviderToolContinuationsPerTurn,
   });
   if (input.physics.mode === "replay-then-real") {
     return createReplayThenRealTurnRunner({

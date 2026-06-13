@@ -16,7 +16,12 @@ import type {
 } from "../runtime-api.js";
 import type { TapePort } from "../tape/port.js";
 
-const MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN = 16;
+// Backstop against a provider stuck in an infinite tool-call loop — NOT a
+// task-size limit. A single agentic turn legitimately makes many tool calls
+// (research/refactors routinely exceed 16), so the ceiling is generous; the
+// real per-turn budget is enforced by context compaction and cost guards.
+// Override per runtime via BrewvaRuntimeOptions.maxProviderToolContinuationsPerTurn.
+export const DEFAULT_MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN = 200;
 
 function clonePromptContentPart(part: PromptContentPart): PromptContentPart {
   return Object.freeze({ ...part });
@@ -63,7 +68,10 @@ export function createTurnRunner(input: {
   model: ModelPort;
   provider: RuntimeProviderPort;
   toolExecutor: RuntimeToolExecutorPort;
+  maxProviderToolContinuationsPerTurn?: number;
 }): (turn: TurnInput) => AsyncIterable<TurnFrame> {
+  const maxProviderToolContinuations =
+    input.maxProviderToolContinuationsPerTurn ?? DEFAULT_MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN;
   return async function* runTurn(turn: TurnInput): AsyncIterable<TurnFrame> {
     const provider = input.provider;
     type ToolOutcome = "continue" | "committed" | "suspend";
@@ -381,7 +389,7 @@ export function createTurnRunner(input: {
               continue;
             }
             yield* commitBufferedAssistantOutput(passOutput);
-            if (providerToolContinuations >= MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN) {
+            if (providerToolContinuations >= maxProviderToolContinuations) {
               throw new Error("provider_tool_continuation_limit_exceeded");
             }
             passHadTool = true;
