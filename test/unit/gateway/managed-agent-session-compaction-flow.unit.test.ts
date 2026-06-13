@@ -128,8 +128,8 @@ describe("managed-agent-session compaction flow", () => {
       onError: () => completed.push("error"),
     });
     expect(deferred).toBe(false);
-    expect(state.consumeToolResultStop([] as never)).toBe(true);
-    expect(state.consumeToolResultStop([] as never)).toBe(false);
+    expect(state.consumeToolResultStop()).toBe(true);
+    expect(state.consumeToolResultStop()).toBe(false);
     expect(state.beginDeferredCompaction()).not.toBeNull();
     state.finishDeferredCompaction();
 

@@ -22,7 +22,9 @@ export interface ContextBudgetCompactionConfig {
 export interface ContextBudgetDerivationConfig {
   readonly enabled?: boolean;
   readonly thresholds: ContextBudgetThresholdConfig;
+  /** Absolute override; when null/absent the ratio below scales with the window. */
   readonly predictedTurnGrowthTokens?: number | null;
+  readonly predictedTurnGrowthRatio?: number | null;
   readonly compaction?: ContextBudgetCompactionConfig | null;
 }
 
@@ -199,12 +201,39 @@ function deriveAdvisoryLimitTokens(
   );
 }
 
+/**
+ * Resolves a window-scaled token budget: an absolute token override wins;
+ * otherwise the ratio scales with the context window so defaults stay
+ * meaningful as model windows grow.
+ */
+export function resolveWindowScaledTokens(
+  absoluteTokens: number | null | undefined,
+  ratio: number | null | undefined,
+  contextWindow: number | null | undefined,
+): number | null {
+  const absolute = finiteNonNegative(absoluteTokens);
+  if (absolute !== null) {
+    return Math.floor(absolute);
+  }
+  const window = positiveFinite(contextWindow);
+  const unitRatio =
+    typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0 ? Math.min(ratio, 1) : null;
+  if (window === null || unitRatio === null) {
+    return null;
+  }
+  return Math.floor(window * unitRatio);
+}
+
 function deriveEffectivePredictedGrowth(
   input: ContextBudgetStateInput,
   contextWindow: number,
 ): number {
   const candidates = [
-    input.config.predictedTurnGrowthTokens,
+    resolveWindowScaledTokens(
+      input.config.predictedTurnGrowthTokens,
+      input.config.predictedTurnGrowthRatio,
+      contextWindow,
+    ),
     input.model?.predictedTurnGrowthTokens,
     input.provider?.predictedTurnGrowthTokensEma,
     input.request?.predictedTurnGrowthTokens,
@@ -414,7 +443,10 @@ export function decideCompaction(input: CompactionPolicyInputs): CompactionPolic
   if (input.hasUI === false) {
     return { decision: "skip", caller: input.caller, reason: "non_interactive_mode" };
   }
-  if (input.idle === false) {
+  if (input.idle === false && reason !== "hard_limit") {
+    // Below hard-limit pressure an active agent defers to advisory state.
+    // Under hard_limit the host soft-cuts at the next complete tool-result
+    // boundary instead of waiting for idle, so execution is safe.
     return {
       decision: "skip",
       caller: input.caller,

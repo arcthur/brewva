@@ -10,6 +10,7 @@ import {
   runHostedRuntimeTurnAdapter,
   type RunHostedRuntimeTurnAdapterInput,
 } from "./runtime-turn-adapter.js";
+import { resolveHostedCompactionBoundary } from "./runtime-turn-compaction.js";
 import { tryApplySchedulePromptTrigger } from "./schedule-trigger.js";
 import { resolveHostedTurnAdapterProfile } from "./state.js";
 import {
@@ -197,17 +198,57 @@ export async function runHostedTurnEnvelope(
   try {
     await ensureSessionInitialPersistence(input.session);
     const adapter = input.runAdapter ?? runHostedRuntimeTurnAdapter;
-    const result = await adapter({
+    const compactionBoundary = resolveHostedCompactionBoundary(input.session);
+    const softCut = compactionBoundary
+      ? { afterToolResult: () => compactionBoundary.consumeToolResultStop() }
+      : undefined;
+    const baseAdapterInput = {
       session: input.session,
-      prompt: input.prompt,
       profile,
       runtime: adapterRuntime,
       sessionId,
       turnId,
       runtimeTurn,
-      resolveApproval: input.resolveApproval,
       onFrame: input.onFrame,
+      softCut,
+    };
+    let result = await adapter({
+      ...baseAdapterInput,
+      prompt: input.prompt,
+      resolveApproval: input.resolveApproval,
     });
+
+    while (result.status === "suspended" && result.reason === "compaction") {
+      if (!compactionBoundary) {
+        break;
+      }
+      const flushed = await compactionBoundary.flushPendingCompaction();
+      if (!flushed) {
+        result = {
+          status: "failed",
+          error: new Error("compaction_soft_cut_flush_failed"),
+          attemptId: "runtime-turn",
+          assistantText: "",
+          toolOutputs: [],
+          diagnostic: createMinimalHostedTurnAdapterDiagnostic({
+            sessionId,
+            turnId,
+            profile,
+            lastDecision: "fail",
+          }),
+        };
+        break;
+      }
+      result = await adapter({
+        ...baseAdapterInput,
+        prompt: [],
+        resume: { kind: "compaction", turnId },
+      });
+    }
+
+    if (compactionBoundary && result.status === "completed") {
+      await compactionBoundary.settleTurnEndCompaction();
+    }
 
     return {
       ...result,

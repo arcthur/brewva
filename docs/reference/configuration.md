@@ -206,11 +206,15 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
   output/growth headroom before ratio checks.
 - `dynamicTailTokens` (`number`, default `4800`) caps hosted dynamic-tail
   context blocks.
-- `predictedTurnGrowthTokens` (`number`, default `35000`) is the configured
-  floor for projected next-turn growth. Gate/advisory evaluation derives the
-  effective prediction from this floor plus model/provider observations,
-  request-local estimates, and recent growth EMA, clamped to the target model
-  window.
+- `predictedTurnGrowthRatio` (`number`, default `0.175`) is the configured
+  floor for projected next-turn growth, expressed as a fraction of the target
+  model context window so the default scales with larger windows. Gate and
+  advisory evaluation derives the effective prediction from this floor plus
+  model/provider observations, request-local estimates, and recent growth EMA,
+  clamped to the target model window.
+- `predictedTurnGrowthTokens` (`number | null`, default `null`) is an optional
+  absolute override for the growth floor. When set, it wins over
+  `predictedTurnGrowthRatio`.
 - `providerCacheStalenessMs` (`number`, default `300000`) bounds how long
   provider-cache evidence is considered warm for request reduction policy.
 - `consequenceDigestMaxChars` (`number`, default `1200`) caps the
@@ -225,10 +229,15 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
   provider-request reduction. Adding a tool here keeps its observations and
   return digests in the outbound payload even when the request would otherwise
   be a candidate for clearing.
-- `tailProtectTokens` (`number` in tokens, default `40000`): cumulative tail
-  budget protected from outbound reduction. Walking from the most recent tool
-  result backwards, candidates whose accumulated tail token estimate fits
-  within this budget are preserved verbatim. Set to `0` to fall back to the
+- `compaction.tailProtectRatio` (`number`, default `0.2`): cumulative tail
+  budget protected from outbound reduction and session compaction cut-point
+  selection, expressed as a fraction of the session context window so the
+  default scales with larger windows. Walking from the most recent tool result
+  backwards, candidates whose accumulated tail token estimate fits within this
+  budget are preserved verbatim.
+- `compaction.tailProtectTokens` (`number | null` in tokens, default `null`):
+  optional absolute override for the protected tail budget. When set, it wins
+  over `compaction.tailProtectRatio`. Set to `0` to fall back to the
   count-based recent-window protection only. Set to a large value to disable
   reduction in practice when the tail is small.
 

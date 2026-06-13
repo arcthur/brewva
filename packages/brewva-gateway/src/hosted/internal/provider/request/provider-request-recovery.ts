@@ -1,5 +1,12 @@
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
-import type { HostedRuntimeAdapterPort } from "../../session/runtime-ports.js";
+import { MESSAGE_END_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
+import {
+  getRuntimeContextUsage,
+  queryStructuredRuntimeEvents,
+  type HostedRuntimeAdapterPort,
+} from "../../session/runtime-ports.js";
+
+const OUTPUT_BUDGET_ESCALATION_FACTOR = 2;
 
 const OUTPUT_BUDGET_PATHS = [
   ["max_tokens"],
@@ -114,13 +121,123 @@ export function applyOutputBudgetEscalationToPayload(
   };
 }
 
+export function readCurrentOutputBudget(payload: unknown): number | null {
+  const record = asRecord(payload);
+  if (!record) {
+    return null;
+  }
+  let current: number | null = null;
+  for (const path of OUTPUT_BUDGET_PATHS) {
+    const value = getNestedNumber(record, path);
+    if (value !== null && (current === null || value > current)) {
+      current = value;
+    }
+  }
+  return current;
+}
+
+interface LatestAssistantStop {
+  readonly stopReason: string | null;
+  readonly eventKey: string;
+}
+
+function latestAssistantStop(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): LatestAssistantStop | null {
+  const events = queryStructuredRuntimeEvents(runtime, sessionId, {
+    type: MESSAGE_END_EVENT_TYPE,
+    last: 8,
+  });
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    const payload = asRecord(event?.payload);
+    if (!event || !payload || payload.role !== "assistant") {
+      continue;
+    }
+    return {
+      stopReason: typeof payload.stopReason === "string" ? payload.stopReason : null,
+      eventKey: typeof event.id === "string" && event.id ? event.id : `ts:${event.timestamp}`,
+    };
+  }
+  return null;
+}
+
+export function resolveOutputBudgetEscalationTarget(input: {
+  readonly currentBudget: number | null;
+  readonly maxOutputTokens: number | null;
+}): number | null {
+  const current = readPositiveNumber(input.currentBudget);
+  const ceiling = readPositiveNumber(input.maxOutputTokens);
+  if (current === null || ceiling === null || current >= ceiling) {
+    return null;
+  }
+  return Math.min(current * OUTPUT_BUDGET_ESCALATION_FACTOR, ceiling);
+}
+
+const escalatedPayloads = new WeakSet<object>();
+const consumedLengthStopBySession = new Map<string, string>();
+
+/**
+ * True when the payload was produced by a one-shot output-budget escalation.
+ * Such requests carry a full-fidelity retry contract: transient outbound
+ * reduction must skip them.
+ */
+export function isOutputBudgetEscalatedPayload(payload: unknown): boolean {
+  const key = asRecord(payload);
+  return key !== null && escalatedPayloads.has(key);
+}
+
 export function registerProviderRequestRecovery(
-  _extensionApi: InternalHostPluginApi,
-  _runtime: HostedRuntimeAdapterPort,
+  extensionApi: InternalHostPluginApi,
+  runtime: HostedRuntimeAdapterPort,
 ): void {
-  return;
+  extensionApi.on("before_provider_request", (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId().trim();
+    if (!sessionId) {
+      return undefined;
+    }
+    const stop = latestAssistantStop(runtime, sessionId);
+    if (!stop || stop.stopReason !== "length") {
+      return undefined;
+    }
+    if (consumedLengthStopBySession.get(sessionId) === stop.eventKey) {
+      return undefined;
+    }
+    const usage = getRuntimeContextUsage(runtime, sessionId);
+    const target = resolveOutputBudgetEscalationTarget({
+      currentBudget: readCurrentOutputBudget(event.payload),
+      maxOutputTokens: usage?.maxOutputTokens ?? null,
+    });
+    if (target === null) {
+      return undefined;
+    }
+    consumedLengthStopBySession.set(sessionId, stop.eventKey);
+    const result = applyOutputBudgetEscalationToPayload(event.payload, Math.trunc(target));
+    runtime.ops.context.evidence.append(sessionId, {
+      kind: "output_budget_escalation",
+      timestamp: Date.now(),
+      payload: {
+        status: result.status,
+        targetMaxTokens: Math.trunc(target),
+        triggerEventKey: stop.eventKey,
+        detail: result.detail,
+      },
+    });
+    if (result.status !== "completed") {
+      return undefined;
+    }
+    const escalated = asRecord(result.payload);
+    if (escalated) {
+      escalatedPayloads.add(escalated);
+    }
+    return result.payload;
+  });
 }
 
 export const PROVIDER_REQUEST_RECOVERY_TEST_ONLY = {
   applyOutputBudgetEscalationToPayload,
+  isOutputBudgetEscalatedPayload,
+  readCurrentOutputBudget,
+  resolveOutputBudgetEscalationTarget,
 };

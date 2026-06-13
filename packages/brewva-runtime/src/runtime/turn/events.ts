@@ -32,7 +32,7 @@ export interface CostObservedPayload {
 export interface RuntimeSuspendedPayload {
   readonly cause: Extract<
     RuntimeRecoveryCause,
-    "approval_pending" | "provider_retry" | "interrupt"
+    "approval_pending" | "provider_retry" | "interrupt" | "compaction_required"
   >;
   readonly commitmentId?: string;
   readonly approvalRequestId?: string;

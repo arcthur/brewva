@@ -51,8 +51,11 @@ flowchart TD
   E -->|No| F["Continue normal turn"]
   E -->|Yes| G{"Hosted session with UI?"}
   G -->|No| H["Emit skipped or advisory state"]
-  G -->|Yes, agent active| I["Defer auto-compaction and expose advisory"]
+  G -->|Yes, agent active| I{"Hard-limit pressure?"}
+  I -->|No| I2["Defer auto-compaction and expose advisory"]
+  I -->|Yes| I3["Soft-cut: suspend turn at next complete tool-result boundary"]
   G -->|Yes, idle| J["Run auto-compaction watchdog path"]
+  I3 --> K
   J --> K["workbench_compact or hosted auto-compaction"]
   K --> L["async compaction commit writes one session_compact receipt"]
   L --> M["Resume interrupted turn from current evidence state"]
@@ -73,14 +76,23 @@ flowchart TD
    the gate.
 6. The hosted path then decides whether to:
    - emit advisory state only
-   - defer auto-compaction because the agent is active
+   - defer auto-compaction because the agent is active and pressure is still
+     below the hard limit
+   - soft-cut an active turn at the next complete tool-result boundary when
+     hard-limit pressure is reached (`runtime.suspended` with cause
+     `compaction_required`)
    - trigger auto-compaction while the session is idle
 7. If compaction is advised but still below hard-gate posture, the hosted path
    may clear older large tool-result bodies on the outbound provider request
    copy before the provider call is sent.
 8. After `workbench_compact` or hosted auto-compaction completes, the runtime
    records one durable `session_compact` receipt from caller-provided digest and
-   cache-impact evidence, then resumes the interrupted turn when required.
+   cache-impact evidence. The canonical hosted turn envelope owns the soft-cut
+   closure for every caller (interactive, channel, subagent, worker): it
+   flushes the deferred compaction and, only when the flush succeeds, re-enters
+   `runtime.turn(...)` with `resume: { kind: "compaction", turnId }` on the
+   same turn id without committing a second `turn.started`. A failed flush maps
+   the turn to a failed result instead of resuming on uncompacted context.
 9. If a durable `reasoning_revert` arrives, hosted recovery rebuilds the active
    branch from the target checkpoint and resumes from that surviving context
    instead of keeping superseded branch history visible to the model.
@@ -98,9 +110,14 @@ flowchart TD
   `@brewva/brewva-substrate/context-budget` from the configured advisory ratio,
   hard ratio, fixed headroom tokens, context window, recent compaction receipts,
   and effective predicted growth
-- effective predicted growth is the maximum of configured
-  `predictedTurnGrowthTokens`, model/provider observations, recent growth EMA,
-  and request-local estimates, clamped to the target model window
+- effective predicted growth is the maximum of the configured floor
+  (`predictedTurnGrowthRatio` scaled by the context window, or the absolute
+  `predictedTurnGrowthTokens` override), model/provider observations, recent
+  growth EMA, and request-local estimates, clamped to the target model window
+- token budgets that protect recent context (`tailProtectRatio` with an
+  optional `tailProtectTokens` override) scale with the session context window
+  through `resolveWindowScaledTokens(...)` so defaults stay meaningful as model
+  windows grow
 - those live ratios drive turn-scoped gate and advisory guidance; the hosted
   system-prompt contract stays static and does not cache window-derived
   percentages
@@ -111,8 +128,12 @@ flowchart TD
   this is narrower than the broader control-plane tool set
 - hosted auto-compaction uses `decideCompaction(...)` for idle-versus-active
   decisions:
-  - when the agent is active, the host records advisory state rather than
-    triggering implicit compaction
+  - when the agent is active below hard-limit pressure, the host records
+    advisory state rather than triggering implicit compaction
+  - when the agent is active at hard-limit pressure, the policy executes and
+    the flow state arms a mid-turn soft cut: `runtime.turn(...)` polls
+    `TurnInput.softCut.afterToolResult()` after each complete tool-result
+    boundary and suspends with cause `compaction_required`
   - when the session is idle, the host may trigger the auto-compaction path
   - breaker/cursor/retry state is supplied as policy input from event tape or
     rebuildable session-index rows; the policy itself is not a stateful owner
@@ -135,24 +156,38 @@ flowchart TD
 - verification-boundary checkpoints reuse the latest hosted leaf observed for
   the session when one is available; otherwise they record `leaf=null` rather
   than inventing a branch target
-- compaction summaries are checked and sanitized so prompt-injection residue or
-  system-prompt material does not survive into compaction artifacts
+- compaction summaries pass a heuristic integrity check (pattern detection and
+  redaction) that strips known prompt-injection and system-prompt-leak shapes
+  before the summary is stored; this is defense-in-depth, not a semantic
+  guarantee against obfuscated injection
 
 ## Failure And Recovery
 
 - non-interactive mode does not run hosted auto-compaction; it leaves explicit
   skipped or advisory state instead
-- an active session defers auto-compaction with
-  `agent_active_manual_compaction_unsafe`
+- an active session below hard-limit pressure defers auto-compaction with
+  `agent_active_manual_compaction_unsafe`; at hard-limit pressure the active
+  turn is soft-cut at the next complete tool-result boundary instead
 - the host does not issue a second auto-compaction request while one is already
   in flight
 - watchdog timeout records `auto_compaction_watchdog_timeout` and clears the
   in-flight state
 - after compaction, the interrupted turn resumes from current task and
-  gateway-owned evidence samples instead of restarting as a blank session
-- compaction retry projects the runtime-internal turn spine to
-  `recovery_settled`; it does not create a separate context-owned lifecycle
-  state machine
+  gateway-owned evidence samples instead of restarting as a blank session: the
+  hosted turn envelope re-enters `runtime.turn(...)` with
+  `resume: { kind: "compaction", turnId }`, so the resumed stream materializes
+  from the compacted context without a second `turn.started`; the runtime
+  rejects a compaction resume unless the session's latest recovery cause is
+  `compaction_required`
+- a failed or absent compaction flush never resumes the soft-cut turn; the
+  envelope returns a failed result (`compaction_soft_cut_flush_failed`)
+- text-only turns that never reach a tool-result boundary settle pending
+  compaction at turn end: the envelope clears the armed stop flag and flushes
+  the deferred request so hard-limit pressure does not leak into future turns
+- compaction interruption and resume reuse the canonical runtime recovery
+  cause vocabulary (`approval_pending`, `compaction_required`,
+  `provider_retry`, `interrupt`, `terminal_commit`); there is no separate
+  context-owned lifecycle state machine
 - after a reasoning revert, hosted recovery uses `branchWithSummary(...)` plus
   rebuilt session messages so compaction products from superseded branch tails
   do not stay model-visible
@@ -189,27 +224,46 @@ flowchart TD
     summary projection is an emergency fallback, not the primary order
 - prompt failure recovery:
   - `runtime.turn(...)` owns recovery cause ordering from canonical tape state
-    instead of letting hosted policy helpers recursively dispatch prompts
-  - deterministic context reduction maps to
-    `wait_for_compaction_settlement` and does not dispatch an extra resume
-    prompt
-  - active compaction that interrupts a turn and returns no assistant answer
-    maps to `compact_resume_stream`
-  - capability-gated output budget escalation may continue on the same prompt
-  - bounded provider-fallback retry and bounded max-output recovery abort
-    remaining policies when their breaker or failure path opens
+    instead of letting hosted policy helpers recursively dispatch prompts; the
+    canonical causes are `approval_pending`, `compaction_required`,
+    `provider_retry`, `interrupt`, and `terminal_commit`
+  - transient outbound reduction is a provider-payload optimization only; it
+    never suspends or re-dispatches a prompt
+  - active compaction that interrupts a turn suspends with
+    `compaction_required` and resumes through the hosted turn envelope with
+    `resume: { kind: "compaction", turnId }` on the same turn id
+  - capability-gated output budget escalation patches the next outbound
+    provider request after an assistant `length` stop: it is one-shot per
+    length-stop occurrence (the trigger message_end event is consumed), the
+    budget doubles and is clamped to the model `maxOutputTokens` ceiling, and
+    it is skipped entirely when the ceiling is unknown; escalated requests
+    carry a full-fidelity contract, so transient outbound reduction skips them
+  - the single-shot provider retry (`provider_retry`) applies only when the
+    failed attempt produced no frame and no committed output
 - outbound reduction:
   - no new durable `context_*` event family is emitted for transient outbound
     reduction
   - request-copy edits remain invisible to replay and tape truth
   - live reduction state is exposed through
     `HostedRuntimeAdapterPort.ops.context.evidence.latest(sessionId, "transient_reduction")`
+  - reduction and output-budget recovery hooks are installed by
+    `installHostedBehavior(...)` alongside the other internal lifecycle ports;
+    output-budget escalations append `output_budget_escalation` evidence
+    samples
 - promotion evidence:
   - hosted prompt-stability, provider-cache, and transient-reduction samples are
     written to the runtime latest evidence ring and the sidecar directory
     `.orchestrator/context-evidence`
   - `bun run report:context-evidence` aggregates those samples with durable
     `session_compact` receipts and cost-summary cache counters
+  - the report closes the cache-impact loop: each `expectedCacheBreak`
+    transient-reduction sample is correlated against the next
+    `provider_cache_observation` (confirmed versus unconfirmed breaks), and
+    each committed `session_compact` receipt -- deduplicated by `compactId`,
+    never advisory checkpoint signals -- is correlated against the first
+    post-compaction cache observation (warm versus reset); the receipt itself
+    keeps `cacheImpact.after` null because the receipt is committed before the
+    next provider response exists
   - this report is the promotion-evidence surface; it is not a replay input
     and it is not a new durable runtime event family
 - post-recovery context:
@@ -235,7 +289,10 @@ flowchart TD
 - Hosted context shell: `packages/brewva-gateway/src/hosted/internal/context/context-transform.ts`
 - Context evidence sidecar/report: `packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.ts`
 - Provider request reduction: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
-- Provider request recovery: `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
+- Provider request recovery (output-budget escalation): `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
+- Hook installation: `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
+- Mid-turn soft cut and compaction resume: `packages/brewva-runtime/src/runtime/turn/impl.ts`,
+  `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts`
 - Compaction telemetry: `packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.ts`
 - Turn resume path: owned by `packages/brewva-runtime/src/runtime/turn/impl.ts`
 - Focused compaction inspect surface:

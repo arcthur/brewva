@@ -47,6 +47,7 @@ export {
 } from "./prompt-session.js";
 export {
   BrewvaManagedSessionStore,
+  DEFAULT_SESSION_COMPACTION_TAIL_PROTECT_TOKENS,
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
   type BrewvaCompactionEntry,

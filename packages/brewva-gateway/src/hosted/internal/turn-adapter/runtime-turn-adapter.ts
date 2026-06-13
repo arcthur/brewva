@@ -39,6 +39,8 @@ export interface RunHostedRuntimeTurnAdapterInput {
   readonly turnId?: string;
   readonly runtimeTurn?: number;
   readonly resolveApproval?: TurnInput["resolveApproval"];
+  readonly resume?: TurnInput["resume"];
+  readonly softCut?: TurnInput["softCut"];
   readonly onFrame?: (frame: SessionWireFrame) => void;
 }
 
@@ -154,13 +156,14 @@ export async function runHostedRuntimeTurnAdapter(
     });
   }
 
-  const prompt = input.resolveApproval
-    ? { status: "ready" as const, prompt: [], prelude: null }
-    : await resolveRuntimePrompt({
-        session: input.session,
-        prompt: input.prompt,
-        profile: input.profile,
-      });
+  const prompt =
+    input.resolveApproval || input.resume
+      ? { status: "ready" as const, prompt: [], prelude: null }
+      : await resolveRuntimePrompt({
+          session: input.session,
+          prompt: input.prompt,
+          profile: input.profile,
+        });
   if (prompt.status !== "ready") {
     return completedRuntimePreludeResult({
       sessionId,
@@ -197,6 +200,8 @@ export async function runHostedRuntimeTurnAdapter(
       prompt: prompt.prompt,
       mode: input.profile.name,
       ...(input.resolveApproval ? { resolveApproval: input.resolveApproval } : {}),
+      ...(input.resume ? { resume: input.resume } : {}),
+      ...(input.softCut ? { softCut: input.softCut } : {}),
       ...(prompt.prelude?.signal ? { signal: prompt.prelude.signal } : {}),
     })) {
       const currentProjectionSequence = nextProjectionSequence();
@@ -221,6 +226,19 @@ export async function runHostedRuntimeTurnAdapter(
               turnId: input.turnId,
               profile: input.profile,
               lastDecision: "fail",
+            }),
+          };
+        }
+        if (frame.cause === "compaction_required") {
+          return {
+            status: "suspended",
+            reason: "compaction",
+            sourceEventId: null,
+            diagnostic: createMinimalHostedTurnAdapterDiagnostic({
+              sessionId,
+              turnId: input.turnId,
+              profile: input.profile,
+              lastDecision: "suspend_for_compaction",
             }),
           };
         }

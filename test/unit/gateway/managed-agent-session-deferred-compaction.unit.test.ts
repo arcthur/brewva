@@ -51,7 +51,7 @@ describe("managed-agent-session deferred compaction coordinator", () => {
     });
 
     void coordinator.request({});
-    expect(coordinator.consumeToolResultStop([] as never)).toBe(true);
+    expect(coordinator.consumeToolResultStop()).toBe(true);
     expect(await coordinator.flushAfterCommittedToolResult()).toBe(true);
     expect(calls).toEqual(["preview", "finalize"]);
   });

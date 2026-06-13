@@ -4,6 +4,7 @@ export {
   deriveContextBudgetState,
   readAutoCompactionBreakerOpen,
   resolveCompactionPressureReason,
+  resolveWindowScaledTokens,
   type AutoCompactionBreakerEvent,
   type CompactionPolicyCaller,
   type CompactionPolicyDecision,

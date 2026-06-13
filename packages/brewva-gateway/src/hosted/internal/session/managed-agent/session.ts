@@ -120,6 +120,10 @@ import type { HostedSessionLogger } from "../../shared/logger.js";
 import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../turn-adapter/hosted-prompt-attempt.js";
 import type { RuntimeProviderContextSummary } from "../../turn-adapter/runtime-provider-context.js";
 import {
+  HOSTED_COMPACTION_BOUNDARY,
+  type HostedCompactionBoundary,
+} from "../../turn-adapter/runtime-turn-compaction.js";
+import {
   HOSTED_RUNTIME_TURN_CONTEXT,
   HOSTED_RUNTIME_TURN_PRELUDE,
   type HostedRuntimeTurnPreludeResult,
@@ -1102,6 +1106,21 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
 
   [HOSTED_RUNTIME_TURN_CONTEXT](): readonly BrewvaAgentProtocolMessage[] {
     return this.#runtimeTurnPreparedMessages;
+  }
+
+  [HOSTED_COMPACTION_BOUNDARY](): HostedCompactionBoundary {
+    return {
+      consumeToolResultStop: () => this.#deferredCompaction.consumeToolResultStop(),
+      flushPendingCompaction: async () => {
+        const flushed = await this.#deferredCompaction.flushAfterCommittedToolResult();
+        await this.syncContextState();
+        return flushed;
+      },
+      settleTurnEndCompaction: async () => {
+        await this.#deferredCompaction.settleTurnEnd();
+        await this.syncContextState();
+      },
+    };
   }
 
   getRuntimeProviderCachePolicy() {

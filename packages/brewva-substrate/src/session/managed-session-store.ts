@@ -142,7 +142,7 @@ export interface BrewvaSessionContext {
 
 const BRANCH_SUMMARY_CONTEXT_CHAR_BUDGET = 2_400;
 const BRANCH_SUMMARY_CONTEXT_TRUNCATION_SUFFIX = "\n[branch summary truncated for context budget]";
-const DEFAULT_SESSION_COMPACTION_TAIL_PROTECT_TOKENS = 40_000;
+export const DEFAULT_SESSION_COMPACTION_TAIL_PROTECT_TOKENS = 40_000;
 
 function createSyntheticDefaultModelPreset(): BrewvaModelPreset {
   return {

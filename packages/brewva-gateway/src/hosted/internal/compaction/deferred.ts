@@ -1,4 +1,3 @@
-import type { BrewvaAgentProtocolToolResultMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaCompactionRequest } from "@brewva/brewva-substrate/tools";
 import type { ManagedSessionCompactionFlowState, PendingCompactionRequestState } from "./flow.js";
 
@@ -58,8 +57,13 @@ export class ManagedSessionDeferredCompactionCoordinator<Prepared, Built> {
     return this.flushAfterCommittedToolResult().then(() => undefined);
   }
 
-  consumeToolResultStop(toolResults: BrewvaAgentProtocolToolResultMessage[]): boolean {
-    return this.#flow.consumeToolResultStop(toolResults);
+  consumeToolResultStop(): boolean {
+    return this.#flow.consumeToolResultStop();
+  }
+
+  async settleTurnEnd(): Promise<void> {
+    this.#flow.clearStopAfterCurrentToolResults();
+    await this.flushAfterCommittedToolResult();
   }
 
   async flushAfterCommittedToolResult(): Promise<boolean> {

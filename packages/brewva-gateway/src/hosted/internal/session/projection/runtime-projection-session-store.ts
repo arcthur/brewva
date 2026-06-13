@@ -5,8 +5,10 @@ import {
   estimateBrewvaSessionEntryTokens,
   selectBrewvaSessionCompactionCutPoint,
 } from "@brewva/brewva-substrate/compaction";
+import { resolveWindowScaledTokens } from "@brewva/brewva-substrate/context-budget";
 import {
   DEFAULT_CONTEXT_STATE,
+  DEFAULT_SESSION_COMPACTION_TAIL_PROTECT_TOKENS,
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
   type BrewvaCompactionEntry,
@@ -346,9 +348,14 @@ export class HostedRuntimeTapeSessionStore {
 
   #selectCompactionCutPoint(branchEntries: readonly BrewvaSessionEntry[]) {
     const usage = getRuntimeContextUsage(this.runtime, this.sessionId);
+    const compactionConfig = this.runtime.config.infrastructure.contextBudget.compaction;
     return selectBrewvaSessionCompactionCutPoint(branchEntries, {
       tailProtectTokens:
-        this.runtime.config.infrastructure.contextBudget.compaction.tailProtectTokens,
+        resolveWindowScaledTokens(
+          compactionConfig.tailProtectTokens,
+          compactionConfig.tailProtectRatio,
+          usage?.contextWindow,
+        ) ?? DEFAULT_SESSION_COMPACTION_TAIL_PROTECT_TOKENS,
       targetContextWindow: usage?.contextWindow,
       reserveTokens: usage?.maxOutputTokens,
       estimateEntryTokens: estimateBrewvaSessionEntryTokens,

@@ -33,6 +33,7 @@ export interface TransientReductionEvidenceSample {
   estimatedTokenSavings: number;
   compactionAdvised: boolean;
   forcedCompaction: boolean;
+  expectedCacheBreak: boolean;
 }
 
 export interface ProviderCacheObservationEvidenceSample {
@@ -129,6 +130,12 @@ export interface ContextEvidenceSessionReport {
   latestProviderCacheBreakReason: string | null;
   latestProviderCacheUnexpectedBreak: boolean;
   latestProviderCacheChangedFields: string[];
+  expectedCacheBreakReductionTurns: number;
+  confirmedCacheBreaksAfterReduction: number;
+  unconfirmedExpectedCacheBreaks: number;
+  compactionsWithPostCacheObservation: number;
+  postCompactionCacheWarmObservations: number;
+  postCompactionCacheResetObservations: number;
   economicVerdicts: ContextEvidenceEconomicVerdict[];
 }
 
@@ -187,6 +194,12 @@ export interface ContextEvidenceAggregateReport {
   providerCacheTtlExpiryBreakSessions: number;
   providerCacheBreakReasonCounts: Record<string, number>;
   providerCacheChangedFieldCounts: Record<string, number>;
+  totalExpectedCacheBreakReductionTurns: number;
+  totalConfirmedCacheBreaksAfterReduction: number;
+  totalUnconfirmedExpectedCacheBreaks: number;
+  totalCompactionsWithPostCacheObservation: number;
+  totalPostCompactionCacheWarmObservations: number;
+  totalPostCompactionCacheResetObservations: number;
   economicVerdictCounts: Record<ContextEvidenceEconomicVerdictKind, number>;
 }
 

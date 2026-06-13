@@ -277,6 +277,7 @@ export function createRuntimePhysicsTurnRunner(input: {
   }
   const realTurn = createTurnRunner({
     tape: input.commit,
+    tapeView: input.tape,
     kernel: input.kernel,
     model: input.model,
     provider: input.physics.provider,

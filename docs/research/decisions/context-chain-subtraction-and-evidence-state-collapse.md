@@ -43,6 +43,17 @@
 - `infrastructure.contextBudget` is contracted to twelve normalized keys: `enabled`, `thresholds.{hardRatio,advisoryRatio,headroomTokens}`, `dynamicTailTokens`, `predictedTurnGrowthTokens`, `providerCacheStalenessMs`, `consequenceDigestMaxChars`, `compactionInstructions`, and `compaction.{minTurnsBetween,protectedTools,tailProtectTokens}`.
 - `ContextService` exposes evidence, visible-read, and compaction read/operator helpers. No legacy `getPromptStability`, `getTransientReduction`, or `getProviderCacheObservation` ports remain.
 
+## Addendum (2026-06-13)
+
+- The contracted `infrastructure.contextBudget` surface was extended by the
+  context-compaction hardening change: `predictedTurnGrowthRatio` and
+  `compaction.tailProtectRatio` were added so token budgets scale with the
+  model context window, and `predictedTurnGrowthTokens` /
+  `compaction.tailProtectTokens` became nullable absolute overrides of those
+  ratios. The live invariant is maintained in
+  `skills/project/shared/critical-rules.md`; the twelve-key list above is the
+  historical contract at the time of this decision.
+
 ## Superseded by
 
 - `docs/research/decisions/four-port-runtime-simplification-rfc.md`

@@ -9,6 +9,8 @@ import { createContextTransformLifecycle } from "../context/context-transform.js
 import { registerEventStream } from "../context/evidence/event-stream.js";
 import { registerLedgerWriter } from "../context/evidence/ledger-writer.js";
 import { createReadPathRecoveryLifecycle } from "../context/read-path-recovery.js";
+import { registerProviderRequestRecovery } from "../provider/request/provider-request-recovery.js";
+import { registerProviderRequestReduction } from "../provider/request/provider-request-reduction.js";
 import {
   createLocalHookManager,
   type LocalHookPort,
@@ -276,6 +278,8 @@ function installHostedBehavior(
   });
   registerLedgerWriter(hostApi, runtime);
   registerToolResultDistiller(hostApi, runtime);
+  registerProviderRequestRecovery(hostApi, runtime);
+  registerProviderRequestReduction(hostApi, runtime);
   registerTurnLifecyclePorts(hostApi, [
     localHookManager.lifecycle,
     {

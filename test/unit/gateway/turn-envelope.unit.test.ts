@@ -250,3 +250,127 @@ describe("hosted turn envelope", () => {
     );
   });
 });
+
+describe("hosted turn envelope compaction boundary", () => {
+  const HOSTED_COMPACTION_BOUNDARY = Symbol.for("brewva.hosted.compactionBoundary");
+
+  function createBoundarySession(input: {
+    flushResults: boolean[];
+    settled: { count: number };
+    flushes: { count: number };
+  }) {
+    return {
+      sessionManager: {
+        getSessionId: () => "compaction-boundary-session",
+      },
+      [HOSTED_COMPACTION_BOUNDARY]: () => ({
+        consumeToolResultStop: () => false,
+        flushPendingCompaction: async () => {
+          input.flushes.count += 1;
+          return input.flushResults.shift() ?? false;
+        },
+        settleTurnEndCompaction: async () => {
+          input.settled.count += 1;
+        },
+      }),
+    };
+  }
+
+  test("flushes and resumes a compaction-suspended turn through the envelope", async () => {
+    const runtime = createRuntime("brewva-turn-envelope-compaction-resume-");
+    const settled = { count: 0 };
+    const flushes = { count: 0 };
+    const session = createBoundarySession({ flushResults: [true], settled, flushes });
+    const adapterCalls: Array<{ resume: unknown; softCut: unknown }> = [];
+
+    const result = await runHostedTurnEnvelope({
+      session: session as unknown as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId: "compaction-boundary-session",
+      prompt: "trigger",
+      source: "channel",
+      runAdapter: async (input) => {
+        adapterCalls.push({ resume: input.resume, softCut: input.softCut });
+        if (adapterCalls.length === 1) {
+          return {
+            status: "suspended",
+            reason: "compaction",
+            sourceEventId: null,
+            diagnostic: {
+              sessionId: "compaction-boundary-session",
+              profile: "channel",
+            },
+          };
+        }
+        return createAdapterResult();
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(flushes.count).toBe(1);
+    expect(settled.count).toBe(1);
+    expect(adapterCalls).toHaveLength(2);
+    expect(adapterCalls[0]?.resume).toBe(undefined);
+    expect(
+      typeof (adapterCalls[0]?.softCut as { afterToolResult?: unknown } | undefined)
+        ?.afterToolResult,
+    ).toBe("function");
+    expect(adapterCalls[1]?.resume).toEqual({ kind: "compaction", turnId: result.turnId });
+  });
+
+  test("does not resume when the compaction flush fails", async () => {
+    const runtime = createRuntime("brewva-turn-envelope-compaction-flush-fail-");
+    const settled = { count: 0 };
+    const flushes = { count: 0 };
+    const session = createBoundarySession({ flushResults: [false], settled, flushes });
+    let adapterCalls = 0;
+
+    const result = await runHostedTurnEnvelope({
+      session: session as unknown as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId: "compaction-boundary-session",
+      prompt: "trigger",
+      source: "channel",
+      runAdapter: async () => {
+        adapterCalls += 1;
+        return {
+          status: "suspended",
+          reason: "compaction",
+          sourceEventId: null,
+          diagnostic: {
+            sessionId: "compaction-boundary-session",
+            profile: "channel",
+          },
+        };
+      },
+    });
+
+    expect(result.status).toBe("failed");
+    expect(
+      result.status === "failed" && result.error instanceof Error && result.error.message,
+    ).toBe("compaction_soft_cut_flush_failed");
+    expect(adapterCalls).toBe(1);
+    expect(flushes.count).toBe(1);
+    expect(settled.count).toBe(0);
+  });
+
+  test("settles pending compaction at turn end for completed turns", async () => {
+    const runtime = createRuntime("brewva-turn-envelope-compaction-settle-");
+    const settled = { count: 0 };
+    const flushes = { count: 0 };
+    const session = createBoundarySession({ flushResults: [], settled, flushes });
+
+    const result = await runHostedTurnEnvelope({
+      session: session as unknown as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId: "compaction-boundary-session",
+      prompt: "text only",
+      source: "channel",
+      runAdapter: async () => createAdapterResult(),
+    });
+
+    expect(result.status).toBe("completed");
+    expect(settled.count).toBe(1);
+    expect(flushes.count).toBe(0);
+  });
+});

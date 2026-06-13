@@ -24,7 +24,7 @@ export type HostedPromptTurnResult =
     }
   | {
       readonly status: "suspended";
-      readonly reason: "approval";
+      readonly reason: "approval" | "compaction";
       readonly sourceEventId: string | null;
     }
   | {

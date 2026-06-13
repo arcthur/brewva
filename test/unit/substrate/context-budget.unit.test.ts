@@ -3,6 +3,7 @@ import {
   decideCompaction,
   deriveContextBudgetState,
   readAutoCompactionBreakerOpen,
+  resolveWindowScaledTokens,
 } from "@brewva/brewva-substrate/context-budget";
 import type { ContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
 import fc from "fast-check";
@@ -207,6 +208,68 @@ describe("deriveContextBudgetState", () => {
       windowTurns: 2,
       lastCompactionTurn: 11,
       turnsSinceCompaction: 1,
+    });
+  });
+
+  test("window-scaled token budgets prefer absolute overrides and scale by ratio", () => {
+    expect(resolveWindowScaledTokens(12_000, 0.2, 100_000)).toBe(12_000);
+    expect(resolveWindowScaledTokens(null, 0.2, 100_000)).toBe(20_000);
+    expect(resolveWindowScaledTokens(null, 0.2, 1_000_000)).toBe(200_000);
+    expect(resolveWindowScaledTokens(null, 1.5, 100_000)).toBe(100_000);
+    expect(resolveWindowScaledTokens(null, null, 100_000)).toBeNull();
+    expect(resolveWindowScaledTokens(null, 0.2, null)).toBeNull();
+  });
+
+  test("predicted growth ratio scales with the context window when no override is set", () => {
+    const derived = deriveContextBudgetState({
+      usage: usage(6_000),
+      config: {
+        ...baseConfig,
+        predictedTurnGrowthTokens: null,
+        predictedTurnGrowthRatio: 0.175,
+      },
+    });
+
+    expect(derived.effectivePredictedGrowthTokens).toBe(1_750);
+  });
+
+  test("auto caller defers to advisory state while the agent is active below hard limit", () => {
+    const advisory = deriveContextBudgetState({
+      usage: usage(7_500),
+      config: baseConfig,
+    });
+
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: advisory.gateStatus,
+        hasUI: true,
+        idle: false,
+      }),
+    ).toEqual({
+      decision: "skip",
+      caller: "auto",
+      reason: "agent_active_manual_compaction_unsafe",
+    });
+  });
+
+  test("auto caller executes under hard-limit pressure even while the agent is active", () => {
+    const forced = deriveContextBudgetState({
+      usage: usage(9_500),
+      config: baseConfig,
+    });
+
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: forced.gateStatus,
+        hasUI: true,
+        idle: false,
+      }),
+    ).toEqual({
+      decision: "execute",
+      caller: "auto",
+      reason: "hard_limit",
     });
   });
 

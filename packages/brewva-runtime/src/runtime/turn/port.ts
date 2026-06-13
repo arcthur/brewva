@@ -63,12 +63,33 @@ export interface TurnInput {
   readonly resolveApproval?: {
     readonly requestId: string;
   };
+  /**
+   * Resumes a turn previously suspended with cause "compaction_required".
+   * Carries the suspended turn id so the resumed stream continues that turn
+   * without committing a second turn.started. The runtime validates that the
+   * session's latest recovery cause is "compaction_required" before resuming.
+   */
+  readonly resume?: {
+    readonly kind: "compaction";
+    readonly turnId: string;
+  };
+  readonly softCut?: {
+    /**
+     * Polled after each committed tool result. Returning true suspends the
+     * turn with cause "compaction_required" at that tool-result boundary so
+     * the host can run compaction and resume.
+     */
+    afterToolResult(): boolean;
+  };
 }
 
 export type TurnFrame =
   | {
       readonly type: "runtime.suspended";
-      readonly cause: Extract<RuntimeRecoveryCause, "approval_pending" | "interrupt">;
+      readonly cause: Extract<
+        RuntimeRecoveryCause,
+        "approval_pending" | "interrupt" | "compaction_required"
+      >;
     }
   | {
       readonly type: "runtime.event";

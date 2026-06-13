@@ -14,6 +14,7 @@ import type {
   TurnFrame,
   TurnInput,
 } from "../runtime-api.js";
+import type { TapePort } from "../tape/port.js";
 
 const MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN = 16;
 
@@ -57,6 +58,7 @@ function turnStartedPayload(turn: TurnInput): {
 
 export function createTurnRunner(input: {
   tape: TapeCommitPort;
+  tapeView: Pick<TapePort, "project">;
   kernel: KernelPort;
   model: ModelPort;
   provider: RuntimeProviderPort;
@@ -72,7 +74,20 @@ export function createTurnRunner(input: {
           readonly kind: "done";
           readonly result: Awaited<ReturnType<RuntimeToolExecutorPort["execute"]>>;
         };
-    let turnId = turn.turnId ?? `turn_${randomUUID()}`;
+    if (turn.resume) {
+      const resumeTurnId = turn.resume.turnId.trim();
+      if (!resumeTurnId) {
+        throw new Error("compaction_resume_requires_turn_id");
+      }
+      if (turn.turnId && turn.turnId !== resumeTurnId) {
+        throw new Error("compaction_resume_turn_id_mismatch");
+      }
+      const turnState = input.tapeView.project(turn.sessionId, "turn_state");
+      if (turnState.lastCause !== "compaction_required") {
+        throw new Error("compaction_resume_requires_suspended_compaction_turn");
+      }
+    }
+    let turnId = turn.resume?.turnId ?? turn.turnId ?? `turn_${randomUUID()}`;
 
     function suspendForInterrupt(): TurnFrame {
       const suspended = input.tape.commit({
@@ -292,7 +307,7 @@ export function createTurnRunner(input: {
       turnId = approvalTurnId;
     }
 
-    if (!turn.resolveApproval) {
+    if (!turn.resolveApproval && !turn.resume) {
       const started = input.tape.commit({
         sessionId: turn.sessionId,
         turnId,
@@ -386,6 +401,17 @@ export function createTurnRunner(input: {
           }
           yield* commitBufferedAssistantOutput(passOutput);
           if (passHadTool) {
+            if (committedToolThisTurn && turn.softCut?.afterToolResult() === true) {
+              const suspended = input.tape.commit({
+                sessionId: turn.sessionId,
+                turnId,
+                type: "runtime.suspended",
+                payload: { cause: "compaction_required" },
+              });
+              yield { type: "runtime.event", event: suspended };
+              yield { type: "runtime.suspended", cause: "compaction_required" };
+              return;
+            }
             providerToolContinuations += 1;
             continue;
           }

@@ -1,3 +1,4 @@
+import { resolveWindowScaledTokens } from "@brewva/brewva-substrate/context-budget";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
   estimateProviderPayloadTextTokens,
@@ -10,6 +11,7 @@ import type {
   ExpectedProviderCacheBreak,
   TransientReductionObservationInput,
 } from "@brewva/brewva-vocabulary/context";
+import { MESSAGE_END_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import {
   decideTransientReductionEligibility,
   type ContextTransientReductionDecision,
@@ -24,6 +26,7 @@ import {
   resolveRuntimeContextCompactionEligibility,
   type HostedRuntimeAdapterPort,
 } from "../../session/runtime-ports.js";
+import { isOutputBudgetEscalatedPayload } from "./provider-request-recovery.js";
 import {
   CLEARED_TOOL_RESULT_PLACEHOLDER,
   MIN_CLEARABLE_TOOL_RESULT_CHARS,
@@ -133,7 +136,7 @@ function getProviderCacheStalenessMs(runtime: HostedRuntimeAdapterPort): number 
 
 function isProviderCacheLikelyCold(runtime: HostedRuntimeAdapterPort, sessionId: string): boolean {
   const latestMessageEnd = queryStructuredRuntimeEvents(runtime, sessionId, {
-    type: "message_end",
+    type: MESSAGE_END_EVENT_TYPE,
   }).at(-1);
   if (!latestMessageEnd) {
     return false;
@@ -268,6 +271,18 @@ export function registerProviderRequestReduction(
       return undefined;
     }
 
+    if (isOutputBudgetEscalatedPayload(event.payload)) {
+      observeAndRecordTransientReduction(runtime, sessionId, {
+        status: "skipped",
+        reason: "output budget recovery requires full request fidelity",
+        eligibleToolResults: 0,
+        clearedToolResults: 0,
+        classification: "prefixPreserving",
+        expectedCacheBreak: false,
+      });
+      return undefined;
+    }
+
     const eligibility = resolveTransientOutboundReductionEligibility(
       runtime,
       sessionId,
@@ -292,6 +307,12 @@ export function registerProviderRequestReduction(
       return undefined;
     }
 
+    const compactionConfig = runtime.config.infrastructure.contextBudget.compaction;
+    const resolvedTailProtectTokens = resolveWindowScaledTokens(
+      compactionConfig.tailProtectTokens,
+      compactionConfig.tailProtectRatio,
+      getRuntimeContextUsage(runtime, sessionId)?.contextWindow,
+    );
     const result = applyTransientOutboundReductionToPayload(
       event.payload,
       {
@@ -300,8 +321,10 @@ export function registerProviderRequestReduction(
         modelId: event.modelId,
       },
       {
-        protectedTools: runtime.config.infrastructure.contextBudget.compaction.protectedTools,
-        tailProtectTokens: runtime.config.infrastructure.contextBudget.compaction.tailProtectTokens,
+        protectedTools: compactionConfig.protectedTools,
+        ...(resolvedTailProtectTokens !== null
+          ? { tailProtectTokens: resolvedTailProtectTokens }
+          : {}),
       },
     );
     const expectedBreak: ExpectedProviderCacheBreak | undefined =

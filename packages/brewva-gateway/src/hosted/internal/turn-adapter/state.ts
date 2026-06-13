@@ -13,7 +13,11 @@ export interface HostedTurnAdapterProfile {
   readonly name: HostedTurnAdapterProfileName;
 }
 
-export type HostedTurnAdapterDecisionAction = "complete" | "fail" | "suspend_for_approval";
+export type HostedTurnAdapterDecisionAction =
+  | "complete"
+  | "fail"
+  | "suspend_for_approval"
+  | "suspend_for_compaction";
 
 export type HostedTurnAdapterResult =
   | {
@@ -33,7 +37,7 @@ export type HostedTurnAdapterResult =
     }
   | {
       readonly status: "suspended";
-      readonly reason: "approval";
+      readonly reason: "approval" | "compaction";
       readonly sourceEventId: string | null;
       readonly diagnostic: HostedTurnAdapterDiagnosticView;
     }

@@ -55,7 +55,12 @@ owner: runtime-maintainers
   in-memory cache.
 - Keep `infrastructure.contextBudget` on the contracted small surface:
   `enabled`, `thresholds.{hardRatio,advisoryRatio,headroomTokens}`,
-  `dynamicTailTokens`, `predictedTurnGrowthTokens`,
+  `dynamicTailTokens`, `predictedTurnGrowthRatio`,
+  `predictedTurnGrowthTokens` (nullable absolute override),
   `providerCacheStalenessMs`, `consequenceDigestMaxChars`,
   `compactionInstructions`, and
-  `compaction.{minTurnsBetween,protectedTools,tailProtectTokens}`.
+  `compaction.{minTurnsBetween,protectedTools,tailProtectRatio,tailProtectTokens}`
+  (`tailProtectTokens` is the nullable absolute override of the ratio). The
+  ratio keys exist so token budgets scale with the model context window; do
+  not add further keys without updating this rule and the owning decision
+  record.

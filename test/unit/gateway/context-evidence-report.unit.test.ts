@@ -178,7 +178,7 @@ describe("context evidence report continuation anchor metrics", () => {
     runtime.runtime.kernel.recordAdvisoryEvent({
       sessionId,
       namespace: "runtime.ops",
-      kind: "message_end",
+      kind: "message.end",
       version: 1,
       payload: {
         role: "assistant",
@@ -206,5 +206,106 @@ describe("context evidence report continuation anchor metrics", () => {
         },
       },
     ]);
+  });
+});
+
+describe("context evidence report cache correlation metrics", () => {
+  test("correlates expected cache breaks and post-compaction observations", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-context-evidence-cache-correlation-")),
+    });
+    const sessionId = "cache-correlation-session";
+    const evidenceDir = join(runtime.identity.workspaceRoot, ".orchestrator/context-evidence");
+    mkdirSync(evidenceDir, { recursive: true });
+    const base = Date.now() - 60_000;
+    const samples = [
+      {
+        schema: CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
+        kind: "transient_reduction",
+        sessionId,
+        turn: 1,
+        timestamp: base,
+        status: "completed",
+        reason: null,
+        eligibleToolResults: 3,
+        clearedToolResults: 2,
+        clearedChars: 4_000,
+        estimatedTokenSavings: 1_000,
+        compactionAdvised: true,
+        forcedCompaction: false,
+        expectedCacheBreak: true,
+      },
+      {
+        schema: CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
+        kind: "provider_cache_observation",
+        sessionId,
+        turn: 2,
+        timestamp: base + 1_000,
+        source: "provider_response",
+        status: "break",
+        classification: "prefixResetting",
+        expected: true,
+        reason: "transient_outbound_reduction",
+        cacheReadTokens: 0,
+        cacheWriteTokens: 5_000,
+        cacheMissTokens: 5_000,
+        changedFields: [],
+      },
+    ];
+    writeFileSync(
+      join(evidenceDir, `session-${encodeURIComponent(sessionId)}.jsonl`),
+      `${samples.map((sample) => JSON.stringify(sample)).join("\n")}\n`,
+      "utf8",
+    );
+
+    runtime.ops.session.compaction.commit(sessionId, {
+      compactId: "compact-cache-correlation",
+      sanitizedSummary: "Compacted for cache correlation test.",
+    });
+    runtime.ops.session.compaction.commit(sessionId, {
+      compactId: "compact-cache-correlation",
+      sanitizedSummary: "Duplicate receipt surface for the same compaction.",
+    });
+    const postCompactionSample = {
+      schema: CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
+      kind: "provider_cache_observation",
+      sessionId,
+      turn: 3,
+      timestamp: Date.now() + 5_000,
+      source: "provider_response",
+      status: "warm",
+      classification: "prefixPreserving",
+      expected: true,
+      reason: null,
+      cacheReadTokens: 9_000,
+      cacheWriteTokens: 100,
+      cacheMissTokens: 0,
+      changedFields: [],
+    };
+    writeFileSync(
+      join(evidenceDir, `session-${encodeURIComponent(sessionId)}.jsonl`),
+      `${[...samples, postCompactionSample].map((sample) => JSON.stringify(sample)).join("\n")}\n`,
+      "utf8",
+    );
+
+    const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
+    const session = report.sessions.find((entry) => entry.sessionId === sessionId);
+
+    expect(session).toMatchObject({
+      expectedCacheBreakReductionTurns: 1,
+      confirmedCacheBreaksAfterReduction: 1,
+      unconfirmedExpectedCacheBreaks: 0,
+      compactionsWithPostCacheObservation: 1,
+      postCompactionCacheWarmObservations: 1,
+      postCompactionCacheResetObservations: 0,
+    });
+    expect(report.aggregate).toMatchObject({
+      totalExpectedCacheBreakReductionTurns: 1,
+      totalConfirmedCacheBreaksAfterReduction: 1,
+      totalUnconfirmedExpectedCacheBreaks: 0,
+      totalCompactionsWithPostCacheObservation: 1,
+      totalPostCompactionCacheWarmObservations: 1,
+      totalPostCompactionCacheResetObservations: 0,
+    });
   });
 });

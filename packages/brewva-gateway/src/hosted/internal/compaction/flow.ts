@@ -1,4 +1,3 @@
-import type { BrewvaAgentProtocolToolResultMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaCompactionRequest } from "@brewva/brewva-substrate/tools";
 import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-vocabulary/session";
 import type {
@@ -94,7 +93,7 @@ export class ManagedSessionCompactionFlowState {
     return !isStreaming;
   }
 
-  consumeToolResultStop(_toolResults: BrewvaAgentProtocolToolResultMessage[]): boolean {
+  consumeToolResultStop(): boolean {
     if (!this.#stopAfterCurrentToolResults) {
       return false;
     }

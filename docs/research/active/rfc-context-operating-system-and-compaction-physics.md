@@ -119,12 +119,13 @@ consumer of host summaries; and replay truth remains inspectable.
   `session_compact` replays the receipt. Auto-compaction breaker posture is
   evidence-backed from durable auto-failed and auto-completed events; in-flight
   attempt state is intentionally not restored after restart.
-- **Predicted overflow:** `predictedTurnGrowthTokens` is currently a configured
-  seed. The effective predictor should use that floor plus model/provider window
-  metadata, an EMA of recent per-turn growth by model/provider, request-local
-  estimates for pending tool outputs and dynamic-tail additions, and
-  post-compaction baseline observations. Prediction remains advisory until the
-  hard gate is derived.
+- **Predicted overflow:** the configured seed is `predictedTurnGrowthRatio`
+  scaled by the context window (with `predictedTurnGrowthTokens` as an
+  absolute override). The effective predictor uses that floor plus
+  model/provider window metadata, an EMA of recent per-turn growth by
+  model/provider, request-local estimates for pending tool outputs and
+  dynamic-tail additions, and post-compaction baseline observations.
+  Prediction remains advisory until the hard gate is derived.
 - **Forked-agent prefix sharing:** summary generation should support hosted
   prefix sharing as a default-off compaction option. It should not be enabled by
   default until prompt-stability and provider-cache fitness prove cache
@@ -226,11 +227,13 @@ evidence-backed breaker state when failure evidence is available, mid-turn soft
 cut at the latest complete tool-result boundary, and default-off hosted
 forked-agent prefix sharing.
 
-Mid-turn soft cut must reuse the existing compaction flow instead of creating a
-new lifecycle state machine. Boundary selection should reuse
-`ManagedSessionCompactionFlowState.consumeToolResultStop`; turn recovery should
-continue through the existing `wait_for_compaction_settlement` and
-`compact_resume_stream` mappings.
+Mid-turn soft cut reuses the existing compaction flow instead of creating a
+new lifecycle state machine. Boundary selection reuses
+`ManagedSessionCompactionFlowState.consumeToolResultStop`, polled by
+`runtime.turn(...)` through `TurnInput.softCut.afterToolResult()` after each
+complete tool-result boundary. The cut suspends the turn with the canonical
+recovery cause `compaction_required`; the hosted dispatch loop flushes the
+deferred compaction and resumes the same turn id with `resume: "compaction"`.
 
 All recovery paths remain non-authoritative until a `session_compact` receipt is
 committed. Request-copy reduction is only a provider payload optimization.

@@ -48,6 +48,7 @@ export {
   type BrewvaSteerOutcome,
   type BrewvaSubscribablePromptSession,
   BrewvaManagedSessionStore,
+  DEFAULT_SESSION_COMPACTION_TAIL_PROTECT_TOKENS,
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
   type BrewvaCompactionEntry,

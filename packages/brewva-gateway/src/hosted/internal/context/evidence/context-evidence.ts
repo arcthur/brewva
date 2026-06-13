@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
+import { MESSAGE_END_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import {
   getRuntimeContextEvidenceLatest,
   getRuntimeCostSummary,
@@ -533,6 +534,99 @@ interface RuntimeEventProjection {
   payload?: unknown;
 }
 
+function nextProviderCacheSampleAfter(
+  samples: readonly ProviderCacheObservationEvidenceSample[],
+  timestamp: number,
+): ProviderCacheObservationEvidenceSample | null {
+  let next: ProviderCacheObservationEvidenceSample | null = null;
+  for (const sample of samples) {
+    if (sample.timestamp <= timestamp) {
+      continue;
+    }
+    if (!next || sample.timestamp < next.timestamp) {
+      next = sample;
+    }
+  }
+  return next;
+}
+
+function correlateExpectedCacheBreaks(
+  reductionSamples: readonly TransientReductionEvidenceSample[],
+  cacheSamples: readonly ProviderCacheObservationEvidenceSample[],
+): { expected: number; confirmed: number; unconfirmed: number } {
+  let expected = 0;
+  let confirmed = 0;
+  let unconfirmed = 0;
+  for (const sample of reductionSamples) {
+    if (!sample.expectedCacheBreak) {
+      continue;
+    }
+    expected += 1;
+    const next = nextProviderCacheSampleAfter(cacheSamples, sample.timestamp);
+    if (!next) {
+      continue;
+    }
+    if (next.status === "break" || next.status === "cold") {
+      confirmed += 1;
+    } else if (next.status === "warm") {
+      unconfirmed += 1;
+    }
+  }
+  return { expected, confirmed, unconfirmed };
+}
+
+function readCompactIdPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const compactId = (payload as { compactId?: unknown }).compactId;
+  return typeof compactId === "string" && compactId.length > 0 ? compactId : null;
+}
+
+/**
+ * Post-compaction cache metrics are derived from committed session_compact
+ * receipts only, deduplicated by compactId so one compaction maps to exactly
+ * one correlation even when the receipt surfaces through multiple event kinds.
+ */
+function dedupeCompactionReceiptEvents(
+  events: readonly RuntimeEventProjection[],
+): RuntimeEventProjection[] {
+  const seen = new Set<string>();
+  const unique: RuntimeEventProjection[] = [];
+  for (const event of events) {
+    const key =
+      readCompactIdPayload(event.payload) ?? event.id ?? `${event.type}:${event.timestamp}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(event);
+  }
+  return unique;
+}
+
+function correlatePostCompactionCacheObservations(
+  compactionReceipts: readonly RuntimeEventProjection[],
+  cacheSamples: readonly ProviderCacheObservationEvidenceSample[],
+): { observed: number; warm: number; reset: number } {
+  let observed = 0;
+  let warm = 0;
+  let reset = 0;
+  for (const signal of compactionReceipts) {
+    const next = nextProviderCacheSampleAfter(cacheSamples, signal.timestamp);
+    if (!next) {
+      continue;
+    }
+    observed += 1;
+    if (next.status === "warm") {
+      warm += 1;
+    } else if (next.status === "break" || next.status === "cold") {
+      reset += 1;
+    }
+  }
+  return { observed, warm, reset };
+}
+
 function projectRuntimeEvent(event: {
   id?: unknown;
   type?: unknown;
@@ -731,7 +825,7 @@ export function buildContextEvidenceReport(
       });
       const compactionGeneration = sumCompactionGenerationMetrics(compactionEvents);
       const messageEndEvents = queryRuntimeEvents(runtime, sessionId, {
-        type: "message_end",
+        type: MESSAGE_END_EVENT_TYPE,
       });
       const messageUsage = sumMessageUsageMetrics(messageEndEvents);
       const firstCompactionTurn =
@@ -794,6 +888,18 @@ export function buildContextEvidenceReport(
       const latestProviderCacheEvidence = resolveLatestProviderCacheEvidence(
         providerCacheSamples,
         getRuntimeContextEvidenceLatest(runtime, sessionId, "provider_cache_observation"),
+      );
+      const expectedCacheBreakCorrelation = correlateExpectedCacheBreaks(
+        reductionSamples,
+        providerCacheSamples,
+      );
+      const postCompactionCache = correlatePostCompactionCacheObservations(
+        dedupeCompactionReceiptEvents(
+          [...committedCompactionEvents, ...legacyCompactionEvents]
+            .map((event) => projectRuntimeEvent(event))
+            .filter((event): event is RuntimeEventProjection => event !== null),
+        ),
+        providerCacheSamples,
       );
       const economicVerdicts = buildCompactionEconomicVerdicts({
         compactionEvents,
@@ -866,6 +972,12 @@ export function buildContextEvidenceReport(
         latestProviderCacheBreakReason: latestProviderCacheEvidence?.reason ?? null,
         latestProviderCacheUnexpectedBreak: latestProviderCacheEvidence?.unexpectedBreak ?? false,
         latestProviderCacheChangedFields: latestProviderCacheEvidence?.changedFields ?? [],
+        expectedCacheBreakReductionTurns: expectedCacheBreakCorrelation.expected,
+        confirmedCacheBreaksAfterReduction: expectedCacheBreakCorrelation.confirmed,
+        unconfirmedExpectedCacheBreaks: expectedCacheBreakCorrelation.unconfirmed,
+        compactionsWithPostCacheObservation: postCompactionCache.observed,
+        postCompactionCacheWarmObservations: postCompactionCache.warm,
+        postCompactionCacheResetObservations: postCompactionCache.reset,
         economicVerdicts,
       };
     })
@@ -1029,6 +1141,30 @@ export function buildContextEvidenceReport(
     ),
     providerCacheChangedFieldCounts: countByString(
       sessions.flatMap((session) => session.latestProviderCacheChangedFields),
+    ),
+    totalExpectedCacheBreakReductionTurns: sessions.reduce(
+      (sum, session) => sum + session.expectedCacheBreakReductionTurns,
+      0,
+    ),
+    totalConfirmedCacheBreaksAfterReduction: sessions.reduce(
+      (sum, session) => sum + session.confirmedCacheBreaksAfterReduction,
+      0,
+    ),
+    totalUnconfirmedExpectedCacheBreaks: sessions.reduce(
+      (sum, session) => sum + session.unconfirmedExpectedCacheBreaks,
+      0,
+    ),
+    totalCompactionsWithPostCacheObservation: sessions.reduce(
+      (sum, session) => sum + session.compactionsWithPostCacheObservation,
+      0,
+    ),
+    totalPostCompactionCacheWarmObservations: sessions.reduce(
+      (sum, session) => sum + session.postCompactionCacheWarmObservations,
+      0,
+    ),
+    totalPostCompactionCacheResetObservations: sessions.reduce(
+      (sum, session) => sum + session.postCompactionCacheResetObservations,
+      0,
     ),
     economicVerdictCounts: {
       cache_regression: sessions.reduce(

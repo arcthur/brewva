@@ -226,14 +226,16 @@ export interface BrewvaConfig {
         headroomTokens: number;
       };
       dynamicTailTokens: number;
-      predictedTurnGrowthTokens: number;
+      predictedTurnGrowthTokens: number | null;
+      predictedTurnGrowthRatio: number;
       providerCacheStalenessMs: number;
       consequenceDigestMaxChars: number;
       compactionInstructions: string;
       compaction: {
         minTurnsBetween: number;
         protectedTools: string[];
-        tailProtectTokens: number;
+        tailProtectTokens: number | null;
+        tailProtectRatio: number;
       };
     };
     toolFailureInjection: {

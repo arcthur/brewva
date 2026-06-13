@@ -13,6 +13,19 @@ import type { BrewvaConfig } from "./types.js";
 const VALID_COST_ACTIONS = new Set(["warn", "block_tools"]);
 const VALID_EVENT_LEVELS = new Set(["audit", "ops", "debug"]);
 
+function normalizeOptionalNonNegativeInteger(
+  value: unknown,
+  fallback: number | null,
+): number | null {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.trunc(value));
+  }
+  return fallback;
+}
+
 export function normalizeInfrastructureConfig(
   infrastructureInput: Record<string, unknown>,
   defaults: BrewvaConfig["infrastructure"],
@@ -78,9 +91,13 @@ export function normalizeInfrastructureConfig(
         contextBudgetInput.dynamicTailTokens,
         defaultContextBudget.dynamicTailTokens,
       ),
-      predictedTurnGrowthTokens: normalizeNonNegativeInteger(
+      predictedTurnGrowthTokens: normalizeOptionalNonNegativeInteger(
         contextBudgetInput.predictedTurnGrowthTokens,
         defaultContextBudget.predictedTurnGrowthTokens,
+      ),
+      predictedTurnGrowthRatio: normalizeUnitInterval(
+        contextBudgetInput.predictedTurnGrowthRatio,
+        defaultContextBudget.predictedTurnGrowthRatio,
       ),
       providerCacheStalenessMs: normalizePositiveInteger(
         contextBudgetInput.providerCacheStalenessMs,
@@ -103,9 +120,13 @@ export function normalizeInfrastructureConfig(
           contextBudgetCompactionInput.protectedTools,
           defaultContextCompaction.protectedTools,
         ),
-        tailProtectTokens: normalizeNonNegativeInteger(
+        tailProtectTokens: normalizeOptionalNonNegativeInteger(
           contextBudgetCompactionInput.tailProtectTokens,
           defaultContextCompaction.tailProtectTokens,
+        ),
+        tailProtectRatio: normalizeUnitInterval(
+          contextBudgetCompactionInput.tailProtectRatio,
+          defaultContextCompaction.tailProtectRatio,
         ),
       },
     },

@@ -179,6 +179,7 @@ export function recordTransientReductionEvidence(input: {
     estimatedTokenSavings: input.observed.estimatedTokenSavings,
     compactionAdvised: input.observed.compactionAdvised,
     forcedCompaction: input.observed.forcedCompaction,
+    expectedCacheBreak: input.observed.expectedCacheBreak === true,
   });
 }
 
@@ -277,6 +278,7 @@ function parseContextEvidenceSample(raw: unknown): ContextEvidenceSample | null 
       estimatedTokenSavings: Math.max(0, toFiniteInteger(record.estimatedTokenSavings) ?? 0),
       compactionAdvised: toBoolean(record.compactionAdvised) ?? false,
       forcedCompaction: toBoolean(record.forcedCompaction) ?? false,
+      expectedCacheBreak: toBoolean(record.expectedCacheBreak) ?? false,
     };
   }
 

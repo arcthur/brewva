@@ -185,7 +185,8 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
         headroomTokens: 8_000,
       },
       dynamicTailTokens: 4800,
-      predictedTurnGrowthTokens: 35_000,
+      predictedTurnGrowthTokens: null,
+      predictedTurnGrowthRatio: 0.175,
       providerCacheStalenessMs: 300_000,
       consequenceDigestMaxChars: 1200,
       compactionInstructions:
@@ -201,7 +202,8 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
           "recall_curate",
           "tape_handoff",
         ],
-        tailProtectTokens: 40_000,
+        tailProtectTokens: null,
+        tailProtectRatio: 0.2,
       },
     },
     toolFailureInjection: {

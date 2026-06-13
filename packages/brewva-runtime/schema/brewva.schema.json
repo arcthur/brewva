@@ -133,8 +133,11 @@
                         "type": "string"
                       }
                     },
-                    "tailProtectTokens": {
+                    "tailProtectRatio": {
                       "type": "number"
+                    },
+                    "tailProtectTokens": {
+                      "type": ["number", "null"]
                     }
                   }
                 },
@@ -150,8 +153,11 @@
                 "enabled": {
                   "type": "boolean"
                 },
-                "predictedTurnGrowthTokens": {
+                "predictedTurnGrowthRatio": {
                   "type": "number"
+                },
+                "predictedTurnGrowthTokens": {
+                  "type": ["number", "null"]
                 },
                 "providerCacheStalenessMs": {
                   "type": "number"
