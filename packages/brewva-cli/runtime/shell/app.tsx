@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import {
   buildPromptPartSignature,
   cloneCliShellPromptParts,
@@ -44,6 +44,7 @@ import {
   applySurfaceNavigationRequest,
   cloneOverlayPayload,
   readSurfaceScrollMetrics,
+  SURFACE_SCROLL_EPSILON,
   toSemanticInput,
   textOffsetFromLogicalCursor,
   logicalCursorFromTextOffset,
@@ -51,7 +52,6 @@ import {
 } from "./utils.js";
 
 const COMPOSER_EDITOR_SYNC_DEBOUNCE_MS = 80;
-const SURFACE_SCROLL_EPSILON = 1;
 
 interface TranscriptScrollSnapshot {
   readonly scrollTop: number;
@@ -59,25 +59,11 @@ interface TranscriptScrollSnapshot {
   readonly viewportHeight: number;
 }
 
-type OpenTuiFrameHandler = (event?: unknown) => void;
 type OpenTuiEventHandler = (event?: unknown) => void;
-
-interface OpenTuiFrameEmitter {
-  on(event: "frame", handler: OpenTuiFrameHandler): void;
-  off(event: "frame", handler: OpenTuiFrameHandler): void;
-}
 
 interface OpenTuiEventEmitter {
   on(event: string, handler: OpenTuiEventHandler): void;
   off(event: string, handler: OpenTuiEventHandler): void;
-}
-
-function isOpenTuiFrameEmitter(value: unknown): value is OpenTuiFrameEmitter {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const candidate = value as Partial<OpenTuiFrameEmitter>;
-  return typeof candidate.on === "function" && typeof candidate.off === "function";
 }
 
 function isOpenTuiEventEmitter(value: unknown): value is OpenTuiEventEmitter {
@@ -113,13 +99,6 @@ function scrollboxHasManualScroll(node: OpenTuiScrollBoxHandle): boolean {
   return candidate[manualScrollKey] === true;
 }
 
-function setScrollTopIfChanged(node: OpenTuiScrollBoxHandle, target: number): void {
-  const boundedTarget = Math.max(0, target);
-  if (Math.abs(node.scrollTop - boundedTarget) > SURFACE_SCROLL_EPSILON) {
-    node.scrollTop = boundedTarget;
-  }
-}
-
 function sameTranscriptScrollSnapshot(
   left: TranscriptScrollSnapshot,
   right: TranscriptScrollSnapshot,
@@ -139,9 +118,17 @@ function readTranscriptScrollSnapshot(node: OpenTuiScrollBoxHandle): TranscriptS
   };
 }
 
+/**
+ * Observe scroll metric changes from the scrollbox itself, never from the
+ * renderer frame loop. Subscribing to per-frame events turned every content
+ * growth tick into a scroll-sync round trip through the domain store
+ * (RFC F6); scrollbar change events plus a coarse fallback poll catch
+ * everything the follow-mode logic needs.
+ */
+const SCROLL_METRIC_FALLBACK_POLL_MS = 150;
+
 function installScrollboxMetricObserver(
   node: OpenTuiScrollBoxHandle,
-  renderer: OpenTuiRenderer,
   notify: () => void,
 ): () => void {
   let disposed = false;
@@ -158,7 +145,6 @@ function installScrollboxMetricObserver(
     notify();
   };
 
-  const emitter = isOpenTuiFrameEmitter(renderer) ? renderer : undefined;
   const scrollEmitters = readScrollboxMetricEmitters(node);
   const onScrollMetricChanged: OpenTuiEventHandler = () => {
     notifyWhenChanged();
@@ -168,28 +154,13 @@ function installScrollboxMetricObserver(
     scrollEmitter.on("change", onScrollMetricChanged);
   }
 
-  const cleanupScrollEmitters = (): void => {
-    for (const scrollEmitter of scrollEmitters) {
-      scrollEmitter.off("change", onScrollMetricChanged);
-    }
-  };
-
-  if (emitter) {
-    const onFrame: OpenTuiFrameHandler = () => notifyWhenChanged();
-    emitter.on("frame", onFrame);
-    queueMicrotask(notifyWhenChanged);
-    return () => {
-      disposed = true;
-      cleanupScrollEmitters();
-      emitter.off("frame", onFrame);
-    };
-  }
-
-  const timer = setInterval(notifyWhenChanged, 16);
+  const timer = setInterval(notifyWhenChanged, SCROLL_METRIC_FALLBACK_POLL_MS);
   queueMicrotask(notifyWhenChanged);
   return () => {
     disposed = true;
-    cleanupScrollEmitters();
+    for (const scrollEmitter of scrollEmitters) {
+      scrollEmitter.off("change", onScrollMetricChanged);
+    }
     clearInterval(timer);
   };
 }
@@ -239,21 +210,13 @@ export function BrewvaOpenTuiShell(input: {
   const [textarea, setTextarea] = createSignal<OpenTuiTextareaHandle | null>(null);
   const [completionContainer, setCompletionContainer] = createSignal<BoxRenderable | null>(null);
   const [promptAnchor, setPromptAnchor] = createSignal<BoxRenderable | null>(null);
-  const [transcriptScrollSnapshot, setTranscriptScrollSnapshot] =
-    createSignal<TranscriptScrollSnapshot>({
-      scrollTop: 0,
-      scrollHeight: 0,
-      viewportHeight: Math.max(1, dimensions().height),
-    });
-  const syncTranscriptScrollSnapshot = (): void => {
-    const node = scrollbox();
-    if (!node || node.isDestroyed) {
-      return;
-    }
-    const next = readTranscriptScrollSnapshot(node);
-    setTranscriptScrollSnapshot((current) =>
-      sameTranscriptScrollSnapshot(current, next) ? current : next,
-    );
+  // Pure re-run trigger for the scroll effect below: the observer already
+  // deduplicates metric changes, and the effect reads live metrics straight
+  // off the node — a value-bearing signal here would be a second, stale
+  // source of truth.
+  const [scrollMetricsVersion, setScrollMetricsVersion] = createSignal(0);
+  const notifyScrollMetricsChanged = (): void => {
+    setScrollMetricsVersion((version) => version + 1);
   };
 
   const promptPartStyle = createMemo(() => createPromptPartStyle(theme()));
@@ -476,13 +439,18 @@ export function BrewvaOpenTuiShell(input: {
     if (!node || node.isDestroyed) {
       return;
     }
-    const cleanup = installScrollboxMetricObserver(node, renderer, syncTranscriptScrollSnapshot);
-    syncTranscriptScrollSnapshot();
+    const cleanup = installScrollboxMetricObserver(node, notifyScrollMetricsChanged);
+    notifyScrollMetricsChanged();
     onCleanup(cleanup);
   });
 
+  // Scroll position is renderer-local: the continuously drifting offset
+  // during streaming never round-trips through the domain store. Only
+  // follow-mode TRANSITIONS (live <-> scrolled) and explicit navigation
+  // requests reach the runtime, so content growth in scrolled mode causes
+  // zero commits (RFC F6/WS5).
   createEffect(() => {
-    transcriptScrollSnapshot();
+    scrollMetricsVersion();
     const node = scrollbox();
     if (!node || node.isDestroyed) {
       return;
@@ -498,6 +466,8 @@ export function BrewvaOpenTuiShell(input: {
 
     const { maxScrollTop, currentOffset } = readSurfaceScrollMetrics(node);
     if (state.surface.followMode === "live") {
+      // Programmatic scrolls (sticky tail, content growth) never set the
+      // manual-scroll flag, so they cannot be re-ingested as user intent.
       if (scrollboxHasManualScroll(node) && currentOffset > SURFACE_SCROLL_EPSILON) {
         setScrollboxStickyTail(node, false);
         void input.runtime.handleInput({
@@ -520,25 +490,29 @@ export function BrewvaOpenTuiShell(input: {
       });
       return;
     }
-    if (Math.abs(currentOffset - state.surface.scrollOffset) > SURFACE_SCROLL_EPSILON) {
-      setScrollboxStickyTail(node, false);
-      void input.runtime.handleInput({
-        type: "surface.scrollSync",
-        followMode: "scrolled",
-        scrollOffset: currentOffset,
-      });
-      return;
-    }
     setScrollboxStickyTail(node, false);
-    setScrollTopIfChanged(node, maxScrollTop - state.surface.scrollOffset);
   });
 
+  // The textarea is uncontrolled while the user edits: editor-sourced sync
+  // echoes keep `composer.revision` unchanged and are never written back, so
+  // a stale echo cannot clobber keystrokes typed after it. Only external
+  // composer changes (history navigation, completion accept, prefill,
+  // submit-clear) bump the revision and reach the node. The guard is keyed
+  // to the node as well as the revision: a recreated textarea must receive
+  // the current composer state even though the revision has not moved.
+  let appliedComposerWrite: { node: OpenTuiTextareaHandle; revision: number } | undefined;
   createEffect(() => {
     const node = textarea();
-    const composer = state.composer;
-    if (!node || node.isDestroyed) {
+    const revision = state.composer.revision;
+    if (
+      !node ||
+      node.isDestroyed ||
+      (appliedComposerWrite?.node === node && appliedComposerWrite.revision === revision)
+    ) {
       return;
     }
+    appliedComposerWrite = { node, revision };
+    const composer = untrack(() => ({ text: state.composer.text, cursor: state.composer.cursor }));
     if (node.plainText !== composer.text) {
       node.setText(composer.text);
     }

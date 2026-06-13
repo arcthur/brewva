@@ -1,47 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   asBrewvaSessionId,
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
-import {
-  buildBrewvaPromptText,
-  type BrewvaPromptContentPart,
-} from "@brewva/brewva-substrate/prompt";
-import type {
-  BrewvaModelPresetState,
-  BrewvaPromptSessionEvent,
-  BrewvaPromptToolCall,
-  BrewvaQueuedPromptView,
-  BrewvaSessionModelDescriptor,
-  BrewvaShellViewPreferences,
-  BrewvaSteerOutcome,
-} from "@brewva/brewva-substrate/session";
+import type { BrewvaPromptToolCall } from "@brewva/brewva-substrate/session";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
-import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
-import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type { ShellEffect } from "../../../packages/brewva-cli/src/shell/domain/effects.js";
-import type {
-  ProviderAuthMethod,
-  ProviderConnectionDescriptor,
-  ProviderOAuthAuthorization,
-} from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
+import type { ProviderConnectionDescriptor } from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
 import { buildSubagentFooterView } from "../../../packages/brewva-cli/src/shell/domain/subagent-footer.js";
-import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
 import {
   createPromptMessageUpdateEvent,
   createToolcallEndAssistantEvent,
 } from "../../helpers/prompt-session-events.js";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
-
-function modelKey(model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">): string {
-  return `${model.provider}/${model.id}`;
-}
+import { createHostedShellFixture } from "../../helpers/shell-fixture.js";
 
 async function invokePaletteCommand(runtime: CliShellRuntime, commandId: string): Promise<boolean> {
   return await (
@@ -76,333 +49,9 @@ async function keymapCommand(runtime: CliShellRuntime, commandId: string): Promi
   });
 }
 
-function createFakeBundle(
-  options: {
-    promptHandler?: (text: string) => Promise<void>;
-    sessionId?: string;
-    transcriptSeed?: unknown[];
-    replaySessions?: BrewvaReplaySession[];
-    sessionWireBySessionId?: Record<string, SessionWireFrame[]>;
-    models?: BrewvaSessionModelDescriptor[];
-    availableModelKeys?: string[];
-    providers?: ProviderConnectionDescriptor[];
-    authMethods?: Record<string, ProviderAuthMethod[]>;
-    authorizeOAuth?: (
-      provider: string,
-      methodId: string,
-      inputs?: Record<string, string>,
-    ) => Promise<ProviderOAuthAuthorization | undefined>;
-    completeOAuth?: (provider: string, methodId: string, code?: string) => Promise<void>;
-    queuedPrompts?: BrewvaQueuedPromptView[];
-    steerHandler?: (text: string) => Promise<BrewvaSteerOutcome>;
-    modelPresetState?: BrewvaModelPresetState;
-    isStreaming?: boolean;
-  } = {},
-) {
-  let attachedUi: BrewvaToolUiPort | undefined;
-  let sessionListener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
-  let queuedPrompts = [...(options.queuedPrompts ?? [])];
-  const approvalDecisions: Array<{ requestId: string; input: unknown }> = [];
-  const sessionId = options.sessionId ?? "session-1";
-  const replaySessions = options.replaySessions ?? [
-    {
-      sessionId,
-      eventCount: 1,
-      lastEventAt: Date.now(),
-      title: "New session",
-    },
-  ];
-  const rawRuntime = createRuntimeInstanceFixture({
-    cwd: mkdtempSync(join(tmpdir(), "brewva-shell-runtime-")),
-  });
-  const runtime = rawRuntime;
-  Object.assign(runtime.ops.proposals.requests, {
-    decide(_sessionId: string, requestId: string, input: unknown) {
-      approvalDecisions.push({ requestId, input });
-    },
-  });
-  Object.assign(runtime.ops.proposals.requests, {
-    listPending() {
-      return [];
-    },
-  });
-  Object.assign(runtime.ops.events.replay, {
-    listSessions() {
-      return replaySessions;
-    },
-  });
-  const querySessionWire = runtime.ops.sessionWire.query.bind(runtime.ops.sessionWire);
-  const providerConnects: Array<{ provider: string; key: string }> = [];
-  Object.assign(runtime.ops.sessionWire, {
-    query(targetSessionId: string) {
-      return options.sessionWireBySessionId?.[targetSessionId] ?? querySessionWire(targetSessionId);
-    },
-  });
-  const defaultModel: BrewvaSessionModelDescriptor = {
-    provider: "openai",
-    id: "gpt-5.4-mini",
-    name: "GPT-5.4 Mini",
-    contextWindow: 128_000,
-    maxTokens: 16_384,
-    reasoning: true,
-  };
-  const allModels = options.models ?? [defaultModel];
-  const availableModelKeys = new Set(options.availableModelKeys ?? allModels.map(modelKey));
-  let currentModel = allModels[0] ?? defaultModel;
-  let thinkingLevel = "high";
-  let isStreaming = options.isStreaming ?? false;
-  let modelPresetState: BrewvaModelPresetState = options.modelPresetState ?? {
-    activeName: "Default",
-    defaultName: "Default",
-    presets: [{ name: "Default", roles: {}, synthetic: true }],
-  };
-  let modelPreferences = { recent: [], favorite: [] } as {
-    recent: Array<{ provider: string; id: string }>;
-    favorite: Array<{ provider: string; id: string }>;
-  };
-  let diffPreferences: { style: "auto" | "stacked"; wrapMode: "word" | "none" } = {
-    style: "auto",
-    wrapMode: "word",
-  };
-  let shellViewPreferences: BrewvaShellViewPreferences = {
-    showThinking: true,
-    toolDetails: true,
-  };
-
-  const session = {
-    get model() {
-      return currentModel;
-    },
-    get thinkingLevel() {
-      return thinkingLevel;
-    },
-    get isStreaming() {
-      return isStreaming;
-    },
-    set isStreaming(next: boolean) {
-      isStreaming = next;
-    },
-    sessionManager: {
-      getSessionId() {
-        return sessionId;
-      },
-      resolveLineageLeafEntryId() {
-        return null;
-      },
-      buildSessionContext() {
-        return { messages: options.transcriptSeed ?? [] };
-      },
-    },
-    settingsManager: {
-      getQuietStartup() {
-        return false;
-      },
-      getModelPreferences() {
-        return modelPreferences;
-      },
-      setModelPreferences(next: typeof modelPreferences) {
-        modelPreferences = next;
-      },
-      getDiffPreferences() {
-        return diffPreferences;
-      },
-      setDiffPreferences(next: typeof diffPreferences) {
-        diffPreferences = next;
-      },
-      getShellViewPreferences() {
-        return shellViewPreferences;
-      },
-      setShellViewPreferences(next: BrewvaShellViewPreferences) {
-        shellViewPreferences = next;
-      },
-    },
-    modelRegistry: {
-      getAll() {
-        return allModels;
-      },
-      getAvailable() {
-        return allModels.filter((model) => availableModelKeys.has(modelKey(model)));
-      },
-    },
-    async setModel(model: BrewvaSessionModelDescriptor) {
-      currentModel = model;
-    },
-    getModelPresetState() {
-      return structuredClone(modelPresetState);
-    },
-    selectModelPreset(request: { name: string }) {
-      const preset = modelPresetState.presets.find((candidate) => candidate.name === request.name);
-      if (!preset) {
-        throw new Error(`Unknown model preset: ${request.name}`);
-      }
-      const previousName = modelPresetState.activeName;
-      modelPresetState = {
-        ...modelPresetState,
-        activeName: preset.name,
-        pendingName: undefined,
-      };
-      return {
-        selectedName: preset.name,
-        previousName,
-        modelChanged: false,
-        queued: false,
-        effectiveDefaultModel: preset.roles.default,
-      };
-    },
-    queueModelPresetForNextTurn(name: string) {
-      const preset = modelPresetState.presets.find((candidate) => candidate.name === name);
-      if (!preset) {
-        throw new Error(`Unknown model preset: ${name}`);
-      }
-      modelPresetState = {
-        ...modelPresetState,
-        pendingName: preset.name,
-      };
-      return {
-        selectedName: preset.name,
-        previousName: modelPresetState.activeName,
-        modelChanged: false,
-        queued: true,
-        effectiveDefaultModel: preset.roles.default,
-      };
-    },
-    getAvailableThinkingLevels() {
-      return currentModel.reasoning ? ["off", "minimal", "low", "medium", "high"] : ["off"];
-    },
-    setThinkingLevel(level: string) {
-      thinkingLevel = level;
-    },
-    subscribe(listener: (event: BrewvaPromptSessionEvent) => void) {
-      sessionListener = listener;
-      return () => {
-        if (sessionListener === listener) {
-          sessionListener = undefined;
-        }
-      };
-    },
-    async prompt(parts: readonly BrewvaPromptContentPart[]) {
-      if (modelPresetState.pendingName) {
-        modelPresetState = {
-          ...modelPresetState,
-          activeName: modelPresetState.pendingName,
-          pendingName: undefined,
-        };
-      }
-      await options.promptHandler?.(buildBrewvaPromptText(parts));
-    },
-    async steer(text: string) {
-      return options.steerHandler?.(text) ?? { status: "no_active_run" };
-    },
-    getQueuedPrompts() {
-      return queuedPrompts;
-    },
-    removeQueuedPrompt(promptId: string) {
-      const index = queuedPrompts.findIndex((item) => item.promptId === promptId);
-      if (index < 0) {
-        return false;
-      }
-      queuedPrompts.splice(index, 1);
-      sessionListener?.({
-        type: "queue.changed",
-        items: [...queuedPrompts],
-      });
-      return true;
-    },
-    async waitForIdle() {},
-    async abort() {},
-    dispose() {},
-    setUiPort(ui: BrewvaToolUiPort) {
-      attachedUi = ui;
-    },
-  };
-
-  const bundle = {
-    session,
-    toolDefinitions: new Map(),
-    runtime,
-    providerConnections: options.providers
-      ? {
-          catalog: {
-            async listProviders() {
-              return options.providers ?? [];
-            },
-          },
-          renderer: {
-            listAuthMethods(provider: string) {
-              return (
-                options.authMethods?.[provider] ?? [
-                  {
-                    id: "api_key" as const,
-                    kind: "api_key" as const,
-                    type: "api" as const,
-                    label: "API key",
-                    credentialRef: `vault://${provider}/apiKey`,
-                  },
-                ]
-              );
-            },
-          },
-          credential: {
-            async listProviders() {
-              return options.providers ?? [];
-            },
-            async connectApiKey(provider: string, key: string) {
-              providerConnects.push({ provider, key });
-            },
-            async disconnect() {},
-            async refresh() {},
-          },
-          authFlow: {
-            listAuthMethods(provider: string) {
-              return (
-                options.authMethods?.[provider] ?? [
-                  {
-                    id: "api_key" as const,
-                    kind: "api_key" as const,
-                    type: "api" as const,
-                    label: "API key",
-                    credentialRef: `vault://${provider}/apiKey`,
-                  },
-                ]
-              );
-            },
-            async authorizeOAuth(
-              provider: string,
-              methodId: string,
-              inputs?: Record<string, string>,
-            ) {
-              return options.authorizeOAuth?.(provider, methodId, inputs);
-            },
-            async completeOAuth(provider: string, methodId: string, code?: string) {
-              await options.completeOAuth?.(provider, methodId, code);
-            },
-          },
-        }
-      : undefined,
-  } as unknown as CliShellSessionBundle;
-
-  return {
-    bundle,
-    getAttachedUi: () => attachedUi,
-    emitSessionEvent(event: BrewvaPromptSessionEvent) {
-      sessionListener?.(event);
-    },
-    approvalDecisions,
-    providerConnects,
-    getModelPreferences: () => modelPreferences,
-    getDiffPreferences: () => diffPreferences,
-    getShellViewPreferences: () => shellViewPreferences,
-    getCurrentModel: () => currentModel,
-    getModelPresetState: () => structuredClone(modelPresetState),
-    setStreaming: (next: boolean) => {
-      isStreaming = next;
-    },
-  };
-}
-
 describe("shell runtime: error surfaces and overlays", () => {
   test("shift-tab is a no-op when only the synthetic default preset is available", async () => {
-    const fixture = createFakeBundle();
+    const fixture = createHostedShellFixture();
     const runtime = new CliShellRuntime(fixture.bundle, {
       cwd: process.cwd(),
       openSession: async () => fixture.bundle,
@@ -434,7 +83,7 @@ describe("shell runtime: error surfaces and overlays", () => {
         credentialRef: "vault://kimi-coding/apiKey",
       },
     ];
-    const fixture = createFakeBundle({
+    const fixture = createHostedShellFixture({
       providers,
       authMethods: {
         "kimi-coding": [
@@ -518,7 +167,7 @@ describe("shell runtime: error surfaces and overlays", () => {
   });
 
   test("groups assistant reasoning and tool execution updates into transcript parts", async () => {
-    const fixture = createFakeBundle();
+    const fixture = createHostedShellFixture();
     const { bundle } = fixture;
 
     const runtime = new CliShellRuntime(bundle, {
@@ -613,7 +262,7 @@ describe("shell runtime: error surfaces and overlays", () => {
   });
 
   test("inspect overlays drill down into a pager and restore inspect on close", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createHostedShellFixture();
 
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
@@ -664,7 +313,7 @@ describe("shell runtime: error surfaces and overlays", () => {
   });
 
   test("task overlays open run output in the subagent footer inspector", async () => {
-    const { bundle } = createFakeBundle({
+    const { bundle } = createHostedShellFixture({
       sessionWireBySessionId: {
         "worker-session-1": [
           {
@@ -791,7 +440,7 @@ describe("shell runtime: error surfaces and overlays", () => {
   });
 
   test("notifications open as an inbox, drill into pager details, and support dismiss", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createHostedShellFixture();
 
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
@@ -857,7 +506,7 @@ describe("shell runtime: error surfaces and overlays", () => {
   });
 
   test("pager context routes Ctrl-E to the external pager instead of the global editor shortcut", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createHostedShellFixture();
     const pagerCalls: Array<{ title: string; lines: readonly string[] }> = [];
     const editorCalls: Array<{ title: string; prefill?: string }> = [];
 
@@ -896,7 +545,7 @@ describe("shell runtime: error surfaces and overlays", () => {
   });
 
   test("Ctrl-E opens the external pager for inspect overlays before falling back to the editor", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createHostedShellFixture();
     const pagerCalls: Array<{ title: string; lines: readonly string[] }> = [];
     const editorCalls: Array<{ title: string; prefill?: string }> = [];
 
@@ -947,7 +596,7 @@ describe("shell runtime: error surfaces and overlays", () => {
   });
 
   test("transcript snapshot command opens the external pager via the runtime hook", async () => {
-    const { bundle } = createFakeBundle({
+    const { bundle } = createHostedShellFixture({
       transcriptSeed: [
         {
           role: "user",
@@ -974,7 +623,7 @@ describe("shell runtime: error surfaces and overlays", () => {
   });
 
   test("transcript snapshot command warns when the transcript pager is unavailable", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createHostedShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,

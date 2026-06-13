@@ -10,6 +10,13 @@ export interface ShellRendererNotifier {
 
 export interface ShellRendererController {
   readonly ui: ShellRendererNotifier;
+  /**
+   * Project the current view model. The result is a structurally shared
+   * snapshot: it is stable until the next commit, and unchanged branches
+   * are reused across calls. Consumers must not mutate it and must not
+   * hold it across awaits while the shell keeps running — copy what they
+   * need first.
+   */
   getViewState(): ShellViewModel;
   getSessionWireFrames(sessionId: string): readonly SessionWireFrame[];
   getToolDefinitions(): ReadonlyMap<string, BrewvaToolDefinition>;

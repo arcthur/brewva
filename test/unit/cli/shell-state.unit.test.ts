@@ -100,8 +100,9 @@ describe("cli shell state", () => {
       ],
     });
     state = reduceCliShellState(state, {
-      type: "surface.scroll",
-      delta: -5,
+      type: "surface.setScrollState",
+      followMode: "scrolled",
+      scrollOffset: 5,
     });
 
     expect(state.surface.followMode).toBe("scrolled");
@@ -198,8 +199,9 @@ describe("cli shell state", () => {
       ],
     });
     state = reduceCliShellState(state, {
-      type: "surface.scroll",
-      delta: 3,
+      type: "surface.setScrollState",
+      followMode: "scrolled",
+      scrollOffset: 3,
     });
 
     expect(state.surface.followMode).toBe("scrolled");

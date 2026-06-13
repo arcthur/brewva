@@ -91,6 +91,8 @@ export interface CliShellOverlayState {
   >;
 }
 
+export type CliShellComposerChangeSource = "editor" | "external";
+
 export interface CliShellViewState {
   theme: TuiTheme;
   focus: {
@@ -116,6 +118,14 @@ export interface CliShellViewState {
     cursor: number;
     parts: CliShellPromptPart[];
     completion?: CliShellCompletionState;
+    /**
+     * Bumped on every composer change that did not originate from a sync
+     * echo of the editing surface itself (`source: "editor"`). Rendering
+     * layers treat the editing surface as uncontrolled while the user
+     * edits and apply state back only when this revision moves, so a stale
+     * sync echo can never clobber newer input (RFC F7).
+     */
+    revision: number;
   };
   pager?: {
     title: string;
@@ -158,10 +168,6 @@ export type CliShellAction =
       scrollOffset: number;
     }
   | {
-      type: "surface.scroll";
-      delta: number;
-    }
-  | {
       type: "surface.followLive";
     }
   | {
@@ -176,12 +182,16 @@ export type CliShellAction =
       type: "composer.setText";
       text: string;
       cursor?: number;
+      /** "editor" when the editing surface already holds this text (sync echo). */
+      source?: CliShellComposerChangeSource;
     }
   | {
       type: "composer.setPromptState";
       text: string;
       cursor: number;
       parts: CliShellPromptPart[];
+      /** "editor" when the editing surface already holds this text (sync echo). */
+      source?: CliShellComposerChangeSource;
     }
   | {
       type: "completion.set";

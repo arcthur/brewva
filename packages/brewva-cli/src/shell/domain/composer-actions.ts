@@ -209,6 +209,18 @@ export function acceptComposerCompletion(input: {
   }
 
   const range = input.completion.range;
+  // The completion may have been resolved against an older composer state
+  // (refresh is debounced). A range that no longer fits the current text,
+  // or whose trigger character is gone, is stale — accepting it would
+  // splice the candidate into unrelated text. Treat it as a no-op; the
+  // pending refresh will reconcile the popup.
+  if (
+    range.start < 0 ||
+    range.end > input.composer.text.length ||
+    input.composer.text[range.start] !== range.trigger
+  ) {
+    return undefined;
+  }
   const replaceEnd = Math.max(range.end, input.composer.cursor);
   const visibleText = completionVisibleText(selected);
   const nextText = replaceRange(input.composer.text, range.start, replaceEnd, visibleText);
@@ -272,7 +284,7 @@ function findSlashCompletionRange(text: string, cursor: number): ShellCompletion
   };
 }
 
-function findCompletionRange(text: string, cursor: number): ShellCompletionRange | null {
+export function findCompletionRange(text: string, cursor: number): ShellCompletionRange | null {
   return findSlashCompletionRange(text, cursor) ?? findReferenceCompletionRange(text, cursor);
 }
 

@@ -846,6 +846,7 @@ describe("opentui solid shell runtime: interaction events", () => {
 
     await runtime.start();
     runtime.ui.setEditorText("/in");
+    await Bun.sleep(CliShellRuntime.COMPLETION_REFRESH_DEBOUNCE_MS + 30);
     await runtime.handleInput({
       type: "keymap.effect",
       effect: { type: "completion.move", delta: 1 },
@@ -865,6 +866,7 @@ describe("opentui solid shell runtime: interaction events", () => {
       expect(runtime.getViewState().composer.completion?.selectedIndex).toBe(1);
 
       runtime.ui.setEditorText("/qu");
+      await Bun.sleep(CliShellRuntime.COMPLETION_REFRESH_DEBOUNCE_MS + 30);
       await testSetup.renderOnce();
       await testSetup.renderOnce();
 

@@ -58,7 +58,10 @@ export async function renderCliTranscriptScrollbackLines(input: {
   width: number;
   toolRenderCache?: ToolRenderCache;
 }): Promise<string[]> {
-  const messages = input.runtime.getViewState().transcript.messages;
+  // Defensive copy: this render awaits while the live shell keeps
+  // committing, and the projected view model is only stable until the next
+  // commit (see ShellRendererController.getViewState).
+  const messages = [...input.runtime.getViewState().transcript.messages];
   if (messages.length === 0) {
     return [];
   }

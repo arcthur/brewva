@@ -26,6 +26,14 @@ This repository uses a centralized `test/` tree with five layers.
   - These tests do not count as product-chain proofs or public contract coverage.
   - `bun run test:fitness` runs the whole `test/fitness/**` layer.
   - `bun run test:docs` is the docs-only subset under `test/fitness/docs/**`.
+- `test/bench/**`
+  - On-demand performance benchmarks (not part of PR gating or `bun test` discovery).
+  - `bun run bench:tui` replays a synthetic streaming session through the full
+    interactive shell stack with a manual clock and reports per-frame wall cost
+    against the 16ms budget. Use it for before/after evidence on render-path
+    changes; the deterministic count-based invariants in `test/unit/cli/`
+    (`shell-streaming-invariants`, `shell-keystroke-invariants`,
+    `opentui-shell-renderer-replay`) are the CI-safe regression gates.
 
 ## Naming
 

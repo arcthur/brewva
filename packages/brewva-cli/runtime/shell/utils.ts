@@ -283,6 +283,14 @@ export function logicalCursorFromTextOffset(
   };
 }
 
+/**
+ * Single source of truth for "close enough to the bottom to count as live".
+ * Shared by the scroll effect's transition classification and the
+ * navigation sync below; a divergence between the two flips follow-mode
+ * back and forth at the boundary.
+ */
+export const SURFACE_SCROLL_EPSILON = 1;
+
 export function readSurfaceScrollMetrics(scrollbox: OpenTuiScrollBoxHandle): {
   maxScrollTop: number;
   currentOffset: number;
@@ -299,7 +307,7 @@ export function syncSurfaceStateFromScrollbox(
   scrollbox: OpenTuiScrollBoxHandle,
 ): void {
   const { maxScrollTop, currentOffset } = readSurfaceScrollMetrics(scrollbox);
-  if (currentOffset <= 1 || maxScrollTop === 0) {
+  if (currentOffset <= SURFACE_SCROLL_EPSILON || maxScrollTop === 0) {
     void runtime.handleInput({
       type: "surface.scrollSync",
       followMode: "live",

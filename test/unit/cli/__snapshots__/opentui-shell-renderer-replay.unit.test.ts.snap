@@ -1,0 +1,35 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`opentui solid shell: streaming replay a replayed stream settles into a stable transcript frame 1`] = `
+"                                                                                
+     Here is the plan.                                                          
+                                                                                
+     Steps                                                                      
+                                                                                
+     1. Read the configuration file.                                            
+     2. Apply the migration in src/db.ts.                                       
+     3. Verify with the contract suite.                                         
+                                                                                
+     All steps are reversible.                                                  
+                                                                                
+     ▣ Brewva · openai/gpt-5.4-mini                                             
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+  ┃                                                                             
+  ┃  Ask Brewva or type / for commands                                          
+  ┃                                                                             
+  ┃  Brewva                                                                     
+  ┃                                                                             
+  ┃  openai/gpt-5.4-mini                                                        
+  ┃                                                                             
+  ┃  think high                                                                 
+  ┃                                                                             
+                                                                                
+    Enter send · Ctrl+K commands · /help · / slash · Ctrl+B queue · Ctrl+O qu   
+                                                                                
+"
+`;

@@ -8,6 +8,7 @@ import {
   resolveTuiTheme,
   type TuiTheme,
 } from "../../internal/tui/index.js";
+import type { ShellCommitOptions } from "../domain/actions.js";
 import {
   cloneCliShellPromptParts,
   rebasePromptPartsAfterTextReplace,
@@ -35,7 +36,7 @@ interface CliShellDialogRequest {
 }
 
 export function createCliShellUiPortController(input: {
-  commit(action: CliShellAction): void;
+  commit(action: CliShellAction, options?: ShellCommitOptions): void;
   getState(): CliShellViewState;
   requestDialog<T>(request: CliShellDialogRequest): Promise<T>;
   requestCustom<T>(kind: string, payload: unknown, opts?: BrewvaUiDialogOptions): Promise<T>;
@@ -121,23 +122,29 @@ export function createCliShellUiPortController(input: {
         state.composer.text.slice(0, state.composer.cursor) +
         text +
         state.composer.text.slice(state.composer.cursor);
-      input.commit({
-        type: "composer.setPromptState",
-        text: nextText,
-        cursor: state.composer.cursor + text.length,
-        parts: rebasePromptPartsAfterTextReplace(cloneCliShellPromptParts(state.composer.parts), {
-          start: state.composer.cursor,
-          end: state.composer.cursor,
-          replacementText: text,
-        }),
-      });
+      input.commit(
+        {
+          type: "composer.setPromptState",
+          text: nextText,
+          cursor: state.composer.cursor + text.length,
+          parts: rebasePromptPartsAfterTextReplace(cloneCliShellPromptParts(state.composer.parts), {
+            start: state.composer.cursor,
+            end: state.composer.cursor,
+            replacementText: text,
+          }),
+        },
+        { refreshCompletions: true },
+      );
     },
     setEditorText(text) {
-      input.commit({
-        type: "composer.setText",
-        text,
-        cursor: text.length,
-      });
+      input.commit(
+        {
+          type: "composer.setText",
+          text,
+          cursor: text.length,
+        },
+        { refreshCompletions: true },
+      );
     },
     getEditorText() {
       return input.getState().composer.text;

@@ -51,7 +51,10 @@ export async function handleShellRendererInput(
           text: input.text,
           cursor: input.cursor,
           parts: cloneCliShellPromptParts(input.parts ?? []),
+          source: "editor",
         },
+        // Completion resolution rides the commit-level default policy:
+        // trigger contexts and open popups refresh, plain typing does not.
         { debounceStatus: false },
       );
       return true;
@@ -61,22 +64,25 @@ export async function handleShellRendererInput(
     case "completion.accept":
       context.completionHandler.accept();
       return true;
-    case "surface.scrollSync":
-      if (
-        context.getState().surface.followMode === input.followMode &&
-        context.getState().surface.scrollOffset === Math.max(0, input.scrollOffset)
-      ) {
+    case "surface.scrollSync": {
+      // Rounding alone absorbs sub-row layout jitter; the comparison must
+      // stay exact so legitimate one-row navigation steps (page step is 1
+      // in very short viewports) are never swallowed.
+      const nextScrollOffset = Math.max(0, Math.round(input.scrollOffset));
+      const surface = context.getState().surface;
+      if (surface.followMode === input.followMode && surface.scrollOffset === nextScrollOffset) {
         return true;
       }
       context.commit(
         {
           type: "surface.setScrollState",
           followMode: input.followMode,
-          scrollOffset: input.scrollOffset,
+          scrollOffset: nextScrollOffset,
         },
         { debounceStatus: false, refreshCompletions: false },
       );
       return true;
+    }
     case "surface.navigationAck":
       if (context.getState().surface.navigationRequest?.id !== input.requestId) {
         return true;

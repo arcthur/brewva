@@ -239,6 +239,12 @@ class ShellCockpitSessionWireFold {
   readonly #toolCalls = new Map<string, MutableToolCall>();
   readonly #transcriptMessageIdsByTurn = new Map<string, Set<string>>();
   readonly #transcriptAssistantSegments = new Map<string, MutableTranscriptAssistantSegment>();
+  /**
+   * Assistant segments whose accumulated text has not been materialized
+   * into `#transcriptMessages` yet. Deltas append in O(1) and the message
+   * objects are built once per snapshot read instead of once per delta.
+   */
+  readonly #dirtyAssistantSegmentKeys = new Set<string>();
   #transcriptMessages: CliShellTranscriptMessage[] = [];
   #transcriptVersion = 0;
   #transcriptSegmentSequence = 0;
@@ -288,6 +294,7 @@ class ShellCockpitSessionWireFold {
   }
 
   snapshot(): ShellCockpitWireFoldSnapshot {
+    const transcriptMessages = [...this.transcriptMessagesView()];
     let runtimeActivity: ShellCockpitRuntimeActivity | null = null;
     for (const turnId of this.#activeTurnIds) {
       const candidate = this.#activities.get(turnId);
@@ -336,7 +343,7 @@ class ShellCockpitSessionWireFold {
         : {}),
       toolCalls: [...this.#toolCalls.values()].map(materializeToolCall),
       transcriptVersion: this.#transcriptVersion,
-      transcriptMessages: [...this.#transcriptMessages],
+      transcriptMessages,
     };
   }
 
@@ -532,6 +539,7 @@ class ShellCockpitSessionWireFold {
   private clearTranscriptProjection(): void {
     this.#transcriptMessageIdsByTurn.clear();
     this.#transcriptAssistantSegments.clear();
+    this.#dirtyAssistantSegmentKeys.clear();
     this.#transcriptMessages = [];
     this.#transcriptVersion += 1;
   }
@@ -570,9 +578,10 @@ class ShellCockpitSessionWireFold {
     if (!ids) {
       return;
     }
-    const nextMessages = this.#transcriptMessages.filter((message) => !ids.has(message.id));
+    const current = this.transcriptMessagesView();
+    const nextMessages = current.filter((message) => !ids.has(message.id));
     this.#transcriptMessageIdsByTurn.delete(turnId);
-    if (nextMessages.length === this.#transcriptMessages.length) {
+    if (nextMessages.length === current.length) {
       return;
     }
     this.#transcriptMessages = nextMessages;
@@ -605,18 +614,52 @@ class ShellCockpitSessionWireFold {
     if (segment.text.trim().length === 0) {
       return;
     }
-    this.upsertTranscriptMessage(
-      frame.turnId,
-      buildTextTranscriptMessage({
-        id: segment.messageId,
-        role: "assistant",
-        text: segment.text,
-        renderMode: "streaming",
-      }),
-    );
+    this.#dirtyAssistantSegmentKeys.add(key);
+    this.#transcriptVersion += 1;
+  }
+
+  /**
+   * The only sanctioned way to read transcript messages: materializes
+   * pending assistant segments first so lazy accumulation is never
+   * observable. Direct `#transcriptMessages` access is reserved for
+   * `materializeDirtyAssistantSegments`/`upsertTranscriptMessage` (which
+   * run inside materialization) and `clearTranscriptProjection`.
+   */
+  private transcriptMessagesView(): readonly CliShellTranscriptMessage[] {
+    this.materializeDirtyAssistantSegments();
+    return this.#transcriptMessages;
+  }
+
+  /**
+   * Materialize pending assistant segment text into transcript messages.
+   * Runs before any read or mutation of `#transcriptMessages` (via
+   * `transcriptMessagesView`).
+   */
+  private materializeDirtyAssistantSegments(): void {
+    if (this.#dirtyAssistantSegmentKeys.size === 0) {
+      return;
+    }
+    const keys = [...this.#dirtyAssistantSegmentKeys];
+    this.#dirtyAssistantSegmentKeys.clear();
+    for (const key of keys) {
+      const segment = this.#transcriptAssistantSegments.get(key);
+      if (!segment || segment.text.trim().length === 0) {
+        continue;
+      }
+      this.upsertTranscriptMessage(
+        segment.turnId,
+        buildTextTranscriptMessage({
+          id: segment.messageId,
+          role: "assistant",
+          text: segment.text,
+          renderMode: "streaming",
+        }),
+      );
+    }
   }
 
   private finishTranscriptAssistantSegmentsForTurn(turnId: string): void {
+    this.materializeDirtyAssistantSegments();
     for (const [key, segment] of this.#transcriptAssistantSegments) {
       if (segment.turnId !== turnId) {
         continue;
@@ -656,14 +699,18 @@ class ShellCockpitSessionWireFold {
         : input.resultMode === "progress"
           ? { partialResult: buildRuntimeToolResultPayload(frame) }
           : { result: buildRuntimeToolResultPayload(frame) };
-    this.#transcriptMessages = upsertToolExecutionIntoTranscriptMessages(this.#transcriptMessages, {
-      toolCallId: frame.toolCallId,
-      toolName: frame.toolName,
-      ...payload,
-      status: frame.type === "tool.finished" ? (frame.isError ? "error" : "completed") : "running",
-      renderMode: input.resultMode === "finish" ? "stable" : "streaming",
-      fallbackMessageId,
-    });
+    this.#transcriptMessages = upsertToolExecutionIntoTranscriptMessages(
+      this.transcriptMessagesView(),
+      {
+        toolCallId: frame.toolCallId,
+        toolName: frame.toolName,
+        ...payload,
+        status:
+          frame.type === "tool.finished" ? (frame.isError ? "error" : "completed") : "running",
+        renderMode: input.resultMode === "finish" ? "stable" : "streaming",
+        fallbackMessageId,
+      },
+    );
     this.recordTranscriptMessage(frame.turnId, fallbackMessageId);
     this.#transcriptVersion += 1;
   }
@@ -673,7 +720,7 @@ class ShellCockpitSessionWireFold {
     if (!ids) {
       return [];
     }
-    return this.#transcriptMessages.filter((message) => ids.has(message.id));
+    return this.transcriptMessagesView().filter((message) => ids.has(message.id));
   }
 
   private turnHasAssistantTranscript(turnId: string): boolean {
@@ -690,20 +737,23 @@ class ShellCockpitSessionWireFold {
       turnId: input.turnId,
       toolCallId: input.toolOutput.toolCallId,
     });
-    this.#transcriptMessages = upsertToolExecutionIntoTranscriptMessages(this.#transcriptMessages, {
-      toolCallId: input.toolOutput.toolCallId,
-      toolName: input.toolOutput.toolName,
-      result: {
-        content:
-          input.toolOutput.text.length > 0 ? [{ type: "text", text: input.toolOutput.text }] : [],
-        details: { verdict: input.toolOutput.verdict },
-        ...(input.toolOutput.display ? { display: input.toolOutput.display } : {}),
-        isError: input.toolOutput.isError,
+    this.#transcriptMessages = upsertToolExecutionIntoTranscriptMessages(
+      this.transcriptMessagesView(),
+      {
+        toolCallId: input.toolOutput.toolCallId,
+        toolName: input.toolOutput.toolName,
+        result: {
+          content:
+            input.toolOutput.text.length > 0 ? [{ type: "text", text: input.toolOutput.text }] : [],
+          details: { verdict: input.toolOutput.verdict },
+          ...(input.toolOutput.display ? { display: input.toolOutput.display } : {}),
+          isError: input.toolOutput.isError,
+        },
+        status: input.toolOutput.isError ? "error" : "completed",
+        renderMode: "stable",
+        fallbackMessageId,
       },
-      status: input.toolOutput.isError ? "error" : "completed",
-      renderMode: "stable",
-      fallbackMessageId,
-    });
+    );
     this.recordTranscriptMessage(input.turnId, fallbackMessageId);
     this.#transcriptVersion += 1;
   }

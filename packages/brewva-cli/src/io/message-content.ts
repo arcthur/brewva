@@ -224,6 +224,31 @@ export function readAssistantMessageEventPartial(assistantMessageEvent: unknown)
   return record?.partial;
 }
 
+/**
+ * Read the text delta of a message_update that the transcript consumes as
+ * a pure append: no assistant message attached (neither on the event nor
+ * as the assistant-event partial) and a non-empty string delta. This is
+ * the single definition shared by the transcript projector (consumption)
+ * and the session-event coalescer (merge safety) — the coalescer may only
+ * merge events the projector would append.
+ */
+export function readAssistantTextAppendDelta(event: unknown): string | undefined {
+  const record = asRecord(event);
+  if (!record) {
+    return undefined;
+  }
+  if (readMessageRole(record.message) === "assistant") {
+    return undefined;
+  }
+  if (
+    readMessageRole(readAssistantMessageEventPartial(record.assistantMessageEvent)) === "assistant"
+  ) {
+    return undefined;
+  }
+  const delta = asRecord(record.assistantMessageEvent)?.delta;
+  return typeof delta === "string" && delta.length > 0 ? delta : undefined;
+}
+
 export function extractVisibleTextFromMessage(message: unknown): string {
   const segments = readMessageContentParts(message)
     .filter((part): part is NormalizedMessageTextPart => part.type === "text")

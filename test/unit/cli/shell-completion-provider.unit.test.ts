@@ -62,6 +62,29 @@ function createCommandProvider(): ShellCommandProvider {
   return provider;
 }
 
+async function primedProvider(input: {
+  cwd: string;
+  extraSources?: ReturnType<typeof createAgentCompletionSource>[];
+  usageStore?: ReturnType<typeof createInMemoryCompletionUsageStore>;
+  primeQueries: readonly string[];
+}): Promise<ShellCompletionProvider> {
+  const workspaceSource = createWorkspaceReferenceCompletionSource({ cwd: input.cwd });
+  const provider = new ShellCompletionProvider({
+    sources: [...(input.extraSources ?? []), workspaceSource],
+    usageStore: input.usageStore ?? createInMemoryCompletionUsageStore(),
+  });
+  // Resolution is cache-backed: each round serves cached parents and
+  // schedules fills for newly discovered children, so prime until the
+  // walk depth is fully populated.
+  for (let round = 0; round < 6; round += 1) {
+    for (const query of input.primeQueries) {
+      provider.resolve(completionRange("@", query));
+    }
+    await workspaceSource.settleFills();
+  }
+  return provider;
+}
+
 describe("ShellCompletionProvider", () => {
   test("/ completion only returns command candidates from ShellCommandProvider", () => {
     const provider = new ShellCompletionProvider({
@@ -173,22 +196,22 @@ describe("ShellCompletionProvider", () => {
     expect(results).toEqual([]);
   });
 
-  test("@ completion mixes agents, files, and directories with fuzzy path matching", () => {
+  test("@ completion mixes agents, files, and directories with fuzzy path matching", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-completion-"));
     mkdirSync(join(cwd, "packages"), { recursive: true });
     mkdirSync(join(cwd, "src"), { recursive: true });
     writeFileSync(join(cwd, "README.md"), "# Test\n");
     writeFileSync(join(cwd, "src", "command-provider.ts"), "export {};\n");
 
-    const provider = new ShellCompletionProvider({
-      sources: [
+    const provider = await primedProvider({
+      cwd,
+      extraSources: [
         createAgentCompletionSource(() => [
           { agentId: "reviewer", description: "Code review agent" },
           { agentId: "builder", description: "Patch agent" },
         ]),
-        createWorkspaceReferenceCompletionSource({ cwd }),
       ],
-      usageStore: createInMemoryCompletionUsageStore(),
+      primeQueries: ["", "provider"],
     });
 
     const broad = provider.resolve(completionRange("@", ""));
@@ -207,14 +230,11 @@ describe("ShellCompletionProvider", () => {
     });
   });
 
-  test("space-bearing directories keep reference completion expandable", () => {
+  test("space-bearing directories keep reference completion expandable", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-completion-spaces-"));
     mkdirSync(join(cwd, "my dir", "nested"), { recursive: true });
 
-    const provider = new ShellCompletionProvider({
-      sources: [createWorkspaceReferenceCompletionSource({ cwd })],
-      usageStore: createInMemoryCompletionUsageStore(),
-    });
+    const provider = await primedProvider({ cwd, primeQueries: ["my", "my dir/"] });
 
     const topLevel = provider.resolve(completionRange("@", "my"));
     expect(topLevel[0]).toMatchObject({
@@ -233,14 +253,11 @@ describe("ShellCompletionProvider", () => {
     });
   });
 
-  test("@ file completion preserves line ranges while matching by base path", () => {
+  test("@ file completion preserves line ranges while matching by base path", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-completion-lines-"));
     writeFileSync(join(cwd, "README.md"), "# Test\n");
 
-    const provider = new ShellCompletionProvider({
-      sources: [createWorkspaceReferenceCompletionSource({ cwd })],
-      usageStore: createInMemoryCompletionUsageStore(),
-    });
+    const provider = await primedProvider({ cwd, primeQueries: ["README.md#L10-L20"] });
 
     const matches = provider.resolve(completionRange("@", "README.md#L10-L20"));
 
@@ -254,14 +271,11 @@ describe("ShellCompletionProvider", () => {
     });
   });
 
-  test("@ file completion keeps line ranges inside quoted spaced paths", () => {
+  test("@ file completion keeps line ranges inside quoted spaced paths", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-completion-spaced-lines-"));
     writeFileSync(join(cwd, "my file.ts"), "export {};\n");
 
-    const provider = new ShellCompletionProvider({
-      sources: [createWorkspaceReferenceCompletionSource({ cwd })],
-      usageStore: createInMemoryCompletionUsageStore(),
-    });
+    const provider = await primedProvider({ cwd, primeQueries: ["my file.ts#L3"] });
 
     const matches = provider.resolve(completionRange("@", "my file.ts#L3"));
 
@@ -275,7 +289,7 @@ describe("ShellCompletionProvider", () => {
     });
   });
 
-  test("frecency promotes matching candidates without surfacing non-matches", () => {
+  test("frecency promotes matching candidates without surfacing non-matches", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-completion-frecency-"));
     mkdirSync(join(cwd, "docs"), { recursive: true });
     mkdirSync(join(cwd, "src"), { recursive: true });
@@ -283,10 +297,7 @@ describe("ShellCompletionProvider", () => {
     writeFileSync(join(cwd, "src", "provider.ts"), "export {};\n");
 
     const usageStore = createInMemoryCompletionUsageStore();
-    const provider = new ShellCompletionProvider({
-      sources: [createWorkspaceReferenceCompletionSource({ cwd })],
-      usageStore,
-    });
+    const provider = await primedProvider({ cwd, usageStore, primeQueries: ["provider"] });
 
     const before = provider.resolve(completionRange("@", "provider"));
     expect(before.map((candidate) => candidate.value)).toEqual([
@@ -309,7 +320,7 @@ describe("ShellCompletionProvider", () => {
     expect(provider.resolve(completionRange("@", "definitely-missing"))).toEqual([]);
   });
 
-  test("frecency caps usage memory and decays stale entries", () => {
+  test("frecency caps usage memory and decays stale entries", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-shell-completion-decay-"));
     mkdirSync(join(cwd, "docs"), { recursive: true });
     mkdirSync(join(cwd, "src"), { recursive: true });
@@ -334,10 +345,7 @@ describe("ShellCompletionProvider", () => {
       undefined,
       { maxEntries: 2 },
     );
-    const provider = new ShellCompletionProvider({
-      sources: [createWorkspaceReferenceCompletionSource({ cwd })],
-      usageStore,
-    });
+    const provider = await primedProvider({ cwd, usageStore, primeQueries: ["provider"] });
 
     expect(provider.resolve(completionRange("@", "provider"))[0]?.value).toBe("src/provider.ts");
 

@@ -2,7 +2,7 @@
 
 ## Metadata
 
-- Status: active (implemented; awaiting promotion review)
+- Status: active
 - Implementation state: single-tool-call closure implemented end to end —
   canonical argument digest, kernel approval enforcement at admission and
   commit, the kernel-owned approval decision writer, expiry with durable

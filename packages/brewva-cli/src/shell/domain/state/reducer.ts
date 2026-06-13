@@ -4,7 +4,12 @@ import {
   resolveRelativeSubagentFooterRunId,
   resolveSubagentFooterSelectedRunId,
 } from "../subagent-footer.js";
-import type { CliShellAction, CliShellOverlayState, CliShellViewState } from "./types.js";
+import type {
+  CliShellComposerChangeSource,
+  CliShellAction,
+  CliShellOverlayState,
+  CliShellViewState,
+} from "./types.js";
 
 function snapshotOverlayState(overlays: OverlayManager): CliShellOverlayState {
   const active = overlays.getActive();
@@ -34,6 +39,19 @@ function restoreSubagentFooterFocus(state: CliShellViewState): CliShellViewState
     active: restored && restored !== "subagentFooter" ? restored : "composer",
     returnStack,
   };
+}
+
+/**
+ * The composer revision moves on every change that did NOT originate from
+ * the editor sync echo. Fail-safe by default: an action without a source
+ * bumps the revision, which at worst causes one redundant write-back —
+ * never a missed one.
+ */
+function nextComposerRevision(
+  current: number,
+  source: CliShellComposerChangeSource | undefined,
+): number {
+  return source === "editor" ? current : current + 1;
 }
 
 export function reduceCliShellState(
@@ -132,15 +150,6 @@ export function reduceCliShellState(
           scrollOffset: Math.max(0, action.scrollOffset),
         },
       };
-    case "surface.scroll":
-      return {
-        ...state,
-        surface: {
-          ...state.surface,
-          followMode: action.delta === 0 ? state.surface.followMode : "scrolled",
-          scrollOffset: Math.max(0, state.surface.scrollOffset + action.delta),
-        },
-      };
     case "surface.followLive":
       return {
         ...state,
@@ -180,6 +189,7 @@ export function reduceCliShellState(
               ? Math.max(0, Math.min(action.text.length, action.cursor))
               : Math.max(0, Math.min(action.text.length, state.composer.cursor)),
           parts: [],
+          revision: nextComposerRevision(state.composer.revision, action.source),
         },
       };
     case "composer.setPromptState":
@@ -190,6 +200,7 @@ export function reduceCliShellState(
           text: action.text,
           cursor: Math.max(0, Math.min(action.text.length, action.cursor)),
           parts: [...action.parts],
+          revision: nextComposerRevision(state.composer.revision, action.source),
         },
       };
     case "completion.set":

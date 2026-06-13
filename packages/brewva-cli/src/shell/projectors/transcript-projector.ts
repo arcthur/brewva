@@ -3,6 +3,7 @@ import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import {
   extractMessageError,
   readAssistantMessageEventPartial,
+  readAssistantTextAppendDelta,
   readMessageRole,
   readMessageStopReason,
   readToolResultMessage,
@@ -60,6 +61,14 @@ function toolResultStatus(input: { result?: unknown; isError?: boolean }): "comp
 
 export class ShellTranscriptProjector {
   #assistantEntryId: string | undefined;
+  /**
+   * Accumulated text of the in-flight assistant draft. Kept alongside
+   * `#assistantEntryId` so the streaming delta path appends in O(1) instead
+   * of rebuilding the text from transcript parts on every flush. Cleared
+   * whenever the draft identity changes or transcript state is replaced
+   * from an external source.
+   */
+  #assistantDraftText: string | undefined;
   #assistantEntrySequence = 0;
   #rewindTranscriptMarkerSequence = 0;
   #wireFoldTranscriptSignature: string | undefined;
@@ -71,6 +80,7 @@ export class ShellTranscriptProjector {
 
   resetAssistantDraft(): void {
     this.#assistantEntryId = undefined;
+    this.#assistantDraftText = undefined;
   }
 
   clearRewindMarker(sessionId: string): void {
@@ -113,6 +123,7 @@ export class ShellTranscriptProjector {
   }
 
   refreshFromSession(): void {
+    this.#assistantDraftText = undefined;
     this.replaceMessages(this.composeSeedTranscript());
     this.#wireFoldTranscriptSignature = undefined;
   }
@@ -142,6 +153,7 @@ export class ShellTranscriptProjector {
       ...current.filter((message) => !message.id.startsWith(ownedPrefix)),
       ...snapshot.transcriptMessages,
     ];
+    this.#assistantDraftText = undefined;
     this.#wireFoldTranscriptSignature = nextSignature;
     this.rebuildToolSafetyCache(nextMessages);
     this.replaceMessages(nextMessages, options);
@@ -173,15 +185,17 @@ export class ShellTranscriptProjector {
         return true;
       }
 
-      const delta = asRecord(event.assistantMessageEvent)?.delta;
-      if (typeof delta === "string" && delta.length > 0) {
+      const delta = readAssistantTextAppendDelta(event);
+      if (delta !== undefined) {
         const id = this.#assistantEntryId ?? this.nextAssistantEntryId("assistant");
         this.#assistantEntryId = id;
+        const accumulated = `${this.#assistantDraftText ?? this.readText(this.findMessage(id))}${delta}`;
+        this.#assistantDraftText = accumulated;
         this.upsertMessage(
           buildTextTranscriptMessage({
             id,
             role: "assistant",
-            text: `${this.readText(this.findMessage(id))}${delta}`,
+            text: accumulated,
             renderMode: "streaming",
           }),
           STREAMING_TRANSCRIPT_COMMIT_OPTIONS,
@@ -219,12 +233,12 @@ export class ShellTranscriptProjector {
           if (this.#assistantEntryId) {
             this.removeMessage(this.#assistantEntryId);
           }
-          this.#assistantEntryId = undefined;
+          this.resetAssistantDraft();
           return true;
         }
         if (this.#assistantEntryId) {
           this.upsertAssistantMessage(event.message, "stable");
-          this.#assistantEntryId = undefined;
+          this.resetAssistantDraft();
           return true;
         }
         this.appendMessage(
@@ -233,12 +247,12 @@ export class ShellTranscriptProjector {
             renderMode: "stable",
           }),
         );
-        this.#assistantEntryId = undefined;
+        this.resetAssistantDraft();
         return true;
       }
 
       if (role === "user") {
-        this.#assistantEntryId = undefined;
+        this.resetAssistantDraft();
         return false;
       }
 
@@ -248,7 +262,7 @@ export class ShellTranscriptProjector {
           renderMode: "stable",
         }),
       );
-      this.#assistantEntryId = undefined;
+      this.resetAssistantDraft();
       return true;
     }
 
@@ -353,8 +367,23 @@ export class ShellTranscriptProjector {
     this.context.setMessages([...messages], options);
   }
 
+  /**
+   * Streaming messages live at the tail of the transcript, so scan
+   * backwards: the hot path resolves in O(1) instead of O(transcript).
+   */
+  private findMessageIndex(id: string): number {
+    const messages = this.context.getMessages();
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.id === id) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
   private findMessage(id: string): CliShellTranscriptMessage | undefined {
-    return this.context.getMessages().find((message) => message.id === id);
+    const index = this.findMessageIndex(id);
+    return index < 0 ? undefined : this.context.getMessages()[index];
   }
 
   private removeMessage(id: string, options?: ShellCommitOptions): void {
@@ -374,7 +403,7 @@ export class ShellTranscriptProjector {
       return;
     }
     const current = this.context.getMessages();
-    const existingIndex = current.findIndex((candidate) => candidate.id === message.id);
+    const existingIndex = this.findMessageIndex(message.id);
     if (existingIndex < 0) {
       this.appendMessage(message, options);
       return;
@@ -410,6 +439,9 @@ export class ShellTranscriptProjector {
   ): void {
     const id = this.#assistantEntryId ?? this.nextAssistantEntryId("assistant");
     this.#assistantEntryId = id;
+    // The partial replaces the draft wholesale, so the append-derived text
+    // buffer no longer mirrors the transcript content.
+    this.#assistantDraftText = undefined;
     const nextMessage = buildTranscriptMessageFromMessage(message, {
       id,
       renderMode,

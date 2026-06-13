@@ -44,6 +44,12 @@ discipline.
   active RFC for hardening approval-bound effect commitment, exact resume,
   approval consumption, rollback capability wiring, and evidence-native
   operator surfaces.
+- [RFC: TUI Rendering Performance And Test Harness](./rfc-tui-rendering-performance-and-test-harness.md):
+  active RFC for removing per-frame full view-model cloning, O(n) per-token
+  projector work, the scroll-sync feedback loop, stale composer write-back,
+  and synchronous keystroke-path filesystem I/O from the interactive shell,
+  moving toward a dual-speed state channel and gated on a deterministic
+  replay benchmark and count-based fitness invariants.
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

@@ -9,6 +9,7 @@ import type { ContextCockpitReport } from "../../operator/inspect.js";
 import { buildInspectReport, buildTaskWorkCardProjection } from "../../operator/inspect.js";
 import { getCliRuntimeCostPosture, queryCliRuntimeEvents } from "../../runtime/runtime-ports.js";
 import type { ShellCommitOptions } from "../domain/actions.js";
+import type { ShellClock, ShellScheduledTimeout } from "../domain/clock.js";
 import {
   projectShellCockpitProjection,
   type CockpitObservationCursor,
@@ -50,6 +51,7 @@ export interface ShellCockpitSyncContext {
     options?: Parameters<SessionViewPort["getCockpitWireFoldSnapshot"]>[1],
   ): ReturnType<SessionViewPort["getCockpitWireFoldSnapshot"]>;
   commit(action: CliShellAction, options?: ShellCommitOptions): void;
+  clock: ShellClock;
 }
 
 function fallbackCostPosture(): RuntimeCostPosture {
@@ -327,8 +329,8 @@ export class ShellCockpitSync {
   #scheduled = false;
   #progressScheduled = false;
   #disposed = false;
-  #progressTimer: ReturnType<typeof setTimeout> | undefined;
-  #lastProgressSyncAt = 0;
+  #progressTimer: ShellScheduledTimeout | undefined;
+  #lastProgressSyncAt: number | undefined;
 
   constructor(private readonly context: ShellCockpitSyncContext) {}
 
@@ -340,7 +342,7 @@ export class ShellCockpitSync {
     this.#scheduled = false;
     this.#progressScheduled = false;
     this.#disposed = false;
-    this.#lastProgressSyncAt = 0;
+    this.#lastProgressSyncAt = undefined;
   }
 
   dispose(): void {
@@ -366,15 +368,16 @@ export class ShellCockpitSync {
     if (this.#disposed || this.context.isDisposed() || this.#scheduled) {
       return;
     }
-    const elapsedMs = Date.now() - this.#lastProgressSyncAt;
-    if (elapsedMs >= COCKPIT_PROGRESS_SYNC_INTERVAL_MS) {
+    const lastSyncAt = this.#lastProgressSyncAt;
+    const elapsedMs = lastSyncAt === undefined ? undefined : this.context.clock.now() - lastSyncAt;
+    if (elapsedMs === undefined || elapsedMs >= COCKPIT_PROGRESS_SYNC_INTERVAL_MS) {
       this.requestProgressSyncNow();
       return;
     }
     if (this.#progressTimer) {
       return;
     }
-    this.#progressTimer = setTimeout(() => {
+    this.#progressTimer = this.context.clock.schedule(() => {
       this.#progressTimer = undefined;
       this.requestProgressSyncNow();
     }, COCKPIT_PROGRESS_SYNC_INTERVAL_MS - elapsedMs);
@@ -449,7 +452,7 @@ export class ShellCockpitSync {
       channels: buildChannels({ sessionId, phase, operator }),
     };
     if (!input.refreshColdSource) {
-      this.#lastProgressSyncAt = Date.now();
+      this.#lastProgressSyncAt = this.context.clock.now();
     }
     this.recordTransition(sourceBase);
     const projection = projectShellCockpitProjection({
@@ -494,11 +497,7 @@ export class ShellCockpitSync {
   }
 
   private clearProgressTimer(): void {
-    const timer = this.#progressTimer;
-    if (!timer) {
-      return;
-    }
-    clearTimeout(timer);
+    this.#progressTimer?.cancel();
     this.#progressTimer = undefined;
   }
 

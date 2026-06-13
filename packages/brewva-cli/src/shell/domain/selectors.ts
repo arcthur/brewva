@@ -11,13 +11,3 @@ export function selectActiveOverlayPayload(
 export function selectHasCompletion(state: CliShellViewState): boolean {
   return Boolean(state.composer.completion);
 }
-
-export function selectSurfaceScrollState(state: CliShellViewState): {
-  readonly followMode: "live" | "scrolled";
-  readonly scrollOffset: number;
-} {
-  return {
-    followMode: state.surface.followMode,
-    scrollOffset: state.surface.scrollOffset,
-  };
-}

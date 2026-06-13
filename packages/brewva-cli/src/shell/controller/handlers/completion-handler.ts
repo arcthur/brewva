@@ -172,6 +172,10 @@ export class ShellCompletionHandler {
     if (completion.trigger === "/") {
       const text = state.composer.text;
       if (text.startsWith("/") && !text.includes(" ")) {
+        // Close the popup synchronously: relying on the (debounced) refresh
+        // would leave a dismissed-but-actionable popup for the debounce
+        // window, where Enter would execute the command the user dismissed.
+        this.setCompletionState(undefined);
         this.context.commit({ type: "composer.setText", text: "", cursor: 0 });
         return;
       }
@@ -187,6 +191,16 @@ export class ShellCompletionHandler {
 
   clearDismissedForCurrentSession(): void {
     this.clearDismissedCompletionState();
+  }
+
+  /**
+   * Whether a dismissed-completion suppression is pending cleanup for the
+   * current session. The commit-level refresh policy keeps resolving while
+   * this is set so typing away from the dismissed spot lifts the
+   * suppression (resolveComposerCompletion's clearDismissed path).
+   */
+  hasDismissedCompletionState(): boolean {
+    return this.#dismissedBySessionId.has(this.context.getSessionId());
   }
 
   private getDismissedCompletionState(): DismissedCompletionState | undefined {

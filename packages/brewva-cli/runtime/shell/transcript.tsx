@@ -23,6 +23,7 @@ import {
   type SessionPalette,
 } from "./palette.js";
 import { useShellRenderContext } from "./render-context.js";
+import { streamingTailWindow } from "./streaming-tail.js";
 import {
   asRecord,
   inferFiletype,
@@ -81,10 +82,18 @@ function safetyToneColor(theme: SessionPalette, tone: OperatorSafetyShellTone): 
 }
 
 function StreamingTextPreview(input: { content: string; theme: SessionPalette }) {
-  const content = createMemo(() => input.content.trim());
+  // Bound the in-flight block so per-frame measure/wrap cost stays constant
+  // regardless of response length; the full text renders as markdown once
+  // the message stabilizes (RFC F8/WS6). The raw content goes in untrimmed —
+  // streamingTailWindow trims within the window so the per-flush cost stays
+  // O(window) instead of O(content).
+  const tail = createMemo(() => streamingTailWindow(input.content));
   return (
-    <Show when={content().length > 0}>
-      <text fg={input.theme.markdownText}>{content()}</text>
+    <Show when={tail().text.length > 0}>
+      <Show when={tail().truncated}>
+        <text fg={input.theme.textMuted}>… streaming, earlier lines render on completion</text>
+      </Show>
+      <text fg={input.theme.markdownText}>{tail().text}</text>
     </Show>
   );
 }

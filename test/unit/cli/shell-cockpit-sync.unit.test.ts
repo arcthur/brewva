@@ -3,6 +3,7 @@ import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import type { RuntimeCostPosture } from "@brewva/brewva-tools/contracts";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { ShellCockpitSync } from "../../../packages/brewva-cli/src/shell/controller/cockpit-sync.js";
+import { systemShellClock } from "../../../packages/brewva-cli/src/shell/domain/clock.js";
 import { createDefaultCockpitObservationCursor } from "../../../packages/brewva-cli/src/shell/domain/cockpit/index.js";
 import { createShellCockpitWireFoldStore } from "../../../packages/brewva-cli/src/shell/domain/cockpit/wire-fold.js";
 import type { OperatorSurfaceSnapshot } from "../../../packages/brewva-cli/src/shell/domain/operator-snapshot.js";
@@ -55,6 +56,7 @@ describe("shell cockpit sync", () => {
     let rawReadCount = 0;
     const sync = new ShellCockpitSync({
       isDisposed: () => false,
+      clock: systemShellClock,
       getRuntime: () => createRuntimeFixture(),
       getSessionId: () => "session-1",
       getSessionPhase: () => ({
@@ -179,6 +181,7 @@ describe("shell cockpit sync", () => {
     const sessionWireReads: Array<boolean | undefined> = [];
     const sync = new ShellCockpitSync({
       isDisposed: () => false,
+      clock: systemShellClock,
       getRuntime: () => runtime,
       getSessionId: () => "session-1",
       getSessionPhase: () => phase,
@@ -263,6 +266,7 @@ describe("shell cockpit sync", () => {
     const committedActions: CliShellAction[] = [];
     const sync = new ShellCockpitSync({
       isDisposed: () => false,
+      clock: systemShellClock,
       getRuntime: () => createRuntimeFixture(),
       getSessionId: () => "session-1",
       getSessionPhase: () => phase,
@@ -316,6 +320,7 @@ describe("shell cockpit sync", () => {
     const runtime = createRuntimeFixture();
     const sync = new ShellCockpitSync({
       isDisposed: () => false,
+      clock: systemShellClock,
       getRuntime: () => runtime,
       getSessionId: () => sessionId,
       getSessionPhase: () => phase,
@@ -350,6 +355,7 @@ describe("shell cockpit sync", () => {
     let commitCount = 0;
     const sync = new ShellCockpitSync({
       isDisposed: () => false,
+      clock: systemShellClock,
       getRuntime: () => createRuntimeFixture(),
       getSessionId: () => "session-1",
       getSessionPhase: () => ({

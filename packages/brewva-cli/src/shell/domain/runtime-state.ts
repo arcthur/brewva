@@ -15,9 +15,19 @@ export interface CliShellRuntimeState {
 export function createShellRuntimeState(input?: {
   view?: CliShellViewState;
   sessionGeneration?: number;
+  /**
+   * Keeps `composer.revision` monotonic across state resets so the
+   * renderer's applied-revision guard can never collide with a fresh
+   * state's counter.
+   */
+  composerRevision?: number;
 }): CliShellRuntimeState {
+  const view = input?.view ?? createCliShellState();
   return {
-    view: input?.view ?? createCliShellState(),
+    view:
+      typeof input?.composerRevision === "number"
+        ? { ...view, composer: { ...view.composer, revision: input.composerRevision } }
+        : view,
     domain: {
       sessionGeneration: input?.sessionGeneration ?? 0,
     },

@@ -26,6 +26,7 @@ export function createCliShellState(): CliShellViewState {
       text: "",
       cursor: 0,
       parts: [],
+      revision: 0,
     },
     notifications: [],
     queue: [],

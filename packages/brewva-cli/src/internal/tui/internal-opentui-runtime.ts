@@ -108,16 +108,25 @@ export interface OpenTuiTestInputDriver {
   typeText(text: string, delayMs?: number): Promise<void>;
 }
 
+/**
+ * Opaque view of the native renderer statistics counter set. Kept
+ * structural so the quarantine layer never imports OpenTUI types.
+ */
+export type OpenTuiNativeRenderStats = Readonly<Record<string, unknown>>;
+
 export interface OpenTuiTestRenderSetup {
   renderer: OpenTuiRenderer;
   mockInput: OpenTuiTestInputDriver;
   renderOnce(): Promise<void>;
   captureCharFrame(): string;
+  getNativeStats?(): OpenTuiNativeRenderStats;
 }
 
 export interface OpenTuiTestRenderOptions {
   width: number;
   height: number;
+  /** Enable native renderer statistics gathering (benchmark harness only). */
+  gatherStats?: boolean;
   onDestroy?(): void;
 }
 

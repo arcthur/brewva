@@ -1,4 +1,4 @@
-import { readdirSync, type Dirent } from "node:fs";
+import { readdir } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ShellCompletionUsageEntry } from "./prompt.js";
 import { fuzzyScore, normalizeSearchQuery } from "./search-scoring.js";
@@ -499,39 +499,146 @@ export function createAgentCompletionSource(
   };
 }
 
-export function createWorkspaceReferenceCompletionSource(input: {
+export interface WorkspaceReferenceCompletionSourceOptions {
   readonly cwd: string;
   readonly limit?: number;
   readonly maxDepth?: number;
-}): ShellCompletionSource {
+  /**
+   * Cache freshness window. Stale entries keep serving synchronously while
+   * a background refill runs (stale-while-revalidate).
+   */
+  readonly cacheTtlMs?: number;
+  /** Called (microtask-coalesced) after a background fill changes entries. */
+  readonly onEntriesUpdated?: () => void;
+  readonly now?: () => number;
+}
+
+export interface WorkspaceReferenceCompletionSource extends ShellCompletionSource {
+  /** Resolves when every in-flight directory fill has settled (test seam). */
+  settleFills(): Promise<void>;
+}
+
+interface WorkspaceDirectoryEntry {
+  readonly fullPath: string;
+  readonly isDirectory: boolean;
+}
+
+interface WorkspaceDirectoryCacheEntry {
+  readonly entries: readonly WorkspaceDirectoryEntry[];
+  readonly fetchedAt: number;
+}
+
+const DEFAULT_WORKSPACE_CACHE_TTL_MS = 3_000;
+
+function workspaceEntriesEqual(
+  left: readonly WorkspaceDirectoryEntry[],
+  right: readonly WorkspaceDirectoryEntry[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every(
+    (entry, index) =>
+      entry.fullPath === right[index]?.fullPath && entry.isDirectory === right[index]?.isDirectory,
+  );
+}
+
+/**
+ * Workspace path completion backed by an in-memory directory cache.
+ *
+ * `resolve()` is synchronous and never touches the filesystem: it serves
+ * whatever the cache holds and schedules asynchronous refills for missing
+ * or stale directories. When a refill changes the cached entries,
+ * `onEntriesUpdated` fires so the owner can re-resolve the completion.
+ * This keeps directory walks entirely off the keystroke path.
+ */
+export function createWorkspaceReferenceCompletionSource(
+  input: WorkspaceReferenceCompletionSourceOptions,
+): WorkspaceReferenceCompletionSource {
   const cwd = resolve(input.cwd);
   const limit = input.limit ?? DEFAULT_WORKSPACE_ENTRY_LIMIT;
   const maxDepth = input.maxDepth ?? DEFAULT_WORKSPACE_DEPTH;
+  const cacheTtlMs = input.cacheTtlMs ?? DEFAULT_WORKSPACE_CACHE_TTL_MS;
+  const now = input.now ?? (() => Date.now());
 
-  const listValidEntries = (
-    directory: string,
-  ): Array<{ fullPath: string; isDirectory: boolean }> => {
+  const directoryCache = new Map<string, WorkspaceDirectoryCacheEntry>();
+  const inFlightFills = new Map<string, Promise<void>>();
+  let updateNotifyScheduled = false;
+  // Bound the readdir burst when many cached directories expire together:
+  // overflow directories simply stay stale until a later resolve retries.
+  const MAX_IN_FLIGHT_FILLS = 16;
+
+  const notifyEntriesUpdated = (): void => {
+    if (!input.onEntriesUpdated || updateNotifyScheduled) {
+      return;
+    }
+    updateNotifyScheduled = true;
+    queueMicrotask(() => {
+      updateNotifyScheduled = false;
+      input.onEntriesUpdated?.();
+    });
+  };
+
+  const fillDirectory = (directory: string): void => {
+    if (
+      inFlightFills.has(directory) ||
+      inFlightFills.size >= MAX_IN_FLIGHT_FILLS ||
+      !isWithinWorkspace(cwd, directory)
+    ) {
+      return;
+    }
+    const fill = readdir(directory, { withFileTypes: true })
+      .then((dirents) => {
+        const entries: WorkspaceDirectoryEntry[] = [];
+        for (const entry of dirents.toSorted((a, b) => a.name.localeCompare(b.name))) {
+          if (entry.name.startsWith(".")) {
+            continue;
+          }
+          const isDirectory = entry.isDirectory();
+          if (isDirectory && IGNORED_WORKSPACE_DIRS.has(entry.name)) {
+            continue;
+          }
+          entries.push({ fullPath: join(directory, entry.name), isDirectory });
+        }
+        return entries;
+      })
+      .then(
+        (entries) => {
+          inFlightFills.delete(directory);
+          const previous = directoryCache.get(directory);
+          directoryCache.set(directory, { entries, fetchedAt: now() });
+          if (!previous || !workspaceEntriesEqual(previous.entries, entries)) {
+            notifyEntriesUpdated();
+          }
+        },
+        () => {
+          // A transient readdir failure must not poison previously good
+          // entries with an authoritative empty listing; keep what we have
+          // and back off until the TTL expires again.
+          inFlightFills.delete(directory);
+          const previous = directoryCache.get(directory);
+          directoryCache.set(directory, {
+            entries: previous?.entries ?? [],
+            fetchedAt: now(),
+          });
+        },
+      );
+    inFlightFills.set(directory, fill);
+  };
+
+  // Warm the workspace root so the first "@" keystroke resolves against a
+  // populated cache instead of opening an empty popup.
+  fillDirectory(cwd);
+
+  const listCachedEntries = (directory: string): readonly WorkspaceDirectoryEntry[] => {
     if (!isWithinWorkspace(cwd, directory)) {
       return [];
     }
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(directory, { withFileTypes: true });
-    } catch {
-      return [];
+    const cached = directoryCache.get(directory);
+    if (!cached || now() - cached.fetchedAt > cacheTtlMs) {
+      fillDirectory(directory);
     }
-    const validEntries: Array<{ fullPath: string; isDirectory: boolean }> = [];
-    for (const entry of entries.toSorted((a, b) => a.name.localeCompare(b.name))) {
-      if (entry.name.startsWith(".")) {
-        continue;
-      }
-      const isDirectory = entry.isDirectory();
-      if (isDirectory && IGNORED_WORKSPACE_DIRS.has(entry.name)) {
-        continue;
-      }
-      validEntries.push({ fullPath: join(directory, entry.name), isDirectory });
-    }
-    return validEntries;
+    return cached?.entries ?? [];
   };
 
   const readDirectoryCandidates = (
@@ -539,7 +646,7 @@ export function createWorkspaceReferenceCompletionSource(input: {
     output: ShellCompletionCandidate[],
     lineRange?: PathLineRange,
   ): void => {
-    for (const { fullPath, isDirectory } of listValidEntries(directory)) {
+    for (const { fullPath, isDirectory } of listCachedEntries(directory)) {
       if (output.length >= limit) {
         return;
       }
@@ -557,7 +664,7 @@ export function createWorkspaceReferenceCompletionSource(input: {
       return;
     }
     const directories: Array<{ fullPath: string }> = [];
-    for (const { fullPath, isDirectory } of listValidEntries(directory)) {
+    for (const { fullPath, isDirectory } of listCachedEntries(directory)) {
       if (output.length >= limit) {
         return;
       }
@@ -594,6 +701,11 @@ export function createWorkspaceReferenceCompletionSource(input: {
 
       walkCandidates(cwd, 0, output, lineRange);
       return output;
+    },
+    async settleFills() {
+      while (inFlightFills.size > 0) {
+        await Promise.allSettled(inFlightFills.values());
+      }
     },
   };
 }

@@ -308,7 +308,15 @@ export function registerBrewvaKeymap(input: RegisterBrewvaKeymapInput): BrewvaKe
     }),
   );
   const beforeDispatch = async (effect: ShellEffect) => {
-    if (effect.type === "composer.submit") {
+    // Any effect that reads or submits composer text must observe the
+    // textarea's latest content, not the debounced editor-sync echo —
+    // otherwise trailing keystrokes are silently dropped from the
+    // submitted prompt or the accepted completion splice.
+    if (
+      effect.type === "composer.submit" ||
+      effect.type === "completion.submit" ||
+      effect.type === "completion.accept"
+    ) {
       await input.syncComposerFromEditor();
     }
   };

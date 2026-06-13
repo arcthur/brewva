@@ -2,11 +2,7 @@ import { execFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
-import {
-  startBoundaryInterval,
-  startBoundaryTimeout,
-  type BoundaryIntervalHandle,
-} from "@brewva/brewva-effect";
+import { startBoundaryInterval, type BoundaryIntervalHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
   enqueueGoalContinuation,
@@ -48,6 +44,7 @@ import { registerShellCommands } from "../commands/shell-command-registry.js";
 import { loadBrewvaTuiConfig } from "../config/tui-config.js";
 import type { ShellAction } from "../domain/actions.js";
 import type { ShellCommitBatch, ShellCommitInput, ShellCommitOptions } from "../domain/actions.js";
+import { systemShellClock, type ShellClock, type ShellScheduledTimeout } from "../domain/clock.js";
 import {
   describeShellCockpitComposerPolicyBlock,
   resolveShellCockpitComposerSubmitPolicy,
@@ -61,6 +58,7 @@ import {
   createWorkspaceReferenceCompletionSource,
   type ShellCompletionAgent,
 } from "../domain/completion-provider.js";
+import { findCompletionRange } from "../domain/composer-actions.js";
 import type { ContinuationAnchorDraft, ShellEffect } from "../domain/effects.js";
 import { routeShellInput } from "../domain/input-router.js";
 import { isShellKeyboardInput, type CliShellInput, type ShellInput } from "../domain/input.js";
@@ -80,7 +78,7 @@ import { selectActiveOverlayPayload, selectHasCompletion } from "../domain/selec
 import { isSessionPhase } from "../domain/session-phase.js";
 import { type CliShellAction, type CliShellViewState } from "../domain/state.js";
 import type { BrewvaResolvedKeymapBindings, BrewvaTuiConfig } from "../domain/tui.js";
-import { projectShellViewModel, type ShellViewModel } from "../domain/view-model.js";
+import { createShellViewModelProjector, type ShellViewModel } from "../domain/view-model.js";
 import {
   BREWVA_BUILT_IN_KEYMAP_BINDINGS,
   buildBrewvaKeymapBindings,
@@ -95,6 +93,7 @@ import { createCliShellPromptStore, createSessionViewPort } from "../ports/sessi
 import type { CliShellSessionBundle, SessionViewPort } from "../ports/session-port.js";
 import { createCliShellUiPortController } from "../ports/ui-adapter.js";
 import type { CliShellUiPort } from "../ports/ui-port.js";
+import { coalesceSessionProgressEvents } from "../projectors/session-event-coalescing.js";
 import { ShellTranscriptProjector } from "../projectors/transcript-projector.js";
 import { ShellCockpitSync } from "./cockpit-sync.js";
 import { ShellDialogManager } from "./dialog-manager.js";
@@ -135,6 +134,8 @@ export interface CliShellRuntimeOptions {
   operatorPollIntervalMs?: number;
   promptStore?: CliShellPromptStorePort;
   completionAgents?: readonly ShellCompletionAgent[] | (() => readonly ShellCompletionAgent[]);
+  /** Time source for debounce/throttle timers; tests inject a manual clock. */
+  clock?: ShellClock;
 }
 
 const execFileAsync = promisify(execFile);
@@ -321,6 +322,7 @@ export class CliShellRuntime {
   static readonly PROMPT_HISTORY_LIMIT = 50;
   static readonly STATUS_DEBOUNCE_MS = 120;
   static readonly STREAMING_RENDER_INTERVAL_MS = 16;
+  static readonly COMPLETION_REFRESH_DEBOUNCE_MS = 120;
   readonly #configPort = createShellConfigPort();
   readonly #commandProvider = new ShellCommandProvider();
   readonly #completionProvider: ShellCompletionProvider;
@@ -356,11 +358,14 @@ export class CliShellRuntime {
   #sessionPhase: SessionPhase = { kind: "idle" };
   #unsubscribeSession: (() => void) | undefined;
   #pollTimer: BoundaryIntervalHandle | undefined;
-  #statusTimer: { close(): Promise<void> } | undefined;
-  #streamingRenderTimer: ReturnType<typeof setTimeout> | undefined;
-  #sessionProgressTimer: ReturnType<typeof setTimeout> | undefined;
+  #statusTimer: ShellScheduledTimeout | undefined;
+  #streamingRenderTimer: ShellScheduledTimeout | undefined;
+  #sessionProgressTimer: ShellScheduledTimeout | undefined;
+  #completionRefreshTimer: ShellScheduledTimeout | undefined;
+  readonly #clock: ShellClock;
+  readonly #projectViewModel = createShellViewModelProjector();
   #queuedSessionProgressEvents: BrewvaPromptSessionEvent[] = [];
-  #lastSessionProgressFlushAt = 0;
+  #lastSessionProgressFlushAt: number | undefined;
   #queuedStatusActions: CliShellAction[] = [];
   #resolveExit: (() => void) | undefined;
   readonly #exitPromise: Promise<void>;
@@ -384,6 +389,7 @@ export class CliShellRuntime {
     private readonly options: CliShellRuntimeOptions,
   ) {
     this.#bundle = bundle;
+    this.#clock = options.clock ?? systemShellClock;
     this.#effectRunner = new ShellEffectRunner({
       isDisposed: () => this.#disposed,
       driveShellEffect: (effect) => this.driveShellEffect(effect),
@@ -440,7 +446,15 @@ export class CliShellRuntime {
           shortcutLabel: (id) => pickShortcutLabel(this.#keymapBindings, id),
         }),
         createAgentCompletionSource(() => this.listCompletionAgents()),
-        createWorkspaceReferenceCompletionSource({ cwd: options.cwd }),
+        createWorkspaceReferenceCompletionSource({
+          cwd: options.cwd,
+          now: () => this.#clock.now(),
+          onEntriesUpdated: () => {
+            if (this.#state.composer.completion?.trigger === "@") {
+              this.scheduleCompletionRefresh();
+            }
+          },
+        }),
       ],
       usageStore: completionUsageStore,
     });
@@ -450,12 +464,15 @@ export class CliShellRuntime {
       getSessionId: () => this.#sessionPort.getSessionId(),
       commit: (action, commitOptions) => this.commit(action, commitOptions),
       replaceCompletionState: (completion) => {
+        // The debounced refresh runs detached from any emitting commit, so
+        // this commit must emit itself; the handler's equality early-return
+        // keeps no-op refreshes from emitting at all.
         this.commit(
           {
             type: "completion.set",
             completion,
           },
-          { emitChange: false, refreshCompletions: false },
+          { refreshCompletions: false },
         );
       },
       emitChange: () => this.emitChange(),
@@ -473,7 +490,7 @@ export class CliShellRuntime {
     );
     const copyTextToClipboard = options.copyTextToClipboard;
     this.#uiController = createCliShellUiPortController({
-      commit: (action) => this.commit(action),
+      commit: (action, commitOptions) => this.commit(action, commitOptions),
       getState: () => this.#state,
       requestDialog: (request) => this.requestDialog(request),
       requestCustom: (kind, payload, dialogOptions) =>
@@ -651,6 +668,7 @@ export class CliShellRuntime {
       getCockpitWireFoldSnapshot: (sessionId, readOptions) =>
         this.#sessionPort.getCockpitWireFoldSnapshot(sessionId, readOptions),
       commit: (action, commitOptions) => this.commit(action, commitOptions),
+      clock: this.#clock,
     });
     this.#viewPreferencesHandler = new ShellViewPreferencesHandler({
       getSessionPort: () => this.#sessionPort,
@@ -700,7 +718,7 @@ export class CliShellRuntime {
   }
 
   getViewState(): ShellViewModel {
-    return projectShellViewModel(this.#state);
+    return this.#projectViewModel(this.#state);
   }
 
   getSessionWireFrames(sessionId: string) {
@@ -846,6 +864,10 @@ export class CliShellRuntime {
     this.initializeState();
     this.mountSession(this.#bundle);
     this.#cockpitSync.syncNow();
+    // Intentionally NOT on the ShellClock seam: the poll loop drives async
+    // Effect work (operator refresh round trips), which a synchronous
+    // manual clock cannot model. Tests neutralize it with a long
+    // operatorPollIntervalMs instead.
     this.#pollTimer = startBoundaryInterval({
       intervalMs: this.options.operatorPollIntervalMs ?? 750,
       run: () =>
@@ -888,23 +910,24 @@ export class CliShellRuntime {
     const statusTimer = this.#statusTimer;
     const streamingRenderTimer = this.#streamingRenderTimer;
     const sessionProgressTimer = this.#sessionProgressTimer;
+    const completionRefreshTimer = this.#completionRefreshTimer;
     this.#disposed = true;
     this.#started = false;
     this.#pollTimer = undefined;
     this.#statusTimer = undefined;
     this.#streamingRenderTimer = undefined;
     this.#sessionProgressTimer = undefined;
+    this.#completionRefreshTimer = undefined;
     this.#queuedSessionProgressEvents = [];
-    this.#lastSessionProgressFlushAt = 0;
+    this.#lastSessionProgressFlushAt = undefined;
     void pollTimer?.close();
-    void statusTimer?.close();
+    statusTimer?.cancel();
     if (streamingRenderTimer) {
-      clearTimeout(streamingRenderTimer);
+      streamingRenderTimer.cancel();
       this.emitChange();
     }
-    if (sessionProgressTimer) {
-      clearTimeout(sessionProgressTimer);
-    }
+    sessionProgressTimer?.cancel();
+    completionRefreshTimer?.cancel();
     this.#cockpitSync.dispose();
     this.#unsubscribeSession?.();
     this.#listeners.clear();
@@ -1009,7 +1032,7 @@ export class CliShellRuntime {
     if (this.#disposed || this.#streamingRenderTimer) {
       return;
     }
-    this.#streamingRenderTimer = setTimeout(() => {
+    this.#streamingRenderTimer = this.#clock.schedule(() => {
       this.#streamingRenderTimer = undefined;
       if (!this.#disposed) {
         this.emitChange();
@@ -1018,12 +1041,10 @@ export class CliShellRuntime {
   }
 
   private clearQueuedSessionProgressEvents(): void {
-    if (this.#sessionProgressTimer) {
-      clearTimeout(this.#sessionProgressTimer);
-      this.#sessionProgressTimer = undefined;
-    }
+    this.#sessionProgressTimer?.cancel();
+    this.#sessionProgressTimer = undefined;
     this.#queuedSessionProgressEvents = [];
-    this.#lastSessionProgressFlushAt = 0;
+    this.#lastSessionProgressFlushAt = undefined;
   }
 
   private enqueueSessionProgressEvent(event: BrewvaPromptSessionEvent): void {
@@ -1035,32 +1056,28 @@ export class CliShellRuntime {
       return;
     }
 
-    const elapsedMs = Date.now() - this.#lastSessionProgressFlushAt;
-    if (
-      this.#lastSessionProgressFlushAt === 0 ||
-      elapsedMs >= CliShellRuntime.STREAMING_RENDER_INTERVAL_MS
-    ) {
+    const lastFlushAt = this.#lastSessionProgressFlushAt;
+    const elapsedMs = lastFlushAt === undefined ? undefined : this.#clock.now() - lastFlushAt;
+    if (elapsedMs === undefined || elapsedMs >= CliShellRuntime.STREAMING_RENDER_INTERVAL_MS) {
       this.flushSessionProgressEvents();
       return;
     }
 
-    this.#sessionProgressTimer = setTimeout(() => {
+    this.#sessionProgressTimer = this.#clock.schedule(() => {
       this.#sessionProgressTimer = undefined;
       this.flushSessionProgressEvents();
     }, CliShellRuntime.STREAMING_RENDER_INTERVAL_MS - elapsedMs);
   }
 
   private flushSessionProgressEvents(): void {
-    if (this.#sessionProgressTimer) {
-      clearTimeout(this.#sessionProgressTimer);
-      this.#sessionProgressTimer = undefined;
-    }
+    this.#sessionProgressTimer?.cancel();
+    this.#sessionProgressTimer = undefined;
     if (this.#queuedSessionProgressEvents.length === 0) {
       return;
     }
-    const events = this.#queuedSessionProgressEvents;
+    const events = coalesceSessionProgressEvents(this.#queuedSessionProgressEvents);
     this.#queuedSessionProgressEvents = [];
-    this.#lastSessionProgressFlushAt = Date.now();
+    this.#lastSessionProgressFlushAt = this.#clock.now();
     if (this.#disposed) {
       return;
     }
@@ -1373,6 +1390,7 @@ export class CliShellRuntime {
     if (reset) {
       this.#store = createShellRuntimeState({
         sessionGeneration: reset.sessionGeneration,
+        composerRevision: this.#state.composer.revision + 1,
       });
     }
     for (const action of immediate) {
@@ -1388,12 +1406,54 @@ export class CliShellRuntime {
     ) {
       this.#overlayHandler.syncNotificationsOverlay();
     }
-    if (options.refreshCompletions ?? true) {
-      void this.runShellEffects([{ type: "completion.refresh" }]);
+    // Completion refresh policy. Three tiers:
+    // 1. A commit that changes composer text while a popup is open MUST
+    //    reconcile — a stale popup is actionable state (Enter would accept
+    //    against text that no longer matches), so this tier cannot be
+    //    suppressed by `refreshCompletions: false`.
+    // 2. With default options, a composer text change resolves when it
+    //    leaves an active trigger range at the cursor (opens the popup for
+    //    typing and prefills alike) or while a dismissed-completion
+    //    suppression is pending cleanup (typing away from the dismissed
+    //    spot must lift it).
+    // 3. Everything else refreshes only on explicit opt-in.
+    const composerTextChanged = immediate.some(
+      (action) => action.type === "composer.setText" || action.type === "composer.setPromptState",
+    );
+    const mustReconcileOpenCompletion =
+      composerTextChanged && this.#state.composer.completion !== undefined;
+    const needsDefaultCompletionResolve = (): boolean =>
+      composerTextChanged &&
+      (findCompletionRange(this.#state.composer.text, this.#state.composer.cursor) !== null ||
+        this.#completionHandler.hasDismissedCompletionState());
+    if (
+      mustReconcileOpenCompletion ||
+      (options.refreshCompletions ?? needsDefaultCompletionResolve())
+    ) {
+      this.scheduleCompletionRefresh();
     }
     if (options.emitChange !== false) {
       this.emitChange();
     }
+  }
+
+  /**
+   * Debounced completion refresh. Keystrokes commit through the editor
+   * sync path far faster than completion resolution is useful; coalescing
+   * to one resolution per window keeps the keystroke path free of
+   * completion work.
+   */
+  private scheduleCompletionRefresh(): void {
+    if (this.#disposed || this.#completionRefreshTimer) {
+      return;
+    }
+    this.#completionRefreshTimer = this.#clock.schedule(() => {
+      this.#completionRefreshTimer = undefined;
+      if (this.#disposed) {
+        return;
+      }
+      void this.runShellEffects([{ type: "completion.refresh" }]);
+    }, CliShellRuntime.COMPLETION_REFRESH_DEBOUNCE_MS);
   }
 
   private async runShellEffects(
@@ -1659,15 +1719,21 @@ export class CliShellRuntime {
     if (this.#statusTimer) {
       return;
     }
-    this.#statusTimer = startBoundaryTimeout({
-      delayMs,
-      run: () =>
-        BrewvaEffect.sync(() => {
-          this.#statusTimer = undefined;
-          const queued = this.#queuedStatusActions.splice(0);
-          this.commit(queued, { debounceStatus: false });
-        }),
-    });
+    this.#statusTimer = this.#clock.schedule(() => {
+      this.#statusTimer = undefined;
+      const queued = this.#queuedStatusActions.splice(0);
+      try {
+        this.commit(queued, { debounceStatus: false });
+      } catch (error) {
+        // The flush runs from a bare timer callback; an uncontained reducer
+        // error would otherwise escape as an uncaught exception and kill
+        // the TUI process (the old Effect-boundary timer swallowed these).
+        this.ui.notify(
+          error instanceof Error ? error.message : "Failed to flush status updates.",
+          "error",
+        );
+      }
+    }, delayMs);
   }
 
   private syncSnapshotOverlay(snapshot: OperatorSurfaceSnapshot): void {

@@ -4,18 +4,10 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
-import type { BrewvaToolUiPort } from "@brewva/brewva-substrate/host-api";
-import type {
-  BrewvaPromptSessionEvent,
-  BrewvaQueuedPromptView,
-  BrewvaSessionModelDescriptor,
-} from "@brewva/brewva-substrate/session";
-import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   type DelegationRunRecord,
 } from "@brewva/brewva-vocabulary/delegation";
-import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { createTestRenderer } from "@opentui/core/testing";
 import {
@@ -36,290 +28,8 @@ import {
   resolveToastMaxWidth,
 } from "../../../packages/brewva-cli/runtime/shell/overlay-style.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
-import type {
-  ProviderAuthMethod,
-  ProviderConnectionDescriptor,
-  ProviderOAuthAuthorization,
-} from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
-import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
-function createFakeBundle(
-  options: {
-    approvals?: number;
-    models?: BrewvaSessionModelDescriptor[];
-    availableModelKeys?: string[];
-    seedMessages?: unknown[];
-    queuedPrompts?: BrewvaQueuedPromptView[];
-    sessionId?: string;
-    replaySessions?: BrewvaReplaySession[];
-    sessionWireBySessionId?: Record<string, SessionWireFrame[]>;
-    taskRuns?: DelegationRunRecord[];
-    toolDefinitions?: Map<string, BrewvaToolDefinition>;
-    providers?: ProviderConnectionDescriptor[];
-    authMethods?: Record<string, ProviderAuthMethod[]>;
-    authorizeOAuth?: (
-      provider: string,
-      methodId: string,
-      inputs?: Record<string, string>,
-    ) => Promise<ProviderOAuthAuthorization | undefined>;
-    completeOAuth?: (provider: string, methodId: string, code?: string) => Promise<void>;
-  } = {},
-) {
-  let attachedUi: BrewvaToolUiPort | undefined;
-  let sessionListener: ((event: BrewvaPromptSessionEvent) => void) | undefined;
-  let queuedPrompts = [...(options.queuedPrompts ?? [])];
-  const approvals = Array.from({ length: options.approvals ?? 0 }, (_, index) => ({
-    requestId: `approval-${index + 1}`,
-    proposalId: `proposal-${index + 1}`,
-    toolName: "write_file",
-    toolCallId: `tool-call-${index + 1}`,
-    subject: `write file ${index + 1}`,
-    boundary: "effectful",
-    effects: ["workspace_write"],
-    argsDigest: `digest-${index + 1}`,
-    evidenceRefs: [],
-    turn: index + 1,
-    createdAt: Date.now(),
-  }));
-  const sessionId = options.sessionId ?? "session-1";
-  const modelKey = (model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">) =>
-    `${model.provider}/${model.id}`;
-  const defaultModel: BrewvaSessionModelDescriptor = {
-    provider: "openai",
-    id: "gpt-5.4-mini",
-    name: "GPT-5.4 Mini",
-    contextWindow: 128_000,
-    maxTokens: 16_384,
-    reasoning: true,
-  };
-  const allModels = options.models ?? [defaultModel];
-  const availableModelKeys = new Set(options.availableModelKeys ?? allModels.map(modelKey));
-  let currentModel = allModels[0] ?? defaultModel;
-  let thinkingLevel = "high";
-  let diffPreferences: { style: "auto" | "stacked"; wrapMode: "word" | "none" } = {
-    style: "auto",
-    wrapMode: "word",
-  };
-  let shellViewPreferences = {
-    showThinking: true,
-    toolDetails: true,
-  };
-  const replaySessions = options.replaySessions ?? [
-    {
-      sessionId,
-      eventCount: 1,
-      lastEventAt: Date.now(),
-      title: "New session",
-    },
-  ];
-
-  const session = {
-    get model() {
-      return currentModel;
-    },
-    get thinkingLevel() {
-      return thinkingLevel;
-    },
-    modelRegistry: {
-      getAll() {
-        return allModels;
-      },
-      getAvailable() {
-        return allModels.filter((model) => availableModelKeys.has(modelKey(model)));
-      },
-    },
-    isStreaming: false,
-    sessionManager: {
-      getSessionId() {
-        return sessionId;
-      },
-      buildSessionContext() {
-        return { messages: options.seedMessages ?? [] };
-      },
-    },
-    settingsManager: {
-      getQuietStartup() {
-        return false;
-      },
-      getModelPreferences() {
-        return { recent: [], favorite: [] };
-      },
-      setModelPreferences() {},
-      getDiffPreferences() {
-        return diffPreferences;
-      },
-      setDiffPreferences(next: typeof diffPreferences) {
-        diffPreferences = next;
-      },
-      getShellViewPreferences() {
-        return shellViewPreferences;
-      },
-      setShellViewPreferences(next: typeof shellViewPreferences) {
-        shellViewPreferences = next;
-      },
-    },
-    subscribe(listener: (event: BrewvaPromptSessionEvent) => void) {
-      sessionListener = listener;
-      return () => {
-        if (sessionListener === listener) {
-          sessionListener = undefined;
-        }
-      };
-    },
-    async prompt() {},
-    getQueuedPrompts() {
-      return queuedPrompts;
-    },
-    removeQueuedPrompt(promptId: string) {
-      const index = queuedPrompts.findIndex((item) => item.promptId === promptId);
-      if (index < 0) {
-        return false;
-      }
-      queuedPrompts.splice(index, 1);
-      sessionListener?.({
-        type: "queue.changed",
-        items: [...queuedPrompts],
-      });
-      return true;
-    },
-    async waitForIdle() {},
-    async abort() {},
-    async setModel(model: BrewvaSessionModelDescriptor) {
-      currentModel = model;
-    },
-    getAvailableThinkingLevels() {
-      return currentModel.reasoning ? ["off", "minimal", "low", "medium", "high"] : ["off"];
-    },
-    setThinkingLevel(level: string) {
-      thinkingLevel = level;
-    },
-    dispose() {},
-    setUiPort(ui: BrewvaToolUiPort) {
-      attachedUi = ui;
-    },
-  };
-
-  const bundle = {
-    session,
-    toolDefinitions: options.toolDefinitions ?? new Map(),
-    runtime: {
-      identity: {
-        cwd: process.cwd(),
-        workspaceRoot: process.cwd(),
-        agentId: "test-agent",
-      },
-      ops: {
-        session: {
-          rewind: {
-            recordCheckpoint() {},
-            rewind() {
-              return { ok: false, reason: "no_checkpoint" };
-            },
-            redo() {
-              return { ok: false, reason: "no_redo" };
-            },
-            getState() {
-              return {
-                checkpoints: [],
-                rewindAvailable: false,
-                redoAvailable: false,
-                redoStack: [],
-              };
-            },
-            listTargets() {
-              return [];
-            },
-          },
-        },
-        proposals: {
-          requests: {
-            decide() {},
-            listPending() {
-              return approvals;
-            },
-          },
-        },
-        events: {
-          records: {
-            query() {
-              return [];
-            },
-          },
-          replay: {
-            listSessions() {
-              return replaySessions;
-            },
-          },
-        },
-        sessionWire: {
-          query(targetSessionId: string) {
-            return options.sessionWireBySessionId?.[targetSessionId] ?? [];
-          },
-        },
-      },
-    },
-    orchestration: {
-      subagents: {
-        async status() {
-          return {
-            ok: true,
-            runs: options.taskRuns ?? [],
-          };
-        },
-        async cancel() {
-          return {
-            ok: false,
-            error: "not_live",
-          };
-        },
-      },
-    },
-    providerConnections: options.providers
-      ? {
-          catalog: {
-            async listProviders() {
-              return options.providers ?? [];
-            },
-          },
-          renderer: {
-            listAuthMethods(provider: string) {
-              return options.authMethods?.[provider] ?? [];
-            },
-          },
-          credential: {
-            async listProviders() {
-              return options.providers ?? [];
-            },
-            async connectApiKey() {},
-            async disconnect() {},
-            async refresh() {},
-          },
-          authFlow: {
-            listAuthMethods(provider: string) {
-              return options.authMethods?.[provider] ?? [];
-            },
-            async authorizeOAuth(
-              provider: string,
-              methodId: string,
-              inputs?: Record<string, string>,
-            ) {
-              return options.authorizeOAuth?.(provider, methodId, inputs);
-            },
-            async completeOAuth(provider: string, methodId: string, code?: string) {
-              await options.completeOAuth?.(provider, methodId, code);
-            },
-          },
-        }
-      : undefined,
-  } as unknown as CliShellSessionBundle;
-
-  return {
-    bundle,
-    getAttachedUi: () => attachedUi,
-    emitSessionEvent(event: BrewvaPromptSessionEvent) {
-      sessionListener?.(event);
-    },
-  };
-}
+import { createManualShellClock } from "../../helpers/manual-shell-clock.js";
+import { createShellFixture } from "../../helpers/shell-fixture.js";
 
 function readOpenTuiRendererRoot(renderer: unknown): unknown {
   return (renderer as { root?: unknown }).root;
@@ -412,8 +122,8 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders shell chrome and notifications through the Solid shell", async () => {
-    const { bundle } = createFakeBundle({
-      seedMessages: [
+    const { bundle } = createShellFixture({
+      transcriptSeed: [
         {
           role: "assistant",
           content: [
@@ -426,11 +136,13 @@ describe("opentui solid shell runtime: layout contract", () => {
       ],
     });
 
+    const clock = createManualShellClock();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
       createSession: async () => bundle,
       operatorPollIntervalMs: 60_000,
+      clock,
     });
 
     await runtime.start();
@@ -446,7 +158,7 @@ describe("opentui solid shell runtime: layout contract", () => {
 
     try {
       await openTuiSolidAct(async () => {
-        await Bun.sleep(CliShellRuntime.STATUS_DEBOUNCE_MS + 20);
+        clock.advance(CliShellRuntime.STATUS_DEBOUNCE_MS + 20);
       });
       await testSetup.renderOnce();
       await testSetup.renderOnce();
@@ -462,7 +174,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("hides the passive cockpit header from the default shell body", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -503,8 +215,8 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("docks active cockpit effects below the transcript and above the prompt", async () => {
-    const { bundle } = createFakeBundle({
-      seedMessages: [
+    const { bundle } = createShellFixture({
+      transcriptSeed: [
         {
           role: "assistant",
           stopReason: "stop",
@@ -565,8 +277,8 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders the latest assistant answer from the transcript surface", async () => {
-    const { bundle } = createFakeBundle({
-      seedMessages: [
+    const { bundle } = createShellFixture({
+      transcriptSeed: [
         {
           role: "assistant",
           stopReason: "stop",
@@ -623,8 +335,8 @@ describe("opentui solid shell runtime: layout contract", () => {
       "",
       "Final paragraph.",
     ].join("\n");
-    const { bundle } = createFakeBundle({
-      seedMessages: [
+    const { bundle } = createShellFixture({
+      transcriptSeed: [
         {
           role: "assistant",
           stopReason: "stop",
@@ -675,7 +387,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("reserves bottom padding under docked cockpit effect metadata", async () => {
-    const { bundle } = createFakeBundle({
+    const { bundle } = createShellFixture({
       sessionWireBySessionId: {
         "session-1": [
           wireFrame({
@@ -725,7 +437,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("hides redundant active runtime progress before provider output arrives", async () => {
-    const { bundle } = createFakeBundle({
+    const { bundle } = createShellFixture({
       sessionWireBySessionId: {
         "session-1": [
           wireFrame({
@@ -771,7 +483,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("hides streaming thinking progress from the default transcript surface", async () => {
-    const { bundle } = createFakeBundle({
+    const { bundle } = createShellFixture({
       sessionWireBySessionId: {
         "session-1": [
           wireFrame({
@@ -825,7 +537,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders cockpit archive and attention overlays from cockpit commands", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -884,7 +596,7 @@ describe("opentui solid shell runtime: layout contract", () => {
 
   test("renders live subagent activity with an accurate hidden count above the prompt", async () => {
     const now = Date.now();
-    const { bundle } = createFakeBundle({
+    const { bundle } = createShellFixture({
       taskRuns: Array.from({ length: 7 }, (_, index): DelegationRunRecord => {
         const primary = index === 0;
         const name = primary ? "review-operator-state" : `background-${index}`;
@@ -953,7 +665,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders long model picker rows as one clipped line with a short footer", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1008,7 +720,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("positions the dynamic model picker higher for long lists", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1053,7 +765,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("aligns model picker title, search, sections, and model labels", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1103,7 +815,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders provider picker with the OpenCode dialog-select shell", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1191,7 +903,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders OAuth wait dialog with copyable URL fallback", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1251,7 +963,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("ctrl+a with no pending approvals renders a visible empty state instead of a blank overlay", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1291,7 +1003,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("ctrl+o with no pending operator input renders a visible empty state instead of a blank overlay", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1330,7 +1042,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders the prompt action bar with live session status", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1366,7 +1078,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders the OpenCode-style inline approval prompt", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1441,7 +1153,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders inline approval diff preview with fullscreen hint", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1515,7 +1227,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders the OpenCode-style inline question prompt", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1598,7 +1310,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders lineage sidebar with session-style marker and left alignment", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1670,7 +1382,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders tree sidebar with active path markers and indentation", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
@@ -1761,7 +1473,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("opens selected task overlay rows in the subagent footer inspector", async () => {
-    const { bundle } = createFakeBundle({
+    const { bundle } = createShellFixture({
       sessionWireBySessionId: {
         "worker-session-1": [
           {
@@ -1889,7 +1601,7 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders structured inspect overlays with section navigation and details", async () => {
-    const { bundle } = createFakeBundle();
+    const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
       openSession: async () => bundle,
