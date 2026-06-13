@@ -243,6 +243,15 @@ path mid-stream. F6 (scroll write-back) and F7 (composer write-back) are
 both violations of this principle, and WS2/WS4/WS6 below are incremental,
 individually shippable steps toward it — not a wholesale rewrite.
 
+The dual-speed target is no longer hypothetical: opencode's TUI (same
+stack — OpenTUI + Solid + Bun) ships it in production. Its SSE event
+handlers coalesce on a 16ms window and write directly into id-normalized
+fine-grained Solid stores inside `batch()` (a token delta is one
+`produce` append on `part[messageId]`), components subscribe to store
+paths, and no snapshot/projection/reconcile boundary exists at all. If a
+future benchmark shows the structural-sharing projection (WS4) still
+paying too much, that is the proven endgame shape on this exact stack.
+
 ## Workstreams
 
 ### WS1: Deterministic performance harness (first, blocking)
@@ -373,7 +382,9 @@ Resolves F6.
 Resolves F4, F5, F8. Sized by benchmark evidence; items here may be
 unnecessary if earlier workstreams already restore the frame budget — the
 tail-window change in particular alters visible behavior while scrolled up
-during a stream and lands only with benchmark justification.
+during a stream and lands only with benchmark justification. (The shipped
+tail window was later superseded by throttled streaming markdown; see the
+2026-06-13 addendum.)
 
 ## Sequencing
 
@@ -430,8 +441,9 @@ plan, with reasons:
   mode the view is now top-anchored (native scrollbox behavior, matching
   terminal scrollback expectations) instead of being dragged toward new
   content.
-- **WS6.** Only the streaming tail window earned its benchmark gate
-  (`packages/brewva-cli/runtime/shell/streaming-tail.ts`; evidence below).
+- **WS6.** Initially shipped as a plain-text tail window; superseded by
+  throttled streaming markdown after studying opencode (see the
+  2026-06-13 addendum below).
   The exec line-split and mermaid classification items were resolved
   structurally by WS4 — branch sharing keeps memo dependencies referentially
   stable, and the classification memo is lazy and never evaluated during
@@ -459,6 +471,43 @@ source, no tool output, legacy projection mode), so the count-based
 invariants — bounded emits, zero scroll-sync commits from content growth,
 zero keystroke filesystem I/O, revision-guarded composer write-back — are
 the primary regression gates, not the timings.
+
+## Addendum (2026-06-13): opencode adoption pass
+
+Three changes landed after studying opencode's TUI (same OpenTUI + Solid +
+Bun stack, materially smoother in production):
+
+- **Throttled streaming markdown replaces the plain-text tail window.**
+  The in-flight response now renders through the native markdown
+  renderable with `streaming` enabled — formatted output during
+  streaming, not a degraded text preview. The content accessor is
+  throttled to ~10Hz by `createStreamingText`
+  (`packages/brewva-cli/runtime/shell/streaming-text.ts`), scheduled
+  through the shell clock so replay tests drive it deterministically; the
+  leading edge emits immediately, an unchanged value never consumes the
+  window, and stabilization swaps to the finalized markdown branch. The
+  tail-window module and its plain-text preview were removed. Benchmark
+  (30k chars, 100-message history, 1ms cadence): paragraph-structured
+  prose — frame p50 0.6ms, p95 3.4ms, max ~14ms, within budget; an
+  adversarial single 30k-char paragraph (no block boundaries, so each
+  10Hz flush re-lays-out the whole block) — p95 ~7.8ms, max ~18ms, at
+  most one dropped frame per flush, the same exposure opencode accepts.
+  `bun run bench:tui` covers both shapes (`--single-block`).
+- **OpenTUI upgraded 0.2.16 -> 0.3.4.** The removed `testing` renderer
+  flag is replaced by injected in-memory terminal streams in the smoke
+  path; all 391 TUI tests including the frame snapshot pass unchanged,
+  and the benchmark stays in the same band.
+- **`ShellRendererController.getClock()`** exposes the shell clock to the
+  render layer so renderer-side throttles share the deterministic timer
+  seam.
+
+Techniques evaluated and not adopted, with reasons: virtualized lists
+(virtua is used only in opencode's web app, not its TUI; retention
+windowing covers brewva), solid-js Transition usage (no occurrences in
+opencode's TUI sources; their patch is an unrelated upstream fix),
+`renderer.idle()` deferred destruction (no destructor-spike pain point in
+brewva today), and per-frame sibling-margin caching (brewva's transcript
+margins are static).
 
 ## Risks
 

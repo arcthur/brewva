@@ -1,3 +1,4 @@
+import { Readable, Writable } from "node:stream";
 import { createCliRenderer, getDataPaths, getTreeSitterClient } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import {
@@ -48,6 +49,38 @@ async function initializeOpenTuiTextRendering(): Promise<void> {
     await treeSitterClient.highlightOnce("# Warmup\n\ntext", "markdown");
   })();
   await textRenderingInitialization;
+}
+
+class HeadlessWriteStream extends Writable {
+  readonly isTTY = true;
+  columns: number;
+  rows: number;
+
+  constructor(columns = 80, rows = 24) {
+    super();
+    this.columns = columns;
+    this.rows = rows;
+  }
+
+  override _write(
+    _chunk: unknown,
+    _encoding: BufferEncoding,
+    callback: (error?: Error | null) => void,
+  ): void {
+    callback();
+  }
+
+  getColorDepth(): number {
+    return 24;
+  }
+}
+
+function createHeadlessStdin(): NodeJS.ReadStream {
+  return new Readable({ read() {} }) as unknown as NodeJS.ReadStream;
+}
+
+function createHeadlessStdout(columns = 80, rows = 24): NodeJS.WriteStream {
+  return new HeadlessWriteStream(columns, rows) as unknown as NodeJS.WriteStream;
 }
 
 function createCliRendererConfig(
@@ -326,7 +359,6 @@ export async function renderOpenTuiScrollbackLines(
   const testSetup = await createTestRenderer({
     width,
     height: initialHeight,
-    testing: true,
     consoleMode: "disabled",
     screenMode: "main-screen",
   });
@@ -426,9 +458,14 @@ export async function runOpenTuiSmoke(
   options: OpenTuiSmokeOptions = {},
 ): Promise<OpenTuiSmokeResult> {
   const screenMode = options.screenMode ?? DEFAULT_SCREEN_MODE;
+  // OpenTUI 0.3.x removed the `testing` renderer flag; headless smoke runs
+  // inject in-memory terminal streams instead (the equivalent factories in
+  // @opentui/core/testing are not exported from the barrel).
   const renderer = await createCliRenderer(
     createCliRendererConfig({
-      testing: true,
+      stdin: createHeadlessStdin(),
+      stdout: createHeadlessStdout(),
+      bufferedOutput: "memory",
       screenMode,
     }),
   );

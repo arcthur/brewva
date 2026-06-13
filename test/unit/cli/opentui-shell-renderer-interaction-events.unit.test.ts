@@ -2122,7 +2122,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     }
   });
 
-  test("renders live streaming markdown text through a lightweight raw preview", async () => {
+  test("renders live streaming text as formatted markdown", async () => {
     const fakeBundle = createFakeBundle({
       isStreaming: true,
     });
@@ -2157,11 +2157,16 @@ describe("opentui solid shell runtime: interaction events", () => {
         );
         await Bun.sleep(50);
       });
+      // Streaming now renders through the native markdown renderable with
+      // concealment: the heading text shows without its "#" marker and the
+      // bold markers are consumed by formatting.
       const frame = await waitForRenderedFrame(testSetup, {
-        predicate: (candidate) => candidate.includes("**Fast** streaming"),
+        predicate: (candidate) => candidate.includes("Fast"),
       });
-      expect(frame).toContain("# Result");
-      expect(frame).toContain("**Fast** streaming");
+      expect(frame).toContain("Result");
+      expect(frame).toContain("Fast");
+      expect(frame).toContain("streaming");
+      expect(frame).not.toContain("# Result");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -2298,7 +2303,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     }
   });
 
-  test("keeps live streaming interactive markdown off native markdown renderables", async () => {
+  test("streams interactive markdown through a single native markdown renderable", async () => {
     const fakeBundle = createFakeBundle({
       isStreaming: true,
     });
@@ -2333,11 +2338,11 @@ describe("opentui solid shell runtime: interaction events", () => {
         await Bun.sleep(50);
       });
       const frame = await waitForRenderedFrame(testSetup, {
-        predicate: (candidate) => candidate.includes("**Fast** streaming"),
+        predicate: (candidate) => candidate.includes("Fast"),
       });
 
-      expect(countRenderablesByConstructorName(testSetup.renderer, "MarkdownRenderable")).toBe(0);
-      expect(frame).toContain("**Fast** streaming");
+      expect(countRenderablesByConstructorName(testSetup.renderer, "MarkdownRenderable")).toBe(1);
+      expect(frame).toContain("Fast");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

@@ -721,6 +721,10 @@ export class CliShellRuntime {
     return this.#projectViewModel(this.#state);
   }
 
+  getClock(): ShellClock {
+    return this.#clock;
+  }
+
   getSessionWireFrames(sessionId: string) {
     return this.#sessionPort.getSessionWireFrames(sessionId);
   }

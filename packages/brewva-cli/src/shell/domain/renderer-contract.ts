@@ -1,5 +1,6 @@
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
+import type { ShellClock } from "./clock.js";
 import type { ShellInput } from "./input.js";
 import type { BrewvaResolvedKeymapBindings, BrewvaTuiConfig } from "./tui.js";
 import type { ShellViewModel } from "./view-model.js";
@@ -18,6 +19,12 @@ export interface ShellRendererController {
    * need first.
    */
   getViewState(): ShellViewModel;
+  /**
+   * The shell's time source. Renderer-side debounce/throttle layers must
+   * schedule through this clock so replay tests drive them
+   * deterministically alongside the runtime's own timers.
+   */
+  getClock(): ShellClock;
   getSessionWireFrames(sessionId: string): readonly SessionWireFrame[];
   getToolDefinitions(): ReadonlyMap<string, BrewvaToolDefinition>;
   getTuiConfig(): BrewvaTuiConfig;

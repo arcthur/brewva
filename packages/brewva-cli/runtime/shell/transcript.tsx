@@ -23,7 +23,7 @@ import {
   type SessionPalette,
 } from "./palette.js";
 import { useShellRenderContext } from "./render-context.js";
-import { streamingTailWindow } from "./streaming-tail.js";
+import { createStreamingText } from "./streaming-text.js";
 import {
   asRecord,
   inferFiletype,
@@ -81,21 +81,20 @@ function safetyToneColor(theme: SessionPalette, tone: OperatorSafetyShellTone): 
   }
 }
 
-function StreamingTextPreview(input: { content: string; theme: SessionPalette }) {
-  // Bound the in-flight block so per-frame measure/wrap cost stays constant
-  // regardless of response length; the full text renders as markdown once
-  // the message stabilizes (RFC F8/WS6). The raw content goes in untrimmed —
-  // streamingTailWindow trims within the window so the per-flush cost stays
-  // O(window) instead of O(content).
-  const tail = createMemo(() => streamingTailWindow(input.content));
-  return (
-    <Show when={tail().text.length > 0}>
-      <Show when={tail().truncated}>
-        <text fg={input.theme.textMuted}>… streaming, earlier lines render on completion</text>
-      </Show>
-      <text fg={input.theme.markdownText}>{tail().text}</text>
-    </Show>
+function StreamingMarkdownBlock(input: { content: string; theme: SessionPalette }) {
+  // The in-flight response renders as real markdown: OpenTUI's streaming
+  // mode parses incrementally (only the trailing block is unstable), and
+  // the content accessor is throttled to ~10Hz so re-parse/re-layout cost
+  // is paid per interval, not per 16ms flush (RFC F8/WS6). When the
+  // message stabilizes the switch in TranscriptTextBlockView swaps to the
+  // finalized markdown branch with the full text.
+  const context = useShellRenderContext();
+  const content = createStreamingText(
+    () => input.content,
+    () => true,
+    { clock: context.runtime.getClock() },
   );
+  return <MarkdownTranscriptBlock content={content()} theme={input.theme} streaming={true} />;
 }
 
 function TranscriptTextBlockView(input: {
@@ -116,7 +115,7 @@ function TranscriptTextBlockView(input: {
   return (
     <Switch>
       <Match when={input.streamingPreview}>
-        <StreamingTextPreview content={input.content} theme={input.theme} />
+        <StreamingMarkdownBlock content={input.content} theme={input.theme} />
       </Match>
       <Match when={mermaidSource()}>
         {(source) => <MermaidBlock source={source()} theme={input.theme} />}

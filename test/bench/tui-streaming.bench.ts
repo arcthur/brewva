@@ -31,6 +31,7 @@ interface BenchArgs {
   width: number;
   height: number;
   json: boolean;
+  singleBlock: boolean;
 }
 
 function parseArgs(argv: readonly string[]): BenchArgs {
@@ -42,6 +43,7 @@ function parseArgs(argv: readonly string[]): BenchArgs {
     width: 100,
     height: 36,
     json: false,
+    singleBlock: false,
   };
   const numericFlags: Record<string, (value: number) => void> = {
     "--history": (value) => (args.history = value),
@@ -55,6 +57,10 @@ function parseArgs(argv: readonly string[]): BenchArgs {
     const flag = argv[index];
     if (flag === "--json") {
       args.json = true;
+      continue;
+    }
+    if (flag === "--single-block") {
+      args.singleBlock = true;
       continue;
     }
     const apply = flag === undefined ? undefined : numericFlags[flag];
@@ -140,10 +146,18 @@ async function main(): Promise<void> {
     await testSetup.renderOnce();
     await testSetup.renderOnce();
 
-    const chunks = chunkText(
-      "brewva ".repeat(Math.ceil(args.chars / 7)).slice(0, args.chars),
-      args.chunk,
-    );
+    // Paragraph-structured prose by default: markdown re-parses only the
+    // trailing block, which is what real responses look like. The
+    // --single-block flag keeps the adversarial one-giant-paragraph shape
+    // that forces a full re-layout per throttle flush.
+    const word = "brewva ";
+    const paragraph = `${word.repeat(56).trimEnd()}\n\n`;
+    const body = (
+      args.singleBlock
+        ? word.repeat(Math.ceil(args.chars / word.length))
+        : paragraph.repeat(Math.ceil(args.chars / paragraph.length))
+    ).slice(0, args.chars);
+    const chunks = chunkText(body, args.chunk);
     let lastRenderedEmit = fixture.emitCount();
     for (const chunk of chunks) {
       const syncStart = performance.now();
