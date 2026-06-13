@@ -507,6 +507,14 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
   const appendFileDescriptors = new Map<string, number>();
   let rootReady = false;
   let recoveredSessions: readonly string[] = [];
+  // The full disk scan (read + parse every tape file) runs at most once.
+  // After recovery the in-memory event maps are authoritative for this
+  // process: commit() keeps them current and appendEventToMemory dedupes by
+  // id, so re-scanning disk on every list/query/project call is pure waste.
+  // Re-parsing large tape histories on every call previously blocked the
+  // event loop for seconds, stalling any caller that polls these reads
+  // (e.g. the interactive shell's operator/cockpit refresh).
+  let diskScanComplete = false;
 
   function sessionEvents(sessionId: string): CanonicalEvent[] {
     let events = eventsBySession.get(sessionId);
@@ -617,11 +625,15 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
   });
 
   function loadFromDisk(): readonly string[] {
-    if (!persistence?.enabled) {
+    if (!persistence?.enabled || diskScanComplete) {
       return recoveredSessions;
     }
     const root = tapeRoot(persistence);
     if (!existsSync(root)) {
+      // The tape directory is created lazily on first write. Don't latch
+      // yet: a later call (once this process has written, creating the dir)
+      // performs the one real recovery scan. The process's own events still
+      // reach memory through commit() in the meantime.
       recoveredSessions = [];
       return recoveredSessions;
     }
@@ -643,6 +655,7 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
       });
     }
     recoveredSessions = [...recovered].toSorted();
+    diskScanComplete = true;
     return recoveredSessions;
   }
 

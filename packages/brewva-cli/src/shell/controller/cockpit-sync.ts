@@ -5,6 +5,7 @@ import {
   TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
   type TaskWorkCardProjection,
 } from "@brewva/brewva-vocabulary/session";
+import { traceSync } from "../../internal/perf-trace.js";
 import type { ContextCockpitReport } from "../../operator/inspect.js";
 import { buildInspectReport, buildTaskWorkCardProjection } from "../../operator/inspect.js";
 import { getCliRuntimeCostPosture, queryCliRuntimeEvents } from "../../runtime/runtime-ports.js";
@@ -231,19 +232,25 @@ function buildColdSource(input: {
   readonly sessionId: string;
   readonly readRewindTargets: () => ReturnType<SessionViewPort["listRewindTargets"]>;
 }): ShellCockpitColdSourceSnapshot {
-  const workCardSource = buildWorkCardSource({
-    runtime: input.runtime,
-    sessionId: input.sessionId,
-  });
+  const workCardSource = traceSync("cockpit.coldSource:buildWorkCard", () =>
+    buildWorkCardSource({
+      runtime: input.runtime,
+      sessionId: input.sessionId,
+    }),
+  );
   return {
     sessionId: input.sessionId,
     ...workCardSource,
-    runtimeEvents: safeRead(() => queryCliRuntimeEvents(input.runtime, input.sessionId), []),
+    runtimeEvents: traceSync("cockpit.coldSource:queryRuntimeEvents", () =>
+      safeRead(() => queryCliRuntimeEvents(input.runtime, input.sessionId), []),
+    ),
     cost: safeRead(
       () => getCliRuntimeCostPosture(input.runtime, input.sessionId),
       fallbackCostPosture(),
     ),
-    rewindTargets: safeRead(() => input.readRewindTargets(), []),
+    rewindTargets: traceSync("cockpit.coldSource:rewindTargets", () =>
+      safeRead(() => input.readRewindTargets(), []),
+    ),
   };
 }
 

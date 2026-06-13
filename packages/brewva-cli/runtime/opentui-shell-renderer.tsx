@@ -13,6 +13,7 @@ import type { OpenTuiRenderer } from "./internal-opentui-runtime.js";
 import {
   createOpenTuiCliRenderer,
   getOpenTuiTerminalBackgroundMode,
+  startOpenTuiStatsCapture,
 } from "./internal-opentui-runtime.js";
 import { render } from "./opentui/index.js";
 import { BrewvaOpenTuiShell } from "./shell/app.js";
@@ -24,6 +25,7 @@ export { BrewvaOpenTuiShell } from "./shell/app.js";
 
 class CliInteractiveOpenTuiShellRuntime {
   #renderer: OpenTuiRenderer | undefined;
+  #stopStatsCapture: (() => void) | undefined;
   readonly #toolRenderCache: ToolRenderCache = createToolRenderCache();
 
   constructor(private readonly shellRuntime: CliShellRuntime) {}
@@ -102,6 +104,7 @@ class CliInteractiveOpenTuiShellRuntime {
 
   private async mount(): Promise<void> {
     this.#renderer = await createOpenTuiCliRenderer();
+    this.#stopStatsCapture = startOpenTuiStatsCapture(this.#renderer);
     await render(
       () => (
         <BrewvaOpenTuiShell
@@ -115,6 +118,8 @@ class CliInteractiveOpenTuiShellRuntime {
   }
 
   private unmount(): void {
+    this.#stopStatsCapture?.();
+    this.#stopStatsCapture = undefined;
     this.#renderer?.destroy();
     this.#renderer = undefined;
   }

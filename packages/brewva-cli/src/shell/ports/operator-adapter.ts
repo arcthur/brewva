@@ -10,6 +10,7 @@ import {
   validateSingleQuestionAnswer,
 } from "@brewva/brewva-gateway";
 import { runHostedPromptTurn } from "@brewva/brewva-gateway/hosted";
+import { traceAsync, traceSync } from "../../internal/perf-trace.js";
 import {
   decideCliRuntimeProposalRequest,
   listCliRuntimePendingProposalRequests,
@@ -143,17 +144,29 @@ export function createOperatorSurfacePort(input: {
     async getSnapshot() {
       const bundle = input.getSessionBundle();
       const sessionId = bundle.session.sessionManager.getSessionId();
-      const approvals = listCliRuntimePendingProposalRequests(bundle.runtime, sessionId);
-      const questions = (await collectOpenSessionQuestions(bundle.runtime, sessionId)).questions;
-      const taskStatus = await bundle.orchestration?.subagents?.status?.({
-        fromSessionId: sessionId,
-        query: {
-          includeTerminal: true,
-          limit: 20,
-        },
-      });
+      const approvals = traceSync("operator.getSnapshot:listPendingProposals", () =>
+        listCliRuntimePendingProposalRequests(bundle.runtime, sessionId),
+      );
+      const questions = (
+        await traceAsync("operator.getSnapshot:collectOpenSessionQuestions", () =>
+          collectOpenSessionQuestions(bundle.runtime, sessionId),
+        )
+      ).questions;
+      const taskStatus = await traceAsync("operator.getSnapshot:subagents.status", () =>
+        Promise.resolve(
+          bundle.orchestration?.subagents?.status?.({
+            fromSessionId: sessionId,
+            query: {
+              includeTerminal: true,
+              limit: 20,
+            },
+          }),
+        ),
+      );
       const taskRuns = taskStatus?.ok ? taskStatus.runs : [];
-      const sessions = listCliRuntimeReplaySessions(bundle.runtime, 20);
+      const sessions = traceSync("operator.getSnapshot:listReplaySessions", () =>
+        listCliRuntimeReplaySessions(bundle.runtime, 20),
+      );
       return { approvals, questions, taskRuns, sessions };
     },
     async recoverAcceptedApprovals() {

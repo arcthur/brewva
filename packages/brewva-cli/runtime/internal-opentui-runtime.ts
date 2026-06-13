@@ -1,3 +1,5 @@
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { createCliRenderer, getDataPaths, getTreeSitterClient } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -32,6 +34,17 @@ const DEFAULT_SCREEN_MODE: OpenTuiScreenMode = "alternate-screen";
 const OPEN_TUI_TEST_DATA_PATH_LISTENER_LIMIT = 100;
 export const OPEN_TUI_INTERACTIVE_RENDER_TARGET_FPS = 60;
 const INTERACTIVE_RENDER_MAX_FPS = 60;
+
+/**
+ * Set BREWVA_TUI_STATS=1 to gather native render statistics and show the
+ * OpenTUI debug overlay (live FPS, frame ms, cells updated). Diagnostic
+ * seam for measuring frame cost in a real interactive session, which the
+ * synthetic replay benchmark cannot reproduce (empty cockpit, manual
+ * clock, no input contention).
+ */
+export function isOpenTuiStatsEnabled(): boolean {
+  return process.env.BREWVA_TUI_STATS === "1";
+}
 const DEFAULT_KITTY_KEYBOARD_CONFIG = {
   disambiguate: true,
   alternateKeys: true,
@@ -96,7 +109,7 @@ function createCliRendererConfig(
     targetFps: OPEN_TUI_INTERACTIVE_RENDER_TARGET_FPS,
     maxFps: INTERACTIVE_RENDER_MAX_FPS,
     autoFocus: false,
-    gatherStats: false,
+    gatherStats: isOpenTuiStatsEnabled(),
     ...overrides,
   };
 }
@@ -109,7 +122,58 @@ export function isOpenTuiRuntimeAvailable(): boolean {
 
 export async function createOpenTuiCliRenderer(): Promise<OpenTuiRenderer> {
   await initializeOpenTuiTextRendering();
-  return await createCliRenderer(createCliRendererConfig());
+  const renderer = await createCliRenderer(createCliRendererConfig());
+  if (isOpenTuiStatsEnabled()) {
+    (
+      renderer as unknown as {
+        configureDebugOverlay(options: { enabled: boolean }): void;
+      }
+    ).configureDebugOverlay({ enabled: true });
+  }
+  return renderer;
+}
+
+/**
+ * When BREWVA_TUI_STATS=1, append the native renderer stats (fps, frame
+ * timing) once per second to `.brewva/tui-perf.jsonl` in the workspace.
+ * Lets a real interactive session be profiled offline — the in-memory test
+ * harness cannot reproduce terminal-output cost, render-loop scheduling, or
+ * input contention. Returns a stop function; a no-op when stats are off.
+ */
+export function startOpenTuiStatsCapture(renderer: OpenTuiRenderer): () => void {
+  if (!isOpenTuiStatsEnabled()) {
+    return () => {};
+  }
+  const statsRenderer = renderer as unknown as {
+    getStats(): {
+      fps: number;
+      averageFrameTime: number;
+      minFrameTime: number;
+      maxFrameTime: number;
+      frameCallbackTime: number;
+      frameCount: number;
+    };
+  };
+  const outputPath = join(process.cwd(), ".brewva", "tui-perf.jsonl");
+  const timer = setInterval(() => {
+    try {
+      const stats = statsRenderer.getStats();
+      appendFileSync(
+        outputPath,
+        `${JSON.stringify({
+          atMs: Date.now(),
+          fps: Math.round(stats.fps),
+          avgFrameMs: Number(stats.averageFrameTime.toFixed(2)),
+          maxFrameMs: Number(stats.maxFrameTime.toFixed(2)),
+          frameCallbackMs: Number(stats.frameCallbackTime.toFixed(2)),
+          frameCount: stats.frameCount,
+        })}\n`,
+      );
+    } catch {
+      // Stats are best-effort diagnostics; never let them disrupt the shell.
+    }
+  }, 1000);
+  return () => clearInterval(timer);
 }
 
 export function createOpenTuiRoot(renderer: OpenTuiRenderer): OpenTuiRoot {
