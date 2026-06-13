@@ -23,6 +23,7 @@ import {
   resolveSessionPatchHistoryPath,
 } from "@brewva/brewva-vocabulary/workbench";
 import type { PersistedPatchSet } from "@brewva/brewva-vocabulary/workbench";
+import { recordDiagnosticError } from "../../internal/perf-trace.js";
 import { type OverlayPriority } from "../../internal/tui/index.js";
 import {
   buildSessionInspectReport,
@@ -1139,6 +1140,11 @@ export class CliShellRuntime {
       transcriptChanged = true;
       const message =
         error instanceof Error ? error.message : "Failed to render the latest session event.";
+      recordDiagnosticError(
+        `projectSessionEvent:${event.type}`,
+        message,
+        error instanceof Error ? error.stack : undefined,
+      );
       this.ui.notify(message, "error");
       appendSessionProjectionError({
         appendMessage: (renderedMessage) =>

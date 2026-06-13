@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
+import { installDiagnosticErrorCapture } from "../src/internal/perf-trace.js";
 import { resolveAutomaticTuiTheme } from "../src/internal/tui/index.js";
 import {
   getExternalPagerCommand,
@@ -129,6 +130,7 @@ export async function renderCliInteractiveOpenTuiShell(
   bundle: CliShellSessionBundle,
   options: Omit<CliShellRuntimeOptions, "openExternalEditor" | "openExternalPager">,
 ): Promise<void> {
+  installDiagnosticErrorCapture();
   let interactiveRuntime: CliInteractiveOpenTuiShellRuntime | undefined;
   const shellRuntime = new CliShellRuntime(bundle, {
     ...options,

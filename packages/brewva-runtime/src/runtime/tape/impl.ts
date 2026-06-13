@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  statSync,
+  writeSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { toJsonValue } from "@brewva/brewva-std/json";
@@ -507,14 +515,16 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
   const appendFileDescriptors = new Map<string, number>();
   let rootReady = false;
   let recoveredSessions: readonly string[] = [];
-  // The full disk scan (read + parse every tape file) runs at most once.
-  // After recovery the in-memory event maps are authoritative for this
-  // process: commit() keeps them current and appendEventToMemory dedupes by
-  // id, so re-scanning disk on every list/query/project call is pure waste.
-  // Re-parsing large tape histories on every call previously blocked the
-  // event loop for seconds, stalling any caller that polls these reads
-  // (e.g. the interactive shell's operator/cockpit refresh).
-  let diskScanComplete = false;
+  // Byte size of each tape file at the time it was last parsed into memory.
+  // The tape is append-only, so a file whose size is unchanged needs no
+  // re-read; only new or grown files are re-parsed (appendEventToMemory
+  // dedupes by id). This keeps loadFromDisk correct for events appended by
+  // other tape instances — e.g. an approval.requested written by the
+  // turn-running runtime that a separate resolution projection must observe
+  // — while avoiding the full re-parse of every historical tape on every
+  // call, which previously blocked the event loop for seconds and stalled
+  // the interactive shell's operator/cockpit refresh.
+  const parsedFileSizes = new Map<string, number>();
 
   function sessionEvents(sessionId: string): CanonicalEvent[] {
     let events = eventsBySession.get(sessionId);
@@ -625,15 +635,11 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
   });
 
   function loadFromDisk(): readonly string[] {
-    if (!persistence?.enabled || diskScanComplete) {
+    if (!persistence?.enabled) {
       return recoveredSessions;
     }
     const root = tapeRoot(persistence);
     if (!existsSync(root)) {
-      // The tape directory is created lazily on first write. Don't latch
-      // yet: a later call (once this process has written, creating the dir)
-      // performs the one real recovery scan. The process's own events still
-      // reach memory through commit() in the meantime.
       recoveredSessions = [];
       return recoveredSessions;
     }
@@ -644,6 +650,19 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
         continue;
       }
       const filePath = resolve(root, entry.name);
+      // Append-only tape: skip files whose byte size is unchanged since the
+      // last parse — their events are already in memory. Only new or grown
+      // files are re-read, so picking up a freshly appended event costs one
+      // file parse, not a full-history re-scan.
+      let size: number;
+      try {
+        size = statSync(filePath).size;
+      } catch {
+        continue;
+      }
+      if (parsedFileSizes.get(filePath) === size) {
+        continue;
+      }
       forEachUtf8LineSync(filePath, (line) => {
         const trimmed = line.trim();
         if (!trimmed) {
@@ -653,9 +672,9 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
         appendEventToMemory(event);
         recovered.add(event.sessionId);
       });
+      parsedFileSizes.set(filePath, size);
     }
     recoveredSessions = [...recovered].toSorted();
-    diskScanComplete = true;
     return recoveredSessions;
   }
 

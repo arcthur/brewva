@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
 import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate/host-api";
+import { recordDiagnosticError } from "../../internal/perf-trace.js";
 import {
   DEFAULT_TUI_THEME,
   getTuiTheme,
@@ -75,6 +76,9 @@ export function createCliShellUiPortController(input: {
       });
     },
     notify(message, level = "info") {
+      if (level === "error" || level === "warning") {
+        recordDiagnosticError(`notify:${level}`, message);
+      }
       input.commit({
         type: "notification.add",
         notification: {

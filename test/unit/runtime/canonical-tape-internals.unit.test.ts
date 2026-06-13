@@ -37,6 +37,39 @@ describe("canonical tape internals", () => {
     ).toHaveLength(1);
   });
 
+  test("re-reads a tape file after another instance appends to it", () => {
+    // Regression: an approval.requested written by the turn-running runtime
+    // must be observable by a separate resolution tape instance that already
+    // ran its initial recovery scan. A load-once cache broke this and made
+    // approvals fail with approval_request_not_found.
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-tape-reread-"));
+    const persistence = { cwd, tapeDir: ".brewva/tape", enabled: true } as const;
+
+    const writer = createRuntimeTape(persistence);
+    writer.commit.commit({
+      id: "evt-1",
+      sessionId: "s1",
+      type: "turn.started",
+      payload: { prompt: "hi", content: [{ type: "text", text: "hi" }] },
+    });
+
+    const reader = createRuntimeTape(persistence);
+    reader.loadFromDisk();
+    expect(reader.tape.list("s1").map((event) => event.id)).toEqual(["evt-1"]);
+
+    // The writer appends a second event to the same on-disk file after the
+    // reader's initial scan.
+    writer.commit.commit({
+      id: "evt-2",
+      sessionId: "s1",
+      type: "turn.started",
+      payload: { prompt: "again", content: [{ type: "text", text: "again" }] },
+    });
+
+    reader.loadFromDisk();
+    expect(reader.tape.list("s1").map((event) => event.id)).toEqual(["evt-1", "evt-2"]);
+  });
+
   test("custom events must use the canonical plugin envelope", () => {
     const runtimeTape = createRuntimeTape();
 

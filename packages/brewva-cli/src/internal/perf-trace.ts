@@ -11,6 +11,61 @@ import { join } from "node:path";
 const PERF_TRACE_ENABLED = process.env.BREWVA_TUI_STATS === "1";
 const PERF_TRACE_THRESHOLD_MS = 20;
 const PERF_TRACE_PATH = join(process.cwd(), ".brewva", "tui-perf.jsonl");
+const ERROR_CAPTURE_PATH = join(process.cwd(), ".brewva", "tui-errors.jsonl");
+
+/**
+ * Append one diagnostic error record to `.brewva/tui-errors.jsonl`, gated by
+ * BREWVA_TUI_STATS=1. The interactive TUI surfaces runtime errors as
+ * transient toasts (ui.notify) or stderr on the alternate screen — neither
+ * lands on disk — so this captures them for offline root-causing. No-op when
+ * the flag is off.
+ */
+export function recordDiagnosticError(source: string, message: string, stack?: string): void {
+  if (!PERF_TRACE_ENABLED) {
+    return;
+  }
+  try {
+    appendFileSync(
+      ERROR_CAPTURE_PATH,
+      `${JSON.stringify({
+        atMs: Date.now(),
+        source,
+        message: message.slice(0, 2000),
+        ...(stack ? { stack: stack.slice(0, 4000) } : {}),
+      })}\n`,
+    );
+  } catch {
+    // Diagnostics are best-effort; never disrupt the shell.
+  }
+}
+
+let errorCaptureInstalled = false;
+
+/**
+ * Install process-level handlers that record otherwise-invisible crashes
+ * (uncaught exceptions, unhandled rejections) to the diagnostic error log.
+ * Idempotent; no-op when the flag is off.
+ */
+export function installDiagnosticErrorCapture(): void {
+  if (!PERF_TRACE_ENABLED || errorCaptureInstalled) {
+    return;
+  }
+  errorCaptureInstalled = true;
+  process.on("uncaughtException", (error: unknown) => {
+    recordDiagnosticError(
+      "uncaughtException",
+      error instanceof Error ? error.message : String(error),
+      error instanceof Error ? error.stack : undefined,
+    );
+  });
+  process.on("unhandledRejection", (reason: unknown) => {
+    recordDiagnosticError(
+      "unhandledRejection",
+      reason instanceof Error ? reason.message : String(reason),
+      reason instanceof Error ? reason.stack : undefined,
+    );
+  });
+}
 
 function recordTrace(label: string, ms: number): void {
   if (ms < PERF_TRACE_THRESHOLD_MS) {
