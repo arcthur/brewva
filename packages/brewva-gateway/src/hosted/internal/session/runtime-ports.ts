@@ -633,7 +633,7 @@ export function acquireRuntimeParallelSlot(
   sessionId: string,
   runId: string,
 ): ReturnType<HostedRuntimeAdapterPort["ops"]["tools"]["parallel"]["acquire"]> {
-  return runtime.ops.tools.parallel.acquire(sessionId, runId);
+  return runtime.ops.tools.parallel.acquire(sessionId, runId, { kind: "delegation" });
 }
 
 export function releaseRuntimeParallelSlot(

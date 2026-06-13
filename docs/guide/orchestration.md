@@ -115,6 +115,13 @@ runtime kernel.
 This keeps delegated routing visible and reviewable instead of turning it into a
 hidden planner.
 
+Pending delegation work projects onto an adoption board over the same
+inspection state: adoption items (worker patches and knowledge proposals,
+each naming the tools that resolve it) are kept distinct from advisory
+attention items (unconsumed evidence, verifier debt, blocked or failed runs).
+`workflow_status` surfaces it; the board owns no truth and resolves nothing
+itself.
+
 ## Specialist Cutover Snapshot
 
 The current stable built-in specialist surface is:
@@ -143,9 +150,12 @@ Execution posture is intentionally split:
   records parent lineage, `forkTurns`, and `executionPrimitive=fork`
 - hosted context shape is owned by gateway materialization policy, not by a
   passive envelope profile field
-- hosted role targets also pin `isolationStrategy`: read-only evidence,
-  consult, and knowledge roles use shared isolation, `verifier` uses ephemeral
-  execution, and `worker` uses snapshot isolation
+- every role binds one of three execution archetypes (the closed physics set the
+  control plane validates): `readonly-shared` (safe, shared — navigator,
+  explorer, librarian, review lanes), `exec-ephemeral` (effectful, ephemeral
+  execution — verifier), and `patch-snapshot` (effectful, snapshot, patch-
+  producing — worker). A capsule may only narrow its archetype's tool and budget
+  ceiling, never widen it
 - recovery-critical baseline materialization
   (`historyViewBaseline` + `recoveryWorkingSet`) is preserved by the gateway
   context materializer when the hosted lane needs it

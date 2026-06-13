@@ -7,7 +7,11 @@ import type {
   ContextEvidenceSample,
   ContextStatus,
 } from "@brewva/brewva-vocabulary/context";
-import type { WorkerMergeReport, WorkerResult } from "@brewva/brewva-vocabulary/delegation";
+import type {
+  ParallelSlotPort,
+  WorkerMergeReport,
+  WorkerResult,
+} from "@brewva/brewva-vocabulary/delegation";
 import type {
   BrewvaEventQuery,
   BrewvaEventRecord,
@@ -453,19 +457,7 @@ export interface BrewvaToolRuntimeCommandPort {
       discoveryObserved(input: unknown): unknown;
       gateArmed(input: unknown): unknown;
     };
-    readonly parallel: {
-      acquire(
-        sessionId: string,
-        runId: string,
-        options?: unknown,
-      ): { accepted: boolean; reason?: string };
-      acquireAsync(
-        sessionId: string,
-        runId: string,
-        options?: { timeoutMs?: number },
-      ): Promise<{ accepted: boolean }>;
-      release(sessionId: string, runId: string): void;
-    };
+    readonly parallel: ParallelSlotPort;
     readonly patches: {
       redoLastPatchSet(sessionId: string): RuntimeMutationResult;
       rollbackCandidate(sessionId: string): PatchRollbackCandidateView;

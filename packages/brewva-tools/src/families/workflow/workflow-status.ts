@@ -1,4 +1,5 @@
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { DelegationAdoptionBoard } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { deriveWorkflowStatus } from "@brewva/brewva-vocabulary/iteration";
 import type {
@@ -41,6 +42,27 @@ async function listPendingDelegationOutcomes(
     return [];
   }
   return result.runs.filter((run) => run.delivery?.handoffState === "pending_parent_turn");
+}
+
+const EMPTY_ADOPTION_BOARD: DelegationAdoptionBoard = {
+  adoptionItems: [],
+  attentionItems: [],
+  explicitPull: true,
+};
+
+async function readAdoptionBoard(
+  runtime: BrewvaToolOptions["runtime"],
+  sessionId: string,
+): Promise<DelegationAdoptionBoard> {
+  // workflow_status is a diagnostic surface; it must degrade to an empty board
+  // rather than fail wholesale if the projection pipeline throws (matching the
+  // failure contract of listPendingDelegationOutcomes).
+  try {
+    const inspection = await runtime.delegation?.inspect?.(sessionId);
+    return inspection?.adoptionBoard ?? EMPTY_ADOPTION_BOARD;
+  } catch {
+    return EMPTY_ADOPTION_BOARD;
+  }
 }
 
 function formatTimestamp(timestamp: number): string {
@@ -193,6 +215,7 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         workflowStatusTool.runtime,
         sessionId,
       );
+      const adoptionBoard = await readAdoptionBoard(workflowStatusTool.runtime, sessionId);
       const stallAdjudication = readLatestStallAdjudication(events);
       const snapshot = deriveWorkflowStatus({
         sessionId,
@@ -258,6 +281,8 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
         `retro: ${posture.retro}`,
         `pending_worker_results: ${snapshot.pendingWorkerResults}`,
         `pending_delegation_outcomes: ${snapshot.pendingDelegationOutcomes}`,
+        `adoption_items: ${adoptionBoard.adoptionItems.length}`,
+        `attention_items: ${adoptionBoard.attentionItems.length}`,
         `open_tool_calls: ${openToolCalls.length}`,
       ];
 
@@ -295,6 +320,23 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
           lines.push(
             `- ${run.delegate}/${run.label ?? run.runId}: ${run.status}${run.summary ? ` :: ${run.summary}` : ""}`,
           );
+        }
+      }
+
+      if (adoptionBoard.adoptionItems.length > 0) {
+        lines.push("adoption_items_pending:");
+        for (const item of adoptionBoard.adoptionItems) {
+          const resolveVia = item.resolutions
+            .map((resolution) => `${resolution.tool} [${resolution.decision}]`)
+            .join(" | ");
+          lines.push(`- ${item.kind} ${item.runId} (${item.title}): resolve via ${resolveVia}`);
+        }
+      }
+
+      if (adoptionBoard.attentionItems.length > 0) {
+        lines.push("attention_items:");
+        for (const item of adoptionBoard.attentionItems) {
+          lines.push(`- ${item.kind} ${item.runId} (${item.title}): ${item.reason}`);
         }
       }
 
@@ -347,6 +389,8 @@ export function createWorkflowStatusTool(options: BrewvaToolOptions): ToolDefini
           summary: run.summary,
           handoffState: run.delivery?.handoffState ?? null,
         })),
+        adoptionItems: adoptionBoard.adoptionItems,
+        attentionItems: adoptionBoard.attentionItems,
         openToolCalls,
         uncleanShutdownDiagnostic,
         stallAdjudication,

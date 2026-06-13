@@ -178,6 +178,198 @@ describe("delegation inspection projection", () => {
     expect(inspection.workboard.pendingWorkerPatches).toHaveLength(0);
   });
 
+  test("partitions the adoption board into adoption decisions and advisory attention", () => {
+    const records = [
+      // Worker patch awaiting adoption.
+      event({
+        id: "evt-w-spawn",
+        type: SUBAGENT_SPAWNED_EVENT_TYPE,
+        timestamp: 1_000,
+        payload: runPayload({
+          runId: "worker-1",
+          agent: "worker",
+          kind: "patch",
+          status: "pending",
+          updatedAt: 1_000,
+        }),
+      }),
+      event({
+        id: "evt-w-done",
+        type: SUBAGENT_COMPLETED_EVENT_TYPE,
+        timestamp: 1_100,
+        payload: runPayload({
+          runId: "worker-1",
+          agent: "worker",
+          kind: "patch",
+          status: "completed",
+          updatedAt: 1_100,
+          summary: "Prepared a patch.",
+          patchSetId: "patch-worker-1",
+        }),
+      }),
+      // Librarian knowledge proposal awaiting adoption.
+      event({
+        id: "evt-l-spawn",
+        type: SUBAGENT_SPAWNED_EVENT_TYPE,
+        timestamp: 1_200,
+        payload: runPayload({
+          runId: "librarian-1",
+          agent: "librarian",
+          kind: "knowledge",
+          status: "pending",
+          updatedAt: 1_200,
+        }),
+      }),
+      event({
+        id: "evt-l-done",
+        type: SUBAGENT_COMPLETED_EVENT_TYPE,
+        timestamp: 1_300,
+        payload: runPayload({
+          runId: "librarian-1",
+          agent: "librarian",
+          kind: "knowledge",
+          status: "completed",
+          updatedAt: 1_300,
+          summary: "Found a convention.",
+        }),
+      }),
+      // Verifier evidence: advisory attention, never an adoption decision.
+      event({
+        id: "evt-v-spawn",
+        type: SUBAGENT_SPAWNED_EVENT_TYPE,
+        timestamp: 1_400,
+        payload: runPayload({
+          runId: "verifier-1",
+          agent: "verifier",
+          kind: "verifier",
+          status: "pending",
+          updatedAt: 1_400,
+        }),
+      }),
+      event({
+        id: "evt-v-done",
+        type: SUBAGENT_COMPLETED_EVENT_TYPE,
+        timestamp: 1_500,
+        payload: runPayload({
+          runId: "verifier-1",
+          agent: "verifier",
+          kind: "verifier",
+          status: "completed",
+          updatedAt: 1_500,
+          summary: "Ran checks.",
+        }),
+      }),
+      // Failed explorer run: advisory attention.
+      event({
+        id: "evt-e-fail",
+        type: SUBAGENT_FAILED_EVENT_TYPE,
+        timestamp: 1_600,
+        payload: runPayload({
+          runId: "explorer-1",
+          agent: "explorer",
+          kind: "consult",
+          status: "failed",
+          updatedAt: 1_600,
+          error: "Child crashed.",
+        }),
+      }),
+    ];
+
+    const board = projectDelegationInspectionState({
+      sessionId: "session-delegation-inspection",
+      records,
+    }).adoptionBoard;
+
+    // Adoption items: exactly the patch and the knowledge proposal.
+    expect(board.adoptionItems.map((item) => item.runId).toSorted()).toEqual([
+      "librarian-1",
+      "worker-1",
+    ]);
+    const worker = board.adoptionItems.find((item) => item.runId === "worker-1");
+    expect(worker?.kind).toBe("worker_patch");
+    expect(worker?.adoptionRequirement).toBe("patch_apply");
+    expect(worker?.resolutions.map((resolution) => resolution.tool)).toEqual([
+      "worker_results_apply",
+      "worker_results_reject",
+    ]);
+    const knowledge = board.adoptionItems.find((item) => item.runId === "librarian-1");
+    expect(knowledge?.kind).toBe("knowledge_proposal");
+    expect(knowledge?.adoptionRequirement).toBe("knowledge_adopt");
+    expect(knowledge?.resolutions.map((resolution) => resolution.decision)).toEqual([
+      "accept",
+      "reject",
+      "defer",
+    ]);
+    expect(knowledge?.resolutions.every((r) => r.tool === "subagent_knowledge_adopt")).toBe(true);
+
+    // Orthogonality: a verifier or failed run can never appear among adoption decisions.
+    const adoptionRunIds = new Set(board.adoptionItems.map((item) => item.runId));
+    expect(adoptionRunIds.has("verifier-1")).toBe(false);
+    expect(adoptionRunIds.has("explorer-1")).toBe(false);
+
+    // Attention items: the verifier evidence and the failed run, advisory only.
+    const attention = new Map(board.attentionItems.map((item) => [item.runId, item]));
+    expect(attention.get("verifier-1")?.kind).toBe("advisory_outcome");
+    expect(attention.get("explorer-1")?.kind).toBe("blocked_run");
+    for (const item of board.attentionItems) {
+      expect(item.reason.length).toBeGreaterThan(0);
+    }
+
+    // The two partitions are disjoint by runId.
+    for (const item of board.attentionItems) {
+      expect(adoptionRunIds.has(item.runId)).toBe(false);
+    }
+  });
+
+  test("a failed librarian is advisory attention, never a knowledge adoption decision", () => {
+    const records = [
+      event({
+        id: "evt-lib-spawn",
+        type: SUBAGENT_SPAWNED_EVENT_TYPE,
+        timestamp: 1_000,
+        payload: runPayload({
+          runId: "librarian-fail",
+          agent: "librarian",
+          kind: "knowledge",
+          status: "pending",
+          updatedAt: 1_000,
+        }),
+      }),
+      event({
+        id: "evt-lib-fail",
+        type: SUBAGENT_FAILED_EVENT_TYPE,
+        timestamp: 1_100,
+        payload: runPayload({
+          runId: "librarian-fail",
+          agent: "librarian",
+          kind: "knowledge",
+          status: "failed",
+          updatedAt: 1_100,
+          error: "Child crashed before producing a proposal.",
+        }),
+      }),
+    ];
+
+    const inspection = projectDelegationInspectionState({
+      sessionId: "session-delegation-inspection",
+      records,
+    });
+
+    // The failed run keeps a pending_knowledge_adopt disposition (no decision was
+    // recorded), but it must not surface as an adoption decision — only completed
+    // proposals can be adopted.
+    expect(
+      inspection.adoptionBoard.adoptionItems.some((item) => item.runId === "librarian-fail"),
+    ).toBe(false);
+    expect(inspection.workboard.pendingKnowledgeAdoptions).toHaveLength(0);
+    expect(inspection.inbox.items.some((item) => item.kind === "librarian_knowledge")).toBe(false);
+    // It surfaces as advisory attention (a blocked/failed run) instead.
+    const attention = inspection.adoptionBoard.attentionItems.find(
+      (item) => item.runId === "librarian-fail",
+    );
+    expect(attention?.kind).toBe("blocked_run");
+  });
+
   test("filters inspection input to the requested session id", () => {
     const records = [
       event({

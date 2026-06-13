@@ -156,7 +156,7 @@ describe("subagent shared execution resolution", () => {
         runtime,
         target: makeTarget({
           agentSpecName: "explorer",
-          envelopeName: "explorer-readonly",
+          envelopeName: "readonly-shared",
         }),
         packet: {
           objective: "Review the gateway deltas.",
@@ -244,7 +244,7 @@ describe("subagent shared execution resolution", () => {
 
     expect(resolved.delegate).toBe("explorer");
     expect(resolved.target.agentSpecName).toBe("explorer");
-    expect(resolved.target.envelopeName).toBe("explorer-readonly");
+    expect(resolved.target.envelopeName).toBe("readonly-shared");
     expect(resolved.target.skillName).toBe(undefined);
     expect(resolved.target.resultMode).toBe("consult");
     expect(resolved.target.consultKind).toBe("review");
@@ -275,7 +275,7 @@ describe("subagent shared execution resolution", () => {
 
     expect(resolved.delegate).toBe("review-security");
     expect(resolved.target.agentSpecName).toBe("review-security");
-    expect(resolved.target.envelopeName).toBe("explorer-readonly");
+    expect(resolved.target.envelopeName).toBe("readonly-shared");
     expect(resolved.target.skillName).toBe(undefined);
     expect(resolved.target.resultMode).toBe("consult");
     expect(resolved.target.consultKind).toBe("review");
@@ -338,7 +338,7 @@ describe("subagent shared execution resolution", () => {
 
     expect(resolved.delegate).toBe("security-explorer");
     expect(resolved.target.agentSpecName).toBe("security-explorer");
-    expect(resolved.target.envelopeName).toBe("explorer-readonly");
+    expect(resolved.target.envelopeName).toBe("readonly-shared");
     expect(resolved.target.managedToolNames).toEqual(["grep", "source_read"]);
   });
 

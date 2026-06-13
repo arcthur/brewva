@@ -41,6 +41,32 @@ must be compatible with the selected role. Maintainer diagnostics use
 Each role has a distinct managed-tool set. The runtime does not rely only on
 prompt posture to separate navigator, explorer, and librarian behavior.
 
+## Execution Archetypes
+
+Every role is a delegation capsule bound to one of three execution archetypes —
+the closed set of physics classes the hosted control plane validates:
+
+- `readonly-shared`: safe, shared workspace, read-only. Hosts `navigator`,
+  `explorer`, `librarian`, and the internal review lanes. Never produces patches.
+- `patch-snapshot`: effectful, copy-on-write snapshot workspace. Produces a
+  `PatchSet` for parent-controlled adoption. Hosts `worker`.
+- `exec-ephemeral`: effectful, ephemeral execution sandbox, non-mutating. Hosts
+  `verifier`.
+
+A capsule may only narrow its archetype — a tool subset, a smaller context
+budget — never widen it. The archetype carries the maximal tool and budget
+ceiling; each capsule (and any workspace `extends` of a public capsule) declares
+its own subset. Authority comes from the bound archetype and the result
+contract, never from the capsule's persona prose. A capsule is deliberately not
+a "skill capsule": skill files are advisory repository knowledge, never a
+runtime authority gate.
+
+Adoption is orthogonal to the archetype, carried by the result contract: a
+`patch` result requires `worker_results_*` and is valid only on
+`patch-snapshot`; a `knowledge` result requires `subagent_knowledge_adopt` on
+any archetype (the `librarian` runs read-only yet still requires it);
+`evidence`, `consult`, and `verifier` results carry no adoption obligation.
+
 ## Cognitive Routing
 
 Delegation is runtime orchestration, not the first search modality. For direct
@@ -78,9 +104,28 @@ reference, but it does not import the child branch's raw transcript.
 
 Delegation inspection is explicit pull over tape and rebuildable read-model
 state. `subagent_status`, `inbox_query`, `brewva inspect`, and `/inspect` may
-render run cards, a workboard, an inbox, a replay timeline, and a recovery
-preview, but reading those views does not consume evidence, change parent
-context, or mutate adoption state.
+render run cards, a workboard, an adoption board, an inbox, a replay timeline,
+and a recovery preview, but reading those views does not consume evidence,
+change parent context, or mutate adoption state.
+
+The adoption board partitions pending delegation work into two kinds that are
+never conflated:
+
+- adoption items: work blocked on an explicit parent authority decision — a
+  worker `PatchSet` (resolve via `worker_results_apply` / `worker_results_reject`)
+  or a librarian knowledge proposal (resolve via `subagent_knowledge_adopt`
+  accept/reject/defer). Each item names the tool(s) that resolve it, with a
+  description that notes any multi-step shape (worker apply is prepare-then-apply).
+- attention items: advisory debt that needs awareness but no adoption decision —
+  unconsumed evidence/consult outcomes, verifier evidence (which surfaces as
+  verification debt, never as patch adoption), and blocked/failed runs.
+
+The board is a pure re-partition of the run cards carried on the inspection
+projection, so every surface that reads `delegation.inspect` sees the same
+board. `workflow_status` surfaces it today; the interactive task browser
+consumes the same projection once its adoption tab lands. The board owns no
+truth and never resolves an item itself; the adoption axis is the result
+contract's adoption requirement, orthogonal to the execution archetype.
 
 Public run cards expose role, result mode, lifecycle, lifecycle reason,
 retention, isolation posture, adoption requirement, and role disposition.
@@ -111,8 +156,8 @@ adoption flow through delegation receipts and read models instead of
 subagent messaging tools.
 
 `subagent_fork` is represented in v4 records as
-`explorer` / `make_judgment` / `deep-reasoning` and uses the
-`explorer-readonly` envelope.
+`explorer` / `make_judgment` / `deep-reasoning` and runs on the
+`readonly-shared` archetype.
 
 ## Transaction Boundary
 

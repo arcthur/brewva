@@ -43,6 +43,10 @@ export {
   readHostedWorkspaceSubagentConfigFiles,
   type HostedWorkspaceSubagentConfigFile,
 } from "./config-files.js";
+export {
+  createParallelAdmissionController,
+  type ParallelAdmissionDeps,
+} from "./parallel-admission.js";
 export { buildDelegationPrompt } from "./prompt.js";
 export {
   createIsolatedWorkspace,

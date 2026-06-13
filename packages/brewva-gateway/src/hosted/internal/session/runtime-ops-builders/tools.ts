@@ -21,6 +21,7 @@ import {
   SOURCE_RESOURCE_READ_EVENT_TYPE,
   SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/workbench";
+import { createHostedParallelAdmission } from "../parallel-admission-host.js";
 import { createContextBudgetRuntimeController } from "../runtime-ops-context-budget.js";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
@@ -29,6 +30,7 @@ import { buildHostedPatchRollbackOps } from "./patches/rollback.js";
 export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["tools"] {
   const budget = createContextBudgetRuntimeController(ctx);
   const patchRollback = buildHostedPatchRollbackOps(ctx);
+  const parallelAdmission = createHostedParallelAdmission(ctx);
 
   return {
     access: {
@@ -114,11 +116,7 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
         return ctx.emit(sessionId, "tool.capability.selected", payload);
       },
     },
-    parallel: {
-      acquire: () => ({ accepted: true }),
-      acquireAsync: async () => ({ accepted: true }),
-      release: () => undefined,
-    },
+    parallel: parallelAdmission,
     resourceLeases: {
       request(sessionId, input) {
         const now = Date.now();

@@ -136,13 +136,32 @@ flowchart TD
 
 - insufficient parallel budget causes immediate rejection; the system does not
   silently overrun the session limit
-- after parent restart, durable detached live runs are restored into the
-  in-memory slot ledger so concurrency is not over-issued
+- after parent restart, active concurrency is reconstructed from the durable
+  tape (delegation spawn/terminal events) so slots are not over-issued; there
+  is no separate in-memory ledger that must survive restart
 - `subagent_status` and `subagent_cancel` survive runtime restart
 - completion predicates are checked before spawn, during recovery, and again on
   later parent events to avoid meaningless spawn-then-cancel behavior
 - merge conflicts return a conflict report only; they do not mutate the parent
   workspace
+
+## Enforced Claims
+
+The authority-bearing claims in this journey are pinned to live enforcement by
+`test/fitness/delegation-claims-enforcement.fitness.test.ts`. Each claim has a
+stable id and an enforcement test that fails if the behavior regresses to a
+stub or no-op, keeping documented authority and wired authority in lockstep
+(design axiom 14). A drift guard in the same file asserts this list and the
+test registry stay identical.
+
+- `parallel-budget-rejection`: insufficient parallel budget causes immediate
+  rejection; the session concurrency limit is never silently overrun.
+- `parallel-lifetime-cap`: the per-session lifetime delegation cap is enforced
+  from durable tape and cannot be silently overrun.
+- `slot-ledger-restart-recovery`: after restart, active concurrency is
+  reconstructed from durable tape so slots are not over-issued.
+- `no-auto-apply`: the runtime does not auto-apply child work; a completed
+  worker patch stays pending an explicit parent adoption decision.
 
 ## Interactive Task Review
 
@@ -198,7 +217,8 @@ Operator expectations:
 - Background protocol: `packages/brewva-gateway/src/delegation/background/protocol.ts`
 - Context bundle: `packages/brewva-gateway/src/context/context-bundle.ts`
 - Workspace isolation: `packages/brewva-gateway/src/delegation/workspace.ts`
-- Runtime parallel state: `packages/brewva-runtime/src/runtime/turn/impl.ts`
+- Parallel admission gate: `packages/brewva-gateway/src/delegation/parallel-admission.ts`
+  (host wiring: `packages/brewva-gateway/src/hosted/internal/session/parallel-admission-host.ts`)
 - Session-index read models: `packages/brewva-session-index/src/projection/delegation.ts`
 - Delegation store: `packages/brewva-gateway/src/delegation/delegation-store.ts`
 - Run / fan-out tools: `packages/brewva-tools/src/families/delegation/subagent-run/api.ts`

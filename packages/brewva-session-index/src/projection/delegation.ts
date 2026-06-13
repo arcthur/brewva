@@ -13,9 +13,15 @@ import {
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
   WORKER_RESULTS_REJECTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/delegation";
-import { deriveParallelBudgetStateFromEvents } from "@brewva/brewva-vocabulary/delegation";
+import {
+  deriveDelegationAdoptionRequirement,
+  deriveParallelBudgetStateFromEvents,
+} from "@brewva/brewva-vocabulary/delegation";
 import type {
-  DelegationAdoptionRequirement,
+  DelegationAdoptionBoard,
+  DelegationAdoptionItem,
+  DelegationAdoptionResolution,
+  DelegationAttentionItem,
   DelegationInboxItem,
   DelegationInspectionProjection,
   DelegationIsolationStrategy,
@@ -378,6 +384,7 @@ export function projectDelegationInspectionState(input: {
     sessionId: input.sessionId,
     runCards,
     workboard: buildWorkboard(runCards),
+    adoptionBoard: buildAdoptionBoard(runCards),
     inbox: buildInbox(runCards),
     timeline: buildTimeline(records),
     recoveryPreview: buildRecoveryPreview(input.sessionId, records, runCards),
@@ -521,7 +528,7 @@ function buildRunCard(
       lifecycle,
       dispositionState,
     }),
-    adoptionRequirement: adoptionRequirementFor(resultMode),
+    adoptionRequirement: deriveDelegationAdoptionRequirement(resultMode),
     title,
     ...(run.taskPath ? { taskPath: run.taskPath } : {}),
     ...(run.summary ? { summary: run.summary } : {}),
@@ -562,12 +569,6 @@ function resultModeOf(value: unknown, role: PublicSubagentRole): DelegationResul
   if (role === "verifier") return "verifier";
   if (role === "librarian") return "knowledge";
   return "consult";
-}
-
-function adoptionRequirementFor(resultMode: DelegationResultMode): DelegationAdoptionRequirement {
-  if (resultMode === "patch") return "patch_apply";
-  if (resultMode === "knowledge") return "knowledge_adopt";
-  return "none";
 }
 
 function isolationOf(value: unknown): DelegationIsolationStrategy {
@@ -620,11 +621,7 @@ function dispositionOf(input: {
 function buildWorkboard(runCards: readonly DelegationRunCard[]) {
   return {
     pendingWorkerPatches: runCards.filter(isActionableWorkerPatch),
-    pendingKnowledgeAdoptions: runCards.filter(
-      (card) =>
-        card.adoptionRequirement === "knowledge_adopt" &&
-        card.disposition === "pending_knowledge_adopt",
-    ),
+    pendingKnowledgeAdoptions: runCards.filter(isActionableKnowledgeProposal),
     unreadEvidence: runCards.filter(
       (card) =>
         (card.resultMode === "evidence" ||
@@ -653,10 +650,7 @@ function buildInbox(runCards: readonly DelegationRunCard[]) {
       items.push(inboxItem(card, "worker_patch"));
       continue;
     }
-    if (
-      card.adoptionRequirement === "knowledge_adopt" &&
-      card.disposition === "pending_knowledge_adopt"
-    ) {
+    if (isActionableKnowledgeProposal(card)) {
       items.push(inboxItem(card, "librarian_knowledge"));
       continue;
     }
@@ -683,6 +677,127 @@ function buildInbox(runCards: readonly DelegationRunCard[]) {
   return { items, explicitPull: true as const };
 }
 
+const WORKER_PATCH_RESOLUTIONS: readonly DelegationAdoptionResolution[] = [
+  {
+    tool: "worker_results_apply",
+    decision: "apply",
+    description: "Prepare and apply the worker PatchSet to the parent workspace.",
+  },
+  {
+    tool: "worker_results_reject",
+    decision: "reject",
+    description: "Reject the worker patch without applying it.",
+  },
+];
+
+const KNOWLEDGE_RESOLUTIONS: readonly DelegationAdoptionResolution[] = [
+  {
+    tool: "subagent_knowledge_adopt",
+    decision: "accept",
+    description: "Adopt the knowledge proposal with a capture, patch, or final artifact reference.",
+  },
+  {
+    tool: "subagent_knowledge_adopt",
+    decision: "reject",
+    description: "Reject the knowledge proposal.",
+  },
+  {
+    tool: "subagent_knowledge_adopt",
+    decision: "defer",
+    description: "Defer the knowledge proposal for a later decision.",
+  },
+];
+
+/**
+ * The adoption board is a single-pass re-partition of the run cards that mirrors
+ * the inbox classification exactly (same branch order), so a run appears in at
+ * most one place and the board and inbox can never disagree on membership. A
+ * verifier or evidence outcome can never land among adoption decisions. Adoption
+ * items carry the exact resolving tool calls; attention items are advisory.
+ *
+ * Note: a failed or missing-evidence verifier is classified as `blocked_run`
+ * here (and `failed_run` in the inbox), not `verification_debt`. That mirrors
+ * the inbox, and intentionally diverges from the workboard's `verificationDebt`
+ * bucket, which folds failed verifiers in alongside stale/superseded ones.
+ */
+function buildAdoptionBoard(runCards: readonly DelegationRunCard[]): DelegationAdoptionBoard {
+  const adoptionItems: DelegationAdoptionItem[] = [];
+  const attentionItems: DelegationAttentionItem[] = [];
+  for (const card of runCards) {
+    if (isActionableWorkerPatch(card)) {
+      adoptionItems.push(adoptionItem(card, "worker_patch", WORKER_PATCH_RESOLUTIONS));
+      continue;
+    }
+    if (isActionableKnowledgeProposal(card)) {
+      adoptionItems.push(adoptionItem(card, "knowledge_proposal", KNOWLEDGE_RESOLUTIONS));
+      continue;
+    }
+    if (
+      card.resultMode === "verifier" &&
+      (card.disposition === "stale" || card.disposition === "superseded")
+    ) {
+      attentionItems.push(
+        attentionItem(card, "verification_debt", "Verifier evidence is stale or superseded."),
+      );
+      continue;
+    }
+    if (card.lifecycle === "failed" || card.lifecycle === "blocked") {
+      attentionItems.push(
+        attentionItem(card, "blocked_run", card.error ?? `Run ${card.lifecycle}.`),
+      );
+      continue;
+    }
+    if (
+      (card.resultMode === "evidence" ||
+        card.resultMode === "consult" ||
+        card.resultMode === "verifier") &&
+      card.disposition === "unread"
+    ) {
+      attentionItems.push(
+        attentionItem(card, "advisory_outcome", "Unconsumed delegated outcome; advisory only."),
+      );
+    }
+  }
+  return { adoptionItems, attentionItems, explicitPull: true as const };
+}
+
+function adoptionItem(
+  card: DelegationRunCard,
+  kind: DelegationAdoptionItem["kind"],
+  resolutions: readonly DelegationAdoptionResolution[],
+): DelegationAdoptionItem {
+  return {
+    runId: card.runId,
+    kind,
+    role: card.role,
+    title: card.title,
+    ...(card.summary ? { summary: card.summary } : {}),
+    disposition: card.disposition,
+    adoptionRequirement: card.adoptionRequirement,
+    resolutions,
+    eventId: card.eventId,
+    canonicalRefs: card.canonicalRefs,
+  };
+}
+
+function attentionItem(
+  card: DelegationRunCard,
+  kind: DelegationAttentionItem["kind"],
+  reason: string,
+): DelegationAttentionItem {
+  return {
+    runId: card.runId,
+    kind,
+    role: card.role,
+    title: card.title,
+    ...(card.summary ? { summary: card.summary } : {}),
+    disposition: card.disposition,
+    reason,
+    eventId: card.eventId,
+    canonicalRefs: card.canonicalRefs,
+  };
+}
+
 function inboxItem(
   card: DelegationRunCard,
   kind: DelegationInboxItem["kind"],
@@ -707,6 +822,19 @@ function isActionableWorkerPatch(card: DelegationRunCard): boolean {
     (card.disposition === "pending_apply" ||
       card.disposition === "prepared" ||
       card.disposition === "apply_failed")
+  );
+}
+
+// A knowledge proposal only awaits a parent adoption decision once the run has
+// completed. A still-running, blocked, or failed librarian run keeps the
+// `pending_knowledge_adopt` disposition (no decision recorded yet), so the
+// lifecycle gate — symmetric with isActionableWorkerPatch — keeps a failed run
+// out of the adoption surfaces and lets it fall through to blocked/failed.
+function isActionableKnowledgeProposal(card: DelegationRunCard): boolean {
+  return (
+    card.adoptionRequirement === "knowledge_adopt" &&
+    card.lifecycle === "completed" &&
+    card.disposition === "pending_knowledge_adopt"
   );
 }
 
@@ -866,10 +994,7 @@ function buildRecoveryPreview(
         runId: card.runId,
       });
     }
-    if (
-      card.adoptionRequirement === "knowledge_adopt" &&
-      card.disposition === "pending_knowledge_adopt"
-    ) {
+    if (isActionableKnowledgeProposal(card)) {
       primitives.push({
         kind: "reject_adoption",
         target: "librarian_knowledge",

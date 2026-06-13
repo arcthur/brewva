@@ -6,6 +6,7 @@ import type {
   SubagentResultMode,
 } from "@brewva/brewva-tools/contracts";
 import type {
+  DelegationEnvelopeArchetype,
   DelegationGateReason,
   DelegationIsolationStrategy,
   DelegationModelCategory,
@@ -30,8 +31,15 @@ import {
   WORKER_SPECIALIST_CONSTITUTION,
 } from "./constitutions.js";
 
+/**
+ * An execution archetype: the physics class of a delegated run (effect boundary
+ * + workspace isolation) and the tool/budget ceiling capsules narrow against.
+ * The hosted control plane validates exactly the three archetypes; `name` is
+ * the archetype identity. `managedToolNames` here is the ceiling — the maximal
+ * toolset any capsule on this archetype may request.
+ */
 export interface HostedExecutionEnvelope {
-  name: string;
+  name: DelegationEnvelopeArchetype;
   description: string;
   boundary?: SubagentExecutionBoundary;
   isolationStrategy: DelegationIsolationStrategy;
@@ -42,12 +50,23 @@ export interface HostedExecutionEnvelope {
   producesPatches: boolean;
 }
 
+/**
+ * A delegation capsule: an authored persona bound to exactly one archetype. It
+ * may narrow the archetype (a tool subset, a smaller budget) and carries the
+ * persona prose (`executorPreamble`, `instructionsMarkdown`) and the result
+ * contract (`fallbackResultMode`) that drives adoption. Authority always comes
+ * from the bound archetype and the result contract — never from the prose. This
+ * is the `HostedAgentSpec` type below; it is deliberately not called a "skill
+ * capsule" because skill files are advisory repository knowledge, never a
+ * runtime authority gate (see docs/reference/skill-routing.md).
+ */
+
 export interface HostedAgentSpec {
   name: string;
   agent: PublicSubagentRole;
   description: string;
   visibility: DelegationVisibility;
-  envelope: string;
+  envelope: DelegationEnvelopeArchetype;
   gateReason: DelegationGateReason;
   modelCategory: DelegationModelCategory;
   skillName?: string;
@@ -57,6 +76,7 @@ export interface HostedAgentSpec {
   modelPreset?: string;
   reasoningEffort?: string;
   managedToolNames?: string[];
+  defaultContextBudget?: SubagentContextBudget;
   executorPreamble?: string;
   instructionsMarkdown?: string;
 }
@@ -64,7 +84,6 @@ export interface HostedAgentSpec {
 export interface HostedDelegationCatalog {
   envelopes: Map<string, HostedExecutionEnvelope>;
   agentSpecs: Map<string, HostedAgentSpec>;
-  workspaceEnvelopeNames: Set<string>;
   workspaceAgentSpecNames: Set<string>;
 }
 
@@ -79,12 +98,14 @@ function buildReviewLaneAgentSpec(input: {
     agent: "explorer",
     description: input.description,
     visibility: "internal",
-    envelope: "explorer-readonly",
+    envelope: "readonly-shared",
     gateReason: "make_judgment",
     modelCategory: "deep-reasoning",
     defaultConsultKind: "review",
     reviewLane: normalizeReviewLaneName(input.name) ?? undefined,
     fallbackResultMode: "consult",
+    managedToolNames: [...EXPLORER_MANAGED_TOOLS],
+    defaultContextBudget: EXPLORER_CONTEXT_BUDGET,
     executorPreamble: input.executorPreamble,
     instructionsMarkdown: input.instructionsMarkdown,
   };
@@ -237,13 +258,6 @@ function assertHostedAgentSpecTightening(input: {
       `${context}:instructionsMarkdown exceeds ${MAX_AGENT_INSTRUCTIONS_MARKDOWN_LENGTH} characters`,
     );
   }
-  assertSubset(
-    context,
-    "managedToolNames",
-    resolveHostedExecutionEnvelope(catalog, base.envelope)?.managedToolNames,
-    candidate.managedToolNames,
-  );
-
   const baseEnvelope = resolveHostedExecutionEnvelope(catalog, base.envelope);
   const candidateEnvelope = resolveHostedExecutionEnvelope(catalog, candidate.envelope);
   if (!baseEnvelope) {
@@ -252,7 +266,67 @@ function assertHostedAgentSpecTightening(input: {
   if (!candidateEnvelope) {
     throw new Error(`${context}:unknown envelope '${candidate.envelope}'`);
   }
+  // A workspace capsule must narrow the persona it extends, not the archetype
+  // ceiling. Multiple personas share one archetype (e.g. explorer and librarian
+  // both bind readonly-shared), so checking against the ceiling would let an
+  // explorer extension acquire librarian-only tools or budget. The base
+  // capsule's effective tools/budget are its own override, falling back to the
+  // archetype. `assertCapsuleWithinArchetype` separately enforces the ceiling.
+  const baseEffectiveTools = base.managedToolNames ?? baseEnvelope.managedToolNames;
+  const baseEffectiveBudget = base.defaultContextBudget ?? baseEnvelope.defaultContextBudget;
+  const candidateEffectiveBudget = candidate.defaultContextBudget ?? baseEffectiveBudget;
+  assertSubset(context, "managedToolNames", baseEffectiveTools, candidate.managedToolNames);
+  assertBudgetTightening(
+    context,
+    "maxInjectionTokens",
+    baseEffectiveBudget?.maxInjectionTokens,
+    candidateEffectiveBudget?.maxInjectionTokens,
+  );
+  assertBudgetTightening(
+    context,
+    "maxTurnTokens",
+    baseEffectiveBudget?.maxTurnTokens,
+    candidateEffectiveBudget?.maxTurnTokens,
+  );
   assertHostedExecutionEnvelopeTightening(baseEnvelope, candidateEnvelope, `${context}:envelope`);
+}
+
+/**
+ * A capsule may only narrow its bound archetype and may never carry a result
+ * contract the archetype cannot honor. Authority lives on the archetype + the
+ * result contract, never on the persona prose: a `patch` contract is valid only
+ * on a patch-producing archetype, while a `knowledge` contract is valid on any
+ * archetype (the librarian proves the orthogonality by adopting on a read-only
+ * envelope). Run for every builtin and workspace capsule at catalog load.
+ */
+function assertCapsuleWithinArchetype(input: {
+  spec: HostedAgentSpec;
+  catalog: HostedDelegationCatalog;
+  context: string;
+}): void {
+  const { spec, catalog, context } = input;
+  const envelope = resolveHostedExecutionEnvelope(catalog, spec.envelope);
+  if (!envelope) {
+    throw new Error(`${context}:unknown archetype '${spec.envelope}'`);
+  }
+  assertSubset(context, "managedToolNames", envelope.managedToolNames, spec.managedToolNames);
+  assertBudgetTightening(
+    context,
+    "maxInjectionTokens",
+    envelope.defaultContextBudget?.maxInjectionTokens,
+    spec.defaultContextBudget?.maxInjectionTokens,
+  );
+  assertBudgetTightening(
+    context,
+    "maxTurnTokens",
+    envelope.defaultContextBudget?.maxTurnTokens,
+    spec.defaultContextBudget?.maxTurnTokens,
+  );
+  if (spec.fallbackResultMode === "patch" && !envelope.producesPatches) {
+    throw new Error(
+      `${context}:patch result contract requires a patch-producing archetype, not '${envelope.name}'`,
+    );
+  }
 }
 
 function toAgentSpec(
@@ -311,6 +385,7 @@ function toAgentSpec(
     modelPreset: asString(source.modelPreset) ?? defaults?.modelPreset,
     reasoningEffort: asString(source.reasoningEffort) ?? defaults?.reasoningEffort,
     managedToolNames: asStringArray(source.tools) ?? defaults?.managedToolNames,
+    defaultContextBudget: defaults?.defaultContextBudget,
     executorPreamble,
     instructionsMarkdown,
   };
@@ -373,75 +448,79 @@ const VERIFIER_MANAGED_TOOLS = [
   "browser_diff_snapshot",
 ] as const;
 
-export const BUILTIN_EXECUTION_ENVELOPES: Readonly<Record<string, HostedExecutionEnvelope>> = {
-  "navigator-readonly": {
-    name: "navigator-readonly",
-    description: "Task-local evidence discovery envelope with no institutional recall tools.",
-    boundary: "safe",
-    isolationStrategy: "shared",
-    builtinToolNames: ["read"],
-    managedToolNames: [...NAVIGATOR_MANAGED_TOOLS],
-    defaultContextBudget: {
-      maxInjectionTokens: 1800,
-      maxTurnTokens: 6500,
-    },
-    managedToolMode: "direct",
-    producesPatches: false,
-  },
-  "explorer-readonly": {
-    name: "explorer-readonly",
-    description: "Read-only judgment envelope for diagnosis, design, review, and risk calls.",
-    boundary: "safe",
-    isolationStrategy: "shared",
-    builtinToolNames: ["read"],
-    managedToolNames: [...EXPLORER_MANAGED_TOOLS],
-    defaultContextBudget: {
-      maxInjectionTokens: 2000,
-      maxTurnTokens: 7000,
-    },
-    managedToolMode: "direct",
-    producesPatches: false,
-  },
-  "librarian-readonly": {
-    name: "librarian-readonly",
-    description: "Institutional knowledge envelope for precedents, conventions, and proposals.",
-    boundary: "safe",
-    isolationStrategy: "shared",
-    builtinToolNames: ["read"],
-    managedToolNames: [...LIBRARIAN_MANAGED_TOOLS],
-    defaultContextBudget: {
-      maxInjectionTokens: 2200,
-      maxTurnTokens: 7600,
-    },
-    managedToolMode: "direct",
-    producesPatches: false,
-  },
-  "verifier-runner": {
-    name: "verifier-runner",
+// Ceiling for the readonly-shared archetype: the union of every read-only
+// persona's toolset. Each capsule (navigator/explorer/librarian/review lanes)
+// narrows to its own subset.
+const READONLY_SHARED_TOOL_CEILING = [
+  ...EXPLORER_MANAGED_TOOLS,
+  "knowledge_search",
+  "recall_search",
+  "precedent_sweep",
+  "precedent_audit",
+] as const;
+
+const NAVIGATOR_CONTEXT_BUDGET: SubagentContextBudget = {
+  maxInjectionTokens: 1800,
+  maxTurnTokens: 6500,
+};
+const EXPLORER_CONTEXT_BUDGET: SubagentContextBudget = {
+  maxInjectionTokens: 2000,
+  maxTurnTokens: 7000,
+};
+const LIBRARIAN_CONTEXT_BUDGET: SubagentContextBudget = {
+  maxInjectionTokens: 2200,
+  maxTurnTokens: 7600,
+};
+// readonly-shared archetype budget ceiling = the largest read-only persona budget.
+const READONLY_SHARED_CONTEXT_BUDGET: SubagentContextBudget = {
+  maxInjectionTokens: 2200,
+  maxTurnTokens: 7600,
+};
+const VERIFIER_CONTEXT_BUDGET: SubagentContextBudget = {
+  maxInjectionTokens: 2000,
+  maxTurnTokens: 8500,
+};
+const WORKER_CONTEXT_BUDGET: SubagentContextBudget = {
+  maxInjectionTokens: 2000,
+  maxTurnTokens: 8000,
+};
+
+export const BUILTIN_EXECUTION_ENVELOPES: Readonly<
+  Record<DelegationEnvelopeArchetype, HostedExecutionEnvelope>
+> = {
+  "readonly-shared": {
+    name: "readonly-shared",
     description:
-      "Effectful but non-patch-producing verifier envelope for executable checks and adversarial probes.",
+      "Safe, shared-workspace read-only archetype for evidence, judgment, review, and knowledge personas.",
+    boundary: "safe",
+    isolationStrategy: "shared",
+    builtinToolNames: ["read"],
+    managedToolNames: [...READONLY_SHARED_TOOL_CEILING],
+    defaultContextBudget: READONLY_SHARED_CONTEXT_BUDGET,
+    managedToolMode: "direct",
+    producesPatches: false,
+  },
+  "exec-ephemeral": {
+    name: "exec-ephemeral",
+    description:
+      "Effectful, ephemeral-execution archetype for non-mutating executable checks and adversarial probes.",
     boundary: "effectful",
     isolationStrategy: "ephemeral_exec",
     builtinToolNames: ["read"],
     managedToolNames: [...VERIFIER_MANAGED_TOOLS],
-    defaultContextBudget: {
-      maxInjectionTokens: 2000,
-      maxTurnTokens: 8500,
-    },
+    defaultContextBudget: VERIFIER_CONTEXT_BUDGET,
     managedToolMode: "direct",
     producesPatches: false,
   },
-  worker: {
-    name: "worker",
-    description: "Isolated worker envelope with editable snapshot-backed workspace access.",
+  "patch-snapshot": {
+    name: "patch-snapshot",
+    description:
+      "Effectful, copy-on-write snapshot archetype that produces a parent-adopted PatchSet.",
     boundary: "effectful",
     isolationStrategy: "snapshot",
     builtinToolNames: ["read", "edit", "write"],
     managedToolNames: [...WORKER_TOOLS],
-    defaultContextBudget: {
-      maxInjectionTokens: 2000,
-      maxTurnTokens: 8000,
-    },
+    defaultContextBudget: WORKER_CONTEXT_BUDGET,
     managedToolMode: "direct",
     producesPatches: true,
   },
@@ -453,10 +532,12 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     agent: "navigator",
     description: "Task-local evidence finder that stops before design judgment.",
     visibility: "public",
-    envelope: "navigator-readonly",
+    envelope: "readonly-shared",
     gateReason: "find_evidence",
     modelCategory: "fast-evidence",
     fallbackResultMode: "evidence",
+    managedToolNames: [...NAVIGATOR_MANAGED_TOOLS],
+    defaultContextBudget: NAVIGATOR_CONTEXT_BUDGET,
     executorPreamble:
       "Operate as a navigator. Find task-local evidence, cite sources, and stop before recommendation or design judgment.",
     instructionsMarkdown: NAVIGATOR_SPECIALIST_CONSTITUTION,
@@ -466,10 +547,12 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     agent: "explorer",
     description: "Read-only explorer for diagnosis, design judgment, review, and risk decisions.",
     visibility: "public",
-    envelope: "explorer-readonly",
+    envelope: "readonly-shared",
     gateReason: "make_judgment",
     modelCategory: "deep-reasoning",
     fallbackResultMode: "consult",
+    managedToolNames: [...EXPLORER_MANAGED_TOOLS],
+    defaultContextBudget: EXPLORER_CONTEXT_BUDGET,
     executorPreamble:
       "Operate as an explorer. Use evidence to make a bounded judgment, preserve counterevidence, and recommend the parent's next decision.",
     instructionsMarkdown: EXPLORER_SPECIALIST_CONSTITUTION,
@@ -523,7 +606,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     description:
       "Executable Verifier delegate for adversarial verification without parent-source mutation.",
     visibility: "public",
-    envelope: "verifier-runner",
+    envelope: "exec-ephemeral",
     gateReason: "verify_reproducibly",
     modelCategory: "verification",
     skillName: "verifier",
@@ -537,7 +620,7 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     agent: "worker",
     description: "Execution-first isolated worker preset.",
     visibility: "public",
-    envelope: "worker",
+    envelope: "patch-snapshot",
     gateReason: "implement_isolated",
     modelCategory: "isolated-execution",
     fallbackResultMode: "patch",
@@ -550,11 +633,13 @@ export const BUILTIN_AGENT_SPECS: Readonly<Record<string, HostedAgentSpec>> = {
     agent: "librarian",
     description: "Read-only institutional knowledge researcher and proposal author.",
     visibility: "public",
-    envelope: "librarian-readonly",
+    envelope: "readonly-shared",
     gateReason: "compound_knowledge",
     modelCategory: "knowledge",
     skillName: "learning-research",
     fallbackResultMode: "knowledge",
+    managedToolNames: [...LIBRARIAN_MANAGED_TOOLS],
+    defaultContextBudget: LIBRARIAN_CONTEXT_BUDGET,
     executorPreamble:
       "Operate as a librarian. Search institutional knowledge, summarize provenance and conflicts, and return proposals without promoting authority.",
     instructionsMarkdown: LIBRARIAN_SPECIALIST_CONSTITUTION,
@@ -626,9 +711,16 @@ export async function loadHostedDelegationCatalog(
     agentSpecs: new Map<string, HostedAgentSpec>(
       Object.values(BUILTIN_AGENT_SPECS).map((agentSpec) => [agentSpec.name, agentSpec] as const),
     ),
-    workspaceEnvelopeNames: new Set<string>(),
     workspaceAgentSpecNames: new Set<string>(),
   };
+
+  for (const agentSpec of catalog.agentSpecs.values()) {
+    assertCapsuleWithinArchetype({
+      spec: agentSpec,
+      catalog,
+      context: `invalid_builtin_capsule:${agentSpec.name}`,
+    });
+  }
 
   const entries = await readHostedWorkspaceSubagentConfigFiles(workspaceRoot);
   const forbiddenEnvelope = entries.find((entry) => entry.kind === "envelope");
@@ -678,6 +770,11 @@ export async function loadHostedDelegationCatalog(
           context: `invalid_agent_spec:${agentSpec.name}`,
         });
       }
+      assertCapsuleWithinArchetype({
+        spec: agentSpec,
+        catalog,
+        context: `invalid_agent_spec:${agentSpec.name}`,
+      });
       catalog.agentSpecs.set(agentSpec.name, agentSpec);
       catalog.workspaceAgentSpecNames.add(agentSpec.name);
       pendingAgentSpecs.splice(index, 1);
@@ -760,7 +857,8 @@ export function buildHostedDelegationTargetFromAgentSpec(input: {
     envelopeName: input.envelope.name,
     builtinToolNames: input.envelope.builtinToolNames,
     managedToolNames: input.agentSpec.managedToolNames ?? input.envelope.managedToolNames,
-    defaultContextBudget: input.envelope.defaultContextBudget,
+    defaultContextBudget:
+      input.agentSpec.defaultContextBudget ?? input.envelope.defaultContextBudget,
     managedToolMode: input.envelope.managedToolMode,
     producesPatches: input.envelope.producesPatches,
     isolationStrategy: input.envelope.isolationStrategy,

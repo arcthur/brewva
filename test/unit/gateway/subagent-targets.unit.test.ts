@@ -53,7 +53,7 @@ describe("delegation prompt and catalog composition", () => {
         gateReason: "make_judgment",
         executorPreamble: "Investigate and summarize.",
         agentSpecName: "explorer",
-        envelopeName: "explorer-readonly",
+        envelopeName: "readonly-shared",
         producesPatches: false,
         isolationStrategy: "shared",
       },
@@ -80,7 +80,7 @@ describe("delegation prompt and catalog composition", () => {
         gateReason: "make_judgment",
         executorPreamble: "Review and summarize.",
         agentSpecName: "explorer",
-        envelopeName: "explorer-readonly",
+        envelopeName: "readonly-shared",
         producesPatches: false,
         isolationStrategy: "shared",
       },
@@ -120,7 +120,7 @@ describe("delegation prompt and catalog composition", () => {
         gateReason: "make_judgment",
         executorPreamble: "Operate as a strict read-only explorer.",
         agentSpecName: "explorer",
-        envelopeName: "explorer-readonly",
+        envelopeName: "readonly-shared",
         producesPatches: false,
         isolationStrategy: "shared",
       },
@@ -173,7 +173,7 @@ describe("delegation prompt and catalog composition", () => {
         executorPreamble: "Operate as an adversarial verifier.",
         skillName: "verifier",
         agentSpecName: "verifier",
-        envelopeName: "verifier-runner",
+        envelopeName: "exec-ephemeral",
         producesPatches: false,
         isolationStrategy: "ephemeral_exec",
       },
@@ -198,7 +198,7 @@ describe("delegation prompt and catalog composition", () => {
       "Expected built-in worker agent spec.",
     );
     const envelope = requireDefined(
-      catalog.envelopes.get("worker"),
+      catalog.envelopes.get("patch-snapshot"),
       "Expected built-in worker envelope.",
     );
 
@@ -265,7 +265,7 @@ describe("delegation prompt and catalog composition", () => {
         name: "reviewer",
         description: "Markdown-backed explorer",
         visibility: "public",
-        envelope: "explorer-readonly",
+        envelope: "readonly-shared",
         fallbackResultMode: "consult",
         instructionsMarkdown:
           "Operate as a strict explorer and summarize the highest-risk findings.",

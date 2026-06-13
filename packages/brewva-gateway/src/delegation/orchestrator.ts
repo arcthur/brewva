@@ -479,7 +479,6 @@ export function createHostedSubagentAdapter(
     let childSessionId: import("@brewva/brewva-runtime/core").BrewvaSessionId | undefined;
     let executionPlan: ReturnType<typeof resolveDelegationExecutionPlan> | undefined;
     let runPlan: ReturnType<typeof buildDelegationRunPlan> | undefined;
-    let parallelSlotReleased = false;
     let cancellationReason: string | undefined;
     let timeoutTriggered = false;
     let finished = false;
@@ -561,32 +560,42 @@ export function createHostedSubagentAdapter(
       return immediateFailure(`parallel_slot_rejected:${parallel.reason ?? "unknown"}`);
     }
 
-    const initialRecord: DelegationRunRecord = {
-      ...buildDelegationRunRecordSeed({
-        runId,
-        target: input.target,
-        parentSessionId: asBrewvaSessionId(input.parentSessionId),
-        createdAt: startedAt,
-        label: input.label,
-        taskIdentity,
-        forkTurns,
-        boundary: executionPlan.boundary,
-        modelRoute: executionPlan.modelRoute,
-        delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
-      }),
-    };
+    // Between acquiring the slot and reaching the runPromise `finally` that
+    // releases it, the spawn-record and lineage writes can throw (e.g. a tape
+    // write error). Release the slot on any such throw so a reservation that
+    // never produced a spawn event cannot leak.
+    let initialRecord: DelegationRunRecord;
+    try {
+      initialRecord = {
+        ...buildDelegationRunRecordSeed({
+          runId,
+          target: input.target,
+          parentSessionId: asBrewvaSessionId(input.parentSessionId),
+          createdAt: startedAt,
+          label: input.label,
+          taskIdentity,
+          forkTurns,
+          boundary: executionPlan.boundary,
+          modelRoute: executionPlan.modelRoute,
+          delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
+        }),
+      };
 
-    recordDelegationRuntimeEvent({
-      runtime: options.runtime,
-      sessionId: input.parentSessionId,
-      type: "subagent_spawned",
-      payload: buildDelegationLifecyclePayload(initialRecord),
-    });
-    ensureDelegationLineageNode({
-      runtime: options.runtime,
-      sessionId: input.parentSessionId,
-      record: initialRecord,
-    });
+      recordDelegationRuntimeEvent({
+        runtime: options.runtime,
+        sessionId: input.parentSessionId,
+        type: "subagent_spawned",
+        payload: buildDelegationLifecyclePayload(initialRecord),
+      });
+      ensureDelegationLineageNode({
+        runtime: options.runtime,
+        sessionId: input.parentSessionId,
+        record: initialRecord,
+      });
+    } catch (error) {
+      releaseRuntimeParallelSlot(options.runtime, input.parentSessionId, runId);
+      return immediateFailure(error instanceof Error ? error.message : String(error));
+    }
 
     const liveRun: LiveHostedDelegationRun = {
       record: initialRecord,
@@ -790,9 +799,6 @@ export function createHostedSubagentAdapter(
           receipt: finalizationReceipt,
           recordPendingTransition: true,
         });
-        if (finalizationReceipt.workerResult) {
-          parallelSlotReleased = true;
-        }
         liveRun.record = finalizationReceipt.record;
         return finalizationReceipt.outcome;
       } catch (error) {
@@ -843,9 +849,6 @@ export function createHostedSubagentAdapter(
           initialDelivery: initialRecord.delivery,
           receipt: finalizationReceipt,
         });
-        if (finalizationReceipt.workerResult) {
-          parallelSlotReleased = true;
-        }
         liveRun.record = finalizationReceipt.record;
         return finalizationReceipt.outcome;
       } finally {
@@ -853,9 +856,9 @@ export function createHostedSubagentAdapter(
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);
         }
-        if (!parallelSlotReleased) {
-          releaseRuntimeParallelSlot(options.runtime, input.parentSessionId, runId);
-        }
+        // The slot frees on terminal status; pending-adoption work is tracked
+        // by the adoption surfaces, not by holding a concurrency slot.
+        releaseRuntimeParallelSlot(options.runtime, input.parentSessionId, runId);
         if (child) {
           await disposeChildSession(child, {
             cancellationReason,
@@ -892,9 +895,9 @@ export function createHostedSubagentAdapter(
       reservedTaskPaths: collectReservedTaskPaths(input.fromSessionId),
     });
     const catalog = await loadHostedDelegationCatalog(options.runtime.identity.workspaceRoot);
-    const readonlyEnvelope = catalog.envelopes.get("explorer-readonly");
+    const readonlyEnvelope = catalog.envelopes.get("readonly-shared");
     if (!readonlyEnvelope) {
-      throw new Error("missing_explorer_readonly_envelope");
+      throw new Error("missing_readonly_shared_archetype");
     }
     const contractFields = buildForkDelegationContractRecordFields({
       parentSessionId,
@@ -925,18 +928,8 @@ export function createHostedSubagentAdapter(
       delivery: buildDeliveryRecordFromRequest(input.request.delivery, startedAt),
     };
 
-    recordDelegationRuntimeEvent({
-      runtime: options.runtime,
-      sessionId: input.fromSessionId,
-      type: "subagent_spawned",
-      payload: buildDelegationLifecyclePayload(initialRecord),
-    });
-    ensureDelegationLineageNode({
-      runtime: options.runtime,
-      sessionId: input.fromSessionId,
-      record: initialRecord,
-    });
-
+    // Admission precedes the spawn record so the gate never counts this run
+    // against its own ceiling (acquire -> spawn ordering, matching run/fanout).
     const parallel = acquireRuntimeParallelSlot(options.runtime, input.fromSessionId, runId);
     if (!parallel.accepted) {
       const failedRecord: DelegationRunRecord = {
@@ -960,6 +953,37 @@ export function createHostedSubagentAdapter(
       return {
         ok: false,
         error: failedRecord.error ?? "parallel_slot_rejected",
+        run: cloneDelegationRunRecord(failedRecord),
+      };
+    }
+
+    // Release the slot if the spawn-record or lineage write throws before the
+    // run reaches the try/finally below that owns the release.
+    try {
+      recordDelegationRuntimeEvent({
+        runtime: options.runtime,
+        sessionId: input.fromSessionId,
+        type: "subagent_spawned",
+        payload: buildDelegationLifecyclePayload(initialRecord),
+      });
+      ensureDelegationLineageNode({
+        runtime: options.runtime,
+        sessionId: input.fromSessionId,
+        record: initialRecord,
+      });
+    } catch (error) {
+      releaseRuntimeParallelSlot(options.runtime, input.fromSessionId, runId);
+      const message = error instanceof Error ? error.message : String(error);
+      const failedRecord: DelegationRunRecord = {
+        ...initialRecord,
+        status: "failed",
+        updatedAt: Date.now(),
+        summary: message,
+        error: message,
+      };
+      return {
+        ok: false,
+        error: message,
         run: cloneDelegationRunRecord(failedRecord),
       };
     }

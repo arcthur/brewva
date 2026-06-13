@@ -527,17 +527,28 @@ export function createDetachedSubagentBackgroundController(
         );
       }
 
-      recordDelegationRuntimeEvent({
-        runtime,
-        sessionId: input.parentSessionId,
-        type: "subagent_spawned",
-        payload: buildDelegationLifecyclePayload(initialRecord),
-      });
-      ensureDelegationLineageNode({
-        runtime: runtime,
-        sessionId: input.parentSessionId,
-        record: initialRecord,
-      });
+      try {
+        recordDelegationRuntimeEvent({
+          runtime,
+          sessionId: input.parentSessionId,
+          type: "subagent_spawned",
+          payload: buildDelegationLifecyclePayload(initialRecord),
+        });
+        ensureDelegationLineageNode({
+          runtime: runtime,
+          sessionId: input.parentSessionId,
+          record: initialRecord,
+        });
+      } catch (error) {
+        // writeTerminalFailure releases the acquired slot and records a terminal
+        // event, so a throw before the detached spec is written cannot leak the
+        // reservation.
+        return writeTerminalFailure(
+          initialRecord,
+          "failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
 
       const spec: DetachedSubagentRunSpec = {
         schema: "brewva.subagent-run-spec.v8",
