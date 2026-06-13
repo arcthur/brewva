@@ -27,9 +27,9 @@ export const BrewvaConfigService = {
         static get defaultLayer() {
           return Layer.effect(
             this,
-            Config.all(fields)
-              .asEffect()
-              .pipe(Effect.map((config) => this.of(config as BrewvaConfigServiceShape<Fields>))),
+            Config.all(fields).pipe(
+              Effect.map((config) => this.of(config as BrewvaConfigServiceShape<Fields>)),
+            ),
           );
         }
       }

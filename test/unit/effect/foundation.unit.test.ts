@@ -26,6 +26,7 @@ import {
 import { nodeFileSystemLayer } from "@brewva/brewva-effect/platform-node";
 import {
   BrewvaEffect,
+  BrewvaExit,
   BrewvaFiber,
   BrewvaConfig,
   BrewvaLayer,
@@ -618,5 +619,49 @@ describe("brewva-effect foundation helpers", () => {
 
     await firstSpine.dispose();
     await secondSpine.dispose();
+  });
+
+  test("exposes Effect.fn so spine generators carry an automatic traced span", async () => {
+    const traced = BrewvaEffect.fn("brewva.test.fn")(function* (value: number) {
+      const span = yield* BrewvaEffect.currentSpan;
+      return { span: span.name, value: value * 2 };
+    });
+
+    const result = await runPromiseAtBoundary(traced(21));
+
+    expect(result).toEqual({ span: "brewva.test.fn", value: 42 });
+  });
+
+  test("exposes Layer.mock so partial service doubles fail loudly on unimplemented members", async () => {
+    class MockProbe extends BrewvaContext.Service<
+      MockProbe,
+      {
+        readonly ready: boolean;
+        readonly load: (id: string) => BrewvaEffect.Effect<string>;
+        readonly remove: (id: string) => BrewvaEffect.Effect<void>;
+      }
+    >()("@brewva/test/MockProbe") {}
+
+    const mockLayer = BrewvaLayer.mock(MockProbe, {
+      ready: true,
+      load: (id) => BrewvaEffect.succeed(`loaded:${id}`),
+      // remove is intentionally omitted -> unimplemented defect when exercised
+    });
+
+    const loaded = await runPromiseAtBoundary(
+      BrewvaEffect.gen(function* () {
+        const probe = yield* MockProbe;
+        return yield* probe.load("x1");
+      }).pipe(BrewvaEffect.provide(mockLayer)),
+    );
+    expect(loaded).toBe("loaded:x1");
+
+    const exit = await BrewvaEffect.runPromiseExit(
+      BrewvaEffect.gen(function* () {
+        const probe = yield* MockProbe;
+        return yield* probe.remove("x1");
+      }).pipe(BrewvaEffect.provide(mockLayer)),
+    );
+    expect(BrewvaExit.isFailure(exit)).toBe(true);
   });
 });
