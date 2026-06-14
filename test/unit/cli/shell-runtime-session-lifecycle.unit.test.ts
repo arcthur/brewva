@@ -559,6 +559,57 @@ describe("shell runtime: session lifecycle", () => {
     runtime.dispose();
   });
 
+  test("tree express branch (b) checks out conversation-only without a carry dialog", async () => {
+    const { bundle } = createFakeBundle({ sessionId: "tree-express-session" });
+    const store = new HostedRuntimeTapeSessionStore(bundle.runtime, "tree-express-session");
+    store.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "explore an idea" }],
+      timestamp: Date.now(),
+    } as StoredSessionMessage);
+    store.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "done" }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      stopReason: "stop",
+      timestamp: Date.now() + 1,
+    } as StoredSessionMessage);
+    const session = bundle.session as unknown as {
+      sessionManager: HostedRuntimeTapeSessionStore;
+      replaceMessages(messages: unknown[]): Promise<void>;
+    };
+    const replacedMessages: unknown[][] = [];
+    session.sessionManager = store;
+    session.replaceMessages = async (messages) => {
+      replacedMessages.push(messages);
+    };
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+    });
+
+    runtime.ui.setEditorText("/tree");
+    await submitComposer(runtime);
+    await keymapEffect(runtime, { type: "overlay.moveSelection", delta: -1 });
+    await runtime.handleInput({
+      key: "character",
+      text: "b",
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+    await Bun.sleep(0);
+
+    // One keystroke: no carry dialog, checkout already applied.
+    expect(runtime.getViewState().overlay.active?.payload?.kind).not.toBe("select");
+    expect(runtime.getViewState().composer.text).toBe("explore an idea");
+    expect(replacedMessages.at(-1) ?? []).toEqual([]);
+    runtime.dispose();
+  });
+
   test("tree checkout restores a selected user prompt into the composer", async () => {
     const { bundle } = createFakeBundle({ sessionId: "tree-restore-session" });
     const store = new HostedRuntimeTapeSessionStore(bundle.runtime, "tree-restore-session");

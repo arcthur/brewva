@@ -75,12 +75,14 @@ default cockpit surface.
 
 `/tree` opens context-entry navigation for the active session. It is the
 micro-level browser for exact prompt/tool/message context entries. Checkout is
-conversation-only by default; when checkout leaves the current branch tail, the
-overlay asks for no summary, a generated branch-carry summary, or a generated
-summary with operator instructions. Workspace rollback requires the explicit
-rewind shortcut or `/rewind`. Inside `/tree`, `/` opens interactive search, `F`
-cycles filters, `f` folds the selected subtree, `l` focuses `/lineage`, and `r`
-opens conversation/code rewind choices when a prior checkpoint exists. Entries
+conversation-only by default; when checkout leaves the current branch tail,
+`Enter` asks for no summary, a generated branch-carry summary, or a generated
+summary with operator instructions, while `b` branches conversation-only with no
+summary in one keystroke and `c` quick-carries a generated summary. Workspace
+rollback requires the explicit rewind shortcut or `/rewind`. Inside `/tree`, `/`
+opens interactive search, `F` cycles filters, `f` folds the selected subtree, `l`
+focuses `/lineage`, and `r` opens conversation/code rewind choices when a prior
+checkpoint exists. Entries
 show whether later workspace patch sets exist so conversation-only checkout is
 visibly separate from file rollback.
 

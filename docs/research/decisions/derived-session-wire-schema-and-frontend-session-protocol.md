@@ -19,7 +19,7 @@
   - `packages/brewva-runtime/src/internal/legacy-runtime/engine/sessions/event-types.ts`
   - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
   - `packages/brewva-gateway/src/daemon/session-supervisor/index.ts`
-  - `packages/brewva-gateway/src/daemon/session-supervisor/session-binding-store.ts`
+  - `packages/brewva-gateway/src/daemon/session-supervisor/control-tape.ts`
   - `packages/brewva-gateway/src/daemon/internal/session-wire-status.ts`
 
 ## Decision Summary

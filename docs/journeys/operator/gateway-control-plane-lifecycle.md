@@ -57,8 +57,8 @@ flowchart TD
 ## Key Steps
 
 1. `brewva gateway start` launches the local daemon and binds only to loopback.
-2. The daemon writes `gateway.pid.json`, `gateway.log`, `gateway.token`, and
-   `children.json`.
+2. The daemon writes `gateway.pid.json`, `gateway.log`, `gateway.token`,
+   `children.json`, and the `gateway-control.jsonl` control tape.
 3. Clients authenticate through challenge-response before using the typed
    WebSocket protocol.
 4. The daemon owns hosted session orchestration, child-process supervision, and
@@ -77,6 +77,12 @@ flowchart TD
 - `rotate-token` revokes the old token immediately
 - the gateway state directory contains control-plane material, not runtime
   replay truth
+- control-plane commitments are receipt-bearing: token rotation, stop, and
+  scheduler pause/resume append durable receipts to the `gateway-control.jsonl`
+  control tape
+- `sessions.send` is idempotent by client `turnId`: a retry replays the durable
+  `gateway_prompt_admitted` admission instead of re-running the turn, so a client
+  is retry-safe across the connection drops `rotate-token` and restart cause
 - public-session replay binding is resolved from the gateway control tape
   (`gateway_session_bound` receipts), not from `children.json`
 
@@ -108,11 +114,13 @@ flowchart TD
   - `gateway.log`
   - `gateway.token`
   - `children.json`
+  - `gateway-control.jsonl`
 
 ## Code Pointers
 
 - Gateway CLI: `packages/brewva-gateway/src/admin/internal/cli.ts`
 - Gateway daemon: `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
+- Control tape: `packages/brewva-gateway/src/daemon/session-supervisor/control-tape.ts`
 - Protocol schema: `packages/brewva-gateway/src/protocol/schema.ts`
 - Client: `packages/brewva-gateway/src/ingress/internal/client.ts`
 - Main CLI entry: `packages/brewva-cli/src/index.ts`

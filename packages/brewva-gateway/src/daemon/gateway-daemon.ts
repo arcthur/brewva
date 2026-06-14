@@ -16,6 +16,7 @@ import type { BrewvaScheduleSelfImproveConfig } from "@brewva/brewva-runtime/con
 import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { createDeferred } from "@brewva/brewva-std/async";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import { safeParseJson } from "@brewva/brewva-std/json";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
@@ -82,6 +83,14 @@ import {
   type SessionBackend,
   type SessionWorkerInfo,
 } from "./session-backend.js";
+import {
+  appendGatewayControlReceipt,
+  closeGatewayControlTape,
+  findGatewayPromptAdmission,
+  listGatewaySessionBindings,
+  resolveGatewayControlTapePath,
+  type GatewayControlReceiptInput,
+} from "./session-supervisor/control-tape.js";
 import { SessionSupervisor } from "./session-supervisor/index.js";
 import {
   createDaemonListeningEvent,
@@ -150,6 +159,13 @@ function ensureDirectoryCwd(cwd: string): void {
 
 function isConnectionAuthenticated(state: ConnectionState): boolean {
   return state.phase === "authenticated";
+}
+
+// Stable digest of a prompt, recorded on the admission receipt so a turn-id
+// retry can be confirmed as the same prompt (idempotent) or rejected as a
+// different one (conflict). Hashing stays behind std.
+function hashPrompt(prompt: string): string {
+  return `sha256:${sha256Hex(prompt)}`;
 }
 
 function normalizeTraceId(traceId: unknown): string | undefined {
@@ -221,7 +237,26 @@ export interface GatewayHealthPayload {
   workers: number;
 }
 
+export type GatewayAssessmentVerdict = "ok" | "inconclusive";
+
+/**
+ * A subsystem the daemon is responding for but cannot honestly assess as
+ * healthy yet. Surfaced instead of collapsing uncertainty into a fake "ok"
+ * (axiom 7: inconclusive is honest governance).
+ */
+export interface GatewayInconclusiveSignal {
+  subject: "worker";
+  reason: string;
+  sessionId?: string;
+}
+
+export interface GatewayStatusAssessment {
+  verdict: GatewayAssessmentVerdict;
+  inconclusive: GatewayInconclusiveSignal[];
+}
+
 export interface GatewayStatusDeepPayload extends GatewayHealthPayload {
+  assessment: GatewayStatusAssessment;
   stateDir: string;
   pidFilePath: string;
   logFilePath: string;
@@ -315,6 +350,7 @@ export class GatewayDaemon {
   private readonly host: string;
   private readonly configuredPort: number;
   private readonly stateDir: string;
+  private readonly controlTapePath: string;
   private readonly pidFilePath: string;
   private readonly logFilePath: string;
   private readonly tokenFilePath: string;
@@ -404,6 +440,7 @@ export class GatewayDaemon {
       : DEFAULT_PORT;
     this.currentPort = this.configuredPort;
     this.stateDir = resolve(options.stateDir);
+    this.controlTapePath = resolveGatewayControlTapePath(this.stateDir);
     this.pidFilePath = resolve(options.pidFilePath);
     this.logFilePath = resolve(options.logFilePath);
     this.tokenFilePath = resolve(options.tokenFilePath);
@@ -801,9 +838,30 @@ export class GatewayDaemon {
     };
   }
 
+  // Honestly classify what the daemon cannot yet assess as healthy, rather than
+  // implying all-clear by the absence of errors (axiom 7). A supervised worker
+  // that has not reported readiness — spawning or recovering — is indeterminate,
+  // not healthy, regardless of whether it already carries a requested agent
+  // session id.
+  private assessStatus(workers: SessionWorkerInfo[]): GatewayStatusAssessment {
+    const inconclusive: GatewayInconclusiveSignal[] = workers
+      .filter((worker) => !worker.ready)
+      .map((worker) => ({
+        subject: "worker" as const,
+        reason: "worker_not_ready",
+        sessionId: worker.sessionId,
+      }));
+    return {
+      verdict: inconclusive.length > 0 ? "inconclusive" : "ok",
+      inconclusive,
+    };
+  }
+
   getDeepStatus(): GatewayStatusDeepPayload {
+    const workersDetail = this.supervisor.listWorkers();
     return {
       ...this.getHealthStatus(),
+      assessment: this.assessStatus(workersDetail),
       stateDir: this.stateDir,
       pidFilePath: this.pidFilePath,
       logFilePath: this.logFilePath,
@@ -812,7 +870,7 @@ export class GatewayDaemon {
       healthHttpPath: this.currentHealthHttpPort ? this.healthHttpPath : undefined,
       heartbeat: this.heartbeatScheduler.getStatus(),
       scheduler: this.getSchedulerStatus(),
-      workersDetail: this.supervisor.listWorkers(),
+      workersDetail,
       connectionsDetail: [...this.connections.values()].map((value) => ({
         connId: value.connId,
         authenticated: isConnectionAuthenticated(value),
@@ -855,6 +913,24 @@ export class GatewayDaemon {
     );
   }
 
+  // Control-plane commitments are recorded as durable receipts on the gateway
+  // control tape. Receipt persistence must never break the operator action it
+  // accompanies, so a failure degrades to a warning rather than propagating
+  // (graceful degradation beats hidden cleverness). For `gateway_prompt_admitted`
+  // a persistence failure (a genuine I/O error — a torn tail is recovered, not
+  // fatal) means that one turn's idempotency falls back to the supervisor's
+  // in-flight turn-id guard; it never blocks the turn.
+  private emitControlReceipt(input: GatewayControlReceiptInput): void {
+    try {
+      appendGatewayControlReceipt(this.controlTapePath, input);
+    } catch (error) {
+      this.logger.warn("failed to record gateway control receipt", {
+        type: input.type,
+        error: toErrorMessage(error),
+      });
+    }
+  }
+
   async stop(reason = "shutdown"): Promise<void> {
     if (this.stopping) {
       await this.stopDeferred.promise;
@@ -863,6 +939,7 @@ export class GatewayDaemon {
     this.stopping = true;
     this.lifecycleEvent = createDaemonStoppingEvent(reason);
 
+    this.emitControlReceipt({ type: "gateway_stopped", reason });
     this.logger.info("gateway daemon stopping", { reason });
     this.broadcastEvent("shutdown", {
       reason,
@@ -907,6 +984,7 @@ export class GatewayDaemon {
 
     this.uninstallSignalHandlers();
     this.removeOwnedPidRecordIfPresent();
+    closeGatewayControlTape(this.controlTapePath);
     this.lifecycleEvent = createDaemonStoppedEvent(reason);
     this.logger.info("gateway daemon stopped", { reason });
     this.stopDeferred.resolve(undefined);
@@ -1396,7 +1474,39 @@ export class GatewayDaemon {
           turnId?: string;
         };
         const sessionId = input.sessionId.trim();
+        const clientTurnId = input.turnId?.trim() || undefined;
+        const promptHash = clientTurnId ? hashPrompt(input.prompt) : undefined;
         this.subscribeConnectionToSession(state, sessionId);
+
+        // Conditional idempotent admission: a retry that reuses the client turn
+        // id AND the same prompt replays the recorded admission instead of
+        // admitting the turn twice — retry-safe across the connection drops that
+        // token rotation and daemon restart cause. The same turn id with a
+        // different prompt is a client conflict, not a retry, and is rejected
+        // rather than silently dropping the new prompt (honest governance).
+        if (clientTurnId && promptHash) {
+          const admitted = findGatewayPromptAdmission(
+            this.controlTapePath,
+            sessionId,
+            clientTurnId,
+          );
+          if (admitted) {
+            if (admitted.promptHash !== promptHash) {
+              throw gatewayError(
+                ErrorCodes.BAD_STATE,
+                `turn id ${clientTurnId} was already admitted with a different prompt`,
+                { retryable: false, details: { kind: "prompt_conflict" } },
+              );
+            }
+            return {
+              sessionId,
+              ...(admitted.agentSessionId ? { agentSessionId: admitted.agentSessionId } : {}),
+              turnId: clientTurnId,
+              accepted: true,
+              idempotentReplay: true,
+            };
+          }
+        }
 
         let payload: Awaited<ReturnType<SessionBackend["sendPrompt"]>>;
         try {
@@ -1406,6 +1516,37 @@ export class GatewayDaemon {
             source: "gateway",
           });
         } catch (error) {
+          // An already-active turn id means this prompt is admitted in-flight;
+          // record the admission receipt (its deterministic id dedupes with the
+          // concurrent winner's) so both paths share provenance and the resolved
+          // retry is durably idempotent, then resolve as success. The agent
+          // session id comes from the durable binding so the ack matches the
+          // recorded-admission replay shape.
+          if (
+            clientTurnId &&
+            promptHash &&
+            isSessionBackendStateError(error) &&
+            error.code === "duplicate_active_turn_id"
+          ) {
+            const boundAgentSessionId = listGatewaySessionBindings(
+              this.controlTapePath,
+              sessionId,
+            ).at(-1)?.agentSessionId;
+            this.emitControlReceipt({
+              type: "gateway_prompt_admitted",
+              gatewaySessionId: sessionId,
+              turnId: clientTurnId,
+              promptHash,
+              ...(boundAgentSessionId ? { agentSessionId: boundAgentSessionId } : {}),
+            });
+            return {
+              sessionId,
+              ...(boundAgentSessionId ? { agentSessionId: boundAgentSessionId } : {}),
+              turnId: clientTurnId,
+              accepted: true,
+              idempotentReplay: true,
+            };
+          }
           if (isSessionBackendStateError(error)) {
             throw gatewayError(ErrorCodes.BAD_STATE, toErrorMessage(error), {
               retryable: false,
@@ -1417,11 +1558,22 @@ export class GatewayDaemon {
           throw error;
         }
 
+        if (clientTurnId && promptHash) {
+          this.emitControlReceipt({
+            type: "gateway_prompt_admitted",
+            gatewaySessionId: sessionId,
+            turnId: clientTurnId,
+            promptHash,
+            agentSessionId: payload.agentSessionId,
+          });
+        }
+
         return {
           sessionId: payload.sessionId,
           agentSessionId: payload.agentSessionId,
           turnId: payload.turnId,
           accepted: payload.accepted,
+          idempotentReplay: false,
         };
       }
       case "sessions.steer": {
@@ -1488,6 +1640,12 @@ export class GatewayDaemon {
             ? this.revokeAuthenticatedConnections(previousToken)
             : 0;
 
+        this.emitControlReceipt({
+          type: "gateway_token_rotated",
+          revokedConnections,
+          connId: state.connId,
+          timestamp: rotatedAt,
+        });
         this.logger.info("gateway auth token rotated", {
           connId: state.connId,
           rotatedAt,
@@ -1615,6 +1773,11 @@ export class GatewayDaemon {
       this.lifecycleEvent = createDaemonSchedulerPausedEvent(
         this.schedulerExecutionState.reason ?? "operator_request",
       );
+      this.emitControlReceipt({
+        type: "gateway_scheduler_paused",
+        reason: this.schedulerExecutionState.reason,
+        timestamp: this.schedulerExecutionState.pausedAt,
+      });
       return {
         paused: true,
         changed: true,
@@ -1672,6 +1835,7 @@ export class GatewayDaemon {
     };
     this.scheduler.syncExecutionState();
     this.lifecycleEvent = createDaemonSchedulerResumedEvent();
+    this.emitControlReceipt({ type: "gateway_scheduler_resumed" });
     return {
       paused: false,
       changed: true,

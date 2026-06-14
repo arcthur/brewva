@@ -5,8 +5,8 @@ import { SessionSupervisor } from "@brewva/brewva-gateway";
 import { TASK_STUCK_DETECTED_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import {
   listGatewaySessionBindings,
-  resolveGatewaySessionBindingStorePath,
-} from "../../../packages/brewva-gateway/src/daemon/session-supervisor/session-binding-store.js";
+  resolveGatewayControlTapePath,
+} from "../../../packages/brewva-gateway/src/daemon/session-supervisor/control-tape.js";
 import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
@@ -319,7 +319,7 @@ describe("session supervisor watchdog bridge", () => {
         ).toBeGreaterThanOrEqual(2);
 
         const bindingReceipts = listGatewaySessionBindings(
-          resolveGatewaySessionBindingStorePath(stateDir),
+          resolveGatewayControlTapePath(stateDir),
           "archived-session",
         );
         expect(bindingReceipts).toHaveLength(2);

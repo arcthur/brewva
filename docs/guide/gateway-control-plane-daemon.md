@@ -95,6 +95,15 @@ Key files:
 - `gateway.pid.json`: daemon PID and listening metadata.
 - `gateway.log`: structured logs (with rotation).
 - `gateway.token`: control-plane auth token.
+- `gateway-control.jsonl`: append-only control tape (`brewva.gateway-control.v3`).
+  - Holds `gateway_session_bound` bindings, `gateway_prompt_admitted` admissions,
+    and operator-commitment receipts (`gateway_token_rotated`, `gateway_stopped`,
+    `gateway_scheduler_paused`/`gateway_scheduler_resumed`).
+  - Authority for public-session replay binding and for idempotent prompt
+    admission; dedupe-by-id and restart-safe.
+  - Per-turn `gateway_prompt_admitted` receipts compact to the most recent
+    admissions (the file is atomically rewritten); bindings and operator
+    receipts are retained.
 - `HEARTBEAT.md`: externalized heartbeat policy file.
   - JSONC heartbeat rules define one explicit prompt per wake-up rule.
   - Comments and trailing commas are accepted inside the fenced heartbeat block.

@@ -299,6 +299,22 @@ export async function queryGatewayStatus(input: {
   }
 }
 
+function readDeepAssessment(deep: unknown): { verdict: string; inconclusive: number } | undefined {
+  if (typeof deep !== "object" || deep === null) {
+    return undefined;
+  }
+  const assessment = (deep as { assessment?: unknown }).assessment;
+  if (typeof assessment !== "object" || assessment === null) {
+    return undefined;
+  }
+  const verdict = (assessment as { verdict?: unknown }).verdict;
+  if (typeof verdict !== "string") {
+    return undefined;
+  }
+  const inconclusive = (assessment as { inconclusive?: unknown }).inconclusive;
+  return { verdict, inconclusive: Array.isArray(inconclusive) ? inconclusive.length : 0 };
+}
+
 function printStatusText(status: GatewayStatusReport, deep: boolean, paths: GatewayPaths): void {
   if (!status.running) {
     if (status.stalePid && status.pidRecord) {
@@ -322,6 +338,14 @@ function printStatusText(status: GatewayStatusReport, deep: boolean, paths: Gate
     `gateway: running pid=${status.pidRecord?.pid} host=${status.host} port=${status.port} deep=${deep ? "yes" : "no"}`,
   );
   if (deep && status.deep !== undefined) {
+    const assessment = readDeepAssessment(status.deep);
+    if (assessment) {
+      console.log(
+        assessment.inconclusive > 0
+          ? `assessment: ${assessment.verdict} (${assessment.inconclusive} subsystem(s) not yet assessable)`
+          : `assessment: ${assessment.verdict}`,
+      );
+    }
     console.log(JSON.stringify(status.deep, null, 2));
   }
 }

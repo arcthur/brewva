@@ -43,9 +43,10 @@ Key ideas:
   the configured external pager
 - `/tree` opens the context-entry micro tree. `Enter` checks out the selected
   entry as conversation-only state and asks whether to carry a summary when
-  leaving the current branch tail. `/` refines search, `F` cycles filters, `c`
-  quick-carries a bounded branch summary, `r` opens explicit rewind choices for
-  conversation/code rollback, and `l` focuses the owning lineage node.
+  leaving the current branch tail. `b` branches here conversation-only with no
+  summary in one keystroke (no dialog), and `c` quick-carries a bounded branch
+  summary. `/` refines search, `F` cycles filters, `r` opens explicit rewind
+  choices for conversation/code rollback, and `l` focuses the owning lineage node.
 - `/lineage` remains the macro topology view for work branches, recovery,
   delegation, adoption, and channel-local selection. `t` opens `/tree` scoped
   to the selected lineage node.

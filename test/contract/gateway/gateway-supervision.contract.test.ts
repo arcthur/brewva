@@ -777,6 +777,7 @@ describe("gateway supervision and subscriptions", () => {
                   lastHeartbeatAt: 1,
                   lastActivityAt: 1,
                   pendingRequests: 0,
+                  ready: true,
                 },
               ]
             : [],

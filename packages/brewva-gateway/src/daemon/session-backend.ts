@@ -48,6 +48,10 @@ export interface SessionWorkerInfo {
   pendingRequests: number;
   agentSessionId?: string;
   cwd?: string;
+  // True once the worker has reported readiness and can accept turns. A
+  // spawning or recovering worker is `false` even when it already carries a
+  // requested agent session id.
+  ready: boolean;
 }
 
 export interface SendPromptOptions {

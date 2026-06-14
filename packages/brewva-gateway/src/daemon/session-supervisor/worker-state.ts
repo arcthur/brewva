@@ -117,6 +117,7 @@ export function isWorkerIdle(handle: WorkerHandle): boolean {
 }
 
 export function toSessionWorkerInfo(handle: WorkerHandle): SessionWorkerInfo {
+  const kind = handle.lifecycleState.kind;
   return {
     sessionId: handle.sessionId,
     pid: handle.child.pid ?? 0,
@@ -126,6 +127,7 @@ export function toSessionWorkerInfo(handle: WorkerHandle): SessionWorkerInfo {
     pendingRequests: handle.pending.size + handle.pendingTurns.size + handle.turnQueue.length,
     agentSessionId: handle.requestedAgentSessionId,
     cwd: handle.cwd,
+    ready: kind === "ready" || kind === "busy",
   };
 }
 

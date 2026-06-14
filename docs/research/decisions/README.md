@@ -9,6 +9,7 @@ Every accepted decision inherits these rules:
 - Future changes update stable docs and start from a new active note when the decision changes materially.
 - Generic Why and Non-goals boilerplate is forbidden. Keep only decision-specific non-goals when they preserve a real boundary.
 - Deprecated validation tables, surface budgets, implementation checklists, and promoted lifecycle wording stay out of this directory.
+- Axiom citation (decisions dated `2026-06-13` and later): include an `## Axioms` section that references `docs/architecture/design-axioms.md` and names which axioms the decision obeys or overrides. Decisions are case law over the constitution — a decision that touches authority must show its work, so docs cannot silently widen kernel authority. This is enforced by `test/fitness/docs/decision-axiom-citations.fitness.test.ts`; decisions before that date are grandfathered.
 
 ## Decision Index
 
@@ -111,6 +112,7 @@ Every accepted decision inherits these rules:
 - [agent-runtime-ergonomics-control-plane](./agent-runtime-ergonomics-control-plane.md)
 - [context-chain-subtraction-and-evidence-state-collapse](./context-chain-subtraction-and-evidence-state-collapse.md)
 - [derived-session-wire-schema-and-frontend-session-protocol](./derived-session-wire-schema-and-frontend-session-protocol.md)
+- [gateway-control-tape-and-receipt-first-control-plane](./gateway-control-tape-and-receipt-first-control-plane.md)
 - [gateway-domain-slicing-and-control-plane-ports](./gateway-domain-slicing-and-control-plane-ports.md)
 - [gateway-experience-ring-decomposition](./gateway-experience-ring-decomposition.md)
 - [gateway-hosted-lane-consolidation](./gateway-hosted-lane-consolidation.md)

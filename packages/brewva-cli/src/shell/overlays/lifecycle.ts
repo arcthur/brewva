@@ -664,8 +664,13 @@ export class ShellOverlayLifecycleHandler {
       return true;
     }
 
+    if (active.kind === "tree" && key === "b") {
+      await this.handleTreePrimary(active, { express: "none" });
+      return true;
+    }
+
     if (active.kind === "tree" && key === "c") {
-      await this.handleTreePrimary(active, { carrySummary: true });
+      await this.handleTreePrimary(active, { express: "summary" });
       return true;
     }
 
@@ -1327,14 +1332,16 @@ export class ShellOverlayLifecycleHandler {
 
   private async handleTreePrimary(
     active: TreeOverlayPayload,
-    options: { carrySummary?: boolean } = {},
+    options: { express?: "none" | "summary" } = {},
   ): Promise<void> {
     const node = active.nodes[active.selectedIndex];
     if (!node) {
       return;
     }
-    if (options.carrySummary) {
-      await this.completeTreeCheckout(active, node, { mode: "summary" });
+    // Express checkout: one keystroke, no carry dialog. The lightest path
+    // (conversation-only, no summary) is as quick as the summary path.
+    if (options.express) {
+      await this.completeTreeCheckout(active, node, { mode: options.express });
       return;
     }
     const checkoutLeafEntryId =
@@ -1391,18 +1398,22 @@ export class ShellOverlayLifecycleHandler {
         lineageNodeId: active.scopeLineageNodeId ?? undefined,
       }),
     );
+    // Fold the workspace-effect warning into the result notification so the
+    // express paths (b / c), which skip the carry dialog, still surface it.
+    const workspaceWarning = buildTreeWorkspaceEffectWarning(node);
+    const baseMessage =
+      result.restorationAdvisory ??
+      (result.summaryRecordedId
+        ? `Checked out tree entry ${node.entryId} with branch carry summary ${result.summaryRecordedId}.`
+        : undefined) ??
+      `Checked out tree entry ${node.entryId} on lineage ${result.lineageNodeId ?? "none"}.`;
     this.context.commit([
       {
         type: "notification.add",
         notification: {
           id: `tree-info:${randomUUID()}`,
-          level: result.restorationAdvisory ? "warning" : "info",
-          message:
-            result.restorationAdvisory ??
-            (result.summaryRecordedId
-              ? `Checked out tree entry ${node.entryId} with branch carry summary ${result.summaryRecordedId}.`
-              : undefined) ??
-            `Checked out tree entry ${node.entryId} on lineage ${result.lineageNodeId ?? "none"}.`,
+          level: result.restorationAdvisory || workspaceWarning ? "warning" : "info",
+          message: workspaceWarning ? `${baseMessage} ${workspaceWarning}` : baseMessage,
           createdAt: Date.now(),
         },
       },

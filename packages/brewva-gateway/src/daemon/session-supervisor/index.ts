@@ -60,10 +60,10 @@ import {
 } from "../types.js";
 import { SessionOpenAdmissionController } from "./admission.js";
 import {
-  appendGatewaySessionBindingReceipt,
+  appendGatewayControlReceipt,
   listGatewaySessionBindings,
-  resolveGatewaySessionBindingStorePath,
-} from "./session-binding-store.js";
+  resolveGatewayControlTapePath,
+} from "./control-tape.js";
 import {
   buildSessionTurnEnvelope,
   extractPromptFromEnvelope,
@@ -342,7 +342,7 @@ export class SessionSupervisor implements SessionBackend {
   private readonly workers = new Map<string, WorkerHandle>();
   private readonly stateDir: string;
   private readonly childrenRegistryPath: string;
-  private readonly sessionBindingStorePath: string;
+  private readonly controlTapePath: string;
   private readonly sessionIdleTtlMs: number;
   private readonly sessionIdleSweepIntervalMs: number;
   private readonly maxWorkers: number;
@@ -387,7 +387,7 @@ export class SessionSupervisor implements SessionBackend {
     this.supervisorScope = runSyncAtBoundary(BrewvaScope.make());
     this.stateDir = resolve(options.stateDir);
     this.childrenRegistryPath = resolve(this.stateDir, "children.json");
-    this.sessionBindingStorePath = resolveGatewaySessionBindingStorePath(this.stateDir);
+    this.controlTapePath = resolveGatewayControlTapePath(this.stateDir);
     this.stateStore = options.stateStore ?? new FileGatewayStateStore();
     this.recoveryWalStore = options.recoveryWalStore;
     this.recoveryWalCompactIntervalMs = Math.max(
@@ -612,7 +612,8 @@ export class SessionSupervisor implements SessionBackend {
           String(child.pid ?? input.sessionId),
           input.sessionId,
         );
-        appendGatewaySessionBindingReceipt(this.sessionBindingStorePath, {
+        appendGatewayControlReceipt(this.controlTapePath, {
+          type: "gateway_session_bound",
           gatewaySessionId: input.sessionId,
           agentSessionId: readyPayload.agentSessionId,
           cwd: handle.cwd,
@@ -1228,24 +1229,14 @@ export class SessionSupervisor implements SessionBackend {
       return [];
     }
 
-    const seen = new Set<string>();
-    return listGatewaySessionBindings(this.sessionBindingStorePath, normalizedSessionId).flatMap(
-      (entry) => {
-        const key = `${entry.gatewaySessionId}::${entry.agentSessionId}::${entry.cwd ?? ""}`;
-        if (seen.has(key)) {
-          return [];
-        }
-        seen.add(key);
-        return [
-          {
-            sessionId: entry.gatewaySessionId,
-            agentSessionId: entry.agentSessionId,
-            openedAt: entry.openedAt,
-            cwd: entry.cwd,
-          },
-        ];
-      },
-    );
+    // The control tape already dedupes bindings by deterministic id, so the
+    // projection maps one-to-one with no further deduplication.
+    return listGatewaySessionBindings(this.controlTapePath, normalizedSessionId).map((entry) => ({
+      sessionId: entry.gatewaySessionId,
+      agentSessionId: entry.agentSessionId,
+      openedAt: entry.openedAt,
+      cwd: entry.cwd,
+    }));
   }
 
   private persistRegistry(): void {

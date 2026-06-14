@@ -153,7 +153,7 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
         `Tree: ${payload.nodes.length}/${payload.totalEntryCount}`,
         `Current: ${payload.currentEntryId ?? "root"} lineage=${payload.currentLineageNodeId ?? "none"}`,
         `Scope: ${payload.scopeLineageNodeId ?? "all"} search=${payload.query} filter=${payload.filter}`,
-        "Use Up/Down to choose, Enter to checkout, / to search, F to filter, c to quick carry, f to fold, l for lineage, r to rewind, Esc to close.",
+        "Use Up/Down to choose, Enter to checkout, b to branch here, c to quick carry, / to search, F to filter, f to fold, l for lineage, r to rewind, Esc to close.",
       ];
       for (const [index, item] of payload.nodes.entries()) {
         const marker = index === payload.selectedIndex ? ">" : " ";
