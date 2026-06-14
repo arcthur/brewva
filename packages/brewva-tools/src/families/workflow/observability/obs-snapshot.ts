@@ -42,6 +42,7 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
         cost,
         task,
         verificationEvent,
+        recentExecFailures,
       } = readObservabilitySnapshotState(obsSnapshotTool.runtime, sessionId);
       const promptPrefixStable = readBoolean(promptStability?.stablePrefix);
       const promptTailStable = readBoolean(promptStability?.stableTail);
@@ -97,6 +98,18 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
       ) {
         lines.push(`verification_reason: ${verificationPayload.reason}`);
       }
+      lines.push(
+        `recent_exec_failures: ${recentExecFailures.failures.length}${
+          recentExecFailures.truncated ? " (truncated)" : ""
+        }`,
+      );
+      for (const failure of recentExecFailures.failures.slice(0, 10)) {
+        lines.push(
+          `  exec_failure: [${failure.sandbox}] ${failure.commandRedacted} -> ${failure.failureKind}${
+            failure.failureCode ? `:${failure.failureCode}` : ""
+          }`,
+        );
+      }
 
       return okTextResult(lines.join("\n"), {
         ok: true,
@@ -114,6 +127,7 @@ export function createObsSnapshotTool(options: BrewvaToolOptions): ToolDefinitio
           items: task.items.length,
         },
         verification: verificationPayload ?? null,
+        recentExecFailures,
       });
     },
   });

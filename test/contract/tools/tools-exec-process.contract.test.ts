@@ -443,16 +443,17 @@ describe("exec/process tool flow", () => {
     expect(rejected.outcome.kind).toBe("err");
   });
 
-  test("exec throws on non-zero exit code", async () => {
-    const { runtime } = createRuntimeForExecTests({
+  test("exec throws on non-zero exit code and records a host exec.failed event", async () => {
+    const { runtime, events } = createRuntimeForExecTests({
       mode: "permissive",
       backend: "host",
     });
     const execTool = createExecTool({ runtime });
     const sessionId = "s13-exec-fail";
 
-    expect(
-      execTool.execute(
+    let thrownMessage = "";
+    try {
+      await execTool.execute(
         "tc-exec-fail",
         {
           command: 'node -e "process.exit(2)"',
@@ -460,8 +461,21 @@ describe("exec/process tool flow", () => {
         undefined,
         undefined,
         fakeContext(sessionId),
-      ),
-    ).rejects.toThrow("Process exited");
+      );
+    } catch (error) {
+      thrownMessage = error instanceof Error ? error.message : String(error);
+    }
+    expect(thrownMessage).toContain("Process exited");
+
+    // A host non-zero exit must surface as an exec.failed receipt, symmetric
+    // with the box lane, so recent-failure projections can see it.
+    const failures = events.filter((event) => event.type === "exec.failed");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]?.payload?.failureBasis).toEqual({
+      kind: "execution_failure",
+      code: "host_process_nonzero",
+    });
+    expect(failures[0]?.payload?.exitCode).toBe(2);
   });
 
   test("exec interprets large timeout values as milliseconds", async () => {

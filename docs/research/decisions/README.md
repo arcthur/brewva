@@ -94,6 +94,7 @@ Every accepted decision inherits these rules:
 - [recall-first-compounding-intelligence-and-experience-products](./recall-first-compounding-intelligence-and-experience-products.md)
 - [duckdb-session-query-plane](./duckdb-session-query-plane.md)
 - [repository-native-compound-knowledge-and-review-ensemble](./repository-native-compound-knowledge-and-review-ensemble.md)
+- [trust-substrate-optimization-axis](./trust-substrate-optimization-axis.md)
 - [skill-distribution-refresh-and-catalog-surface](./skill-distribution-refresh-and-catalog-surface.md)
 - [skill-contract-layering-project-context-and-explicit-activation](./skill-contract-layering-project-context-and-explicit-activation.md)
 - [skill-compounding-loop-completeness-and-parameterization-model](./skill-compounding-loop-completeness-and-parameterization-model.md)

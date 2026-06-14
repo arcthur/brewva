@@ -96,7 +96,8 @@ There is no automatic host fallback. `security.execution.backend` is either
   prototype-pollution keys are dropped before process launch.
 - Box runtime failures emit `box.exec.failed` or `box.bootstrap.failed` and do
   not downgrade to host. Host and virtual-readonly routing failures emit
-  `exec.failed`.
+  `exec.failed`, as do host command non-zero exits (`host_process_nonzero`) and
+  host start failures (`host_start_failure`), symmetric with the box lane.
 - A virtual readonly route failure never falls back to host. If execution still
   needs to proceed, the next attempt must be a separate
   `local_exec_effectful` `Ask` request.

@@ -2,6 +2,7 @@ import type {
   ExplorerConsultBrief,
   DelegationCompletionPredicate,
   DelegationOutcomeFinding,
+  ReviewLaneConfidence,
   ReviewLaneDisposition,
   ReviewLaneName,
   ReviewPrecedentConsultStatus,
@@ -71,10 +72,25 @@ export interface ReviewLaneDelegationPacketInput {
   completionPredicate?: DelegationCompletionPredicate;
 }
 
+export type ReviewLaneConsensus = "none" | "single" | "unanimous" | "split";
+
 export interface ReviewLaneOutcomeSummary {
   lane: ReviewLaneName;
   status: SubagentOutcome["status"] | "missing";
+  /** Worst disposition across reviewers that produced a structured outcome; "blocked" when none did. */
   disposition: ReviewLaneDisposition;
+  /** Total reviewers routed to the lane. */
+  reviewerCount: number;
+  /** Reviewers that produced a structured review outcome (review coverage). */
+  successfulReviewerCount: number;
+  /** Reviewers that crashed or returned no structured outcome (execution health, not a review finding). */
+  executionFailureCount: number;
+  /** Consensus over the reviewers that produced a structured outcome. */
+  consensus: ReviewLaneConsensus;
+  /** Lowest confidence reported by a structured reviewer; advisory, never a gate. */
+  confidence?: ReviewLaneConfidence;
+  /** How many successful reviewers actually reported a confidence (so partial reporting is visible). */
+  confidenceReportedBy: number;
   summary?: string;
 }
 

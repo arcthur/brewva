@@ -38,6 +38,7 @@ import {
   preflightDetails,
 } from "./exec/preflight.js";
 import {
+  ExecCommandFailedError,
   isExecAbortedError,
   normalizeCommand,
   normalizeOptionalString,
@@ -327,7 +328,42 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               },
             }),
           );
-          return attachExecPreflightDetails(await runHost(), executionPreflight);
+          // Host non-zero exits throw ExecCommandFailedError and host start
+          // failures return an err result; neither emitted an exec.failed event,
+          // so host command failures were invisible to recent-failure
+          // projections. Emit symmetrically with the box lane's box.exec.failed.
+          const recordHostExecFailure = (code: string, exitCode: number | null) => {
+            recordExecEvent(
+              runtime,
+              ownerSessionId,
+              EXEC_FAILED_EVENT_TYPE,
+              buildExecAuditPayload({
+                toolCallId,
+                policy,
+                command,
+                sandboxProfile: EXEC_SANDBOX_PROFILES.host,
+                failureBasis: { kind: "execution_failure", code },
+                payload: {
+                  resolvedBackend: "host",
+                  reason: code,
+                  ...(exitCode === null ? {} : { exitCode }),
+                },
+              }),
+            );
+          };
+          let hostResult: Awaited<ReturnType<typeof runHost>>;
+          try {
+            hostResult = await runHost();
+          } catch (error) {
+            if (error instanceof ExecCommandFailedError) {
+              recordHostExecFailure("host_process_nonzero", error.exitCode);
+            }
+            throw error;
+          }
+          if (hostResult.outcome.kind === "err") {
+            recordHostExecFailure("host_start_failure", null);
+          }
+          return attachExecPreflightDetails(hostResult, executionPreflight);
         }
 
         const boxRootMappings = buildBoxRootMappings({
