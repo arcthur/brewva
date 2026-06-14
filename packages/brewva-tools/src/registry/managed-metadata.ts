@@ -226,7 +226,10 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.observed",
   ]),
   workbench_note: metadata("base", "memory_write", ["capabilities.workbench.note"]),
-  workbench_evict: metadata("base", "memory_write", ["capabilities.workbench.evict"]),
+  workbench_evict: metadata("base", "memory_write", [
+    "capabilities.events.records.list",
+    "capabilities.workbench.evict",
+  ]),
   workbench_undo_evict: metadata("base", "memory_write", ["capabilities.workbench.undoEviction"]),
   knowledge_capture: metadata("skill", "workspace_patch", [
     "capabilities.events.records.query",
@@ -250,6 +253,11 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.observed",
     "capabilities.tools.recall.curationRecorded",
   ]),
+  recall_expand: metadata("skill", "workspace_read", [
+    "capabilities.events.records.list",
+    "capabilities.workbench.list",
+  ]),
+  context_route: metadata("skill", "runtime_observe", []),
   knowledge_search: metadata("skill", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",

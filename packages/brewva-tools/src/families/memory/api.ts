@@ -17,7 +17,12 @@ export {
   type PrecedentAuditSummary,
 } from "./precedent-audit.js";
 export { createPrecedentSweepTool } from "./precedent-sweep.js";
-export { createRecallCurateTool, createRecallSearchTool } from "./recall.js";
+export { createContextRouteTool } from "./context-route.js";
+export {
+  createRecallCurateTool,
+  createRecallExpandTool,
+  createRecallSearchTool,
+} from "./recall.js";
 export {
   createWorkbenchEvictTool,
   createWorkbenchNoteTool,

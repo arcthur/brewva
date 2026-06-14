@@ -5,3 +5,9 @@ export {
   isKernelClaimRecallTapeEvent,
   isStrongRecallTapeEvent,
 } from "./classification.js";
+export {
+  buildRcrReferencesForEvents,
+  type RcrResolvableEvent,
+  type RcrTapeEventSource,
+  resolveRcrReference,
+} from "./rcr.js";

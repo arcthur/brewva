@@ -14,11 +14,13 @@ import {
 import { createExecTool, createProcessTool } from "../families/execution/api.js";
 import {
   createAttentionOptionTools,
+  createContextRouteTool,
   createKnowledgeCaptureTool,
   createKnowledgeSearchTool,
   createPrecedentAuditTool,
   createPrecedentSweepTool,
   createRecallCurateTool,
+  createRecallExpandTool,
   createRecallSearchTool,
   createWorkbenchEvictTool,
   createWorkbenchNoteTool,
@@ -92,6 +94,8 @@ export function buildDefaultBundledBrewvaTools(
     createKnowledgeCaptureTool({ runtime }),
     createRecallSearchTool({ runtime }),
     createRecallCurateTool({ runtime }),
+    createRecallExpandTool({ runtime }),
+    createContextRouteTool({ runtime }),
     createKnowledgeSearchTool({ runtime }),
     createPrecedentAuditTool({ runtime }),
     createPrecedentSweepTool({ runtime }),

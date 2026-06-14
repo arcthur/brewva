@@ -47,6 +47,7 @@
     "models:catalog": "bun run script/generate-provider-model-catalog.ts --write",
     "models:catalog:check": "bun run script/generate-provider-model-catalog.ts --check",
     "prepare": "./script/install-git-hooks.sh",
+    "rdp:distill": "bun run script/rdp-distill.ts",
     "report:context-evidence": "bun run script/report-context-evidence.ts",
     "start": "bun run --preload @opentui/solid/preload packages/brewva-cli/src/index.ts",
     "test": "bun run test:ci",

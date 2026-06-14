@@ -47,6 +47,18 @@
       "import": "./dist/iteration.js",
       "default": "./dist/iteration.js"
     },
+    "./rcr": {
+      "types": "./dist/rcr.d.ts",
+      "bun": "./src/rcr.ts",
+      "import": "./dist/rcr.js",
+      "default": "./dist/rcr.js"
+    },
+    "./reduction": {
+      "types": "./dist/reduction.d.ts",
+      "bun": "./src/reduction.ts",
+      "import": "./dist/reduction.js",
+      "default": "./dist/reduction.js"
+    },
     "./schedule": {
       "types": "./dist/schedule.d.ts",
       "bun": "./src/schedule.ts",

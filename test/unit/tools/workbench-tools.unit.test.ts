@@ -185,6 +185,7 @@ describe("workbench memory tools", () => {
     });
     expect(textContent(result)).toContain("[WorkbenchEvict]");
     expect(getBrewvaToolMetadata(tool)?.requiredCapabilities).toEqual([
+      "capabilities.events.records.list",
       "capabilities.workbench.evict",
     ]);
   });

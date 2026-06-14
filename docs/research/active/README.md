@@ -50,6 +50,14 @@ discipline.
   and synchronous keystroke-path filesystem I/O from the interactive shell,
   moving toward a dual-speed state channel and gated on a deterministic
   replay benchmark and count-based fitness invariants.
+- [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](./rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md):
+  active RFC for re-homing external context-compression capabilities into
+  Brewva's authority model: tape-anchored byte-exact reversible references for
+  evicted spans (RCR), deliberation-ring advisory reduction candidates with a
+  bounded emergency cut-shape hint (ACR), and an opt-in control-plane job that
+  distills failure precedent from the session index into explicit-pull
+  `docs/solutions/**` records (RDP). Resolves the recall-versus-summary
+  fact-ownership question tracked by the context-OS RFC.
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

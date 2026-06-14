@@ -433,6 +433,8 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
     effectClasses: ["workspace_read", "runtime_observe"],
   }),
   recall_curate: memoryWrite(),
+  recall_expand: workspaceRead(),
+  context_route: runtimeObserve(),
   knowledge_search: workspaceRead(),
   precedent_audit: workspaceRead(),
   precedent_sweep: workspaceRead(),

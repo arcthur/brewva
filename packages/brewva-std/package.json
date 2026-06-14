@@ -17,6 +17,12 @@
       "import": "./dist/collections.js",
       "default": "./dist/collections.js"
     },
+    "./content-shape": {
+      "types": "./dist/content-shape.d.ts",
+      "bun": "./src/content-shape.ts",
+      "import": "./dist/content-shape.js",
+      "default": "./dist/content-shape.js"
+    },
     "./hash": {
       "types": "./dist/hash.d.ts",
       "bun": "./src/hash.ts",

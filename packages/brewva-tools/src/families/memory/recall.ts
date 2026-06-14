@@ -13,16 +13,23 @@ import {
   getOrCreateRecallBroker,
   isRecallSessionIndexUnavailable,
 } from "@brewva/brewva-recall/broker";
+import { resolveRcrReference } from "@brewva/brewva-recall/evidence";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
+import {
+  parseRcrReference,
+  type RcrReference,
+  type RcrResolutionOutcome,
+} from "@brewva/brewva-vocabulary/rcr";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
+import { createRecordsRcrTapeEventSource } from "../../runtime-port/rcr.js";
 import { resolveRecallBrokerRuntime } from "../../runtime-port/recall.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { errTextResult, okTextResult } from "../../utils/result.js";
@@ -402,6 +409,108 @@ export function createRecallCurateTool(options: BrewvaToolOptions): ToolDefiniti
           signal,
           stableIds,
           note: normalizeQuery(params.note) ?? null,
+        },
+      );
+    },
+  });
+}
+
+function renderRcrOutcome(
+  index: number,
+  reference: RcrReference,
+  outcome: RcrResolutionOutcome,
+): string {
+  const head = `- [${index}] event=${reference.eventRef.sessionId}:${reference.eventRef.eventId} path=${reference.contentPath || "(root)"} status=${outcome.status}`;
+  if (outcome.status === "unresolvable_reference") {
+    return `${head} reason=${outcome.reason}`;
+  }
+  return `${head}\n  content=${JSON.stringify(outcome.content)}`;
+}
+
+export function createRecallExpandTool(options: BrewvaToolOptions): ToolDefinition {
+  const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "recall_expand");
+  return define({
+    name: "recall_expand",
+    label: "Recall Expand",
+    description:
+      "Recover the exact previously model-visible content behind a reversible eviction reference, resolved from committed tape truth.",
+    promptSnippet:
+      "Use this to restore a span you evicted earlier when you need its exact original content again. Resolution is redaction-bounded and fails closed when the reference no longer matches tape.",
+    parameters: Type.Object({
+      entry_id: Type.String({ minLength: 1, maxLength: 256 }),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const sessionId = getSessionId(ctx);
+      const entryId = params.entry_id.trim();
+      if (entryId.length === 0) {
+        return errTextResult("recall_expand rejected (missing_entry_id).", {
+          ok: false,
+          error: "missing_entry_id",
+        });
+      }
+      const entry = runtime.capabilities.workbench
+        .list(sessionId)
+        .find((candidate) => candidate.id === entryId);
+      if (!entry) {
+        return errTextResult(`recall_expand unresolved (unknown_entry_id): ${entryId}`, {
+          ok: false,
+          error: "unknown_entry_id",
+          entryId,
+        });
+      }
+      const references = (entry.rcr ?? [])
+        .map((value) => parseRcrReference(value))
+        .filter((reference): reference is RcrReference => reference !== null);
+      if (references.length === 0) {
+        return errTextResult(`recall_expand unresolved (no_reversible_reference): ${entryId}`, {
+          ok: false,
+          error: "no_reversible_reference",
+          entryId,
+        });
+      }
+      const source = createRecordsRcrTapeEventSource(runtime);
+      const results = await Promise.all(
+        references.map(async (reference) => ({
+          reference,
+          outcome: await resolveRcrReference(reference, source).catch(
+            (): RcrResolutionOutcome => ({
+              status: "unresolvable_reference",
+              reason: "event_unavailable",
+            }),
+          ),
+        })),
+      );
+      // Only a clean "resolved" counts; "sensitive_payload_withheld" returns a
+      // redaction-bounded partial and is reported separately, not as recovered.
+      const resolved = results.filter((item) => item.outcome.status === "resolved");
+      return okTextResult(
+        [
+          "[RecallExpand]",
+          `entry_id: ${entryId}`,
+          `references: ${references.length}`,
+          `resolved: ${resolved.length}`,
+          ...results.map((item, index) => renderRcrOutcome(index, item.reference, item.outcome)),
+        ].join("\n"),
+        {
+          ok: true,
+          entryId,
+          references: references.length,
+          resolved: resolved.length,
+          results: results.map((item) =>
+            item.outcome.status === "unresolvable_reference"
+              ? {
+                  eventRef: item.reference.eventRef,
+                  contentPath: item.reference.contentPath,
+                  status: item.outcome.status,
+                  reason: item.outcome.reason,
+                }
+              : {
+                  eventRef: item.reference.eventRef,
+                  contentPath: item.reference.contentPath,
+                  status: item.outcome.status,
+                  content: item.outcome.content,
+                },
+          ),
         },
       );
     },

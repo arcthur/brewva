@@ -37,6 +37,7 @@ export function buildWorkbenchRuntimeOps(
         sourceRefs: [...input.spanRefs],
         reason: input.reason,
         reversible: true,
+        ...(input.rcr && input.rcr.length > 0 ? { rcr: input.rcr } : {}),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };

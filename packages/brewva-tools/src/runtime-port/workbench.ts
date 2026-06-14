@@ -1,3 +1,4 @@
+import type { RcrReference } from "@brewva/brewva-vocabulary/rcr";
 import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
@@ -22,6 +23,7 @@ export function evictWorkbench(
     replacementNote?: string;
     reason: string;
     preservedQuotes?: readonly string[];
+    rcr?: readonly RcrReference[];
   },
 ): WorkbenchEntry | undefined {
   return runtime?.capabilities?.workbench.evict(sessionId, input);

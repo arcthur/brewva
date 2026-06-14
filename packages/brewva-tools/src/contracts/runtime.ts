@@ -48,6 +48,7 @@ import type {
   ToolInvocationStartReceipt,
   TurnEffectCommitmentProjection,
 } from "@brewva/brewva-vocabulary/iteration";
+import type { RcrReference } from "@brewva/brewva-vocabulary/rcr";
 import type {
   ScheduleIntentCancelInput,
   ScheduleIntentCancelResult,
@@ -530,6 +531,7 @@ export interface BrewvaToolRuntimeCommandPort {
         replacementNote?: string;
         reason: string;
         preservedQuotes?: readonly string[];
+        rcr?: readonly RcrReference[];
       },
     ): WorkbenchEntry;
     note(

@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { RcrReference } from "./rcr.js";
 import { optionalStringField } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
 import type {
@@ -167,6 +168,7 @@ export interface WorkbenchEntry extends ProtocolRecord {
   readonly reason: string;
   readonly createdTurn?: number;
   readonly reversible?: boolean;
+  readonly rcr?: readonly RcrReference[];
   readonly createdAt?: number;
   readonly updatedAt?: number;
 }

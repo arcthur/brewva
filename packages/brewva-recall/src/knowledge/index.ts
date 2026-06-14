@@ -19,3 +19,12 @@ export type {
   KnowledgeSourceType,
   ScoredKnowledgeDoc,
 } from "./search.js";
+export { collectRdpFailureSignals, distillFailurePatterns, renderRdpCandidate } from "./rdp.js";
+export type {
+  DistillFailurePatternsOptions,
+  RdpCandidateDocument,
+  RdpFailurePattern,
+  RdpFailureSignal,
+  RdpToolResultEvent,
+  RenderRdpCandidateOptions,
+} from "./rdp.js";

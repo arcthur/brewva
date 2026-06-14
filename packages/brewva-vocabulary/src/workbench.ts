@@ -39,4 +39,5 @@ export type {
   SourceResourceDescriptor,
   SourceSnapshot,
   WorkbenchEntry,
+  WorkbenchEvictionSpanRef,
 } from "./internal/workbench.js";

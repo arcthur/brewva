@@ -1,12 +1,17 @@
+import { buildRcrReferencesForEvents } from "@brewva/brewva-recall/evidence";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { RcrReference } from "@brewva/brewva-vocabulary/rcr";
 import {
   listInvalidWorkbenchEvictionSpanRefs,
+  parseWorkbenchEvictionSpanRef,
   type WorkbenchEntry,
+  type WorkbenchEvictionSpanRef,
 } from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
+import { createRecordsRcrTapeEventSource } from "../../runtime-port/rcr.js";
 import {
   evictWorkbench,
   noteWorkbench,
@@ -148,11 +153,31 @@ export function createWorkbenchEvictTool(options: BrewvaToolOptions): ToolDefini
 
       const replacementNote = readNonEmptyString(params.replacement_note);
       const preservedQuotes = readStringList(params.preserved_quotes);
-      const entry = evictWorkbench(runtime, getSessionId(ctx), {
+      const sessionId = getSessionId(ctx);
+      // Build reversible references for committed-event spans so the eviction
+      // stays recoverable from tape truth. Non-event spans and recall outages
+      // degrade gracefully to a plain (non-reversible) eviction.
+      const eventIds = spanRefs
+        .map((ref) => parseWorkbenchEvictionSpanRef(ref))
+        .filter(
+          (parsed): parsed is WorkbenchEvictionSpanRef =>
+            parsed !== null && parsed.prefix === "event",
+        )
+        .map((parsed) => parsed.id);
+      const rcr =
+        eventIds.length > 0
+          ? await buildRcrReferencesForEvents(
+              createRecordsRcrTapeEventSource(runtime),
+              sessionId,
+              eventIds,
+            ).catch((): RcrReference[] => [])
+          : [];
+      const entry = evictWorkbench(runtime, sessionId, {
         spanRefs,
         ...(replacementNote ? { replacementNote } : {}),
         reason,
         preservedQuotes,
+        ...(rcr.length > 0 ? { rcr } : {}),
       });
       if (!entry) {
         return errTextResult("workbench_evict unavailable (missing_runtime_workbench).", {
