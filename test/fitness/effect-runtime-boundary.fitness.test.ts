@@ -6,7 +6,7 @@ const repoRoot = resolve(import.meta.dir, "../..");
 const packagesRoot = resolve(repoRoot, "packages");
 const effectPackageRoot = resolve(packagesRoot, "brewva-effect");
 const effectPackageName = "@brewva/brewva-effect";
-const effectVersion = "4.0.0-beta.60";
+const effectVersion = "4.0.0-beta.83";
 const ownedEffectPackages = ["effect", "@effect/opentelemetry", "@effect/platform-node"] as const;
 const effectPrimitiveAliases = [
   "BrewvaCause",
