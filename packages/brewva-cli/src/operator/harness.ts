@@ -27,7 +27,7 @@ import {
   type HarnessComparisonReport,
   type HarnessManifest,
 } from "@brewva/brewva-vocabulary/harness";
-import { createCliSessionIndexSources } from "../runtime/runtime-ports.js";
+import { createCliInspectPort } from "../runtime/cli-runtime-ports.js";
 
 const HARNESS_PARSE_OPTIONS = {
   help: { type: "boolean", short: "h" },
@@ -91,7 +91,7 @@ export async function runHarnessCli(argv: string[]): Promise<number> {
     configPath: parsed.options.configPath,
   });
   const index = await createSessionIndex({
-    ...createCliSessionIndexSources(runtime),
+    ...createCliInspectPort(runtime).sessionIndexSources(),
   });
   try {
     const status = await index.catchUp();

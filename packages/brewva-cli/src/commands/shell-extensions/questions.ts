@@ -15,7 +15,7 @@ import {
 } from "@brewva/brewva-gateway/extensions";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import { clampText } from "../../operator/inspect-analysis.js";
-import { recordCliRuntimeOperatorQuestionAnswer } from "../../runtime/runtime-ports.js";
+import { createCliOperatorPort } from "../../runtime/cli-runtime-ports.js";
 
 const MAX_NOTIFICATION_LINES = 28;
 const MAX_LINE_CHARS = 220;
@@ -115,6 +115,7 @@ function parseAnswerArgs(
 export function createQuestionsCommandExtension(
   runtime: HostedRuntimeAdapterPort,
 ): HostedExtensionPlugin {
+  const operator = createCliOperatorPort(runtime);
   return defineHostedExtensionPlugin({
     name: "cli.questions_command",
     capabilities: ["tool_registration.write", "user_message.enqueue"],
@@ -193,7 +194,7 @@ export function createQuestionsCommandExtension(
               deliverAs: "followUp",
             });
           }
-          recordCliRuntimeOperatorQuestionAnswer(runtime, {
+          operator.tools.recordOperatorQuestionAnswer({
             sessionId,
             payload: buildOperatorQuestionAnsweredPayload({
               question,

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import process from "node:process";
 import type { HostedRuntimeAdapterOptions as BrewvaRuntimeOptions } from "@brewva/brewva-gateway/hosted";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
+import { createCliOperatorPort } from "../../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
 import {
   runCliInteractiveSession,
   runCliPrintSession,
@@ -75,6 +76,7 @@ describe("cli runtime print mode", () => {
         mode: "text",
         initialMessage: "Reply with exactly: pong",
         runtime,
+        operator: createCliOperatorPort(runtime),
       });
       throw new Error("Expected runCliPrintSession to throw");
     } catch (error) {

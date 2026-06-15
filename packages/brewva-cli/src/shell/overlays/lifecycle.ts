@@ -7,19 +7,6 @@ import {
   buildSessionInspectReport,
   resolveInspectDirectory,
 } from "../../operator/inspect.js";
-import {
-  explainCliRuntimeToolAccess,
-  getCliRuntimeCompactionGateStatus,
-  getCliRuntimeContextEvidenceLatest,
-  getCliRuntimeContextStatus,
-  getCliRuntimeContextUsage,
-  getCliRuntimeHistoryViewBaseline,
-  getCliRuntimeLatestCapabilitySelection,
-  getCliRuntimePendingCompactionReason,
-  getCliRuntimeVisibleReadEpoch,
-  getCliRuntimeSkillCatalogLoadReport,
-  listCliRuntimeSkills,
-} from "../../runtime/runtime-ports.js";
 import { buildCommandPalettePayload, buildHelpHubPayload } from "../commands/command-palette.js";
 import type { ShellCommandProvider } from "../commands/command-provider.js";
 import type { ShellAction } from "../domain/actions.js";
@@ -136,8 +123,8 @@ function buildAuthorityToolAccessRows(input: {
   bundle: CliShellSessionBundle;
   sessionId: string;
 }): AuthorityToolAccessRow[] {
-  const runtime = input.bundle.runtime;
-  const usage = getCliRuntimeContextUsage(runtime, input.sessionId);
+  const { inspect } = input.bundle;
+  const usage = inspect.context.usage(input.sessionId);
   const rows: AuthorityToolAccessRow[] = [];
   for (const definition of input.bundle.toolDefinitions.values()) {
     const toolName = typeof definition.name === "string" ? definition.name : "";
@@ -145,10 +132,10 @@ function buildAuthorityToolAccessRows(input: {
       continue;
     }
     try {
-      const result = explainCliRuntimeToolAccess(runtime, {
+      const result = inspect.tools.explainAccess({
         sessionId: input.sessionId,
         toolName,
-        cwd: runtime.identity.cwd,
+        cwd: input.bundle.runtime.identity.cwd,
         usage,
       });
       rows.push({
@@ -955,33 +942,27 @@ export class ShellOverlayLifecycleHandler {
   }
 
   openContextOverlay(): void {
-    const runtime = this.context.getBundle().runtime;
+    const { inspect } = this.context.getBundle();
     const sessionId = this.context.getSessionPort().getSessionId();
-    const usage = getCliRuntimeContextUsage(runtime, sessionId);
+    const usage = inspect.context.usage(sessionId);
     this.openOverlay(
       buildContextOverlayPayload({
         sessionId,
         usage,
-        status: getCliRuntimeContextStatus(runtime, sessionId, usage),
-        pendingCompactionReason: getCliRuntimePendingCompactionReason(runtime, sessionId),
-        gateStatus: getCliRuntimeCompactionGateStatus(runtime, sessionId, usage),
-        promptStabilityEvidence: getCliRuntimeContextEvidenceLatest(
-          runtime,
-          sessionId,
-          "prompt_stability",
-        ),
-        transientReductionEvidence: getCliRuntimeContextEvidenceLatest(
-          runtime,
+        status: inspect.context.status(sessionId, usage),
+        pendingCompactionReason: inspect.context.pendingCompactionReason(sessionId),
+        gateStatus: inspect.context.compactionGateStatus(sessionId, usage),
+        promptStabilityEvidence: inspect.context.evidenceLatest(sessionId, "prompt_stability"),
+        transientReductionEvidence: inspect.context.evidenceLatest(
           sessionId,
           "transient_reduction",
         ),
-        providerCacheEvidence: getCliRuntimeContextEvidenceLatest(
-          runtime,
+        providerCacheEvidence: inspect.context.evidenceLatest(
           sessionId,
           "provider_cache_observation",
         ),
-        visibleReadEpoch: getCliRuntimeVisibleReadEpoch(runtime, sessionId),
-        historyViewBaseline: getCliRuntimeHistoryViewBaseline(runtime, sessionId),
+        visibleReadEpoch: inspect.context.visibleReadEpoch(sessionId),
+        historyViewBaseline: inspect.context.historyViewBaseline(sessionId),
       }),
     );
   }
@@ -996,7 +977,7 @@ export class ShellOverlayLifecycleHandler {
         capabilitySummary: buildAuthorityCapabilitySummary(
           bundle.toolDefinitions,
           readAuthorityCapabilitySelection(
-            getCliRuntimeLatestCapabilitySelection(bundle.runtime, sessionId),
+            bundle.inspect.skills.latestCapabilitySelection(sessionId),
           ),
         ),
         operatorSafety,
@@ -1676,12 +1657,12 @@ export class ShellOverlayLifecycleHandler {
   }
 
   private buildSkillsOverlayPayload(input: { query?: string; selectedIndex?: number } = {}) {
-    const runtime = this.context.getBundle().runtime;
+    const { inspect } = this.context.getBundle();
     return buildSkillsOverlayPayload({
       query: input.query,
       selectedIndex: input.selectedIndex,
-      loadReport: getCliRuntimeSkillCatalogLoadReport(runtime),
-      skills: listCliRuntimeSkills(runtime),
+      loadReport: inspect.skills.catalogLoadReport(),
+      skills: inspect.skills.list(),
     });
   }
 

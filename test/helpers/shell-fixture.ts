@@ -24,6 +24,10 @@ import type {
 import type { BrewvaReplaySession, SkillDocument } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import {
+  createCliInspectPort,
+  createCliOperatorPort,
+} from "../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
+import {
   CliShellRuntime,
   type CliShellRuntimeOptions,
 } from "../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
@@ -33,6 +37,7 @@ import type {
   ProviderOAuthAuthorization,
 } from "../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
 import type { CliShellSessionBundle } from "../../packages/brewva-cli/src/shell/ports/session-port.js";
+import type { HostedRuntimeAdapterPort } from "../../packages/brewva-gateway/src/hosted/api.js";
 import {
   fauxAssistantMessage,
   registerFauxProvider,
@@ -311,88 +316,103 @@ export function createShellFixture(options: ShellFixtureOptions = {}): ShellFixt
     },
   };
 
-  const bundle = {
-    session,
-    toolDefinitions: options.toolDefinitions ?? new Map(),
-    runtime: {
-      identity: {
-        cwd: process.cwd(),
-        workspaceRoot: process.cwd(),
-        agentId: "test-agent",
+  const runtime = {
+    identity: {
+      cwd: process.cwd(),
+      workspaceRoot: process.cwd(),
+      agentId: "test-agent",
+    },
+    ops: {
+      session: {
+        rewind: {
+          recordCheckpoint() {},
+          rewind() {
+            return { ok: false, reason: "no_checkpoint" };
+          },
+          redo() {
+            return { ok: false, reason: "no_redo" };
+          },
+          getState() {
+            return {
+              checkpoints: [],
+              rewindAvailable: false,
+              redoAvailable: false,
+              redoStack: [],
+            };
+          },
+          listTargets() {
+            return [];
+          },
+        },
+        lineage: {
+          getContextEntryPath() {
+            return [];
+          },
+        },
       },
-      ops: {
-        session: {
-          rewind: {
-            recordCheckpoint() {},
-            rewind() {
-              return { ok: false, reason: "no_checkpoint" };
-            },
-            redo() {
-              return { ok: false, reason: "no_redo" };
-            },
-            getState() {
-              return {
-                checkpoints: [],
-                rewindAvailable: false,
-                redoAvailable: false,
-                redoStack: [],
-              };
-            },
-            listTargets() {
-              return [];
-            },
+      skills: {
+        catalog: {
+          getLoadReport() {
+            return {
+              roots: [],
+              loadedSkills: skills.map((skill) => skill.name),
+              selectableSkills: skills.map((skill) => skill.name),
+              overlaySkills: [],
+              projectGuidance: [],
+              categories: {},
+            };
+          },
+          list() {
+            return skills;
+          },
+          listProducers() {
+            return [];
           },
         },
-        skills: {
-          catalog: {
-            getLoadReport() {
-              return {
-                roots: [],
-                loadedSkills: skills.map((skill) => skill.name),
-                selectableSkills: skills.map((skill) => skill.name),
-                overlaySkills: [],
-                projectGuidance: [],
-                categories: {},
-              };
-            },
-            list() {
-              return skills;
-            },
-            listProducers() {
-              return [];
-            },
+      },
+      proposals: {
+        requests: {
+          decide(_sessionId: string, requestId: string, input: DecideEffectCommitmentInput) {
+            options.onApprovalDecision?.(requestId, input);
+            approvals = approvals.filter((approval) => approval.requestId !== requestId);
+          },
+          listPending() {
+            return approvals;
+          },
+          list() {
+            return [];
           },
         },
-        proposals: {
-          requests: {
-            decide(_sessionId: string, requestId: string, input: DecideEffectCommitmentInput) {
-              options.onApprovalDecision?.(requestId, input);
-              approvals = approvals.filter((approval) => approval.requestId !== requestId);
-            },
-            listPending() {
-              return approvals;
-            },
+      },
+      events: {
+        records: {
+          list() {
+            return [];
+          },
+          query() {
+            return [];
           },
         },
-        events: {
-          records: {
-            query() {
-              return [];
-            },
-          },
-          replay: {
-            listSessions() {
-              return replaySessions;
-            },
+        replay: {
+          listSessions() {
+            return replaySessions;
           },
         },
-        sessionWire: {
-          query(targetSessionId: string) {
-            return options.sessionWireBySessionId?.[targetSessionId] ?? [];
-          },
+      },
+      sessionWire: {
+        query(targetSessionId: string) {
+          return options.sessionWireBySessionId?.[targetSessionId] ?? [];
         },
       },
     },
+  } as unknown as HostedRuntimeAdapterPort;
+
+  const bundle = {
+    session,
+    toolDefinitions: options.toolDefinitions ?? new Map(),
+    runtime,
+    inspect: createCliInspectPort(runtime),
+    operator: createCliOperatorPort(runtime),
     orchestration: {
       subagents: {
         async status() {
@@ -502,6 +522,9 @@ export function createHostedShellFixture(
       approvalDecisions.push({ requestId, input });
     },
     listPending() {
+      return [];
+    },
+    list() {
       return [];
     },
   });
@@ -774,6 +797,8 @@ export function createHostedShellFixture(
     session,
     toolDefinitions: options.toolDefinitions ?? new Map(),
     runtime,
+    inspect: createCliInspectPort(runtime as unknown as HostedRuntimeAdapterPort),
+    operator: createCliOperatorPort(runtime as unknown as HostedRuntimeAdapterPort),
     providerConnections: buildProviderConnections(options, providerConnects),
   } as unknown as CliShellSessionBundle;
 

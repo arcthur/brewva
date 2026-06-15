@@ -30,21 +30,6 @@ import {
   formatInspectText,
   resolveInspectDirectory,
 } from "../../operator/inspect.js";
-import {
-  clearCliRuntimeGoal,
-  getCliRuntimeCompactionGateStatus,
-  getCliRuntimeContextUsage,
-  getCliRuntimeGoalState,
-  getCliRuntimePendingCompactionReason,
-  getCliRuntimeTapeStatus,
-  getCliRuntimeTurnProjection,
-  pauseCliRuntimeGoal,
-  recordCliRuntimeContinuationAnchor,
-  renderCliRuntimeTurnDigest,
-  requestCliRuntimeCompaction,
-  resumeCliRuntimeGoal,
-  startCliRuntimeGoal,
-} from "../../runtime/runtime-ports.js";
 import { buildCommandPalettePayload, parseShellSlashPrompt } from "../commands/command-palette.js";
 import { ShellCommandProvider } from "../commands/command-provider.js";
 import { registerShellCommands } from "../commands/shell-command-registry.js";
@@ -664,6 +649,7 @@ export class CliShellRuntime {
     this.#cockpitSync = new ShellCockpitSync({
       isDisposed: () => this.#disposed,
       getRuntime: () => this.#bundle.runtime,
+      getInspect: () => this.#bundle.inspect,
       getSessionId: () => this.#sessionPort.getSessionId(),
       getSessionPhase: () => this.#sessionPhase,
       getModelLabel: () => this.#sessionPort.getModelLabel(),
@@ -1952,13 +1938,10 @@ export class CliShellRuntime {
 
   private requestContextCompaction(): void {
     const sessionId = this.#sessionPort.getSessionId();
-    const usage = getCliRuntimeContextUsage(this.#bundle.runtime, sessionId);
-    const gateStatus = getCliRuntimeCompactionGateStatus(this.#bundle.runtime, sessionId, usage);
-    const previousPendingReason = getCliRuntimePendingCompactionReason(
-      this.#bundle.runtime,
-      sessionId,
-    );
-    requestCliRuntimeCompaction(this.#bundle.runtime, sessionId, "manual");
+    const usage = this.#bundle.inspect.context.usage(sessionId);
+    const gateStatus = this.#bundle.inspect.context.compactionGateStatus(sessionId, usage);
+    const previousPendingReason = this.#bundle.inspect.context.pendingCompactionReason(sessionId);
+    this.#bundle.operator.context.requestCompaction(sessionId, "manual");
     if (gateStatus.required) {
       this.ui.notify(
         `Context compaction requested; gate is already required (${gateStatus.reason ?? "unknown"}).`,
@@ -2062,14 +2045,14 @@ export class CliShellRuntime {
 
   private appendPatchAttributionSection(lines: string[]): void {
     const sessionId = this.#sessionPort.getSessionId();
-    const projection = getCliRuntimeTurnProjection(this.#bundle.runtime, sessionId);
+    const projection = this.#bundle.inspect.events.getTurnProjection(sessionId);
     const patchSets = this.listSessionPatchSets().slice(-8).toReversed();
     lines.push(
       "",
       "## Brewva turn attribution",
       `runtimeTurn=${projection.runtimeTurn} declared=${projection.declared.length} attempted=${projection.attempted.length} decisions=${projection.decisions.length} executed=${projection.executed.length} recovery=${projection.recovery.length} warnings=${projection.warnings.length}`,
     );
-    const digest = renderCliRuntimeTurnDigest(this.#bundle.runtime, sessionId, {
+    const digest = this.#bundle.inspect.events.renderTurnDigest(sessionId, {
       maxChars: 1_800,
     });
     lines.push("", digest);
@@ -2175,7 +2158,7 @@ export class CliShellRuntime {
   }
 
   private buildLatestContinuationAnchorLines(): string[] {
-    const status = getCliRuntimeTapeStatus(this.#bundle.runtime, this.#sessionPort.getSessionId());
+    const status = this.#bundle.inspect.tape.status(this.#sessionPort.getSessionId());
     const anchor = status.lastAnchor;
     if (!anchor || !decideContinuationAnchorRelevance(anchor).include) {
       return [];
@@ -2227,7 +2210,7 @@ export class CliShellRuntime {
     const summary = continuationAnchor?.summary?.trim();
     const nextSteps =
       continuationAnchor?.nextSteps?.trim() || "Continue from the latest work card.";
-    const result = recordCliRuntimeContinuationAnchor(this.#bundle.runtime, sessionId, {
+    const result = this.#bundle.operator.tape.recordContinuationAnchor(sessionId, {
       name,
       ...(summary ? { summary } : {}),
       nextSteps,
@@ -2244,9 +2227,8 @@ export class CliShellRuntime {
 
   private async handleGoalCommand(command: GoalCommand): Promise<void> {
     const sessionId = this.#sessionPort.getSessionId();
-    const runtime = this.#bundle.runtime;
     if (command.kind === "status") {
-      const goal = getCliRuntimeGoalState(runtime, sessionId);
+      const goal = this.#bundle.inspect.goal.state(sessionId);
       if (!goal) {
         this.ui.notify("No active goal is set.", "info");
         return;
@@ -2258,7 +2240,7 @@ export class CliShellRuntime {
       return;
     }
     if (command.kind === "pause") {
-      const result = pauseCliRuntimeGoal(runtime, sessionId, { reason: "interactive" });
+      const result = this.#bundle.operator.goal.pause(sessionId, { reason: "interactive" });
       this.ui.notify(
         result.ok ? "Goal paused." : `Goal pause rejected: ${result.reason}`,
         result.ok ? "info" : "warning",
@@ -2266,7 +2248,7 @@ export class CliShellRuntime {
       return;
     }
     if (command.kind === "resume") {
-      const result = resumeCliRuntimeGoal(runtime, sessionId, { reason: "interactive" });
+      const result = this.#bundle.operator.goal.resume(sessionId, { reason: "interactive" });
       this.ui.notify(
         result.ok ? "Goal resumed." : `Goal resume rejected: ${result.reason}`,
         result.ok ? "info" : "warning",
@@ -2274,7 +2256,7 @@ export class CliShellRuntime {
       return;
     }
     if (command.kind === "clear") {
-      const result = clearCliRuntimeGoal(runtime, sessionId, { reason: "interactive" });
+      const result = this.#bundle.operator.goal.clear(sessionId, { reason: "interactive" });
       this.ui.notify(
         result.ok ? "Goal cleared." : `Goal clear rejected: ${result.reason}`,
         result.ok ? "info" : "warning",
@@ -2282,7 +2264,7 @@ export class CliShellRuntime {
       return;
     }
 
-    const result = startCliRuntimeGoal(runtime, sessionId, {
+    const result = this.#bundle.operator.goal.start(sessionId, {
       objective: command.objective,
       tokenBudget: command.tokenBudget,
     });

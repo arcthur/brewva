@@ -22,6 +22,10 @@ import {
 } from "../../../packages/brewva-cli/runtime/internal-opentui-runtime.js";
 import { BrewvaOpenTuiShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
 import { toSemanticInput } from "../../../packages/brewva-cli/runtime/shell/utils.js";
+import {
+  createCliInspectPort,
+  createCliOperatorPort,
+} from "../../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type {
   ProviderAuthMethod,
@@ -30,6 +34,7 @@ import type {
 } from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
 import type { CliShellTranscriptTextPart } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 import type { CliShellSessionBundle } from "../../../packages/brewva-cli/src/shell/ports/session-port.js";
+import type { HostedRuntimeAdapterPort } from "../../../packages/brewva-gateway/src/hosted/api.js";
 import { requireDefined } from "../../helpers/assertions.js";
 interface FakeOpenTuiSelectionRenderer extends OpenTuiRenderer {
   console: {
@@ -556,89 +561,104 @@ function createFakeBundle(
     },
   };
 
-  const bundle = {
-    session,
-    toolDefinitions: options.toolDefinitions ?? new Map(),
-    runtime: {
-      identity: {
-        cwd: process.cwd(),
-        workspaceRoot: process.cwd(),
-        agentId: "test-agent",
+  const runtime = {
+    identity: {
+      cwd: process.cwd(),
+      workspaceRoot: process.cwd(),
+      agentId: "test-agent",
+    },
+    ops: {
+      session: {
+        rewind: {
+          recordCheckpoint() {},
+          rewind() {
+            return { ok: false, reason: "no_checkpoint" };
+          },
+          redo() {
+            return { ok: false, reason: "no_redo" };
+          },
+          getState() {
+            return {
+              checkpoints: [],
+              rewindAvailable: false,
+              redoAvailable: false,
+              redoStack: [],
+            };
+          },
+          listTargets() {
+            return [];
+          },
+        },
+        lineage: {
+          getContextEntryPath() {
+            return [];
+          },
+        },
       },
-      ops: {
-        session: {
-          rewind: {
-            recordCheckpoint() {},
-            rewind() {
-              return { ok: false, reason: "no_checkpoint" };
-            },
-            redo() {
-              return { ok: false, reason: "no_redo" };
-            },
-            getState() {
-              return {
-                checkpoints: [],
-                rewindAvailable: false,
-                redoAvailable: false,
-                redoStack: [],
-              };
-            },
-            listTargets() {
-              return [];
-            },
+      skills: {
+        catalog: {
+          getLoadReport() {
+            return {
+              roots: [],
+              loadedSkills: skills.map((skill) => skill.name),
+              selectableSkills: skills.map((skill) => skill.name),
+              overlaySkills: [],
+              projectGuidance: [],
+              categories: {},
+            };
+          },
+          list() {
+            return skills;
+          },
+          listProducers() {
+            return [];
           },
         },
-        skills: {
-          catalog: {
-            getLoadReport() {
-              return {
-                roots: [],
-                loadedSkills: skills.map((skill) => skill.name),
-                selectableSkills: skills.map((skill) => skill.name),
-                overlaySkills: [],
-                projectGuidance: [],
-                categories: {},
-              };
-            },
-            list() {
-              return skills;
-            },
-            listProducers() {
-              return [];
-            },
+      },
+      proposals: {
+        requests: {
+          decide(_sessionId: string, requestId: string, input: DecideEffectCommitmentInput) {
+            options.onApprovalDecision?.(requestId, input);
+            approvals = approvals.filter((approval) => approval.requestId !== requestId);
+            return { requestId, decision: input.decision, applied: true };
+          },
+          listPending() {
+            return approvals;
+          },
+          list() {
+            return [];
           },
         },
-        proposals: {
-          requests: {
-            decide(_sessionId: string, requestId: string, input: DecideEffectCommitmentInput) {
-              options.onApprovalDecision?.(requestId, input);
-              approvals = approvals.filter((approval) => approval.requestId !== requestId);
-              return { requestId, decision: input.decision, applied: true };
-            },
-            listPending() {
-              return approvals;
-            },
+      },
+      events: {
+        records: {
+          list() {
+            return [];
+          },
+          query() {
+            return [];
           },
         },
-        events: {
-          records: {
-            query() {
-              return [];
-            },
-          },
-          replay: {
-            listSessions() {
-              return replaySessions;
-            },
+        replay: {
+          listSessions() {
+            return replaySessions;
           },
         },
-        sessionWire: {
-          query(targetSessionId: string) {
-            return options.sessionWireBySessionId?.[targetSessionId] ?? [];
-          },
+      },
+      sessionWire: {
+        query(targetSessionId: string) {
+          return options.sessionWireBySessionId?.[targetSessionId] ?? [];
         },
       },
     },
+  } as unknown as HostedRuntimeAdapterPort;
+
+  const bundle = {
+    session,
+    toolDefinitions: options.toolDefinitions ?? new Map(),
+    runtime,
+    inspect: createCliInspectPort(runtime),
+    operator: createCliOperatorPort(runtime),
     providerConnections: options.providers
       ? {
           catalog: {

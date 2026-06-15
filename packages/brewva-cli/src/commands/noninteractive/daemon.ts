@@ -24,14 +24,7 @@ import {
 import { parseScheduleIntentEvent } from "@brewva/brewva-vocabulary/schedule";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import { differenceInSeconds, formatISO } from "date-fns";
-import {
-  getCliRuntimeClaimState,
-  getCliRuntimeScheduleEvents,
-  getCliRuntimeTaskState,
-  listCliRuntimeEventSessionIds,
-  listCliRuntimeEvents,
-  subscribeCliRuntimeEvents,
-} from "../../runtime/runtime-ports.js";
+import { createCliInspectPort, createCliOperatorPort } from "../../runtime/cli-runtime-ports.js";
 
 export interface RunDaemonOptions {
   cwd?: string;
@@ -81,6 +74,8 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     configPath: parsed.configPath,
     agentId: parsed.agentId,
   });
+  const inspect = createCliInspectPort(runtime);
+  const operator = createCliOperatorPort(runtime);
   parsed.onRuntimeReady?.(runtime);
 
   if (!runtime.config.schedule.enabled) {
@@ -161,7 +156,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
     summaryWindow.childFinished = 0;
     summaryWindow.childFailed = 0;
   };
-  const unsubscribeEvents = subscribeCliRuntimeEvents(runtime, (event) => {
+  const unsubscribeEvents = inspect.events.subscribe((event) => {
     if (event.type === SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE) {
       summaryWindow.deferredIntents += 1;
       return;
@@ -219,12 +214,12 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
       runtime: {
         workspaceRoot: runtime.identity.workspaceRoot,
         scheduleConfig: runtime.config.schedule,
-        listSessionIds: () => listCliRuntimeEventSessionIds(runtime),
-        listEvents: (sessionId, query) => listCliRuntimeEvents(runtime, sessionId, query),
-        scheduleEvents: getCliRuntimeScheduleEvents(runtime),
-        subscribeEvents: (listener) => subscribeCliRuntimeEvents(runtime, listener),
-        getClaimState: (sessionId) => getCliRuntimeClaimState(runtime, sessionId),
-        getTaskState: (sessionId) => getCliRuntimeTaskState(runtime, sessionId),
+        listSessionIds: () => inspect.events.listSessionIds(),
+        listEvents: (sessionId, query) => inspect.events.list(sessionId, query),
+        scheduleEvents: operator.schedule.events(),
+        subscribeEvents: (listener) => inspect.events.subscribe(listener),
+        getClaimState: (sessionId) => inspect.claim.state(sessionId),
+        getTaskState: (sessionId) => inspect.task.state(sessionId),
         recoveryWal: {
           appendPending: (envelope, source, options) =>
             schedulerIngress.appendPending(envelope, source, options),

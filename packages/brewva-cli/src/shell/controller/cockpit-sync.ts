@@ -8,7 +8,7 @@ import {
 import { traceSync } from "../../internal/perf-trace.js";
 import type { ContextCockpitReport } from "../../operator/inspect.js";
 import { buildInspectReport, buildTaskWorkCardProjection } from "../../operator/inspect.js";
-import { getCliRuntimeCostPosture, queryCliRuntimeEvents } from "../../runtime/runtime-ports.js";
+import type { CliInspectPort } from "../../runtime/cli-runtime-ports.js";
 import type { ShellCommitOptions } from "../domain/actions.js";
 import type { ShellClock, ShellScheduledTimeout } from "../domain/clock.js";
 import {
@@ -29,7 +29,7 @@ interface ShellCockpitColdSourceSnapshot {
   readonly sessionId: string;
   readonly workCard: TaskWorkCardProjection;
   readonly contextCockpit: ContextCockpitReport;
-  readonly runtimeEvents: ReturnType<typeof queryCliRuntimeEvents>;
+  readonly runtimeEvents: ReturnType<CliInspectPort["events"]["query"]>;
   readonly cost: RuntimeCostPosture;
   readonly rewindTargets: ReturnType<SessionViewPort["listRewindTargets"]>;
 }
@@ -37,6 +37,7 @@ interface ShellCockpitColdSourceSnapshot {
 export interface ShellCockpitSyncContext {
   isDisposed(): boolean;
   getRuntime(): HostedRuntimeAdapterPort;
+  getInspect(): CliInspectPort;
   getSessionId(): string;
   getSessionPhase(): SessionPhase;
   getModelLabel(): string;
@@ -229,6 +230,7 @@ function buildFallbackColdSource(input: {
 
 function buildColdSource(input: {
   readonly runtime: HostedRuntimeAdapterPort;
+  readonly inspect: CliInspectPort;
   readonly sessionId: string;
   readonly readRewindTargets: () => ReturnType<SessionViewPort["listRewindTargets"]>;
 }): ShellCockpitColdSourceSnapshot {
@@ -242,12 +244,9 @@ function buildColdSource(input: {
     sessionId: input.sessionId,
     ...workCardSource,
     runtimeEvents: traceSync("cockpit.coldSource:queryRuntimeEvents", () =>
-      safeRead(() => queryCliRuntimeEvents(input.runtime, input.sessionId), []),
+      safeRead(() => input.inspect.events.query(input.sessionId), []),
     ),
-    cost: safeRead(
-      () => getCliRuntimeCostPosture(input.runtime, input.sessionId),
-      fallbackCostPosture(),
-    ),
+    cost: safeRead(() => input.inspect.cost.posture(input.sessionId), fallbackCostPosture()),
     rewindTargets: traceSync("cockpit.coldSource:rewindTargets", () =>
       safeRead(() => input.readRewindTargets(), []),
     ),
@@ -485,6 +484,7 @@ export class ShellCockpitSync {
   }): ShellCockpitColdSourceSnapshot {
     const snapshot = buildColdSource({
       runtime: input.runtime,
+      inspect: this.context.getInspect(),
       sessionId: input.sessionId,
       readRewindTargets: () => this.context.getRewindTargets(),
     });

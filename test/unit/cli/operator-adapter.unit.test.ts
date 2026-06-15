@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { createCliInspectPort } from "../../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
 import { createOperatorSurfacePort } from "../../../packages/brewva-cli/src/shell/ports/operator-adapter.js";
+import type { HostedRuntimeAdapterPort } from "../../../packages/brewva-gateway/src/hosted/api.js";
 
 describe("operator adapter", () => {
   test("getSnapshot does not trigger accepted approval recovery", async () => {
@@ -31,7 +33,7 @@ describe("operator adapter", () => {
           },
         },
       },
-    };
+    } as unknown as HostedRuntimeAdapterPort;
     const session = {
       sessionManager: {
         getSessionId() {
@@ -44,6 +46,7 @@ describe("operator adapter", () => {
         return {
           session,
           runtime,
+          inspect: createCliInspectPort(runtime),
           toolDefinitions: new Map(),
           initPhases: [],
           phase: "ready",

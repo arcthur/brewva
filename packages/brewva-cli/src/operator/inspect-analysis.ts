@@ -28,7 +28,7 @@ import {
   type PersistedPatchSet,
 } from "@brewva/brewva-vocabulary/workbench";
 import { formatISO } from "date-fns";
-import { listCliRuntimeLedgerRows, queryCliRuntimeEvents } from "../runtime/runtime-ports.js";
+import { createCliInspectPort } from "../runtime/cli-runtime-ports.js";
 
 const IGNORED_WORKSPACE_PREFIXES = [".orchestrator/", ".brewva/", "node_modules/"] as const;
 const PARALLEL_SLOT_REJECTED_EVENT_TYPE = "parallel_slot_rejected";
@@ -747,12 +747,15 @@ export function buildInspectAnalysis(input: {
   directory: InspectDirectory;
   base: InspectBaseReportForAnalysis;
 }): InspectAnalysisReport {
-  const snapshotEvents = queryCliRuntimeEvents(input.runtime, input.sessionId);
+  const inspect = createCliInspectPort(input.runtime);
+  const snapshotEvents = inspect.events.query(input.sessionId);
   const cutoffEvent = snapshotEvents[snapshotEvents.length - 1] ?? null;
   const cutoffTimestamp = cutoffEvent?.timestamp ?? null;
-  const ledgerRows = listCliRuntimeLedgerRows(input.runtime, input.sessionId).filter(
-    (row: { timestamp: number }) => cutoffTimestamp === null || row.timestamp <= cutoffTimestamp,
-  );
+  const ledgerRows = inspect.ledger
+    .listRows(input.sessionId)
+    .filter(
+      (row: { timestamp: number }) => cutoffTimestamp === null || row.timestamp <= cutoffTimestamp,
+    );
   const patchSets = listPersistedPatchSets({
     path: input.base.snapshots.patchHistoryPath,
     sessionId: input.sessionId,

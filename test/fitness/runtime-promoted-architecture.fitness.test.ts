@@ -700,7 +700,6 @@ describe("four-port runtime architecture fitness", () => {
 
   test("production runtime ops writes stay quarantined behind semantic adapters", () => {
     const allowed = new Set([
-      "packages/brewva-cli/src/runtime/runtime-ports.ts",
       "packages/brewva-gateway/src/hosted/internal/session/projection/runtime-write-adapters.ts",
       "packages/brewva-gateway/src/hosted/internal/session/runtime-ports.ts",
     ]);

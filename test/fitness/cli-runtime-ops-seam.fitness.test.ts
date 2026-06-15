@@ -5,16 +5,16 @@ import { resolve } from "node:path";
 const repoRoot = resolve(import.meta.dir, "../..");
 
 // The gateway `ops` facade (authority/operator/inspect) is reached from the CLI
-// only through its port layer: the typed `runtime/runtime-ports.ts` facade and
-// the `shell/ports/*` adapters. Every other CLI module consumes those narrow
-// functions instead of dereferencing `runtime.ops` directly, so the wide gateway
-// facade stays effectively gateway-private at the CLI boundary (WS3).
+// only through the single capability-port factory `runtime/cli-runtime-ports.ts`,
+// which assembles the narrow `inspect`/`operator` ports once at the composition
+// boundary. Every other CLI module consumes those capability-scoped ports instead
+// of dereferencing `.ops` directly, so the wide gateway facade stays effectively
+// gateway-private at the CLI boundary (WS3 "retire the wide adapter").
 const allowedOpsSeamOwners = [
-  /^packages\/brewva-cli\/src\/runtime\/runtime-ports\.ts$/u,
-  /^packages\/brewva-cli\/src\/shell\/ports\//u,
+  /^packages\/brewva-cli\/src\/runtime\/cli-runtime-ports\.ts$/u,
 ] as const;
 
-const runtimeOpsAccess = /runtime\.ops\b/u;
+const opsAccess = /\.ops\b/u;
 
 function isAllowed(file: string, patterns: readonly RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(file));
@@ -44,10 +44,10 @@ function listTypeScriptFiles(relativeDir: string): string[] {
 }
 
 describe("cli runtime ops seam", () => {
-  test("keeps runtime.ops dereferences inside the CLI port layer", () => {
+  test("reaches the gateway ops facade only through the capability-port factory", () => {
     const offenders = listTypeScriptFiles("packages/brewva-cli/src")
       .filter((file) => !isAllowed(file, allowedOpsSeamOwners))
-      .filter((file) => runtimeOpsAccess.test(readFileSync(resolve(repoRoot, file), "utf-8")))
+      .filter((file) => opsAccess.test(readFileSync(resolve(repoRoot, file), "utf-8")))
       .toSorted();
 
     expect(offenders).toEqual([]);

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import type { RuntimeCostPosture } from "@brewva/brewva-tools/contracts";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
+import { createCliInspectPort } from "../../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
 import { ShellCockpitSync } from "../../../packages/brewva-cli/src/shell/controller/cockpit-sync.js";
 import { systemShellClock } from "../../../packages/brewva-cli/src/shell/domain/clock.js";
 import { createDefaultCockpitObservationCursor } from "../../../packages/brewva-cli/src/shell/domain/cockpit/index.js";
@@ -54,10 +55,12 @@ describe("shell cockpit sync", () => {
     );
     const committedActions: CliShellAction[] = [];
     let rawReadCount = 0;
+    const runtime = createRuntimeFixture();
     const sync = new ShellCockpitSync({
       isDisposed: () => false,
       clock: systemShellClock,
-      getRuntime: () => createRuntimeFixture(),
+      getRuntime: () => runtime,
+      getInspect: () => createCliInspectPort(runtime),
       getSessionId: () => "session-1",
       getSessionPhase: () => ({
         kind: "model_streaming",
@@ -183,6 +186,7 @@ describe("shell cockpit sync", () => {
       isDisposed: () => false,
       clock: systemShellClock,
       getRuntime: () => runtime,
+      getInspect: () => createCliInspectPort(runtime),
       getSessionId: () => "session-1",
       getSessionPhase: () => phase,
       getModelLabel: () => "faux/faux-shell-1",
@@ -264,10 +268,12 @@ describe("shell cockpit sync", () => {
       }),
     ];
     const committedActions: CliShellAction[] = [];
+    const runtime = createRuntimeFixture();
     const sync = new ShellCockpitSync({
       isDisposed: () => false,
       clock: systemShellClock,
-      getRuntime: () => createRuntimeFixture(),
+      getRuntime: () => runtime,
+      getInspect: () => createCliInspectPort(runtime),
       getSessionId: () => "session-1",
       getSessionPhase: () => phase,
       getModelLabel: () => "faux/faux-shell-1",
@@ -322,6 +328,7 @@ describe("shell cockpit sync", () => {
       isDisposed: () => false,
       clock: systemShellClock,
       getRuntime: () => runtime,
+      getInspect: () => createCliInspectPort(runtime),
       getSessionId: () => sessionId,
       getSessionPhase: () => phase,
       getModelLabel: () => "faux/faux-shell-1",
@@ -353,10 +360,12 @@ describe("shell cockpit sync", () => {
 
   test("dispose cancels pending progress timers", async () => {
     let commitCount = 0;
+    const runtime = createRuntimeFixture();
     const sync = new ShellCockpitSync({
       isDisposed: () => false,
       clock: systemShellClock,
-      getRuntime: () => createRuntimeFixture(),
+      getRuntime: () => runtime,
+      getInspect: () => createCliInspectPort(runtime),
       getSessionId: () => "session-1",
       getSessionPhase: () => ({
         kind: "model_streaming",

@@ -19,7 +19,7 @@ import {
   readMessageRole,
   readMessageStopReason,
 } from "../io/message-content.js";
-import { recordCliRuntimeRewindCheckpoint } from "../runtime/runtime-ports.js";
+import { createCliRuntimePorts, type CliOperatorPort } from "../runtime/cli-runtime-ports.js";
 import type { CliShellSessionBundle } from "../shell/ports/session-port.js";
 import type { BrewvaSessionResult } from "./session.js";
 
@@ -92,9 +92,12 @@ function toCliShellSessionBundle(input: {
   phase: BrewvaSessionResult["phase"];
   orchestration?: BrewvaSessionResult["orchestration"];
 }): CliShellSessionBundle {
+  const { inspect, operator } = createCliRuntimePorts(input.runtime);
   return {
     session: input.session,
     runtime: input.runtime,
+    inspect,
+    operator,
     toolDefinitions: createToolDefinitionMap(input.session),
     providerConnections:
       input.providerConnections ??
@@ -118,6 +121,7 @@ async function runCliTurn(
   options: {
     printText: boolean;
     runtime: HostedRuntimeAdapterPort;
+    operator: CliOperatorPort;
   },
 ): Promise<string> {
   let emittedText = "";
@@ -171,7 +175,7 @@ async function runCliTurn(
       throw new Error("cli_print_session_missing_session_id");
     }
     const parts = [{ type: "text" as const, text: prompt }];
-    recordCliRuntimeRewindCheckpoint(options.runtime, sessionId, {
+    options.operator.session.recordCheckpoint(sessionId, {
       turnId: `print:${Date.now()}`,
       prompt: {
         text: prompt,
@@ -284,6 +288,7 @@ export async function runCliPrintSession(
     mode: CliPrintMode;
     initialMessage?: string;
     runtime: HostedRuntimeAdapterPort;
+    operator: CliOperatorPort;
   },
 ): Promise<void> {
   if (typeof options.initialMessage !== "string" || options.initialMessage.trim().length === 0) {
@@ -293,5 +298,6 @@ export async function runCliPrintSession(
   await runCliTurn(session, options.initialMessage, {
     printText: options.mode === "text",
     runtime: options.runtime,
+    operator: options.operator,
   });
 }

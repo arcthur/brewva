@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
+import { createCliInspectPort } from "../../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
 import { isSessionPhase } from "../../../packages/brewva-cli/src/shell/domain/session-phase.js";
 import {
   createLiveSessionWireFrameStore,
   createSessionViewPort,
 } from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";
+import type { HostedRuntimeAdapterPort } from "../../../packages/brewva-gateway/src/hosted/api.js";
 
 function frame(sessionId: string, frameId: string): SessionWireFrame {
   return {
@@ -70,22 +72,24 @@ function durableReadFrames(sessionId: string): SessionWireFrame[] {
 describe("SessionViewPort session wire cache", () => {
   test("reuses durable session wire on lightweight progress reads", () => {
     let queryCount = 0;
+    const runtime = {
+      ops: {
+        sessionWire: {
+          query(sessionId: string) {
+            queryCount += 1;
+            return [frame(sessionId, `frame:${queryCount}`)];
+          },
+        },
+      },
+    } as unknown as HostedRuntimeAdapterPort;
     const bundle = {
       session: {
         sessionManager: {
           getSessionId: () => "session-1",
         },
       },
-      runtime: {
-        ops: {
-          sessionWire: {
-            query(sessionId: string) {
-              queryCount += 1;
-              return [frame(sessionId, `frame:${queryCount}`)];
-            },
-          },
-        },
-      },
+      runtime,
+      inspect: createCliInspectPort(runtime),
     };
     const port = createSessionViewPort(bundle as never);
 
@@ -110,22 +114,24 @@ describe("SessionViewPort session wire cache", () => {
 
   test("keeps cockpit durable wire baseline available for lightweight progress snapshots", () => {
     let queryCount = 0;
+    const runtime = {
+      ops: {
+        sessionWire: {
+          query(sessionId: string) {
+            queryCount += 1;
+            return durableReadFrames(sessionId);
+          },
+        },
+      },
+    } as unknown as HostedRuntimeAdapterPort;
     const bundle = {
       session: {
         sessionManager: {
           getSessionId: () => "session-1",
         },
       },
-      runtime: {
-        ops: {
-          sessionWire: {
-            query(sessionId: string) {
-              queryCount += 1;
-              return durableReadFrames(sessionId);
-            },
-          },
-        },
-      },
+      runtime,
+      inspect: createCliInspectPort(runtime),
     };
     const port = createSessionViewPort(bundle as never);
 

@@ -10,19 +10,7 @@ import {
   type SkillResourceRef,
 } from "@brewva/brewva-vocabulary/session";
 import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
-import {
-  getCliRuntimeCompactionGateStatus,
-  getCliRuntimeContextEvidenceLatest,
-  getCliRuntimeContextStatus,
-  getCliRuntimeContextUsage,
-  getCliRuntimeHistoryViewBaseline,
-  getCliRuntimeLatestCapabilitySelection,
-  getCliRuntimeLatestSkillSelection,
-  getCliRuntimePendingCompactionReason,
-  getCliRuntimeVisibleReadEpoch,
-  listCliRuntimeWorkbenchEntries,
-  queryCliRuntimeEvents,
-} from "../../runtime/runtime-ports.js";
+import { createCliInspectPort, type CliInspectPort } from "../../runtime/cli-runtime-ports.js";
 
 interface ContextCockpitRecallResult {
   readonly stableId: string;
@@ -55,12 +43,12 @@ export interface ContextCockpitCompactionBaselineProjection {
 export interface ContextCockpitReport {
   readonly sideEffectPolicy: "inspect_projection_only";
   readonly context: {
-    readonly usage: ReturnType<typeof getCliRuntimeContextUsage>;
-    readonly status: ReturnType<typeof getCliRuntimeContextStatus>;
-    readonly gate: ReturnType<typeof getCliRuntimeCompactionGateStatus>;
+    readonly usage: ReturnType<CliInspectPort["context"]["usage"]>;
+    readonly status: ReturnType<CliInspectPort["context"]["status"]>;
+    readonly gate: ReturnType<CliInspectPort["context"]["compactionGateStatus"]>;
     readonly pendingCompactionReason: string | null;
-    readonly visibleReadEpoch: ReturnType<typeof getCliRuntimeVisibleReadEpoch>;
-    readonly historyBaseline: ReturnType<typeof getCliRuntimeHistoryViewBaseline>;
+    readonly visibleReadEpoch: ReturnType<CliInspectPort["context"]["visibleReadEpoch"]>;
+    readonly historyBaseline: ReturnType<CliInspectPort["context"]["historyViewBaseline"]>;
   };
   readonly workbench: {
     readonly activeCount: number;
@@ -370,37 +358,34 @@ export function buildContextCockpitReport(
   runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): ContextCockpitReport {
-  const usage = getCliRuntimeContextUsage(runtime, sessionId);
-  const status = getCliRuntimeContextStatus(runtime, sessionId, usage);
-  const skillSelection = getCliRuntimeLatestSkillSelection(runtime, sessionId);
+  const inspect = createCliInspectPort(runtime);
+  const usage = inspect.context.usage(sessionId);
+  const status = inspect.context.status(sessionId, usage);
+  const skillSelection = inspect.skills.latestSelection(sessionId);
   const skillInvocationRecords = readSkillInvocationRecords(skillSelection);
-  const capabilitySelection = getCliRuntimeLatestCapabilitySelection(runtime, sessionId);
+  const capabilitySelection = inspect.skills.latestCapabilitySelection(sessionId);
   const recallResults = dedupeRecallResults(
-    queryCliRuntimeEvents(runtime, sessionId, { type: RECALL_RESULTS_SURFACED_EVENT_TYPE }).flatMap(
-      (event) => readRecallResults(event.payload),
-    ),
+    inspect.events
+      .query(sessionId, { type: RECALL_RESULTS_SURFACED_EVENT_TYPE })
+      .flatMap((event) => readRecallResults(event.payload)),
   );
-  const workbenchEntries = listCliRuntimeWorkbenchEntries(runtime, sessionId);
+  const workbenchEntries = inspect.workbench.list(sessionId);
   const compaction = readCompactionTimeline(
-    queryCliRuntimeEvents(runtime, sessionId, {
+    inspect.events.query(sessionId, {
       type: RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND,
     }),
   );
-  const cacheObservation = getCliRuntimeContextEvidenceLatest(
-    runtime,
-    sessionId,
-    "provider_cache_observation",
-  );
+  const cacheObservation = inspect.context.evidenceLatest(sessionId, "provider_cache_observation");
 
   return {
     sideEffectPolicy: "inspect_projection_only",
     context: {
       usage,
       status,
-      gate: getCliRuntimeCompactionGateStatus(runtime, sessionId, usage),
-      pendingCompactionReason: getCliRuntimePendingCompactionReason(runtime, sessionId),
-      visibleReadEpoch: getCliRuntimeVisibleReadEpoch(runtime, sessionId),
-      historyBaseline: getCliRuntimeHistoryViewBaseline(runtime, sessionId),
+      gate: inspect.context.compactionGateStatus(sessionId, usage),
+      pendingCompactionReason: inspect.context.pendingCompactionReason(sessionId),
+      visibleReadEpoch: inspect.context.visibleReadEpoch(sessionId),
+      historyBaseline: inspect.context.historyViewBaseline(sessionId),
     },
     workbench: {
       activeCount: workbenchEntries.length,

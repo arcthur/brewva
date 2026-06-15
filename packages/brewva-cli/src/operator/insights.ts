@@ -7,7 +7,7 @@ import {
   type SessionIndexStatus,
 } from "@brewva/brewva-session-index";
 import { formatISO } from "date-fns";
-import { createCliSessionIndexSources } from "../runtime/runtime-ports.js";
+import { createCliInspectPort, type CliInspectPort } from "../runtime/cli-runtime-ports.js";
 import { clampText, resolveInspectDirectory, type InspectFinding } from "./inspect-analysis.js";
 import { buildSessionInspectReport, type SessionInspectReport } from "./inspect.js";
 
@@ -219,11 +219,11 @@ function extractSessionFacet(report: SessionInspectReport): SessionInspectFacet 
 }
 
 async function listAvailableSessions(
-  runtime: HostedRuntimeAdapterPort,
+  inspect: CliInspectPort,
   limit: number,
 ): Promise<{ sessions: SessionIndexRecentSession[]; status: SessionIndexStatus }> {
   const index = await createSessionIndex({
-    ...createCliSessionIndexSources(runtime),
+    ...inspect.sessionIndexSources(),
   });
   try {
     const status = await index.catchUp();
@@ -560,7 +560,7 @@ async function buildProjectInsightsReport(input: {
   }) => SessionInspectReport;
 }): Promise<ProjectInsightsReport> {
   const limit = input.limit ?? DEFAULT_SESSION_LIMIT;
-  const indexed = await listAvailableSessions(input.runtime, 1_000_000);
+  const indexed = await listAvailableSessions(createCliInspectPort(input.runtime), 1_000_000);
   const indexDiagnostic = indexed.status.ok
     ? {
         status: "ok" as const,

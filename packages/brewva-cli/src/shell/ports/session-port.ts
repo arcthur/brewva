@@ -27,12 +27,15 @@ import type {
 } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { PatchRollbackResult } from "@brewva/brewva-vocabulary/workbench";
+import type { CliInspectPort, CliOperatorPort } from "../../runtime/cli-runtime-ports.js";
 import type { BrewvaSessionResult } from "../../session/session.js";
 import type { ShellCockpitWireFoldSnapshot } from "../domain/cockpit/index.js";
 
 export interface CliShellSessionBundle {
   session: BrewvaManagedPromptSession;
   runtime: HostedRuntimeAdapterPort;
+  readonly inspect: CliInspectPort;
+  readonly operator: CliOperatorPort;
   toolDefinitions: ReadonlyMap<string, BrewvaToolDefinition>;
   providerConnections?: ProviderConnectionSeams;
   initPhases: BrewvaSessionResult["initPhases"];

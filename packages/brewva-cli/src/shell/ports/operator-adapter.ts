@@ -11,12 +11,6 @@ import {
 } from "@brewva/brewva-gateway";
 import { runHostedPromptTurn } from "@brewva/brewva-gateway/hosted";
 import { traceAsync, traceSync } from "../../internal/perf-trace.js";
-import {
-  decideCliRuntimeProposalRequest,
-  listCliRuntimePendingProposalRequests,
-  listCliRuntimeProposalRequests,
-  listCliRuntimeReplaySessions,
-} from "../../runtime/runtime-ports.js";
 import type { OperatorSurfacePort } from "./operator-port.js";
 import type { CliShellSessionBundle } from "./session-port.js";
 
@@ -119,13 +113,9 @@ export function createOperatorSurfacePort(input: {
     bundle: CliShellSessionBundle;
     sessionId: string;
   }): void {
-    const accepted = listCliRuntimeProposalRequests(
-      inputValue.bundle.runtime,
-      inputValue.sessionId,
-      {
-        state: "accepted",
-      },
-    );
+    const accepted = inputValue.bundle.inspect.proposals.list(inputValue.sessionId, {
+      state: "accepted",
+    });
     for (const request of accepted) {
       const turnId = resolveApprovalTurnId({
         turnId: request.turnId,
@@ -145,7 +135,7 @@ export function createOperatorSurfacePort(input: {
       const bundle = input.getSessionBundle();
       const sessionId = bundle.session.sessionManager.getSessionId();
       const approvals = traceSync("operator.getSnapshot:listPendingProposals", () =>
-        listCliRuntimePendingProposalRequests(bundle.runtime, sessionId),
+        bundle.inspect.proposals.listPending(sessionId),
       );
       const questions = (
         await traceAsync("operator.getSnapshot:collectOpenSessionQuestions", () =>
@@ -165,7 +155,7 @@ export function createOperatorSurfacePort(input: {
       );
       const taskRuns = taskStatus?.ok ? taskStatus.runs : [];
       const sessions = traceSync("operator.getSnapshot:listReplaySessions", () =>
-        listCliRuntimeReplaySessions(bundle.runtime, 20),
+        bundle.inspect.events.listReplaySessions(20),
       );
       return { approvals, questions, taskRuns, sessions };
     },
@@ -177,15 +167,10 @@ export function createOperatorSurfacePort(input: {
     async decideApproval(requestId, inputDecision) {
       const bundle = input.getSessionBundle();
       const sessionId = bundle.session.sessionManager.getSessionId();
-      const request = listCliRuntimePendingProposalRequests(bundle.runtime, sessionId).find(
-        (entry) => entry.requestId === requestId,
-      );
-      const result = decideCliRuntimeProposalRequest(
-        bundle.runtime,
-        sessionId,
-        requestId,
-        inputDecision,
-      );
+      const request = bundle.inspect.proposals
+        .listPending(sessionId)
+        .find((entry) => entry.requestId === requestId);
+      const result = bundle.operator.proposals.decide(sessionId, requestId, inputDecision);
       if (!result.applied) {
         // The request was already terminal (decided, consumed, or expired);
         // the attempt is a durable no-op receipt and there is nothing to
@@ -220,7 +205,7 @@ export function createOperatorSurfacePort(input: {
         answerText: validatedAnswer.answerText,
       });
       await deliverOperatorPrompt({ bundle, sessionId, prompt });
-      bundle.runtime.ops.tools.operatorQuestions.answerRecorded({
+      bundle.operator.tools.recordOperatorQuestionAnswer({
         sessionId,
         payload: buildOperatorQuestionAnsweredPayload({
           question,
@@ -251,7 +236,7 @@ export function createOperatorSurfacePort(input: {
         if (!answerText) {
           continue;
         }
-        bundle.runtime.ops.tools.operatorQuestions.answerRecorded({
+        bundle.operator.tools.recordOperatorQuestionAnswer({
           sessionId,
           payload: buildOperatorQuestionAnsweredPayload({
             question,

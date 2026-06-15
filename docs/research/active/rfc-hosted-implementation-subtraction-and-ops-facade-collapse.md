@@ -242,7 +242,9 @@ These workstreams change observable behavior on purpose, by fixing existing
 violations. They are guarded by WS0 behavior locks.
 
 - **WS1:** session runtime lifecycle becomes single-instance; `close` ownership
-  becomes well-defined. No public runtime API change.
+  becomes well-defined. The only public runtime API change is the required
+  `sessionId` parameter on the `RuntimeToolAuthorityResolver` signature
+  (detailed below); no other public runtime surface changes.
 - **WS2:** recoverable hosted state survives restart via tape projection instead
   of being silently lost. This restores invariant 9 (projection integrity) and
   invariant 12 (replay-derived state) in the hosted layer.
@@ -413,14 +415,14 @@ createRuntime }`). Dropped from the adapter; the 3 call sites (cli
   - consumer narrowing: the only cross-package consumer is the CLI (channels,
     delegation, daemon, init, host-api all construct the runtime _inside_ the
     gateway and legitimately hold the wide adapter — they are the gateway). The
-    CLI already funnels ops access through its `runtime/runtime-ports.ts` facade
-    (now ~57 use-case functions over `InspectRuntime`/`AuthorityRuntime` Picks);
-    the ~10 stragglers that dereferenced `runtime.ops` directly in app logic
-    (entry, shell-runtime, lifecycle, report, questions, daemon) were routed
-    through that facade. `ops` is now effectively gateway-private at the CLI
-    boundary, locked by `test/fitness/cli-runtime-ops-seam.fitness.test.ts`
-    (only `runtime/runtime-ports.ts` + `shell/ports/*` may dereference
-    `runtime.ops`).
+    CLI funnels ops access through `runtime/cli-runtime-ports.ts`, which assembles
+    two consumer-scoped aggregate ports once per session — `CliInspectPort`
+    (reads) and `CliOperatorPort` (writes); the stragglers that dereferenced
+    `runtime.ops` directly in app logic (entry, shell-runtime, lifecycle, report,
+    questions, daemon) now consume `bundle.inspect` / `bundle.operator`. `ops` is
+    now effectively gateway-private at the CLI boundary, locked by
+    `test/fitness/cli-runtime-ops-seam.fitness.test.ts` (only
+    `runtime/cli-runtime-ports.ts` may dereference `runtime.ops`).
   - On "make `ops` literally gateway-private": rejected as a type-level change.
     The CLI is a legitimate operator console needing broad inspect+operator
     access; removing `ops` from the exported type would force either a broad

@@ -16,17 +16,6 @@ import type { BrewvaOutcome } from "@brewva/brewva-vocabulary/outcome";
 import { SESSION_REWIND_DIVERGENCE_SCHEMA } from "@brewva/brewva-vocabulary/session";
 import type { SessionRewindDivergenceNote } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
-import {
-  getCliRuntimeLineageTree,
-  getCliRuntimeRewindState,
-  getCliRuntimeSessionWire,
-  listCliRuntimeEvents,
-  listCliRuntimeRewindTargets,
-  recordCliRuntimeLineageSelection,
-  recordCliRuntimeRewindCheckpoint,
-  redoCliRuntimeSession,
-  rewindCliRuntimeSession,
-} from "../../runtime/runtime-ports.js";
 import { createShellCockpitWireFoldStore } from "../domain/cockpit/wire-fold.js";
 import type {
   CliShellSessionBundle,
@@ -253,7 +242,7 @@ function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusV
   try {
     const sessionManager = readTreeSessionManager(bundle);
     const sessionId = sessionManager.getSessionId();
-    const tree = getCliRuntimeLineageTree(bundle.runtime, sessionId);
+    const tree = bundle.inspect.session.lineageTree(sessionId);
     const lineageNodeId = readSessionManagerLineageNodeId(sessionManager);
     const node = tree.nodes.find((candidate) => candidate.lineageNodeId === lineageNodeId) ?? null;
     const childCount = tree.edges.filter(
@@ -283,10 +272,12 @@ function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusV
 function buildTreeProjection(bundle: CliShellSessionBundle): SessionTreeProjectionView {
   const sessionManager = readTreeSessionManager(bundle);
   const sessionId = sessionManager.getSessionId();
-  const contextEntries: ContextEntryRecord[] =
-    bundle.runtime.ops.session.lineage.getContextEntryPath(sessionId, {});
+  const contextEntries: ContextEntryRecord[] = bundle.inspect.session.contextEntryPath(
+    sessionId,
+    {},
+  );
   const eventsById = new Map(
-    listCliRuntimeEvents(bundle.runtime, sessionId).map((event) => [event.id, event] as const),
+    bundle.inspect.events.list(sessionId).map((event) => [event.id, event] as const),
   );
   const entries: SessionTreeEntryView[] = contextEntries.map((contextEntry) => {
     const sourceEvent = eventsById.get(contextEntry.sourceEventId);
@@ -329,11 +320,12 @@ function buildWorkspaceEffectPatchSetCounts(
 ): Map<string, number> {
   const entriesById = new Map(entries.map((entry) => [entry.entryId, entry] as const));
   const activeTargetsByCheckpointId = new Map(
-    listCliRuntimeRewindTargets(bundle.runtime, sessionId)
+    bundle.inspect.session
+      .rewindTargets(sessionId)
       .filter((target) => target.lineage.kind === "active")
       .map((target) => [target.checkpointId, target] as const),
   );
-  const checkpoints = getCliRuntimeRewindState(bundle.runtime, sessionId).checkpoints;
+  const checkpoints = bundle.inspect.session.rewindState(sessionId).checkpoints;
   const counts = new Map<string, number>();
 
   for (const entry of entries) {
@@ -401,11 +393,12 @@ function resolveTreeRewindTargetForProjection(
     return { kind: "none", entryId };
   }
   const activeTargetsByCheckpointId = new Map(
-    listCliRuntimeRewindTargets(bundle.runtime, projection.sessionId)
+    bundle.inspect.session
+      .rewindTargets(projection.sessionId)
       .filter((target) => target.lineage.kind === "active")
       .map((target) => [target.checkpointId, target] as const),
   );
-  const checkpoints = getCliRuntimeRewindState(bundle.runtime, projection.sessionId).checkpoints;
+  const checkpoints = bundle.inspect.session.rewindState(projection.sessionId).checkpoints;
   let best:
     | {
         checkpointId: string;
@@ -598,7 +591,7 @@ async function checkoutTreeEntryInSession(
 
   await replaceSessionMessagesFromCurrentContext(bundle);
   const lineageNodeId = readSessionManagerLineageNodeId(sessionManager);
-  recordCliRuntimeLineageSelection(bundle.runtime, projection.sessionId, {
+  bundle.operator.session.recordLineageSelection(projection.sessionId, {
     selectionId: `cli:${randomUUID()}`,
     channelId: input.channelId ?? "cli",
     lineageNodeId,
@@ -830,7 +823,7 @@ function createDurableSessionWireReader(bundle: CliShellSessionBundle): {
       if (refreshDurable || cache?.sessionId !== sessionId) {
         cache = {
           sessionId,
-          frames: getCliRuntimeSessionWire(bundle.runtime, sessionId),
+          frames: bundle.inspect.sessionWire.query(sessionId),
         };
       }
       return cache.frames;
@@ -1367,7 +1360,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return readLineageStatus(bundle);
     },
     getLineageTree() {
-      return getCliRuntimeLineageTree(bundle.runtime, bundle.session.sessionManager.getSessionId());
+      return bundle.inspect.session.lineageTree(bundle.session.sessionManager.getSessionId());
     },
     resolveLineageLeafEntryId(lineageNodeId) {
       return readTreeSessionManager(bundle).resolveLineageLeafEntryId(lineageNodeId);
@@ -1390,7 +1383,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         }
         throw error;
       }
-      recordCliRuntimeLineageSelection(bundle.runtime, sessionId, {
+      bundle.operator.session.recordLineageSelection(sessionId, {
         selectionId: `cli:${randomUUID()}`,
         channelId: input.channelId ?? "cli",
         lineageNodeId: input.lineageNodeId,
@@ -1627,18 +1620,14 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     },
     async recordRewindCheckpoint(input) {
       await ensureSessionInitialPersistence(bundle.session);
-      recordCliRuntimeRewindCheckpoint(
-        bundle.runtime,
-        bundle.session.sessionManager.getSessionId(),
-        {
-          ...input,
-          leafEntryId: input.leafEntryId ?? bundle.session.sessionManager.getLeafId?.() ?? null,
-        },
-      );
+      bundle.operator.session.recordCheckpoint(bundle.session.sessionManager.getSessionId(), {
+        ...input,
+        leafEntryId: input.leafEntryId ?? bundle.session.sessionManager.getLeafId?.() ?? null,
+      });
     },
     rollbackLastPatchSet() {
       const sessionId = bundle.session.sessionManager.getSessionId();
-      return bundle.runtime.ops.tools.patches.rollbackLastPatchSet(sessionId);
+      return bundle.operator.tools.rollbackLastPatchSet(sessionId);
     },
     async rewindSession(input) {
       const sessionId = bundle.session.sessionManager.getSessionId();
@@ -1647,7 +1636,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       if (typeof bundle.session.replaceMessages !== "function") {
         throw new Error("Session rewind requires session.replaceMessages().");
       }
-      const result = rewindCliRuntimeSession(bundle.runtime, sessionId, {
+      const result = bundle.operator.session.rewind(sessionId, {
         ...input,
         returnLeafEntryId,
       });
@@ -1691,7 +1680,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       if (typeof bundle.session.replaceMessages !== "function") {
         throw new Error("Session redo requires session.replaceMessages().");
       }
-      const result = redoCliRuntimeSession(bundle.runtime, sessionId, input);
+      const result = bundle.operator.session.redo(sessionId, input);
       if (!result.ok) {
         return result;
       }
@@ -1713,13 +1702,10 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       return result;
     },
     getRewindState() {
-      return getCliRuntimeRewindState(bundle.runtime, bundle.session.sessionManager.getSessionId());
+      return bundle.inspect.session.rewindState(bundle.session.sessionManager.getSessionId());
     },
     listRewindTargets() {
-      return listCliRuntimeRewindTargets(
-        bundle.runtime,
-        bundle.session.sessionManager.getSessionId(),
-      );
+      return bundle.inspect.session.rewindTargets(bundle.session.sessionManager.getSessionId());
     },
   };
 }
