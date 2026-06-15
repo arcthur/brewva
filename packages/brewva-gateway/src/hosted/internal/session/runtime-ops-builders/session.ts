@@ -7,21 +7,19 @@ import {
   TASK_STUCK_DETECTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/task";
 import { rememberCommittedCompactionContextState } from "../runtime-ops-compaction-state.js";
-import { type HostedRuntimeOpsContext, readStringArrayRecord } from "../runtime-ops-context.js";
+import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
+import { readStringArrayRecord } from "./runtime-ops-projections.js";
 import { lineageTreeFor, listContextEntryPath } from "./session-lineage.js";
-import { taskItemsFor, taskSpecFor } from "./task-projection.js";
-import { workerResultsFor } from "./worker-results-projection.js";
 export function buildSessionRuntimeOps(
   ctx: HostedRuntimeOpsContext,
 ): HostedRuntimeOpsPort["session"] {
   return {
     state: {
       clear(sessionId) {
+        // Durable state is pure-from-tape (no cache to drop); only performance-only
+        // Maps are session-scoped in-memory and cleared here.
         for (const map of [
-          ctx.state.taskSpecs,
-          ctx.state.taskItems,
-          ctx.state.taskBlockers,
           ctx.state.taskProgressAt,
           ctx.state.latestContextEvidence,
           ctx.state.latestContextUsage,
@@ -30,7 +28,6 @@ export function buildSessionRuntimeOps(
           ctx.state.contextPredictedGrowthEmaTokens,
           ctx.state.contextTurnIndexes,
           ctx.state.activeTaskStalls,
-          ctx.state.workerResults,
         ]) {
           map.delete(sessionId);
         }
@@ -75,25 +72,14 @@ export function buildSessionRuntimeOps(
       turnEnded: ctx.recordSemanticEvent("turn_ended"),
     },
     workerResults: {
-      list: (sessionId) => workerResultsFor(ctx, sessionId),
+      list: (sessionId) => ctx.projections.workerResults(sessionId),
       record(sessionId, value) {
-        ctx.state.workerResults.set(sessionId, [...workerResultsFor(ctx, sessionId), value]);
         return ctx.emit(sessionId, "worker.result.recorded", { value });
       },
       clear(sessionId, input) {
+        // Emit-only: the cleared event carries the workerIds, and the projection's
+        // fold applies the removal on read. No cache to keep in sync.
         const workerIds = readStringArrayRecord(input, "workerIds");
-        const selected = new Set(workerIds);
-        const retained =
-          selected.size === 0
-            ? []
-            : workerResultsFor(ctx, sessionId).filter((result, index) => {
-                const record = result && typeof result === "object" ? result : {};
-                const workerId =
-                  typeof record.workerId === "string" ? record.workerId : `worker_${index + 1}`;
-                return !selected.has(workerId);
-              });
-        if (retained.length === 0) ctx.state.workerResults.delete(sessionId);
-        else ctx.state.workerResults.set(sessionId, retained);
         return ctx.emit(sessionId, "worker.results.cleared", {
           workerIds,
           decision:
@@ -104,7 +90,7 @@ export function buildSessionRuntimeOps(
       },
       merge(sessionId, value) {
         const workerIds = readStringArrayRecord(value, "workerIds");
-        const stored = workerResultsFor(ctx, sessionId);
+        const stored = ctx.projections.workerResults(sessionId);
         const report: WorkerMergeReport =
           stored.length === 0
             ? { status: "empty", workerIds }
@@ -198,8 +184,8 @@ export function buildSessionRuntimeOps(
     stall: {
       poll(sessionId, inputValue) {
         // Tape-authoritative: a TaskSpec persisted by a prior process must still
-        // arm stall detection after a restart, when the in-memory Map is empty.
-        if (!taskSpecFor(ctx, sessionId)) return undefined;
+        // arm stall detection after a restart (the projection reads the tape).
+        if (!ctx.projections.taskSpec(sessionId)) return undefined;
         const now = inputValue.now ?? Date.now();
         const baselineProgressAt = ctx.state.taskProgressAt.get(sessionId) ?? now;
         ctx.state.taskProgressAt.set(sessionId, baselineProgressAt);
@@ -214,7 +200,7 @@ export function buildSessionRuntimeOps(
           baselineProgressAt,
           detectedAt: now,
           idleMs,
-          openItemCount: taskItemsFor(ctx, sessionId).length,
+          openItemCount: ctx.projections.taskItems(sessionId).length,
         };
         ctx.state.activeTaskStalls.set(sessionId, payload);
         return ctx.emit(sessionId, TASK_STUCK_DETECTED_EVENT_TYPE, payload, { timestamp: now });

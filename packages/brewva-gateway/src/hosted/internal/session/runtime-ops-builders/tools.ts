@@ -26,7 +26,6 @@ import { createContextBudgetRuntimeController } from "../runtime-ops-context-bud
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 import { buildHostedPatchRollbackOps } from "./patches/rollback.js";
-import { resourceLeasesFor } from "./resource-leases-projection.js";
 
 export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["tools"] {
   const budget = createContextBudgetRuntimeController(ctx);
@@ -132,13 +131,13 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
               : null,
           expiresAfterTurn: typeof input.ttlTurns === "number" ? input.ttlTurns : null,
         };
-        ctx.state.resourceLeases.set(sessionId, [...resourceLeasesFor(ctx, sessionId), lease]);
         ctx.emit(sessionId, "resource_lease_requested", { lease });
         return { ok: true, lease };
       },
       cancel(sessionId, leaseId, reason) {
-        const leases = resourceLeasesFor(ctx, sessionId);
-        const lease = leases.find((entry) => entry.id === leaseId);
+        const lease = ctx.projections
+          .resourceLeases(sessionId)
+          .find((entry) => entry.id === leaseId);
         if (!lease) {
           return { ok: false, reason: "not_found" };
         }
@@ -147,14 +146,10 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
           status: "cancelled",
           reason: reason ?? lease.reason,
         };
-        ctx.state.resourceLeases.set(
-          sessionId,
-          leases.map((entry) => (entry.id === leaseId ? cancelledLease : entry)),
-        );
         ctx.emit(sessionId, "resource_lease_cancelled", { lease: cancelledLease, reason });
         return { ok: true, lease: cancelledLease };
       },
-      list: (sessionId) => resourceLeasesFor(ctx, sessionId),
+      list: (sessionId) => ctx.projections.resourceLeases(sessionId),
     },
     patches: {
       rollbackLastPatchSet: (sessionId: string) => patchRollback.rollbackLastPatchSet(sessionId),

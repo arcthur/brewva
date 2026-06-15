@@ -18,12 +18,12 @@ import type {
   ContextEvidenceSample,
   ContextStatus,
 } from "@brewva/brewva-vocabulary/context";
-import type { WorkerResult } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventQuery, ProtocolRecord } from "@brewva/brewva-vocabulary/events";
-import type { ResourceLeaseRecord } from "@brewva/brewva-vocabulary/iteration";
 import type { BrewvaReplaySession, SessionCostSummary } from "@brewva/brewva-vocabulary/session";
-import type { TaskItem, TaskSpec } from "@brewva/brewva-vocabulary/task";
-import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
+import {
+  createHostedProjections,
+  type HostedProjections,
+} from "./runtime-ops-builders/runtime-ops-projections.js";
 import type {
   RuntimeEventRecord,
   RuntimeInputRecorder,
@@ -44,9 +44,6 @@ export type HostedRuntimeOpsState = {
   readonly subscribers: Set<RuntimeListener>;
   readonly sessionWireSubscribers: Map<string, Set<SessionListener>>;
   readonly operationalSessionIds: Set<string>;
-  readonly taskSpecs: Map<string, TaskSpec>;
-  readonly taskItems: Map<string, TaskItem[]>;
-  readonly taskBlockers: Map<string, ProtocolRecord[]>;
   readonly taskProgressAt: Map<string, number>;
   readonly latestContextEvidence: Map<string, Map<string, ContextEvidenceSample>>;
   readonly latestContextUsage: Map<string, ContextBudgetUsage>;
@@ -54,8 +51,6 @@ export type HostedRuntimeOpsState = {
   readonly pendingContextCompactionReasons: Map<string, string>;
   readonly contextPredictedGrowthEmaTokens: Map<string, number>;
   readonly contextTurnIndexes: Map<string, number>;
-  readonly resourceLeases: Map<string, ResourceLeaseRecord[]>;
-  readonly workbenchEntries: Map<string, WorkbenchEntry[]>;
   readonly activeTaskStalls: Map<
     string,
     {
@@ -65,13 +60,14 @@ export type HostedRuntimeOpsState = {
       readonly idleMs: number;
     }
   >;
-  readonly workerResults: Map<string, WorkerResult[]>;
   readonly clearListeners: Set<(sessionId: string) => void>;
 };
 
 export type HostedRuntimeOpsContext = {
   readonly runtime: BrewvaRuntime;
   readonly state: HostedRuntimeOpsState;
+  /** The sole owner of durable tape-authoritative state (see runtime-ops-projections). */
+  readonly projections: HostedProjections;
   /** Evaluation clock for display-time projections; never authority-bearing. */
   readonly clock: () => number;
   readonly emptyCostSummary: SessionCostSummary;
@@ -206,9 +202,6 @@ export function createHostedRuntimeOpsContext(options: {
     subscribers: new Set<RuntimeListener>(),
     sessionWireSubscribers: new Map<string, Set<SessionListener>>(),
     operationalSessionIds: new Set<string>(),
-    taskSpecs: new Map<string, TaskSpec>(),
-    taskItems: new Map<string, TaskItem[]>(),
-    taskBlockers: new Map<string, ProtocolRecord[]>(),
     taskProgressAt: new Map<string, number>(),
     latestContextEvidence: new Map<string, Map<string, ContextEvidenceSample>>(),
     latestContextUsage: new Map<string, ContextBudgetUsage>(),
@@ -216,10 +209,7 @@ export function createHostedRuntimeOpsContext(options: {
     pendingContextCompactionReasons: new Map<string, string>(),
     contextPredictedGrowthEmaTokens: new Map<string, number>(),
     contextTurnIndexes: new Map<string, number>(),
-    resourceLeases: new Map<string, ResourceLeaseRecord[]>(),
-    workbenchEntries: new Map<string, WorkbenchEntry[]>(),
     activeTaskStalls: new Map(),
-    workerResults: new Map<string, WorkerResult[]>(),
     clearListeners: new Set<(sessionId: string) => void>(),
   };
 
@@ -434,9 +424,12 @@ export function createHostedRuntimeOpsContext(options: {
     };
   }
 
+  const projections = createHostedProjections({ listEvents });
+
   return {
     runtime: options.runtime,
     state,
+    projections,
     clock,
     emptyCostSummary: EMPTY_COST_SUMMARY,
     emptyContextStatus: EMPTY_CONTEXT_STATUS,
@@ -465,14 +458,4 @@ export function createHostedRuntimeOpsContext(options: {
     recordInputPayload,
     readObjectPayload,
   };
-}
-
-export function readStringArrayRecord(value: unknown, key: string): string[] {
-  if (!value || typeof value !== "object" || !(key in value)) {
-    return [];
-  }
-  const item = (value as Record<string, unknown>)[key];
-  return Array.isArray(item)
-    ? item.filter((entry): entry is string => typeof entry === "string")
-    : [];
 }

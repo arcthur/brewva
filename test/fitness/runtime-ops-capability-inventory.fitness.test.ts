@@ -44,10 +44,18 @@ function readRepoFile(path: string): string {
   return readFileSync(join(REPO_ROOT, path), "utf8");
 }
 
+const RUNTIME_OPS_PROJECTIONS_FILE = "runtime-ops-projections.ts";
+
 function runtimeOpsBuilderSources(): readonly string[] {
-  return readdirSync(join(REPO_ROOT, RUNTIME_OPS_BUILDER_DIR))
-    .filter((fileName) => fileName.endsWith(".ts"))
-    .map((fileName) => readRepoFile(`${RUNTIME_OPS_BUILDER_DIR}/${fileName}`));
+  return (
+    readdirSync(join(REPO_ROOT, RUNTIME_OPS_BUILDER_DIR))
+      .filter((fileName) => fileName.endsWith(".ts"))
+      // The projection layer owns durable state for all six domains in one cohesive
+      // module; it is not a per-namespace port builder, so it carries its own line
+      // budget (below) rather than the small per-builder cap.
+      .filter((fileName) => fileName !== RUNTIME_OPS_PROJECTIONS_FILE)
+      .map((fileName) => readRepoFile(`${RUNTIME_OPS_BUILDER_DIR}/${fileName}`))
+  );
 }
 
 function interfaceBlock(source: string, name: string): string {
@@ -270,6 +278,7 @@ describe("runtime ops capability inventory fitness", () => {
       "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-context.ts",
     );
     const runtimeOpsBuilders = runtimeOpsBuilderSources();
+    const projections = readRepoFile(`${RUNTIME_OPS_BUILDER_DIR}/${RUNTIME_OPS_PROJECTIONS_FILE}`);
     const toolRuntime = readRepoFile("packages/brewva-tools/src/contracts/runtime.ts");
 
     expect(runtimeOps.split("\n").length).toBeLessThanOrEqual(120);
@@ -277,6 +286,9 @@ describe("runtime ops capability inventory fitness", () => {
     for (const builder of runtimeOpsBuilders) {
       expect(builder.split("\n").length).toBeLessThanOrEqual(HOSTED_OPS_BUILDER_LINE_BUDGET);
     }
+    // The projection layer is one cohesive module with the pure tape rebuild for
+    // all six durable domains; it gets a larger single-file budget than a port builder.
+    expect(projections.split("\n").length).toBeLessThanOrEqual(320);
     expect(runtimeOps).not.toContain("export interface HostedRuntimeOpsPort");
     expect(runtimeOps).not.toContain("export type { HostedRuntimeOpsPort }");
     expect(runtimeOps).not.toContain("as unknown as HostedRuntimeOpsPort");
@@ -285,6 +297,7 @@ describe("runtime ops capability inventory fitness", () => {
     const hostedOpsLines =
       runtimeOps.split("\n").length +
       runtimeOpsContext.split("\n").length +
+      projections.split("\n").length +
       runtimeOpsBuilders.reduce((sum, builder) => sum + builder.split("\n").length, 0);
     const hostedOpsMirrorLines = runtimeOps.split("\n").length + toolRuntime.split("\n").length;
     expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_050);
@@ -304,6 +317,11 @@ describe("runtime ops capability inventory fitness", () => {
     const runtimeOpsContext = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-context.ts",
     );
+    // The six durable, tape-authoritative domains (taskSpec/taskItems/
+    // taskBlockers/resourceLeases/workbench/workerResults) are no longer here:
+    // they are pure tape projections (runtime-ops-projections.ts, no in-memory
+    // copy at all), so ctx.state holds only performance-only caches and infra.
+    // Their absence from the type makes a stray Map dereference a compile error.
     const expectedStateFields = [
       "activeTaskStalls",
       "clearListeners",
@@ -314,15 +332,9 @@ describe("runtime ops capability inventory fitness", () => {
       "latestContextUsage",
       "operationalSessionIds",
       "pendingContextCompactionReasons",
-      "resourceLeases",
       "sessionWireSubscribers",
       "subscribers",
-      "taskBlockers",
-      "taskItems",
       "taskProgressAt",
-      "taskSpecs",
-      "workbenchEntries",
-      "workerResults",
     ].toSorted();
     const expectedMapFields = [
       "activeTaskStalls",
@@ -332,14 +344,8 @@ describe("runtime ops capability inventory fitness", () => {
       "latestContextEvidence",
       "latestContextUsage",
       "pendingContextCompactionReasons",
-      "resourceLeases",
       "sessionWireSubscribers",
-      "taskBlockers",
-      "taskItems",
       "taskProgressAt",
-      "taskSpecs",
-      "workbenchEntries",
-      "workerResults",
     ].toSorted();
 
     expect(topLevelReadonlyTypeMembers(runtimeOpsContext, "HostedRuntimeOpsState")).toEqual(

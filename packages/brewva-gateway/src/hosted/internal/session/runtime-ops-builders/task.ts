@@ -1,31 +1,37 @@
+import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type { TaskItem } from "@brewva/brewva-vocabulary/task";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
-import {
-  liveTaskBlockerRecords,
-  taskBlockersFor,
-  taskItemsFor,
-  taskSpecFor,
-} from "./task-projection.js";
+
+function normalizeBlocker(value: ProtocolRecord): { message: string; source?: string } | undefined {
+  const message = typeof value.message === "string" ? value.message.trim() : "";
+  if (!message) {
+    return undefined;
+  }
+  const source = typeof value.source === "string" ? value.source : undefined;
+  return source ? { message, source } : { message };
+}
 
 export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["task"] {
+  const { taskSpec, taskItems, taskBlockers } = ctx.projections;
   return {
     spec: {
       set(sessionId, spec): void {
-        ctx.state.taskSpecs.set(sessionId, spec);
         ctx.recordProgress(sessionId);
         ctx.emit(sessionId, "task.spec.set", { spec });
       },
     },
     state: {
       get(sessionId) {
-        const spec = taskSpecFor(ctx, sessionId);
+        const spec = taskSpec(sessionId);
         return {
           ...(spec ? { spec } : {}),
           status: { phase: "active" },
           acceptance: { status: "pending" },
-          items: taskItemsFor(ctx, sessionId),
-          blockers: taskBlockersFor(ctx, sessionId),
+          items: taskItems(sessionId),
+          blockers: taskBlockers(sessionId)
+            .map(normalizeBlocker)
+            .filter((value): value is { message: string; source?: string } => value !== undefined),
           updatedAt: null,
         };
       },
@@ -37,7 +43,6 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
           text: item.text,
           status: item.status,
         };
-        ctx.state.taskItems.set(sessionId, [...taskItemsFor(ctx, sessionId), taskItem]);
         ctx.recordProgress(sessionId);
         ctx.emit(sessionId, "task.item.added", taskItem, {
           timestamp: item.timestamp,
@@ -47,61 +52,37 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
       },
       update(sessionId, item) {
         const itemId = item.id;
-        const items = taskItemsFor(ctx, sessionId);
-        let updated: TaskItem | undefined;
-        const next = items.map((entry) => {
-          if (entry.id !== itemId) {
-            return entry;
-          }
-          updated = {
-            ...entry,
-            text: item.text ?? entry.text,
-            status: item.status ?? entry.status,
-          };
-          return updated;
-        });
-        ctx.state.taskItems.set(sessionId, next);
+        const existing = taskItems(sessionId).find((entry) => entry.id === itemId);
+        if (!existing) {
+          return { ok: false, reason: `Task item not found: ${itemId}` };
+        }
+        const updated: TaskItem = {
+          ...existing,
+          text: item.text ?? existing.text,
+          status: item.status ?? existing.status,
+        };
         ctx.recordProgress(sessionId);
         ctx.emit(
           sessionId,
           "task.item.updated",
-          {
-            id: item.id,
-            text: item.text,
-            status: item.status,
-          },
+          { id: item.id, text: item.text, status: item.status },
           { timestamp: item.timestamp, turn: item.turn },
         );
-        return updated
-          ? { ok: true, itemId, item: updated }
-          : { ok: false, reason: `Task item not found: ${itemId}` };
+        return { ok: true, itemId, item: updated };
       },
     },
     blockers: {
       record(sessionId, blocker) {
         const blockerId = blocker.id ?? `task-blocker:${sessionId}:${Date.now()}`;
-        const blockerRecord = { ...blocker, id: blockerId };
-        // Derive from the tape projection (not the raw Map) so the cache stays
-        // consistent with durable truth across restarts, mirroring items.add.
-        ctx.state.taskBlockers.set(sessionId, [
-          ...liveTaskBlockerRecords(ctx, sessionId),
-          blockerRecord,
-        ]);
         ctx.recordProgress(sessionId);
-        ctx.emit(sessionId, "task.blocker.recorded", blockerRecord);
+        ctx.emit(sessionId, "task.blocker.recorded", { ...blocker, id: blockerId });
         return { ok: true, blockerId };
       },
       resolve(sessionId, blockerId) {
-        // The verdict is tape-authoritative: after a restart the in-memory Map is
-        // empty, so existence must be decided from the projected live blockers,
-        // not the cache — otherwise resolve() would report "not found" while the
-        // resolved event it emits actually takes effect on the tape.
-        const live = liveTaskBlockerRecords(ctx, sessionId);
-        const removed = live.some((entry) => entry.id === blockerId);
-        ctx.state.taskBlockers.set(
-          sessionId,
-          live.filter((entry) => entry.id !== blockerId),
-        );
+        // The verdict is read straight from the tape projection (no cache): after
+        // a restart the recorded blocker is still seen, so resolve() reports the
+        // real existence rather than "not found" from stale in-memory state.
+        const removed = taskBlockers(sessionId).some((entry) => entry.id === blockerId);
         ctx.recordProgress(sessionId);
         ctx.emit(sessionId, "task.blocker.resolved", { blockerId });
         return removed ? { ok: true, blockerId } : { ok: false, reason: "Blocker not found" };

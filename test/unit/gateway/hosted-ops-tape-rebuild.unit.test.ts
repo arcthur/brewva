@@ -226,4 +226,35 @@ describe("hosted ops tape authority (WS2)", () => {
 
     expect(results.map((result) => result.workerId)).toEqual(["w2"]);
   });
+
+  test("projection reads are pure: each read is a fresh rebuild, mutating it cannot inject state", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-ws2-projection-purity-"));
+    const sessionId = "projection-purity-session";
+
+    const adapter = createHostedRuntimeAdapter({ cwd });
+    await adapter.runtime.start();
+    adapter.ops.tools.resourceLeases.request(sessionId, {
+      budget: { maxParallel: 4 },
+      reason: "scan",
+    });
+
+    const first = adapter.ops.tools.resourceLeases.list(sessionId);
+    // A cache that handed out its internal array would be corrupted by this push
+    // (a ghost lease with no resource_lease_requested event), which the parallel
+    // admission gate would then honor. A pure projection returns a throwaway
+    // array, so the push is inert.
+    (first as unknown as Array<{ id: string; reason: string }>).push({
+      id: "ghost-lease",
+      reason: "ghost",
+    });
+
+    const second = adapter.ops.tools.resourceLeases.list(sessionId);
+    await adapter.runtime.close();
+
+    // Distinct reference per read (no shared cached array) and no injected ghost:
+    // state exists only because the tape has the event.
+    expect(second).not.toBe(first);
+    expect(second.map((lease) => lease.id)).not.toContain("ghost-lease");
+    expect(second.map((lease) => lease.reason)).toEqual(["scan"]);
+  });
 });

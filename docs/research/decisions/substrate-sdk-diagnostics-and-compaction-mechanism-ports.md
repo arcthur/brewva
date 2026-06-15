@@ -32,6 +32,28 @@
 - Runtime still owns replay, WAL, governance gates, context pressure authority, and durable `session_compact` receipts.
 - The substrate root remains contract-only; none of these mechanism ports are exported from `@brewva/brewva-substrate`.
 
+## Amendment — WS5 single-consumer seam recovery (`2026-06-15`)
+
+- The `provenance/` and `execution/` summary bullets above are no longer backed by
+  public package subpaths. WS5 removed the `./provenance` and `./execution`
+  exports from `packages/brewva-substrate/package.json` (alongside
+  `./persistence`) for having zero external production consumers; the inline
+  qualifications already appended to those two bullets record the same change.
+- The implementations stay substrate-internal and are reached via relative
+  paths: `prompt/templates.ts` imports `../provenance/source-info.js`, and the
+  execution tool-phase primitives are re-exposed through the `./tools` subpath via
+  `tools/api.ts`. The event-bus (`createBrewvaEventBus`) and the persistence
+  session-bundle helpers are now consumed only by unit tests.
+- This mirrors the WS5 amendment in
+  `docs/research/decisions/substrate-domain-slicing-and-root-surface-compression.md`
+  ("Amendment — WS5 single-consumer seam recovery"), which records the same
+  subpath removals from the substrate domain-slicing decision and the seam
+  principle behind them (a public API with no second consumer is a hypothetical
+  seam, not architecture).
+- The code anchors above (`src/provenance/index.ts`, `src/execution/index.ts`)
+  remain accurate: the internal source files still exist; only their public
+  subpath exports were withdrawn.
+
 ## Builds On
 
 - `docs/research/decisions/substrate-domain-slicing-and-root-surface-compression.md`
