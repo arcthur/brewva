@@ -8,7 +8,7 @@ import {
   createSourcePatchTools,
   shutdownLspWorkspaceServerManager,
 } from "@brewva/brewva-tools/navigation";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
@@ -130,7 +130,7 @@ process.stdin.on("data", (chunk) => {
       `${JSON.stringify({ command: process.execPath, args: [serverPath] }, null, 2)}\n`,
       "utf8",
     );
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const hover = createLspTools({ runtime }).find((tool) => tool.name === "lsp_hover");
     if (!hover) {
       throw new Error("Missing lsp_hover tool.");
@@ -234,7 +234,7 @@ process.stdin.on("data", (chunk) => {
       `${JSON.stringify({ command: process.execPath, args: [serverPath] }, null, 2)}\n`,
       "utf8",
     );
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const rename = createLspTools({ runtime }).find((tool) => tool.name === "lsp_rename");
     if (!rename) {
       throw new Error("Missing lsp_rename tool.");
@@ -345,7 +345,7 @@ process.stdin.on("data", (chunk) => {
       `${JSON.stringify({ command: process.execPath, args: [serverPath] }, null, 2)}\n`,
       "utf8",
     );
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const codeAction = createLspTools({ runtime }).find((tool) => tool.name === "lsp_code_action");
     if (!codeAction) {
       throw new Error("Missing lsp_code_action tool.");

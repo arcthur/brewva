@@ -6,7 +6,6 @@ import type {
   ProviderPayloadMetadata,
 } from "@brewva/brewva-provider-core/contracts";
 import { clearApiProviderSessions } from "@brewva/brewva-provider-core/registry";
-import { toJsonValue } from "@brewva/brewva-std/json";
 import {
   type BrewvaAgentProtocolController,
   type BrewvaAgentProtocolEvent,
@@ -26,8 +25,6 @@ import {
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate/host-api";
 import {
-  appendBrewvaSystemPromptTextSection,
-  buildBrewvaProjectInstructionsPromptBlock,
   buildBrewvaPromptText,
   cloneBrewvaPromptContentParts,
   expandBrewvaPromptTemplate,
@@ -38,10 +35,7 @@ import type {
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
 } from "@brewva/brewva-substrate/provider";
-import type {
-  BrewvaHostedResourceLoader,
-  BrewvaProjectInstructionFile,
-} from "@brewva/brewva-substrate/resources";
+import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
 import {
   canTransitionSessionPhase,
   type BrewvaManagedPromptSession,
@@ -68,12 +62,7 @@ import {
   BrewvaToolContext,
   BrewvaToolDefinition,
 } from "@brewva/brewva-substrate/tools";
-import {
-  buildHarnessManifest,
-  stableHarnessId,
-  wrapHarnessManifestRecordedAdvisoryPayload,
-  type HarnessManifest,
-} from "@brewva/brewva-vocabulary/harness";
+import { buildHarnessManifest, stableHarnessId } from "@brewva/brewva-vocabulary/harness";
 import {
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
@@ -129,10 +118,7 @@ import {
   type HostedRuntimeTurnPreludeResult,
 } from "../../turn-adapter/runtime-turn-prelude.js";
 import { readRuntimeVerificationGateEvidenceFromEvent } from "../../turn-adapter/runtime-turn-verification-gates.js";
-import {
-  runHostedTurnEnvelope,
-  type HostedTurnEnvelopeSource,
-} from "../../turn-adapter/turn-envelope.js";
+import { runHostedTurnEnvelope } from "../../turn-adapter/turn-envelope.js";
 import { extractPromptTargetPaths } from "../prompt-paths.js";
 import {
   getRuntimeCompactionGateStatus,
@@ -200,6 +186,20 @@ import {
   type ProviderCacheRuntimeState,
 } from "./session-contracts.js";
 import {
+  nextHarnessProviderAttemptSequence,
+  readHarnessCapabilitySelection,
+  readHarnessSkillSelection,
+  readProviderFallbackActive,
+  recordRuntimeHarnessManifest,
+  turnNumberFromTurnId,
+} from "./session-harness-manifest.js";
+import {
+  appendTargetScopedProjectInstructions,
+  hostedTurnSourceFromPromptOptions,
+  promptPartsFromCustomMessage,
+  toTurnLoopCustomMessage,
+} from "./session-prompt-dispatch.js";
+import {
   buildManagedSessionBaseSystemPrompt,
   ManagedSessionToolRegistry,
 } from "./tool-registry.js";
@@ -208,68 +208,6 @@ import {
   normalizePromptSource,
   resolveChannelContext,
 } from "./turn-audit.js";
-
-function appendTargetScopedProjectInstructions(input: {
-  baseSystemPrompt: string;
-  promptTargetPaths: readonly string[];
-  resourceLoader: BrewvaHostedResourceLoader;
-}): string {
-  const targetInstructions: BrewvaProjectInstructionFile[] = [];
-  const seen = new Set<string>();
-  for (const targetPath of input.promptTargetPaths) {
-    const instructionSet = input.resourceLoader.getTargetOnlyProjectInstructions(targetPath);
-    for (const instruction of instructionSet.files) {
-      if (seen.has(instruction.path)) {
-        continue;
-      }
-      seen.add(instruction.path);
-      targetInstructions.push(instruction);
-    }
-  }
-  const block = buildBrewvaProjectInstructionsPromptBlock(targetInstructions, "turn");
-  if (!block) {
-    return input.baseSystemPrompt;
-  }
-  return appendBrewvaSystemPromptTextSection({
-    systemPrompt: input.baseSystemPrompt,
-    section: block.text,
-  });
-}
-
-function toTurnLoopCustomMessage(
-  message: BrewvaHostCustomMessage,
-): Extract<BrewvaAgentProtocolMessage, { role: "custom" }> {
-  return {
-    role: "custom",
-    customType: message.customType,
-    content: message.content,
-    display: message.display ?? true,
-    ...(message.excludeFromContext !== undefined
-      ? { excludeFromContext: message.excludeFromContext }
-      : {}),
-    details: message.details,
-    timestamp: Date.now(),
-  };
-}
-
-function hostedTurnSourceFromPromptOptions(
-  options: BrewvaPromptOptions | undefined,
-): HostedTurnEnvelopeSource {
-  switch (options?.source) {
-    case "interactive":
-      return "interactive";
-    case "extension":
-      return "gateway";
-    default:
-      return "gateway";
-  }
-}
-
-function promptPartsFromCustomMessage(
-  message: BrewvaHostCustomMessage,
-): readonly BrewvaPromptContentPart[] {
-  return [{ type: "text", text: message.content }];
-}
 
 export const MANAGED_AGENT_SESSION_TEST_ONLY = {
   nextHarnessProviderAttemptSequence,
@@ -310,102 +248,6 @@ interface RuntimeProviderPayloadInput {
 interface RuntimeProviderCacheRenderInput {
   readonly render: ProviderCacheRenderResult;
   readonly model: ProviderModel<Api>;
-}
-
-function recordRuntimeHarnessManifest(input: {
-  readonly runtime: HostedRuntimeAdapterPort;
-  readonly manifest: HarnessManifest;
-  readonly turnId?: string;
-}): void {
-  const advisoryPayload = wrapHarnessManifestRecordedAdvisoryPayload(input.manifest);
-  input.runtime.runtime.kernel.recordAdvisoryEvent({
-    sessionId: input.manifest.sessionId,
-    ...(input.turnId ? { turnId: input.turnId } : {}),
-    namespace: advisoryPayload.namespace,
-    kind: advisoryPayload.kind,
-    version: advisoryPayload.version,
-    payload: toJsonValue(advisoryPayload.payload),
-  });
-}
-
-function readRecordValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function readStringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function readProviderFallbackActive(value: unknown): boolean {
-  return readRecordValue(value)?.active === true;
-}
-
-function turnNumberFromTurnId(turnId: string | undefined): number | undefined {
-  if (!turnId) return undefined;
-  const numeric = Number(turnId);
-  if (Number.isFinite(numeric)) return numeric;
-  const structured = /^turn[-_](\d+)$/u.exec(turnId);
-  if (!structured) return undefined;
-  const structuredNumeric = Number(structured[1]);
-  return Number.isFinite(structuredNumeric) ? structuredNumeric : undefined;
-}
-
-function nextHarnessProviderAttemptSequence(input: {
-  readonly turnId?: string;
-  readonly currentTurnKey?: string;
-  readonly currentSequence: number;
-  readonly update: (next: { readonly turnKey: string; readonly sequence: number }) => void;
-}): number {
-  const turnKey = input.turnId ?? "__unknown_turn__";
-  const sequence = input.currentTurnKey === turnKey ? input.currentSequence + 1 : 1;
-  input.update({ turnKey, sequence });
-  return sequence;
-}
-
-function readHarnessSkillSelection(
-  runtime: HostedRuntimeAdapterPort,
-  sessionId: string,
-): HarnessManifest["skillSelection"] | undefined {
-  const receipt = readRecordValue(runtime.ops.skills.selection.latest(sessionId));
-  if (!receipt) return undefined;
-  const invocationRecords = Array.isArray(receipt.skillInvocationRecords)
-    ? receipt.skillInvocationRecords
-    : [];
-  const selectedSkillIds = invocationRecords
-    .map((entry) => readStringValue(readRecordValue(entry)?.name))
-    .filter((entry): entry is string => entry !== undefined)
-    .toSorted();
-  return {
-    selectionId: readStringValue(receipt.selectionId),
-    mode: readStringValue(receipt.selectionMode),
-    selectedSkillIds,
-    renderedContextHash: stableHarnessId("skill_context", {
-      selectionId: receipt.selectionId,
-      renderedSkillCount: receipt.renderedSkillCount,
-      omittedSkillCount: receipt.omittedSkillCount,
-      promptPaths: receipt.promptPaths,
-    }),
-  };
-}
-
-function readHarnessCapabilitySelection(
-  runtime: HostedRuntimeAdapterPort,
-  sessionId: string,
-): HarnessManifest["capabilitySelection"] | undefined {
-  const receipt = readRecordValue(runtime.ops.tools.capabilitySelection.latest(sessionId));
-  if (!receipt) return undefined;
-  const selected = Array.isArray(receipt.selected_capabilities)
-    ? receipt.selected_capabilities
-    : [];
-  return {
-    selectionId: readStringValue(receipt.selection_id),
-    selectedCapabilityNames: selected
-      .map((entry) => readStringValue(readRecordValue(entry)?.name))
-      .filter((entry): entry is string => entry !== undefined)
-      .toSorted(),
-  };
 }
 
 class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {

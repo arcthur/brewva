@@ -57,7 +57,7 @@ function toolContext(sessionId: string) {
 describe("attention option tools", () => {
   test("options return bounded cards; consume, pin, ignore, and verify_plan keep separate effects", async () => {
     const runtime = createRuntimeFixture({
-      capabilities: {
+      ops: {
         skills: {
           catalog: {
             get: (name: string) =>
@@ -284,7 +284,7 @@ describe("attention option tools", () => {
   });
 
   test("session tape evidence consume returns redacted event summaries", async () => {
-    const runtime = createRuntimeFixture();
+    const runtime = createBundledToolRuntime(createRuntimeFixture());
     const sessionId = "attention-tape-redaction-session";
     const sensitiveEvent = runtime.capabilities.events.recordMetricObservation(sessionId, {
       metricKey: "attention.secret_probe",
@@ -303,7 +303,7 @@ describe("attention option tools", () => {
       throw new Error("expected_sensitive_event_recorded");
     }
 
-    const tools = createAttentionOptionTools({ runtime: createBundledToolRuntime(runtime) });
+    const tools = createAttentionOptionTools({ runtime });
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     const optionsTool = byName.get("attention_options");
     const consumeTool = byName.get("attention_consume");
@@ -352,7 +352,7 @@ describe("attention option tools", () => {
     let skillListCalls = 0;
     let workbenchListCalls = 0;
     const runtime = createRuntimeFixture({
-      capabilities: {
+      ops: {
         skills: {
           catalog: {
             get: () => undefined,

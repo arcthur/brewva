@@ -126,7 +126,8 @@ export type {
 
 export type RuntimeToolAuthorityResolver = (
   toolName: string,
-  args?: Record<string, unknown>,
+  args: Record<string, unknown> | undefined,
+  sessionId: SessionId,
 ) => ResolvedToolAuthority;
 
 export type SessionId = string;

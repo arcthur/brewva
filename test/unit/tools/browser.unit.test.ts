@@ -282,11 +282,10 @@ describe("browser tools", () => {
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);
     config.security.boundaryPolicy.network.mode = "allowlist";
     config.security.boundaryPolicy.network.outbound = [{ host: "allowed.example", ports: [443] }];
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace, config });
-    const tools = createBrowserTools(
-      { runtime: createBundledToolRuntime(runtime) },
-      { command: fakeBrowser },
+    const runtime = createBundledToolRuntime(
+      createRuntimeInstanceFixture({ cwd: workspace, config }),
     );
+    const tools = createBrowserTools({ runtime }, { command: fakeBrowser });
     const openTool = tools.find((tool) => tool.name === "browser_open");
 
     const result = await openTool!.execute(

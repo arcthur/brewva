@@ -27,6 +27,7 @@ import { foldTaskLedgerEvents } from "@brewva/brewva-vocabulary/task";
 import { PATCH_HISTORY_FILE } from "@brewva/brewva-vocabulary/workbench";
 import { formatISO } from "date-fns";
 import {
+  getCliRuntimeGoalState,
   getCliRuntimeLifecycleHydration,
   getCliRuntimeLifecycleIntegrity,
   getCliRuntimeLedgerPath,
@@ -729,7 +730,7 @@ function buildInspectReport(
   const taskEvents = eventsByType.get(TASK_EVENT_TYPE) ?? [];
   const claimEvents = eventsByType.get(CLAIM_EVENT_TYPE) ?? [];
   const taskState = foldTaskLedgerEvents(taskEvents);
-  const goalControlState = runtime.ops.goal.state.get(sessionId);
+  const goalControlState = getCliRuntimeGoalState(runtime, sessionId);
   const claimState = foldClaimLedgerEvents(claimEvents);
   const tapeStatus = getCliRuntimeTapeStatus(runtime, sessionId);
   const hydration = getCliRuntimeLifecycleHydration(runtime, sessionId);

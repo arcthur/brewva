@@ -25,7 +25,9 @@ describe("runtime topology boundary fitness", () => {
     expect(runtimePorts).not.toContain("as unknown as RuntimeAdapterOpsPort");
     expect(runtimePorts).not.toContain("as unknown as HostedRuntimeAdapterPort");
     expect(runtimeTurn).not.toContain("bindTurnPorts");
-    expect(runtimeTurn).toContain("createRuntime?.({ physics })");
+    // WS1: the per-session createRuntime swap is retired; the turn registers its
+    // session on the adapter's single router runtime instead.
+    expect(runtimeTurn).toContain("registerTurnSession");
   });
 
   test("keeps provider driver mechanics out of the runtime turn implementation", () => {

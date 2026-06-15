@@ -14,6 +14,7 @@ const allowedCreateBrewvaRuntimeOwners = [
   /^packages\/brewva-gateway\/src\/channels\/(?:agent-runtime-manager|wiring)\.ts$/u,
   /^packages\/brewva-gateway\/src\/daemon\/gateway-daemon\.ts$/u,
   /^packages\/brewva-gateway\/src\/delegation\/background\/runner-main\.ts$/u,
+  /^packages\/brewva-gateway\/src\/harness\/api\.ts$/u,
   /^packages\/brewva-gateway\/src\/hosted\/internal\/session\//u,
   /^script\/(?:report-context-evidence|verify-dist)\.ts$/u,
 ] as const;

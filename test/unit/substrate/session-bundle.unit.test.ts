@@ -6,7 +6,7 @@ import {
   isLegacyPiSessionArtifactPath,
   readSessionBundleArtifact,
   type BrewvaSessionBundleManifest,
-} from "@brewva/brewva-substrate/persistence";
+} from "../../../packages/brewva-substrate/src/persistence/index.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
 describe("substrate native session bundle contract", () => {

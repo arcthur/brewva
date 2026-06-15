@@ -132,8 +132,8 @@ describe("source intelligence managed tools", () => {
 
   test("code_outline returns language-neutral outline details and records source intelligence telemetry", async () => {
     const workspace = makeWorkspace();
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tools = createSourceIntelligenceTools({ runtime: createBundledToolRuntime(runtime) });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tools = createSourceIntelligenceTools({ runtime });
     const codeOutline = requireTool(tools, "code_outline");
 
     const result = await codeOutline.execute(

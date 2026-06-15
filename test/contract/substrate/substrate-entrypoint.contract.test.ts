@@ -73,20 +73,6 @@ describe("substrate entrypoint surface", () => {
     expect("discoverSkills" in resources).toBe(false);
   });
 
-  test("exports source provenance only from the explicit provenance subpath", async () => {
-    const provenance = await import("@brewva/brewva-substrate/provenance");
-
-    expect(typeof provenance.createBrewvaSyntheticSourceInfo).toBe("function");
-    expect(provenance.BREWVA_SOURCE_SCOPES).toContain("runtime-plugin");
-  });
-
-  test("exports execution primitives only from the explicit execution subpath", async () => {
-    const execution = await import("@brewva/brewva-substrate/execution");
-
-    expect(typeof execution.createBrewvaEventBus).toBe("function");
-    expect(execution.TOOL_EXECUTION_PHASES).toContain("cleanup");
-  });
-
   test("exports compaction mechanisms only from the explicit compaction subpath", async () => {
     const compaction = await import("@brewva/brewva-substrate/compaction");
 
@@ -125,13 +111,6 @@ describe("substrate entrypoint surface", () => {
     expect(typeof hostApi.normalizeQuestionPrompt).toBe("function");
   });
 
-  test("exports persistence helpers only from the explicit persistence subpath", async () => {
-    const persistence = await import("@brewva/brewva-substrate/persistence");
-
-    expect(typeof persistence.assertSessionBundleManifest).toBe("function");
-    expect(typeof persistence.readSessionBundleArtifact).toBe("function");
-  });
-
   test("exports provider driver mechanisms only from the explicit provider subpath", async () => {
     const provider = await import("@brewva/brewva-substrate/provider");
 
@@ -159,5 +138,20 @@ describe("substrate entrypoint surface", () => {
     expect(Object.keys(packageJson.exports ?? {})).not.toContain("./sdk");
     expect(Object.keys(packageJson.exports ?? {})).not.toContain("./turn");
     expect(Object.keys(packageJson.exports ?? {})).toContain("./agent-protocol");
+  });
+
+  test("does not expose zero-consumer mechanism subpaths as public API (WS5)", () => {
+    // persistence/provenance/execution had no external production consumers and
+    // were recovered from the public surface per the single-consumer seam
+    // principle. Their implementations stay substrate-internal (consumed via
+    // relative paths); re-export them only if a real second consumer appears.
+    const packageJson = JSON.parse(
+      readFileSync(resolve(repoRoot, "packages/brewva-substrate/package.json"), "utf8"),
+    ) as { exports?: Record<string, unknown> };
+
+    const exportKeys = Object.keys(packageJson.exports ?? {});
+    expect(exportKeys).not.toContain("./persistence");
+    expect(exportKeys).not.toContain("./provenance");
+    expect(exportKeys).not.toContain("./execution");
   });
 });

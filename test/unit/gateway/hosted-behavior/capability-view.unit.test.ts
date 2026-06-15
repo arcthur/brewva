@@ -11,7 +11,7 @@ import {
   renderCapabilityView,
 } from "../../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
 import { requireDefined } from "../../../helpers/assertions.js";
-import { createRuntimeFixture } from "./fixtures/runtime.js";
+import { createBundledToolRuntime, createRuntimeFixture } from "./fixtures/runtime.js";
 
 describe("capability view", () => {
   test("builds semantic inventory with governance-first ordering", () => {
@@ -185,7 +185,7 @@ describe("capability view", () => {
   });
 
   test("renders enum contract details for requested capabilities", () => {
-    const runtime = createRuntimeFixture();
+    const runtime = createBundledToolRuntime(createRuntimeFixture());
     const grepTool = createGrepTool({ runtime });
     const result = buildCapabilityView({
       prompt: "inspect $grep",
@@ -213,7 +213,7 @@ describe("capability view", () => {
   });
 
   test("renders required capabilities for privileged managed tools", () => {
-    const runtime = createRuntimeFixture();
+    const runtime = createBundledToolRuntime(createRuntimeFixture());
     const resourceLeaseTool = createResourceLeaseTool({ runtime });
     const result = buildCapabilityView({
       prompt: "inspect $resource_lease",
@@ -238,7 +238,7 @@ describe("capability view", () => {
   });
 
   test("renders nested enum contract details for schedule intent predicates", () => {
-    const runtime = createRuntimeFixture();
+    const runtime = createBundledToolRuntime(createRuntimeFixture());
     const scheduleIntentTool = createScheduleIntentTool({ runtime });
     const result = buildCapabilityView({
       prompt: "inspect $schedule_intent",
@@ -313,7 +313,7 @@ describe("capability view", () => {
   });
 
   test("marks operator acceptance closure as having no automatic recovery", () => {
-    const runtime = createRuntimeFixture();
+    const runtime = createBundledToolRuntime(createRuntimeFixture());
     const acceptanceTool = requireDefined(
       createTaskLedgerTools({ runtime }).find((tool) => tool.name === "task_record_acceptance"),
       "missing task_record_acceptance tool",
@@ -374,7 +374,7 @@ describe("capability view", () => {
   });
 
   test("renders semantic action policy for budget mutation tools", () => {
-    const runtime = createRuntimeFixture();
+    const runtime = createBundledToolRuntime(createRuntimeFixture());
     const resourceLeaseTool = createResourceLeaseTool({ runtime });
     const result = buildCapabilityView({
       prompt: "inspect $resource_lease",

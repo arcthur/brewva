@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createPrecedentSweepTool } from "@brewva/brewva-tools/memory";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -117,7 +117,7 @@ describe("precedent sweep tool", () => {
       ].join("\n"),
     );
 
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const tool = createPrecedentSweepTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-sweep-actionable",
@@ -172,7 +172,7 @@ describe("precedent sweep tool", () => {
   test("returns inconclusive when the repository has no solution docs yet", async () => {
     workspace = createTestWorkspace("precedent-sweep-empty");
 
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const tool = createPrecedentSweepTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-sweep-empty",

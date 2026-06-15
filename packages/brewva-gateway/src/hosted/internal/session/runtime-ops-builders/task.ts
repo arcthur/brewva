@@ -1,8 +1,12 @@
-import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type { TaskItem } from "@brewva/brewva-vocabulary/task";
-import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
+import {
+  liveTaskBlockerRecords,
+  taskBlockersFor,
+  taskItemsFor,
+  taskSpecFor,
+} from "./task-projection.js";
 
 export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["task"] {
   return {
@@ -20,7 +24,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
           ...(spec ? { spec } : {}),
           status: { phase: "active" },
           acceptance: { status: "pending" },
-          items: ctx.state.taskItems.get(sessionId) ?? [],
+          items: taskItemsFor(ctx, sessionId),
           blockers: taskBlockersFor(ctx, sessionId),
           updatedAt: null,
         };
@@ -33,9 +37,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
           text: item.text,
           status: item.status,
         };
-        const items = ctx.state.taskItems.get(sessionId) ?? [];
-        items.push(taskItem);
-        ctx.state.taskItems.set(sessionId, items);
+        ctx.state.taskItems.set(sessionId, [...taskItemsFor(ctx, sessionId), taskItem]);
         ctx.recordProgress(sessionId);
         ctx.emit(sessionId, "task.item.added", taskItem, {
           timestamp: item.timestamp,
@@ -45,7 +47,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
       },
       update(sessionId, item) {
         const itemId = item.id;
-        const items = ctx.state.taskItems.get(sessionId) ?? [];
+        const items = taskItemsFor(ctx, sessionId);
         let updated: TaskItem | undefined;
         const next = items.map((entry) => {
           if (entry.id !== itemId) {
@@ -79,24 +81,26 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
       record(sessionId, blocker) {
         const blockerId = blocker.id ?? `task-blocker:${sessionId}:${Date.now()}`;
         const blockerRecord = { ...blocker, id: blockerId };
-        const blockers = ctx.state.taskBlockers.get(sessionId) ?? [];
-        blockers.push(blockerRecord);
-        ctx.state.taskBlockers.set(sessionId, blockers);
+        // Derive from the tape projection (not the raw Map) so the cache stays
+        // consistent with durable truth across restarts, mirroring items.add.
+        ctx.state.taskBlockers.set(sessionId, [
+          ...liveTaskBlockerRecords(ctx, sessionId),
+          blockerRecord,
+        ]);
         ctx.recordProgress(sessionId);
         ctx.emit(sessionId, "task.blocker.recorded", blockerRecord);
         return { ok: true, blockerId };
       },
       resolve(sessionId, blockerId) {
-        const blockers = ctx.state.taskBlockers.get(sessionId) ?? [];
-        let removed = false;
+        // The verdict is tape-authoritative: after a restart the in-memory Map is
+        // empty, so existence must be decided from the projected live blockers,
+        // not the cache — otherwise resolve() would report "not found" while the
+        // resolved event it emits actually takes effect on the tape.
+        const live = liveTaskBlockerRecords(ctx, sessionId);
+        const removed = live.some((entry) => entry.id === blockerId);
         ctx.state.taskBlockers.set(
           sessionId,
-          blockers.filter((entry) => {
-            const matches =
-              entry && typeof entry === "object" && !Array.isArray(entry) && entry.id === blockerId;
-            removed ||= matches;
-            return !matches;
-          }),
+          live.filter((entry) => entry.id !== blockerId),
         );
         ctx.recordProgress(sessionId);
         ctx.emit(sessionId, "task.blocker.resolved", { blockerId });
@@ -116,47 +120,4 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
       },
     },
   };
-}
-
-function latestPayload(
-  ctx: HostedRuntimeOpsContext,
-  sessionId: string,
-  type: string,
-): ProtocolRecord | undefined {
-  const event = ctx.listEvents(sessionId, { type, last: 1 })[0];
-  const payload = event?.payload;
-  return payload && typeof payload === "object" && !Array.isArray(payload) ? payload : undefined;
-}
-
-function taskSpecFor(ctx: HostedRuntimeOpsContext, sessionId: string): TaskSpec | undefined {
-  const latestSpec = latestPayload(ctx, sessionId, "task.spec.set")?.spec;
-  if (latestSpec && typeof latestSpec === "object" && !Array.isArray(latestSpec)) {
-    return latestSpec as TaskSpec;
-  }
-  return ctx.state.taskSpecs.get(sessionId);
-}
-
-function taskBlockersFor(
-  ctx: HostedRuntimeOpsContext,
-  sessionId: string,
-): { message: string; source?: string }[] {
-  const fromTape = ctx
-    .listEvents(sessionId, { type: "task.blocker.recorded" })
-    .map((event) => event.payload);
-  const blockerSource =
-    fromTape.length > 0 ? fromTape : (ctx.state.taskBlockers.get(sessionId) ?? []);
-  return blockerSource
-    .map((value) => {
-      if (!value || typeof value !== "object") {
-        return undefined;
-      }
-      const record = value as Record<string, unknown>;
-      const message = typeof record.message === "string" ? record.message.trim() : "";
-      if (!message) {
-        return undefined;
-      }
-      const blockerRecordSource = typeof record.source === "string" ? record.source : undefined;
-      return blockerRecordSource ? { message, source: blockerRecordSource } : { message };
-    })
-    .filter((value): value is { message: string; source?: string } => value !== undefined);
 }

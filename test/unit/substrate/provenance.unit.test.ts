@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadBrewvaPromptTemplates } from "@brewva/brewva-substrate/prompt";
-import { createBrewvaSyntheticSourceInfo } from "@brewva/brewva-substrate/provenance";
+import { createBrewvaSyntheticSourceInfo } from "../../../packages/brewva-substrate/src/provenance/index.js";
 
 describe("substrate provenance", () => {
   test("creates stable synthetic source info", () => {

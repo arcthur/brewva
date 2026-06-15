@@ -3,7 +3,7 @@ import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { findKnowledgeDocByRelativePath } from "@brewva/brewva-recall/knowledge";
 import { createKnowledgeSearchTool } from "@brewva/brewva-tools/memory";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -50,7 +50,7 @@ updated_at: 2026-04-19
     );
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeSearchTool({ runtime });
+    const tool = createKnowledgeSearchTool({ runtime: createBundledToolRuntime(runtime) });
 
     const result = await tool.execute(
       "tc-knowledge-search-cjk",
@@ -218,7 +218,7 @@ This note mentions replay experiments but is not the canonical precedent.
     );
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeSearchTool({ runtime });
+    const tool = createKnowledgeSearchTool({ runtime: createBundledToolRuntime(runtime) });
 
     const result = await tool.execute(
       "tc-knowledge-search-main",
@@ -298,7 +298,7 @@ Always-on reviewer lanes should stay active even when metadata is incomplete.
     );
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeSearchTool({ runtime });
+    const tool = createKnowledgeSearchTool({ runtime: createBundledToolRuntime(runtime) });
 
     const noMatch = await tool.execute(
       "tc-knowledge-search-no-match",
@@ -393,7 +393,7 @@ Architecture guidance for replay ordering.
     );
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeSearchTool({ runtime });
+    const tool = createKnowledgeSearchTool({ runtime: createBundledToolRuntime(runtime) });
 
     const result = await tool.execute(
       "tc-knowledge-search-solution-only",
@@ -464,7 +464,7 @@ The runtime contract covers broader system behavior but not this specific replay
     );
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeSearchTool({ runtime });
+    const tool = createKnowledgeSearchTool({ runtime: createBundledToolRuntime(runtime) });
     const result = await tool.execute(
       "tc-knowledge-search-fuzzy",
       {
@@ -536,7 +536,7 @@ Replay ordering and cursor movement are normative runtime contracts.
     );
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeSearchTool({ runtime });
+    const tool = createKnowledgeSearchTool({ runtime: createBundledToolRuntime(runtime) });
     const result = await tool.execute(
       "tc-knowledge-search-normative",
       {
@@ -574,7 +574,7 @@ Replay ordering and cursor movement are normative runtime contracts.
     );
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeSearchTool({ runtime });
+    const tool = createKnowledgeSearchTool({ runtime: createBundledToolRuntime(runtime) });
 
     expect(
       tool.execute(

@@ -63,7 +63,7 @@ export function getParallelReadPayloads(
   sessionId: string,
 ): Array<Record<string, unknown>> {
   const payloads: Array<Record<string, unknown>> = [];
-  for (const event of runtime.capabilities.events.records.query(sessionId, {
+  for (const event of runtime.ops.events.records.query(sessionId, {
     type: "tool_parallel_read",
   })) {
     if (!event.payload) continue;

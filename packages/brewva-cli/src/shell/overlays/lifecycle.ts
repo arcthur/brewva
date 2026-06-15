@@ -14,11 +14,11 @@ import {
   getCliRuntimeContextStatus,
   getCliRuntimeContextUsage,
   getCliRuntimeHistoryViewBaseline,
+  getCliRuntimeLatestCapabilitySelection,
   getCliRuntimePendingCompactionReason,
   getCliRuntimeVisibleReadEpoch,
   getCliRuntimeSkillCatalogLoadReport,
   listCliRuntimeSkills,
-  toCliOperatorRuntime,
 } from "../../runtime/runtime-ports.js";
 import { buildCommandPalettePayload, buildHelpHubPayload } from "../commands/command-palette.js";
 import type { ShellCommandProvider } from "../commands/command-provider.js";
@@ -913,8 +913,7 @@ export class ShellOverlayLifecycleHandler {
   }
 
   async openInspectOverlay(): Promise<void> {
-    const hostedRuntime = this.context.getBundle().runtime;
-    const operatorRuntime = toCliOperatorRuntime(hostedRuntime);
+    const operatorRuntime = this.context.getBundle().runtime;
     const report = buildSessionInspectReport({
       runtime: operatorRuntime,
       sessionId: this.context.getSessionPort().getSessionId(),
@@ -990,15 +989,14 @@ export class ShellOverlayLifecycleHandler {
   openAuthorityOverlay(): void {
     const bundle = this.context.getBundle();
     const sessionId = this.context.getSessionPort().getSessionId();
-    const operatorRuntime = toCliOperatorRuntime(bundle.runtime);
-    const operatorSafety = buildInspectReport(operatorRuntime, sessionId).operatorSafety;
+    const operatorSafety = buildInspectReport(bundle.runtime, sessionId).operatorSafety;
     this.openOverlay(
       buildAuthorityOverlayPayload({
         snapshot: this.context.getOperatorSnapshot(),
         capabilitySummary: buildAuthorityCapabilitySummary(
           bundle.toolDefinitions,
           readAuthorityCapabilitySelection(
-            bundle.runtime.ops.tools.capabilitySelection.latest(sessionId),
+            getCliRuntimeLatestCapabilitySelection(bundle.runtime, sessionId),
           ),
         ),
         operatorSafety,

@@ -24,8 +24,8 @@
 - `@brewva/brewva-substrate/sdk` was removed by the four-port runtime promotion; direct hosts construct `BrewvaRuntime` rather than creating a second turn owner.
 - SDK services return `BrewvaSubstrateDiagnostic` values for recoverable startup or composition issues; invariant failures still throw.
 - SDK host-api wiring covers turn-loop-aligned events and provider/context/tool hooks without synthesizing gateway hosted prompt input policy.
-- `@brewva/brewva-substrate/provenance` owns reusable source-info vocabulary for prompt, tool, SDK, resource, and future extension-discovered artifacts.
-- `@brewva/brewva-substrate/execution` owns a sequential event-bus primitive that separates subscriber bus access from controller emit authority; listener settlement remains part of caller settlement.
+- substrate's `provenance/` owns reusable source-info vocabulary for prompt, tool, SDK, resource, and future extension-discovered artifacts. (As of WS5 in `rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md`, this is substrate-internal — the `./provenance` public subpath was removed for having zero external consumers; it is consumed via relative paths such as `prompt/templates.ts`.)
+- substrate's `execution/` owns a sequential event-bus primitive that separates subscriber bus access from controller emit authority; listener settlement remains part of caller settlement. (As of WS5, `./execution` is no longer a public subpath; the tool-phase primitives it defines stay reachable through `./tools`, and the event-bus is substrate-internal.)
 - `@brewva/brewva-substrate/tools` owns `wrapBrewvaTool(...)` for metadata-preserving cross-cutting tool decoration.
 - `@brewva/brewva-substrate/compaction` owns pure summary, token-estimation, threshold, cut-point, and message-projection helpers only.
 - Gateway still owns hosted envelopes, profile selection, compaction trigger/recovery policy, and terminal render authority.

@@ -15,6 +15,7 @@ import {
 } from "@brewva/brewva-gateway/extensions";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import { clampText } from "../../operator/inspect-analysis.js";
+import { recordCliRuntimeOperatorQuestionAnswer } from "../../runtime/runtime-ports.js";
 
 const MAX_NOTIFICATION_LINES = 28;
 const MAX_LINE_CHARS = 220;
@@ -192,7 +193,7 @@ export function createQuestionsCommandExtension(
               deliverAs: "followUp",
             });
           }
-          runtime.ops.tools.operatorQuestions.answerRecorded({
+          recordCliRuntimeOperatorQuestionAnswer(runtime, {
             sessionId,
             payload: buildOperatorQuestionAnsweredPayload({
               question,

@@ -26,6 +26,7 @@ import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import { differenceInSeconds, formatISO } from "date-fns";
 import {
   getCliRuntimeClaimState,
+  getCliRuntimeScheduleEvents,
   getCliRuntimeTaskState,
   listCliRuntimeEventSessionIds,
   listCliRuntimeEvents,
@@ -220,7 +221,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
         scheduleConfig: runtime.config.schedule,
         listSessionIds: () => listCliRuntimeEventSessionIds(runtime),
         listEvents: (sessionId, query) => listCliRuntimeEvents(runtime, sessionId, query),
-        scheduleEvents: runtime.ops.schedule.events,
+        scheduleEvents: getCliRuntimeScheduleEvents(runtime),
         subscribeEvents: (listener) => subscribeCliRuntimeEvents(runtime, listener),
         getClaimState: (sessionId) => getCliRuntimeClaimState(runtime, sessionId),
         getTaskState: (sessionId) => getCliRuntimeTaskState(runtime, sessionId),

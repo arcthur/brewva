@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createSourcePatchTools, createSourceReadTool } from "@brewva/brewva-tools/navigation";
 import { createRollbackLastPatchTool } from "@brewva/brewva-tools/workflow";
 import { ROLLBACK_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
 
@@ -22,7 +22,7 @@ interface SourceReadDetails {
 }
 
 async function applySamplePatch(input: {
-  readonly runtime: ReturnType<typeof createRuntimeInstanceFixture>;
+  readonly runtime: ReturnType<typeof createBundledToolRuntime>;
   readonly replacement: string;
 }): Promise<{ patchSetId: string; rollbackArtifactRef: string }> {
   const sourceRead = createSourceReadTool({ runtime: input.runtime });
@@ -85,7 +85,8 @@ describe("patch rollback lifecycle", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-rollback-lifecycle-"));
     const filePath = join(workspace, "example.ts");
     writeFileSync(filePath, ORIGINAL_TEXT, "utf8");
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const adapter = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(adapter);
 
     const applied = await applySamplePatch({ runtime, replacement: PATCHED_LINE });
     expect(readFileSync(filePath, "utf8")).toContain(PATCHED_LINE);
@@ -107,7 +108,7 @@ describe("patch rollback lifecycle", () => {
     });
     expect(readFileSync(filePath, "utf8")).toBe(ORIGINAL_TEXT);
 
-    const evidence = runtime.ops.events.records
+    const evidence = adapter.ops.events.records
       .list(SESSION_ID)
       .filter((event: { type: string }) => event.type === ROLLBACK_EVENT_TYPE);
     expect(evidence).toHaveLength(1);
@@ -129,7 +130,7 @@ describe("patch rollback lifecycle", () => {
 
   test("no-candidate is a first-class state, not an undo promise", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-rollback-empty-"));
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
 
     expect(runtime.capabilities.tools.patches.rollbackCandidate(SESSION_ID)).toMatchObject({
       available: false,
@@ -148,7 +149,7 @@ describe("patch rollback lifecycle", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-rollback-conflict-"));
     const filePath = join(workspace, "example.ts");
     writeFileSync(filePath, ORIGINAL_TEXT, "utf8");
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
 
     await applySamplePatch({ runtime, replacement: PATCHED_LINE });
     const drifted = "export const alpha = 1;\nexport const beta = 999;\n";
@@ -168,7 +169,7 @@ describe("patch rollback lifecycle", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-rollback-artifact-missing-"));
     const filePath = join(workspace, "example.ts");
     writeFileSync(filePath, ORIGINAL_TEXT, "utf8");
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
 
     const applied = await applySamplePatch({ runtime, replacement: PATCHED_LINE });
     const manifestPath = join(workspace, applied.rollbackArtifactRef);
@@ -191,7 +192,7 @@ describe("patch rollback lifecycle", () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-rollback-tool-"));
     const filePath = join(workspace, "example.ts");
     writeFileSync(filePath, ORIGINAL_TEXT, "utf8");
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const tool = createRollbackLastPatchTool({ runtime });
 
     await applySamplePatch({ runtime, replacement: PATCHED_LINE });

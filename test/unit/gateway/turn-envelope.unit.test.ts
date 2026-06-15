@@ -8,6 +8,7 @@ import type { BrewvaToolUpdateHandler } from "@brewva/brewva-substrate/tools";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { Type } from "@sinclair/typebox";
 import { NOOP_UI } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/noop-ui.js";
+import { createHostedRuntimeAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 import {
   runHostedTurnEnvelope,
   type HostedTurnEnvelopeAdapterResult,
@@ -78,7 +79,9 @@ describe("hosted turn envelope", () => {
   });
 
   test("creates a runtime turn adapter from the hosted session when no custom adapter is supplied", async () => {
-    const runtime = createRuntime("brewva-turn-envelope-runtime-adapter-");
+    const runtime = createHostedRuntimeAdapter({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-turn-envelope-runtime-adapter-")),
+    });
     const sessionId = "session-envelope-runtime-adapter";
     const fauxProvider = registerFauxProvider({
       provider: "faux-turn-envelope",
@@ -214,7 +217,7 @@ describe("hosted turn envelope", () => {
         { text: "echo:preparing", details: { stage: "preparing" } },
         { text: "echo:progress:runtime-path", details: { stage: "running" } },
       ]);
-      const events = result.status === "completed" ? runtime.tape.list(sessionId) : [];
+      const events = result.status === "completed" ? runtime.runtime.tape.list(sessionId) : [];
       expect(events.map((event) => event.type)).toEqual(
         expect.arrayContaining([
           "turn.started",

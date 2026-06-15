@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createBrewvaEventBus } from "@brewva/brewva-substrate/execution";
+import { createBrewvaEventBus } from "../../../packages/brewva-substrate/src/execution/index.js";
 
 describe("substrate event bus", () => {
   test("settles listeners sequentially and returns the transformed event", async () => {

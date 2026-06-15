@@ -124,6 +124,12 @@ call`; turn-level bounded recovery may grow later, but cross-agent saga
 
 ## Ring Model
 
+This is the authority-bearing view of the ring topology. The canonical, complete
+ring list — which adds the implementation rings `Substrate Ring`,
+`Model Attention Boundary`, and `Control Plane` — lives in
+`docs/architecture/system-architecture.md`. The two are consistent: the rings
+below are the authority-bearing subset of that topology.
+
 - `Kernel Ring`
   - commitment boundary
   - policy enforcement

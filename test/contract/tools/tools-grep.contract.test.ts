@@ -101,7 +101,7 @@ describe("grep managed tool", () => {
     const promptText = `Compare ${siblingRoot} against this workspace before setting TaskSpec targets.`;
     const runtime = createBundledToolRuntime(
       createRuntimeFixture({
-        capabilities: {
+        ops: {
           events: {
             records: {
               query: (_sessionId, query?: { type?: string }) =>

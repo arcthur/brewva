@@ -7,9 +7,11 @@ import {
   clusterHarnessTraceSnapshots,
   compareHarnessCandidate,
   executeHarnessCandidateComparison,
+  type HarnessRuntimeFactory,
+  toHarnessRuntimeFactory,
 } from "@brewva/brewva-gateway/harness";
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
-import type { CanonicalEvent } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime, CanonicalEvent } from "@brewva/brewva-runtime";
 import {
   buildHarnessManifest,
   buildHarnessTraceSnapshotId,
@@ -238,7 +240,7 @@ describe("harness patrol", () => {
 
     const report = await executeHarnessCandidateComparison({
       mode: "fixture",
-      runtime,
+      runtime: toHarnessRuntimeFactory(runtime),
       sourceSessionId: "source-session",
       targetSessionId: "target-session",
       divergeAt: "event-source-msg",
@@ -254,25 +256,116 @@ describe("harness patrol", () => {
       sideEffectPolicy: "fixture_provider_and_noop_tools",
       promotion: { recommendation: "review_required" },
     });
+    // The harness fork is an independent replay-then-real runtime: WS1 removed
+    // the createRuntime swap, so the fork no longer becomes the adapter's
+    // runtime. Its target tape (replay + real events) is verified through the
+    // report metrics; replay events live only in the fork's in-memory tape.
     expect(report.metrics.execution).toMatchObject({
       replayEventCount: 2,
+      targetEventCount: 8,
       providerExecuted: true,
       toolExecutorMode: "fixture_noop",
       promptSource: "synthetic",
       toolCallFrameCount: 1,
       toolProgressFrameCount: 1,
     });
+    // The adapter's own runtime stays isolated from the fork.
     expect(runtime.runtime.tape.list("source-session")).toEqual([]);
-    expect(runtime.runtime.tape.list("target-session").map((event) => event.type)).toEqual([
-      "turn.started",
-      "msg.committed",
-      "turn.started",
-      "reason.committed",
-      "tool.proposed",
-      "tool.committed",
-      "msg.committed",
-      "turn.ended",
-    ]);
+  });
+
+  function forkComparisonInput(behavior: { startThrows?: boolean; turnThrows?: boolean }): {
+    runtime: HarnessRuntimeFactory;
+    closeCount: () => number;
+    input: Parameters<typeof executeHarnessCandidateComparison>[0];
+  } {
+    let closes = 0;
+    const fork = {
+      async start() {
+        if (behavior.startThrows) {
+          throw new Error("harness_fork_start_failed");
+        }
+        return { recoveredSessions: [] };
+      },
+      // eslint-disable-next-line require-yield
+      async *turn() {
+        if (behavior.turnThrows) {
+          throw new Error("harness_fork_turn_failed");
+        }
+      },
+      tape: { list: () => [] },
+      async close() {
+        closes += 1;
+      },
+    } as unknown as BrewvaRuntime;
+    const runtime: HarnessRuntimeFactory = {
+      runtime: { tape: { list: () => [] } as unknown as BrewvaRuntime["tape"] },
+      createRuntime: () => fork,
+    };
+    const sourceEvents: CanonicalEvent[] = [
+      {
+        id: "event-source-start",
+        sessionId: "source-session",
+        type: "turn.started",
+        timestamp: 1,
+        payload: { prompt: "recorded task", content: [{ type: "text", text: "recorded task" }] },
+      },
+      {
+        id: "event-source-msg",
+        sessionId: "source-session",
+        type: "msg.committed",
+        timestamp: 2,
+        payload: { text: "recorded answer" },
+      },
+    ];
+    const baseManifest = buildHarnessManifest({
+      sessionId: "source-session",
+      attempt: 1,
+      refs: { sourceEventIds: sourceEvents.map((event) => event.id) },
+    });
+    return {
+      runtime,
+      closeCount: () => closes,
+      input: {
+        mode: "fixture",
+        runtime,
+        sourceSessionId: "source-session",
+        targetSessionId: "target-session",
+        divergeAt: "event-source-msg",
+        baseManifest,
+        candidateManifest: buildHarnessManifest({
+          ...baseManifest,
+          manifestId: undefined,
+          runtime: { configHash: "runtime_config:candidate" },
+        }),
+        sourceEvents,
+        changedFields: ["runtime.configHash"],
+      },
+    };
+  }
+
+  test("closes the forked harness runtime exactly once on success", async () => {
+    const { closeCount, input } = forkComparisonInput({});
+    await executeHarnessCandidateComparison(input);
+    expect(closeCount()).toBe(1);
+  });
+
+  test("closes the forked harness runtime exactly once when start() fails", async () => {
+    const { closeCount, input } = forkComparisonInput({ startThrows: true });
+    let message: string | undefined;
+    try {
+      await executeHarnessCandidateComparison(input);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toBe("harness_fork_start_failed");
+    expect(closeCount()).toBe(1);
+  });
+
+  test("closes the forked harness runtime exactly once when turn() fails", async () => {
+    const { closeCount, input } = forkComparisonInput({ turnThrows: true });
+    const report = await executeHarnessCandidateComparison(input);
+    expect(report.metrics.regressions).toContain("execution_error:harness_fork_turn_failed");
+    expect(closeCount()).toBe(1);
   });
 
   test("rejects replay comparison when the target tape already has events", async () => {
@@ -312,7 +405,7 @@ describe("harness patrol", () => {
     expect(
       executeHarnessCandidateComparison({
         mode: "fixture",
-        runtime,
+        runtime: toHarnessRuntimeFactory(runtime),
         sourceSessionId: "source-session",
         targetSessionId: "target-session",
         divergeAt: "event-source-start",

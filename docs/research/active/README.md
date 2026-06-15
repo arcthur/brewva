@@ -58,6 +58,14 @@ discipline.
   distills failure precedent from the session index into explicit-pull
   `docs/solutions/**` records (RDP). Resolves the recall-versus-summary
   fact-ownership question tracked by the context-OS RFC.
+- [RFC: Hosted Control-Plane Subtraction — Single Runtime, Tape-Authoritative State, And Adapter Collapse](./rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md):
+  active RFC for a gateway hosted control-plane convergence pass: collapsing the
+  two per-session runtime instances into one, making recoverable hosted state
+  tape-authoritative (fixing a replay-derived invariant violation), retiring the
+  wide `HostedRuntimeAdapterPort` in favor of use-case-scoped narrow ports,
+  converging the hosted turn path into one module, recovering single-consumer
+  substrate seams, and compressing the architecture narrative. Gated on
+  characterization behavior locks and count-based hosted fitness invariants.
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

@@ -36,9 +36,15 @@ type HostedTurnEnvelopeAdapter = (
   input: RunHostedRuntimeTurnAdapterInput,
 ) => Promise<HostedTurnEnvelopeAdapterResult>;
 
+// Two turn paths share this input: the production path (no `runAdapter`) needs
+// `runtime` + `registerTurnSession` to resolve the adapter's router runtime; the
+// override path (`runAdapter` supplied, e.g. tests) brings its own turn logic and
+// only needs identity/config. The resolve-path members are therefore optional and
+// guarded at the resolve site rather than required for both paths.
 type HostedTurnEnvelopeRuntime = Pick<BrewvaRuntime, "identity" | "config"> & {
   readonly ops?: HostedRuntimeAdapterPort["ops"];
-  readonly createRuntime?: HostedRuntimeAdapterPort["createRuntime"];
+  readonly runtime?: HostedRuntimeAdapterPort["runtime"];
+  readonly registerTurnSession?: HostedRuntimeAdapterPort["registerTurnSession"];
 };
 
 export interface HostedTurnEnvelopeActionSummary {
@@ -152,6 +158,7 @@ function createThrownLoopResult(input: {
 }
 
 async function resolveAdapterRuntime(input: {
+  sessionId: string;
   session: CollectSessionPromptOutputSession;
   prompt: SessionPromptInput;
   runtime: HostedTurnEnvelopeRuntime;
@@ -163,9 +170,15 @@ async function resolveAdapterRuntime(input: {
   if (!canResolveHostedRuntimeTurnRuntime(input.session, input.prompt)) {
     return undefined;
   }
+  const registerTurnSession = input.runtime.registerTurnSession;
+  const runtime = input.runtime.runtime;
+  if (!registerTurnSession || !runtime) {
+    return undefined;
+  }
   return resolveHostedRuntimeTurnRuntime({
+    sessionId: input.sessionId,
     session: input.session,
-    runtime: input.runtime,
+    runtime: { registerTurnSession, runtime },
   });
 }
 
@@ -179,6 +192,7 @@ export async function runHostedTurnEnvelope(
     walReplayId: input.walReplayId,
   });
   const adapterRuntime = await resolveAdapterRuntime({
+    sessionId,
     session: input.session,
     prompt: input.prompt,
     runtime: input.runtime,

@@ -57,7 +57,7 @@ function skill(input: {
 describe("discover_skills tool", () => {
   test("searches SkillCards with shared TF-IDF ranking", async () => {
     const runtime = createRuntimeFixture({
-      capabilities: {
+      ops: {
         skills: {
           catalog: {
             list: () => [
@@ -147,7 +147,7 @@ describe("discover_skills tool", () => {
   test("bounds discover-only SkillCard projection while preserving surfaced provenance", async () => {
     const references = Array.from({ length: 30 }, (_, index) => `references/ref-${index}.md`);
     const runtime = createRuntimeFixture({
-      capabilities: {
+      ops: {
         skills: {
           catalog: {
             list: () => [

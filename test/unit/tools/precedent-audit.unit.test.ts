@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createPrecedentAuditTool } from "@brewva/brewva-tools/memory";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -46,7 +46,7 @@ describe("precedent audit tool", () => {
       ].join("\n"),
     );
 
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const tool = createPrecedentAuditTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-audit-drift",
@@ -94,7 +94,7 @@ describe("precedent audit tool", () => {
   test("fails when an active solution record claims it was already superseded", async () => {
     workspace = createTestWorkspace("precedent-audit-status-conflict");
 
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const tool = createPrecedentAuditTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-audit-status-conflict",
@@ -161,7 +161,7 @@ describe("precedent audit tool", () => {
       ].join("\n"),
     );
 
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const tool = createPrecedentAuditTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-audit-same-rank-conflict",
@@ -204,7 +204,7 @@ describe("precedent audit tool", () => {
   test("fails malformed promotion-candidate derivative links", async () => {
     workspace = createTestWorkspace("precedent-audit-promotion-link");
 
-    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
     const tool = createPrecedentAuditTool({ runtime });
     const result = await tool.execute(
       "tc-precedent-audit-promotion-link",

@@ -3,8 +3,11 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createLookAtTool } from "@brewva/brewva-tools/navigation";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
-import { createRuntimeConfig } from "../../helpers/runtime.js";
+import {
+  createBundledToolRuntime,
+  createRuntimeConfig,
+  createRuntimeInstanceFixture,
+} from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 
 function extractTextContent(result: { content: Array<{ type: string; text?: string }> }): string {
@@ -16,10 +19,12 @@ function extractTextContent(result: { content: Array<{ type: string; text?: stri
 
 function createScopedLookAtTool(sessionId: string, filePath: string) {
   const cwd = dirname(filePath);
-  const runtime = createRuntimeInstanceFixture({
-    cwd,
-    config: createRuntimeConfig(),
-  });
+  const runtime = createBundledToolRuntime(
+    createRuntimeInstanceFixture({
+      cwd,
+      config: createRuntimeConfig(),
+    }),
+  );
   runtime.capabilities.task.spec.set(sessionId, {
     schema: "brewva.task.v1",
     goal: "Inspect an explicitly targeted file.",

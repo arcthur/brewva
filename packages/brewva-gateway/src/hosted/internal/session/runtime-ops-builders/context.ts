@@ -29,6 +29,10 @@ export function buildContextRuntimeOps(
       checkAndRequest: (sessionId, inputValue) => budget.checkAndRequest(sessionId, inputValue),
     },
     evidence: {
+      // Context evidence is intentionally lossy in-memory performance state
+      // (latest-per-kind, not replay-derived): it does not survive a restart by
+      // design (see context-evidence-latest.unit.test.ts), unlike the
+      // tape-authoritative workbench/task/lease/worker-result state.
       latest(sessionId, kind) {
         return ctx.state.latestContextEvidence.get(sessionId)?.get(kind);
       },

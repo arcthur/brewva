@@ -4,15 +4,36 @@ import type {
   BrewvaRuntimeIdentity,
   BrewvaRuntimeOptions,
   DeepReadonly,
+  RuntimeProviderPort,
   RuntimePhysicsDeclaration,
+  RuntimeToolAuthorityResolver,
+  RuntimeToolExecutorPort,
   TurnInput,
 } from "@brewva/brewva-runtime";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import {
+  createActionPolicyRegistry,
+  resolveToolAuthority as resolveActionPolicyAuthority,
+} from "@brewva/brewva-runtime/security";
 import type { BrewvaToolRuntimeCapabilitiesPort } from "@brewva/brewva-tools/contracts";
 import type { ContextEvidenceKind } from "@brewva/brewva-vocabulary/context";
 import { createRecoveryWalStore } from "../../../daemon/api.js";
+import type { CollectSessionPromptOutputSession } from "../turn-adapter/collect-output.js";
+import {
+  createHostedRuntimeProviderPort,
+  createHostedRuntimeToolAuthorityResolver,
+  createHostedRuntimeToolExecutorPort,
+  isRuntimeAdapterSession,
+} from "../turn-adapter/runtime-turn-execution-ports.js";
+import { createVerificationGateRuntimeProviderPort } from "../turn-adapter/runtime-turn-verification-gates.js";
 import type { HostedRuntimeOpsPort } from "./runtime-ops-port.js";
 import { createHostedRuntimeOps } from "./runtime-ops.js";
+
+type HostedTurnSessionPorts = {
+  readonly provider: RuntimeProviderPort;
+  readonly toolExecutor: RuntimeToolExecutorPort;
+  readonly authority: RuntimeToolAuthorityResolver;
+};
 
 export type { BrewvaRuntimeOptions };
 export type HostedRuntimeAdapterOptions = Omit<BrewvaRuntimeOptions, "physics"> & {
@@ -83,15 +104,23 @@ export interface HostedRuntimeAdapterPort {
   readonly config: DeepReadonly<BrewvaConfig>;
   readonly runtime: BrewvaRuntime;
   readonly ops: RuntimeAdapterOpsPort;
-  readonly capabilities: RuntimeAdapterCapabilitiesPort;
   readonly extensions: HostedRuntimeExtensionsPort;
-  createRuntime(input: { readonly physics: RuntimePhysicsDeclaration }): BrewvaRuntime;
+  /**
+   * Register a hosted session under its sessionId so the adapter's single
+   * router runtime resolves provider/tool/authority physics for that session's
+   * turns. Replaces the old per-session runtime instance + createRuntime swap.
+   */
+  registerTurnSession(sessionId: string, session: CollectSessionPromptOutputSession): void;
 }
 
-export interface ToolRuntimeAdapterPort extends Pick<
-  HostedRuntimeAdapterPort,
-  "identity" | "config" | "capabilities"
-> {
+// The tools-facing port. `capabilities` is the capability-scoped projection of
+// the gateway `ops` facade (see `toToolRuntimeAdapterPort`). It is defined
+// independently of `HostedRuntimeAdapterPort` so the wide adapter does not have
+// to carry a redundant `capabilities` alias of `ops`.
+export interface ToolRuntimeAdapterPort {
+  readonly identity: BrewvaRuntimeIdentity;
+  readonly config: DeepReadonly<BrewvaConfig>;
+  readonly capabilities: RuntimeAdapterCapabilitiesPort;
   readonly extensions: {
     readonly tools: HostedRuntimeExtensionsPort["tools"];
   };
@@ -160,22 +189,83 @@ export function createHostedRuntimeAdapter(
     });
   }
 
-  let runtimeTarget = wrapRuntime(
-    createBrewvaRuntime({
-      ...options,
-      physics: options.physics ?? { mode: "noop" },
-    }),
-  );
-  const ops = createHostedRuntimeOps({
-    get runtime() {
-      return runtimeTarget;
+  const sessionRegistry = new Map<string, HostedTurnSessionPorts>();
+  const fallbackAuthorityRegistry = createActionPolicyRegistry();
+
+  function portsFor(sessionId: string): HostedTurnSessionPorts {
+    const ports = sessionRegistry.get(sessionId);
+    if (!ports) {
+      throw new Error(`hosted_runtime_session_not_registered:${sessionId}`);
+    }
+    return ports;
+  }
+
+  // One stable runtime per adapter. Its physics routes each turn to the
+  // registered session's ports by sessionId — no noop shell, no per-turn swap.
+  const routerPhysics: RuntimePhysicsDeclaration = options.physics ?? {
+    mode: "real",
+    provider: {
+      stream(input) {
+        return portsFor(input.turn.sessionId).provider.stream(input);
+      },
     },
+    toolExecutor: {
+      execute(commitment, executorInput) {
+        return portsFor(commitment.call.sessionId).toolExecutor.execute(commitment, executorInput);
+      },
+    },
+    resolveToolAuthority: (toolName, args, sessionId) => {
+      const ports = sessionId ? sessionRegistry.get(sessionId) : undefined;
+      if (ports) {
+        return ports.authority(toolName, args, sessionId);
+      }
+      // Direct kernel use outside a hosted turn (e.g. tape-replay queries) has no
+      // registered session; fall back to the default action policy, matching the
+      // prior noop-adapter behavior.
+      return resolveActionPolicyAuthority(
+        toolName,
+        fallbackAuthorityRegistry,
+        args,
+        runtime.config.security.actionAdmissionOverrides,
+      );
+    },
+  };
+
+  const runtime = wrapRuntime(createBrewvaRuntime({ ...options, physics: routerPhysics }));
+
+  function registerTurnSession(
+    sessionId: string,
+    session: CollectSessionPromptOutputSession,
+  ): void {
+    observedSessionIds.add(sessionId);
+    if (sessionRegistry.has(sessionId) || !isRuntimeAdapterSession(session)) {
+      return;
+    }
+    sessionRegistry.set(sessionId, {
+      provider: createVerificationGateRuntimeProviderPort(
+        createHostedRuntimeProviderPort(session),
+        session,
+      ),
+      toolExecutor: createHostedRuntimeToolExecutorPort(session),
+      authority: createHostedRuntimeToolAuthorityResolver(session, {
+        actionAdmissionOverrides: runtime.config.security.actionAdmissionOverrides,
+      }),
+    });
+  }
+
+  const ops = createHostedRuntimeOps({
+    runtime,
     listSessionIds: () => [...observedSessionIds].toSorted(),
     ...(options.clock ? { clock: options.clock } : {}),
   });
+  // Release a session's router ports when its state is cleared, so the registry
+  // does not grow unbounded across the adapter's lifetime.
+  ops.session.state.onClear((clearedSessionId) => {
+    sessionRegistry.delete(clearedSessionId);
+  });
   const recoveryWal = createRecoveryWalStore({
-    workspaceRoot: runtimeTarget.identity.workspaceRoot,
-    config: runtimeTarget.config.infrastructure.recoveryWal,
+    workspaceRoot: runtime.identity.workspaceRoot,
+    config: runtime.config.infrastructure.recoveryWal,
     scope: "runtime",
   });
   const extensions: HostedRuntimeExtensionsPort = Object.freeze({
@@ -191,23 +281,12 @@ export function createHostedRuntimeAdapter(
     },
   });
   const adapter: HostedRuntimeAdapterPort = {
-    identity: runtimeTarget.identity,
-    config: runtimeTarget.config,
-    get runtime() {
-      return runtimeTarget;
-    },
+    identity: runtime.identity,
+    config: runtime.config,
+    runtime,
     ops,
-    capabilities: ops,
     extensions,
-    createRuntime(input: { readonly physics: RuntimePhysicsDeclaration }) {
-      runtimeTarget = wrapRuntime(
-        createBrewvaRuntime({
-          ...options,
-          physics: input.physics,
-        }),
-      );
-      return runtimeTarget;
-    },
+    registerTurnSession,
   };
   return freezePort(adapter);
 }
@@ -224,7 +303,7 @@ export function toToolRuntimeAdapterPort(
   return Object.freeze({
     identity: runtime.identity,
     config: runtime.config,
-    capabilities: runtime.capabilities,
+    capabilities: runtime.ops,
     extensions: Object.freeze({
       tools: runtime.extensions.tools,
     }),

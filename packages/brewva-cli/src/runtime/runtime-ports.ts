@@ -4,10 +4,6 @@ import type { CreateSessionIndexInput } from "@brewva/brewva-session-index";
 type InspectRuntime = Pick<HostedRuntimeAdapterPort, "identity" | "config" | "ops">;
 type AuthorityRuntime = Pick<HostedRuntimeAdapterPort, "ops">;
 
-export function toCliOperatorRuntime(runtime: HostedRuntimeAdapterPort): HostedRuntimeAdapterPort {
-  return runtime;
-}
-
 export function createCliSessionIndexSources(
   runtime: InspectRuntime,
 ): Pick<CreateSessionIndexInput, "workspaceRoot" | "events" | "task"> {
@@ -351,4 +347,81 @@ export function getCliRuntimeLedgerPath(
   runtime: InspectRuntime,
 ): ReturnType<InspectRuntime["ops"]["ledger"]["store"]["getPath"]> {
   return runtime.ops.ledger.store.getPath();
+}
+
+export function markCliRuntimeTurnStart(
+  runtime: AuthorityRuntime,
+  sessionId: string,
+  turn: Parameters<HostedRuntimeAdapterPort["ops"]["context"]["lifecycle"]["onTurnStart"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["context"]["lifecycle"]["onTurnStart"]> {
+  return runtime.ops.context.lifecycle.onTurnStart(sessionId, turn);
+}
+
+export function requestCliRuntimeCompaction(
+  runtime: AuthorityRuntime,
+  sessionId: string,
+  reason: Parameters<HostedRuntimeAdapterPort["ops"]["context"]["compaction"]["request"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["context"]["compaction"]["request"]> {
+  return runtime.ops.context.compaction.request(sessionId, reason);
+}
+
+export function rollbackCliRuntimeLastPatchSet(
+  runtime: AuthorityRuntime,
+  sessionId: string,
+): ReturnType<HostedRuntimeAdapterPort["ops"]["tools"]["patches"]["rollbackLastPatchSet"]> {
+  return runtime.ops.tools.patches.rollbackLastPatchSet(sessionId);
+}
+
+export function recordCliRuntimeOperatorQuestionAnswer(
+  runtime: AuthorityRuntime,
+  input: Parameters<
+    HostedRuntimeAdapterPort["ops"]["tools"]["operatorQuestions"]["answerRecorded"]
+  >[0],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["tools"]["operatorQuestions"]["answerRecorded"]> {
+  return runtime.ops.tools.operatorQuestions.answerRecorded(input);
+}
+
+export function getCliRuntimeScheduleEvents(
+  runtime: InspectRuntime,
+): InspectRuntime["ops"]["schedule"]["events"] {
+  return runtime.ops.schedule.events;
+}
+
+export function getCliRuntimeGoalState(
+  runtime: InspectRuntime,
+  sessionId: string,
+): ReturnType<InspectRuntime["ops"]["goal"]["state"]["get"]> {
+  return runtime.ops.goal.state.get(sessionId);
+}
+
+export function startCliRuntimeGoal(
+  runtime: AuthorityRuntime,
+  sessionId: string,
+  input: Parameters<HostedRuntimeAdapterPort["ops"]["goal"]["lifecycle"]["start"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["goal"]["lifecycle"]["start"]> {
+  return runtime.ops.goal.lifecycle.start(sessionId, input);
+}
+
+export function pauseCliRuntimeGoal(
+  runtime: AuthorityRuntime,
+  sessionId: string,
+  input: Parameters<HostedRuntimeAdapterPort["ops"]["goal"]["lifecycle"]["pause"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["goal"]["lifecycle"]["pause"]> {
+  return runtime.ops.goal.lifecycle.pause(sessionId, input);
+}
+
+export function resumeCliRuntimeGoal(
+  runtime: AuthorityRuntime,
+  sessionId: string,
+  input: Parameters<HostedRuntimeAdapterPort["ops"]["goal"]["lifecycle"]["resume"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["goal"]["lifecycle"]["resume"]> {
+  return runtime.ops.goal.lifecycle.resume(sessionId, input);
+}
+
+export function clearCliRuntimeGoal(
+  runtime: AuthorityRuntime,
+  sessionId: string,
+  input: Parameters<HostedRuntimeAdapterPort["ops"]["goal"]["lifecycle"]["clear"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["goal"]["lifecycle"]["clear"]> {
+  return runtime.ops.goal.lifecycle.clear(sessionId, input);
 }

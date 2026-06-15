@@ -10,6 +10,8 @@ import { rememberCommittedCompactionContextState } from "../runtime-ops-compacti
 import { type HostedRuntimeOpsContext, readStringArrayRecord } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 import { lineageTreeFor, listContextEntryPath } from "./session-lineage.js";
+import { taskItemsFor, taskSpecFor } from "./task-projection.js";
+import { workerResultsFor } from "./worker-results-projection.js";
 export function buildSessionRuntimeOps(
   ctx: HostedRuntimeOpsContext,
 ): HostedRuntimeOpsPort["session"] {
@@ -73,11 +75,9 @@ export function buildSessionRuntimeOps(
       turnEnded: ctx.recordSemanticEvent("turn_ended"),
     },
     workerResults: {
-      list: (sessionId) => ctx.state.workerResults.get(sessionId) ?? [],
+      list: (sessionId) => workerResultsFor(ctx, sessionId),
       record(sessionId, value) {
-        const next = ctx.state.workerResults.get(sessionId) ?? [];
-        next.push(value);
-        ctx.state.workerResults.set(sessionId, next);
+        ctx.state.workerResults.set(sessionId, [...workerResultsFor(ctx, sessionId), value]);
         return ctx.emit(sessionId, "worker.result.recorded", { value });
       },
       clear(sessionId, input) {
@@ -86,7 +86,7 @@ export function buildSessionRuntimeOps(
         const retained =
           selected.size === 0
             ? []
-            : (ctx.state.workerResults.get(sessionId) ?? []).filter((result, index) => {
+            : workerResultsFor(ctx, sessionId).filter((result, index) => {
                 const record = result && typeof result === "object" ? result : {};
                 const workerId =
                   typeof record.workerId === "string" ? record.workerId : `worker_${index + 1}`;
@@ -104,7 +104,7 @@ export function buildSessionRuntimeOps(
       },
       merge(sessionId, value) {
         const workerIds = readStringArrayRecord(value, "workerIds");
-        const stored = ctx.state.workerResults.get(sessionId) ?? [];
+        const stored = workerResultsFor(ctx, sessionId);
         const report: WorkerMergeReport =
           stored.length === 0
             ? { status: "empty", workerIds }
@@ -197,7 +197,9 @@ export function buildSessionRuntimeOps(
     },
     stall: {
       poll(sessionId, inputValue) {
-        if (!ctx.state.taskSpecs.has(sessionId)) return undefined;
+        // Tape-authoritative: a TaskSpec persisted by a prior process must still
+        // arm stall detection after a restart, when the in-memory Map is empty.
+        if (!taskSpecFor(ctx, sessionId)) return undefined;
         const now = inputValue.now ?? Date.now();
         const baselineProgressAt = ctx.state.taskProgressAt.get(sessionId) ?? now;
         ctx.state.taskProgressAt.set(sessionId, baselineProgressAt);
@@ -212,7 +214,7 @@ export function buildSessionRuntimeOps(
           baselineProgressAt,
           detectedAt: now,
           idleMs,
-          openItemCount: ctx.state.taskItems.get(sessionId)?.length ?? 0,
+          openItemCount: taskItemsFor(ctx, sessionId).length,
         };
         ctx.state.activeTaskStalls.set(sessionId, payload);
         return ctx.emit(sessionId, TASK_STUCK_DETECTED_EVENT_TYPE, payload, { timestamp: now });

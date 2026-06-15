@@ -31,13 +31,19 @@ import {
   resolveInspectDirectory,
 } from "../../operator/inspect.js";
 import {
+  clearCliRuntimeGoal,
   getCliRuntimeCompactionGateStatus,
   getCliRuntimeContextUsage,
+  getCliRuntimeGoalState,
   getCliRuntimePendingCompactionReason,
   getCliRuntimeTapeStatus,
   getCliRuntimeTurnProjection,
+  pauseCliRuntimeGoal,
   recordCliRuntimeContinuationAnchor,
   renderCliRuntimeTurnDigest,
+  requestCliRuntimeCompaction,
+  resumeCliRuntimeGoal,
+  startCliRuntimeGoal,
 } from "../../runtime/runtime-ports.js";
 import { buildCommandPalettePayload, parseShellSlashPrompt } from "../commands/command-palette.js";
 import { ShellCommandProvider } from "../commands/command-provider.js";
@@ -1952,7 +1958,7 @@ export class CliShellRuntime {
       this.#bundle.runtime,
       sessionId,
     );
-    this.#bundle.runtime.ops.context.compaction.request(sessionId, "manual");
+    requestCliRuntimeCompaction(this.#bundle.runtime, sessionId, "manual");
     if (gateStatus.required) {
       this.ui.notify(
         `Context compaction requested; gate is already required (${gateStatus.reason ?? "unknown"}).`,
@@ -2238,9 +2244,9 @@ export class CliShellRuntime {
 
   private async handleGoalCommand(command: GoalCommand): Promise<void> {
     const sessionId = this.#sessionPort.getSessionId();
-    const goalOps = this.#bundle.runtime.ops.goal;
+    const runtime = this.#bundle.runtime;
     if (command.kind === "status") {
-      const goal = goalOps.state.get(sessionId);
+      const goal = getCliRuntimeGoalState(runtime, sessionId);
       if (!goal) {
         this.ui.notify("No active goal is set.", "info");
         return;
@@ -2252,7 +2258,7 @@ export class CliShellRuntime {
       return;
     }
     if (command.kind === "pause") {
-      const result = goalOps.lifecycle.pause(sessionId, { reason: "interactive" });
+      const result = pauseCliRuntimeGoal(runtime, sessionId, { reason: "interactive" });
       this.ui.notify(
         result.ok ? "Goal paused." : `Goal pause rejected: ${result.reason}`,
         result.ok ? "info" : "warning",
@@ -2260,7 +2266,7 @@ export class CliShellRuntime {
       return;
     }
     if (command.kind === "resume") {
-      const result = goalOps.lifecycle.resume(sessionId, { reason: "interactive" });
+      const result = resumeCliRuntimeGoal(runtime, sessionId, { reason: "interactive" });
       this.ui.notify(
         result.ok ? "Goal resumed." : `Goal resume rejected: ${result.reason}`,
         result.ok ? "info" : "warning",
@@ -2268,7 +2274,7 @@ export class CliShellRuntime {
       return;
     }
     if (command.kind === "clear") {
-      const result = goalOps.lifecycle.clear(sessionId, { reason: "interactive" });
+      const result = clearCliRuntimeGoal(runtime, sessionId, { reason: "interactive" });
       this.ui.notify(
         result.ok ? "Goal cleared." : `Goal clear rejected: ${result.reason}`,
         result.ok ? "info" : "warning",
@@ -2276,7 +2282,7 @@ export class CliShellRuntime {
       return;
     }
 
-    const result = goalOps.lifecycle.start(sessionId, {
+    const result = startCliRuntimeGoal(runtime, sessionId, {
       objective: command.objective,
       tokenBudget: command.tokenBudget,
     });

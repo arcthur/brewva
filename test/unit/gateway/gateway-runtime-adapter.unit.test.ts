@@ -271,7 +271,7 @@ describe("gateway runtime adapter", () => {
 
   test("hosted runtime adapter keeps canonical tape durability enabled", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "brewva-gateway-runtime-adapter-durable-"));
-    const runtime = createBrewvaRuntime({ cwd, physics: { mode: "noop" } });
+    const adapter = createHostedRuntimeAdapter({ cwd });
     const session = {
       getRegisteredTools() {
         return [];
@@ -293,8 +293,9 @@ describe("gateway runtime adapter", () => {
     } as never;
 
     const hostedTurnRuntime = await resolveHostedRuntimeTurnRuntime({
+      sessionId: "durable-adapter-session",
       session,
-      runtime,
+      runtime: adapter,
     });
     const decision = await hostedTurnRuntime.kernel.beginToolCall({
       sessionId: "durable-adapter-session",
@@ -336,6 +337,7 @@ describe("gateway runtime adapter", () => {
     } as never;
 
     const hostedTurnRuntime = await resolveHostedRuntimeTurnRuntime({
+      sessionId: "shared-adapter-session",
       session,
       runtime: adapter,
     });

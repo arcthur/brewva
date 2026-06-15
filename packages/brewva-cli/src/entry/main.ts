@@ -45,7 +45,11 @@ import {
   getCliRuntimeRewindState,
   listCliRuntimeEvents,
   listCliRuntimeEventSessionIds,
+  markCliRuntimeTurnStart,
   queryCliStructuredRuntimeEvents,
+  redoCliRuntimeSession,
+  rewindCliRuntimeSession,
+  rollbackCliRuntimeLastPatchSet,
   setCliRuntimeTaskSpec,
 } from "../runtime/runtime-ports.js";
 import type { CliInteractiveSessionOptions } from "../session/cli-runtime.js";
@@ -303,7 +307,7 @@ function printGatewayCostSummary(input: {
     cwd: resolveBackendWorkingCwd(input.cwd),
     configPath: input.configPath,
   });
-  runtime.ops.context.lifecycle.onTurnStart(replaySessionId, 0);
+  markCliRuntimeTurnStart(runtime, replaySessionId, 0);
   printCostSummary(replaySessionId, runtime);
 }
 
@@ -563,8 +567,8 @@ export async function runCliRootOperation(): Promise<void> {
     );
     const lineageResult = targetSessionId
       ? parsed.redo
-        ? runtime.ops.session.rewind.redo(targetSessionId)
-        : runtime.ops.session.rewind.rewind(targetSessionId, {
+        ? redoCliRuntimeSession(runtime, targetSessionId)
+        : rewindCliRuntimeSession(runtime, targetSessionId, {
             mode: "both",
             summary: "carry",
           })
@@ -595,7 +599,7 @@ export async function runCliRootOperation(): Promise<void> {
       );
       return;
     }
-    const rollback = runtime.capabilities.tools.patches.rollbackLastPatchSet(rollbackSessionId);
+    const rollback = rollbackCliRuntimeLastPatchSet(runtime, rollbackSessionId);
     if (rollback.ok) {
       console.log(
         `Workspace rollback applied in session ${rollbackSessionId}: restored patch set ${rollback.patchSetId ?? "unknown"} (${rollback.restoredPaths.length} file(s)). Lineage rewind unavailable (${lineageReason}).`,

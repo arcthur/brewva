@@ -124,7 +124,7 @@ export function createRuntimeForExecTests(input?: {
 
   const runtimeFixture = createRuntimeFixture({
     config,
-    capabilities: {
+    ops: {
       events:
         turnPromptText === undefined
           ? undefined

@@ -1638,7 +1638,7 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     },
     rollbackLastPatchSet() {
       const sessionId = bundle.session.sessionManager.getSessionId();
-      return bundle.runtime.capabilities.tools.patches.rollbackLastPatchSet(sessionId);
+      return bundle.runtime.ops.tools.patches.rollbackLastPatchSet(sessionId);
     },
     async rewindSession(input) {
       const sessionId = bundle.session.sessionManager.getSessionId();

@@ -40,7 +40,6 @@ type DeepPartial<T> = {
 export interface RuntimeFixtureOptions {
   config?: BrewvaConfig;
   ops?: DeepPartial<RuntimeAdapterOpsPort>;
-  capabilities?: DeepPartial<RuntimeAdapterCapabilitiesPort>;
   context?: Record<string, unknown>;
   events?: Record<string, unknown>;
   tools?: Record<string, unknown>;
@@ -102,12 +101,6 @@ export function createRuntimeFixture(
     assignDeep(
       runtime.ops as unknown as Record<string, unknown>,
       options.ops as Record<string, unknown>,
-    );
-  }
-  if (options.capabilities) {
-    assignDeep(
-      runtime.capabilities as unknown as Record<string, unknown>,
-      options.capabilities as Record<string, unknown>,
     );
   }
 
@@ -227,7 +220,7 @@ export function createBundledToolRuntime(
   return {
     identity: runtime.identity,
     config: runtime.config,
-    capabilities: runtime.capabilities,
+    capabilities: runtime.ops,
     extensions: {
       tools: runtime.extensions.tools,
     },

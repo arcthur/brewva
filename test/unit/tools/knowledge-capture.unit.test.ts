@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { createKnowledgeCaptureTool } from "@brewva/brewva-tools/memory";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -42,7 +42,7 @@ describe("knowledge capture tool", () => {
     );
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeCaptureTool({ runtime });
+    const tool = createKnowledgeCaptureTool({ runtime: createBundledToolRuntime(runtime) });
 
     const result = await tool.execute(
       "tc-knowledge-capture-create",
@@ -123,7 +123,7 @@ describe("knowledge capture tool", () => {
     workspace = createTestWorkspace("knowledge-capture-skip");
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeCaptureTool({ runtime });
+    const tool = createKnowledgeCaptureTool({ runtime: createBundledToolRuntime(runtime) });
     const solutionDocPath = "docs/solutions/runtime/wal-cursor-pinning.md";
 
     await tool.execute(
@@ -186,7 +186,7 @@ describe("knowledge capture tool", () => {
     workspace = createTestWorkspace("knowledge-capture-invalid");
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeCaptureTool({ runtime });
+    const tool = createKnowledgeCaptureTool({ runtime: createBundledToolRuntime(runtime) });
 
     const result = await tool.execute(
       "tc-knowledge-capture-invalid",
@@ -225,7 +225,7 @@ describe("knowledge capture tool", () => {
     workspace = createTestWorkspace("knowledge-capture-stale-routing");
 
     const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-    const tool = createKnowledgeCaptureTool({ runtime });
+    const tool = createKnowledgeCaptureTool({ runtime: createBundledToolRuntime(runtime) });
 
     const result = await tool.execute(
       "tc-knowledge-capture-stale-routing",

@@ -1,6 +1,9 @@
 import type {
+  BrewvaConfig,
   BrewvaRuntime,
+  BrewvaRuntimeIdentity,
   CanonicalEvent,
+  DeepReadonly,
   RuntimePhysicsDeclaration,
   RuntimeProviderFrame,
   RuntimeProviderPort,
@@ -8,6 +11,7 @@ import type {
   RuntimeToolExecutorPort,
   TurnFrame,
 } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import { createActionPolicyRegistry, resolveToolAuthority } from "@brewva/brewva-runtime/security";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import {
@@ -59,6 +63,29 @@ export interface CompareHarnessCandidateInput {
 export interface HarnessRuntimeFactory {
   readonly runtime?: Pick<BrewvaRuntime, "tape">;
   createRuntime(input: { readonly physics: RuntimePhysicsDeclaration }): BrewvaRuntime;
+}
+
+/**
+ * Build a harness runtime factory from a hosted adapter's identity/config/tape,
+ * creating independent replay runtimes via `createBrewvaRuntime` directly. This
+ * keeps replay-fork creation explicit in the harness and lets the hosted adapter
+ * drop its general `createRuntime` surface (WS3).
+ */
+export function toHarnessRuntimeFactory(adapter: {
+  readonly identity: Pick<BrewvaRuntimeIdentity, "cwd" | "agentId">;
+  readonly config: DeepReadonly<BrewvaConfig>;
+  readonly runtime: Pick<BrewvaRuntime, "tape">;
+}): HarnessRuntimeFactory {
+  return {
+    runtime: { tape: adapter.runtime.tape },
+    createRuntime: ({ physics }) =>
+      createBrewvaRuntime({
+        cwd: adapter.identity.cwd,
+        agentId: adapter.identity.agentId,
+        config: structuredClone(adapter.config) as BrewvaConfig,
+        physics,
+      }),
+  };
 }
 
 export interface HarnessCandidateExecutionPorts {
@@ -232,46 +259,53 @@ export async function executeHarnessCandidateComparison(
       ...(ports.resolveToolAuthority ? { resolveToolAuthority: ports.resolveToolAuthority } : {}),
     },
   });
-  await runtime.start();
-
   const counters = createExecutionFrameCounters();
   const startedAt = Date.now();
+  // The harness owns the forked replay runtime it created above, so it must
+  // close it. The outer caller only closes the adapter's own runtime. `close()`
+  // runs exactly once in `finally` across success, start failure, and turn
+  // failure; the report reads `runtime.tape` before the close fires.
   try {
-    for await (const frame of runtime.turn({
-      sessionId: input.targetSessionId,
-      prompt: input.prompt ?? prompt.text,
-    })) {
-      observeExecutionFrame(counters, frame);
+    await runtime.start();
+    try {
+      for await (const frame of runtime.turn({
+        sessionId: input.targetSessionId,
+        prompt: input.prompt ?? prompt.text,
+      })) {
+        observeExecutionFrame(counters, frame);
+      }
+    } catch (error) {
+      regressions.push(`execution_error:${classifyExecutionError(error)}`);
     }
-  } catch (error) {
-    regressions.push(`execution_error:${classifyExecutionError(error)}`);
-  }
 
-  return compareHarnessCandidate({
-    mode: input.mode,
-    sourceSessionId: input.sourceSessionId,
-    targetSessionId: input.targetSessionId,
-    divergeAt: input.divergeAt,
-    baseManifestId: input.baseManifest.manifestId,
-    candidateManifestId: input.candidateManifest.manifestId,
-    changedFields: input.changedFields,
-    regressions,
-    execution: {
-      replayEventCount: replayEventCountThroughDivergence(input.sourceEvents, input.divergeAt),
-      targetEventCount: runtime.tape.list(input.targetSessionId).length,
-      frameCount: counters.frameCount,
-      runtimeEventFrameCount: counters.runtimeEventFrameCount,
-      textFrameCount: counters.textFrameCount,
-      reasonFrameCount: counters.reasonFrameCount,
-      toolCallFrameCount: counters.toolCallFrameCount,
-      toolProgressFrameCount: counters.toolProgressFrameCount,
-      suspensionFrameCount: counters.suspensionFrameCount,
-      durationMs: Math.max(0, Date.now() - startedAt),
-      providerExecuted: ports.providerExecuted(),
-      toolExecutorMode: input.mode === "fixture" ? "fixture_noop" : "hosted",
-      promptSource: prompt.source,
-    },
-  });
+    return compareHarnessCandidate({
+      mode: input.mode,
+      sourceSessionId: input.sourceSessionId,
+      targetSessionId: input.targetSessionId,
+      divergeAt: input.divergeAt,
+      baseManifestId: input.baseManifest.manifestId,
+      candidateManifestId: input.candidateManifest.manifestId,
+      changedFields: input.changedFields,
+      regressions,
+      execution: {
+        replayEventCount: replayEventCountThroughDivergence(input.sourceEvents, input.divergeAt),
+        targetEventCount: runtime.tape.list(input.targetSessionId).length,
+        frameCount: counters.frameCount,
+        runtimeEventFrameCount: counters.runtimeEventFrameCount,
+        textFrameCount: counters.textFrameCount,
+        reasonFrameCount: counters.reasonFrameCount,
+        toolCallFrameCount: counters.toolCallFrameCount,
+        toolProgressFrameCount: counters.toolProgressFrameCount,
+        suspensionFrameCount: counters.suspensionFrameCount,
+        durationMs: Math.max(0, Date.now() - startedAt),
+        providerExecuted: ports.providerExecuted(),
+        toolExecutorMode: input.mode === "fixture" ? "fixture_noop" : "hosted",
+        promptSource: prompt.source,
+      },
+    });
+  } finally {
+    await runtime.close();
+  }
 }
 
 function sideEffectPolicyForMode(

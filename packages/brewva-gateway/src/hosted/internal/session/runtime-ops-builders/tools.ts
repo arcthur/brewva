@@ -26,6 +26,7 @@ import { createContextBudgetRuntimeController } from "../runtime-ops-context-bud
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 import { buildHostedPatchRollbackOps } from "./patches/rollback.js";
+import { resourceLeasesFor } from "./resource-leases-projection.js";
 
 export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["tools"] {
   const budget = createContextBudgetRuntimeController(ctx);
@@ -131,15 +132,12 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
               : null,
           expiresAfterTurn: typeof input.ttlTurns === "number" ? input.ttlTurns : null,
         };
-        ctx.state.resourceLeases.set(sessionId, [
-          ...(ctx.state.resourceLeases.get(sessionId) ?? []),
-          lease,
-        ]);
+        ctx.state.resourceLeases.set(sessionId, [...resourceLeasesFor(ctx, sessionId), lease]);
         ctx.emit(sessionId, "resource_lease_requested", { lease });
         return { ok: true, lease };
       },
       cancel(sessionId, leaseId, reason) {
-        const leases = ctx.state.resourceLeases.get(sessionId) ?? [];
+        const leases = resourceLeasesFor(ctx, sessionId);
         const lease = leases.find((entry) => entry.id === leaseId);
         if (!lease) {
           return { ok: false, reason: "not_found" };
@@ -156,7 +154,7 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
         ctx.emit(sessionId, "resource_lease_cancelled", { lease: cancelledLease, reason });
         return { ok: true, lease: cancelledLease };
       },
-      list: (sessionId) => ctx.state.resourceLeases.get(sessionId) ?? [],
+      list: (sessionId) => resourceLeasesFor(ctx, sessionId),
     },
     patches: {
       rollbackLastPatchSet: (sessionId: string) => patchRollback.rollbackLastPatchSet(sessionId),

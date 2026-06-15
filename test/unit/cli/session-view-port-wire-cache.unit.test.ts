@@ -214,6 +214,39 @@ describe("SessionViewPort session wire cache", () => {
         };
       },
     };
+    const turnRuntime = {
+      identity: {
+        agentId: "agent-1",
+        cwd: "/repo",
+        workspaceRoot: "/repo",
+      },
+      config: {},
+      tape: {
+        list() {
+          return [];
+        },
+      },
+      kernel: {},
+      model: {},
+      async start() {
+        return { recoveredSessions: [] };
+      },
+      async *turn() {
+        yield {
+          type: "tool.progress",
+          progress: {
+            toolCallId: "tool-exec-1",
+            toolName: "exec",
+            update: {
+              outcome: { kind: "ok", value: {} },
+              content: "started",
+            },
+          },
+        };
+        throw new Error("provider_tool_continuation_limit_exceeded");
+      },
+      async close() {},
+    };
     const runtime = {
       identity: {
         agentId: "agent-1",
@@ -232,41 +265,8 @@ describe("SessionViewPort session wire cache", () => {
           },
         },
       },
-      createRuntime() {
-        return {
-          identity: {
-            agentId: "agent-1",
-            cwd: "/repo",
-            workspaceRoot: "/repo",
-          },
-          config: {},
-          tape: {
-            list() {
-              return [];
-            },
-          },
-          kernel: {},
-          model: {},
-          async start() {
-            return { recoveredSessions: [] };
-          },
-          async *turn() {
-            yield {
-              type: "tool.progress",
-              progress: {
-                toolCallId: "tool-exec-1",
-                toolName: "exec",
-                update: {
-                  outcome: { kind: "ok", value: {} },
-                  content: "started",
-                },
-              },
-            };
-            throw new Error("provider_tool_continuation_limit_exceeded");
-          },
-          async close() {},
-        };
-      },
+      runtime: turnRuntime,
+      registerTurnSession() {},
     };
     const port = createSessionViewPort({
       session,

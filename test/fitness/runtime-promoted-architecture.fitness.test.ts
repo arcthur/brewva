@@ -346,6 +346,9 @@ describe("four-port runtime architecture fitness", () => {
     const hostedRuntimeTurn = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/runtime-turn-runtime.ts",
     );
+    const hostedRuntimePorts = readRepoFile(
+      "packages/brewva-gateway/src/hosted/internal/session/runtime-ports.ts",
+    );
 
     expect(kernel).toContain('./policy/public-contract.js"');
     expect(kernel).toContain("resolveToolAuthority");
@@ -357,8 +360,11 @@ describe("four-port runtime architecture fitness", () => {
     expect(hostedExecutionPorts).toContain("createHostedRuntimeToolAuthorityResolver");
     expect(hostedAuthority).toContain("getBrewvaToolMetadata");
     expect(hostedAuthority).toContain('base.source === "exact"');
-    expect(hostedRuntimeTurn).toContain("resolveToolAuthority");
-    expect(hostedRuntimeTurn).toContain("createRuntime?.({ physics })");
+    // WS1: the adapter owns one router runtime whose physics assembles the
+    // authority resolver; runtime-turn-runtime only registers the turn session.
+    expect(hostedRuntimeTurn).toContain("registerTurnSession");
+    expect(hostedRuntimePorts).toContain("createHostedRuntimeToolAuthorityResolver");
+    expect(hostedRuntimePorts).toContain("resolveToolAuthority");
   });
 
   test("kernel policy primitives live in the four-port kernel, not legacy governance", () => {

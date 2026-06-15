@@ -5,6 +5,7 @@ import {
   clusterHarnessTraceSnapshots,
   compareHarnessCandidate,
   executeHarnessCandidateComparison,
+  toHarnessRuntimeFactory,
 } from "@brewva/brewva-gateway/harness";
 import {
   createHostedHarnessRuntimeExecutionPorts,
@@ -338,7 +339,7 @@ async function runHarnessReplayCompare(input: {
     hostedSession = ports?.session;
     return await executeHarnessCandidateComparison({
       mode: input.options.mode === "real" ? "real" : "fixture",
-      runtime: input.runtime,
+      runtime: toHarnessRuntimeFactory(input.runtime),
       sourceSessionId: input.options.sourceSessionId,
       targetSessionId: input.targetSessionId,
       divergeAt: input.options.divergeAt,

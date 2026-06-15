@@ -177,7 +177,7 @@ function resolveAdmissionDecision(
   call: ToolCallProposal,
   resolveAuthority: KernelToolAuthorityResolver,
 ): ToolAdmissionDecision {
-  const authority = resolveAuthority(call.toolName, call.args);
+  const authority = resolveAuthority(call.toolName, call.args, call.sessionId);
   const admission = authority.effectiveAdmission ?? (authority.requiresApproval ? "ask" : "deny");
   return Object.freeze({
     authority,

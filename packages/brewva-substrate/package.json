@@ -31,18 +31,6 @@
       "import": "./dist/resources/index.js",
       "default": "./dist/resources/index.js"
     },
-    "./provenance": {
-      "types": "./dist/provenance/index.d.ts",
-      "bun": "./src/provenance/index.ts",
-      "import": "./dist/provenance/index.js",
-      "default": "./dist/provenance/index.js"
-    },
-    "./execution": {
-      "types": "./dist/execution/index.d.ts",
-      "bun": "./src/execution/index.ts",
-      "import": "./dist/execution/index.js",
-      "default": "./dist/execution/index.js"
-    },
     "./compaction": {
       "types": "./dist/compaction/index.d.ts",
       "bun": "./src/compaction/index.ts",
@@ -66,12 +54,6 @@
       "bun": "./src/host-api/index.ts",
       "import": "./dist/host-api/index.js",
       "default": "./dist/host-api/index.js"
-    },
-    "./persistence": {
-      "types": "./dist/persistence/index.d.ts",
-      "bun": "./src/persistence/index.ts",
-      "import": "./dist/persistence/index.js",
-      "default": "./dist/persistence/index.js"
     },
     "./provider": {
       "types": "./dist/provider/index.d.ts",

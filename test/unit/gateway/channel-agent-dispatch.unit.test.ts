@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBrewvaRuntime, type BrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaToolUpdateHandler } from "@brewva/brewva-substrate/tools";
 import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import { Type } from "@sinclair/typebox";
@@ -14,6 +13,10 @@ import {
 import { resolveTelegramChannelPolicyState } from "../../../packages/brewva-gateway/src/channels/policy/channel-policy.js";
 import type { ChannelSessionHandle } from "../../../packages/brewva-gateway/src/channels/session/coordinator.js";
 import { NOOP_UI } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/noop-ui.js";
+import {
+  createHostedRuntimeAdapter,
+  type HostedRuntimeAdapterPort,
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 import {
   fauxAssistantMessage,
   fauxToolCall,
@@ -60,14 +63,13 @@ function createRuntimeTurnFixture(input: {
     isError?: boolean;
   };
 }): {
-  runtime: BrewvaRuntime;
+  runtime: HostedRuntimeAdapterPort;
   provider: ReturnType<typeof registerFauxProvider>;
   session: RuntimeTurnSession;
   unregister(): void;
 } {
-  const runtime = createBrewvaRuntime({
+  const runtime = createHostedRuntimeAdapter({
     cwd: mkdtempSync(join(tmpdir(), `${input.providerName}-`)),
-    physics: { mode: "noop" },
   });
   const provider = registerFauxProvider({
     provider: input.providerName,

@@ -2,8 +2,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
-import type { HostedRuntimeAdapterPort } from "../../helpers/runtime.js";
+import type { BrewvaBundledToolRuntime } from "@brewva/brewva-tools/contracts";
+import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 export type ToolExecutionContext = Parameters<BrewvaToolDefinition["execute"]>[4];
 
@@ -36,7 +36,7 @@ export function mergeContext(
   } as unknown as ToolExecutionContext;
 }
 
-export function createScheduleToolRuntime(prefix: string): HostedRuntimeAdapterPort {
+export function createScheduleToolRuntime(prefix: string): BrewvaBundledToolRuntime {
   const workspace = mkdtempSync(join(tmpdir(), prefix));
   mkdirSync(join(workspace, ".brewva"), { recursive: true });
   writeFileSync(
@@ -52,5 +52,5 @@ export function createScheduleToolRuntime(prefix: string): HostedRuntimeAdapterP
     ),
     "utf8",
   );
-  return createRuntimeInstanceFixture({ cwd: workspace });
+  return createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
 }

@@ -3,6 +3,7 @@ import {
   createParallelAdmissionController,
   type ParallelAdmissionDeps,
 } from "../../../delegation/api.js";
+import { resourceLeasesFor } from "./runtime-ops-builders/resource-leases-projection.js";
 import type { HostedRuntimeOpsContext } from "./runtime-ops-context.js";
 
 /**
@@ -18,7 +19,7 @@ export function createHostedParallelAdmission(ctx: HostedRuntimeOpsContext): Par
   const deps: ParallelAdmissionDeps = {
     parallelConfig: () => ctx.runtime.config.parallel,
     queryEvents: (sessionId) => ctx.queryStructuredEvents(sessionId),
-    activeLeases: (sessionId) => ctx.state.resourceLeases.get(sessionId) ?? [],
+    activeLeases: (sessionId) => resourceLeasesFor(ctx, sessionId),
     emit: (sessionId, type, payload) => {
       ctx.emit(sessionId, type, payload);
     },
