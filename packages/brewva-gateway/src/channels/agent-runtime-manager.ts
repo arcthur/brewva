@@ -253,10 +253,3 @@ export class AgentRuntimeManager {
     this.handles.delete(handle.agentId);
   }
 }
-
-export function forceAgentRuntimeNamespace(
-  baseConfig: BrewvaConfig,
-  agentId: string,
-): BrewvaConfig {
-  return forceNamespaceConfig(baseConfig, normalizeAgentId(agentId));
-}

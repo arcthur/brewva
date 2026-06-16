@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   parseJsonc,
   resolveGlobalBrewvaRootDir,
@@ -337,8 +337,4 @@ export function loadBrewvaTuiConfig(
     consultedPaths: paths,
     warnings,
   };
-}
-
-export function resolveBrewvaTuiConfigFileBaseDir(configPath: string): string {
-  return dirname(configPath);
 }

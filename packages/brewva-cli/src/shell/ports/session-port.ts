@@ -188,5 +188,3 @@ export interface SessionViewPort {
   getRewindState(): SessionRewindState;
   listRewindTargets(): SessionRewindTargetView[];
 }
-
-export type SessionPort = SessionViewPort;

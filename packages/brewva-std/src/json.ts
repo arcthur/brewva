@@ -4,16 +4,6 @@ export interface JsonObject {
   [key: string]: JsonValue;
 }
 export type JsonValue = JsonPrimitive | JsonArray | JsonObject;
-export type JsonCompatible<T> = T extends JsonPrimitive
-  ? T
-  : T extends undefined
-    ? undefined
-    : T extends readonly (infer U)[]
-      ? JsonCompatible<U>[]
-      : T extends object
-        ? { [K in keyof T]: JsonCompatible<T[K]> }
-        : never;
-export type JsonCompatibleObject<T extends object> = T & { [K in keyof T]: JsonCompatible<T[K]> };
 
 function compareKeys(left: string, right: string): number {
   if (left < right) return -1;
@@ -99,16 +89,4 @@ function toJsonValueInner(value: unknown, seen: WeakSet<object>): JsonValue {
     default:
       return null;
   }
-}
-
-export function normalizeJsonRecord(
-  payload: Record<string, unknown> | undefined,
-): Record<string, JsonValue> | undefined {
-  if (!payload) return undefined;
-  const out: Record<string, JsonValue> = {};
-  for (const [key, value] of Object.entries(payload)) {
-    if (value === undefined) continue;
-    out[key] = toJsonValue(value);
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
 }

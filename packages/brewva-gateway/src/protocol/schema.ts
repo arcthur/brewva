@@ -81,48 +81,6 @@ export const ConnectParamsSchema = Type.Object(
 
 export type ConnectParams = Static<typeof ConnectParamsSchema>;
 
-export const ConnectChallengePayloadSchema = Type.Object(
-  {
-    nonce: NonEmptyString,
-    ts: Type.Integer({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
-
-export type ConnectChallengePayload = Static<typeof ConnectChallengePayloadSchema>;
-
-export const HelloOkPayloadSchema = Type.Object(
-  {
-    type: Type.Literal("hello-ok"),
-    protocol: Type.Integer({ minimum: 1 }),
-    server: Type.Object(
-      {
-        version: NonEmptyString,
-        connId: NonEmptyString,
-        pid: Type.Integer({ minimum: 1 }),
-      },
-      { additionalProperties: false },
-    ),
-    features: Type.Object(
-      {
-        methods: Type.Array(NonEmptyString),
-        events: Type.Array(NonEmptyString),
-      },
-      { additionalProperties: false },
-    ),
-    policy: Type.Object(
-      {
-        maxPayloadBytes: Type.Integer({ minimum: 1024 }),
-        tickIntervalMs: Type.Integer({ minimum: 1000 }),
-      },
-      { additionalProperties: false },
-    ),
-  },
-  { additionalProperties: false },
-);
-
-export type HelloOkPayload = Static<typeof HelloOkPayloadSchema>;
-
 export const RequestFrameSchema = Type.Object(
   {
     type: Type.Literal("req"),
@@ -252,7 +210,6 @@ export const SessionsUnsubscribeParamsSchema = Type.Object(
 export type SessionsUnsubscribeParams = Static<typeof SessionsUnsubscribeParamsSchema>;
 
 export const SessionsAbortReasonSchema = Type.Union([Type.Literal("user_submit")]);
-export type SessionsAbortReason = Static<typeof SessionsAbortReasonSchema>;
 
 export const SessionsAbortParamsSchema = Type.Object(
   {

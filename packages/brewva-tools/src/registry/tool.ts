@@ -41,12 +41,6 @@ type ManagedToolAuthoringDefinition<TParams extends TSchema, TOutput, TError> = 
 > &
   Partial<ToolOutcomeContract>;
 
-export function defineTool<TParams extends TSchema, TDetails = unknown>(
-  tool: ToolDefinition<TParams, TDetails>,
-): ToolDefinition<TParams, TDetails> {
-  return tool;
-}
-
 function cloneExecutionTraits(input: BrewvaToolExecutionTraits): BrewvaToolExecutionTraits {
   return {
     concurrencySafe: input.concurrencySafe,

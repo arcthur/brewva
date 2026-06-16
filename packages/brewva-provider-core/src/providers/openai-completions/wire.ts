@@ -1,9 +1,4 @@
-import {
-  isRecord,
-  readArray,
-  readRecord as readObject,
-  readString,
-} from "@brewva/brewva-std/unknown";
+import { isRecord, readRecord as readObject, readString } from "@brewva/brewva-std/unknown";
 import type OpenAI from "openai";
 import type {
   ChatCompletionAssistantMessageParam,
@@ -127,8 +122,4 @@ export function readToolImagePayload(
 
 export function readOpenRouterRouting(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined;
-}
-
-export function readArrayReasoningDetails(value: unknown): unknown[] {
-  return readArray({ details: value }, "details") ?? [];
 }

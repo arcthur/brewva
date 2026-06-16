@@ -11,7 +11,7 @@ retirement_sensitivity: auto_decay_allowed
 
 - Runtime API and contracts: `packages/brewva-runtime/src/runtime/runtime.ts`, `packages/brewva-runtime/src/public/index.ts`
 - Runtime subpath ownership registry: `skills/project/shared/runtime-subpaths.json`, enforced by `test/fitness/runtime-subpath-registry.fitness.test.ts`
-- Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/security/mode.ts`, `packages/brewva-runtime/src/runtime/config/state.ts`
+- Runtime config and semantics: `packages/brewva-runtime/src/config/defaults.ts`, `packages/brewva-runtime/src/config/normalize.ts`, `packages/brewva-runtime/src/runtime/config/state.ts`
 - Runtime tape and durability: `packages/brewva-runtime/src/runtime/tape/impl.ts`, `packages/brewva-runtime/src/runtime/runtime-api.ts`
 - Runtime model attention: `packages/brewva-runtime/src/runtime/model/impl.ts`
 - Runtime authorization and tool commitments: `packages/brewva-runtime/src/runtime/kernel/impl.ts`, `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`, `packages/brewva-runtime/src/runtime/kernel/policy/tool-decision.ts`

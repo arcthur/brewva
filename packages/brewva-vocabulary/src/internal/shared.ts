@@ -21,11 +21,6 @@ export function numberField(record: ProtocolRecord, key: string, fallback: numbe
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-export function recordArrayField(record: ProtocolRecord, key: string): readonly ProtocolRecord[] {
-  const value = record[key];
-  return Array.isArray(value) ? value.filter(isProtocolRecord) : [];
-}
-
 export function readStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);

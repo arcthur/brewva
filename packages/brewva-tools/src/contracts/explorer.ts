@@ -4,9 +4,6 @@ import type {
   VerifierSubagentOutcomeData as RuntimeVerifierSubagentOutcomeData,
 } from "@brewva/brewva-vocabulary/delegation";
 import type {
-  DesignExecutionStep as RuntimeDesignExecutionStep,
-  DesignImplementationTarget as RuntimeDesignImplementationTarget,
-  DesignRiskItem as RuntimeDesignRiskItem,
   ReviewLaneName as RuntimeReviewLaneName,
   ReviewPrecedentConsultStatus as RuntimeReviewPrecedentConsultStatus,
   ReviewReportArtifact as RuntimeReviewReportArtifact,
@@ -52,12 +49,6 @@ export interface ExplorerInvestigateSubagentOutcomeData extends ExplorerConsultO
   ownershipHints?: string[];
   recommendedReads?: string[];
 }
-
-export type PlanExecutionStep = RuntimeDesignExecutionStep;
-
-export type PlanImplementationTarget = RuntimeDesignImplementationTarget;
-
-export type PlanRiskItem = RuntimeDesignRiskItem;
 
 export interface ExplorerDiagnoseHypothesis {
   hypothesis: string;

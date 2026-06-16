@@ -1,8 +1,8 @@
 export const TEST_LAYERS = ["unit", "contract", "system", "live", "fitness"] as const;
 
-export type TestLayer = (typeof TEST_LAYERS)[number];
+type TestLayer = (typeof TEST_LAYERS)[number];
 
-export type TestPolicySeverity = "error" | "warning";
+type TestPolicySeverity = "error" | "warning";
 
 export interface TestAssetMetrics {
   readonly loc: number;

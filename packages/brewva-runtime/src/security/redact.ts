@@ -55,6 +55,11 @@ export function redactUnknown(value: unknown): unknown {
     const out: Record<string, unknown> = {};
     cached.set(input, out);
     for (const [key, item] of Object.entries(input as Record<string, unknown>)) {
+      // Redact secret-shaped string values only. Key-NAME redaction is
+      // deliberately NOT applied here: the tape stores replay-derived structured
+      // data where keys like "token"/"auth" are legitimate (e.g. source-patch
+      // anchors), so masking by key name would corrupt replay. Credentials are
+      // scrubbed by value via registerRuntimeSecret.
       out[key] = visit(item);
     }
     inProgress.delete(input);

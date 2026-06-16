@@ -1,4 +1,3 @@
-import { normalizeShellInputTrigger, type ShellInputTrigger } from "../domain/keymap.js";
 import type {
   BrewvaKeymapBindingDefinition,
   BrewvaKeymapLayer,
@@ -340,17 +339,6 @@ function normalizeShortcutChord(chord: string): string {
 
 export function normalizeShortcutSequence(sequence: string): string {
   return sequence.trim().split(/\s+/u).map(normalizeShortcutChord).filter(Boolean).join(" ");
-}
-
-export function shortcutSequenceFromShellInputTrigger(trigger: ShellInputTrigger): string {
-  const normalized = normalizeShellInputTrigger(trigger);
-  const parts = [
-    normalized.ctrl ? "ctrl" : "",
-    normalized.meta ? "meta" : "",
-    normalized.shift ? "shift" : "",
-    expandShortcutAlias(normalized.key),
-  ].filter(Boolean);
-  return normalizeShortcutSequence(parts.join("+"));
 }
 
 function normalizeShortcutValue(value: BrewvaShortcutValue): readonly string[] | undefined {

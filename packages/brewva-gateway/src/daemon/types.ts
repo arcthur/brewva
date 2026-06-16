@@ -10,8 +10,6 @@ export type WorkerLifecycleState =
   | { kind: "spawned"; workerId: string; sessionId: string }
   | { kind: "ready"; workerId: string; sessionId: string }
   | { kind: "busy"; workerId: string; sessionId: string; turnId: string }
-  | { kind: "recovering"; workerId: string; sessionId: string; reason: string }
-  | { kind: "closing"; workerId: string; sessionId: string; reason: string }
   | { kind: "closed"; workerId: string; sessionId: string; reason: string };
 
 export function createDaemonStartingEvent(pidFilePath: string): DaemonLifecycleEvent {
@@ -55,22 +53,6 @@ export function createWorkerBusyState(
   turnId: string,
 ): WorkerLifecycleState {
   return { kind: "busy", workerId, sessionId, turnId };
-}
-
-export function createWorkerRecoveringState(
-  workerId: string,
-  sessionId: string,
-  reason: string,
-): WorkerLifecycleState {
-  return { kind: "recovering", workerId, sessionId, reason };
-}
-
-export function createWorkerClosingState(
-  workerId: string,
-  sessionId: string,
-  reason: string,
-): WorkerLifecycleState {
-  return { kind: "closing", workerId, sessionId, reason };
 }
 
 export function createWorkerClosedState(

@@ -147,15 +147,6 @@ export function writeDetachedSubagentSpec(
   writeJsonFile(resolveDetachedSubagentSpecPath(workspaceRoot, runId), spec);
 }
 
-export function readDetachedSubagentSpec(
-  workspaceRoot: string,
-  runId: string,
-): DetachedSubagentRunSpec | undefined {
-  return readJsonFile<DetachedSubagentRunSpec>(
-    resolveDetachedSubagentSpecPath(workspaceRoot, runId),
-  );
-}
-
 export function writeDetachedSubagentLiveState(
   workspaceRoot: string,
   runId: string,

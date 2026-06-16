@@ -614,12 +614,6 @@ export function queryRuntimeSessionWire(
   return runtime.ops.sessionWire.query(sessionId);
 }
 
-export function listRuntimeSkillCatalog(
-  runtime: Pick<HostedRuntimeAdapterPort, "ops">,
-): ReturnType<HostedRuntimeAdapterPort["ops"]["skills"]["catalog"]["list"]> {
-  return runtime.ops.skills.catalog.list();
-}
-
 export function recordRuntimeSkillSelection(
   runtime: RuntimeSkillSelectionWriter,
   sessionId: string,

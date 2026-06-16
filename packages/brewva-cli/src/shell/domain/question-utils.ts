@@ -121,12 +121,3 @@ export function normalizeQuestionDraftState(
     customAnswers,
   };
 }
-
-export function questionRequestIsComplete(
-  request: SessionQuestionRequest,
-  draft: CliQuestionDraftState,
-): boolean {
-  return request.questions.every(
-    (_, index) => normalizeQuestionAnswers(draft.answers[index]).length > 0,
-  );
-}

@@ -4,15 +4,7 @@ import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
-import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
-import type {
-  ExplorerConsultKind,
-  SubagentContextBudget,
-  SubagentExecutionBoundary,
-  SubagentResultMode,
-} from "@brewva/brewva-tools/contracts";
-import type { DelegationIsolationStrategy } from "@brewva/brewva-vocabulary/delegation";
-import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
+import { isRecord } from "@brewva/brewva-std/unknown";
 
 export type HostedDelegationBuiltinToolName = "read" | "edit" | "write";
 export type HostedWorkspaceSubagentConfigKind = "envelope" | "agentSpec";
@@ -35,77 +27,6 @@ export function asString(value: unknown): string | undefined {
 export function asStringArray(value: unknown): string[] | undefined {
   const entries = normalizeStringList(value);
   return entries.length > 0 ? entries : undefined;
-}
-
-export function asBuiltinToolArray(value: unknown): HostedDelegationBuiltinToolName[] | undefined {
-  const entries = asStringArray(value);
-  if (!entries) {
-    return undefined;
-  }
-  const normalized = entries.filter(
-    (entry): entry is HostedDelegationBuiltinToolName =>
-      entry === "read" || entry === "edit" || entry === "write",
-  );
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-export function asBoundary(value: unknown): SubagentExecutionBoundary | undefined {
-  return value === "safe" || value === "effectful" ? value : undefined;
-}
-
-export function asManagedToolMode(value: unknown): ManagedToolMode | undefined {
-  return value === "hosted" || value === "direct" ? value : undefined;
-}
-
-export function asResultMode(value: unknown): SubagentResultMode | undefined {
-  return value === "evidence" ||
-    value === "consult" ||
-    value === "verifier" ||
-    value === "patch" ||
-    value === "knowledge"
-    ? value
-    : undefined;
-}
-
-export function asConsultKind(value: unknown): ExplorerConsultKind | undefined {
-  return value === "investigate" || value === "diagnose" || value === "design" || value === "review"
-    ? value
-    : undefined;
-}
-
-export function asBoolean(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
-}
-
-export function asIsolationStrategy(value: unknown): DelegationIsolationStrategy | undefined {
-  return value === "shared" ||
-    value === "ephemeral_exec" ||
-    value === "snapshot" ||
-    value === "worktree" ||
-    value === "a2a_channel"
-    ? value
-    : undefined;
-}
-
-export function asContextBudget(value: unknown): SubagentContextBudget | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-  const maxInjectionTokenValue = readFiniteNumberValue(value.maxInjectionTokens);
-  const maxInjectionTokens =
-    maxInjectionTokenValue !== undefined
-      ? Math.max(1, Math.trunc(maxInjectionTokenValue))
-      : undefined;
-  const maxTurnTokenValue = readFiniteNumberValue(value.maxTurnTokens);
-  const maxTurnTokens =
-    maxTurnTokenValue !== undefined ? Math.max(1, Math.trunc(maxTurnTokenValue)) : undefined;
-  if (!maxInjectionTokens && !maxTurnTokens) {
-    return undefined;
-  }
-  return {
-    maxInjectionTokens,
-    maxTurnTokens,
-  };
 }
 
 function normalizeWorkspaceSubagentConfigKind(

@@ -5,10 +5,6 @@ export type SessionRewindMode = "conversation" | "code" | "both";
 export type SessionRewindSummary = "none" | "carry";
 export type SessionRewindTrigger = "undo" | "rewind";
 
-export const SESSION_REWIND_CHECKPOINT_SCHEMA = "brewva.session.rewind.checkpoint.v1" as const;
-export const SESSION_REWIND_SCHEMA = "brewva.session.rewind.v1" as const;
-export const SESSION_REDO_SCHEMA = "brewva.session.rewind.redo.v1" as const;
-export const SESSION_SUPERSEDE_SCHEMA = "brewva.session.rewind.superseded.v1" as const;
 export const SESSION_REWIND_DIVERGENCE_SCHEMA = "brewva.session.rewind.divergence.v1" as const;
 
 export interface SessionPromptSnapshot {
@@ -163,36 +159,6 @@ export type SessionRedoResult =
       readonly redoResults?: readonly RedoResult[];
       readonly compensationRollbackResults?: readonly RollbackResult[];
       readonly error?: string;
-    };
-
-export type SessionRewindCompletedEventPayload =
-  | {
-      readonly schema: typeof SESSION_REWIND_SCHEMA;
-      readonly ok: true;
-      readonly checkpointId: string;
-      readonly trigger: SessionRewindTrigger;
-      readonly mode: SessionRewindMode;
-      readonly summary: SessionRewindSummary;
-      readonly reasoningRevertId: string | null;
-      readonly reasoningRevertEventId: string | null;
-      readonly divergenceNote: SessionRewindDivergenceNote | null;
-      readonly abandonedCheckpointIds: readonly string[];
-      readonly patchSetIds: readonly string[];
-      readonly rollbackResults: readonly RollbackResult[];
-      readonly returnLeafEntryId: string | null;
-    }
-  | {
-      readonly schema: typeof SESSION_REWIND_SCHEMA;
-      readonly ok: false;
-      readonly checkpointId: string;
-      readonly trigger: SessionRewindTrigger;
-      readonly mode: SessionRewindMode;
-      readonly summary: SessionRewindSummary;
-      readonly patchSetIds: readonly string[];
-      readonly rollbackResults: readonly RollbackResult[];
-      readonly compensationRedoResults: readonly RedoResult[];
-      readonly reason: SessionRewindFailureReason;
-      readonly error: string | null;
     };
 
 export type SessionRewindTargetLineage =

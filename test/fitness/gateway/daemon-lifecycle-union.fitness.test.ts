@@ -9,7 +9,7 @@ const daemonKinds = [
   "stopping",
   "stopped",
 ] as const;
-const workerKinds = ["spawned", "ready", "busy", "recovering", "closing", "closed"] as const;
+const workerKinds = ["spawned", "ready", "busy", "closed"] as const;
 
 describe("daemon lifecycle union", () => {
   test("defines daemon lifecycle event kinds", () => {

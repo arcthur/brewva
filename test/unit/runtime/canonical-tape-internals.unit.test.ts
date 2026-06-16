@@ -4,6 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRuntimeTape } from "../../../packages/brewva-runtime/src/runtime/tape/impl.js";
+import { registerRuntimeSecret } from "../../../packages/brewva-runtime/src/security/redact.js";
 
 describe("canonical tape internals", () => {
   test("deduplicates repeated event ids in memory and durable jsonl", () => {
@@ -35,6 +36,38 @@ describe("canonical tape internals", () => {
     expect(
       readFileSync(join(cwd, ".brewva/tape/s1.jsonl"), "utf8").trim().split("\n"),
     ).toHaveLength(1);
+  });
+
+  test("redacts registered secrets and known secret patterns from committed payloads", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-tape-redact-"));
+    const runtimeTape = createRuntimeTape({ cwd, tapeDir: ".brewva/tape", enabled: true });
+    const secret = "super-secret-vault-token-abcdef";
+    const unregister = registerRuntimeSecret(secret);
+    try {
+      const committed = runtimeTape.commit.commit({
+        id: "evt-redact",
+        sessionId: "s1",
+        type: "turn.started",
+        payload: {
+          prompt: `use vault token ${secret} and key sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX`,
+          content: [{ type: "text", text: "Bearer sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345" }],
+        },
+      });
+
+      const committedJson = JSON.stringify(committed.payload);
+      expect(committedJson).not.toContain(secret);
+      expect(committedJson).not.toContain("sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX");
+      expect(committedJson).toContain("[redacted]");
+
+      const onDisk = readFileSync(join(cwd, ".brewva/tape/s1.jsonl"), "utf8");
+      expect(onDisk).not.toContain(secret);
+      expect(onDisk).not.toContain("sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX");
+
+      const listed = runtimeTape.tape.list("s1")[0];
+      expect(JSON.stringify(listed?.payload)).not.toContain(secret);
+    } finally {
+      unregister();
+    }
   });
 
   test("re-reads a tape file after another instance appends to it", () => {

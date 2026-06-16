@@ -71,30 +71,6 @@ export interface DecideEffectCommitmentResult {
   readonly receipt?: DecisionReceipt;
 }
 
-export interface EffectCommitmentApprovalRequestedEventPayload {
-  readonly requestId: string;
-  readonly proposalId: string;
-  readonly proposal: EffectCommitmentProposal;
-}
-
-export interface EffectCommitmentApprovalResolutionEventPayload {
-  readonly requestId: string;
-  readonly proposalId: string;
-  readonly decision: "accept" | "deny" | "cancel";
-  readonly actor: string;
-  readonly reason?: string;
-}
-
-export interface EffectCommitmentApprovalConsumedEventPayload {
-  readonly requestId: string;
-  readonly proposalId: string;
-  readonly commitmentId?: string;
-}
-
-export interface EffectCommitmentDecisionReceiptRecordedPayload {
-  readonly receipt: DecisionReceipt;
-}
-
 export interface EffectCommitmentDiffPreviewFile {
   readonly path: string;
   readonly status?: string;
@@ -116,12 +92,6 @@ export type EffectCommitmentDiffPreview =
   | EffectCommitmentDiffPreviewManifest
   | EffectCommitmentDiffPreviewEdit;
 
-export interface EffectCommitmentListQuery {
-  readonly sessionId?: string;
-  readonly status?: string;
-  readonly limit?: number;
-}
-
 export interface EffectCommitmentRequestListQuery {
   readonly sessionId?: string;
   readonly state?: EffectCommitmentRequestState;
@@ -134,17 +104,6 @@ export type EffectCommitmentRequestState =
   | "cancelled"
   | "consumed"
   | "expired";
-
-export interface EffectCommitmentProposalPayload {
-  readonly proposal: EffectCommitmentProposal;
-}
-
-export interface EffectCommitmentRecord {
-  readonly id: string;
-  readonly proposalId: string;
-  readonly state: string;
-  readonly createdAt: number;
-}
 
 export interface EffectCommitmentRequestRecord {
   readonly id: string;
@@ -180,35 +139,4 @@ export interface PendingEffectCommitmentRequest {
   readonly argsDigest?: string;
   readonly expiresAt?: number;
   readonly diffPreview?: EffectCommitmentDiffPreview;
-}
-
-export interface EffectAuthorityManifestFacts {
-  readonly schema: "brewva.effect_authority_basis.v2";
-  readonly requiresApproval: boolean;
-  readonly effects: readonly string[];
-  readonly invariantBasis: readonly string[];
-  readonly overlayBasis: readonly string[];
-  readonly runtimeBasis: readonly string[];
-  readonly receiptBasis: readonly string[];
-}
-
-export function buildEffectAuthorityManifestBasis(
-  input: Partial<EffectAuthorityManifestFacts>,
-): EffectAuthorityManifestFacts {
-  return Object.freeze({
-    schema: "brewva.effect_authority_basis.v2",
-    requiresApproval: false,
-    effects: [],
-    invariantBasis: [],
-    overlayBasis: [],
-    runtimeBasis: [],
-    receiptBasis: [],
-    ...input,
-  });
-}
-
-export function decideEffectAuthorityManifest(
-  input: Record<string, unknown>,
-): Record<string, unknown> {
-  return Object.freeze({ decision: "allow", ...input });
 }

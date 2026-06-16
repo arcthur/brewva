@@ -89,13 +89,6 @@ export interface DelegationOutcomeFinding {
   evidenceRefs?: string[];
 }
 
-export interface DelegationOutcomeCheck {
-  name: string;
-  status: "pass" | "fail" | "skip";
-  summary?: string;
-  evidenceRefs?: string[];
-}
-
 export interface DelegationOutcomeChange {
   path: string;
   action?: "add" | "modify" | "delete";

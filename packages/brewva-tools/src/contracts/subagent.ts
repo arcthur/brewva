@@ -2,7 +2,6 @@ import type { ToolExecutionBoundary } from "@brewva/brewva-runtime/security";
 import type {
   DelegationForkTurns,
   DelegationGateReason,
-  DelegationModelCategory,
   DelegationResultMode,
   PublicSubagentRole,
 } from "@brewva/brewva-vocabulary/delegation";
@@ -14,7 +13,6 @@ import type {
   DelegationExecutionHints,
   DelegationOutcomeChange,
   DelegationPacket,
-  DelegationRefKind,
   DelegationRunRecord,
   DelegationTaskPacket,
 } from "./delegation.js";
@@ -27,10 +25,8 @@ import type {
 export type SubagentResultMode = DelegationResultMode;
 export type SubagentAgent = PublicSubagentRole;
 export type SubagentGateReason = DelegationGateReason;
-export type SubagentModelCategory = DelegationModelCategory;
 export type SubagentDelegationMode = "single" | "parallel";
 export type SubagentReturnMode = "text_only" | "supplemental";
-export type SubagentContextRefKind = Exclude<DelegationRefKind, "tool_result"> | "tool_result";
 export type SubagentExecutionBoundary = ToolExecutionBoundary;
 export type SubagentForkTurns = DelegationForkTurns;
 export type SubagentContextBudget = DelegationContextBudget;

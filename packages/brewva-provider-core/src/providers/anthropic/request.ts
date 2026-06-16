@@ -1,18 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { MessageCreateParamsStreaming } from "@anthropic-ai/sdk/resources/messages.js";
 import { resolveAnthropicCacheRender } from "../../cache/render/anthropic.js";
-import type { Context, Model, SimpleStreamOptions } from "../../contracts/index.js";
+import type { Context, Model } from "../../contracts/index.js";
 import { sanitizeSurrogates } from "../../utils/sanitize-unicode.js";
 import {
   buildCopilotDynamicHeaders,
   hasCopilotVisionInput,
 } from "../_shared/github-copilot-headers.js";
-import {
-  claudeCodeVersion,
-  isOAuthToken,
-  mapThinkingLevelToEffort,
-  supportsAdaptiveThinking,
-} from "./compat.js";
+import { claudeCodeVersion, isOAuthToken, supportsAdaptiveThinking } from "./compat.js";
 import type { AnthropicOptions } from "./contract.js";
 import {
   convertMessages,
@@ -214,33 +209,6 @@ export function buildAnthropicParams(
   }
 
   return params;
-}
-
-export function buildSimpleAnthropicOptions(
-  model: Model<"anthropic-messages">,
-  options: SimpleStreamOptions | undefined,
-  base: SimpleStreamOptions,
-): AnthropicOptions {
-  if (!options?.reasoning) {
-    return {
-      ...base,
-      thinkingEnabled: false,
-    };
-  }
-
-  if (supportsAdaptiveThinking(model.id)) {
-    const effort = mapThinkingLevelToEffort(options.reasoning, model.id);
-    return {
-      ...base,
-      thinkingEnabled: true,
-      effort,
-    };
-  }
-
-  return {
-    ...base,
-    thinkingEnabled: true,
-  };
 }
 
 export function resolveCopilotDynamicHeaders(

@@ -360,17 +360,6 @@ export function resolveWorkspaceRevision(input: string | ProtocolRecord): string
   return typeof input === "string" ? revision : { revision, ...input };
 }
 
-export interface DeriveTurnEffectCommitmentProjectionInput extends ProtocolRecord {
-  readonly runtimeTurn?: number;
-  readonly turnId?: string;
-  readonly declared?: readonly EffectCommitmentSummary[];
-  readonly attempted?: readonly EffectCommitmentAttempt[];
-  readonly decisions?: readonly EffectAuthorityDecisionSummary[];
-  readonly executed?: readonly EffectExecutionSummary[];
-  readonly recovery?: readonly EffectRecoverySummary[];
-  readonly warnings?: readonly ProtocolRecord[];
-}
-
 export interface EffectAuthorityDecisionSummary extends ProtocolRecord {}
 
 export interface EffectCommitmentAttempt extends ProtocolRecord {}

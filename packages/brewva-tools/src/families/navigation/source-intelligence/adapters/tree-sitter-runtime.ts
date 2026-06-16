@@ -1,7 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { sha256Hex } from "@brewva/brewva-std/hash";
 import type {
   Language as TreeSitterLanguage,
   Node as TreeSitterNode,
@@ -110,20 +109,6 @@ export function getTreeSitterGrammarAssetPath(language: SourceLanguage): string 
 
 export function getTreeSitterGrammarVersion(language: SourceLanguage): string {
   return getTreeSitterGrammarManifest(language)?.grammarVersion ?? "none";
-}
-
-export function verifyTreeSitterGrammarAsset(language: SourceLanguage): boolean {
-  const manifest = getTreeSitterGrammarManifest(language);
-  const assetPath = getTreeSitterGrammarAssetPath(language);
-  if (!assetPath || !manifest) {
-    return false;
-  }
-  try {
-    const bytes = readFileSync(assetPath);
-    return bytes.byteLength > 0 && sha256Hex(bytes) === manifest.sha256;
-  } catch {
-    return false;
-  }
 }
 
 export interface TreeSitterNodeSnapshot {

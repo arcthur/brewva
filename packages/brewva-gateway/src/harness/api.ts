@@ -175,8 +175,6 @@ export function buildPreflightHarnessTraceSnapshot(
   };
 }
 
-export const buildHarnessTraceSnapshot = buildPreflightHarnessTraceSnapshot;
-
 export function compareHarnessCandidate(
   input: CompareHarnessCandidateInput,
 ): HarnessComparisonReport {

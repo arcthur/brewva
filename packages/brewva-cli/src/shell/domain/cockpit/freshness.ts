@@ -1,10 +1,5 @@
 import type { CockpitFreshness, CockpitObservationCursor } from "./types.js";
 
-export interface CockpitSourceClock {
-  readonly ref: string;
-  readonly timestamp: number;
-}
-
 export function createDefaultCockpitObservationCursor(
   input: Partial<CockpitObservationCursor> = {},
 ): CockpitObservationCursor {

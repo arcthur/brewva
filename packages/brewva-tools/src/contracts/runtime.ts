@@ -214,9 +214,6 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES = [
   "workbench",
 ] as const;
 
-export type BrewvaToolRuntimeCapabilityNamespace =
-  (typeof BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES)[number];
-
 export type RuntimeCostPostureStatus = "disabled" | "ok" | "warn" | "blocked";
 export type RuntimeCostPostureSalience = "muted" | "default" | "elevated" | "alert";
 export type RuntimeCostPostureAction =

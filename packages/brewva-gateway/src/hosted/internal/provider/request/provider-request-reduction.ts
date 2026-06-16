@@ -27,12 +27,7 @@ import {
   type HostedRuntimeAdapterPort,
 } from "../../session/runtime-ports.js";
 import { isOutputBudgetEscalatedPayload } from "./provider-request-recovery.js";
-import {
-  CLEARED_TOOL_RESULT_PLACEHOLDER,
-  MIN_CLEARABLE_TOOL_RESULT_CHARS,
-  RECENT_TOOL_RESULT_RETAIN_COUNT,
-  applyTransientOutboundReductionToPayload,
-} from "./provider-request-reduction-walker.js";
+import { applyTransientOutboundReductionToPayload } from "./provider-request-reduction-walker.js";
 
 const DEFAULT_PROVIDER_CACHE_STALENESS_MS = 5 * 60 * 1000;
 const expectedCacheBreakByPayload = new WeakMap<object, ExpectedProviderCacheBreak>();
@@ -355,15 +350,3 @@ export function registerProviderRequestReduction(
     return result.status === "completed" ? result.payload : undefined;
   });
 }
-
-export const PROVIDER_REQUEST_REDUCTION_TEST_ONLY = {
-  CLEARED_TOOL_RESULT_PLACEHOLDER,
-  MIN_CLEARABLE_TOOL_RESULT_CHARS,
-  RECENT_TOOL_RESULT_RETAIN_COUNT,
-  applyTransientOutboundReductionToPayload,
-  buildEffectiveReductionUsage,
-  buildEstimatedPayloadUsage,
-  estimatePayloadTextTokens: estimateProviderPayloadTextTokens,
-  resolveTransientOutboundReductionEligibility,
-  resolveReductionPostureBlockReason,
-};

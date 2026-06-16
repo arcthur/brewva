@@ -279,8 +279,3 @@ export function isRuntimeAttached(runtimeKey: object): boolean {
 export function markRuntimeAttached(runtimeKey: object): void {
   attachedRuntimes.set(runtimeKey, attachmentEpoch);
 }
-
-export function resetSearchAdvisorStateStore(): void {
-  sessionStates.clear();
-  attachmentEpoch += 1;
-}

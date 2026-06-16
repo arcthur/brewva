@@ -47,10 +47,6 @@ export const HOSTED_RUNTIME_OPS_NAMESPACE_LABELS = {
   channel: "C",
 } as const;
 
-export type HostedRuntimeOpsNamespace = keyof typeof HOSTED_RUNTIME_OPS_NAMESPACE_LABELS;
-export type HostedRuntimeOpsNamespaceLabel =
-  (typeof HOSTED_RUNTIME_OPS_NAMESPACE_LABELS)[HostedRuntimeOpsNamespace];
-
 export function createHostedRuntimeOps(options: {
   readonly runtime: BrewvaRuntime;
   readonly listSessionIds?: () => readonly string[];

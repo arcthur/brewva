@@ -37,12 +37,6 @@ export class ProviderRuntimeConfig extends BrewvaConfigService.Service<ProviderR
   },
 ) {}
 
-export function providerRuntimeLayerFrom(
-  service: ProviderRuntimeService,
-): BrewvaLayer.Layer<ProviderRuntime> {
-  return BrewvaLayer.succeed(ProviderRuntime)(service);
-}
-
 export const providerRuntimeLayer = BrewvaLayer.effect(
   ProviderRuntime,
   BrewvaEffect.gen(function* () {

@@ -106,11 +106,6 @@ const ExecutionHintsSchema = Type.Object({
   ),
 });
 
-export const ExecutionShapeSchema = Type.Object({
-  boundary: Type.Optional(BoundarySchema),
-  managedToolMode: Type.Optional(ManagedToolModeSchema),
-});
-
 export const CompletionPredicateSchema = Type.Union([
   Type.Object({
     source: Type.Literal("events"),
@@ -323,7 +318,6 @@ export const DiagnosticSubagentFanoutParamsSchema = Type.Object({
 });
 
 export type SharedPacketInput = Static<typeof SharedPacketSchema>;
-export type ExecutionShapeInput = Static<typeof ExecutionShapeSchema>;
 export type CompletionPredicateInput = Static<typeof CompletionPredicateSchema>;
 export type TaskPacketInput = Static<typeof TaskPacketSchema>;
 export type PublicTaskPacketInput = Static<typeof PublicTaskPacketSchema>;

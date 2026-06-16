@@ -1,5 +1,3 @@
-import type { JsonValue } from "./foundation.js";
-
 export type PatchFileAction = "add" | "modify" | "delete" | "rename" | (string & {});
 
 export interface PatchFileChange {
@@ -33,16 +31,6 @@ export interface PatchSet {
   };
   readonly rollbackArtifactRef?: string;
   changes: PatchFileChange[];
-}
-
-export type PatchApplyFailureReason = string;
-
-export interface PatchApplyResult {
-  readonly ok: boolean;
-  readonly patchSetId?: string;
-  readonly appliedPaths?: readonly string[];
-  readonly failedPaths?: readonly string[];
-  readonly reason?: PatchApplyFailureReason;
 }
 
 export type PatchRollbackFailureReason =
@@ -105,7 +93,6 @@ export interface WorkerResult {
   readonly patches?: PatchSet;
   readonly [key: string]: unknown;
 }
-export type WorkerStatus = string;
 
 export type PersistedPatchSetStatus = string;
 
@@ -139,19 +126,4 @@ export interface RedoResult {
   readonly ok: boolean;
   readonly patchSetId?: string;
   readonly reason?: string;
-}
-
-export type PatchHistoryRootInput =
-  | string
-  | {
-      readonly path?: string;
-      readonly root?: string;
-      readonly workspaceRoot?: string;
-      readonly sessionId?: string;
-    };
-
-export function patchHistoryPayload(value: unknown): Record<string, JsonValue> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, JsonValue>)
-    : {};
 }

@@ -48,7 +48,6 @@ export class ManagedExecSessionNotFoundError extends Error {
 }
 
 export type ManagedExecStartError = BrewvaBoundaryFailure;
-export type ManagedExecRuntimeError = BrewvaBoundaryFailure | ManagedExecSessionNotFoundError;
 
 interface ManagedExecBase {
   id: string;

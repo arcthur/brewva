@@ -23,31 +23,6 @@ const EXTENSION_LANGUAGE: ReadonlyMap<string, SourceLanguage> = new Map([
   [".h", "cpp"],
 ]);
 
-export const SOURCE_INTELLIGENCE_SUPPORTED_FILENAMES = ["package.json"] as const;
-
-export const SOURCE_INTELLIGENCE_SUPPORTED_EXTENSIONS = [
-  ".ts",
-  ".mts",
-  ".cts",
-  ".d.ts",
-  ".tsx",
-  ".js",
-  ".mjs",
-  ".cjs",
-  ".jsx",
-  ".py",
-  ".go",
-  ".rs",
-  ".java",
-  ".cc",
-  ".cpp",
-  ".cxx",
-  ".hh",
-  ".hpp",
-  ".hxx",
-  ".h",
-] as const;
-
 export function detectSourceLanguage(filePath: string): SourceLanguage | null {
   if (basename(filePath) === "package.json") {
     return "json";

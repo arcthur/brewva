@@ -5,7 +5,6 @@ import { resolve } from "node:path";
 import process from "node:process";
 import {
   BrewvaGatewayScope,
-  runBoundaryOperation,
   startBoundaryInterval,
   withBrewvaObservability,
   type BrewvaObservationFields,
@@ -2493,31 +2492,4 @@ export class GatewayDaemon {
       ),
     };
   }
-}
-export async function runGatewayDaemon(options: GatewayDaemonOptions): Promise<void> {
-  const daemon = new GatewayDaemon(options);
-  const stateDir = resolve(options.stateDir);
-  const scopeFields = {
-    gatewayId: stateDir,
-    stateDir,
-  };
-  await runBoundaryOperation(
-    "gateway.daemon.run",
-    BrewvaEffect.scoped(
-      BrewvaEffect.acquireRelease(
-        BrewvaEffect.promise(async () => {
-          await daemon.start();
-          return daemon;
-        }),
-        (startedDaemon) => BrewvaEffect.promise(() => startedDaemon.stop("effect_scope_closed")),
-      ).pipe(
-        BrewvaEffect.flatMap((startedDaemon) =>
-          BrewvaEffect.promise(() => startedDaemon.waitForStop()),
-        ),
-      ),
-    ).pipe(
-      BrewvaEffect.provide(BrewvaGatewayScope.layer(scopeFields)),
-      withBrewvaObservability("brewva.gateway.daemon", scopeFields),
-    ),
-  );
 }

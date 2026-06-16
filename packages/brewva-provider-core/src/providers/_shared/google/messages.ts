@@ -18,10 +18,6 @@ import { transformMessages } from "../transform-messages.js";
 
 export type GoogleApiType = "google-genai";
 
-export function isThinkingPart(part: Pick<Part, "thought" | "thoughtSignature">): boolean {
-  return part.thought === true;
-}
-
 export function retainThoughtSignature(
   existing: string | undefined,
   incoming: string | undefined,
@@ -293,16 +289,5 @@ export function mapStopReason(reason: FinishReason): StopReason {
       const _exhaustive: never = reason;
       throw new Error(`Unhandled stop reason: ${_exhaustive}`);
     }
-  }
-}
-
-export function mapStopReasonString(reason: string): StopReason {
-  switch (reason) {
-    case "STOP":
-      return "stop";
-    case "MAX_TOKENS":
-      return "length";
-    default:
-      return "error";
   }
 }

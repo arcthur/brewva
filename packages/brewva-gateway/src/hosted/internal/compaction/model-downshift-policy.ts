@@ -10,9 +10,6 @@ import {
 export const MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS =
   "Compact before switching to a model with a smaller context window. Preserve the current objective, latest user correction, failed attempt, and next step.";
 
-export const FALLBACK_MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS =
-  "Compact before switching to a fallback model with a smaller context window. Preserve the current objective, latest user correction, failed attempt, and next step.";
-
 export function shouldCompactForModelDownshift(input: {
   runtime: HostedRuntimeAdapterPort;
   sessionId: string;

@@ -76,10 +76,6 @@ export function fauxText(text: string): TextContent {
   return { type: "text", text };
 }
 
-export function fauxThinking(thinking: string): ThinkingContent {
-  return { type: "thinking", thinking };
-}
-
 export function fauxToolCall(
   name: string,
   arguments_: ToolCall["arguments"],

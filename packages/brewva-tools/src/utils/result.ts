@@ -36,16 +36,6 @@ export function okTextResult(
   };
 }
 
-export function withDisplay<TOutput, TError>(
-  result: AgentToolResult<TOutput, TError>,
-  display: BrewvaToolResultDisplay,
-): AgentToolResult<TOutput, TError> {
-  return {
-    ...result,
-    display,
-  };
-}
-
 export function errTextResult(
   text: string,
   payload: Record<string, unknown> = {},
@@ -89,14 +79,4 @@ export function textResultForOutcome(
     return inconclusiveTextResult(text, payload, display);
   }
   return okTextResult(text, payload, display);
-}
-
-export function toolResultData(result: AgentToolResult): JsonValue {
-  if (result.outcome.kind === "ok") {
-    return toJsonValue(result.outcome.value);
-  }
-  if (result.outcome.kind === "err") {
-    return toJsonValue(result.outcome.error);
-  }
-  return toJsonValue(result.outcome.value ?? {});
 }

@@ -2,7 +2,7 @@ import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcess
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-import { Layer } from "effect";
+import type { Layer } from "effect";
 import type { BrewvaNodeSdkConfiguration } from "./observability.js";
 
 export {
@@ -13,16 +13,6 @@ export {
 };
 
 export const nodeFileSystemLayer = NodeFileSystem.layer;
-export const nodePathLayer = NodePath.layer;
-export const nodeChildProcessSpawnerLayer = NodeChildProcessSpawner.layer.pipe(
-  Layer.provideMerge(NodeFileSystem.layer),
-  Layer.provideMerge(NodePath.layer),
-);
-
-export async function loadNodeHttpClientLayer(): Promise<Layer.Layer<unknown>> {
-  const module = await import("@effect/platform-node/NodeHttpClient");
-  return module.layerUndici as Layer.Layer<unknown>;
-}
 
 export async function loadNodeOpenTelemetryLayer(
   config: BrewvaNodeSdkConfiguration,

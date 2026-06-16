@@ -30,7 +30,7 @@ export function collectTestFiles(): TestFileAsset[] {
     .toSorted((left, right) => left.path.localeCompare(right.path));
 }
 
-export function scanTestFile(absolutePath: string): TestFileAsset {
+function scanTestFile(absolutePath: string): TestFileAsset {
   const content = readFileSync(absolutePath, "utf8");
   const repoPath = toRepoPath(absolutePath);
   const layer = parseLayer(repoPath);

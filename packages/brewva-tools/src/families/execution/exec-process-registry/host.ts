@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { BrewvaBoundaryFailure, startBoundaryTimeout } from "@brewva/brewva-effect";
-import { BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { resolveShellConfig as getShellConfig } from "@brewva/brewva-substrate/host-api";
 import { finalizeSession } from "./internal/lifecycle.js";
 import { appendOutput, appendOutputWithBackpressure } from "./internal/output.js";
@@ -191,19 +191,6 @@ export function startManagedExecEffect(
             cause: error,
           }),
   });
-}
-
-export function scopedManagedExec(
-  registry: ManagedExecProcessRegistryState,
-  input: ManagedExecStartInput,
-): BrewvaEffect.Effect<ManagedExecStartResult, ManagedExecStartError, BrewvaScope.Scope> {
-  return BrewvaEffect.acquireRelease(startManagedExecEffect(registry, input), (started) =>
-    BrewvaEffect.sync(() => {
-      if (!started.session.backgrounded && !started.session.exited) {
-        terminateRunningSession(started.session, true);
-      }
-    }),
-  );
 }
 
 export function terminateRunningSessionEffect(

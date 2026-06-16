@@ -1,6 +1,5 @@
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
-import { CONTEXT_ENTRY_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
 import type { ContextAdmission, ContextEntryPresentTo } from "@brewva/brewva-vocabulary/context";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
@@ -195,8 +194,4 @@ export function resolveContextEntryInputForSourceEvent(input: {
     };
   }
   return null;
-}
-
-export function isContextEntryRecordedEvent(event: BrewvaEventRecord): boolean {
-  return event.type === CONTEXT_ENTRY_RECORDED_EVENT_TYPE;
 }

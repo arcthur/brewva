@@ -221,7 +221,6 @@
         "@brewva/brewva-std": "workspace:*",
         "@brewva/brewva-token-estimation": "workspace:*",
         "ajv": "^8.20.0",
-        "date-fns": "^4.3.0",
         "jsonc-parser": "^3.3.1",
       },
     },

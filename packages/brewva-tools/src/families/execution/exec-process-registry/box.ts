@@ -1,5 +1,5 @@
 import { BrewvaBoundaryFailure, startBoundaryTimeout } from "@brewva/brewva-effect";
-import { BrewvaEffect, type BrewvaScope } from "@brewva/brewva-effect/primitives";
+import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { finalizeBoxSession } from "./internal/lifecycle.js";
 import {
   appendOutput,
@@ -265,19 +265,6 @@ export function startManagedBoxExecEffect(
             cause: error,
           }),
   });
-}
-
-export function scopedManagedBoxExec(
-  registry: ManagedExecProcessRegistryState,
-  input: ManagedBoxExecStartInput,
-): BrewvaEffect.Effect<ManagedBoxExecStartResult, ManagedExecStartError, BrewvaScope.Scope> {
-  return BrewvaEffect.acquireRelease(startManagedBoxExecEffect(registry, input), (started) =>
-    BrewvaEffect.promise(async () => {
-      if (!started.session.backgrounded && !started.session.exited) {
-        await terminateRunningBoxSession(started.session, true);
-      }
-    }),
-  );
 }
 
 export async function terminateRunningBoxSession(

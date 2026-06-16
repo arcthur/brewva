@@ -37,7 +37,7 @@ function lineFindings(
   );
 }
 
-export const TEST_POLICY_RULES: readonly TestBoundaryRule[] = [
+const TEST_POLICY_RULES: readonly TestBoundaryRule[] = [
   {
     id: "test-layer-suffix",
     severity: "error",

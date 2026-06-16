@@ -8,14 +8,12 @@ import {
   type OpenAICompletionsCacheControl,
   type OpenAICompletionsCacheRender,
 } from "../../cache/render/openai-completions.js";
-import { supportsXhigh } from "../../catalog/index.js";
 import type {
   Context,
   Model,
   ResolvedOpenAICompletionsCompat,
   StreamOptions,
 } from "../../contracts/index.js";
-import { clampReasoning } from "../_shared/simple-options.js";
 import { resolveOpenAICompletionsCompat } from "./compat.js";
 import type { OpenAICompletionsOptions } from "./contract.js";
 import { convertMessages } from "./messages.js";
@@ -254,18 +252,4 @@ export function buildOpenAICompletionsParams(
   }
 
   return params;
-}
-
-export function buildSimpleOpenAICompletionsOptions(
-  model: Model<"openai-completions">,
-  options?: StreamOptions & { reasoning?: OpenAICompletionsOptions["reasoningEffort"] },
-): OpenAICompletionsOptions {
-  const reasoningEffort = supportsXhigh(model)
-    ? options?.reasoning
-    : clampReasoning(options?.reasoning);
-
-  return {
-    ...options,
-    reasoningEffort,
-  };
 }

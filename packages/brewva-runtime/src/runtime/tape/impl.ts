@@ -14,6 +14,7 @@ import { toJsonValue } from "@brewva/brewva-std/json";
 import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
 import { isSupportedToolOutcomeVersion } from "@brewva/brewva-std/tool-outcome-version";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import { redactUnknown } from "../../security/redact.js";
 import type {
   Baseline,
   CanonicalEvent,
@@ -587,7 +588,7 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
       const event = freezeCanonicalEvent({
         ...input,
         ...(input.payload !== undefined
-          ? { payload: normalizeCanonicalPayload(input.payload) }
+          ? { payload: normalizeCanonicalPayload(redactUnknown(input.payload)) }
           : {}),
         id: input.id ?? `evt_${randomUUID()}`,
         timestamp: input.timestamp ?? Date.now(),

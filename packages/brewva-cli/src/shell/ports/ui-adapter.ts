@@ -210,9 +210,3 @@ export function createCliShellUiPortController(input: {
     },
   };
 }
-
-export function createCliShellUiPort(
-  input: Parameters<typeof createCliShellUiPortController>[0],
-): CliShellUiPort {
-  return createCliShellUiPortController(input).ui;
-}
