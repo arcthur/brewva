@@ -170,16 +170,24 @@ export function createHostedRuntimeAdapter(
   }
 
   function wrapRuntime(runtime: BrewvaRuntime): BrewvaRuntime {
+    // Start once per adapter instance. The hosted adapter owns a single runtime
+    // and the per-turn registerTurnSessionRuntime path calls start() on every
+    // turn; without memoization that re-runs loadFromDisk() (a full tape reread)
+    // each turn. Memoize the first start so it is paid once.
+    let startReceipt: ReturnType<BrewvaRuntime["start"]> | undefined;
     return Object.freeze({
       identity: runtime.identity,
       config: runtime.config,
       tape: runtime.tape,
       kernel: runtime.kernel,
       model: runtime.model,
-      async start() {
-        const receipt = await runtime.start();
-        rememberSessions(receipt.recoveredSessions);
-        return receipt;
+      start() {
+        startReceipt ??= (async () => {
+          const receipt = await runtime.start();
+          rememberSessions(receipt.recoveredSessions);
+          return receipt;
+        })();
+        return startReceipt;
       },
       turn(input: TurnInput) {
         observedSessionIds.add(input.sessionId);
@@ -202,6 +210,8 @@ export function createHostedRuntimeAdapter(
 
   // One stable runtime per adapter. Its physics routes each turn to the
   // registered session's ports by sessionId — no noop shell, no per-turn swap.
+  // Omitting `options.physics` defaults to real routing; callers that want a noop
+  // runtime (e.g. inspect-only paths) must pass `physics: { mode: "noop" }`.
   const routerPhysics: RuntimePhysicsDeclaration = options.physics ?? {
     mode: "real",
     provider: {
