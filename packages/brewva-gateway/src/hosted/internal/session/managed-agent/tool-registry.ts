@@ -67,10 +67,19 @@ function stringArraysMatch(left: readonly string[], right: readonly string[]): b
 }
 
 export interface ManagedSessionToolRegistryOptions {
+  cwd: string;
+  resourceLoader: BrewvaHostedResourceLoader;
   resolveSchemaSnapshot: (
     tools: readonly BrewvaToolDefinition[],
     invalidationReason: string,
   ) => ToolSchemaSnapshot;
+}
+
+export interface ManagedSessionToolApplicationDeps {
+  createToolContext: () => BrewvaToolContext;
+  getActiveToolNames: () => string[];
+  applyBaseContext: (input: { systemPrompt: string; tools: BrewvaAgentProtocolTool[] }) => void;
+  applyBaseSystemPrompt: (systemPrompt: string) => void;
 }
 
 export class ManagedSessionToolRegistry {
@@ -78,10 +87,19 @@ export class ManagedSessionToolRegistry {
   readonly #toolDefinitions = new Map<string, BrewvaToolDefinition>();
   readonly #toolPromptSnippets = new Map<string, string>();
   readonly #toolPromptGuidelines = new Map<string, string[]>();
+  readonly #cwd: string;
+  readonly #resourceLoader: BrewvaHostedResourceLoader;
   readonly #resolveSchemaSnapshot: ManagedSessionToolRegistryOptions["resolveSchemaSnapshot"];
+  #baseSystemPrompt = "";
 
   constructor(options: ManagedSessionToolRegistryOptions) {
+    this.#cwd = options.cwd;
+    this.#resourceLoader = options.resourceLoader;
     this.#resolveSchemaSnapshot = options.resolveSchemaSnapshot;
+  }
+
+  get currentBaseSystemPrompt(): string {
+    return this.#baseSystemPrompt;
   }
 
   replaceAll(tools: readonly BrewvaToolDefinition[]): void {
@@ -166,6 +184,56 @@ export class ManagedSessionToolRegistry {
       }
     }
     return { selectedTools, toolSnippets, promptGuidelines };
+  }
+
+  resolveProviderToolSchemaSnapshot(
+    invalidationReason: string,
+    activeToolNames: readonly string[],
+  ): ToolSchemaSnapshot {
+    const activeDefinitions = this.resolveDefinitions(activeToolNames);
+    return this.buildSchemaSnapshot(activeDefinitions, invalidationReason);
+  }
+
+  refreshTools(deps: ManagedSessionToolApplicationDeps): void {
+    // Rebuild the indexed maps from the current registered tools. A defensive
+    // copy is required because the registry now owns the single source array;
+    // passing the live array to replaceAll would alias it and clear it mid-rebuild.
+    this.replaceAll([...this.#registeredTools]);
+    this.applyToolSet(this.listRegisteredTools(), "tool_refresh", deps);
+  }
+
+  setActiveTools(toolNames: string[], deps: ManagedSessionToolApplicationDeps): void {
+    this.applyToolSet(this.resolveDefinitions(toolNames), "active_tool_set_changed", deps);
+  }
+
+  registerHostedTool(tool: BrewvaToolDefinition, deps: ManagedSessionToolApplicationDeps): void {
+    this.upsert(tool);
+    this.#baseSystemPrompt = this.rebuildSystemPrompt(deps.getActiveToolNames());
+    deps.applyBaseSystemPrompt(this.#baseSystemPrompt);
+  }
+
+  private applyToolSet(
+    definitions: readonly BrewvaToolDefinition[],
+    invalidationReason: string,
+    deps: ManagedSessionToolApplicationDeps,
+  ): void {
+    const activeToolNames = definitions.map((tool) => tool.name);
+    const snapshot = this.buildSchemaSnapshot(definitions, invalidationReason);
+    const tools = this.buildAgentTools(definitions, snapshot, () => deps.createToolContext());
+    this.#baseSystemPrompt = this.rebuildSystemPrompt(activeToolNames);
+    deps.applyBaseContext({
+      tools,
+      systemPrompt: this.#baseSystemPrompt,
+    });
+  }
+
+  private rebuildSystemPrompt(activeToolNames: readonly string[]): string {
+    return buildManagedSessionBaseSystemPrompt({
+      cwd: this.#cwd,
+      resourceLoader: this.#resourceLoader,
+      activeToolNames,
+      toolPromptInputs: this.buildPromptInputs(activeToolNames),
+    });
   }
 
   private upsertIndexed(tool: BrewvaToolDefinition): void {

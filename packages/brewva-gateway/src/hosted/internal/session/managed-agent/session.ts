@@ -1,36 +1,18 @@
-import { randomUUID } from "node:crypto";
-import type {
-  Api,
-  Model as ProviderModel,
-  ProviderCacheRenderResult,
-  ProviderPayloadMetadata,
-} from "@brewva/brewva-provider-core/contracts";
 import { clearApiProviderSessions } from "@brewva/brewva-provider-core/registry";
 import {
-  type BrewvaAgentProtocolController,
   type BrewvaAgentProtocolEvent,
   type BrewvaAgentProtocolMessage,
 } from "@brewva/brewva-substrate/agent-protocol";
-import {
-  buildBrewvaDeterministicCompactionSummary,
-  estimateBrewvaCompactionTokens,
-} from "@brewva/brewva-substrate/compaction";
 import { decideCompaction } from "@brewva/brewva-substrate/context-budget";
 import {
   createBrewvaHostPluginRunner,
-  type BrewvaHostCommandContext,
+  type BrewvaHostContext,
   type BrewvaHostCustomMessage,
   type BrewvaHostCustomMessageDelivery,
   type BrewvaHostPluginRunner,
   type BrewvaToolUiPort,
 } from "@brewva/brewva-substrate/host-api";
-import {
-  buildBrewvaPromptText,
-  cloneBrewvaPromptContentParts,
-  expandBrewvaPromptTemplate,
-  promptPartsArePlainText,
-  type BrewvaPromptContentPart,
-} from "@brewva/brewva-substrate/prompt";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
@@ -52,7 +34,6 @@ import {
   type BrewvaPromptSessionEvent,
   type BrewvaPromptThinkingLevel,
   type SessionPhase,
-  type SessionPhaseEvent,
   type BrewvaSessionModelCatalogView,
   type ContextState,
   type BrewvaSessionModelDescriptor,
@@ -62,7 +43,6 @@ import {
   BrewvaToolContext,
   BrewvaToolDefinition,
 } from "@brewva/brewva-substrate/tools";
-import { buildHarnessManifest, stableHarnessId } from "@brewva/brewva-vocabulary/harness";
 import {
   STEER_APPLIED_EVENT_TYPE,
   STEER_DROPPED_EVENT_TYPE,
@@ -72,18 +52,8 @@ import {
   collectHostedExtensionManifests,
   type VerificationGateManifest,
 } from "../../../../extensions/api.js";
-import {
-  ManagedSessionDeferredCompactionCoordinator,
-  type DeferredCompactionSalvageMode,
-} from "../../compaction/deferred.js";
-import {
-  buildCompactionSummaryGenerationMetadata,
-  compactionFallbackReason,
-  ManagedSessionCompactionFlowState,
-  nonNegativeUsageNumber,
-  sameSessionMessages,
-  type ResolvedCompactionSummary,
-} from "../../compaction/flow.js";
+import { ManagedSessionDeferredCompactionCoordinator } from "../../compaction/deferred.js";
+import { ManagedSessionCompactionFlowState } from "../../compaction/flow.js";
 import {
   MODEL_DOWNSHIFT_COMPACTION_INSTRUCTIONS,
   requestCompactionAndWait,
@@ -91,23 +61,16 @@ import {
 } from "../../compaction/model-downshift-policy.js";
 import {
   createHostedLlmCompactionSummaryGenerator,
-  DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
-  generateCompactionSummaryWithPromptTooLargeRetry,
-  LLM_PRIMARY_COMPACTION_STRATEGY,
-  normalizeCompactionSummaryForStorage,
   type BrewvaCompactionSummaryGenerator,
 } from "../../compaction/summary-generator.js";
 import { supportsHostedExtendedThinkingModel as supportsHostedExtendedThinking } from "../../provider/built-in-catalog.js";
 import {
   ProviderCacheBreakDetector,
-  createProviderRequestFingerprint,
   createToolSchemaSnapshotStore,
   type ToolSchemaSnapshot,
 } from "../../provider/cache/index.js";
-import { consumeProviderRequestReductionExpectedCacheBreak } from "../../provider/request/provider-request-reduction.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
 import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../turn-adapter/hosted-prompt-attempt.js";
-import type { RuntimeProviderContextSummary } from "../../turn-adapter/runtime-provider-context.js";
 import {
   HOSTED_COMPACTION_BOUNDARY,
   type HostedCompactionBoundary,
@@ -119,18 +82,13 @@ import {
 } from "../../turn-adapter/runtime-turn-prelude.js";
 import { readRuntimeVerificationGateEvidenceFromEvent } from "../../turn-adapter/runtime-turn-verification-gates.js";
 import { runHostedTurnEnvelope } from "../../turn-adapter/turn-envelope.js";
-import { extractPromptTargetPaths } from "../prompt-paths.js";
 import {
   getRuntimeCompactionGateStatus,
-  getRuntimeContextEvidenceLatest,
   getRuntimeContextUsage,
-  getRuntimeVisibleReadEpoch,
   queryRuntimeEvents,
-  recordRuntimeAssistantCost,
   type HostedRuntimeAdapterPort,
 } from "../runtime-ports.js";
 import {
-  deriveSessionPhaseFromLifecycleSnapshot,
   deriveCompatibilityValidationEvent,
   ManagedSessionPhaseCoordinator,
   resolveManagedSessionBootstrapPhase,
@@ -142,8 +100,10 @@ import {
   createHostedSessionTitleGenerator,
   type BrewvaSessionTitleGenerator,
 } from "../title-generator.js";
+import { ManagedSessionCompactionLifecycle } from "./compaction-lifecycle.js";
 import {
   ManagedSessionCommandDispatchGate,
+  ManagedSessionCommandMessageRouter,
   ManagedSessionDeferredTurnState,
 } from "./deferred-dispatch.js";
 import { ManagedSessionEventBridge } from "./event-bridge.js";
@@ -155,24 +115,15 @@ import {
 } from "./model-selection.js";
 import { NOOP_UI } from "./noop-ui.js";
 import { ManagedSessionSettingsView } from "./preferences.js";
-import {
-  buildSkillCommandText,
-  buildTextPromptParts,
-  parseCommand,
-  toAgentUserContent,
-} from "./prompt-content.js";
 import { ManagedSessionProviderAssistantObserver } from "./provider-assistant-observer.js";
 import {
-  buildProviderCacheModelKey,
   ManagedSessionProviderCacheState,
-  normalizeProviderCacheRender,
   resolveProviderCacheDiagnosticDumpDirectory,
 } from "./provider-cache-state.js";
+import { createProviderPayloadPipeline } from "./provider-payload-pipeline.js";
 import {
-  EMPTY_WORKBENCH_CONTEXT_FINGERPRINT,
-  buildProviderDynamicTailSummary,
   resolveWorkbenchContextFingerprint,
-  type WorkbenchContextFingerprintInput,
+  WorkbenchContextFingerprintHolder,
 } from "./provider-payload-summary.js";
 import { ManagedRuntimeSessionController } from "./runtime-session-controller.js";
 import {
@@ -183,29 +134,28 @@ import {
   type CreateBrewvaManagedAgentSessionOptions,
   type ManagedAgentSessionStore,
   type PreparedDeferredCompaction,
-  type ProviderCacheRuntimeState,
+  type PreparedManagedPromptDispatch,
+  type RuntimeProviderCacheRenderInput,
+  type RuntimeProviderPayloadInput,
 } from "./session-contracts.js";
 import {
   nextHarnessProviderAttemptSequence,
-  readHarnessCapabilitySelection,
-  readHarnessSkillSelection,
-  readProviderFallbackActive,
   recordRuntimeHarnessManifest,
   turnNumberFromTurnId,
 } from "./session-harness-manifest.js";
 import {
-  appendTargetScopedProjectInstructions,
   hostedTurnSourceFromPromptOptions,
-  promptPartsFromCustomMessage,
-  toTurnLoopCustomMessage,
+  prepareManagedPromptDispatch,
+  type ManagedPromptDispatchDeps,
 } from "./session-prompt-dispatch.js";
 import {
-  buildManagedSessionBaseSystemPrompt,
   ManagedSessionToolRegistry,
+  type ManagedSessionToolApplicationDeps,
 } from "./tool-registry.js";
 import {
   buildSteerAuditPayload,
   normalizePromptSource,
+  recordSteeringAuditEvent,
   resolveChannelContext,
 } from "./turn-audit.js";
 
@@ -222,34 +172,6 @@ export type {
   ManagedAgentSessionStore,
 } from "./session-contracts.js";
 
-type PreparedManagedPromptDispatch =
-  | {
-      readonly status: "ready";
-      readonly promptText: string;
-      readonly promptContent: readonly BrewvaPromptContentPart[];
-      readonly messages: readonly BrewvaAgentProtocolMessage[];
-      readonly source: string | undefined;
-    }
-  | {
-      readonly status: "handled" | "queued";
-    };
-
-interface RuntimeProviderPayloadInput {
-  readonly payload: unknown;
-  readonly model: ProviderModel<Api>;
-  readonly metadata?: ProviderPayloadMetadata;
-  readonly turn: {
-    readonly sessionId: string;
-    readonly turnId?: string;
-  };
-  readonly providerContext: RuntimeProviderContextSummary;
-}
-
-interface RuntimeProviderCacheRenderInput {
-  readonly render: ProviderCacheRenderResult;
-  readonly model: ProviderModel<Api>;
-}
-
 class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly sessionManager: ManagedAgentSessionStore;
   readonly settingsManager: BrewvaManagedSessionSettingsView;
@@ -261,18 +183,18 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #catalog: BrewvaMutableModelCatalog;
   readonly #modelSelection: ManagedSessionModelSelectionController;
   readonly #resourceLoader: BrewvaHostedResourceLoader;
-  readonly #agent: BrewvaAgentProtocolController;
+  readonly #agent: ManagedRuntimeSessionController;
   readonly #runner: BrewvaHostPluginRunner;
   readonly #verificationGateManifests: readonly VerificationGateManifest[];
   readonly #compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
   readonly #sessionTitleGenerator: BrewvaSessionTitleGenerator;
-  readonly #registeredTools: BrewvaToolDefinition[];
   readonly #toolSchemaSnapshotStore = createToolSchemaSnapshotStore();
   readonly #toolRegistry: ManagedSessionToolRegistry;
   readonly #providerCacheState: ManagedSessionProviderCacheState;
   readonly #deferredTurnState = new ManagedSessionDeferredTurnState();
   readonly #commandDispatchGate = new ManagedSessionCommandDispatchGate();
   readonly #compactionFlow = new ManagedSessionCompactionFlowState();
+  readonly #compactionLifecycle: ManagedSessionCompactionLifecycle;
   readonly #deferredCompaction: ManagedSessionDeferredCompactionCoordinator<
     PreparedDeferredCompaction,
     BuiltDeferredCompactionEvents
@@ -280,20 +202,18 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #eventBridge: ManagedSessionEventBridge;
   readonly #liveTranscript: ManagedSessionLiveTranscript;
   readonly #phaseCoordinator: ManagedSessionPhaseCoordinator;
+  readonly #promptDispatchDeps: ManagedPromptDispatchDeps;
+  readonly #commandRouter: ManagedSessionCommandMessageRouter;
   readonly #listeners = new Set<(event: BrewvaPromptSessionEvent) => void>();
   #ui: BrewvaToolUiPort;
-  readonly #commandUnsupported = async (): Promise<{ cancelled: boolean }> => ({ cancelled: true });
   #unsubscribeSessionWire: (() => void) | null = null;
   #unsubscribeSessionTitleCoordinator: (() => void) | null = null;
-  #baseSystemPrompt = "";
   #disposed = false;
   #turnIndex = 0;
   #turnStartTimestamp = 0;
   #activePromptSource: string | undefined;
   #runtimeTurnPreparedMessages: readonly BrewvaAgentProtocolMessage[] = [];
-  #lastWorkbenchContextFingerprint: WorkbenchContextFingerprintInput = {
-    ...EMPTY_WORKBENCH_CONTEXT_FINGERPRINT,
-  };
+  readonly #workbenchContextFingerprint: WorkbenchContextFingerprintHolder;
   readonly #logger: HostedSessionLogger | null;
   readonly #onProviderAssistantMessage:
     | ((message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>) => void)
@@ -322,7 +242,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     customTools: readonly BrewvaToolDefinition[];
     runner: BrewvaHostPluginRunner;
     verificationGateManifests: readonly VerificationGateManifest[];
-    agent: BrewvaAgentProtocolController;
+    agent: ManagedRuntimeSessionController;
     compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
     sessionTitleGenerator: BrewvaSessionTitleGenerator;
     ui?: BrewvaToolUiPort;
@@ -332,6 +252,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     ) => void;
     prepareRuntimeProviderPayload?: (input: RuntimeProviderPayloadInput) => Promise<unknown>;
     observeRuntimeCacheRender?: (input: RuntimeProviderCacheRenderInput) => void;
+    workbenchContextFingerprint: WorkbenchContextFingerprintHolder;
     onInitialPersistence?: () => void;
     onDispose?: () => void;
   }) {
@@ -344,7 +265,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.sessionManager = input.sessionStore;
     this.settingsManager = new ManagedSessionSettingsView(input.settings);
     this.modelRegistry = new ManagedSessionModelCatalogView(input.catalog);
-    this.#registeredTools = [...input.customTools];
     this.#runner = input.runner;
     this.#verificationGateManifests = input.verificationGateManifests;
     this.#agent = input.agent;
@@ -354,6 +274,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#onProviderAssistantMessage = input.onProviderAssistantMessage;
     this.#prepareRuntimeProviderPayload = input.prepareRuntimeProviderPayload;
     this.#observeRuntimeCacheRender = input.observeRuntimeCacheRender;
+    this.#workbenchContextFingerprint = input.workbenchContextFingerprint;
     this.#onInitialPersistence = input.onInitialPersistence;
     this.#onDispose = input.onDispose;
     this.#modelRole = input.modelRole;
@@ -385,14 +306,27 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       warnOnIncompatibleReconciledSessionPhase: (previousPhase, nextPhase) =>
         this.warnOnIncompatibleReconciledSessionPhase(previousPhase, nextPhase),
     });
+    this.#compactionLifecycle = new ManagedSessionCompactionLifecycle({
+      cwd: this.#cwd,
+      runtime: this.#runtime,
+      agentState: () => this.#agent.state,
+      catalog: this.#catalog,
+      compactionSummaryGenerator: this.#compactionSummaryGenerator,
+      sessionManager: this.sessionManager,
+      runner: this.#runner,
+      createHostContext: () => this.createHostContext(),
+      emitToListeners: (event) => this.emitToListeners(event),
+      replaceMessages: (messages) => this.replaceMessages(messages),
+      markSessionCompacted: () => this.markSessionCompactedForCacheState(),
+    });
     this.#deferredCompaction = new ManagedSessionDeferredCompactionCoordinator({
       flow: this.#compactionFlow,
       isStreaming: () => this.isStreaming,
-      preview: (request) => this.previewDeferredCompaction(request),
-      build: (prepared) => this.buildDeferredCompactionEvents(prepared),
-      finalize: (prepared, built) => this.finalizeDeferredCompaction(prepared, built),
-      salvage: (prepared, built, mode) => this.salvageDeferredCompaction(prepared, built, mode),
-      rollback: (prepared) => this.rollbackDeferredCompaction(prepared),
+      preview: (request) => this.#compactionLifecycle.preview(request),
+      build: (prepared) => this.#compactionLifecycle.build(prepared),
+      finalize: (prepared, built) => this.#compactionLifecycle.finalize(prepared, built),
+      salvage: (prepared, built, mode) => this.#compactionLifecycle.salvage(prepared, built, mode),
+      rollback: (prepared) => this.#compactionLifecycle.rollback(prepared),
     });
     this.#providerCacheState = new ManagedSessionProviderCacheState({
       getSessionId: () => this.sessionManager.getSessionId(),
@@ -401,6 +335,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       logger: this.#logger ?? undefined,
     });
     this.#toolRegistry = new ManagedSessionToolRegistry({
+      cwd: this.#cwd,
+      resourceLoader: this.#resourceLoader,
       resolveSchemaSnapshot: (tools, invalidationReason) =>
         this.#toolSchemaSnapshotStore.resolve(
           tools.map((tool) => ({
@@ -411,6 +347,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
           invalidationReason,
         ),
     });
+    this.#toolRegistry.replaceAll(input.customTools);
     this.#modelSelection = new ManagedSessionModelSelectionController({
       initialState:
         input.modelPresetState ??
@@ -438,6 +375,44 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         return this.#eventBridge.emitModelSelect({ model, previousModel, source });
       },
     });
+    this.#commandRouter = new ManagedSessionCommandMessageRouter({
+      commandDispatchGate: this.#commandDispatchGate,
+      deferredTurnState: this.#deferredTurnState,
+      isStreaming: () => this.isStreaming,
+      dispatchPrompt: (parts, options) => this.prompt(parts, options),
+      getRegisteredCommands: () => this.#runner.getRegisteredCommands(),
+      appendPassiveCustomMessage: (customMessage, options) =>
+        this.#eventBridge.appendPassiveCustomMessage(customMessage, options),
+      createHostContext: () => this.createHostContext(),
+      waitForIdle: () => this.waitForIdle(),
+      reload: async () => {
+        await this.#resourceLoader.reload();
+        this.refreshTools();
+      },
+    });
+    this.#promptDispatchDeps = {
+      runner: this.#runner,
+      resourceLoader: this.#resourceLoader,
+      catalog: this.#catalog,
+      sessionManager: this.sessionManager,
+      isStreaming: () => this.isStreaming,
+      getModel: () => this.model,
+      getBaseSystemPrompt: () => this.baseSystemPrompt,
+      consumeNextTurnMessages: () => this.#deferredTurnState.consumeNextTurnMessages(),
+      createHostContext: () => this.createHostContext(),
+      waitForProviderCacheSessionClear: () => this.waitForProviderCacheSessionClear(),
+      applyQueuedModelPreset: () => this.applyQueuedModelPreset(),
+      tryExecuteRegisteredCommand: (name, args) =>
+        this.#commandRouter.tryExecuteRegisteredCommand(name, args),
+      flushCommandDispatchBuffer: () => this.#commandRouter.flushCommandDispatchBuffer(),
+      ensureInitialPersistence: () => this.ensureInitialPersistence(),
+      queueUserMessage: (parts, behavior) => this.queueUserMessage(parts, behavior),
+      appendPassiveCustomMessage: (customMessage, options) =>
+        this.#eventBridge.appendPassiveCustomMessage(customMessage, options),
+      applyPromptOverlay: (systemPrompt) => this.#liveTranscript.applyPromptOverlay(systemPrompt),
+      setWorkbenchContextFingerprint: (value) => this.#workbenchContextFingerprint.set(value),
+      syncContextState: () => this.syncContextState(),
+    };
   }
 
   static async create(
@@ -445,21 +420,21 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   ): Promise<BrewvaManagedAgentSession> {
     const toolDefinitions = [...(options.customTools ?? [])];
     let session: BrewvaManagedAgentSession | undefined;
+    const requireSession = (): BrewvaManagedAgentSession => {
+      if (!session) {
+        throw new Error("Session not initialized");
+      }
+      return session;
+    };
 
     const runner = await createBrewvaHostPluginRunner({
       plugins: options.extensions,
       actions: {
         sendMessage(message, sendOptions) {
-          if (!session) {
-            throw new Error("Session not initialized");
-          }
-          void session.sendCustomMessage(message, sendOptions);
+          void requireSession().sendCustomMessage(message, sendOptions);
         },
         sendUserMessage(content, sendOptions) {
-          if (!session) {
-            throw new Error("Session not initialized");
-          }
-          void session.sendUserMessage(content, sendOptions);
+          void requireSession().sendUserMessage(content, sendOptions);
         },
         getActiveTools() {
           return session?.getActiveToolNames() ?? [];
@@ -501,12 +476,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
     const extensionManifests = collectHostedExtensionManifests(options.extensions);
 
-    const providerCacheRuntime: ProviderCacheRuntimeState = {
-      lastProviderFingerprint: undefined,
-      lastCacheRender: undefined,
-      lastCacheRenderModelKey: undefined,
-      lastExpectedProviderCacheBreak: undefined,
-    };
     const cacheBreakDetector = new ProviderCacheBreakDetector({
       diagnosticDumpDirectory: resolveProviderCacheDiagnosticDumpDirectory(options.cwd),
     });
@@ -521,39 +490,45 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         resolveAuth: (model) => options.modelCatalog.getApiKeyAndHeaders(model),
       });
     const sessionId = options.sessionStore.getSessionId();
-    const clearCacheState = options.runtime?.ops.session.state.onClear(
-      (clearedSessionId: string) => {
-        if (clearedSessionId === sessionId) {
-          cacheBreakDetector.clear();
-          providerCacheRuntime.lastProviderFingerprint = undefined;
-          providerCacheRuntime.lastCacheRender = undefined;
-          providerCacheRuntime.lastCacheRenderModelKey = undefined;
-          session?.clearProviderCacheSessionStateBestEffort();
-        }
-      },
-    );
 
     const agent = new ManagedRuntimeSessionController({
       initialModel: options.initialModel,
       initialThinkingLevel: toTurnLoopThinkingLevel(options.initialThinkingLevel),
     });
 
+    const workbenchContextFingerprint = new WorkbenchContextFingerprintHolder();
+    const providerPayloadPipeline = createProviderPayloadPipeline({
+      runner,
+      settings: options.settings,
+      runtime: options.runtime,
+      sessionId,
+      isSessionReady: () => session !== undefined,
+      agentState: () => agent.state,
+      createHostContext: () => requireSession().createHostContext(),
+      resolveChannelContext: () => requireSession().resolveProviderCacheChannelContext(),
+      resolveToolSchemaSnapshot: (invalidationReason) =>
+        requireSession().resolveProviderToolSchemaSnapshot(invalidationReason),
+      observeStickyLatches: (input) => requireSession().observeProviderCacheStickyLatches(input),
+      readWorkbenchContextFingerprint: () => workbenchContextFingerprint.get(),
+    });
+
+    const clearCacheState = options.runtime?.ops.session.state.onClear(
+      (clearedSessionId: string) => {
+        if (clearedSessionId === sessionId) {
+          cacheBreakDetector.clear();
+          providerPayloadPipeline.resetForSessionClear();
+          session?.clearProviderCacheSessionStateBestEffort();
+        }
+      },
+    );
+
     const providerAssistantObserver = new ManagedSessionProviderAssistantObserver({
       runtime: options.runtime,
       sessionId,
       cacheBreakDetector,
-      resolveExpectedBreak: () => {
-        const hint = providerCacheRuntime.lastExpectedProviderCacheBreak;
-        providerCacheRuntime.lastExpectedProviderCacheBreak = undefined;
-        return hint;
-      },
-      state: () => ({
-        lastProviderFingerprint: providerCacheRuntime.lastProviderFingerprint,
-        lastCacheRender: providerCacheRuntime.lastCacheRender,
-      }),
+      resolveExpectedBreak: () => providerPayloadPipeline.consumeExpectedBreak(),
+      state: () => providerPayloadPipeline.readState(),
     });
-    let harnessProviderAttemptTurnKey: string | undefined;
-    let harnessProviderAttemptSequence = 0;
 
     session = new BrewvaManagedAgentSession({
       cwd: options.cwd,
@@ -572,189 +547,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       ui: options.ui,
       runtime: options.runtime,
       logger: options.logger,
-      prepareRuntimeProviderPayload: async ({
-        payload,
-        model,
-        metadata,
-        turn,
-        providerContext,
-      }) => {
-        if (!session) {
-          return payload;
-        }
-        const providerPayloadResult = await runner.emitBeforeProviderRequest(
-          {
-            type: "before_provider_request",
-            payload,
-            provider: model.provider,
-            api: model.api,
-            modelId: model.id,
-          },
-          session.createHostContext(),
-        );
-        const nextPayload = providerPayloadResult.payload;
-        providerCacheRuntime.lastExpectedProviderCacheBreak =
-          consumeProviderRequestReductionExpectedCacheBreak(nextPayload);
-        const channelContext = session.resolveProviderCacheChannelContext();
-        const cachePolicy = options.settings.getCachePolicy();
-        let cacheRender = normalizeProviderCacheRender({
-          metadata,
-          model,
-          transport: options.settings.getTransport(),
-          sessionId,
-          cachePolicy,
-          previousRender: providerCacheRuntime.lastCacheRender,
-          previousRenderModelKey: providerCacheRuntime.lastCacheRenderModelKey,
-        });
-        providerCacheRuntime.lastCacheRender = cacheRender;
-        providerCacheRuntime.lastCacheRenderModelKey = buildProviderCacheModelKey(model);
-        const toolSchemaSnapshot = session.resolveProviderToolSchemaSnapshot("provider_payload");
-        const stickyLatches = session.observeProviderCacheStickyLatches({
-          cachePolicy,
-          cacheRender,
-          transport: options.settings.getTransport(),
-          reasoning: metadata?.reasoning ?? agent.state.thinkingLevel,
-          channelContext,
-        });
-        const transientReduction = getRuntimeContextEvidenceLatest(
-          options.runtime,
-          sessionId,
-          "transient_reduction",
-        )?.payload;
-        const visibleHistoryReduction = {
-          epoch: getRuntimeVisibleReadEpoch(options.runtime, sessionId),
-          transientReductionStatus:
-            transientReduction &&
-            typeof transientReduction === "object" &&
-            "status" in transientReduction
-              ? transientReduction.status
-              : "none",
-          transientReductionClassification:
-            transientReduction &&
-            typeof transientReduction === "object" &&
-            "classification" in transientReduction
-              ? transientReduction.classification
-              : null,
-          expectedCacheBreak: providerCacheRuntime.lastExpectedProviderCacheBreak !== undefined,
-        };
-        const workbenchContext = session.#lastWorkbenchContextFingerprint;
-        const providerFallback = metadata?.providerFallback ?? { active: false };
-        const providerFingerprint = createProviderRequestFingerprint({
-          provider: model.provider,
-          api: model.api,
-          model: model.id,
-          transport: options.settings.getTransport(),
-          sessionId,
-          cachePolicy,
-          toolSchemaSnapshot,
-          stablePrefixParts: [agent.state.systemPrompt],
-          dynamicTailParts: [
-            buildProviderDynamicTailSummary({
-              payload: nextPayload,
-              channelContext,
-              workbenchContext,
-              visibleHistoryReduction,
-            }),
-          ],
-          channelContext,
-          renderedCache: cacheRender,
-          stickyLatches,
-          reasoning: metadata?.reasoning ?? agent.state.thinkingLevel,
-          thinkingBudgets: metadata?.thinkingBudgets ?? options.settings.getThinkingBudgets(),
-          cacheRelevantHeaders: metadata?.headers,
-          extraBody: metadata?.extraBody,
-          visibleHistoryReduction,
-          workbenchContext,
-          providerFallback,
-          payload: nextPayload,
-        });
-        providerCacheRuntime.lastProviderFingerprint = providerFingerprint;
-        const harnessManifest = buildHarnessManifest({
-          sessionId,
-          ...(() => {
-            const numericTurn = turnNumberFromTurnId(turn.turnId);
-            return numericTurn === undefined ? {} : { turn: numericTurn };
-          })(),
-          ...(turn.turnId ? { turnId: turn.turnId } : {}),
-          attempt: nextHarnessProviderAttemptSequence({
-            turnId: turn.turnId,
-            currentTurnKey: harnessProviderAttemptTurnKey,
-            currentSequence: harnessProviderAttemptSequence,
-            update(next) {
-              harnessProviderAttemptTurnKey = next.turnKey;
-              harnessProviderAttemptSequence = next.sequence;
-            },
-          }),
-          runtime: {
-            configHash: stableHarnessId("runtime_config", options.runtime.config),
-            runtimeIdentityHash: stableHarnessId("runtime_identity", options.runtime.identity),
-          },
-          prompt: {
-            systemPromptHash: providerContext.systemPromptHash,
-            blockHashes: providerContext.messageHashes,
-            stabilityHash: providerFingerprint.stablePrefixHash,
-          },
-          tools: {
-            activeToolNames: toolSchemaSnapshot.tools.map((tool) => tool.name).toSorted(),
-            toolSchemaSnapshotHash: toolSchemaSnapshot.hash,
-          },
-          skillSelection: readHarnessSkillSelection(options.runtime, sessionId),
-          capabilitySelection: readHarnessCapabilitySelection(options.runtime, sessionId),
-          context: {
-            materializationPolicyHash: stableHarnessId("context_materialization_policy", {
-              transport: options.settings.getTransport(),
-              cachePolicy,
-            }),
-            compactionPolicyHash: stableHarnessId("context_compaction_policy", {
-              thinkingLevel: metadata?.reasoning ?? agent.state.thinkingLevel,
-              thinkingBudgets: metadata?.thinkingBudgets ?? options.settings.getThinkingBudgets(),
-              visibleHistoryReduction,
-            }),
-            promptStablePrefixHash: providerFingerprint.stablePrefixHash,
-            promptDynamicTailHash: providerFingerprint.dynamicTailHash,
-            contextEvidenceHashes: [
-              providerFingerprint.channelContextHash,
-              providerFingerprint.visibleHistoryReductionHash,
-              providerFingerprint.workbenchContextHash,
-            ],
-          },
-          provider: {
-            provider: model.provider,
-            api: model.api,
-            model: model.id,
-            transport: options.settings.getTransport(),
-            cachePolicyHash: providerFingerprint.cachePolicyHash,
-            requestHash: providerFingerprint.requestHash,
-            providerFallbackHash: providerFingerprint.providerFallbackHash,
-            providerFallbackActive: readProviderFallbackActive(providerFallback),
-            status: "prepared",
-          },
-          plugins: {
-            mutatingHookIds: providerPayloadResult.mutatingHookIds,
-          },
-          refs: {
-            sourceEventIds: [],
-          },
-        });
-        recordRuntimeHarnessManifest({
-          runtime: options.runtime,
-          manifest: harnessManifest,
-          turnId: turn.turnId,
-        });
-        return nextPayload;
-      },
-      observeRuntimeCacheRender: ({ render, model }) => {
-        providerCacheRuntime.lastCacheRender = {
-          status: render.status,
-          reason: render.reason,
-          renderedRetention: render.renderedRetention,
-          bucketKey: render.bucketKey,
-          capability: render.capability,
-          cachedContentName: render.cachedContentName,
-          cachedContentTtlSeconds: render.cachedContentTtlSeconds,
-        };
-        providerCacheRuntime.lastCacheRenderModelKey = buildProviderCacheModelKey(model);
-      },
+      prepareRuntimeProviderPayload: providerPayloadPipeline.preparePayload,
+      observeRuntimeCacheRender: providerPayloadPipeline.observeCacheRender,
+      workbenchContextFingerprint,
       onProviderAssistantMessage: (message) =>
         providerAssistantObserver.onCommittedAssistantMessage(message),
       onInitialPersistence: options.onInitialPersistence,
@@ -929,19 +724,16 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     const previousPromptSource = this.#activePromptSource;
     this.#activePromptSource = prepared.source;
     this.#runtimeTurnPreparedMessages = prepared.messages;
-    const runtimeTurn =
-      this.#agent instanceof ManagedRuntimeSessionController
-        ? this.#agent.beginRuntimeTurn()
-        : null;
+    const runtimeTurn = this.#agent.beginRuntimeTurn();
     return {
       status: "ready",
       promptText: prepared.promptText,
       promptContent: prepared.promptContent,
-      ...(runtimeTurn ? { signal: runtimeTurn.signal } : {}),
+      signal: runtimeTurn.signal,
       complete: () => {
         this.#runtimeTurnPreparedMessages = [];
         this.#activePromptSource = previousPromptSource;
-        runtimeTurn?.complete();
+        runtimeTurn.complete();
       },
     };
   }
@@ -1018,124 +810,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     parts: readonly BrewvaPromptContentPart[],
     options?: BrewvaPromptOptions,
   ): Promise<PreparedManagedPromptDispatch> {
-    await this.waitForProviderCacheSessionClear();
-    await this.applyQueuedModelPreset();
-    const expandPromptTemplates = options?.expandPromptTemplates ?? true;
-    let currentParts = cloneBrewvaPromptContentParts(parts);
-    const command =
-      expandPromptTemplates && promptPartsArePlainText(currentParts)
-        ? parseCommand(buildBrewvaPromptText(currentParts))
-        : null;
-    if (command) {
-      const handled = await this.tryExecuteRegisteredCommand(command.name, command.args);
-      if (handled) {
-        await this.flushCommandDispatchBuffer();
-        return { status: "handled" };
-      }
-    }
-
-    await this.ensureInitialPersistence();
-
-    if (this.#runner.hasHandlers("input")) {
-      const result = await this.#runner.emitInput(
-        {
-          type: "input",
-          text: buildBrewvaPromptText(currentParts),
-          parts: currentParts,
-          source: options?.source,
-        },
-        this.createHostContext(),
-      );
-      if (result.action === "handled") {
-        return { status: "handled" };
-      }
-      if (result.action === "transform") {
-        currentParts = cloneBrewvaPromptContentParts(result.parts);
-      }
-    }
-
-    if (expandPromptTemplates && promptPartsArePlainText(currentParts)) {
-      let expandedText = buildBrewvaPromptText(currentParts);
-      expandedText = buildSkillCommandText(expandedText, this.#resourceLoader);
-      expandedText = expandBrewvaPromptTemplate(
-        expandedText,
-        this.#resourceLoader.getPrompts().prompts,
-      );
-      currentParts = buildTextPromptParts(expandedText);
-    }
-
-    if (this.isStreaming) {
-      const behavior = options?.streamingBehavior ?? "queue";
-      await this.queueUserMessage(currentParts, behavior);
-      return { status: "queued" };
-    }
-
-    if (!this.model) {
-      throw new Error("No model selected.");
-    }
-    if (!this.#catalog.hasConfiguredAuth(this.model as BrewvaRegisteredModel)) {
-      throw new Error(`No API key found for ${this.model.provider}/${this.model.id}.`);
-    }
-
-    const restoredMessages = this.sessionManager.buildSessionContext()
-      .messages as BrewvaAgentProtocolMessage[];
-    const messages: BrewvaAgentProtocolMessage[] = [
-      ...restoredMessages,
-      {
-        role: "user",
-        content: toAgentUserContent(currentParts),
-        timestamp: Date.now(),
-      },
-      ...this.#deferredTurnState.consumeNextTurnMessages(),
-    ];
-
-    const promptText = buildBrewvaPromptText(currentParts);
-    const promptTargetPaths = extractPromptTargetPaths(promptText);
-    const systemPrompt = appendTargetScopedProjectInstructions({
-      baseSystemPrompt: this.#baseSystemPrompt,
-      promptTargetPaths,
-      resourceLoader: this.#resourceLoader,
-    });
-
-    const beforeStart = await this.#runner.emitBeforeAgentStart(
-      {
-        type: "before_agent_start",
-        prompt: promptText,
-        parts: cloneBrewvaPromptContentParts(currentParts),
-        promptPaths: promptTargetPaths,
-        systemPrompt,
-      },
-      this.createHostContext(),
-    );
-    if (beforeStart?.messages) {
-      for (const message of beforeStart.messages) {
-        messages.push(toTurnLoopCustomMessage(message));
-      }
-    }
-    this.#lastWorkbenchContextFingerprint = resolveWorkbenchContextFingerprint(
-      beforeStart?.messages,
-    );
-    const transformedMessages = (await this.#runner.emitContext(
-      { type: "context", messages },
-      this.createHostContext(),
-    )) as BrewvaAgentProtocolMessage[];
-    messages.length = 0;
-    messages.push(...transformedMessages);
-    for (const message of beforeStart?.messages ?? []) {
-      await this.#eventBridge.appendPassiveCustomMessage(toTurnLoopCustomMessage(message), {
-        transcript: true,
-      });
-    }
-
-    this.#liveTranscript.applyPromptOverlay(beforeStart?.systemPrompt ?? systemPrompt);
-    await this.syncContextState();
-    return {
-      status: "ready",
-      promptText,
-      promptContent: cloneBrewvaPromptContentParts(currentParts),
-      messages,
-      source: normalizePromptSource(options?.source),
-    };
+    return prepareManagedPromptDispatch(this.#promptDispatchDeps, parts, options);
   }
 
   async steer(text: string, options?: BrewvaSteerOptions): Promise<BrewvaSteerOutcome> {
@@ -1287,8 +962,10 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   private resolveProviderToolSchemaSnapshot(invalidationReason: string): ToolSchemaSnapshot {
-    const activeDefinitions = this.#toolRegistry.resolveDefinitions(this.getActiveToolNames());
-    return this.#toolRegistry.buildSchemaSnapshot(activeDefinitions, invalidationReason);
+    return this.#toolRegistry.resolveProviderToolSchemaSnapshot(
+      invalidationReason,
+      this.getActiveToolNames(),
+    );
   }
 
   private async waitForProviderCacheSessionClear(): Promise<void> {
@@ -1313,44 +990,26 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     await this.#providerCacheState.markSessionCompacted();
   }
 
+  private toolApplicationDeps(): ManagedSessionToolApplicationDeps {
+    return {
+      createToolContext: () => this.createToolContext(),
+      getActiveToolNames: () => this.getActiveToolNames(),
+      applyBaseContext: (input) => this.#liveTranscript.applyBaseContext(input),
+      applyBaseSystemPrompt: (systemPrompt) =>
+        this.#liveTranscript.applyBaseSystemPrompt(systemPrompt),
+    };
+  }
+
+  private get baseSystemPrompt(): string {
+    return this.#toolRegistry.currentBaseSystemPrompt;
+  }
+
   private refreshTools(): void {
-    this.#toolRegistry.replaceAll(this.#registeredTools);
-    const toolDefinitions = this.#toolRegistry.listRegisteredTools();
-    const activeToolNames = toolDefinitions.map((tool) => tool.name);
-    const snapshot = this.#toolRegistry.buildSchemaSnapshot(toolDefinitions, "tool_refresh");
-    const tools = this.#toolRegistry.buildAgentTools(toolDefinitions, snapshot, () =>
-      this.createToolContext(),
-    );
-    this.#baseSystemPrompt = this.rebuildSystemPrompt(activeToolNames);
-    this.#liveTranscript.applyBaseContext({
-      tools,
-      systemPrompt: this.#baseSystemPrompt,
-    });
+    this.#toolRegistry.refreshTools(this.toolApplicationDeps());
   }
 
   private registerHostedTool(tool: BrewvaToolDefinition): void {
-    const existingIndex = this.#registeredTools.findIndex(
-      (candidate) => candidate.name === tool.name,
-    );
-    if (existingIndex >= 0) {
-      this.#registeredTools[existingIndex] = tool;
-    } else {
-      this.#registeredTools.push(tool);
-    }
-    this.#toolRegistry.upsert(tool);
-    this.#baseSystemPrompt = this.rebuildSystemPrompt();
-    this.#liveTranscript.applyBaseSystemPrompt(this.#baseSystemPrompt);
-  }
-
-  private rebuildSystemPrompt(
-    activeToolNames: readonly string[] = this.getActiveToolNames(),
-  ): string {
-    return buildManagedSessionBaseSystemPrompt({
-      cwd: this.#cwd,
-      resourceLoader: this.#resourceLoader,
-      activeToolNames,
-      toolPromptInputs: this.#toolRegistry.buildPromptInputs(activeToolNames),
-    });
+    this.#toolRegistry.registerHostedTool(tool, this.toolApplicationDeps());
   }
 
   private getActiveToolNames(): string[] {
@@ -1362,51 +1021,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   private setActiveTools(toolNames: string[]): void {
-    const selectedDefinitions = this.#toolRegistry.resolveDefinitions(toolNames);
-    const activeToolNames = selectedDefinitions.map((tool) => tool.name);
-    const snapshot = this.#toolRegistry.buildSchemaSnapshot(
-      selectedDefinitions,
-      "active_tool_set_changed",
-    );
-    const tools = this.#toolRegistry.buildAgentTools(selectedDefinitions, snapshot, () =>
-      this.createToolContext(),
-    );
-    this.#baseSystemPrompt = this.rebuildSystemPrompt(activeToolNames);
-    this.#liveTranscript.applyBaseContext({
-      tools,
-      systemPrompt: this.#baseSystemPrompt,
-    });
-  }
-
-  private async tryExecuteRegisteredCommand(name: string, args: string): Promise<boolean> {
-    const command = this.#runner.getRegisteredCommands().get(name);
-    if (!command) {
-      return false;
-    }
-    this.#commandDispatchGate.begin();
-    try {
-      await command.handler(args, this.createCommandContext());
-      return true;
-    } finally {
-      this.#commandDispatchGate.finishAfterCommand();
-    }
-  }
-
-  private async flushCommandDispatchBuffer(): Promise<void> {
-    const buffer = this.#commandDispatchGate.consumeBufferedItems();
-    if (buffer.length === 0) {
-      return;
-    }
-    for (const item of buffer) {
-      if (item.kind === "user") {
-        await this.prompt(item.parts, {
-          expandPromptTemplates: false,
-          source: "extension",
-        });
-        continue;
-      }
-      await this.sendCustomMessage(item.message, { triggerTurn: true });
-    }
+    this.#toolRegistry.setActiveTools(toolNames, this.toolApplicationDeps());
   }
 
   private async queueUserMessage(
@@ -1417,60 +1032,18 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.emitQueuedPromptChange();
   }
 
-  private async sendCustomMessage(
+  private sendCustomMessage(
     message: BrewvaHostCustomMessage,
     options?: { triggerTurn?: boolean; deliverAs?: BrewvaHostCustomMessageDelivery },
   ): Promise<void> {
-    const customMessage = toTurnLoopCustomMessage(message);
-
-    if (options?.deliverAs === "nextTurn") {
-      this.#deferredTurnState.pushNextTurnMessage(customMessage);
-      return;
-    }
-
-    if (options?.deliverAs === "transcript") {
-      await this.#eventBridge.appendPassiveCustomMessage(customMessage, { transcript: true });
-      return;
-    }
-
-    if (
-      !this.isStreaming &&
-      options?.triggerTurn &&
-      this.#commandDispatchGate.bufferTriggeredCustom(message)
-    ) {
-      return;
-    }
-
-    if (this.isStreaming) {
-      this.#deferredTurnState.pushNextTurnMessage(customMessage);
-      return;
-    }
-
-    if (options?.triggerTurn) {
-      this.#deferredTurnState.pushNextTurnMessage(customMessage);
-      await this.prompt(promptPartsFromCustomMessage(message), {
-        expandPromptTemplates: false,
-        source: "extension",
-      });
-      return;
-    }
-
-    await this.#eventBridge.appendPassiveCustomMessage(customMessage);
+    return this.#commandRouter.sendCustomMessage(message, options);
   }
 
-  private async sendUserMessage(
+  private sendUserMessage(
     content: BrewvaPromptContentPart[],
     options?: { deliverAs?: "queue" | "followUp" },
   ): Promise<void> {
-    if (!this.isStreaming && this.#commandDispatchGate.bufferUser(content)) {
-      return;
-    }
-
-    await this.prompt(content, {
-      expandPromptTemplates: false,
-      streamingBehavior: options?.deliverAs,
-      source: "extension",
-    });
+    return this.#commandRouter.sendUserMessage(content, options);
   }
 
   private createToolContext(): BrewvaToolContext {
@@ -1497,24 +1070,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     };
   }
 
-  private createHostContext() {
+  private createHostContext(): BrewvaHostContext {
     return this.createToolContext();
-  }
-
-  private createCommandContext(): BrewvaHostCommandContext {
-    const hostContext = this.createHostContext();
-    return {
-      ...hostContext,
-      waitForIdle: () => this.waitForIdle(),
-      newSession: this.#commandUnsupported,
-      fork: this.#commandUnsupported,
-      navigateTree: this.#commandUnsupported,
-      switchSession: this.#commandUnsupported,
-      reload: async () => {
-        await this.#resourceLoader.reload();
-        this.refreshTools();
-      },
-    };
   }
 
   private async handleAgentEvent(
@@ -1579,201 +1136,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     void this.#deferredCompaction.request(request);
   }
 
-  private async resolveCompactionSummary(input: {
-    sessionId: string;
-    messages: readonly unknown[];
-    customInstructions?: string;
-  }): Promise<ResolvedCompactionSummary> {
-    try {
-      const stateModel = this.#agent.state.model;
-      const model = stateModel ? this.#catalog.find(stateModel.provider, stateModel.id) : undefined;
-      if (!model) {
-        throw new Error("compaction_summary_model_unavailable");
-      }
-      const generated = await generateCompactionSummaryWithPromptTooLargeRetry({
-        input: {
-          sessionId: input.sessionId,
-          cwd: this.#cwd,
-          model,
-          messages: input.messages,
-          systemPrompt: this.#agent.state.systemPrompt,
-          customInstructions: input.customInstructions,
-        },
-        generate: this.#compactionSummaryGenerator,
-      });
-      return {
-        summary: normalizeCompactionSummaryForStorage(generated.summary),
-        strategy: generated.strategy ?? LLM_PRIMARY_COMPACTION_STRATEGY,
-        model: generated.model ?? {
-          provider: model.provider,
-          id: model.id,
-          api: model.api,
-        },
-        usage: generated.usage,
-      };
-    } catch (error) {
-      return {
-        summary: buildBrewvaDeterministicCompactionSummary(input.messages),
-        strategy: DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
-        fallbackReason: compactionFallbackReason(error),
-      };
-    }
-  }
-
-  private recordCompactionGenerationCost(
-    sessionId: string,
-    resolution: ResolvedCompactionSummary,
-  ): void {
-    if (!this.#runtime || !resolution.model || !resolution.usage) {
-      return;
-    }
-    recordRuntimeAssistantCost(this.#runtime, {
-      sessionId,
-      model: `${resolution.model.provider}/${resolution.model.id}`,
-      inputTokens: nonNegativeUsageNumber(resolution.usage.input),
-      outputTokens: nonNegativeUsageNumber(resolution.usage.output),
-      cacheReadTokens: nonNegativeUsageNumber(resolution.usage.cacheRead),
-      cacheWriteTokens: nonNegativeUsageNumber(resolution.usage.cacheWrite),
-      totalTokens: nonNegativeUsageNumber(resolution.usage.totalTokens),
-      costUsd: nonNegativeUsageNumber(resolution.usage.cost?.total),
-      stopReason: "compaction_summary",
-    });
-  }
-
-  private async previewDeferredCompaction(
-    request: BrewvaCompactionRequest,
-  ): Promise<PreparedDeferredCompaction> {
-    const branchEntries = this.sessionManager.getBranch();
-    const originalContext = this.sessionManager.buildSessionContext();
-    const sessionId = this.sessionManager.getSessionId();
-    const sourceLeafEntryId = this.sessionManager.getLeafId() ?? null;
-    const summaryResolution = await this.resolveCompactionSummary({
-      sessionId,
-      messages: originalContext.messages,
-      customInstructions: request.customInstructions,
-    });
-    const summary = summaryResolution.summary;
-    const summaryGeneration = buildCompactionSummaryGenerationMetadata(summaryResolution);
-    this.recordCompactionGenerationCost(sessionId, summaryResolution);
-    const tokensBefore = estimateBrewvaCompactionTokens(originalContext.messages);
-    const preview = this.sessionManager.previewCompaction(
-      summary,
-      tokensBefore,
-      randomUUID(),
-      sourceLeafEntryId,
-    );
-    return {
-      request,
-      sessionId,
-      branchEntries,
-      originalContext,
-      sourceLeafEntryId,
-      summary,
-      summaryGeneration,
-      preview,
-    };
-  }
-
-  private buildDeferredCompactionEvents(
-    prepared: PreparedDeferredCompaction,
-  ): BuiltDeferredCompactionEvents {
-    return {
-      beforeCompactEvent: {
-        type: "session_before_compact",
-        preparation: {
-          ...prepared.summaryGeneration,
-        },
-        branchEntries: prepared.branchEntries,
-        customInstructions: prepared.request.customInstructions,
-      },
-      compactEvent: {
-        type: "session_compact",
-        compactionEntry: {
-          id: prepared.preview.compactId,
-          summary: prepared.summary,
-          content: prepared.summary,
-          text: prepared.summary,
-          sourceLeafEntryId: prepared.preview.sourceLeafEntryId,
-          firstKeptEntryId: prepared.preview.firstKeptEntryId,
-          tokensBefore: prepared.preview.tokensBefore,
-          summaryGeneration: prepared.summaryGeneration,
-        },
-        fromExtension: false,
-      },
-    };
-  }
-
-  private async finalizeDeferredCompaction(
-    prepared: PreparedDeferredCompaction,
-    built: BuiltDeferredCompactionEvents,
-  ): Promise<void> {
-    await this.#runner.emit(
-      "session_before_compact",
-      built.beforeCompactEvent,
-      this.createHostContext(),
-    );
-    this.emitToListeners(built.beforeCompactEvent);
-    await this.replaceMessages(prepared.preview.context.messages);
-    await this.#runner.emit("session_compact", built.compactEvent, this.createHostContext());
-    this.emitToListeners(built.compactEvent);
-    await this.markSessionCompactedForCacheState();
-    prepared.request.onComplete?.(built.compactEvent);
-  }
-
-  private async salvageDeferredCompaction(
-    prepared: PreparedDeferredCompaction,
-    built: BuiltDeferredCompactionEvents,
-    mode: DeferredCompactionSalvageMode,
-  ): Promise<boolean> {
-    if (mode === "persisted-preview") {
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        await Promise.resolve();
-        await new Promise((settle) => setTimeout(settle, 0));
-        const persistedBranch = this.sessionManager.getBranch();
-        const persistedLeaf = persistedBranch[persistedBranch.length - 1];
-        const persistedContext = this.sessionManager.buildSessionContext();
-        if (
-          (persistedLeaf?.type === "compaction" &&
-            persistedLeaf.summary === prepared.summary &&
-            persistedLeaf.firstKeptEntryId === prepared.preview.firstKeptEntryId &&
-            persistedLeaf.tokensBefore === prepared.preview.tokensBefore) ||
-          sameSessionMessages(persistedContext.messages, prepared.preview.context.messages)
-        ) {
-          await this.replaceMessages(persistedContext.messages);
-          this.emitToListeners(built.compactEvent);
-          await this.markSessionCompactedForCacheState();
-          prepared.request.onComplete?.(built.compactEvent);
-          return true;
-        }
-      }
-      return false;
-    }
-
-    await Promise.resolve();
-    await new Promise((settle) => setTimeout(settle, 0));
-    const settledBranch = this.sessionManager.getBranch();
-    const settledLeaf = settledBranch[settledBranch.length - 1];
-    if (settledLeaf?.type !== "compaction") {
-      return false;
-    }
-    const settledContext = this.sessionManager.buildSessionContext();
-    await this.replaceMessages(settledContext.messages);
-    this.emitToListeners(built.compactEvent);
-    await this.markSessionCompactedForCacheState();
-    prepared.request.onComplete?.(built.compactEvent);
-    return true;
-  }
-
-  private async rollbackDeferredCompaction(prepared: PreparedDeferredCompaction): Promise<void> {
-    await this.replaceMessages(prepared.originalContext.messages);
-  }
-
   private async transitionCrashAndResume(anchor: string): Promise<void> {
     await this.#phaseCoordinator.transitionCrashAndResume(anchor);
-  }
-
-  private async transitionSessionPhase(event: SessionPhaseEvent): Promise<void> {
-    await this.#phaseCoordinator.transition(event);
   }
 
   private async reconcileSessionPhase(nextPhase: SessionPhase): Promise<void> {
@@ -1805,21 +1169,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     console.warn("managed_agent_session_phase_reconcile_mismatch", fields);
   }
 
-  private getSessionPhase(): SessionPhase {
-    const localPhase = this.#phaseCoordinator.get();
-    const lifecycleSnapshot = this.sessionManager.readLifecycle?.();
-    const projected = lifecycleSnapshot
-      ? deriveSessionPhaseFromLifecycleSnapshot(lifecycleSnapshot, this.resolvePhaseTurn())?.phase
-      : null;
-    if (!projected) {
-      return localPhase;
-    }
-    if (projected.kind !== "idle" || localPhase.kind === "idle") {
-      return projected;
-    }
-    return localPhase;
-  }
-
   private resolvePhaseTurn(): number {
     return resolvePhaseTurn(this.#turnIndex);
   }
@@ -1838,20 +1187,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   #recordRuntimeEvent(type: string, payload: Record<string, unknown>): void {
-    if (!this.#runtime) {
-      return;
-    }
-    const event = {
-      sessionId: this.sessionManager.getSessionId(),
-      payload,
-    };
-    if (type === STEER_QUEUED_EVENT_TYPE) {
-      this.#runtime.ops.tools.steering.queued(event);
-    } else if (type === STEER_APPLIED_EVENT_TYPE) {
-      this.#runtime.ops.tools.steering.applied(event);
-    } else if (type === STEER_DROPPED_EVENT_TYPE) {
-      this.#runtime.ops.tools.steering.dropped(event);
-    }
+    recordSteeringAuditEvent(this.#runtime, this.sessionManager.getSessionId(), type, payload);
   }
 
   private async syncContextState(): Promise<void> {

@@ -20,6 +20,24 @@ export const EMPTY_WORKBENCH_CONTEXT_FINGERPRINT: WorkbenchContextFingerprintInp
   contentHash: null,
 };
 
+/**
+ * Single-slot holder for the latest workbench-context fingerprint. The prompt
+ * dispatch path writes via `set(...)` while the provider payload pipeline reads
+ * via `get()`, so both sides share one instance instead of reaching across the
+ * session for a mutable class field.
+ */
+export class WorkbenchContextFingerprintHolder {
+  #value: WorkbenchContextFingerprintInput = { ...EMPTY_WORKBENCH_CONTEXT_FINGERPRINT };
+
+  get(): WorkbenchContextFingerprintInput {
+    return this.#value;
+  }
+
+  set(value: WorkbenchContextFingerprintInput): void {
+    this.#value = value;
+  }
+}
+
 export function resolveWorkbenchContextFingerprint(
   messages: readonly BrewvaHostCustomMessage[] | undefined,
 ): WorkbenchContextFingerprintInput {

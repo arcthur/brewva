@@ -8,11 +8,7 @@ import type {
 import { observeHostedProviderCache } from "../../context/materialization.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import { providerCacheCountersAvailable } from "./provider-cache-state.js";
-
-export interface ManagedSessionProviderAssistantObserverState {
-  lastProviderFingerprint: ProviderRequestFingerprint | undefined;
-  lastCacheRender: ProviderCacheRenderState | undefined;
-}
+import type { ProviderCacheObserverView } from "./session-contracts.js";
 
 export interface ManagedSessionProviderAssistantObserverOptions {
   runtime: HostedRuntimeAdapterPort | undefined;
@@ -29,7 +25,7 @@ export interface ManagedSessionProviderAssistantObserverOptions {
     }): ProviderCacheBreakObservation;
   };
   resolveExpectedBreak: () => ExpectedProviderCacheBreak | undefined;
-  state: () => ManagedSessionProviderAssistantObserverState;
+  state: () => ProviderCacheObserverView;
 }
 
 export class ManagedSessionProviderAssistantObserver {

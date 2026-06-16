@@ -1,8 +1,13 @@
 import type {
+  Api,
+  Model as ProviderModel,
   ProviderCachePolicy,
+  ProviderCacheRenderResult,
+  ProviderPayloadMetadata,
   ProviderRequestFingerprint,
 } from "@brewva/brewva-provider-core/contracts";
 import type {
+  BrewvaAgentProtocolMessage,
   BrewvaAgentProtocolThinkingBudgets,
   BrewvaAgentProtocolThinkingLevel,
   BrewvaAgentProtocolTransport,
@@ -11,6 +16,7 @@ import type {
   CreateBrewvaHostPluginRunnerOptions,
   BrewvaToolUiPort,
 } from "@brewva/brewva-substrate/host-api";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
@@ -39,6 +45,7 @@ import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { BrewvaCompactionSummaryGenerator } from "../../compaction/summary-generator.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
+import type { RuntimeProviderContextSummary } from "../../turn-adapter/runtime-provider-context.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { HostedModelRoutingSettings } from "../settings/settings-store.js";
 import type { BrewvaSessionTitleGenerator } from "../title-generator.js";
@@ -170,13 +177,6 @@ export interface ManagedAgentSessionStore extends ManagedAgentSessionStoreCore {
   };
 }
 
-export type ToolResultForAgent = {
-  content: Array<
-    { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
-  >;
-  details: unknown;
-};
-
 export interface PreparedDeferredCompaction {
   request: BrewvaCompactionRequest;
   sessionId: string;
@@ -216,4 +216,37 @@ export interface ProviderCacheRuntimeState {
   lastCacheRender: ProviderCacheRenderState | undefined;
   lastCacheRenderModelKey: string | undefined;
   lastExpectedProviderCacheBreak: ExpectedProviderCacheBreak | undefined;
+}
+
+export type ProviderCacheObserverView = Pick<
+  ProviderCacheRuntimeState,
+  "lastProviderFingerprint" | "lastCacheRender"
+>;
+
+export type PreparedManagedPromptDispatch =
+  | {
+      readonly status: "ready";
+      readonly promptText: string;
+      readonly promptContent: readonly BrewvaPromptContentPart[];
+      readonly messages: readonly BrewvaAgentProtocolMessage[];
+      readonly source: string | undefined;
+    }
+  | {
+      readonly status: "handled" | "queued";
+    };
+
+export interface RuntimeProviderPayloadInput {
+  readonly payload: unknown;
+  readonly model: ProviderModel<Api>;
+  readonly metadata?: ProviderPayloadMetadata;
+  readonly turn: {
+    readonly sessionId: string;
+    readonly turnId?: string;
+  };
+  readonly providerContext: RuntimeProviderContextSummary;
+}
+
+export interface RuntimeProviderCacheRenderInput {
+  readonly render: ProviderCacheRenderResult;
+  readonly model: ProviderModel<Api>;
 }
