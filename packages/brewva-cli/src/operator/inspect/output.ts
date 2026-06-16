@@ -103,8 +103,9 @@ export function formatInspectDiagnosticText(report: InspectReport): string {
     `Workspace: ${report.workspaceRoot}`,
     `Config: mode=${report.configLoad.mode} paths=${renderList(report.configLoad.paths)} warnings=${report.configLoad.warningCount}`,
     "",
-    `Hydration: status=${report.hydration.status} issues=${report.hydration.issueCount} hydratedAt=${report.hydration.hydratedAt ?? "n/a"}`,
-    `Integrity: status=${report.integrity.status} issues=${report.integrity.issueCount}`,
+    `Hydration: status=${report.hydration.status} issues=${report.hydration.issueCount} hydratedAt=${report.hydration.hydratedAt ?? "n/a"} reason=${report.hydration.reason ?? "n/a"}`,
+    `Integrity: status=${report.integrity.status} issues=${report.integrity.issueCount} reason=${report.integrity.reason ?? "n/a"}`,
+    `Recovery capabilities: ${report.recoveryCapabilities.capabilities.map((capability) => `${capability.name}=${capability.available ? "yes" : "no"}`).join(" ")}`,
     `Replay: events=${report.replay.eventCount} first=${report.replay.firstEventAt ?? "n/a"} last=${report.replay.lastEventAt ?? "n/a"}`,
     `Replay: anchors=${report.replay.anchorCount} checkpoints=${report.replay.checkpointCount} tapePressure=${report.replay.tapePressure} entriesSinceAnchor=${report.replay.entriesSinceAnchor}`,
     `Model preset: active=${report.modelPreset.activeName} roles=${renderList(Object.keys(report.modelPreset.roles))} source=${report.modelPreset.source ?? "synthetic"} selectedAt=${report.modelPreset.selectedAt ?? "n/a"}`,
@@ -176,7 +177,7 @@ export function formatInspectDiagnosticText(report: InspectReport): string {
   if (report.hydration.issues.length > 0) {
     for (const issue of report.hydration.issues.slice(0, 5)) {
       lines.push(
-        `Hydration issue: index=${issue.index} type=${issue.eventType} event=${issue.eventId} reason=${issue.reason}`,
+        `Hydration issue: domain=${issue.domain} severity=${issue.severity} index=${issue.index} type=${issue.eventType} event=${issue.eventId} reason=${issue.reason}`,
       );
     }
   }
@@ -185,6 +186,11 @@ export function formatInspectDiagnosticText(report: InspectReport): string {
       lines.push(
         `Integrity issue: domain=${issue.domain} severity=${issue.severity} event=${issue.eventId ?? "n/a"} reason=${issue.reason}`,
       );
+    }
+  }
+  for (const capability of report.recoveryCapabilities.capabilities) {
+    if (!capability.available && capability.reasons.length > 0) {
+      lines.push(`Recovery denied: ${capability.name} reasons=${capability.reasons.join("; ")}`);
     }
   }
   if (

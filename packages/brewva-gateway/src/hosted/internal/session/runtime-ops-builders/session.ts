@@ -2,10 +2,21 @@ import type { WorkerMergeReport } from "@brewva/brewva-vocabulary/delegation";
 import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
+  buildSessionRewindProjection,
+  listSessionRewindTargets,
+} from "@brewva/brewva-vocabulary/session";
+import {
   TASK_STALL_ADJUDICATED_EVENT_TYPE,
   TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
   TASK_STUCK_DETECTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/task";
+import {
+  executeRedo,
+  executeRewind,
+  previewWorkspaceRewind,
+  recordRewindCheckpoint,
+} from "../recovery/rewind-engine.js";
+import { projectRewindState } from "../recovery/rewind-state.js";
 import { rememberCommittedCompactionContextState } from "../runtime-ops-compaction-state.js";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
@@ -50,13 +61,8 @@ export function buildSessionRuntimeOps(
       compactFailed: ctx.recordSemanticEvent("compact_failed"),
       compactRequestFailed: ctx.recordSemanticEvent("compact_request_failed"),
       compactRequested: ctx.recordSemanticEvent("compact_requested"),
-      getHydration: () => ({
-        status: "ready",
-        hydratedAt: Date.now(),
-        latestEventId: null,
-        issues: [],
-      }),
-      getIntegrity: () => ({ status: "healthy", issues: [] }),
+      getHydration: (sessionId) => ctx.projections.hydration(sessionId),
+      getIntegrity: (sessionId) => ctx.projections.integrity(sessionId),
       getOpenToolCalls: () => [],
       getUncleanShutdownDiagnostic: () => undefined,
       inputObserved: ctx.recordSemanticEvent("session_input_observed"),
@@ -164,22 +170,17 @@ export function buildSessionRuntimeOps(
       toolCallFailed: ctx.recordInputPayload("mcp_tool_call_failed"),
     },
     rewind: {
-      getState: () => ({
-        checkpoints: [],
-        rewindAvailable: false,
-        redoAvailable: false,
-        redoStack: [],
-      }),
-      listTargets: () => [],
-      recordCheckpoint: ctx.recordSessionPayload("session_rewind_checkpoint"),
-      rewind: (_sessionId, input) => ({
-        ok: false,
-        reason: "no_checkpoint",
-        trigger: "rewind",
-        mode: input.mode ?? "both",
-        summary: input.summary ?? "carry",
-      }),
-      redo: () => ({ ok: false, reason: "no_redo" }),
+      getState: (sessionId) => projectRewindState(sessionId, ctx.listEvents(sessionId)),
+      listTargets: (sessionId) => [
+        ...listSessionRewindTargets(
+          buildSessionRewindProjection({ sessionId, events: ctx.listEvents(sessionId) }),
+        ),
+      ],
+      workspaceReadiness: (sessionId, checkpointId) =>
+        previewWorkspaceRewind(ctx, sessionId, checkpointId),
+      recordCheckpoint: (sessionId, input) => recordRewindCheckpoint(ctx, sessionId, input),
+      rewind: (sessionId, input) => executeRewind(ctx, sessionId, input),
+      redo: (sessionId, input) => executeRedo(ctx, sessionId, input),
     },
     stall: {
       poll(sessionId, inputValue) {

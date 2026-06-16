@@ -1,11 +1,14 @@
 export {
-  ATTENTION_OPTION_PROJECTION_SCHEMA_V1,
   buildSessionRewindProjection,
+  listSessionRewindTargets,
+} from "./internal/session-rewind.js";
+
+export {
+  ATTENTION_OPTION_PROJECTION_SCHEMA_V1,
   decideContinuationAnchorRelevance,
   DEFAULT_SESSION_TITLE,
   deriveSessionLineageState,
   findSessionLineageRoot,
-  listSessionRewindTargets,
   MESSAGE_END_EVENT_TYPE,
   normalizeAgentId,
   readSessionRewindCompletedEventPayload,

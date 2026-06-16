@@ -26,7 +26,6 @@ import type {
   SessionRewindTargetView,
 } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
-import type { PatchRollbackResult } from "@brewva/brewva-vocabulary/workbench";
 import type { CliInspectPort, CliOperatorPort } from "../../runtime/cli-runtime-ports.js";
 import type { BrewvaSessionResult } from "../../session/session.js";
 import type { ShellCockpitWireFoldSnapshot } from "../domain/cockpit/index.js";
@@ -178,12 +177,6 @@ export interface SessionViewPort {
   getTranscriptSeed(): unknown[];
   recordRewindCheckpoint(input: RecordSessionRewindCheckpointInput): Promise<void>;
   rewindSession(input?: SessionRewindInput): Promise<SessionRewindResult>;
-  /**
-   * Workspace-plane recovery over the tracked patch lifecycle. Distinct from
-   * session rewind (the conversation-lineage plane); /undo composes both and
-   * reports each plane's outcome explicitly.
-   */
-  rollbackLastPatchSet(): PatchRollbackResult;
   redoSession(input?: SessionRedoInput): Promise<SessionRedoResult>;
   getRewindState(): SessionRewindState;
   listRewindTargets(): SessionRewindTargetView[];

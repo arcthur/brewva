@@ -504,7 +504,6 @@ export async function runCliRootOperation(): Promise<void> {
       cwd: parsed.cwd,
       configPath: parsed.configPath,
     });
-    const inspect = createCliInspectPort(runtime);
     const targetSessionId = parsed.sessionId ?? resolveTargetSession(runtime, undefined);
     if (!targetSessionId) {
       console.error("Error: no replayable session found.");
@@ -517,12 +516,12 @@ export async function runCliRootOperation(): Promise<void> {
       physics: { mode: "noop" },
     });
     await canonicalRuntime.start();
-    const canonicalEvents = canonicalRuntime.tape.list(targetSessionId);
-    const events =
-      canonicalEvents.length > 0
-        ? canonicalEvents
-        : inspect.events.queryStructured(targetSessionId);
-    const replayEvents = toReplayEventRecords(targetSessionId, events);
+    // Replay and timeline read the canonical tape only — there is no non-canonical
+    // fallback source (RFC: raw replay and timeline share the canonical source).
+    const replayEvents = toReplayEventRecords(
+      targetSessionId,
+      canonicalRuntime.tape.list(targetSessionId),
+    );
     const timeline = parsed.replayTimeline
       ? projectDelegationInspectionState({
           sessionId: targetSessionId,
@@ -559,7 +558,10 @@ export async function runCliRootOperation(): Promise<void> {
       parsed.redo ? "redo" : "undo",
       parsed.sessionId,
     );
-    const lineageResult = targetSessionId
+    // One transaction owner: undo/redo go through the rewind engine, which rolls
+    // tracked workspace patch sets back to the checkpoint boundary in the same
+    // transaction as the conversation fork. There is no separate patch-only plane.
+    const result = targetSessionId
       ? parsed.redo
         ? operator.session.redo(targetSessionId)
         : operator.session.rewind(targetSessionId, {
@@ -567,42 +569,17 @@ export async function runCliRootOperation(): Promise<void> {
             summary: "carry",
           })
       : null;
-    if (lineageResult?.ok) {
-      const promptSuffix = lineageResult.restoredPrompt?.text
-        ? ` Restored prompt: ${lineageResult.restoredPrompt.text.trim()}`
+    if (result?.ok) {
+      const promptSuffix = result.restoredPrompt?.text
+        ? ` Restored prompt: ${result.restoredPrompt.text.trim()}`
         : "";
       console.log(
-        `Session ${parsed.redo ? "redo" : "undo"} applied in session ${targetSessionId} (${lineageResult.patchSetIds.length} patch set(s)).${promptSuffix}`,
+        `Session ${parsed.redo ? "redo" : "undo"} applied in session ${targetSessionId} (${result.patchSetIds.length} patch set(s)).${promptSuffix}`,
       );
       return;
     }
-    const lineageReason =
-      lineageResult && !lineageResult.ok ? lineageResult.reason : "no_checkpoint";
-    if (parsed.redo) {
-      console.log(`No session redo applied (${lineageReason}).`);
-      return;
-    }
-    // Undo composes two recovery planes: lineage rewind (above) and patch
-    // rollback over tracked workspace mutations. When lineage has nothing to
-    // rewind, the workspace plane is still attempted and reported on its own
-    // terms.
-    const rollbackSessionId = parsed.sessionId ?? targetSessionId;
-    if (!rollbackSessionId) {
-      console.log(
-        `No session undo applied (lineage: ${lineageReason}; workspace: pass --session to target tracked patch rollback).`,
-      );
-      return;
-    }
-    const rollback = operator.tools.rollbackLastPatchSet(rollbackSessionId);
-    if (rollback.ok) {
-      console.log(
-        `Workspace rollback applied in session ${rollbackSessionId}: restored patch set ${rollback.patchSetId ?? "unknown"} (${rollback.restoredPaths.length} file(s)). Lineage rewind unavailable (${lineageReason}).`,
-      );
-    } else {
-      console.log(
-        `No session undo applied (lineage: ${lineageReason}; workspace: ${rollback.reason ?? "no_patchset"}).`,
-      );
-    }
+    const reason = result && !result.ok ? result.reason : "no_checkpoint";
+    console.log(`No session ${parsed.redo ? "redo" : "undo"} applied (${reason}).`);
     return;
   }
 

@@ -384,30 +384,10 @@ export class ShellSessionHandler {
     }
     const result = await this.context.getSessionPort().rewindSession();
     if (!result.ok) {
-      // The lineage plane has nothing to rewind; the workspace plane may
-      // still hold tracked mutations. /undo composes both and reports each
-      // plane's outcome explicitly instead of pretending they are one.
-      const rollback = this.context.getSessionPort().rollbackLastPatchSet();
-      if (rollback.ok) {
-        this.context.transcriptProjector.setRewindMarker(
-          `Workspace rollback applied: restored patch set ${rollback.patchSetId ?? "unknown"} (${rollback.restoredPaths.length} file(s)). Conversation lineage rewind unavailable (${result.reason}).`,
-        );
-        this.context.transcriptProjector.refreshFromSession();
-        this.context
-          .getUi()
-          .notify(
-            `Rolled back ${rollback.restoredPaths.length} file(s) from the last tracked patch set; lineage rewind unavailable (${result.reason}).`,
-            "info",
-          );
-        this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
-        return;
-      }
-      this.context
-        .getUi()
-        .notify(
-          `Undo unavailable (lineage: ${result.reason}; workspace: ${rollback.reason ?? "no_patchset"}).`,
-          "warning",
-        );
+      // One recovery owner: /undo IS the session rewind transaction (conversation
+      // plus workspace through one engine). There is no separate workspace-only
+      // plane to compose, so report why the transaction could not run.
+      this.context.getUi().notify(`Undo unavailable: ${result.reason}.`, "warning");
       return;
     }
     this.context.transcriptProjector.setRewindMarker(

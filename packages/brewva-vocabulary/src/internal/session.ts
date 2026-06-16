@@ -2,7 +2,6 @@ import { CONTEXT_ENTRY_RECORDED_EVENT_TYPE, type ContextEntryRecord } from "./co
 import { type BrewvaEventRecord } from "./events.js";
 import { isProtocolRecord, optionalStringField, readStringArray, stringField } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
-import type { SessionRewindTargetView } from "./types/session-rewind.js";
 import { type SessionWireFrame, type TurnEnvelope } from "./wire.js";
 
 export type { ProtocolRecord } from "./types/foundation.js";
@@ -780,15 +779,4 @@ export function findSessionLineageRoot(
 ): ProtocolRecord | null {
   const root = tree.root ?? null;
   return root && isProtocolRecord(root) ? root : null;
-}
-
-export function buildSessionRewindProjection(input: ProtocolRecord): ProtocolRecord {
-  return { targets: [], ...input };
-}
-
-export function listSessionRewindTargets(
-  input: ProtocolRecord,
-): readonly SessionRewindTargetView[] {
-  const targets = input.targets;
-  return Array.isArray(targets) ? (targets as SessionRewindTargetView[]) : [];
 }

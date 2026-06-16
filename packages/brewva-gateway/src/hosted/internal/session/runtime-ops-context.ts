@@ -1,6 +1,11 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { BrewvaRuntime } from "@brewva/brewva-runtime";
+import type { BrewvaRuntime, TapeForensicScan } from "@brewva/brewva-runtime";
+import {
+  emptyTapeForensicScan,
+  resolveTapeFilePath,
+  scanTapeFileForensics,
+} from "@brewva/brewva-runtime";
 import {
   classifyToolBoundaryRequest,
   CONTEXT_CRITICAL_ALLOWED_TOOLS,
@@ -424,7 +429,18 @@ export function createHostedRuntimeOpsContext(options: {
     };
   }
 
-  const projections = createHostedProjections({ listEvents });
+  const scanTape = (sessionId: string): TapeForensicScan =>
+    options.runtime.config.tape.enabled
+      ? scanTapeFileForensics(
+          resolveTapeFilePath(
+            options.runtime.identity.workspaceRoot,
+            options.runtime.config.tape.dir,
+            sessionId,
+          ),
+          sessionId,
+        )
+      : emptyTapeForensicScan(sessionId);
+  const projections = createHostedProjections({ listEvents, scanTape, clock });
 
   return {
     runtime: options.runtime,

@@ -22,6 +22,24 @@ Describe how a persisted session is reconstructed by inspection surfaces and how
 operators move through the `inspect -> replay -> integrity -> rewind/redo` path
 to diagnose issues, recover state, and validate outcomes.
 
+## Implementation Status
+
+Hydration, the recovery projections, and the rewind/redo engine are implemented
+under `docs/research/active/rfc-inspect-replay-and-recovery-optimization.md`:
+hydration projects `cold`/`ready`/`degraded` from tape with a source cursor;
+conversation and workspace rewind and redo run through one gateway-owned
+transaction engine with per-turn auto-checkpoints and supersession; recovery
+capabilities are evidence-derived. Integrity currently verifies the event tape
+(degrading on damage) and stays `inconclusive` until WAL, artifact, and ledger
+checks also run. World-changing rewind invalidates verification evidence
+structurally rather than through an authority-bearing event: patch-set rollback
+detaches the patch-set-keyed evidence the gate matches on (`containsAll` over
+`patchSetRefs`), so stale outcomes fall to a `stale`/`missing` posture by
+consequence. A dedicated "verification debt created by recovery" Work Card line
+and original-prompt restoration on `--undo` remain intended refinements. Read
+present-tense descriptions of the unchecked integrity dimensions and those
+refinements as the intended contract, not yet a shipped guarantee.
+
 ## In Scope
 
 - inspect report construction
@@ -101,9 +119,18 @@ flowchart TD
   disposition respectively
 - verifier evidence is advisory debt; it can enter inspect/workboard, but not
   worker merge/apply authority
+- checkpoint domains are distinct contracts and must not share an ambiguous
+  identity, though they may reference one another:
+  - model materialization checkpoints (`checkpoint.committed`) anchor replay
+    baseline reconstruction
+  - session fold baselines anchor what survived a `session_compact`
+  - operator recovery checkpoints anchor `/rewind` and `--undo`/`--redo`
 - hydration and integrity are distinct views:
-  - hydration reports whether replay successfully rebuilt session-local state
-  - integrity reports unified durability health across tape, WAL, and artifacts
+  - hydration reports whether replay successfully rebuilt session-local state,
+    as `cold`/`ready`/`degraded` with a source cursor
+  - integrity reports durability health: it degrades on `event_tape` damage and
+    stays `inconclusive` until WAL, artifact, and ledger checks also run, rather
+    than ever claiming health it has not verified
 
 ## Failure And Recovery
 

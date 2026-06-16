@@ -57,6 +57,18 @@ function collectPatchRollbackEvidence(
 export interface HostedPatchRollbackOps {
   rollbackLastPatchSet(sessionId: string): PatchRollbackResult;
   rollbackCandidate(sessionId: string): PatchRollbackCandidateView;
+  /**
+   * Readonly check that every patch set in a rewind window still has valid
+   * rollback material, validated newest-first without touching the tape or the
+   * workspace — so inspect can report workspace-rewind availability honestly
+   * instead of promising a rewind the fail-closed engine would reject. The
+   * boundary patch is excluded by the caller's window, so its material is
+   * irrelevant.
+   */
+  previewWindowRollback(
+    sessionId: string,
+    windowPatchSetIds: readonly string[],
+  ): { readonly ready: boolean; readonly blockedReason: string | null };
 }
 
 /**
@@ -132,6 +144,37 @@ export function buildHostedPatchRollbackOps(ctx: HostedRuntimeOpsContext): Hoste
         affectedPaths: resolution.candidate.affectedPaths,
         artifactAvailable: true,
       };
+    },
+    previewWindowRollback(
+      sessionId: string,
+      windowPatchSetIds: readonly string[],
+    ): { readonly ready: boolean; readonly blockedReason: string | null } {
+      if (windowPatchSetIds.length === 0) {
+        return { ready: true, blockedReason: null };
+      }
+      const workspaceRoot = ctx.runtime.identity.workspaceRoot;
+      const evidence = collectPatchRollbackEvidence(ctx, sessionId);
+      // Validate the window newest-first by simulating progressive rollback: each
+      // window patch must resolve to a valid candidate. The boundary patch (first
+      // candidate outside the window) ends validation — its material never matters.
+      const rolledBack = new Set(evidence.rolledBackPatchSetIds);
+      const windowSet = new Set(windowPatchSetIds);
+      for (let index = 0; index < windowPatchSetIds.length; index += 1) {
+        const resolution = resolveLatestRollbackCandidate({
+          workspaceRoot,
+          sessionId,
+          appliedPatchSets: evidence.appliedPatchSets,
+          rolledBackPatchSetIds: rolledBack,
+        });
+        if (resolution.kind === "none") {
+          return { ready: false, blockedReason: resolution.reason };
+        }
+        if (!windowSet.has(resolution.candidate.patchSetId)) {
+          break;
+        }
+        rolledBack.add(resolution.candidate.patchSetId);
+      }
+      return { ready: true, blockedReason: null };
     },
   };
 }

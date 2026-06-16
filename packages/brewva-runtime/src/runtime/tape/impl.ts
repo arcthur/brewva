@@ -35,6 +35,7 @@ import type {
   TurnStateView,
 } from "../runtime-api.js";
 import { CANONICAL_EVENT_TYPES } from "../runtime-api.js";
+import { resolveTapeFilePath } from "./path.js";
 
 type TapeCommitInput = Parameters<TapeCommitPort["commit"]>[0];
 
@@ -378,17 +379,30 @@ function tapeRoot(persistence: RuntimeTapePersistence): string {
 }
 
 function tapePath(persistence: RuntimeTapePersistence, sessionId: string): string {
-  return resolve(tapeRoot(persistence), `${encodeURIComponent(sessionId)}.jsonl`);
+  return resolveTapeFilePath(persistence.cwd, persistence.tapeDir, sessionId);
 }
 
-function parsePersistedEvent(line: string, filePath: string): CanonicalEvent {
+// Why a single grammar: the strict reader (authoritative replay, fail-closed)
+// and the forensic scanner (tolerant, non-authoritative diagnosis) must agree on
+// exactly what a well-formed tape record is, or they drift into two definitions.
+// `classifyTapeRecord` is that one definition; the strict reader throws on a
+// non-ok classification, the scanner localizes it.
+export type TapeRecordIssueClass =
+  | "malformed_json"
+  | "missing_fields"
+  | "unknown_type"
+  | "invalid_payload";
+
+export type TapeRecordClassification =
+  | { readonly ok: true; readonly event: CanonicalEvent }
+  | { readonly ok: false; readonly issueClass: TapeRecordIssueClass; readonly tag: string };
+
+export function classifyTapeRecord(line: string): TapeRecordClassification {
   let parsed: Partial<CanonicalEvent>;
   try {
     parsed = JSON.parse(line) as Partial<CanonicalEvent>;
   } catch {
-    throw new Error(
-      `unsupported_tape_schema:malformed Remove or archive ${filePath}, then rebuild derived session-index state.`,
-    );
+    return { ok: false, issueClass: "malformed_json", tag: "malformed" };
   }
   if (
     typeof parsed.id !== "string" ||
@@ -397,20 +411,30 @@ function parsePersistedEvent(line: string, filePath: string): CanonicalEvent {
     !isCanonicalEventType(parsed.type) ||
     typeof parsed.timestamp !== "number"
   ) {
-    const type = typeof parsed.type === "string" ? parsed.type : "missing_type";
-    throw new Error(
-      `unsupported_tape_schema:${type} Remove or archive ${filePath}, then rebuild derived session-index state.`,
-    );
+    const hasUnknownType = typeof parsed.type === "string" && !isCanonicalEventType(parsed.type);
+    return {
+      ok: false,
+      issueClass: hasUnknownType ? "unknown_type" : "missing_fields",
+      tag: typeof parsed.type === "string" ? parsed.type : "missing_type",
+    };
   }
   const event = freezeCanonicalEvent(parsed as CanonicalEvent);
   try {
     assertCanonicalEventPayload(event);
   } catch {
+    return { ok: false, issueClass: "invalid_payload", tag: event.type };
+  }
+  return { ok: true, event };
+}
+
+function parsePersistedEvent(line: string, filePath: string): CanonicalEvent {
+  const classified = classifyTapeRecord(line);
+  if (!classified.ok) {
     throw new Error(
-      `unsupported_tape_schema:${event.type} Remove or archive ${filePath}, then rebuild derived session-index state.`,
+      `unsupported_tape_schema:${classified.tag} Remove or archive ${filePath}, then rebuild derived session-index state.`,
     );
   }
-  return event;
+  return classified.event;
 }
 
 function isCustomEventPayload(value: unknown): value is CustomEventPayload {

@@ -9,6 +9,14 @@ export function recordRuntimeContinuationAnchor(
   return runtime.ops.tape.handoff.record(sessionId, input);
 }
 
+export function recordRuntimeTurnRewindCheckpoint(
+  runtime: Pick<HostedRuntimeAdapterPort, "ops">,
+  sessionId: string,
+  input: Parameters<HostedRuntimeAdapterPort["ops"]["session"]["rewind"]["recordCheckpoint"]>[1],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["session"]["rewind"]["recordCheckpoint"]> {
+  return runtime.ops.session.rewind.recordCheckpoint(sessionId, input);
+}
+
 export function commitRuntimeSessionCompaction(
   runtime: Pick<HostedRuntimeAdapterPort, "ops">,
   sessionId: string,

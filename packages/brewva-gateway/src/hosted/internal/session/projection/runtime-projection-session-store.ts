@@ -46,7 +46,6 @@ import {
   MESSAGE_END_EVENT_TYPE,
   readSessionRewindCompletedEventPayload,
   SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2,
-  SESSION_REWIND_COMPLETED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
 import {
   SESSION_REWIND_DIVERGENCE_SCHEMA,
@@ -220,6 +219,21 @@ function sortEvents(events: BrewvaEventRecord[]): BrewvaEventRecord[] {
       return left.index - right.index;
     })
     .map(({ event }) => event);
+}
+
+// Local event-type constants, mirroring the recovery projection (`rewind-state.ts`):
+// these names are emitted by the gateway rewind engine and read here, so they stay
+// gateway-internal rather than widening the vocabulary's curated public surface.
+const SESSION_REWIND_COMPLETED_EVENT_TYPE = "session.rewind.completed";
+const SESSION_REDO_COMPLETED_EVENT_TYPE = "session.redo.completed";
+
+// Rewind and redo share one re-anchor projection: both completion receipts map
+// their reasoning-revert event to a summary mode and move the conversation leaf.
+function isRecoveryCompletionEvent(event: BrewvaEventRecord): boolean {
+  return (
+    event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE ||
+    event.type === SESSION_REDO_COMPLETED_EVENT_TYPE
+  );
 }
 
 export class HostedRuntimeTapeSessionStore {
@@ -792,12 +806,14 @@ export class HostedRuntimeTapeSessionStore {
 
     const events = sortEvents(listRuntimeEvents(this.runtime, this.sessionId));
     for (const event of events) {
-      const rewind =
-        event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE
-          ? readSessionRewindCompletedEventPayload(event)
-          : null;
-      if (rewind?.ok === true && rewind.reasoningRevertEventId) {
-        this.#rewindSummaryModeByRevertEventId.set(rewind.reasoningRevertEventId, rewind.summary);
+      const completion = isRecoveryCompletionEvent(event)
+        ? readSessionRewindCompletedEventPayload(event)
+        : null;
+      if (completion?.ok === true && completion.reasoningRevertEventId) {
+        this.#rewindSummaryModeByRevertEventId.set(
+          completion.reasoningRevertEventId,
+          completion.summary,
+        );
       }
     }
     for (const event of events) {
@@ -811,19 +827,22 @@ export class HostedRuntimeTapeSessionStore {
     }
     this.#seenEventIds.add(event.id);
     this.#eventsById.set(event.id, event);
-    if (event.type === SESSION_REWIND_COMPLETED_EVENT_TYPE) {
-      const rewind = readSessionRewindCompletedEventPayload(event);
-      if (rewind?.ok === true && rewind.reasoningRevertEventId) {
-        this.#rewindSummaryModeByRevertEventId.set(rewind.reasoningRevertEventId, rewind.summary);
-        if (rewind.divergenceNote && options.fromHydration !== true) {
+    if (isRecoveryCompletionEvent(event)) {
+      const completion = readSessionRewindCompletedEventPayload(event);
+      if (completion?.ok === true && completion.reasoningRevertEventId) {
+        this.#rewindSummaryModeByRevertEventId.set(
+          completion.reasoningRevertEventId,
+          completion.summary,
+        );
+        if (completion.divergenceNote && options.fromHydration !== true) {
           this.#maybeUpgradeRewindToRecoveryLineage(event);
           this.#recordContextEntryForSourceEvent(event);
-          if (rewind.summary === "none") {
+          if (completion.summary === "none") {
             this.#hydrateFromRuntime();
           }
           return;
         }
-        if (rewind.summary === "none" && options.fromHydration !== true) {
+        if (completion.summary === "none" && options.fromHydration !== true) {
           this.#hydrateFromRuntime();
           return;
         }
@@ -831,7 +850,13 @@ export class HostedRuntimeTapeSessionStore {
     }
     if (event.type === REASONING_REVERT_EVENT_TYPE) {
       const revert = readReasoningRevertEventPayload(event);
-      if (revert && this.#rewindSummaryModeByRevertEventId.get(event.id) === "none") {
+      const summaryMode = this.#rewindSummaryModeByRevertEventId.get(event.id);
+      // One re-anchor projection shared by rewind and redo, for both summary modes:
+      // the conversation leaf snaps to the rewound/redone checkpoint. For carry a
+      // later durable branch-summary entry (shell `branchWithSummary`) moves the leaf
+      // onward; for headless callers this is the deterministic leaf. Cold hydration
+      // therefore matches the live in-memory leaf for none, carry, and redo alike.
+      if (revert && (summaryMode === "none" || summaryMode === "carry")) {
         this.#leafId = revert.targetLeafEntryId ?? null;
         return;
       }

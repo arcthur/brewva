@@ -738,5 +738,6 @@ export {
   recordRuntimeLineageSummary,
   recordRuntimeReasoningCheckpoint,
   recordRuntimeContinuationAnchor,
+  recordRuntimeTurnRewindCheckpoint,
   startRuntimeToolInvocation,
 } from "./projection/runtime-write-adapters.js";

@@ -1,4 +1,10 @@
+import type { TapeForensicScan } from "@brewva/brewva-runtime";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import type {
+  RuntimeSessionHydration,
+  RuntimeSessionIntegrity,
+  RuntimeSessionIssue,
+} from "@brewva/brewva-tools/contracts";
 import type { WorkerResult } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventQuery, ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type { ResourceLeaseRecord } from "@brewva/brewva-vocabulary/iteration";
@@ -22,6 +28,7 @@ import type { RuntimeEventRecord } from "../runtime-ops-port.js";
  */
 
 type ListEvents = (sessionId: string, query?: BrewvaEventQuery) => RuntimeEventRecord[];
+type ScanTape = (sessionId: string) => TapeForensicScan;
 
 export interface HostedProjections {
   readonly taskSpec: (sessionId: string) => TaskSpec | undefined;
@@ -30,6 +37,8 @@ export interface HostedProjections {
   readonly resourceLeases: (sessionId: string) => ResourceLeaseRecord[];
   readonly workbench: (sessionId: string) => WorkbenchEntry[];
   readonly workerResults: (sessionId: string) => WorkerResult[];
+  readonly hydration: (sessionId: string) => RuntimeSessionHydration;
+  readonly integrity: (sessionId: string) => RuntimeSessionIntegrity;
 }
 
 export function readStringArrayRecord(value: unknown, key: string): string[] {
@@ -192,10 +201,74 @@ function projectWorkerResults(listEvents: ListEvents, sessionId: string): Worker
   return results;
 }
 
+function tapeForensicIssues(scan: TapeForensicScan): RuntimeSessionIssue[] {
+  return scan.issues.map((issue) => ({
+    domain: "event_tape" as const,
+    severity: "error" as const,
+    index: issue.line,
+    reason: `${issue.issueClass} at line ${issue.line} (byte ${issue.byteOffset}); ${
+      issue.tailLocal ? (scan.tornTail ? "torn tail" : "tail record") : "precedes later records"
+    }`,
+  }));
+}
+
+function projectHydration(
+  listEvents: ListEvents,
+  scanTape: ScanTape,
+  clock: () => number,
+  sessionId: string,
+): RuntimeSessionHydration {
+  const scan = scanTape(sessionId);
+  const hydratedAt = clock();
+  if (scan.issues.length > 0) {
+    // Damage found by the forensic scan: degrade with explicit event_tape issues
+    // instead of letting the strict reader collapse the session. Read the cursor
+    // from the scan's valid prefix — never call listEvents, which would throw.
+    return {
+      status: "degraded",
+      hydratedAt,
+      cursor: { latestEventId: scan.lastValidEventId, eventCount: scan.validRecords },
+      reason: null,
+      issues: tapeForensicIssues(scan),
+    };
+  }
+  // The shared grammar guarantees a clean forensic scan implies the strict reader
+  // will not throw, so listEvents is safe here and reflects the actually rebuilt
+  // state (including in-memory sessions that have no tape file to scan).
+  const events = listEvents(sessionId);
+  const cursor = { latestEventId: events.at(-1)?.id ?? null, eventCount: events.length };
+  return events.length === 0
+    ? { status: "cold", hydratedAt, cursor, reason: null, issues: [] }
+    : { status: "ready", hydratedAt, cursor, reason: null, issues: [] };
+}
+
+function projectIntegrity(scanTape: ScanTape, sessionId: string): RuntimeSessionIntegrity {
+  const scan = scanTape(sessionId);
+  if (scan.issues.length > 0) {
+    return {
+      status: "degraded",
+      cursor: { latestEventId: scan.lastValidEventId, eventCount: scan.validRecords },
+      reason: null,
+      issues: tapeForensicIssues(scan),
+    };
+  }
+  // Tape verified clean. WAL, artifact, and ledger dimensions are not yet checked,
+  // so we must not claim full health — stay honestly inconclusive.
+  return {
+    status: "inconclusive",
+    cursor: null,
+    reason:
+      "tape integrity verified; WAL, artifact, and ledger checks not yet implemented (RFC WS1)",
+    issues: [],
+  };
+}
+
 export function createHostedProjections(deps: {
   readonly listEvents: ListEvents;
+  readonly scanTape: ScanTape;
+  readonly clock: () => number;
 }): HostedProjections {
-  const { listEvents } = deps;
+  const { listEvents, scanTape, clock } = deps;
   return {
     taskSpec: (sessionId) => projectTaskSpec(listEvents, sessionId),
     taskItems: (sessionId) => projectTaskItems(listEvents, sessionId),
@@ -203,5 +276,7 @@ export function createHostedProjections(deps: {
     resourceLeases: (sessionId) => projectResourceLeases(listEvents, sessionId),
     workbench: (sessionId) => projectWorkbench(listEvents, sessionId),
     workerResults: (sessionId) => projectWorkerResults(listEvents, sessionId),
+    hydration: (sessionId) => projectHydration(listEvents, scanTape, clock, sessionId),
+    integrity: (sessionId) => projectIntegrity(scanTape, sessionId),
   };
 }

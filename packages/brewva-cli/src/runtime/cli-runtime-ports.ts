@@ -110,6 +110,11 @@ export function createCliInspectPort(adapter: CliInspectAdapter) {
         ops.session.rewind.getState(sessionId),
       rewindTargets: (sessionId: string): ReturnType<Ops["session"]["rewind"]["listTargets"]> =>
         ops.session.rewind.listTargets(sessionId),
+      workspaceRewindReadiness: (
+        sessionId: string,
+        checkpointId?: string,
+      ): ReturnType<Ops["session"]["rewind"]["workspaceReadiness"]> =>
+        ops.session.rewind.workspaceReadiness(sessionId, checkpointId),
       lineageTree: (sessionId: string): ReturnType<Ops["session"]["lineage"]["getTree"]> =>
         ops.session.lineage.getTree(sessionId),
       contextEntryPath: (

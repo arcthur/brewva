@@ -36,6 +36,11 @@ discipline.
 
 ## Current Active Notes
 
+- [RFC: Inspect, Replay, And Recovery Optimization](./rfc-inspect-replay-and-recovery-optimization.md):
+  active RFC for replacing optimistic recovery status with cursor-bound
+  evidence, separating authoritative replay from forensic scanning, converging
+  rewind/redo on one gateway-owned transaction engine, and proving zero-cache
+  replay equivalence without widening the four-port runtime.
 - [RFC: Context Operating System And Compaction Physics](./rfc-context-operating-system-and-compaction-physics.md):
   active RFC for closing Brewva's context-budget loop, making compaction cut
   points token-aware, and promoting workbench-gated compaction into a runtime

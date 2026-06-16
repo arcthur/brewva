@@ -6,6 +6,12 @@ export {
   createBrewvaRuntime,
   RUNTIME_RECOVERY_CAUSES,
 } from "../runtime/runtime.js";
+export {
+  emptyTapeForensicScan,
+  resolveTapeFilePath,
+  scanTapeFileForensics,
+} from "../runtime/tape/forensics.js";
+export type { TapeForensicIssue, TapeForensicScan } from "../runtime/tape/forensics.js";
 export type {
   AbortToolCallInput,
   AdvisoryEventInput,

@@ -34,6 +34,7 @@ import {
   type InspectDirectory,
 } from "../inspect-analysis.js";
 import { buildContextCockpitReport, type ContextCockpitReport } from "./context-cockpit.js";
+import { deriveRecoveryCapabilities, type RecoveryCapabilities } from "./recovery-capabilities.js";
 
 interface SessionTransitionSnapshot {
   readonly sequence: number;
@@ -106,11 +107,14 @@ interface InspectReport {
   configLoad: InspectConfigLoadReport;
   analysis?: InspectAnalysisReport;
   hydration: {
-    status: "cold" | "ready" | "degraded";
+    status: "cold" | "ready" | "degraded" | "unavailable";
     hydratedAt: string | null;
     latestEventId: string | null;
+    reason: string | null;
     issueCount: number;
     issues: Array<{
+      domain: string;
+      severity: string;
       eventId: string;
       eventType: string;
       index: number;
@@ -118,7 +122,8 @@ interface InspectReport {
     }>;
   };
   integrity: {
-    status: "healthy" | "degraded" | "unavailable";
+    status: "healthy" | "degraded" | "inconclusive" | "unavailable";
+    reason: string | null;
     issueCount: number;
     issues: Array<{
       domain: string;
@@ -130,6 +135,7 @@ interface InspectReport {
       reason: string;
     }>;
   };
+  recoveryCapabilities: RecoveryCapabilities;
   replay: {
     eventCount: number;
     firstEventAt: string | null;
@@ -726,6 +732,7 @@ function buildInspectReport(
   const hydration = inspect.session.lifecycleHydration(sessionId);
   const integrity = inspect.session.lifecycleIntegrity(sessionId);
   const rewindState = inspect.session.rewindState(sessionId);
+  const workspaceRewindReadiness = inspect.session.workspaceRewindReadiness(sessionId);
   const rewindTargets = inspect.session.rewindTargets(sessionId);
   const bootstrap = readLatestEventPayload<InspectBootstrapPayload>(
     events,
@@ -808,40 +815,38 @@ function buildInspectReport(
     hydration: {
       status: hydration.status,
       hydratedAt: toIso(hydration.hydratedAt),
-      latestEventId: hydration.latestEventId ?? null,
+      latestEventId: hydration.cursor?.latestEventId ?? null,
+      reason: hydration.reason,
       issueCount: hydration.issues.length,
-      issues: hydration.issues.map(
-        (issue: { eventId?: string; eventType?: string; index?: number; reason: string }) => ({
-          eventId: issue.eventId ?? "n/a",
-          eventType: issue.eventType ?? "n/a",
-          index: issue.index ?? -1,
-          reason: issue.reason,
-        }),
-      ),
+      issues: hydration.issues.map((issue) => ({
+        domain: issue.domain,
+        severity: issue.severity,
+        eventId: issue.eventId ?? "n/a",
+        eventType: issue.eventType ?? "n/a",
+        index: issue.index ?? -1,
+        reason: issue.reason,
+      })),
     },
     integrity: {
       status: integrity.status,
+      reason: integrity.reason,
       issueCount: integrity.issues.length,
-      issues: integrity.issues.map(
-        (issue: {
-          domain: string;
-          severity: string;
-          sessionId?: string;
-          eventId?: string;
-          eventType?: string;
-          index?: number;
-          reason: string;
-        }) => ({
-          domain: issue.domain,
-          severity: issue.severity,
-          sessionId: issue.sessionId ?? null,
-          eventId: issue.eventId ?? null,
-          eventType: issue.eventType ?? null,
-          index: typeof issue.index === "number" ? issue.index : null,
-          reason: issue.reason,
-        }),
-      ),
+      issues: integrity.issues.map((issue) => ({
+        domain: issue.domain,
+        severity: issue.severity,
+        sessionId: issue.sessionId ?? null,
+        eventId: issue.eventId ?? null,
+        eventType: issue.eventType ?? null,
+        index: typeof issue.index === "number" ? issue.index : null,
+        reason: issue.reason,
+      })),
     },
+    recoveryCapabilities: deriveRecoveryCapabilities({
+      hydration,
+      integrity,
+      rewind: rewindState,
+      workspaceRewind: workspaceRewindReadiness,
+    }),
     replay: {
       eventCount: replaySession?.eventCount ?? events.length,
       firstEventAt: toIso(events[0]?.timestamp),

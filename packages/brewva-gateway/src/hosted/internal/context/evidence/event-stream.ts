@@ -19,6 +19,7 @@ import {
   getRuntimeCostSummary,
   recordRuntimeAssistantCost,
   recordRuntimeReasoningCheckpoint,
+  recordRuntimeTurnRewindCheckpoint,
   subscribeRuntimeEvents,
   type HostedRuntimeAdapterPort,
 } from "../../session/runtime-ports.js";
@@ -74,14 +75,14 @@ function recordReasoningCheckpoint(
     boundary: "turn_start" | "tool_boundary" | "verification_boundary" | "compaction_boundary";
     leafEntryId: string | null;
   },
-): void {
+): ReturnType<typeof recordRuntimeReasoningCheckpoint> | undefined {
   try {
-    recordRuntimeReasoningCheckpoint(runtime, input.sessionId, {
+    return recordRuntimeReasoningCheckpoint(runtime, input.sessionId, {
       boundary: input.boundary,
       leafEntryId: input.leafEntryId,
     });
   } catch {
-    return;
+    return undefined;
   }
 }
 
@@ -528,7 +529,7 @@ export function registerEventStream(
     const runtimeTurn = turnClock.observeTurnStart(sessionId, event.turnIndex, event.timestamp);
     getToolAttemptBindings(sessionId).beginTurn(syncCurrentAttemptSequence(sessionId) ?? 1);
     const leafEntryId = rememberLeafEntryId(sessionId, ctx);
-    recordReasoningCheckpoint(runtime, {
+    const reasoningCheckpoint = recordReasoningCheckpoint(runtime, {
       sessionId,
       boundary: "turn_start",
       leafEntryId,
@@ -540,6 +541,14 @@ export function registerEventStream(
         localTurn: event.turnIndex,
         timestamp: event.timestamp,
       },
+    });
+    // Record a per-turn rewind checkpoint so `undo`/`/rewind` has a target,
+    // linking the reasoning checkpoint just captured rather than duplicating it.
+    // Routed through the semantic write adapter so this stays out of the raw
+    // `runtime.ops.*.record` write surface the four-port fitness quarantines.
+    recordRuntimeTurnRewindCheckpoint(runtime, sessionId, {
+      leafEntryId,
+      reasoningCheckpointId: reasoningCheckpoint?.checkpointId,
     });
     return undefined;
   });

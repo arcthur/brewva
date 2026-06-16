@@ -97,14 +97,14 @@ interface InspectDirectory {
 
 interface InspectBaseReportForAnalysis {
   hydration: {
-    status: "cold" | "ready" | "degraded";
+    status: "cold" | "ready" | "degraded" | "unavailable";
     issueCount: number;
     issues: Array<{
       eventId: string;
     }>;
   };
   integrity: {
-    status: "healthy" | "degraded" | "unavailable";
+    status: "healthy" | "degraded" | "inconclusive" | "unavailable";
     issueCount: number;
     issues: Array<{
       eventId: string | null;
@@ -376,7 +376,10 @@ function buildDurabilityFinding(base: InspectBaseReportForAnalysis): InspectFind
   const issues: string[] = [];
   const eventIds: string[] = [];
 
-  if (base.integrity.status !== "healthy") {
+  // Only genuine degradation is a durability defect. `inconclusive`/`unavailable`
+  // mean integrity was not established (no checker yet), which is honest unknown,
+  // not a fault — it is surfaced through the status line and reason, not a finding.
+  if (base.integrity.status === "degraded") {
     issues.push(`integrity ${base.integrity.status} (${base.integrity.issueCount} issue(s))`);
     eventIds.push(
       ...base.integrity.issues

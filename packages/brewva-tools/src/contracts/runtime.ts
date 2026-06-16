@@ -117,30 +117,96 @@ interface RuntimeResult {
 
 type RuntimeMutationResult = RuntimeResult;
 
-export type RuntimeSessionHydration = {
-  readonly status: "cold" | "ready" | "degraded";
-  readonly hydratedAt: number;
-  readonly latestEventId: string | null;
-  readonly issues: ReadonlyArray<{
-    readonly eventId?: string;
-    readonly eventType?: string;
-    readonly index?: number;
-    readonly reason: string;
-  }>;
+/**
+ * Origin domain of a durability or hydration issue. Shared by hydration and
+ * integrity so a caller can categorize a problem without parsing prose.
+ */
+export type RuntimeSessionIssueDomain = "event_tape" | "wal" | "artifact" | "ledger" | "projection";
+
+export type RuntimeSessionIssueSeverity = "info" | "warning" | "error";
+
+export type RuntimeSessionIssue = {
+  readonly domain: RuntimeSessionIssueDomain;
+  readonly severity: RuntimeSessionIssueSeverity;
+  readonly reason: string;
+  readonly sessionId?: string;
+  readonly eventId?: string;
+  readonly eventType?: string;
+  readonly index?: number;
 };
 
-export type RuntimeSessionIntegrity = {
-  readonly status: "healthy" | "degraded" | "unavailable";
-  readonly issues: ReadonlyArray<{
-    readonly domain: string;
-    readonly severity: string;
-    readonly sessionId?: string;
-    readonly eventId?: string;
-    readonly eventType?: string;
-    readonly index?: number;
-    readonly reason: string;
-  }>;
+/**
+ * Binds an evidence-bearing status to the durable tape position it was derived
+ * from. A status that carries a cursor is a claim grounded in real tape; a
+ * status whose cursor is null is explicitly not such a claim.
+ */
+export type RuntimeSessionEvidenceCursor = {
+  readonly latestEventId: string | null;
+  readonly eventCount: number;
 };
+
+/**
+ * Replay rebuilt session-local state. Evidence-bearing: always carries a
+ * cursor, so the claim is traceable to durable tape, and never a reason.
+ */
+export type RuntimeSessionHydrationProven = {
+  readonly status: "cold" | "ready" | "degraded";
+  readonly hydratedAt: number;
+  readonly cursor: RuntimeSessionEvidenceCursor;
+  readonly reason: null;
+  readonly issues: readonly RuntimeSessionIssue[];
+};
+
+/**
+ * No projector ran, or its input was unreadable. Not a hydration claim: it
+ * carries a reason instead of a cursor and can never masquerade as `ready`.
+ */
+export type RuntimeSessionHydrationUnavailable = {
+  readonly status: "unavailable";
+  readonly hydratedAt: null;
+  readonly cursor: null;
+  readonly reason: string;
+  readonly issues: readonly RuntimeSessionIssue[];
+};
+
+export type RuntimeSessionHydration =
+  | RuntimeSessionHydrationProven
+  | RuntimeSessionHydrationUnavailable;
+
+/** Integrity confirmed against tape, WAL, and artifacts. Evidence-bearing. */
+export type RuntimeSessionIntegrityProven = {
+  readonly status: "healthy" | "degraded";
+  readonly cursor: RuntimeSessionEvidenceCursor;
+  readonly reason: null;
+  readonly issues: readonly RuntimeSessionIssue[];
+};
+
+/**
+ * Integrity could not be established: `inconclusive` (checks did not complete)
+ * or `unavailable` (no checker). Not a claim; carries a reason, never issues.
+ */
+export type RuntimeSessionIntegrityUnproven = {
+  readonly status: "inconclusive" | "unavailable";
+  readonly cursor: null;
+  readonly reason: string;
+  readonly issues: readonly RuntimeSessionIssue[];
+};
+
+export type RuntimeSessionIntegrity =
+  | RuntimeSessionIntegrityProven
+  | RuntimeSessionIntegrityUnproven;
+
+// Readonly preview of whether a workspace (`code`/`both`) rewind can reverse its
+// patch window without executing — every window patch must still have valid
+// rollback material. Lets inspect report capability honestly instead of promising
+// a rewind that the fail-closed engine would then reject.
+export interface WorkspaceRewindReadiness {
+  readonly ready: boolean;
+  /** Patch sets in the rollback window for the targeted checkpoint. */
+  readonly windowSize: number;
+  /** Why the window cannot be reversed (null when ready or the window is empty). */
+  readonly blockedReason: string | null;
+}
 
 export type RuntimeRecoveryPendingRecord = {
   readonly walId: string;
@@ -688,6 +754,7 @@ export interface BrewvaToolRuntimeQueryPort {
     readonly rewind: {
       getState(sessionId: string): SessionRewindState;
       listTargets(sessionId: string): SessionRewindTargetView[];
+      workspaceReadiness(sessionId: string, checkpointId?: string): WorkspaceRewindReadiness;
     };
     readonly title: {
       get(sessionId: string): string | undefined;

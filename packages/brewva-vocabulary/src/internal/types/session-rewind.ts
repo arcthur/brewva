@@ -16,6 +16,8 @@ export interface RecordSessionRewindCheckpointInput {
   readonly turnId?: string;
   readonly leafEntryId?: string | null;
   readonly prompt?: SessionPromptSnapshot;
+  /** Links the rewind checkpoint to a reasoning checkpoint captured at the same boundary. */
+  readonly reasoningCheckpointId?: string;
 }
 
 export type SessionRewindCheckpointStatus = "active" | "undone" | "redone" | "superseded";

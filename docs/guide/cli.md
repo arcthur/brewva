@@ -105,6 +105,7 @@ bun run start -- --print "Refactor runtime cost tracker"
 bun run start -- --mode json "Summarize recent changes"
 bun run start -- inspect --session <session-id>
 bun run start -- inspect --session <session-id> --compaction
+bun run start -- inspect --session <session-id> --verify-replay
 bun run start -- insights --limit 50
 bun run start -- --undo --session <session-id>
 bun run start -- --redo --session <session-id>

@@ -1625,10 +1625,6 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         leafEntryId: input.leafEntryId ?? bundle.session.sessionManager.getLeafId?.() ?? null,
       });
     },
-    rollbackLastPatchSet() {
-      const sessionId = bundle.session.sessionManager.getSessionId();
-      return bundle.operator.tools.rollbackLastPatchSet(sessionId);
-    },
     async rewindSession(input) {
       const sessionId = bundle.session.sessionManager.getSessionId();
       const returnLeafEntryId =
