@@ -1,4 +1,5 @@
 import type {
+  AttentionOptionConsumedEventPayload,
   GuardResultInput,
   GuardResultQuery,
   MetricObservationInput,
@@ -20,6 +21,14 @@ export function recordGuardResult(
   input: GuardResultInput,
 ): ReturnType<BrewvaToolRuntime["capabilities"]["events"]["recordGuardResult"]> {
   return runtime.capabilities.events.recordGuardResult(sessionId, input);
+}
+
+export function recordAttentionConsumption(
+  runtime: BrewvaToolRuntime,
+  sessionId: string,
+  input: AttentionOptionConsumedEventPayload,
+): ReturnType<BrewvaToolRuntime["capabilities"]["events"]["recordAttentionConsumption"]> {
+  return runtime.capabilities.events.recordAttentionConsumption(sessionId, input);
 }
 
 export function listMetricObservations(

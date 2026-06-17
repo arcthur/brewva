@@ -36,6 +36,10 @@ inspectable evidence:
 - attention option metric observations record bounded option exposure,
   consumption, pin, ignore, and verify-plan refs separately from automatically
   available context
+- `attention.option.consumed` records the typed consume receipt for a selected
+  attention option, including the option id, source family, consumed refs, and
+  optional model-authored reason. Per-entry consume counts are replay-derived
+  from these receipts; they are not stored on workbench entries.
 - workbench events track model-authored notes, reversible evictions, and
   committed baselines
 

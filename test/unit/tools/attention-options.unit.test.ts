@@ -242,6 +242,7 @@ describe("attention option tools", () => {
     ]);
     expect(metadata.attention_consume?.requiredCapabilities).toEqual([
       "capabilities.events.iteration.listMetricObservations",
+      "capabilities.events.recordAttentionConsumption",
       "capabilities.events.recordMetricObservation",
       "capabilities.events.records.query",
       "capabilities.skills.catalog.get",

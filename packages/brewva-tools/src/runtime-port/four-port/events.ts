@@ -10,6 +10,7 @@ import type {
   RenderTurnConsequenceDigestOptions,
   TurnEffectCommitmentProjection,
 } from "@brewva/brewva-vocabulary/iteration";
+import { ATTENTION_OPTION_CONSUMED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type { BrewvaReplaySession } from "@brewva/brewva-vocabulary/session";
 import type { BrewvaToolRuntimeCapabilitiesPort } from "../../contracts/index.js";
 import {
@@ -18,7 +19,11 @@ import {
   readRecord,
   sliceWindow,
 } from "./helpers.js";
-import { listGuardResultsFromEvents, listMetricObservationsFromEvents } from "./iteration-facts.js";
+import {
+  listAttentionConsumptionsFromEvents,
+  listGuardResultsFromEvents,
+  listMetricObservationsFromEvents,
+} from "./iteration-facts.js";
 import {
   FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES,
   type FourPortRuntimeCapabilityContext,
@@ -254,6 +259,12 @@ export function createFourPortEventsRuntimeOps(
         kind: "iteration.guard.recorded",
         payload: input,
       }),
+    recordAttentionConsumption: (sessionId, input) =>
+      recordFourPortRuntimeOpsEvent(context, {
+        sessionId,
+        kind: ATTENTION_OPTION_CONSUMED_EVENT_TYPE,
+        payload: input,
+      }),
     records: {
       listSessionIds: () => knownRuntimeEventSessionIds(context),
       list: (sessionId, query) => listFourPortRuntimeEvents(context.runtime, sessionId, query),
@@ -275,6 +286,13 @@ export function createFourPortEventsRuntimeOps(
       getTurnProjection: (_sessionId, value = {}) => deriveTurnEffectCommitmentProjection(value),
     },
     iteration: {
+      listAttentionConsumptions: (sessionId, query) =>
+        listAttentionConsumptionsFromEvents(
+          listFourPortRuntimeEvents(context.runtime, sessionId, {
+            type: ATTENTION_OPTION_CONSUMED_EVENT_TYPE,
+          }),
+          query,
+        ),
       listGuardResults: (sessionId, query) =>
         listGuardResultsFromEvents(
           listFourPortRuntimeEvents(context.runtime, sessionId, {

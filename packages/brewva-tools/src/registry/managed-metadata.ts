@@ -104,6 +104,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.workbench.list",
     "capabilities.events.records.query",
     "capabilities.events.iteration.listMetricObservations",
+    "capabilities.events.recordAttentionConsumption",
     "capabilities.events.recordMetricObservation",
   ]),
   attention_pin: metadata("base", "memory_write", ["capabilities.workbench.note"]),

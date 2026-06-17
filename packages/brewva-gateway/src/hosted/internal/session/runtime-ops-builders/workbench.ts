@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
+import {
+  type WorkbenchEntry,
+  WORKBENCH_EVICTION_RECORDED_EVENT_TYPE,
+  WORKBENCH_EVICTION_UNDONE_EVENT_TYPE,
+  WORKBENCH_NOTE_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/workbench";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 
@@ -18,10 +23,11 @@ export function buildWorkbenchRuntimeOps(
         content: input.content,
         sourceRefs: [...(input.sourceRefs ?? [])],
         reason: input.reason,
+        ...(input.retentionHint ? { retentionHint: input.retentionHint } : {}),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      ctx.emit(sessionId, "workbench.note.recorded", entry);
+      ctx.emit(sessionId, WORKBENCH_NOTE_RECORDED_EVENT_TYPE, entry);
       return entry;
     },
     evict(sessionId, input) {
@@ -38,12 +44,16 @@ export function buildWorkbenchRuntimeOps(
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-      ctx.emit(sessionId, "workbench.eviction.recorded", entry);
+      ctx.emit(sessionId, WORKBENCH_EVICTION_RECORDED_EVENT_TYPE, entry);
       return entry;
     },
     undoEviction(sessionId, entryId, reason) {
       const entry = workbench(sessionId).find((item) => item.id === entryId);
-      ctx.emit(sessionId, "workbench.eviction.undone", { entryId, reason, undone: Boolean(entry) });
+      ctx.emit(sessionId, WORKBENCH_EVICTION_UNDONE_EVENT_TYPE, {
+        entryId,
+        reason,
+        undone: Boolean(entry),
+      });
       return entry ? { undone: true, entry } : { undone: false };
     },
   };

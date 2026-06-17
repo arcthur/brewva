@@ -157,6 +157,12 @@ export const SOURCE_RESOURCE_READ_EVENT_TYPE = "source_resource_read" as const;
 
 export const SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE = "source_snapshot_recorded" as const;
 
+export const WORKBENCH_EVICTION_RECORDED_EVENT_TYPE = "workbench.eviction.recorded" as const;
+
+export const WORKBENCH_EVICTION_UNDONE_EVENT_TYPE = "workbench.eviction.undone" as const;
+
+export const WORKBENCH_NOTE_RECORDED_EVENT_TYPE = "workbench.note.recorded" as const;
+
 export interface WorkbenchEntry extends ProtocolRecord {
   readonly id?: string;
   readonly kind?: string;
@@ -169,6 +175,12 @@ export interface WorkbenchEntry extends ProtocolRecord {
   readonly createdTurn?: number;
   readonly reversible?: boolean;
   readonly rcr?: readonly RcrReference[];
+  /**
+   * Model-authored salience hint recorded when the note is written (for example
+   * `"attention_pin"`). Persisted as model-sovereign retention evidence; only
+   * promotion-eligible hints become promotion signals.
+   */
+  readonly retentionHint?: string;
   readonly createdAt?: number;
   readonly updatedAt?: number;
 }

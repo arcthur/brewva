@@ -9,7 +9,11 @@ import type { WorkerResult } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventQuery, ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type { ResourceLeaseRecord } from "@brewva/brewva-vocabulary/iteration";
 import type { TaskItem, TaskSpec } from "@brewva/brewva-vocabulary/task";
-import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
+import {
+  type WorkbenchEntry,
+  WORKBENCH_EVICTION_RECORDED_EVENT_TYPE,
+  WORKBENCH_NOTE_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/workbench";
 import type { RuntimeEventRecord } from "../runtime-ops-port.js";
 
 /**
@@ -150,9 +154,9 @@ function projectResourceLeases(listEvents: ListEvents, sessionId: string): Resou
   });
 }
 
-const WORKBENCH_ENTRY_EVENT_TYPES = new Set([
-  "workbench.note.recorded",
-  "workbench.eviction.recorded",
+const WORKBENCH_ENTRY_EVENT_TYPES = new Set<string>([
+  WORKBENCH_NOTE_RECORDED_EVENT_TYPE,
+  WORKBENCH_EVICTION_RECORDED_EVENT_TYPE,
 ]);
 
 function isWorkbenchEntry(value: unknown): value is WorkbenchEntry {

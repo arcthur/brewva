@@ -71,6 +71,17 @@ discipline.
   converging the hosted turn path into one module, recovering single-consumer
   substrate seams, and compressing the architecture narrative. Gated on
   characterization behavior locks and count-based hosted fitness invariants.
+- [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md):
+  active RFC for closing the last gap in typed, per-entry, promotion-grade
+  attention-selection evidence: making attention selection an accountable effect
+  on top of today's generic metrics (persisting the dropped `retention_hint`,
+  adding a typed consume event and per-entry projection, promoting eviction
+  strings to vocabulary constants), a taxonomy-gated verify-only attention-budget
+  commitment, and a retention dashboard; feeding the reversible-references RDP
+  promotion path rather than adding a second one; and naming the cross-RFC
+  grammar (`Selection is an effect; reversal is an effect; both leave receipts`)
+  and the aesthetic (`Model-sovereign, tape-accountable context`) for
+  `design-axioms.md`. Surface amplification is a non-blocking follow-up.
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

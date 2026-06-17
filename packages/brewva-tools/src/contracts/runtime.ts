@@ -25,6 +25,8 @@ import type {
 } from "@brewva/brewva-vocabulary/goal";
 import type {
   ActiveReasoningBranchState,
+  AttentionConsumptionRecord,
+  AttentionOptionConsumedEventPayload,
   ClaimState,
   DecideEffectCommitmentInput,
   DecideEffectCommitmentResult,
@@ -354,6 +356,10 @@ export interface BrewvaToolRuntimeCommandPort {
       input: MetricObservationInput,
     ): BrewvaEventRecord | undefined;
     recordGuardResult(sessionId: string, input: GuardResultInput): BrewvaEventRecord | undefined;
+    recordAttentionConsumption(
+      sessionId: string,
+      input: AttentionOptionConsumedEventPayload,
+    ): BrewvaEventRecord | undefined;
   };
   readonly goal: {
     readonly lifecycle: {
@@ -673,6 +679,10 @@ export interface BrewvaToolRuntimeQueryPort {
       renderTurnDigest(sessionId: string, input?: RenderTurnConsequenceDigestOptions): string;
     };
     readonly iteration: {
+      listAttentionConsumptions(
+        sessionId: string,
+        query?: ProtocolRecord,
+      ): AttentionConsumptionRecord[];
       listGuardResults(sessionId: string, query?: GuardResultQuery): GuardResultRecord[];
       listMetricObservations(
         sessionId: string,

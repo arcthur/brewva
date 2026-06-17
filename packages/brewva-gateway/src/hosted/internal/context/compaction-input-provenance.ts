@@ -418,7 +418,7 @@ function readAttentionPinnedRefsFromWorkbench(
 ): string[] {
   const pinnedRefs = new Set<string>();
   for (const entry of workbenchEntries) {
-    const retentionHint = stringOrNull((entry as ProtocolRecord).retentionHint);
+    const retentionHint = stringOrNull(entry.retentionHint);
     if (entry.reason !== "attention_pin" && retentionHint !== "attention_pin") {
       continue;
     }

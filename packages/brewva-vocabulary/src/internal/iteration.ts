@@ -4,6 +4,7 @@ import { type ContextBudgetUsage } from "./context.js";
 import { payloadOf, type BrewvaEventRecord } from "./events.js";
 import { numberField, optionalStringField } from "./shared.js";
 import type { JsonValue, ProtocolRecord } from "./types/foundation.js";
+import type { WorkbenchEntry } from "./workbench.js";
 
 export type {
   DecideEffectCommitmentInput,
@@ -18,6 +19,8 @@ export type {
 } from "./types/effect-commitment.js";
 
 export type { JsonValue, ProtocolRecord } from "./types/foundation.js";
+
+export const ATTENTION_OPTION_CONSUMED_EVENT_TYPE = "attention.option.consumed" as const;
 
 export const BOX_ACQUIRED_EVENT_TYPE = "box.acquired" as const;
 
@@ -105,6 +108,19 @@ export const ITERATION_FACT_SESSION_SCOPE_VALUES = ["session", "turn"] as const;
 export const ITERATION_GUARD_STATUS_VALUES = ["pass", "warn", "fail"] as const;
 
 export const ITERATION_METRIC_AGGREGATION_VALUES = ["sum", "max", "last"] as const;
+
+/**
+ * Typed receipt for an explicit `attention_consume`. It sits beside the generic
+ * `attention.consume` metric and carries the consumed option/ref identity so a
+ * per-entry consume projection can attribute consumption to a specific
+ * `WorkbenchEntry`. Selection is an effect; this is its receipt.
+ */
+export interface AttentionOptionConsumedEventPayload extends ProtocolRecord {
+  readonly optionId: string;
+  readonly sourceFamily: string;
+  readonly refs: readonly string[];
+  readonly reason?: string;
+}
 
 export interface ResourceLeaseBudget extends ProtocolRecord {
   readonly maxToolCalls?: number;
@@ -488,6 +504,196 @@ export interface MetricObservationRecord extends ProtocolRecord {
   readonly aggregation?: string;
   readonly iterationKey?: string;
   readonly source: string;
+}
+
+export interface AttentionConsumptionQuery extends ProtocolRecord {}
+
+export interface AttentionConsumptionRecord extends ProtocolRecord {
+  readonly eventId: string;
+  readonly optionId: string;
+  readonly sourceFamily: string;
+  readonly refs: readonly string[];
+  readonly reason?: string;
+  readonly consumedAt?: number;
+}
+
+export interface AttentionEntryConsumption {
+  readonly entryId: string;
+  readonly consumeCount: number;
+  readonly lastConsumedAt?: number;
+}
+
+const WORKBENCH_ATTENTION_OPTION_PREFIX = "workbench:";
+
+/**
+ * Per-entry consume projection over `attention.option.consumed` receipts. It
+ * counts how many times each `WorkbenchEntry` was explicitly consumed and the
+ * latest time it happened. This is a read-model derivation; neither the count
+ * nor the timestamp is ever stored on the entry.
+ */
+export function projectAttentionEntryConsumption(
+  records: readonly AttentionConsumptionRecord[],
+): AttentionEntryConsumption[] {
+  const byEntry = new Map<string, { count: number; lastConsumedAt?: number }>();
+  for (const record of records) {
+    if (!record.optionId.startsWith(WORKBENCH_ATTENTION_OPTION_PREFIX)) {
+      continue;
+    }
+    const entryId = record.optionId.slice(WORKBENCH_ATTENTION_OPTION_PREFIX.length);
+    if (entryId.length === 0) {
+      continue;
+    }
+    const current = byEntry.get(entryId) ?? { count: 0 };
+    const lastConsumedAt =
+      typeof record.consumedAt === "number" && Number.isFinite(record.consumedAt)
+        ? Math.max(current.lastConsumedAt ?? record.consumedAt, record.consumedAt)
+        : current.lastConsumedAt;
+    byEntry.set(entryId, { count: current.count + 1, lastConsumedAt });
+  }
+  return [...byEntry.entries()].map(([entryId, aggregate]) =>
+    aggregate.lastConsumedAt === undefined
+      ? { entryId, consumeCount: aggregate.count }
+      : {
+          entryId,
+          consumeCount: aggregate.count,
+          lastConsumedAt: aggregate.lastConsumedAt,
+        },
+  );
+}
+
+export type AttentionAttribution = "aesthetic" | "implementation" | "capability" | "unknown";
+
+export interface RetentionRate {
+  readonly value: number | null;
+  readonly attribution: AttentionAttribution;
+}
+
+export interface RetentionDashboard {
+  readonly consumeRate: RetentionRate;
+  readonly evictThenUndoRate: RetentionRate;
+  readonly forcedCompactionRate: RetentionRate;
+}
+
+export interface RetentionDashboardInput {
+  readonly consumeRatio: number | null;
+  readonly eviction: { readonly undone: number; readonly recorded: number };
+  readonly forcedCompaction: { readonly forced: number; readonly opportunities: number };
+  readonly attribution?: {
+    readonly consumeRate?: AttentionAttribution;
+    readonly evictThenUndoRate?: AttentionAttribution;
+    readonly forcedCompactionRate?: AttentionAttribution;
+  };
+}
+
+/**
+ * Retention dashboard projection over Phase 1 receipts and existing metrics. Each
+ * rate is inconclusive (`null`) until it has a denominator. Attribution is an
+ * explicit input (human annotation or recorded guard result) and defaults to
+ * `"unknown"`; it is never inferred by heuristic, mirroring the budget-actual
+ * rule that forbids a hidden classifier.
+ */
+export function projectRetentionDashboard(input: RetentionDashboardInput): RetentionDashboard {
+  const ratio = (numerator: number, denominator: number): number | null =>
+    denominator > 0 ? numerator / denominator : null;
+  return {
+    consumeRate: {
+      value: input.consumeRatio,
+      attribution: input.attribution?.consumeRate ?? "unknown",
+    },
+    evictThenUndoRate: {
+      value: ratio(input.eviction.undone, input.eviction.recorded),
+      attribution: input.attribution?.evictThenUndoRate ?? "unknown",
+    },
+    forcedCompactionRate: {
+      value: ratio(input.forcedCompaction.forced, input.forcedCompaction.opportunities),
+      attribution: input.attribution?.forcedCompactionRate ?? "unknown",
+    },
+  };
+}
+
+export interface RetentionPromotionSignal {
+  readonly entryId: string;
+  readonly reason: "retention_hint" | "repeated_consumption";
+  readonly retentionHint?: string;
+  readonly consumeCount: number;
+  readonly digest: string;
+  readonly sourceRefs: readonly string[];
+}
+
+export interface RetentionPromotionOptions {
+  readonly minConsumeCount?: number;
+  readonly promotionEligibleRetentionHints?: readonly string[];
+}
+
+const DEFAULT_PROMOTION_ELIGIBLE_RETENTION_HINTS = new Set([
+  "attention_pin",
+  "promotion_candidate",
+]);
+
+function readPromotionEligibleRetentionHint(
+  value: unknown,
+  eligibleHints: ReadonlySet<string>,
+): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const retentionHint = value.trim();
+  return retentionHint.length > 0 && eligibleHints.has(retentionHint) ? retentionHint : undefined;
+}
+
+/**
+ * Select model-sovereign promotion candidates from workbench notes: notes the
+ * model marked with a promotion-eligible `retentionHint`, or notes it consumed
+ * at least `minConsumeCount` times. Pure: callers supply replay-derived notes
+ * plus the consume projection. This only NOMINATES candidates; promotion to an
+ * active `docs/solutions/**` record still runs through `knowledge_capture` with
+ * human review. There is no runtime auto-promotion — the runtime nominates, the
+ * model or operator promotes, tape accounts.
+ */
+export function collectRetentionPromotionSignals(
+  notes: readonly WorkbenchEntry[],
+  consumptions: readonly AttentionEntryConsumption[],
+  options: RetentionPromotionOptions = {},
+): RetentionPromotionSignal[] {
+  const minConsumeCount = options.minConsumeCount ?? 3;
+  const promotionEligibleRetentionHints = new Set(
+    options.promotionEligibleRetentionHints ?? DEFAULT_PROMOTION_ELIGIBLE_RETENTION_HINTS,
+  );
+  const consumeByEntry = new Map(consumptions.map((entry) => [entry.entryId, entry.consumeCount]));
+  const signals: RetentionPromotionSignal[] = [];
+  for (const note of notes) {
+    if (note.kind !== "note" || !note.id) {
+      continue;
+    }
+    const consumeCount = consumeByEntry.get(note.id) ?? 0;
+    const retentionHint = readPromotionEligibleRetentionHint(
+      note.retentionHint,
+      promotionEligibleRetentionHints,
+    );
+    const repeatedConsumption = consumeCount >= minConsumeCount;
+    if (retentionHint === undefined && !repeatedConsumption) {
+      continue;
+    }
+    signals.push(
+      retentionHint === undefined
+        ? {
+            entryId: note.id,
+            reason: "repeated_consumption",
+            consumeCount,
+            digest: note.digest,
+            sourceRefs: note.sourceRefs,
+          }
+        : {
+            entryId: note.id,
+            reason: "retention_hint",
+            retentionHint,
+            consumeCount,
+            digest: note.digest,
+            sourceRefs: note.sourceRefs,
+          },
+    );
+  }
+  return signals;
 }
 
 export interface RuntimeCapabilityAccessFact extends ProtocolRecord {

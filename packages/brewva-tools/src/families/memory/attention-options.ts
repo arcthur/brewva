@@ -24,7 +24,10 @@ import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions, BrewvaToolRuntime } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { recordMetricObservation } from "../../runtime-port/iteration.js";
+import {
+  recordAttentionConsumption,
+  recordMetricObservation,
+} from "../../runtime-port/iteration.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { noteWorkbench } from "../../runtime-port/workbench.js";
 import { errTextResult, okTextResult } from "../../utils/result.js";
@@ -614,7 +617,12 @@ function resolveConsumedContent(input: {
   readonly runtime: BrewvaToolRuntime;
   readonly sessionId: string;
   readonly optionId: string;
-}): { readonly title: string; readonly content: string; readonly refs: readonly string[] } | null {
+}): {
+  readonly title: string;
+  readonly content: string;
+  readonly refs: readonly string[];
+  readonly sourceFamily: AttentionOptionSourceFamily;
+} | null {
   if (input.optionId.startsWith("skill:")) {
     const name = input.optionId.slice("skill:".length);
     const skill = input.runtime.capabilities.skills.catalog.get(name);
@@ -628,6 +636,7 @@ function resolveConsumedContent(input: {
         skill.filePath,
         ...listSkillResourceRefs(skill).map((ref) => `${ref.kind}:${ref.path}`),
       ],
+      sourceFamily: "skill_card",
     };
   }
   if (input.optionId.startsWith("workbench:")) {
@@ -642,6 +651,7 @@ function resolveConsumedContent(input: {
       title: input.optionId,
       content: readNonEmptyString(entry.content) ?? readNonEmptyString(entry.text) ?? "",
       refs: entry.sourceRefs,
+      sourceFamily: "workbench",
     };
   }
   const recallDocument = input.runtime.capabilities.events.records
@@ -657,6 +667,7 @@ function resolveConsumedContent(input: {
         `root_ref: ${recallDocument.card.rootRef}`,
       ].join("\n"),
       refs: recallDocument.card.resourceRefs,
+      sourceFamily: recallDocument.card.sourceFamily,
     };
   }
   if (input.optionId.startsWith("event:")) {
@@ -671,6 +682,7 @@ function resolveConsumedContent(input: {
       title: event.type,
       content: renderTapeEventSummary(event),
       refs: [input.optionId],
+      sourceFamily: "session_tape_evidence",
     };
   }
   return null;
@@ -766,18 +778,29 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
           error: "unknown_option",
         });
       }
+      const reason = readNonEmptyString(params.reason);
       const event = recordAttentionMetric({
         runtime: attentionConsumeTool.runtime,
         sessionId,
         action: "consume",
         optionId,
-        reason: readNonEmptyString(params.reason),
+        reason,
       });
       recordAttentionConsumeRatio({
         runtime: attentionConsumeTool.runtime,
         sessionId,
         optionId,
       });
+      const consumeReceiptEvent = recordAttentionConsumption(
+        attentionConsumeTool.runtime,
+        sessionId,
+        {
+          optionId,
+          sourceFamily: consumed.sourceFamily,
+          refs: [...consumed.refs],
+          ...(reason ? { reason } : {}),
+        },
+      );
       const content = truncateText(consumed.content, MAX_CONSUMED_CHARS, { marker: "\n..." });
       return okTextResult(
         [
@@ -794,6 +817,8 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
           title: consumed.title,
           refs: consumed.refs,
           eventId: event?.id ?? null,
+          metricEventId: event?.id ?? null,
+          consumeReceiptEventId: consumeReceiptEvent?.id ?? null,
           truncated: content.length < consumed.content.length,
         },
       );

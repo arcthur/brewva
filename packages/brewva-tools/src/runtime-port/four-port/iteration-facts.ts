@@ -1,10 +1,12 @@
 import type { BrewvaEventRecord, ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type {
+  AttentionConsumptionRecord,
   GuardResultQuery,
   GuardResultRecord,
   MetricObservationQuery,
   MetricObservationRecord,
 } from "@brewva/brewva-vocabulary/iteration";
+import { ATTENTION_OPTION_CONSUMED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import { normalizeWindowCount, readRecord, sliceWindow } from "./helpers.js";
 
 function readStringField(record: ProtocolRecord, key: string): string | undefined {
@@ -99,5 +101,46 @@ export function listGuardResultsFromEvents(
       .filter((record): record is GuardResultRecord => Boolean(record)),
     query,
     ["guardKey", "status", "iterationKey", "source", "sessionScope"],
+  );
+}
+
+function attentionConsumptionFromEvent(
+  event: BrewvaEventRecord,
+): AttentionConsumptionRecord | null {
+  if (event.type !== ATTENTION_OPTION_CONSUMED_EVENT_TYPE) {
+    return null;
+  }
+  const payload = readRecord(event.payload);
+  const optionId = readStringField(payload, "optionId");
+  const sourceFamily = readStringField(payload, "sourceFamily");
+  if (!optionId || !sourceFamily) {
+    return null;
+  }
+  const refs = Array.isArray(payload.refs)
+    ? payload.refs.filter((ref): ref is string => typeof ref === "string")
+    : [];
+  return {
+    ...payload,
+    eventId: event.id,
+    optionId,
+    sourceFamily,
+    refs,
+    reason: readStringField(payload, "reason"),
+    ...(typeof event.timestamp === "number" && Number.isFinite(event.timestamp)
+      ? { consumedAt: event.timestamp }
+      : {}),
+  };
+}
+
+export function listAttentionConsumptionsFromEvents(
+  events: readonly BrewvaEventRecord[],
+  query?: ProtocolRecord,
+): AttentionConsumptionRecord[] {
+  return filterIterationRecords(
+    events
+      .map(attentionConsumptionFromEvent)
+      .filter((record): record is AttentionConsumptionRecord => Boolean(record)),
+    query,
+    ["optionId", "sourceFamily"],
   );
 }
