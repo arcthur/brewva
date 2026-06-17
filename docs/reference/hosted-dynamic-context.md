@@ -71,7 +71,7 @@ cards and only enters the answer path when the model consumes or pins it.
 
 `Available Brewva SkillCards` and `[CapabilitySelection]` are not part of the
 dynamic-tail renderer. `Available Brewva SkillCards` is an advisory
-prompt-context view backed by `skill_selection_recorded` and a hidden
+prompt-context view backed by `skill.selection.recorded` and a hidden
 trace-only message.
 `[CapabilitySelection]` is a system-prompt authority view backed by a durable
 capability-selection receipt. The two sections are physically separate so

@@ -282,7 +282,7 @@ function foldHarnessEvidence(state: HarnessProjectionState, record: BrewvaEventR
     case "tool.surface.resolved":
       foldToolSurface(state, record);
       return;
-    case "skill_selection_recorded":
+    case "skill.selection.recorded":
       foldSkillSelection(state, record);
       return;
     case VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE:

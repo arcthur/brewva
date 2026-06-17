@@ -18,7 +18,7 @@ accounts, budgets, side effects, or completion gates.
 - shortlisted skills are prompt context under `Available Brewva SkillCards`
 - explicit `$skill-name` mentions, candidate counts, render counts, omission
   counts, selection reasons, and render metadata are recorded in
-  `skill_selection_recorded`
+  `skill.selection.recorded`
 - explicit mentions are mirrored into a hidden, context-excluded
   `brewva-skill-selection` turn message without replaying the trace marker as
   model context
@@ -105,7 +105,7 @@ Use ordinary advisory and authority surfaces:
 - file/search tools to inspect more skill markdown when needed
 - capability manifests for SaaS, CLI, and MCP authority
 - durable `tool.capability.selected` events for selection evidence
-- durable `skill_selection_recorded` events for advisory context evidence
+- durable `skill.selection.recorded` events for advisory context evidence
 - `workbench_note` for model-authored durable working notes
 - `workbench_evict` to evict stale context with optional replacement notes
 - `task_set_spec` and `task_view_state` for task state

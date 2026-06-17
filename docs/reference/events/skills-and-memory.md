@@ -10,7 +10,7 @@ Skills are catalog documents. Runtime events may record catalog refresh,
 inventory maintenance, and advisory prompt-context selection, but there is no
 activation, completion, repair, or active-skill lifecycle state.
 
-`skill_selection_recorded` records prompt-visible SkillCard shortlists and
+`skill.selection.recorded` records prompt-visible SkillCard shortlists and
 `discover_skills` discover-only projections: available count, candidate count,
 rendered count, omitted count, selection mode, explicit `$skill` mentions,
 rendered reasons, advisory `skillInvocationRecords`, and rendered context size.

@@ -153,7 +153,7 @@ The trace uses two separate concepts:
 - a skill-surface tool is a managed tool whose registry metadata has
   `surface="skill"`
 
-The available SkillCard shortlist is reported by `skill_selection_recorded`
+The available SkillCard shortlist is reported by `skill.selection.recorded`
 and mirrored in the hidden, context-excluded `brewva-skill-selection` custom
 turn message. Explicit `$skill` mentions are mirrored as
 `tool_surface_resolved.explicitSkillMentionNames`; `skillSelectionId` and

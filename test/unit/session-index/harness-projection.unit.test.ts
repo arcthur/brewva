@@ -327,6 +327,53 @@ describe("harness trace projection", () => {
     expect(snapshots.find((snapshot) => snapshot.turn === 7)?.tools.committed).toBe(1);
   });
 
+  test("folds skill selection evidence from the canonical dotted event kind", () => {
+    const manifest = buildHarnessManifest({
+      sessionId: "session-harness-projection",
+      turn: 8,
+      attempt: 1,
+      skillSelection: {
+        selectionId: "skill-selection-1",
+        mode: "shortlist_prompt_context",
+        selectedSkillIds: ["skill-a"],
+      },
+    });
+    const records = [
+      harnessManifestEvent({
+        id: "event-manifest",
+        timestamp: 5_000,
+        turn: 8,
+        payload: manifest,
+      }),
+      event({
+        id: "event-skill-selection",
+        // Canonical kind emitted by the gateway via ctx.emit and preserved
+        // verbatim as record.type by the four-port converter (dotted form).
+        type: "skill.selection.recorded",
+        timestamp: 5_010,
+        turn: 8,
+        payload: { omittedCount: 2 },
+      }),
+    ];
+
+    const snapshots = projectSessionHarnessTraceSnapshots({
+      sessionId: "session-harness-projection",
+      records,
+    });
+
+    expect(snapshots).toHaveLength(1);
+    // The manifest records a selection, so the baseline omitted count is 0;
+    // folding the advisory event must raise it to the event payload's count.
+    expect(snapshots[0]?.skills).toMatchObject({
+      selectionId: "skill-selection-1",
+      omittedCount: 2,
+    });
+    // foldSkillSelection records the event id, proving the switch case matched.
+    expect(snapshots[0]?.eventIds).toContain("event-skill-selection");
+    expect(snapshots[0]?.updatedAt).toBe(5_010);
+    expect(snapshots[0]?.signals.map((signal) => signal.kind)).toContain("skill_surface_miss");
+  });
+
   test("patrol rows read only snapshots with projected signals", async () => {
     let observedSql = "";
     const snapshot = {
