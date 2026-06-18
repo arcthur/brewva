@@ -546,7 +546,11 @@ function main(): void {
     const artifactText = "服务启动中\n数据库连接被拒绝，连接失败需要重试\n";
     mkdirSync(dirname(artifactPath), { recursive: true });
     writeFileSync(artifactPath, artifactText, "utf8");
-    const toolRuntime = hostedRuntime;
+    // Tools read events through the tool-facing capability port; the hosted
+    // adapter keeps ops gateway-private and re-exposes that surface to tools as
+    // capabilities (production wires it via toToolRuntimeAdapterPort). Mirror
+    // that projection here so output_search can reach the event records below.
+    const toolRuntime = { ...hostedRuntime, capabilities: hostedRuntime.ops };
     toolRuntime.ops.tools.outputs.artifactPersisted({
       sessionId,
       payload: {
