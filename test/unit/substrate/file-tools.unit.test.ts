@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  buildBrewvaEditDiffPreview,
   createBrewvaEditToolDefinition,
   createBrewvaReadToolDefinition,
   createBrewvaWriteToolDefinition,
@@ -198,6 +199,79 @@ describe("substrate file tools", () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toBe("Operation aborted");
     expect(attemptedWrite).toBe(false);
+
+    cleanupTestWorkspace(workspace);
+  });
+
+  test("edit diff preview rejects the removed flat oldText/newText shape", () => {
+    expect(() =>
+      buildBrewvaEditDiffPreview(
+        { path: "example.ts", oldText: "const value = 1;", newText: "const value = 2;" },
+        "const value = 1;\n",
+      ),
+    ).toThrow("no longer supported");
+  });
+
+  test("edit tool exposes no prepareArguments hook to normalize legacy input", () => {
+    const workspace = createTestWorkspace("substrate-edit-tool-no-prepare-arguments");
+
+    const tool = createBrewvaEditToolDefinition(workspace);
+    expect(tool.prepareArguments).toBeUndefined();
+
+    cleanupTestWorkspace(workspace);
+  });
+
+  test("edit tool rejects the flat oldText/newText shape without mutating the file", async () => {
+    const workspace = createTestWorkspace("substrate-edit-tool-legacy-flat-shape");
+    const filePath = join(workspace, "example.ts");
+    writeFileSync(filePath, "const value = 1;\n", "utf8");
+
+    const tool = createBrewvaEditToolDefinition(workspace);
+    const error = await captureError(
+      tool.execute(
+        "tool-call-legacy-flat",
+        {
+          path: "example.ts",
+          oldText: "const value = 1;",
+          newText: "const value = 2;",
+        } as never,
+        undefined,
+        undefined,
+        undefined as never,
+      ),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("no longer supported");
+    expect(readFileSync(filePath, "utf8")).toBe("const value = 1;\n");
+
+    cleanupTestWorkspace(workspace);
+  });
+
+  test("edit tool rejects a hybrid shape mixing flat oldText/newText with edits[]", async () => {
+    const workspace = createTestWorkspace("substrate-edit-tool-hybrid-shape");
+    const filePath = join(workspace, "example.ts");
+    writeFileSync(filePath, "const value = 1;\n", "utf8");
+
+    const tool = createBrewvaEditToolDefinition(workspace);
+    const error = await captureError(
+      tool.execute(
+        "tool-call-hybrid",
+        {
+          path: "example.ts",
+          oldText: "const value = 1;",
+          newText: "const value = 2;",
+          edits: [{ oldText: "const value = 1;", newText: "const value = 3;" }],
+        } as never,
+        undefined,
+        undefined,
+        undefined as never,
+      ),
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("no longer supported");
+    expect(readFileSync(filePath, "utf8")).toBe("const value = 1;\n");
 
     cleanupTestWorkspace(workspace);
   });

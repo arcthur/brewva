@@ -44,12 +44,6 @@ const editSchema = Type.Object(
 
 export type BrewvaEditToolInput = Static<typeof editSchema>;
 
-type LegacyEditToolInput = Record<string, unknown> & {
-  oldText?: unknown;
-  newText?: unknown;
-  edits?: unknown;
-};
-
 export interface BrewvaEditToolDetails {
   diff: string;
   firstChangedLine?: number;
@@ -83,27 +77,22 @@ export interface BrewvaEditToolOptions {
   operations?: BrewvaEditOperations;
 }
 
-function prepareEditArguments(input: unknown): BrewvaEditToolInput {
+function validateEditInput(input: unknown): { path: string; edits: Edit[] } {
   if (!input || typeof input !== "object") {
-    return input as BrewvaEditToolInput;
+    throw new Error(
+      "Edit tool input is invalid. Provide an object with a path and an edits[] array.",
+    );
   }
-
-  const args = input as LegacyEditToolInput;
-  if (typeof args.oldText !== "string" || typeof args.newText !== "string") {
-    return input as BrewvaEditToolInput;
+  const candidate = input as Record<string, unknown>;
+  if ("oldText" in candidate || "newText" in candidate) {
+    throw new Error(
+      "Edit tool input is invalid. Top-level oldText/newText is no longer supported; wrap each replacement in edits: [{ oldText, newText }].",
+    );
   }
-
-  const edits = Array.isArray(args.edits) ? [...args.edits] : [];
-  edits.push({ oldText: args.oldText, newText: args.newText });
-  const { oldText: _oldText, newText: _newText, ...rest } = args;
-  return { ...rest, edits } as BrewvaEditToolInput;
-}
-
-function validateEditInput(input: BrewvaEditToolInput): { path: string; edits: Edit[] } {
-  if (!Array.isArray(input.edits) || input.edits.length === 0) {
+  if (!Array.isArray(candidate.edits) || candidate.edits.length === 0) {
     throw new Error("Edit tool input is invalid. edits must contain at least one replacement.");
   }
-  return { path: input.path, edits: input.edits };
+  return { path: candidate.path as string, edits: candidate.edits as Edit[] };
 }
 
 function shortenPath(path: string): string {
@@ -128,8 +117,7 @@ export function buildBrewvaEditDiffPreview(
   input: unknown,
   rawContent: string,
 ): BrewvaEditDiffPreview {
-  const normalizedInput = prepareEditArguments(input);
-  const { path, edits } = validateEditInput(normalizedInput);
+  const { path, edits } = validateEditInput(input);
   const { text } = stripBom(rawContent);
   const normalizedContent = normalizeToLF(text);
   const { baseContent, newContent } = applyEditsToNormalizedContent(normalizedContent, edits, path);
@@ -163,7 +151,6 @@ export function createBrewvaEditToolDefinition(
     outputSchema: editOutputSchema,
     errorSchema: ToolErrorRecordSchema,
     outcomeVersion: DEFAULT_TOOL_OUTCOME_VERSION,
-    prepareArguments: prepareEditArguments,
     async execute(_toolCallId, input, signal) {
       const { path, edits } = validateEditInput(input);
       const absolutePath = resolveToCwd(path, cwd);
