@@ -691,9 +691,13 @@ describe("four-port runtime architecture fitness", () => {
     );
 
     expect(offenders).toEqual([]);
-    expect(skillsOps).toContain('"skill.selection.recorded"');
-    expect(toolsOps).toContain('"tool.capability.selected"');
-    expect(toolsOps).toContain('"tool.surface.resolved"');
+    // The semantic-ops builders emit these advisory kinds through the centralized
+    // vocabulary constants rather than bare literals, so every emit/read/fold site
+    // shares one source of truth and cannot drift apart. The exact wire values are
+    // pinned in test/unit/vocabulary/harness.unit.test.ts.
+    expect(skillsOps).toContain("SKILL_SELECTION_RECORDED_EVENT_TYPE");
+    expect(toolsOps).toContain("CAPABILITY_SELECTION_RECORDED_EVENT_TYPE");
+    expect(toolsOps).toContain("TOOL_SURFACE_RESOLVED_EVENT_TYPE");
     expect(runtimeOps).not.toContain("events.readModels.record");
     expect(runtimeOps).not.toContain("ops.events.records.record");
   });

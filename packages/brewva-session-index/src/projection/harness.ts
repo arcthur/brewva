@@ -1,7 +1,10 @@
 import { chunkArray } from "@brewva/brewva-std/collections";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
+  CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE,
   HARNESS_TRACE_SNAPSHOT_SCHEMA,
+  SKILL_SELECTION_RECORDED_EVENT_TYPE,
+  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
   buildHarnessTraceSnapshotId,
   clusterHarnessTraceSnapshots,
   readHarnessManifestRecordedAdvisoryEvent,
@@ -267,7 +270,7 @@ function recordBelongsToManifest(record: BrewvaEventRecord, manifest: HarnessMan
 
 function foldHarnessEvidence(state: HarnessProjectionState, record: BrewvaEventRecord): void {
   switch (record.type) {
-    case "context_evidence_appended":
+    case CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE:
       foldContextEvidence(state, record);
       return;
     case "tool.committed":
@@ -279,10 +282,10 @@ function foldHarnessEvidence(state: HarnessProjectionState, record: BrewvaEventR
     case "turn.ended":
       foldTurnEnded(state, record);
       return;
-    case "tool.surface.resolved":
+    case TOOL_SURFACE_RESOLVED_EVENT_TYPE:
       foldToolSurface(state, record);
       return;
-    case "skill.selection.recorded":
+    case SKILL_SELECTION_RECORDED_EVENT_TYPE:
       foldSkillSelection(state, record);
       return;
     case VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE:

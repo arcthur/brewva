@@ -10,6 +10,33 @@ export const HARNESS_MANIFEST_RECORDED_EVENT_NAMESPACE = "runtime.ops";
 export const HARNESS_MANIFEST_RECORDED_EVENT_VERSION = 1;
 export const HARNESS_MANIFEST_RECORDED_EVENT_AUTHORITY = "advisory";
 
+/**
+ * Advisory runtime-ops event kinds emitted by the hosted gateway runtime-ops
+ * builders. Each literal is referenced at multiple sites — the emit call, any
+ * latest-payload read, and (for the folded kinds) the session-index harness
+ * switch — which must all agree. When sites spelled the literal independently
+ * they drifted (e.g. `skill_selection_recorded` vs `skill.selection.recorded`),
+ * silently turning the harness fold into dead code. Centralizing each literal
+ * here gives every site one source of truth, mirroring
+ * `VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE` in `iteration`.
+ *
+ * Folded by `foldHarnessEvidence`: skill-selection, context-evidence, and
+ * tool-surface. `CAPABILITY_SELECTION_RECORDED_EVENT_TYPE` is not folded — it is
+ * emitted and read back co-located in the tools builder — but is centralized for
+ * the same reason (two in-file references that must not drift).
+ *
+ * `CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE` intentionally keeps its snake_case wire
+ * value: it is persisted on the tape, so dotting it would break replay of
+ * existing records for no functional gain. Canonical kernel kinds folded by the
+ * same switch (`tool.committed`, `runtime.suspended`, `turn.ended`) are not
+ * redefined here — their single source of truth is `CANONICAL_EVENT_TYPES` in
+ * `@brewva/brewva-runtime`, which this package does not depend on.
+ */
+export const SKILL_SELECTION_RECORDED_EVENT_TYPE = "skill.selection.recorded" as const;
+export const CAPABILITY_SELECTION_RECORDED_EVENT_TYPE = "tool.capability.selected" as const;
+export const CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE = "context_evidence_appended" as const;
+export const TOOL_SURFACE_RESOLVED_EVENT_TYPE = "tool.surface.resolved" as const;
+
 export type HarnessSeverity = "low" | "medium" | "high";
 export type HarnessConfidence = "low" | "medium" | "high";
 

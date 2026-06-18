@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
+import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
 import { parseSkillDocument } from "@brewva/brewva-vocabulary/session";
 import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
@@ -22,9 +23,10 @@ export function buildSkillsRuntimeOps(
       getProducer: () => undefined,
     },
     selection: {
-      latest: (sessionId) => ctx.latestRecordedPayload(sessionId, "skill.selection.recorded"),
+      latest: (sessionId) =>
+        ctx.latestRecordedPayload(sessionId, SKILL_SELECTION_RECORDED_EVENT_TYPE),
       record(sessionId, payload) {
-        return ctx.emit(sessionId, "skill.selection.recorded", payload);
+        return ctx.emit(sessionId, SKILL_SELECTION_RECORDED_EVENT_TYPE, payload);
       },
     },
   };

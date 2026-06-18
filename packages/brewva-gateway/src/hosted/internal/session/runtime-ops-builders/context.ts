@@ -1,3 +1,4 @@
+import { CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
 import { createContextBudgetRuntimeController } from "../runtime-ops-context-budget.js";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
@@ -50,7 +51,7 @@ export function buildContextRuntimeOps(
           });
           ctx.state.latestContextEvidence.set(sessionId, sessionEvidence);
         }
-        return ctx.emit(sessionId, "context_evidence_appended", payload);
+        return ctx.emit(sessionId, CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE, payload);
       },
     },
     prompt: {

@@ -1,7 +1,9 @@
 export {
   buildHarnessManifest,
   buildHarnessTraceSnapshotId,
+  CAPABILITY_SELECTION_RECORDED_EVENT_TYPE,
   clusterHarnessTraceSnapshots,
+  CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE,
   HARNESS_EVAL_REPORT_SCHEMA,
   HARNESS_MANIFEST_RECORDED_EVENT_AUTHORITY,
   HARNESS_MANIFEST_RECORDED_EVENT_NAMESPACE,
@@ -12,7 +14,9 @@ export {
   HARNESS_TRACE_SNAPSHOT_SCHEMA,
   redactHarnessManifest,
   readHarnessManifestRecordedAdvisoryEvent,
+  SKILL_SELECTION_RECORDED_EVENT_TYPE,
   stableHarnessId,
+  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
   unwrapHarnessManifestRecordedAdvisoryPayload,
   wrapHarnessManifestRecordedAdvisoryPayload,
 } from "./internal/harness.js";

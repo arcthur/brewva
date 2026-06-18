@@ -9,6 +9,10 @@ import {
   RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND,
 } from "@brewva/brewva-vocabulary/events";
 import {
+  CAPABILITY_SELECTION_RECORDED_EVENT_TYPE,
+  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/harness";
+import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
@@ -106,14 +110,14 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
     },
     surface: {
       recordResolved(sessionId, payload) {
-        return ctx.emit(sessionId, "tool.surface.resolved", payload);
+        return ctx.emit(sessionId, TOOL_SURFACE_RESOLVED_EVENT_TYPE, payload);
       },
     },
     capabilitySelection: {
       latest: (sessionId: string) =>
-        ctx.latestRecordedPayload(sessionId, "tool.capability.selected"),
+        ctx.latestRecordedPayload(sessionId, CAPABILITY_SELECTION_RECORDED_EVENT_TYPE),
       record(sessionId, payload) {
-        return ctx.emit(sessionId, "tool.capability.selected", payload);
+        return ctx.emit(sessionId, CAPABILITY_SELECTION_RECORDED_EVENT_TYPE, payload);
       },
     },
     parallel: parallelAdmission,

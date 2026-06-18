@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
   buildHarnessTraceSnapshotId,
   buildHarnessManifest,
+  CAPABILITY_SELECTION_RECORDED_EVENT_TYPE,
   clusterHarnessTraceSnapshots,
+  CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE,
   HARNESS_MANIFEST_RECORDED_EVENT_AUTHORITY,
   HARNESS_MANIFEST_RECORDED_EVENT_NAMESPACE,
   HARNESS_MANIFEST_RECORDED_EVENT_TYPE,
@@ -10,13 +12,26 @@ import {
   HARNESS_MANIFEST_SCHEMA,
   redactHarnessManifest,
   readHarnessManifestRecordedAdvisoryEvent,
+  SKILL_SELECTION_RECORDED_EVENT_TYPE,
   stableHarnessId,
+  TOOL_SURFACE_RESOLVED_EVENT_TYPE,
   unwrapHarnessManifestRecordedAdvisoryPayload,
   wrapHarnessManifestRecordedAdvisoryPayload,
   type HarnessTraceSnapshot,
 } from "@brewva/brewva-vocabulary/harness";
 
 describe("harness vocabulary", () => {
+  test("pins the wire values of the harness-folded advisory event kinds", () => {
+    // These constants are the single source of truth shared by the gateway emit
+    // sites and the session-index harness fold; the literals must never drift.
+    // context_evidence_appended intentionally stays snake_case because the value
+    // is persisted on the tape — dotting it would break replay of existing events.
+    expect(SKILL_SELECTION_RECORDED_EVENT_TYPE).toBe("skill.selection.recorded");
+    expect(CAPABILITY_SELECTION_RECORDED_EVENT_TYPE).toBe("tool.capability.selected");
+    expect(TOOL_SURFACE_RESOLVED_EVENT_TYPE).toBe("tool.surface.resolved");
+    expect(CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE).toBe("context_evidence_appended");
+  });
+
   test("builds a stable redacted manifest identity", () => {
     const first = buildHarnessManifest({
       sessionId: "session-harness",
