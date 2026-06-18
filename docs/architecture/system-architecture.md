@@ -243,8 +243,7 @@ compatibility story.
 
 - `@brewva/brewva-runtime`: the four-port runtime root, canonical tape, kernel
   tool transactions, model materialization, runtime turn implementation, deterministic
-  tape projections, and internal infrastructure needed to preserve old hosted
-  adapter behavior during cutover.
+  tape projections.
 - `@brewva/brewva-effect`: internal Effect foundation package. It owns Effect
   platform dependencies, boundary runners, scoped resource and schedule
   helpers, typed infrastructure errors, config service helpers, retry policy,
