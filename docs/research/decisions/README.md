@@ -101,6 +101,7 @@ Every accepted decision inherits these rules:
 - [skill-compounding-loop-completeness-and-parameterization-model](./skill-compounding-loop-completeness-and-parameterization-model.md)
 - [skill-contract-precision-and-advisory-artifact-boundaries](./skill-contract-precision-and-advisory-artifact-boundaries.md)
 - [skill-metadata-as-runtime-contract-and-routing-substrate](./skill-metadata-as-runtime-contract-and-routing-substrate.md)
+- [derivation-direction-invariant-and-skill-navigation](./derivation-direction-invariant-and-skill-navigation.md)
 - [skill-lifecycle-profile-subtraction](./skill-lifecycle-profile-subtraction.md)
 - [skill-surface-compression-and-project-guidance-boundaries](./skill-surface-compression-and-project-guidance-boundaries.md)
 - [specialist-subagents-and-adversarial-verification](./specialist-subagents-and-adversarial-verification.md)

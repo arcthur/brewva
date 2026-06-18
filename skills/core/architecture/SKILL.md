@@ -144,7 +144,7 @@ Hand off to `plan` after one deepening candidate has been selected and the
 `interface_exploration_brief` names the interface sketches, constraints, and
 decision criteria that `plan` must resolve.
 
-Hand off to `repository-analysis` when the hot path is unknown, and to
+Hand off to `repository-analysis` when the hot path is unknown. Hand off to
 `learning-research` when precedent may overturn the candidate. Recommend
 `knowledge-capture` only after validation; this skill does not write docs.
 

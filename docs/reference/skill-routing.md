@@ -97,6 +97,36 @@ receipts stay hidden.
 `explicitSkillMentionNames`, `skillSelectionId`, and `skillSelectionMode`.
 These fields are trace evidence, not gates.
 
+## Derivation Direction Invariant
+
+Skill metadata and bodies are descriptive. The runtime never derives an
+unbypassable decision from them (see `design-axioms.md`, axiom 18). The boundary
+has two axes — direction and binding strength — which yield three tiers:
+
+| Tier | Flow                              | Example                                                                        | Verdict                             |
+| ---- | --------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------- |
+| 1    | descriptive to doc view           | a generated skill navigation view                                              | allowed                             |
+| 2    | descriptive to advisory runtime   | `selection.*` feeding selection-field ranking                                  | allowed — sole registered exception |
+| 3    | descriptive to authoritative gate | a readiness gate, skill activation, or artifact resolver derived from metadata | forbidden                           |
+
+This maps onto the state-visibility rule in `design-axioms.md`: a Tier-1 view is
+visibility-changing and stays projection-visible; Tier-2 ranking is advisory, so
+attention stays with the model; a Tier-3 gate would be behavior-changing yet not
+replay-derived, which the axiom forbids.
+
+The sole registered Tier-2 exception is selection-field ranking: the
+deterministic selector reads `selection.path_globs`, `selection.when_to_use`,
+`name`, and `description` to order an advisory SkillCard shortlist (see Advisory
+Shortlist above). It produces a ranking the model can ignore, not a gate. Any
+new descriptive-to-runtime read site must be registered here explicitly, or it
+is a Tier-3 violation.
+
+Cross-skill handoff references in skill bodies — a verb from the closed set
+`escalate to`, `hand off to`, `route to` (the one-word `handoff to` spelling is
+also accepted) before a backticked skill name — are the Tier-1 source-of-record:
+a build-time generator may derive an aggregate navigation view from them, but
+neither the view nor the handoff lines feed runtime selection.
+
 ## Replacement Pattern
 
 Use ordinary advisory and authority surfaces:

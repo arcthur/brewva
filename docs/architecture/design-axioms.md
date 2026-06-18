@@ -75,6 +75,14 @@ public contracts.
     New orchestration breadth must land as opt-in control-plane behavior or as
     an explicit exception with a compatibility story. The current stable
     transaction boundary remains `single tool call`.
+18. `Descriptive metadata derives views, never authority.`
+    Descriptions, selection hints, and in-body cross-references may be projected
+    into documentation and advisory surfaces, but the runtime must never derive
+    an unbypassable decision — a gate, an activation, or an authority grant —
+    from them. Derivation is one-way: authoritative state may feed descriptive
+    views; descriptive metadata may not feed authoritative runtime decisions.
+    Advisory, model-bypassable ranking is the only exception and must be
+    registered where it lives.
 
 Implementation note:
 
