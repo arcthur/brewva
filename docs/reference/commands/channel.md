@@ -38,7 +38,9 @@ goal lifecycle, and direct `@agent` task routing.
 `/goal [@agent] ...` uses the same shared parser as the interactive shell:
 `/goal [@agent] [--tokens <count>] <objective>`, `/goal [@agent] status`,
 `pause`, `resume`, and `clear`. The target agent defaults to the current focus.
-Owner ACL matches `/update`. The command mutates the target live session's
+Like all non-public orchestration commands (everything except `/agents` and
+`@agent` routing), `/goal` requires owner authorization. The command mutates the
+target live session's
 runtime goal ops; it does not create channel-local goal truth.
 
 These commands coordinate live sessions; they do not create hidden planner

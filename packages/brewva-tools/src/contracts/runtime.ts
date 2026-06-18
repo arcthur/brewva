@@ -65,7 +65,6 @@ import type {
 import type {
   HistoryViewBaselineSnapshot,
   OpenToolCallRecord,
-  ProducerContract,
   RecordSessionRewindCheckpointInput,
   SessionCostSummary,
   SessionLifecycleSnapshot,
@@ -783,9 +782,7 @@ export interface BrewvaToolRuntimeQueryPort {
     readonly catalog: {
       get(name: string): SkillDocument | undefined;
       getLoadReport(): SkillRegistryLoadReport;
-      getProducer(name: string): ProducerContract | undefined;
       list(): SkillDocument[];
-      listProducers(): ProtocolRecord[];
     };
     readonly selection: {
       record(sessionId: string, receipt: object): unknown;

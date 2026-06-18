@@ -27,9 +27,9 @@ channel.
 
 ## Out Of Scope
 
-- `brewva gateway ...`
-- local interactive CLI sessions
-- detached subagent details
+- `brewva gateway ...` → `gateway-control-plane-lifecycle`
+- local interactive CLI sessions → `interactive-session`
+- detached subagent details → `background-and-parallelism`
 
 ## Flow
 

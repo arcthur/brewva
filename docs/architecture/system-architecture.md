@@ -78,8 +78,8 @@ consistent with it and adds the implementation rings `Substrate Ring`,
   turn truth or recovery policy.
 - `Substrate Ring`: session lifecycle, turn orchestration, tool execution
   phases, request materialization primitives, checkpoint/resume mechanics, and
-  session persistence bridges. Substrate may prepare requests; it does not call
-  models or own salience.
+  substrate-internal persistence helpers. Substrate may prepare requests; it
+  does not call models or own salience.
 - `Deliberation Ring`: recall search, precedent search, model-facing guidance,
   compact prompt templates, candidate preparation, and advisory evaluation. It
   may produce candidates and prompts, but it does not commit effects or execute
@@ -155,8 +155,8 @@ four-port object:
   deterministic projections.
 - `runtime.kernel`: tool authorization, approval requests, commitments, commit
   receipts, and abort receipts.
-- `runtime.model`: prompt materialization, skill selection, and checkpoint
-  candidates.
+- `runtime.model`: prompt and working-memory materialization, and checkpoint
+  candidate construction.
 - `runtime.turn(...)`: provider streaming, context pressure, retry discipline,
   resource scheduling, interruption, cost observation, and terminal turn commit.
 
@@ -252,13 +252,13 @@ compatibility story.
   boundary-oriented, while Effect primitive aliases remain explicit through the
   `@brewva/brewva-effect/primitives` subpath.
 - `@brewva/brewva-substrate`: contract-only root vocabulary plus explicit
-  mechanism subpaths for session lifecycle, prompt/resource loading,
-  provenance, sequential execution primitives, pure context-budget derivation,
-  token-aware compaction cut-point selection, pure compaction mechanics,
-  host-facing tools, tool protocol vocabulary, host plugin ports, persistence
-  helpers, and the turn-loop substrate. Substrate assembles mechanisms for
-  direct hosts; it is not the gateway hosted effect owner, does not execute
-  model calls, and does not own compaction trigger or recovery policy.
+  mechanism subpaths for session lifecycle, prompt/resource loading, pure
+  context-budget derivation, token-aware compaction cut-point selection, pure
+  compaction mechanics, host-facing tools, tool protocol vocabulary, host plugin
+  ports, the agent protocol, and the turn-loop substrate. Substrate assembles
+  mechanisms for direct hosts; it is not the gateway hosted effect owner, does
+  not execute model calls, and does not own compaction trigger or recovery
+  policy.
 - `@brewva/brewva-provider-core`: provider contracts, model catalog lookup,
   provider registration, stream normalization, cache rendering, and driver
   adapters. It is mechanism, not replay or credential authority.

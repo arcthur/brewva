@@ -61,8 +61,15 @@ Workflow walkthroughs:
   - Channel gateway and turn flow: `docs/journeys/operator/channel-gateway-and-turn-flow.md`
   - Background and parallelism: `docs/journeys/operator/background-and-parallelism.md`
   - Intent-driven scheduling: `docs/journeys/operator/intent-driven-scheduling.md`
+  - MCP tool integration: `docs/journeys/operator/mcp-tool-integration.md`
+  - ACP client ingress: `docs/journeys/operator/acp-client-ingress.md`
+  - Skill routing and activation: `docs/journeys/operator/skill-routing-and-activation.md`
+  - Recall and knowledge compounding: `docs/journeys/operator/recall-and-knowledge-compounding.md`
 - Internal journeys:
   - Context and compaction: `docs/journeys/internal/context-and-compaction.md`
+  - WAL and crash recovery: `docs/journeys/internal/wal-and-crash-recovery.md`
+  - Provider turn, streaming, and fallback: `docs/journeys/internal/provider-turn-streaming-and-fallback.md`
+  - Hosted behavior installation: `docs/journeys/internal/hosted-behavior-installation.md`
 
 ## Architecture
 

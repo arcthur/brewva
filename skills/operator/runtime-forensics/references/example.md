@@ -14,7 +14,7 @@ Output:
       "layer": "event_store",
       "detail": "`provider_fallback_retry` has an `entered` record with no later `completed` or `failed` event for attempt=1",
       "severity": "high",
-      "evidence_path": ".orchestrator/events/sess_c2Vzc19hYmMxMjM.jsonl"
+      "evidence_path": ".brewva/tape/sess_abc123.jsonl"
     },
     {
       "type": "divergence",

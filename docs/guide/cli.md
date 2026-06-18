@@ -9,11 +9,14 @@ complete generated subcommand and flag contract, use
 ## Execution Modes
 
 - Interactive mode by default
-- One-shot text mode with `--print`
+- One-shot text mode with `--print` (target the local daemon with
+  `--backend gateway`; the default `auto` falls back to embedded)
 - One-shot JSON mode with `--mode json` or `--json`
 - Undo, redo, and replay modes
-- Scheduler daemon mode
-- Channel gateway mode
+- Scheduler daemon mode with `--daemon`
+- Channel host mode with `--channel <name>`
+- ACP stdio agent mode with `--acp` (runs an Agent Client Protocol agent over
+  stdio through the gateway)
 
 Mode resolution is explicit and fail-fast. Incompatible flags return a parse
 error instead of reviving retired prompt-loop behavior.
@@ -41,15 +44,11 @@ Key ideas:
   inbox, diff, and raw replay are drill-downs
 - `/transcript` opens a read-only snapshot of the current session transcript in
   the configured external pager
-- `/tree` opens the context-entry micro tree. `Enter` checks out the selected
-  entry as conversation-only state and asks whether to carry a summary when
-  leaving the current branch tail. `b` branches here conversation-only with no
-  summary in one keystroke (no dialog), and `c` quick-carries a bounded branch
-  summary. `/` refines search, `F` cycles filters, `r` opens explicit rewind
-  choices for conversation/code rollback, and `l` focuses the owning lineage node.
-- `/lineage` remains the macro topology view for work branches, recovery,
-  delegation, adoption, and channel-local selection. `t` opens `/tree` scoped
-  to the selected lineage node.
+- `/tree` is the context-entry micro browser (conversation-only checkout,
+  one-keystroke branch/carry, in-tree search, filters, and rewind); `/lineage`
+  is the macro topology view for work branches, recovery, delegation, adoption,
+  and channel-local selection. Per-key behavior lives in
+  `docs/reference/commands/interactive.md`.
 
 Keyboard details are in `docs/reference/commands/interactive.md`.
 
@@ -59,6 +58,9 @@ Keyboard details are in `docs/reference/commands/interactive.md`.
 - `brewva inspect`: Work Card first, replay-first inspection for persisted
   sessions
 - `brewva insights`: multi-session workspace analysis
+- `brewva harness`: trace-driven harness snapshots, patrol, and manifest
+  comparison (advisory)
+- `brewva skills`: skills migration helper
 - `brewva onboard`: gateway service install/uninstall wrapper
 - `brewva gateway`: local hosted-session daemon lifecycle
 
@@ -90,8 +92,8 @@ or delete those fields before rerunning Brewva.
 
 Managed or headless sessions can register hosted extension commands for inspect,
 insights, questions, answers, agent overlays, and updates. Channel
-orchestration adds agent list/status, steer, create/delete/focus, run, discuss,
-and direct `@agent` routing when enabled.
+orchestration adds agent-management slash commands (see
+`docs/reference/commands/channel.md`) when enabled.
 
 These commands are thin control-plane veneers over replay-visible session
 state. They do not create hidden planner state or a second command authority

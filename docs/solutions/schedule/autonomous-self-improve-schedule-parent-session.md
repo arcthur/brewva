@@ -32,7 +32,7 @@ reason text merely told the child session to "run self-improve".
 Do not treat recurring `self-improve` as a raw cron prompt. Seed a fixed parent
 session that owns:
 
-- the `self-improve` advisory context and producer contract
+- the `self-improve` advisory context
 - the TaskSpec goal / expected behavior / constraints for the learning pass
 - the durable recurring schedule intent
 
@@ -43,14 +43,14 @@ child run.
 ## Why This Matters
 
 If the schedule only passes freeform reason text, the child run has to rediscover
-the intended producer contract from prose. That weakens continuation fidelity and
-makes the automation look like a second hidden control path.
+the intended semantic artifacts from prose. That weakens continuation fidelity
+and makes the automation look like a second hidden control path.
 
 By contrast, parent-session seeding keeps the autonomous loop inside Brewva's
 existing semantic contract:
 
 - TaskSpec remains the parameter surface
-- producer contracts describe the semantic artifacts
+- the parent session's advisory context describes the expected artifacts
 - capability selection remains separate from the schedule trigger
 - scheduler remains the recurring trigger, not the policy brain
 - `self-improve` still stops at promotion candidates rather than direct writes

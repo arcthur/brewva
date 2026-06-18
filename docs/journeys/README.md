@@ -17,9 +17,42 @@ approval handling, channel behavior, scheduling, or incident entrypoints.
 Start with `internal/` when you are reviewing runtime internals, hosted runtime
 plugins, WAL behavior, compaction, or other cross-package recovery mechanics.
 
+## Coverage Map
+
+This map is the source of truth for what has a journey today. Absence below is a
+tracked gap, not an oversight: a path is either covered or explicitly listed as
+not-yet-journeyed with the doc to read meanwhile.
+
+### Covered
+
+| Surface / path                         | Journey                                            | Axis     |
+| -------------------------------------- | -------------------------------------------------- | -------- |
+| Interactive session                    | `operator/interactive-session.md`                  | operator |
+| Channel gateway and turn flow          | `operator/channel-gateway-and-turn-flow.md`        | operator |
+| Gateway control-plane lifecycle        | `operator/gateway-control-plane-lifecycle.md`      | operator |
+| Approval and rollback                  | `operator/approval-and-rollback.md`                | operator |
+| Background and parallelism             | `operator/background-and-parallelism.md`           | operator |
+| Intent-driven scheduling               | `operator/intent-driven-scheduling.md`             | operator |
+| Inspect, replay, and recovery          | `operator/inspect-replay-and-recovery.md`          | operator |
+| MCP tool integration                   | `operator/mcp-tool-integration.md`                 | operator |
+| ACP client ingress                     | `operator/acp-client-ingress.md`                   | operator |
+| Skill routing and activation           | `operator/skill-routing-and-activation.md`         | operator |
+| Recall and knowledge compounding       | `operator/recall-and-knowledge-compounding.md`     | operator |
+| Context and compaction                 | `internal/context-and-compaction.md`               | internal |
+| WAL and crash recovery                 | `internal/wal-and-crash-recovery.md`               | internal |
+| Provider turn, streaming, and fallback | `internal/provider-turn-streaming-and-fallback.md` | internal |
+| Hosted behavior installation           | `internal/hosted-behavior-installation.md`         | internal |
+
+### Not Yet Journeyed
+
+No tracked gaps right now: every major path above has a journey. When a new
+cross-package path appears without one, list it here with its axis and the
+reference or guide doc to use in the meantime, so its absence reads as a tracked
+gap rather than an oversight.
+
 ## Standard Pattern
 
-Every journey follows the same structure:
+Every journey carries the same required core sections, in this order:
 
 1. `Audience`
 2. `Entry Points`
@@ -33,6 +66,16 @@ Every journey follows the same structure:
 10. `Observability`
 11. `Code Pointers`
 12. `Related Docs`
+
+A journey may add optional sections when a path needs them. Place any optional
+section after `Failure And Recovery` and before `Observability`. Optional
+sections currently in use:
+
+- `Enforced Claims`: authority-bearing claims pinned to live fitness tests, each
+  with a stable id and a drift guard that keeps the documented list and the test
+  registry identical (see `operator/background-and-parallelism.md`)
+- `Interactive Task Review`: operator-facing review UX specific to one surface
+  (see `operator/background-and-parallelism.md`)
 
 ## Terminology Baseline
 

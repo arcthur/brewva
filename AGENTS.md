@@ -54,7 +54,7 @@
 
 - Runtime API and public entry surface: `packages/brewva-runtime/src/runtime/runtime.ts`, `packages/brewva-runtime/src/public/index.ts`.
 - Runtime model attention: `packages/brewva-runtime/src/runtime/model/impl.ts`.
-- Session query plane: `packages/brewva-session-index/src/index.ts`, consumed by `packages/brewva-recall/src/broker.ts` and `packages/brewva-cli/src/insights.ts`.
+- Session query plane: `packages/brewva-session-index/src/index.ts`, consumed by `packages/brewva-recall/src/broker/broker.ts` and `packages/brewva-cli/src/operator/insights.ts`.
 - Gateway hosted context and plugins: `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`, `packages/brewva-gateway/src/hosted/internal/compaction/model-downshift-policy.ts`, `packages/brewva-gateway/src/extensions/api.ts`, `packages/brewva-gateway/src/hosted/internal/turn-adapter/lifecycle/local-hook-port.ts`.
 - Managed tool capabilities: `packages/brewva-tools/src/registry/managed-metadata.ts`, `packages/brewva-tools/src/registry/runtime-bound-tool.ts`.
 - Expanded lookup map: `skills/project/shared/source-map.md`.

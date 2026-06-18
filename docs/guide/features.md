@@ -19,7 +19,7 @@ Brewva is organized around replay-visible runtime capabilities:
 - Work Card projections for the default
   `receive -> orient -> authorize -> act -> verify -> continue` product loop
 - attention options for bounded discovery before unbounded memory admission
-- advisory SkillCards, ProducerContracts, and capability selection receipts
+- advisory SkillCards and capability selection receipts
 - tool access policy, effect boundaries, and budget gates
 - evidence ledger recording and replay-visible governance receipts
 - task and truth state through event-sourced replay
@@ -43,7 +43,9 @@ Operators interact with those capabilities through:
 - `brewva inspect` for Work Card first, replay-first session inspection
 - `brewva insights` for multi-session workspace analysis
 - the gateway daemon for local hosted-session orchestration
-- scheduler daemon mode for intent execution
+- scheduler daemon mode (`--daemon`) for background scheduled work without an
+  interactive session
+- the ACP stdio agent (`--acp`) for external Agent Client Protocol clients
 - Telegram channel mode and webhook ingress
 - multi-agent channel orchestration when enabled
 
@@ -59,7 +61,7 @@ Managed tools are grouped by behavior rather than listed in this guide:
 - memory, recall, precedent, output search, and observability
 - attention options over recall, precedent, workbench, SkillCards, and tape
   evidence
-- producer-contract, subagent, worker-result, and task delegation
+- subagent, worker-result, and task delegation
 - workflow, scheduling, leases, tape, and resource coordination
 
 Channel-specific A2A tools are registered by channel extensions when
@@ -72,10 +74,8 @@ execution envelopes. The parent session owns task truth, effect receipts,
 verification evidence, and patch adoption; it no longer owns an active skill
 slot or skill completion state.
 
-Structured workflow artifacts come from `skills/producers/<name>.yaml`, not
-from `SKILL.md` frontmatter. External authority comes from capability manifests
-and deterministic selection receipts, not from a skill name appearing in model
-context.
+External authority comes from capability manifests and deterministic selection
+receipts, not from a skill name appearing in model context.
 
 Skill taxonomy is split by role:
 

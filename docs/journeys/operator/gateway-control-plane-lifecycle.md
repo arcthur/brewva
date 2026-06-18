@@ -33,9 +33,10 @@ long-running operation through status, logs, install, and token rotation.
 
 ## Out Of Scope
 
-- `--channel telegram`
-- skill and verification details inside one interactive session
-- scheduler daemon
+- `--channel telegram` → `channel-gateway-and-turn-flow`
+- skill and verification details inside one interactive session →
+  `skill-routing-and-activation` and `interactive-session`
+- scheduler daemon → `intent-driven-scheduling`
 
 ## Flow
 

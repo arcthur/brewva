@@ -33,16 +33,8 @@ The default loop is:
 
 This is the product grammar for shell, CLI, channels, and headless sessions. It
 is not a planner ontology and not a session state machine. Each step reads or
-renders existing facts:
-
-- `receive`: user/channel/hosted ingress and current request refs
-- `orient`: Work Card, bounded baseline context, and attention option cards
-- `authorize`: capability receipts, operator asks, sandbox posture, and kernel
-  proposal state
-- `act`: single-tool-call kernel transactions and managed-tool execution
-- `verify`: advisory verification evidence or explicit verification gate
-  policy input
-- `continue`: optional replayable continuation anchor, summary, and next steps
+renders existing facts. See `system-architecture.md` (Product Shape) for the
+per-step ownership breakdown.
 
 ## Work Card Product
 

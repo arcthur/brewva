@@ -1,9 +1,0 @@
-producer: review
-outputs:
-  - review_report
-  - review_findings
-  - merge_decision
-semantic_bindings:
-  review_report: review.review_report.v2
-  review_findings: review.review_findings.v2
-  merge_decision: review.merge_decision.v2

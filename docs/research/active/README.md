@@ -45,10 +45,6 @@ discipline.
   active RFC for closing Brewva's context-budget loop, making compaction cut
   points token-aware, and promoting workbench-gated compaction into a runtime
   contract.
-- [RFC: Effect Approval And Rollback Closure](./rfc-effect-approval-and-rollback-closure.md):
-  active RFC for hardening approval-bound effect commitment, exact resume,
-  approval consumption, rollback capability wiring, and evidence-native
-  operator surfaces.
 - [RFC: TUI Rendering Performance And Test Harness](./rfc-tui-rendering-performance-and-test-harness.md):
   active RFC for removing per-frame full view-model cloning, O(n) per-token
   projector work, the scroll-sync feedback loop, stale composer write-back,
@@ -63,14 +59,6 @@ discipline.
   distills failure precedent from the session index into explicit-pull
   `docs/solutions/**` records (RDP). Resolves the recall-versus-summary
   fact-ownership question tracked by the context-OS RFC.
-- [RFC: Hosted Control-Plane Subtraction — Single Runtime, Tape-Authoritative State, And Adapter Collapse](./rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md):
-  active RFC for a gateway hosted control-plane convergence pass: collapsing the
-  two per-session runtime instances into one, making recoverable hosted state
-  tape-authoritative (fixing a replay-derived invariant violation), retiring the
-  wide `HostedRuntimeAdapterPort` in favor of use-case-scoped narrow ports,
-  converging the hosted turn path into one module, recovering single-consumer
-  substrate seams, and compressing the architecture narrative. Gated on
-  characterization behavior locks and count-based hosted fitness invariants.
 - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md):
   active RFC for closing the last gap in typed, per-entry, promotion-grade
   attention-selection evidence: making attention selection an accountable effect

@@ -60,6 +60,6 @@ the user/model stream yet. Do not use it to switch models mid-answer.
 
 ## References
 
-- `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-provider.ts`
 - `packages/brewva-provider-core/src/providers/_shared/payload-metadata.ts`
 - `docs/reference/provider-streaming.md`

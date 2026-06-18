@@ -71,6 +71,7 @@ type CanonicalEventType =
   | "msg.committed"
   | "reason.committed"
   | "tool.proposed"
+  | "tool.started"
   | "tool.committed"
   | "tool.aborted"
   | "checkpoint.committed"

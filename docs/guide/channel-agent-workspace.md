@@ -11,8 +11,8 @@ the full command or hosted extension contract.
 
 - Multi-agent registry under `.brewva/agents/<agentId>/`
 - Per-agent runtime state isolation (`.brewva/agents/<agentId>/state/*`)
-- In-channel command routing (`/agents`, `/status`, `/steer`, `/answer`, `/update`,
-  `/agent new`, `/agent delete`, `/agent status`, `/focus`, `/run`,
+- In-channel command routing (`/agents`, `/status`, `/steer`, `/answer`, `/goal`,
+  `/update`, `/agent new`, `/agent delete`, `/agent status`, `/focus`, `/run`,
   `/discuss`, `@agent ...`)
 - Fan-out and bounded discussion loops
 - Optional A2A tools (`agent_send`, `agent_broadcast`, `agent_list`)
@@ -47,7 +47,7 @@ Worker runtimes force these paths per agent:
 - `ledger.path -> .brewva/agents/<agentId>/state/ledger/evidence.jsonl`
 - `projection.dir -> .brewva/agents/<agentId>/state/projection`
 - `tape.dir -> .brewva/agents/<agentId>/state/tape`
-- `infrastructure.recoveryWal.dir -> .brewva/agents/<agentId>/state/recovery-wal` (WAL-backed recovery mechanism)
+- `infrastructure.recoveryWal.dir -> .brewva/agents/<agentId>/state/recovery-wal` (durable-transient ingress/in-flight WAL; see `docs/journeys/internal/wal-and-crash-recovery.md`)
 - `schedule.projectionPath -> .brewva/agents/<agentId>/state/schedule/intents.jsonl`
 - `schedule.enabled -> false`
 

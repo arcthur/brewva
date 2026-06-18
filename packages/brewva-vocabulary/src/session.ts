@@ -34,12 +34,8 @@ export {
 } from "./internal/session.js";
 
 export {
-  getProducerOutputContracts,
-  getProducerSemanticBindings,
   listSkillResourceRefs,
   listSurfacedSkillResourceRefs,
-  listProducerOutputs,
-  parseProducerContractFile,
   parseSkillDocument,
   SKILLCARD_PROJECTION_LIMITS,
 } from "./internal/skills.js";
@@ -101,14 +97,12 @@ export type {
 
 export type {
   LoadableSkillCategory,
-  ProducerContract,
   SkillCard,
   SkillCategory,
   SkillDocument,
   SkillInvocationMode,
   SkillInvocationRecord,
   SkillInvocationSelectionTrigger,
-  SkillOutputContract,
   SkillRegistryLoadReport,
   SkillResourceRef,
 } from "./internal/skills.js";

@@ -36,7 +36,8 @@ Every runtime event follows the same stored envelope:
 - `sessionId`
 - `type`
 - `timestamp`
-- `turn?`
+- `turnId?`
+- `attemptId?`
 - `payload?`
 
 Payload shape is owned by the event family, but envelope ordering and query
@@ -127,24 +128,6 @@ Use the generated index below for exact canonical event names. Use the family
 pages for advisory event semantics, payload interpretation, and where a family
 affects replay or inspection.
 
-## Convention Event Producer Maturity
-
-The convention lifecycle foundation registers the full convention event
-vocabulary so downstream replay and inspection code can rely on stable event
-names. Producer maturity is intentionally uneven:
-
-- active internal writers:
-  `convention_candidate_observed`, `convention_change_requested`,
-  `convention_change_decided`, `convention_decision_receipt_recorded`,
-  `convention_change_applied`, `convention_emergency_applied`
-- explicit-request writer only: `convention_contested`
-- reserved projector outputs without active producers:
-  `convention_health_degraded`, `convention_conflict_detected`
-
-Historical projector rationale is archived in
-`docs/research/archive/convention-projectors-and-substrate-review.md`. New
-producer work should start from a focused active research note.
-
 ## Generated Event Catalog
 
 <!-- generated:event-catalog start -->
@@ -176,3 +159,12 @@ Not every diagnostic deserves a durable event. Envelope diagnostics stay
 process-local. No separate durable envelope-diagnostics event is part of the
 contract; recovery exposes bounded, replay-relevant state through session and
 recovery events instead.
+
+## Maintenance
+
+Before deleting or renaming a documented event, verify it against the whole
+codebase, not just the constant table: some events are emitted as bare string
+literals (with no `*_EVENT_TYPE` constant to grep) and carry a
+dotted-versus-underscored split between the runtime kind and the canonical form.
+See `docs/solutions/docs/stale-claim-verification-in-doc-audits.md` for the
+precedent behind this rule.

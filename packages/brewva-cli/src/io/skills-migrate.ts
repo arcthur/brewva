@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { stringify as stringifyYaml } from "yaml";
@@ -25,7 +25,6 @@ const SKILL_CATEGORY_DIRS = ["core", "domain", "operator", "meta", "internal", "
 interface MigrationIssue {
   filePath: string;
   removedFields: string[];
-  producerOutputs: string[];
 }
 
 interface ParsedSkillFile {
@@ -67,7 +66,6 @@ function walkSkillFiles(root: string): string[] {
       if (entry.name.startsWith(".")) continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name === "producers") continue;
         walk(full);
         continue;
       }
@@ -93,19 +91,8 @@ function parseSkillFile(filePath: string): ParsedSkillFile {
   };
 }
 
-function readOutputNames(value: unknown): string[] {
-  if (!isRecord(value)) return [];
-  const outputs = value.outputs;
-  if (!Array.isArray(outputs)) return [];
-  return outputs.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
-}
-
 function isMetaSkill(skillDir: string, filePath: string): boolean {
   return relative(skillDir, filePath).replaceAll("\\", "/").startsWith("meta/");
-}
-
-function isProjectOverlay(skillDir: string, filePath: string): boolean {
-  return relative(skillDir, filePath).replaceAll("\\", "/").startsWith("project/overlays/");
 }
 
 function buildSkillCardFrontmatter(
@@ -131,59 +118,21 @@ function normalizeSelection(value: unknown): unknown {
   return selection;
 }
 
-function buildProducerContract(parsed: ParsedSkillFile): Record<string, unknown> | undefined {
-  const name =
-    typeof parsed.data.name === "string" ? parsed.data.name.trim() : basename(parsed.filePath);
-  if (!name) return undefined;
-  const intent = parsed.data.intent;
-  if (!isRecord(intent)) return undefined;
-  const intentRecord = intent;
-  const outputs = readOutputNames(intent);
-  if (outputs.length === 0) return undefined;
-  const producer: Record<string, unknown> = {
-    producer: name,
-    outputs,
-  };
-  if (isRecord(intentRecord.output_contracts)) {
-    producer.output_contracts = intentRecord.output_contracts;
-  }
-  if (isRecord(intentRecord.semantic_bindings)) {
-    producer.semantic_bindings = intentRecord.semantic_bindings;
-  }
-  return producer;
-}
-
 function collectIssues(skillDir: string): MigrationIssue[] {
   return walkSkillFiles(skillDir).map((filePath) => {
     const parsed = parseSkillFile(filePath);
     return {
       filePath,
       removedFields: Object.keys(parsed.data).filter((key) => REMOVED_SKILL_CARD_KEYS.has(key)),
-      producerOutputs: isProjectOverlay(skillDir, filePath)
-        ? []
-        : readOutputNames(parsed.data.intent),
     };
   });
 }
 
 function writeMigration(skillDir: string): MigrationIssue[] {
   const issues = collectIssues(skillDir);
-  const producerDir = join(skillDir, "producers");
-  mkdirSync(producerDir, { recursive: true });
 
   for (const filePath of walkSkillFiles(skillDir)) {
     const parsed = parseSkillFile(filePath);
-    const producer = isProjectOverlay(skillDir, filePath)
-      ? undefined
-      : buildProducerContract(parsed);
-    if (producer) {
-      writeFileSync(
-        join(producerDir, `${String(producer.producer)}.yaml`),
-        stringifyYaml(producer, { lineWidth: 100 }),
-        "utf8",
-      );
-    }
-
     const card = buildSkillCardFrontmatter(skillDir, parsed);
     writeFileSync(
       filePath,
@@ -196,22 +145,10 @@ function writeMigration(skillDir: string): MigrationIssue[] {
 }
 
 function printIssues(issues: readonly MigrationIssue[], mode: "check" | "write"): void {
-  const impacted = issues.filter(
-    (issue) => issue.removedFields.length > 0 || issue.producerOutputs.length > 0,
-  );
-  console.log(
-    `skills migrate ${mode}: ${impacted.length} file(s) with removed fields or producer outputs`,
-  );
+  const impacted = issues.filter((issue) => issue.removedFields.length > 0);
+  console.log(`skills migrate ${mode}: ${impacted.length} file(s) with removed fields`);
   for (const issue of impacted) {
-    const parts = [
-      issue.removedFields.length > 0
-        ? `removed_fields=${issue.removedFields.join(",")}`
-        : undefined,
-      issue.producerOutputs.length > 0
-        ? `producer_outputs=${issue.producerOutputs.join(",")}`
-        : undefined,
-    ].filter((entry): entry is string => Boolean(entry));
-    console.log(`${issue.filePath}: ${parts.join(" ")}`);
+    console.log(`${issue.filePath}: removed_fields=${issue.removedFields.join(",")}`);
   }
 }
 

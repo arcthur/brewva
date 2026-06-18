@@ -358,15 +358,11 @@ export function createShellFixture(options: ShellFixtureOptions = {}): ShellFixt
               loadedSkills: skills.map((skill) => skill.name),
               selectableSkills: skills.map((skill) => skill.name),
               overlaySkills: [],
-              projectGuidance: [],
               categories: {},
             };
           },
           list() {
             return skills;
-          },
-          listProducers() {
-            return [];
           },
         },
       },

@@ -49,8 +49,6 @@ function skill(input: {
       invariants: input.invariants ?? [],
     },
     inheritedResources: { references: [], scripts: [], invariants: [] },
-    projectGuidance: [],
-    overlayFiles: [],
   };
 }
 

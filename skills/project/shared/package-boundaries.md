@@ -163,10 +163,10 @@ owner: runtime-maintainers
 - runtime projection admission is explicit: canonical projection code belongs in
   `packages/brewva-runtime/src/runtime/tape/` and must not import gateway hosted
   internals, provider packages, tool families, or removed runtime port contracts
-- gateway public/domain entrypoints stay explicit by domain (`/admin`, `/ingress`,
-  `/host`, `/session`, `/channels`, `/daemon`, `/delegation`,
-  `/extensions`, `/protocol`); control-plane CLI routing lives under
-  `/admin`, while `/ingress` stays transport/auth oriented
+- gateway public/domain entrypoints stay explicit by domain (`/hosted`,
+  `/channels`, `/daemon`, `/admin`, `/ingress`, `/extensions`, `/harness`,
+  `/delegation`, `/policy/model-routing`, `/protocol`); control-plane CLI routing
+  lives under `/admin`, while `/ingress` stays transport/auth oriented
 - Telegram ingress is owned by `@brewva/brewva-ingress-telegram`; do not
   reintroduce generic `@brewva/brewva-ingress` until a second channel or
   transport proves a generic ingress contract

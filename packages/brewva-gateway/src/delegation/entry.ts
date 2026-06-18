@@ -25,9 +25,6 @@ export function prepareSubagentEntry(input: {
   const skillDocument = delegatedSkill
     ? input.parentRuntime.ops.skills.catalog.get(delegatedSkill)
     : undefined;
-  const producerContract = delegatedSkill
-    ? input.parentRuntime.ops.skills.catalog.getProducer(delegatedSkill)
-    : undefined;
   if (delegatedSkill && !skillDocument) {
     throw new Error(`unknown_skill:${delegatedSkill}`);
   }
@@ -39,7 +36,6 @@ export function prepareSubagentEntry(input: {
       promptOverride: input.promptOverride,
       contextBundle: input.contextBundle,
       skill: skillDocument,
-      producer: producerContract,
     }),
     childOwnsSkill,
   };

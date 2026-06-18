@@ -16,7 +16,7 @@
 - Last reviewed: `2026-06-16`
 - Depends on:
   - [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](./rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md)
-  - [RFC: Effect Approval And Rollback Closure](./rfc-effect-approval-and-rollback-closure.md)
+  - [RFC: Effect Approval And Rollback Closure](../archive/rfc-effect-approval-and-rollback-closure.md)
   - [RFC: Context Operating System And Compaction Physics](./rfc-context-operating-system-and-compaction-physics.md)
 - Promotion target:
   - `docs/architecture/design-axioms.md`
@@ -592,5 +592,5 @@ note; it may ship separately.
 - `docs/architecture/cognitive-product-architecture.md`
 - `docs/journeys/operator/interactive-session.md`
 - `docs/research/active/rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md`
-- `docs/research/active/rfc-effect-approval-and-rollback-closure.md`
+- `docs/research/archive/rfc-effect-approval-and-rollback-closure.md`
 - `docs/research/active/rfc-context-operating-system-and-compaction-physics.md`

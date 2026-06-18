@@ -9,10 +9,11 @@ retirement_sensitivity: auto_decay_allowed
 
 Primary artifact families:
 
-- `.orchestrator/events/sess_<base64url(sessionId)>.jsonl`: event tape,
+- `.brewva/tape/<encodeURIComponent(sessionId)>.jsonl`: event tape,
   replay authority, and causal timeline
 - `.orchestrator/ledger/evidence.jsonl`: evidence ledger with hash chain
-- `.orchestrator/projection/*`: working projection units and snapshots
+- `.orchestrator/projection/*`: rebuildable working-projection files, recomputed
+  from tape on demand (no persisted unit log)
 - `.orchestrator/recovery-wal/*.jsonl`: turn durability and recovery state
 - `tape_handoff` / `tape.handoff` events in the session event tape:
   replayable continuation anchors with name, summary, next steps, and evidence
@@ -30,6 +31,6 @@ drawing conclusions. Treat DuckDB rows and snapshots as indexed evidence
 pointers back to event tape, not as runtime truth.
 
 Work Card output is a product projection over these artifacts. Use it to orient
-quickly, then drill down to event tape, WAL, ledger, projection units, or raw
+quickly, then drill down to event tape, WAL, ledger, projections, or raw
 replay before making a forensic claim about continuation anchors, authority, or
 execution.

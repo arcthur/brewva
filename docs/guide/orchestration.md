@@ -53,9 +53,10 @@ Platform-growth rule:
 2. Gateway session assembly privately installs hosted behavior through substrate host-api adapters
 3. `before_agent_start` runs lifecycle plumbing (`context-transform`) and renders the hosted dynamic context tail
 4. `tool_call` passes quality/security/budget gates (`quality-gate`)
-5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool_result_recorded`.
+5. `ledger-writer` records durable tool outcomes (normally from SDK `tool_result`; can fallback to `tool_execution_end` when `tool_result` is missing). Persisted governance event is `tool.result.recorded`.
 6. `tool-result-distiller` may replace large pure-text `tool_result` payloads with bounded same-turn summaries after raw evidence is recorded.
-7. `agent_end` runs completion guard and leaves recovery sequencing to the model
+7. `agent_end` runs completion guard and leaves recovery sequencing to the
+   runtime turn loop
 
 ## Tool Registration Modes
 
@@ -82,7 +83,7 @@ Delegated worker authoring now has two layers:
   `~/.brewva/subagents/*.md`
 
 Markdown worker files narrow one of the existing public specialists. The
-allowed frontmatter fields are `name`, `description`, `extends`, `modelPreset`,
+recognized frontmatter fields are `name`, `description`, `extends`, `modelPreset`,
 `reasoningEffort`, and `tools`. `extends` must be one of `navigator`,
 `explorer`, `worker`, `verifier`, or `librarian`; tools must be a subset of the base
 role's managed-tool set. The Markdown body becomes additive authored
@@ -130,41 +131,23 @@ The current stable built-in specialist surface is:
 - internal review fan-out lanes remain behind the review ensemble and are not
   part of the public specialist taxonomy; they are internal `explorer` targets
 
-Execution posture is intentionally split:
+For each role's execution posture and the three execution archetypes
+(`readonly-shared`, `exec-ephemeral`, `patch-snapshot`), see
+`docs/journeys/operator/background-and-parallelism.md` (Execution Semantics).
+Orchestration-specific notes on top of that:
 
-- `navigator` finds task-local evidence and returns `evidence`
-- `explorer` makes read-only diagnoses, design judgments, strategy calls, and
-  reviews, returning `consult`
-- `librarian` researches institutional knowledge and returns `knowledge`
-- public consult intent derives `investigate`, `diagnose`, `design`, or
-  `review` internally; only diagnostics select consult kind directly
-- consult runs do not make the child own semantic completion; parent-owned
-  producer contracts still describe semantic workflow artifacts such as
-  `workflow.design` and `workflow.review`
-- `verifier` is effectful for commands, browser flows, and evidence capture, but it
-  is non-patch-producing and does not enter `WorkerResult` adoption semantics
-- `verifier` is intentionally adversarial: a `pass` posture depends on evidence-backed
-  executed checks, not static code reading or inherited implementer confidence
-- `worker` is the isolated patch-producing specialist
-- `subagent_fork` is an execution primitive rather than a specialist; it
-  records parent lineage, `forkTurns`, and `executionPrimitive=fork`
+- consult runs do not make the child own semantic completion; the parent
+  session retains ownership of task truth and artifact adoption
 - hosted context shape is owned by gateway materialization policy, not by a
   passive envelope profile field
-- every role binds one of three execution archetypes (the closed physics set the
-  control plane validates): `readonly-shared` (safe, shared — navigator,
-  explorer, librarian, review lanes), `exec-ephemeral` (effectful, ephemeral
-  execution — verifier), and `patch-snapshot` (effectful, snapshot, patch-
-  producing — worker). A capsule may only narrow its archetype's tool and budget
-  ceiling, never widen it
-- recovery-critical baseline materialization
-  (`historyViewBaseline` + `recoveryWorkingSet`) is preserved by the gateway
-  context materializer when the hosted lane needs it
-- the review ensemble keeps internal evidence-audit coverage for stale
-  evidence, missing probes, rollback posture, and operator-visible recovery
-  burden
+- recovery-critical baseline materialization (`historyViewBaseline` +
+  `recoveryWorkingSet`) is preserved by the gateway context materializer when the
+  hosted lane needs it
+- the review ensemble keeps internal evidence-audit coverage for stale evidence,
+  missing probes, rollback posture, and operator-visible recovery burden
 
-`HostedRuntimeAdapterPort.ops.verification.*` remains the repo-owned adapter for evidence
-sufficiency and freshness. It is not a delegated specialist, and new
+`HostedRuntimeAdapterPort.ops.verification.*` remains the repo-owned adapter for
+evidence sufficiency and freshness. It is not a delegated specialist, and new
 consequence-bearing runtime work should move through `runtime.kernel`.
 
 ## Inspectable Stall Adjudication
@@ -196,7 +179,7 @@ new kernel state:
 - interactive `/inbox` and headless `/questions` both inspect the operator
   inbox derived from durable task, verification, and delegated consult outcome
   artifacts
-- `/answer` records `operator_question_answered` and routes the answer back into
+- `/answer` records `operator.question.answered` and routes the answer back into
   the active session as explicit operator input
 - `/agent-overlays` inspects and validates Markdown-authored delegated-worker
   overlays against the hosted catalog narrowing rules

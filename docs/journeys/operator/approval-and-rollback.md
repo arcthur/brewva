@@ -30,10 +30,10 @@ effect commitment, explicit approval, exact resume, and rollback surfaces.
 
 ## Out Of Scope
 
-- normal interactive-session happy paths
-- detached subagent merge
-- scheduler daemon
-- full inspect report composition
+- normal interactive-session happy paths → `interactive-session`
+- detached subagent merge → `background-and-parallelism`
+- scheduler daemon → `intent-driven-scheduling`
+- full inspect report composition → `inspect-replay-and-recovery`
 
 ## Flow
 

@@ -359,7 +359,7 @@ Current implementation:
 
 Decision history:
 
-- `docs/research/active/rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md`
+- `docs/research/archive/rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md`
   (landed WS0-WS6: single runtime, tape-authoritative hosted state, narrow CLI
   seam — the layer this RFC builds on)
 - `docs/research/decisions/session-rewind-as-conversation-fork-primitive.md`

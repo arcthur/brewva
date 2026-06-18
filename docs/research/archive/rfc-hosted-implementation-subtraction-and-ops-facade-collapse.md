@@ -2,7 +2,8 @@
 
 ## Metadata
 
-- Status: active
+- Status: `archived`
+- Accepted as: `docs/research/decisions/hosted-control-plane-subtraction.md` (2026-06-17)
 - Implementation state: WS0–WS6 all landed on branch
   `claude/interesting-dirac-5e77d9` (committed, full `bun test` + `bun run check`
   green). WS3: `createRuntime` removal, capabilities-alias fold, CLI ops-seam
@@ -463,6 +464,6 @@ createRuntime }`). Dropped from the adapter; the 3 call sites (cli
 - `docs/architecture/system-architecture.md`
 - `docs/architecture/invariants-and-reliability.md`
 - `docs/research/active/rfc-context-operating-system-and-compaction-physics.md`
-- `docs/research/active/rfc-effect-approval-and-rollback-closure.md`
+- `docs/research/archive/rfc-effect-approval-and-rollback-closure.md`
 - `docs/research/decisions/canonical-hosted-turn-envelope.md`
 - `docs/research/decisions/four-port-runtime-simplification-rfc.md`

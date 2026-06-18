@@ -35,9 +35,8 @@ approval state. Those inputs produce facts. The runtime authority decision owns
 allow, block, defer, receipt, and rollback meaning.
 
 Skills are deliberately outside this authority chain. `SkillCard` metadata can
-make advisory context discoverable, and producer contracts can describe
-structured workflow artifacts, but neither grants an account, tool surface,
-budget, or external side effect.
+make advisory context discoverable, but it does not grant an account, tool
+surface, budget, or external side effect.
 
 Attention options follow the same rule. Candidate cards, consumed refs, pins,
 ignored refs, and verification recipes shape attention and provenance; they do

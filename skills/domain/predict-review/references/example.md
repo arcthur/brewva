@@ -19,7 +19,7 @@ Output:
     },
     {
       "perspective": "Devil's Advocate",
-      "profile": "explore",
+      "profile": "explorer",
       "primary_claim": "The metric may have genuinely converged — the stall could be a real plateau, not a bug.",
       "evidence": ["Loss curve shape matches typical convergence for this problem class"],
       "uncertainty": "No controlled run exists to compare converged vs stalled behavior."

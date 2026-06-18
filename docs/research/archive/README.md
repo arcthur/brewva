@@ -45,6 +45,7 @@ runtime, product, and session contracts.
 - [`rfc-substrate-domain-slicing-and-agent-engine-removal.md`](./rfc-substrate-domain-slicing-and-agent-engine-removal.md)
 - [`rfc-deliberation-home-and-compounding-intelligence.md`](./rfc-deliberation-home-and-compounding-intelligence.md)
 - [`rfc-effect-governance-and-contract-vnext.md`](./rfc-effect-governance-and-contract-vnext.md)
+- [`rfc-effect-approval-and-rollback-closure.md`](./rfc-effect-approval-and-rollback-closure.md)
 - [`rfc-goal-control-plane.md`](./rfc-goal-control-plane.md)
 - [`rfc-invocation-spine-and-posture-runtime-vnext.md`](./rfc-invocation-spine-and-posture-runtime-vnext.md)
 - [`rfc-runtime-decomposition-and-deliberation-thickening.md`](./rfc-runtime-decomposition-and-deliberation-thickening.md)
@@ -60,6 +61,7 @@ lane.
 
 - [`gateway-host-first-refactor-and-control-plane-seam-hardening.md`](./gateway-host-first-refactor-and-control-plane-seam-hardening.md)
 - [`gateway-hosted-lane-consolidation-rfc.md`](./gateway-hosted-lane-consolidation-rfc.md)
+- [`rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md`](./rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md)
 
 ## Reading Rule
 

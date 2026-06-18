@@ -300,7 +300,6 @@
       "version": "0.1.0",
       "dependencies": {
         "@brewva/brewva-std": "workspace:*",
-        "yaml": "^2.9.0",
       },
     },
   },

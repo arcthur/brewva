@@ -1,8 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
-import { parse as parseYaml } from "yaml";
-import { optionalStringField, readStringArray } from "./shared.js";
+import { readStringArray } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
 
 export type SkillCategory = string;
@@ -63,25 +62,11 @@ export interface SkillInvocationRecord extends ProtocolRecord {
   readonly argumentHints: readonly string[];
 }
 
-export type SkillOutputContract =
-  | ({
-      readonly kind: "text";
-      readonly minWords?: number;
-      readonly minLength?: number;
-    } & ProtocolRecord)
-  | ({
-      readonly kind: "json";
-      readonly minItems?: number;
-      readonly minKeys?: number;
-    } & ProtocolRecord)
-  | ({ readonly kind: "enum"; readonly values: readonly string[] } & ProtocolRecord);
-
 export interface SkillRegistryLoadReport extends ProtocolRecord {
   readonly loadedSkills: readonly string[];
   readonly selectableSkills: readonly string[];
   readonly overlaySkills: readonly string[];
   readonly roots: readonly string[];
-  readonly projectGuidance: readonly ProjectGuidanceEntry[];
 }
 
 export interface SkillResourceSet extends ProtocolRecord {
@@ -116,19 +101,6 @@ export interface SkillSelectionPolicy extends ProtocolRecord {
   readonly whenToUse?: string;
   readonly pathGlobs?: readonly string[];
 }
-
-export type SkillSemanticBindings = Record<string, string>;
-
-export interface ProducerContract extends ProtocolRecord {
-  readonly source?: string;
-  readonly producer?: string;
-  readonly filePath?: string;
-  readonly outputs?: readonly string[];
-  readonly outputContracts?: Record<string, SkillOutputContract>;
-  readonly semanticBindings?: Record<string, string>;
-}
-
-export interface ProjectGuidanceEntry extends ProtocolRecord {}
 
 function readDocumentSource(sourceOrPath: string): {
   readonly source: string;
@@ -212,60 +184,4 @@ export function parseSkillDocument(
       invariants: readStringArray(frontmatter.invariants),
     },
   };
-}
-
-export function parseProducerContractFile(
-  sourceOrPath: string,
-  ..._rest: unknown[]
-): ProducerContract {
-  const { source } = readDocumentSource(sourceOrPath);
-  const parsed = parseYaml(source);
-  const record = typeof parsed === "object" && parsed !== null ? (parsed as ProtocolRecord) : {};
-  const rawContracts =
-    typeof record.output_contracts === "object" && record.output_contracts !== null
-      ? (record.output_contracts as ProtocolRecord)
-      : {};
-  const outputContractEntries: Array<[string, SkillOutputContract]> = Object.entries(
-    rawContracts,
-  ).flatMap(([key, value]) => {
-    if (typeof value !== "object" || value === null) return [];
-    const contract = value as ProtocolRecord;
-    const normalized = Object.fromEntries(
-      Object.entries(contract).filter(([contractKey]) => contractKey !== "min_words"),
-    );
-    return [
-      [
-        key,
-        {
-          ...normalized,
-          ...(typeof contract.min_words === "number" ? { minWords: contract.min_words } : {}),
-        },
-      ] as [string, SkillOutputContract],
-    ];
-  });
-  const outputContracts: Record<string, SkillOutputContract> =
-    Object.fromEntries(outputContractEntries);
-  return {
-    source,
-    producer: optionalStringField(record, "producer") ?? source,
-    filePath: sourceOrPath,
-    outputs: readStringArray(record.outputs),
-    outputContracts,
-  };
-}
-
-export function getProducerOutputContracts(
-  producer: ProducerContract | undefined,
-): Record<string, SkillOutputContract> {
-  return producer?.outputContracts ?? {};
-}
-
-export function getProducerSemanticBindings(
-  producer: ProducerContract | undefined,
-): SkillSemanticBindings {
-  return producer?.semanticBindings ?? {};
-}
-
-export function listProducerOutputs(producer: ProducerContract | undefined): readonly string[] {
-  return producer?.outputs ?? [];
 }

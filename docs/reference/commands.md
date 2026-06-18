@@ -7,7 +7,8 @@ semantic pages for each operator surface.
 
 Implementation anchors:
 
-- `packages/brewva-cli/src/index.ts`
+- `packages/brewva-cli/src/entry/args.ts` (root subcommands and parse options)
+- `packages/brewva-cli/src/entry/help.ts` (operator-facing help surface)
 - `packages/brewva-gateway/src/admin/internal/cli.ts`
 
 ## Reading Path

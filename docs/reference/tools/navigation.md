@@ -12,7 +12,8 @@ approval receipts. Source-changing navigation helpers must prepare a
 Representative surfaces:
 
 - browser state, screenshots, PDFs, and snapshots
-- grep, search-advisor recovery, output search, and hash-anchored `source_read`
+- file globbing (`glob`), goal-focused content analysis (`look_at`), grep,
+  search-advisor recovery, output search, and hash-anchored `source_read`
 - `brewva-resource:///` reads through `resource_read`
 - real language-server status, diagnostics, references, definitions, and edit
   preparation

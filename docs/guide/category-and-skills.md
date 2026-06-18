@@ -26,13 +26,13 @@ The important distinction is semantic:
 - public skill: advisory instruction and selection context
 - runtime or control-plane workflow semantics: not public skills
 - project overlay: project-specific tightening plus project guidance
-- operator and meta skills: loaded catalog entries, explicit or specialist use
+- operator and meta skills: ordinary advisory SkillCards (same shortlist as core
+  and domain), typically reached by explicit `$skill` mention or specialist use
 
 Skills should remain behavior-rich, not just contract-rich. Frontmatter defines
 advisory selection and resource references; the Markdown body still teaches the
 model how the specialist reasons, decides, asks questions, and hands work off.
-Outputs live in producer contracts. External actions live in capability
-manifests and tool policy.
+External actions live in capability manifests and tool policy.
 
 ## Selection And Authority
 
@@ -54,9 +54,9 @@ Capability manifests are the authority plane. They are selected separately and
 record durable selection receipts. `skills.routing` and runtime routing scopes
 are removed.
 
-Current capability selection is deterministic: explicit target, policy default,
-then selection-field ranking. Embedding ranking and LLM fallback remain reserved
-RFC stages and do not expose authority in the promoted implementation.
+Capability selection is deterministic and fail-closed; see the capability
+selection priority in `docs/reference/skill-routing.md` for the authoritative
+stage list.
 
 Bounded or advisory protocol skills should still be used narrowly. For example:
 
@@ -83,12 +83,8 @@ At a high level, the families map like this:
 Project overlays specialize a subset of public skills for this repository.
 Shared project guidance is injected centrally from `skills/project/shared`.
 
-The current shared guidance files are `anti-patterns`, `critical-rules`,
-`migration-priority-matrix`, `package-boundaries`, `runtime-artifacts`,
-`source-map`, and `workflow-gates`.
-
-Use `docs/reference/skills.md` when you need the exact current inventory rather
-than examples.
+Use `docs/reference/skills.md` when you need the exact current inventory of
+shared guidance files and public skills.
 
 ## Overlay Semantics
 
@@ -103,12 +99,11 @@ Runtime prepends shared project guidance from `skills/project/shared` to final
 loaded skills in root order, with each shared document injected at most once per
 skill. This happens independently of whether a skill has a project overlay.
 
-Shared project guidance files must use metadata-only frontmatter with
-`strength`, `scope`, `convention_kind`, `retirement_sensitivity`, and optional
-`owner`. Runtime strips that frontmatter before injection and uses it only for
-provenance and convention-lifecycle labels; it does not grant or deny tool
-authority, change routing, alter provider payloads, mutate tool results, or
-affect replay.
+Shared project guidance files use metadata-only frontmatter (provenance and
+convention-lifecycle labels only; see `docs/reference/skills.md` for the exact
+fields). Runtime strips that frontmatter before injection: it does not grant or
+deny tool authority, change routing, alter provider payloads, mutate tool
+results, or affect replay.
 
 This keeps project knowledge centralized without turning every project into a
 new catalog of public super-skills.

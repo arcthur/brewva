@@ -21,7 +21,7 @@ run stays `completed`; `worker_results_apply` moves its card to `prepared`,
 
 - follow-up and schedule intent
 - resource lease request and cancellation
-- session compaction
+- workbench compaction (`workbench_compact`, documented under the memory family)
 - worker result merge and SourcePatchPlan-backed apply
 - worker result rejection through explicit parent receipt
 - task spec, item, blocker, acceptance, and state views

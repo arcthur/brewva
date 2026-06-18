@@ -387,7 +387,6 @@ describe("interactive command overlays", () => {
         loadedSkills: ["review", "loaded-only"],
         selectableSkills: ["review"],
         overlaySkills: [],
-        projectGuidance: [],
         categories: {},
       },
       skills: [
@@ -413,8 +412,6 @@ describe("interactive command overlays", () => {
           resources: { references: [], scripts: [], invariants: [] },
           authoredResources: { references: [], scripts: [], invariants: [] },
           inheritedResources: { references: [], scripts: [], invariants: [] },
-          projectGuidance: [],
-          overlayFiles: [],
         },
         {
           name: "loaded-only",
@@ -433,8 +430,6 @@ describe("interactive command overlays", () => {
           resources: { references: [], scripts: [], invariants: [] },
           authoredResources: { references: [], scripts: [], invariants: [] },
           inheritedResources: { references: [], scripts: [], invariants: [] },
-          projectGuidance: [],
-          overlayFiles: [],
         },
       ],
     });
@@ -489,7 +484,6 @@ describe("interactive command overlays", () => {
         loadedSkills: ["review"],
         selectableSkills: ["review"],
         overlaySkills: [],
-        projectGuidance: [],
         categories: {},
       },
       skills: [
@@ -513,8 +507,6 @@ describe("interactive command overlays", () => {
           resources: { references: [], scripts: [], invariants: [] },
           authoredResources: { references: [], scripts: [], invariants: [] },
           inheritedResources: { references: [], scripts: [], invariants: [] },
-          projectGuidance: [],
-          overlayFiles: [],
         },
       ],
     });
@@ -534,7 +526,6 @@ describe("interactive command overlays", () => {
         loadedSkills: ["review", "security-review"],
         selectableSkills: ["review", "security-review"],
         overlaySkills: [],
-        projectGuidance: [],
         categories: {},
       },
       skills: [
@@ -555,8 +546,6 @@ describe("interactive command overlays", () => {
           resources: { references: [], scripts: [], invariants: [] },
           authoredResources: { references: [], scripts: [], invariants: [] },
           inheritedResources: { references: [], scripts: [], invariants: [] },
-          projectGuidance: [],
-          overlayFiles: [],
         },
         {
           name: "security-review",
@@ -578,8 +567,6 @@ describe("interactive command overlays", () => {
           resources: { references: [], scripts: [], invariants: [] },
           authoredResources: { references: [], scripts: [], invariants: [] },
           inheritedResources: { references: [], scripts: [], invariants: [] },
-          projectGuidance: [],
-          overlayFiles: [],
         },
       ],
     });

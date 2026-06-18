@@ -34,9 +34,9 @@ parallel-budget limits, isolated workspaces, and parent-controlled adoption.
 
 ## Out Of Scope
 
-- scheduler-daemon time-driven execution
-- channel ingress / egress
-- approval-bound tool governance
+- scheduler-daemon time-driven execution → `intent-driven-scheduling`
+- channel ingress / egress → `channel-gateway-and-turn-flow`
+- approval-bound tool governance → `approval-and-rollback`
 
 ## Flow
 

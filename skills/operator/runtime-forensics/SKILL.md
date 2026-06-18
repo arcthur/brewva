@@ -56,6 +56,10 @@ Classify each artifact as authoritative (event store, WAL) or derived
 (projections, ledger summaries, diagnostics, session index rows).
 Authoritative artifacts win when they contradict derived ones.
 
+The event tape (replay authority) is
+`.brewva/tape/<encodeURIComponent(sessionId)>.jsonl`; the ledger, projection
+cache, and recovery WAL live under `.orchestrator/`.
+
 The DuckDB session index under `.brewva/session-index/session-index.duckdb` is a
 rebuildable query plane. Non-writer processes may read the published snapshot
 referenced by `.brewva/session-index/read-snapshot.json`. Use either file only

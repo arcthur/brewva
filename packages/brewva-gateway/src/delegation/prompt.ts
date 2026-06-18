@@ -1,65 +1,19 @@
 import type { DelegationPacket } from "@brewva/brewva-tools/contracts";
-import {
-  getProducerOutputContracts,
-  getProducerSemanticBindings,
-  listProducerOutputs,
-} from "@brewva/brewva-vocabulary/session";
-import type {
-  ProducerContract,
-  SkillDocument,
-  SkillOutputContract,
-} from "@brewva/brewva-vocabulary/session";
+import type { SkillDocument } from "@brewva/brewva-vocabulary/session";
 import type { ContextBundle } from "../context/api.js";
 import { buildStructuredOutcomeContract, getCanonicalSubagentPrompt } from "./protocol.js";
 import type { HostedDelegationTarget } from "./targets.js";
 
-function renderSkillOutputContract(
-  name: string,
-  contract: SkillOutputContract | undefined,
-): string {
-  if (!contract) {
-    return `- ${name}: provide a non-empty value.`;
-  }
-  if (contract.kind === "text") {
-    const parts = [
-      typeof contract.minWords === "number" ? `minWords=${contract.minWords}` : null,
-      typeof contract.minLength === "number" ? `minLength=${contract.minLength}` : null,
-    ].filter(Boolean);
-    return `- ${name}: text${parts.length > 0 ? ` (${parts.join(", ")})` : ""}.`;
-  }
-  if (contract.kind === "json") {
-    const parts = [
-      typeof contract.minItems === "number" ? `minItems=${contract.minItems}` : null,
-      typeof contract.minKeys === "number" ? `minKeys=${contract.minKeys}` : null,
-    ].filter(Boolean);
-    return `- ${name}: json${parts.length > 0 ? ` (${parts.join(", ")})` : ""}.`;
-  }
-  return `- ${name}: enum (${contract.values.join(", ")}).`;
-}
-
-function renderSkillCardSection(skill: SkillDocument, producer?: ProducerContract): string[] {
-  const outputNames = listProducerOutputs(producer);
-  const outputContracts = getProducerOutputContracts(producer);
-  const semanticBindings = getProducerSemanticBindings(producer);
-  const lines = [
+function renderSkillCardSection(skill: SkillDocument): string[] {
+  return [
     "",
     "## Delegated Skill",
     `Skill: ${skill.name}`,
     `Description: ${skill.description}`,
+    "",
+    "### Skill Body",
+    skill.markdown.trim(),
   ];
-  if (outputNames.length > 0) {
-    lines.push(
-      "",
-      "### Required Producer Outputs",
-      ...outputNames.map((name) => {
-        const schemaId = semanticBindings[name];
-        const contractLine = renderSkillOutputContract(name, outputContracts[name]);
-        return schemaId ? `${contractLine} Normalized consumer schema: ${schemaId}.` : contractLine;
-      }),
-    );
-  }
-  lines.push("", "### Skill Body", skill.markdown.trim());
-  return lines;
 }
 
 function renderSkillContextSection(skill: SkillDocument): string[] {
@@ -95,7 +49,6 @@ export function buildDelegationPrompt(input: {
   packet: DelegationPacket;
   promptOverride?: string;
   skill?: SkillDocument;
-  producer?: ProducerContract;
   contextBundle?: ContextBundle;
 }): string {
   const prompt =
@@ -142,7 +95,7 @@ export function buildDelegationPrompt(input: {
     lines.push(
       ...(input.target.resultMode === "consult"
         ? renderSkillContextSection(input.skill)
-        : renderSkillCardSection(input.skill, input.producer)),
+        : renderSkillCardSection(input.skill)),
     );
   }
 

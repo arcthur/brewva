@@ -10,9 +10,9 @@ method-level contract and caller-specific ports, use:
 ## Runtime Shape
 
 `createBrewvaRuntime(...)` (`packages/brewva-runtime/src/runtime/runtime.ts`) is
-the stable runtime construction boundary. It returns one frozen four-port
-runtime with `identity`, `config`, `tape`, `kernel`, `model`, `start`, `turn`,
-and `close`.
+the stable runtime construction boundary. It returns one frozen runtime root:
+the four ports `tape`, `kernel`, `model`, and `turn`, plus `identity`, `config`,
+`start`, and `close`.
 
 The public root shape is constitutional, not implementation-organized:
 
@@ -80,9 +80,9 @@ Replay remains tape-first.
 - projections and other read models are rebuildable state
 - host/UI caches are not replay authority
 
-`TurnReplayEngine` and session hydration rebuild runtime state from persisted
-events. That replay model is what allows operator inspection and exact resume
-to stay deterministic.
+Tape replay (`tape.replayBaseline(...)`) and session hydration rebuild runtime
+state from persisted canonical events. That replay model is what allows operator
+inspection and exact resume to stay deterministic.
 
 ## Governance Core
 

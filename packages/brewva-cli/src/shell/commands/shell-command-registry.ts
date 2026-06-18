@@ -316,7 +316,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
   {
     id: "skills.catalog",
     title: "Skills",
-    description: "Open the skill and producer catalog.",
+    description: "Open the skill catalog.",
     category: "Skills",
     slash: { name: "skills" },
     suggested: true,

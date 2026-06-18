@@ -26,7 +26,7 @@ Output:
       "investigation_record:provider-fallback-stuck-recovery",
       "verification_evidence:turn-transition-posture-regression"
     ],
-    "derivative_links": ["docs/reference/events.md", "docs/reference/session-lifecycle.md"]
+    "derivative_links": ["docs/reference/events/README.md", "docs/reference/session-lifecycle.md"]
   },
   "solution_doc_path": "docs/solutions/provider-fallback-stuck-recovery-posture.md",
   "capture_status": "created"

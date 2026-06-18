@@ -18,7 +18,7 @@ cost, cache, replay, and recovery explicit.
   `workbench_undo_evict`, on-demand `recall_search`, and LLM-driven
   `workbench_compact`
 - A short product loop:
-  `receive -> orient -> authorize -> act -> verify -> handoff`
+  `receive -> orient -> authorize -> act -> verify -> continue`
 - Shared Work Card projections across shell, CLI, channel, and export surfaces
 - Consequence governance through explicit `safe | effectful` execution and
   approval-bearing commitment boundaries
@@ -47,7 +47,7 @@ flowchart TD
   MODEL["Model<br/>owns attention"]
   WORKBENCH["Workbench Plane<br/>notes + evictions + on-demand recall"]
   OPTIONS["Attention Options<br/>bounded candidate cards"]
-  WORKCARD["Work Card<br/>goal + context + authority + evidence + handoff"]
+  WORKCARD["Work Card<br/>goal + context + authority + evidence + continuation"]
   GATEWAY["Gateway Model Boundary<br/>main turn + LLM compaction + cache policy"]
   PHYSICS["Runtime Physics<br/>context status + cost + provider limits"]
   KERNEL["Kernel<br/>effect gates + verification + approvals"]
@@ -137,7 +137,7 @@ For taxonomy and exact generated inventories, see `docs/guide/features.md` and
 
 One common advisory chain is:
 
-`repository-analysis -> discovery -> strategy -> learning-research -> plan -> prep -> implementation -> review -> qa -> ship -> retro -> knowledge-capture`
+`repository-analysis -> discovery -> strategy -> learning-research -> plan -> prep -> implementation -> review -> verifier -> ship -> retro -> knowledge-capture`
 
 New idea work starts further upstream:
 

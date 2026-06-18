@@ -2,12 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  getProducerOutputContracts,
-  listProducerOutputs,
-  parseProducerContractFile,
-  parseSkillDocument,
-} from "@brewva/brewva-vocabulary/session";
+import { parseSkillDocument } from "@brewva/brewva-vocabulary/session";
 
 function tempFile(name: string, content: string): string {
   const dir = mkdtempSync(join(tmpdir(), "brewva-skill-card-"));
@@ -16,7 +11,7 @@ function tempFile(name: string, content: string): string {
   return path;
 }
 
-describe("SkillCard and ProducerContract cutover", () => {
+describe("SkillCard cutover", () => {
   test("rejects removed authority fields in SkillCard frontmatter", () => {
     const path = tempFile(
       "SKILL.md",
@@ -95,33 +90,5 @@ references:
     expect(parsed.card.name).toBe("bom-crlf");
     expect(parsed.card.description).toBe("Shared parser skill.");
     expect(parsed.markdown).toBe("# Shared Parser\n");
-  });
-
-  test("parses producer contracts independently from SkillCard", () => {
-    const path = tempFile(
-      "producer.yaml",
-      `producer: review
-outputs:
-  - root_cause
-output_contracts:
-  root_cause:
-    kind: text
-    min_words: 20
-`,
-    );
-
-    const producer = parseProducerContractFile(path, {
-      rootDir: "/tmp/root",
-      skillDir: "/tmp/root/skills",
-      source: "system_root",
-    });
-
-    expect(listProducerOutputs(producer)).toEqual(["root_cause"]);
-    expect(getProducerOutputContracts(producer)).toEqual({
-      root_cause: {
-        kind: "text",
-        minWords: 20,
-      },
-    });
   });
 });

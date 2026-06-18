@@ -37,8 +37,6 @@ function skill(input: { name: string; description: string; markdown: string }): 
       invariants: [],
     },
     inheritedResources: { references: [], scripts: [], invariants: [] },
-    projectGuidance: [],
-    overlayFiles: [],
   };
 }
 

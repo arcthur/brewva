@@ -28,7 +28,7 @@ Current boundary:
 ## Quick Start
 
 ```bash
-brewva gateway start
+brewva gateway start --detach    # foreground by default; --detach to background
 brewva gateway install
 brewva gateway status --deep
 brewva gateway scheduler-pause --reason incident_mitigation
@@ -81,9 +81,8 @@ Supervisor defaults:
 - Use `--dry-run` to preview generated service content.
 - One-shot wrapper: `brewva onboard --install-daemon`.
 
-For full flag-level contract (per subcommand), see:
-
-- `docs/reference/commands.md` ("Gateway Subcommand Flags")
+For the generated flag inventory, see `docs/reference/commands.md`; for semantic
+grouping, see `docs/reference/commands/gateway.md`.
 
 ## State Directory and Artifacts
 
@@ -136,17 +135,11 @@ Optional HTTP probe endpoint:
 
 ## Latest-Only Protocol Semantics
 
-To reduce ambiguity and long-term compatibility complexity, the control plane uses latest-only semantics:
-
-- `connect` accepts a single `protocol` field and requires exact version match.
-- `sessions.send` is stream-first only; `stream=false` sync mode is not supported.
-- `gateway.rotate-token` does not support grace windows; old token is invalid immediately.
-
-Primary implementation surfaces:
-
-- `packages/brewva-gateway/src/protocol/schema.ts`
-- `packages/brewva-gateway/src/ingress/internal/client.ts`
-- `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
+The control plane uses latest-only semantics: `connect` requires an exact
+`protocol` version match, `sessions.send` is stream-first only (no `stream=false`
+sync mode), and `gateway.rotate-token` invalidates the old token immediately with
+no grace window. See `docs/reference/gateway-control-plane-protocol.md`
+("Latest-Only Compatibility Policy") for the authoritative contract.
 
 ## Related Docs
 

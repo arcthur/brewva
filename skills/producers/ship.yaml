@@ -1,9 +1,0 @@
-producer: ship
-outputs:
-  - ship_report
-  - release_checklist
-  - ship_decision
-semantic_bindings:
-  ship_report: ship.ship_report.v2
-  release_checklist: ship.release_checklist.v2
-  ship_decision: ship.ship_decision.v2

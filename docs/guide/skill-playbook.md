@@ -16,6 +16,9 @@ or `suggested_chains`.
 | Diagnostic    | `debugging`, `runtime-forensics`, `predict-review`                                                                  | The task needs root cause, runtime trace reconstruction, or pre-merge adversarial prediction                                                                    |
 | Operator/Data | `git`, `github`, `telegram`, `agent-browser`                                                                        | The work centers on repository operations, GitHub workflow, Telegram delivery, or browser observation                                                           |
 
+Groups here are task-phase conveniences, not the directory-derived `category`
+(see `docs/reference/skills.md`).
+
 ## Pre-Build Frame Choice
 
 Use this table before choosing among `office-hours`, `discovery`, and
@@ -40,9 +43,9 @@ Vocabulary:
 - `status quo`: what the target human does today instead.
 - `posture`: the scope/timing stance inherited by downstream planning.
 
-Compatibility between skills is expressed by explicit handoff text, producer
-contracts, and the current task state. The removed `composable_with` field must
-not be reintroduced as a lifecycle gate or taxonomy coverage checklist.
+Compatibility between skills is expressed by explicit handoff text and the
+current task state. The removed `composable_with` field must not be reintroduced
+as a lifecycle gate or taxonomy coverage checklist.
 
 ## Manual Chains
 
@@ -55,8 +58,8 @@ be selected by the user, the model, or `workflow_status`.
 - `repository-analysis -> architecture -> plan -> implementation -> review` when the task is to deepen modules, improve testability, or reduce caller burden
 - `repository-analysis -> plan -> implementation -> review`
 - `frontend-design -> implementation -> verifier`
-- `frontend-design -> plan -> implementation -> verifier` when UI direction changes
-  cross-package architecture, data contracts, or product scope.
+- `frontend-design -> plan -> implementation -> verifier` when UI direction
+  affects cross-package architecture, data contracts, or product scope.
 - `extract -> review -> knowledge-capture`
 - `runtime-forensics -> debugging -> plan -> implementation`
 - `ship -> retro -> knowledge-capture`
@@ -78,12 +81,15 @@ explicitly.
 
 ## Stop Rule
 
-Skill switching is explicit. A chain advances only when one of these is true:
+Skill switching is explicit and never auto-cascades (see Execution Semantics in
+`docs/journeys/operator/skill-routing-and-activation.md`). A chain advances only
+when one of these is true:
 
 - the user selects the next skill
 - the model names a stop condition and handoff target
-- `workflow_status` shows readiness, stale evidence, or a missing artifact that
-  makes the next owner clear
+- `workflow_status` (derived progress inspection, not a gate) surfaces
+  readiness, stale evidence, or a missing artifact that makes the next owner
+  clear
 
 Do not add automatic cascade behavior. Do not infer a hidden chain from this
 document. Do not preserve old skill-name aliases.

@@ -87,6 +87,10 @@ recovery, and bounded execution.
   cancellation, rollback, recovery, and failure evidence must still be recorded
   through runtime events, receipts, WAL, or ledger rows when the boundary
   requires it.
+- The unified `getIntegrity` durability aggregation is currently a healthy stub;
+  live integrity signals are the Recovery WAL fail-closed guard, hydration
+  (which surfaces `event_tape` damage), and ledger chain verification (see
+  `docs/journeys/internal/wal-and-crash-recovery.md`).
 - Promise/Effect boundary crossings are adapter mechanics. Repeated boundary
   crossings inside provider stream core, channel queue core, tool execution
   internals, or runtime package code are reliability bugs, not implementation

@@ -68,6 +68,8 @@ Stable interactive slash commands include:
 - `/redo`
 - `/answer <question-id> <answer>`
 - `/theme`
+- `/new`
+- `/quit` (alias `/exit`)
 
 `/transcript` opens a read-only snapshot of the current session transcript in the
 configured external pager. Transcript is archive evidence; it is not the

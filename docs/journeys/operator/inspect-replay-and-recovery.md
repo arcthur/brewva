@@ -44,15 +44,16 @@ refinements as the intended contract, not yet a shipped guarantee.
 
 - inspect report construction
 - event tape replay and hydration
-- integrity aggregation
+- integrity reporting from durable health signals
 - session rewind checkpoints, fork recovery, and PatchSet restoration
 - recovery boundaries when projection, WAL, or nearby artifacts are missing
 
 ## Out Of Scope
 
-- skill selection and normal execution happy paths
-- effect-commitment approval semantics
-- Telegram channel ingress details
+- skill selection and normal execution happy paths →
+  `skill-routing-and-activation` and `interactive-session`
+- effect-commitment approval semantics → `approval-and-rollback`
+- Telegram channel ingress details → `channel-gateway-and-turn-flow`
 
 ## Flow
 
@@ -61,16 +62,17 @@ flowchart TD
   A["Persisted session artifacts"] --> B["brewva inspect or /inspect"]
   B --> C["Replay tape (checkpoint + delta)"]
   C --> D["Hydrate task/truth/cost/verification state"]
-  D --> E["Aggregate integrity from tape, WAL, artifacts"]
+  D --> E["Surface durability health (tape hydration, WAL guard, ledger)"]
   E --> F{"Operator action"}
   F -->|Inspect| G["Read hydration, blockers, evidence, diagnostics"]
   F -->|Replay| H["Print raw structured events"]
-  F -->|Replay timeline| I["Print redacted timeline projection"]
-  F -->|Undo| I["Resolve latest active checkpoint and rewind its patch window"]
-  I --> J["Revert reasoning state or record divergence, then reset verification evidence"]
+  F -->|Replay timeline| T["Print redacted timeline projection"]
+  F -->|Undo| U["Resolve latest active checkpoint and rewind its patch window"]
+  U --> J["Revert reasoning state or record divergence, then reset verification evidence"]
   F -->|Redo| L["Reapply undone rewind window and branch to redo leaf"]
   G --> K["Re-run or continue session"]
   H --> K
+  T --> K
   J --> K
   L --> K
 ```
@@ -82,8 +84,14 @@ flowchart TD
    replay and diagnostic sections are explicit drill-downs.
 2. On first hydration, the runtime performs checkpoint-plus-delta replay and
    restores task, truth, cost, verification, and related fold slices.
-3. `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` aggregates tape, Recovery WAL, and artifact
-   persistence issues into one health surface.
+3. The report surfaces durability health from live signals: damaged event-tape
+   rows degrade hydration with explicit `event_tape` issues, the Recovery WAL
+   store guards itself fail-closed, and the ledger chain is verified
+   independently. The unified
+   `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` aggregation
+   is the intended single health surface, but it is not yet implemented: the
+   hosted adapter returns a healthy stub, so the report's `integrity` block stays
+   empty until it lands.
 4. `--replay` prints raw structured event records from durable tape for scripts
    that intentionally depend on event payloads.
 5. `--replay-timeline` prints a redacted replay timeline from the same durable
@@ -151,11 +159,14 @@ flowchart TD
   - `brewva inspect`
   - `brewva --replay`
   - `brewva --undo`
-  - `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)`
+  - the Recovery WAL store's fail-closed integrity guard (read via the inspect
+    `recoveryWal` block)
+  - `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(...)` — the
+    intended unified health surface, currently a healthy stub (see Key Steps)
 - key report sections:
   - Work Card goal/context/options/authority/work/evidence/continuation anchor
   - hydration status
-  - integrity issues
+  - integrity issues (empty until the unified `getIntegrity` aggregation lands)
   - latest verification outcome
   - ledger chain status
   - projection, WAL, and snapshot artifact paths

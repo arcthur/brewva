@@ -397,10 +397,9 @@ permanent degradation.
   explicit `event_tape` integrity issues instead of being treated as an empty
   healthy tape.
 - Note: upstream `turnIndex` can reset to `0` on `agent_start` boundaries. Brewva normalizes turns to be monotonic per session (for example `effectiveTurn = max(current, turnIndex)`) and uses the normalized value for gating/reconciliation.
-- If projection artifacts are missing, runtime can rebuild projection files from
-  source tape events using deterministic projection extraction rules.
-  `projection_ingested` and `projection_refreshed` remain projection telemetry,
-  not semantic rebuild inputs.
+- If projection artifacts are missing, runtime rebuilds projection state on
+  demand from durable tape replay through deterministic `RuntimeTape` projection
+  folds; there is no separate projection-engine ingest/refresh telemetry.
 - That projection rebuild does not recreate history authority on its own. The
   history-view baseline still comes from durable `session_compact` receipts or
   a completed reasoning branch reset, plus reference-context compatibility
@@ -445,6 +444,12 @@ permanent degradation.
   integrity failures now fail closed for recovery until the corrupted rows are
   repaired; Recovery WAL compaction preserves the latest ingress watermark through a
   metadata-only marker needed for polling recovery.
-- `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(sessionId)` is the canonical operator-facing
-  health read model. It aggregates `event_tape`, `recovery_wal`, and `artifact`
-  durability issues into one status surface.
+- `HostedRuntimeAdapterPort.ops.session.lifecycle.getIntegrity(sessionId)` is the
+  intended canonical operator-facing health read model: its contract is to
+  aggregate `event_tape`, `recovery_wal`, and `artifact` durability issues into
+  one status surface. That aggregation is not yet implemented — the hosted
+  adapter returns a healthy stub, so the `brewva inspect` `integrity` block also
+  stays empty. Until it lands, durability health is read from the live signals:
+  malformed event-tape rows degrade hydration with explicit `event_tape` issues,
+  the Recovery WAL store guards itself fail-closed (surfaced through the inspect
+  `recoveryWal` block), and the ledger chain is verified independently.

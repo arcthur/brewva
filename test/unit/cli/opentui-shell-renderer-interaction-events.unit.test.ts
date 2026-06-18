@@ -343,8 +343,6 @@ function fakeSkill(input: {
     resources: { references: [], scripts: [], invariants: [] },
     authoredResources: { references: [], scripts: [], invariants: [] },
     inheritedResources: { references: [], scripts: [], invariants: [] },
-    projectGuidance: [],
-    overlayFiles: [],
   };
 }
 
@@ -603,15 +601,11 @@ function createFakeBundle(
               loadedSkills: skills.map((skill) => skill.name),
               selectableSkills: skills.map((skill) => skill.name),
               overlaySkills: [],
-              projectGuidance: [],
               categories: {},
             };
           },
           list() {
             return skills;
-          },
-          listProducers() {
-            return [];
           },
         },
       },

@@ -19,8 +19,6 @@ export function buildSkillsRuntimeOps(
       list: () => loadSkillCatalog(ctx).skills,
       get: (name) => loadSkillCatalog(ctx).skills.find((skill) => skill.name === name),
       getLoadReport: () => loadSkillCatalog(ctx).report,
-      listProducers: () => [],
-      getProducer: () => undefined,
     },
     selection: {
       latest: (sessionId) =>
@@ -73,12 +71,7 @@ function loadSkillCatalog(ctx: HostedRuntimeOpsContext): SkillCatalogSnapshot {
         const category = skillCategoryFromPath(root.root, filePath);
         const parsed = parseSkillDocument(filePath, category);
         const existing = byName.get(parsed.name);
-        const overlayFiles =
-          root.overlay || Array.isArray(existing?.overlayFiles)
-            ? [...((existing?.overlayFiles as string[] | undefined) ?? [])]
-            : [];
         if (root.overlay) {
-          overlayFiles.push(filePath);
           overlaySkills.add(parsed.name);
         }
         byName.set(parsed.name, {
@@ -86,7 +79,6 @@ function loadSkillCatalog(ctx: HostedRuntimeOpsContext): SkillCatalogSnapshot {
           ...parsed,
           category,
           filePath,
-          overlayFiles,
         });
       } catch (error) {
         failed.push({
@@ -107,7 +99,6 @@ function loadSkillCatalog(ctx: HostedRuntimeOpsContext): SkillCatalogSnapshot {
       selectableSkills: loadedSkills,
       overlaySkills: [...overlaySkills].toSorted((left, right) => left.localeCompare(right)),
       roots: roots.map((root) => root.root).filter((root) => existsSync(root)),
-      projectGuidance: [],
       failed,
     },
   };

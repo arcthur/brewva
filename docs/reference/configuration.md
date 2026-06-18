@@ -170,9 +170,10 @@ allowlist, and optional per-tool policy overrides. Supported transports are
 metadata; every MCP tool defaults to `external_side_effect` unless a Brewva
 config policy explicitly sets a narrower `actionClass`.
 
-For `stdio`, inherited environment is disabled. `inheritEnv` is normalized to
-`false`; only explicit `env` entries and `envAllowlist` keys are forwarded to
-the child process.
+For `stdio`, inherited environment is disabled and there is no opt-in. The
+legacy `inheritEnv` field has been removed; supplying any truthy value fails
+config load. Only explicit `env` entries and `envAllowlist` keys are forwarded
+to the child process.
 
 Hosted tool names are generated as `mcp__{serverId}__{toolName}` and bounded to
 provider-safe tool-name syntax before they enter the hosted tool surface.

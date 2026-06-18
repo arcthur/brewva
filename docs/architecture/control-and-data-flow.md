@@ -19,12 +19,14 @@ sequenceDiagram
   U->>CLI: submit turn
   CLI->>GW: hosted prompt
   GW->>RT: inspect + operator context
-  GW->>RT: authority.tools.invocation.start
-  RT->>STORE: decision + lifecycle evidence
+  GW->>RT: ops.tools.invocation.start
+  RT->>RT: kernel.beginToolCall admission decision
+  RT->>STORE: tool.proposed + lifecycle evidence
   GW->>TOOL: execute admitted call
   TOOL-->>GW: result
-  GW->>RT: authority.tools.invocation.finish + recordResult
-  RT->>STORE: tool outcome + receipts
+  GW->>RT: ops.tools.invocation.finish + recordResult
+  RT->>RT: kernel.commitToolResult
+  RT->>STORE: tool.committed or abort receipts
 ```
 
 ## Default Product Loop

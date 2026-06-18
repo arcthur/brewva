@@ -9,10 +9,13 @@ The generated inventory in `docs/reference/commands.md` is the exact
 subcommand and flag list. Semantically, gateway commands fall into these
 groups:
 
-- lifecycle: start, stop, status, logs
+- lifecycle: start (foreground by default; `--detach` to background), stop,
+  status, logs
 - service install: install, uninstall
 - scheduler control: pause and resume
-- token and heartbeat maintenance
+- token and heartbeat control: `rotate-token` (rotates the control-plane token
+  and revokes authenticated clients) and `heartbeat-reload` (reloads
+  `HEARTBEAT.md` policy without restart)
 
 ## Gateway Versus Channel
 
@@ -27,10 +30,10 @@ partial-failure repair.
 
 ## Operational Posture
 
-Gateway commands should expose daemon state, pid/log/token paths, health,
-deep diagnostics, and timeout behavior as inspectable operator output. They
-should fail closed when config loading, token access, or loopback binding is
-invalid.
+Gateway commands expose daemon state, pid/log/token paths, health, deep
+diagnostics (`status --deep`), and timeout behavior as inspectable operator
+output, and fail closed when config loading, token access, or loopback binding
+is invalid.
 
 ## Related Docs
 

@@ -33,9 +33,10 @@ reviewable flow.
 
 ## Out Of Scope
 
-- working-projection persistence rules
-- scheduler and delegation business semantics
-- general approval / rollback governance
+- working-projection persistence rules → `docs/reference/working-projection.md`
+- scheduler and delegation business semantics → `intent-driven-scheduling` and
+  `background-and-parallelism`
+- general approval / rollback governance → `approval-and-rollback`
 
 ## Flow
 

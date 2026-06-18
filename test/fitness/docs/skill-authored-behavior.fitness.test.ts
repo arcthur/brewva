@@ -55,46 +55,25 @@ describe("skill authored behavior coverage", () => {
     expect(markdown).toContain("Author the behavior, not just the schema");
   });
 
-  test("strategy documents timing pressure and explicit scope ledgers", () => {
+  test("strategy documents timing pressure", () => {
     const markdown = readRepoFile("skills/core/strategy/SKILL.md");
 
     expect(markdown).toMatch(/why now/i);
-    expect(markdown).toMatch(/accepted\s*\/\s*deferred\s*\/\s*non-goals scope ledger/);
   });
 
-  test("architecture preserves deepening language and seam discipline", () => {
+  test("architecture preserves seam discipline", () => {
     const markdown = readRepoFile("skills/core/architecture/SKILL.md");
-    const language = readRepoFile("skills/core/architecture/references/language.md");
-    const deepening = readRepoFile("skills/core/architecture/references/deepening.md");
 
     expect(markdown).toContain("NO DEEPENING OPPORTUNITY WITHOUT A NAMED MODULE");
     expect(markdown).toContain("deletion test");
     expect(markdown).toContain("interface as the test surface");
-    expect(language).toContain("Module");
-    expect(language).toContain("Depth");
-    expect(deepening).toContain("One adapter is a hypothetical seam");
-    expect(deepening).toContain("Testing Through The Deepened Interface");
   });
 
   test("office-hours preserves diagnostic discipline from the source skill", () => {
     const markdown = readRepoFile("skills/core/office-hours/SKILL.md");
-    const startup = readRepoFile("skills/core/office-hours/references/startup-diagnostic.md");
-    const builder = readRepoFile("skills/core/office-hours/references/builder-mode.md");
-    const alternatives = readRepoFile(
-      "skills/core/office-hours/references/premise-and-alternatives.md",
-    );
 
     expect(markdown).toContain("NO OFFICE HOURS WITHOUT MODE, PREMISES, AND A NEXT ASSIGNMENT");
     expect(markdown).toContain("Ask one question at a time");
-    expect(markdown).toContain("Office-hours compares bets, not task lists");
-    expect(startup).toContain("Interest is not demand");
-    expect(startup).toContain("The status quo is your real competitor");
-    expect(startup).toContain("Desperate Specificity");
-    expect(builder).toContain("Delight is the currency");
-    expect(builder).toContain("Ship something you can show people");
-    expect(alternatives).toContain("Minimal viable path");
-    expect(alternatives).toContain("Ideal architecture or fullest-value path");
-    expect(alternatives).toContain("Creative or lateral path");
   });
 
   test("verifier documents diff-aware, browser-first, and rerun-after-fix behavior", () => {
@@ -121,7 +100,6 @@ describe("skill authored behavior coverage", () => {
     const referenceMarkdown = readRepoFile("skills/core/retro/references/retrospective-lenses.md");
 
     expect(referenceMarkdown).toContain("Metrics-First Questions");
-    expect(referenceMarkdown).toContain("most churn");
     expect(markdown).toContain("systemic");
   });
 

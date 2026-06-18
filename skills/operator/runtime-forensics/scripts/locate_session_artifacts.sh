@@ -19,11 +19,21 @@ json_quote() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/'
 }
 
-session_file_token() {
-  printf '%s' "$1" | base64 | tr -d '\n' | tr '+/' '-_' | sed 's/=*$//'
+# Mirror encodeURIComponent for the tape filename: Brewva stores the event tape
+# as `${encodeURIComponent(sessionId)}.jsonl`.
+url_encode() {
+  local s="$1" out="" i c
+  for ((i = 0; i < ${#s}; i++)); do
+    c="${s:i:1}"
+    case "$c" in
+      [a-zA-Z0-9_.~-]) out+="$c" ;;
+      *) out+="$(printf '%%%02X' "'$c")" ;;
+    esac
+  done
+  printf '%s' "$out"
 }
 
-encoded_session_id="$(session_file_token "${session_id}")"
+encoded_session_id="$(url_encode "${session_id}")"
 event_store="null"
 ledger="null"
 projections="null"
@@ -36,12 +46,6 @@ orchestrator_root="${workspace}/.orchestrator"
 brewva_root="${workspace}/.brewva"
 
 if [ -d "${orchestrator_root}" ]; then
-  encoded_event_log="${orchestrator_root}/events/sess_${encoded_session_id}.jsonl"
-  if [ -f "${encoded_event_log}" ]; then
-    event_store="$(json_quote "${encoded_event_log}")"
-    found=true
-  fi
-
   ledger_path="${orchestrator_root}/ledger/evidence.jsonl"
   if [ -f "${ledger_path}" ]; then
     ledger="$(json_quote "${ledger_path}")"
@@ -59,6 +63,12 @@ if [ -d "${orchestrator_root}" ]; then
 fi
 
 if [ -d "${brewva_root}" ]; then
+  tape_path="${brewva_root}/tape/${encoded_session_id}.jsonl"
+  if [ -f "${tape_path}" ]; then
+    event_store="$(json_quote "${tape_path}")"
+    found=true
+  fi
+
   index_path="${brewva_root}/session-index/session-index.duckdb"
   if [ -f "${index_path}" ]; then
     session_index="$(json_quote "${index_path}")"
@@ -103,7 +113,7 @@ for root in "${search_dirs[@]}"; do
   fi
 
   # Also check flat layout: <base>/<artifact_type>/<session_id>*
-  for evt_candidate in "${root}/events/${session_id}"*; do
+  for evt_candidate in "${root}/tape/${session_id}"*; do
     if [ -e "${evt_candidate}" ] && [ "${event_store}" = "null" ]; then
       event_store="$(json_quote "${evt_candidate}")"
       found=true

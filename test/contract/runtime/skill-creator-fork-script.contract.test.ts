@@ -91,9 +91,7 @@ describe("skill-authoring fork script", () => {
         description: "workspace chaincraft",
       });
       const runtime = createRuntimeInstanceFixture({ cwd: workspace });
-      expect(runtime.ops.skills.catalog.get("chaincraft")?.overlayFiles).toContain(
-        resolve(destination),
-      );
+      expect(runtime.ops.skills.catalog.getLoadReport().overlaySkills).toContain("chaincraft");
     } finally {
       rmSync(workspace, { recursive: true, force: true });
       rmSync(xdgRoot, { recursive: true, force: true });
@@ -135,9 +133,7 @@ describe("skill-authoring fork script", () => {
         description: "workspace nestedcraft",
       });
       const runtime = createRuntimeInstanceFixture({ cwd: nested });
-      expect(runtime.ops.skills.catalog.get("nestedcraft")?.overlayFiles).toContain(
-        resolve(destination),
-      );
+      expect(runtime.ops.skills.catalog.getLoadReport().overlaySkills).toContain("nestedcraft");
     } finally {
       rmSync(workspace, { recursive: true, force: true });
       rmSync(xdgRoot, { recursive: true, force: true });

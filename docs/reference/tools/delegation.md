@@ -161,9 +161,9 @@ subagent messaging tools.
 
 ## Transaction Boundary
 
-Delegation does not create cross-agent saga behavior or automatic
-partial-failure repair. Parent-owned prepare, apply, or reject actions create
-the receipt that matters.
+Parent-owned prepare, apply, or reject actions create the receipt that matters;
+delegation adds no cross-agent transaction semantics. See the Transaction
+Boundary in `docs/reference/tools.md` for the shared no-saga contract.
 
 Run completion has one finalization path. `DelegationRunPlan` is the immutable
 resolved input for a run; `buildDelegationFinalizationReceipt(...)` describes

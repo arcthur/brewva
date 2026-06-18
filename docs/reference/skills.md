@@ -8,10 +8,10 @@ Skill parsing, merge, and inventory anchors:
 - `packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.ts`
 - `packages/brewva-tools/src/families/skills/discover-skills.ts`
 
-This page owns skill taxonomy, SkillCard metadata, ProducerContract metadata,
-and the generated skill inventory. Hosted turns may select skills as bounded
-advisory prompt context. External action authority lives in capability
-manifests, selection receipts, and tool policy, not in skill frontmatter.
+This page owns skill taxonomy, SkillCard metadata, and the generated skill
+inventory. Hosted turns may select skills as bounded advisory prompt context.
+External action authority lives in capability manifests, selection receipts,
+and tool policy, not in skill frontmatter.
 
 ## Generated Inventory
 
@@ -116,20 +116,6 @@ side effects, or structured output obligations.
 the model saw. They are not schemas, routing directives, budget grants, or
 completion contracts.
 
-## Producer Contracts
-
-Structured producer outputs live outside `SKILL.md` in
-`skills/producers/<name>.yaml`, keyed by producer name. Producer contracts carry:
-
-- `producer`
-- `outputs`
-- `output_contracts`
-- `semantic_bindings`
-
-Delegation and prompt rendering read required outputs from the producer
-registry. Semantic-bound outputs must not duplicate `output_contracts`; non-
-semantic outputs must declare an explicit output contract.
-
 ## File Semantics
 
 Directory layout derives category and discoverability:
@@ -142,8 +128,8 @@ Directory layout derives category and discoverability:
 
 Hosted runtime code renders SkillCard descriptions and `selection.when_to_use`
 for model-native advisory routing, but selection metadata is not authorization.
-Authored frontmatter cannot override `category` or `tier`; attempts to do so
-are rejected at load time.
+Authored frontmatter cannot override the directory-derived `category`; attempts
+to do so are rejected at load time.
 
 ## Available Skills Versus Skill-Surface Tools
 
@@ -153,28 +139,12 @@ The trace uses two separate concepts:
 - a skill-surface tool is a managed tool whose registry metadata has
   `surface="skill"`
 
-The available SkillCard shortlist is reported by `skill.selection.recorded`
-and mirrored in the hidden, context-excluded `brewva-skill-selection` custom
-turn message. Explicit `$skill` mentions are mirrored as
-`tool_surface_resolved.explicitSkillMentionNames`; `skillSelectionId` and
-`skillSelectionMode` remain trace correlation fields. The event also records
-`candidateSkillCount`, `renderedSkillCount`, `omittedSkillCount`,
-`promptPaths`, `renderedSkillReasons`, `skillInvocationRecords`, and
-`renderedSkillContext` with character and token-estimate metadata for any
-prompt block that was injected.
-`discover_skills` reuses the same event family for discover-only projections:
-returned SkillCards record `selectionTrigger=discover_only` and
-`invocationMode=inspect_only` without creating authority or automatic context
-admission.
-
-Hosted shortlist selection is deterministic: explicit mention, path glob, name
-match, then shared-search-tokenized description or `selection.when_to_use` text
-match. Runtime-only Chinese keyword bridging supports common task wording
-without adding trigger metadata to `SKILL.md`.
-The default cap is 8 rendered SkillCards, except that explicit mentions over
-the cap are preserved and recorded with an over-budget reason. A turn with no
-candidate SkillCards records receipt-only discovery guidance instead of the
-full catalog or an empty SkillCard block.
+The advisory-shortlist selection algorithm and its `skill.selection.recorded`
+event payload — counts, selection reasons, render metadata, the hidden
+`brewva-skill-selection` message, the `tool_surface_resolved` mirror, and the
+`discover_skills` discover-only projection — are owned by
+`docs/reference/skill-routing.md` (Advisory Shortlist); this page does not
+restate them.
 
 Skill-surface tools are counted by `skillSurfaceToolActiveCount` and
 `hiddenSkillSurfaceToolCount`. They are tool inventory counters, not selected
@@ -217,8 +187,8 @@ authoritative fact or adoption receipt.
 ## Interactive Catalog Surface
 
 The interactive shell exposes skills through `/skills`. That command reads the
-runtime skill catalog, producer contracts, and load report; it does not grant
-tool authority and does not special-case workflow names.
+runtime skill catalog and load report; it does not grant tool authority and
+does not special-case workflow names.
 
 The catalog renders SkillCards as advisory cards: name, source, why relevant,
 token estimate, resource refs, output artifacts, and authority posture `none`.
@@ -226,8 +196,8 @@ token estimate, resource refs, output artifacts, and authority posture `none`.
 add a `Run skill` path or hard-code workflow command IDs.
 
 Review-oriented workflows such as `review` and security review remain
-catalog-discoverable skills or producer-backed workflows. They are intentionally
-not built-in `/review` or `/security-review` shell commands.
+catalog-discoverable skills. They are intentionally not built-in `/review` or
+`/security-review` shell commands.
 
 The catalog is read-only until a runtime-owned user-invocable skill operator
 port exists. The shell must not simulate invocation by submitting prompts or by
@@ -236,7 +206,6 @@ hard-coding workflow command IDs.
 ## Authoring Rules
 
 - Keep `SKILL.md` advisory. Put action authority in capability manifests.
-- Put structured producer outputs in `skills/producers/<name>.yaml`.
 - Keep `selection` useful for deterministic advisory shortlist routing, humans,
   and repository tooling, not runtime authorization.
 - Keep operator/meta skills advisory and inspectable; do not use them to grant

@@ -31,9 +31,9 @@ met.
 
 ## Out Of Scope
 
-- detached subagent worker merge
-- channel ingress / egress
-- gateway control-plane daemon
+- detached subagent worker merge → `background-and-parallelism`
+- channel ingress / egress → `channel-gateway-and-turn-flow`
+- gateway control-plane daemon → `gateway-control-plane-lifecycle`
 
 ## Flow
 

@@ -43,10 +43,11 @@ while headless and channel command grammars remain separate control planes.
 
 ## Out Of Scope
 
-- `brewva inspect` / `--replay` / `--undo`
-- `brewva gateway ...`
-- channel ingress / egress
-- detached subagent and scheduler daemon flows
+- `brewva inspect` / `--replay` / `--undo` → `inspect-replay-and-recovery`
+- `brewva gateway ...` → `gateway-control-plane-lifecycle`
+- channel ingress / egress → `channel-gateway-and-turn-flow`
+- detached subagent and scheduler daemon flows → `background-and-parallelism`
+  and `intent-driven-scheduling`
 
 ## Flow
 
@@ -161,3 +162,11 @@ flowchart TD
 - Workbench runtime surface:
   `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 - Workbench tools: `packages/brewva-tools/src/families/memory/workbench.ts`
+
+## Related Docs
+
+- CLI: `docs/guide/cli.md`
+- Interactive command surface: `docs/reference/commands/interactive.md`
+- Hosted dynamic context: `docs/reference/hosted-dynamic-context.md`
+- Context and compaction: `docs/journeys/internal/context-and-compaction.md`
+- Session lifecycle: `docs/reference/session-lifecycle.md`

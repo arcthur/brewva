@@ -35,8 +35,11 @@ cooldown policy only; provider secrets and credential values are forbidden.
 ## Rewind And Recovery
 
 Session rewind events record checkpoints, completed rewinds, redo completion,
-and supersession. Recovery WAL events record pending, inflight, done, failed,
-expired, recovered, and compacted posture for turn envelopes.
+and supersession. Recovery WAL emits `recovery.wal.appended`,
+`recovery.wal.status.changed`, `recovery.wal.compacted`, and
+`recovery.wal.recovery.completed`; the `status.changed` payload carries row
+posture (`pending`, `inflight`, `done`, `failed`, `expired`, `recovered`,
+`compacted`).
 
 Use recovery events to answer:
 

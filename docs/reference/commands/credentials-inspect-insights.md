@@ -42,16 +42,8 @@ notable sessions, and repeated delivery patterns without hiding provenance.
 
 ## Harness
 
-`brewva harness` reads trace-driven Harness projections through explicit
-subcommands:
-
-- `snapshots`
-- `patrol`
-- `compare`
-
-It is intentionally advisory. It can report repeated Harness patterns and
-manifest-only comparisons against the current runtime or an explicit candidate
-manifest file, but it does not promote behavior changes by itself.
+`brewva harness` (trace-driven snapshots, patrol, and manifest comparison;
+advisory only) is documented in `docs/reference/commands/harness.md`.
 
 ## Onboard
 

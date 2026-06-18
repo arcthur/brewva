@@ -60,7 +60,7 @@ describe("skills migrate CLI", () => {
     expect(existsSync(join(workspace, "skills", "producers", "legacy-review.yaml"))).toBe(false);
   });
 
-  test("write migrates SkillCard frontmatter and extracts ProducerContract", async () => {
+  test("write migrates SkillCard frontmatter", async () => {
     const workspace = createTestWorkspace("skills-migrate-write");
     const skillDir = writeLegacySkill(workspace);
 
@@ -73,13 +73,7 @@ describe("skills migrate CLI", () => {
     expect(skillMarkdown).not.toContain("intent:");
     expect(skillMarkdown).not.toContain("effects:");
     expect(skillMarkdown).not.toContain("routing:");
-    const producer = readFileSync(
-      join(workspace, "skills", "producers", "legacy-review.yaml"),
-      "utf8",
-    );
-    expect(producer).toContain("producer: legacy-review");
-    expect(producer).toContain("review_report:");
-    expect(producer).toContain("min_words: 3");
+    expect(existsSync(join(workspace, "skills", "producers", "legacy-review.yaml"))).toBe(false);
   });
 
   test("migrate parses SkillCard frontmatter through the shared markdown parser", async () => {
