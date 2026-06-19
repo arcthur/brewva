@@ -1352,7 +1352,7 @@ export class CliShellRuntime {
   private projectQueuedPrompts(
     items: ReturnType<SessionViewPort["getQueuedPrompts"]>,
   ): ReturnType<SessionViewPort["getQueuedPrompts"]> {
-    // followUp prompts merge into the current turn and are not part of the queue UI.
+    // followUp prompts use a separate continuation lane and are not part of the queue UI.
     return items.filter((item) => item.behavior === "queue");
   }
 

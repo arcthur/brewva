@@ -9,7 +9,6 @@ export {
   advanceSessionPhaseResult,
   canTransitionSessionPhase,
   type SessionPhaseEvent,
-  type BrewvaPromptEnvelope,
   type BrewvaDiffPreferences,
   type BrewvaDiffStyle,
   type BrewvaDiffWrapMode,

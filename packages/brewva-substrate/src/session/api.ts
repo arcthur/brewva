@@ -19,7 +19,6 @@ export {
   type BrewvaModelPresetState,
   type BrewvaPromptAssistantMessageEvent,
   type BrewvaPromptDispatchSession,
-  type BrewvaPromptEnvelope,
   type BrewvaPromptInputSource,
   type BrewvaPromptOptions,
   type BrewvaPromptQueueBehavior,

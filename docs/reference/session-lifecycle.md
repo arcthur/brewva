@@ -81,7 +81,7 @@ In particular:
 
 ## Queued Prompt Contract
 
-Queued prompts remain a hosted-loop concern with three stable rules:
+Queued prompts remain a hosted-loop concern with four stable rules:
 
 1. Interactive composer submissions made during active streaming default to
    queued delivery when the caller omits `streamingBehavior`. Explicit
@@ -94,11 +94,15 @@ Queued prompts remain a hosted-loop concern with three stable rules:
    removes the still-pending entry when it exists and returns `false` when the
    prompt is already consumed or missing; that outcome is advisory, not an
    exceptional lifecycle error.
+4. Queue and `followUp` remain separate lanes. Queue entries release before
+   follow-ups regardless of arrival order. Each lane independently uses its
+   configured `one-at-a-time` or `all` release mode; an `all` batch drains only
+   that lane before the other lane becomes eligible.
 
 The CLI's pending strip and queue overlay intentionally surface only
 `behavior="queue"` entries. Explicit `followUp` delivery remains a distinct
-continuation lane even though both travel through the hosted loop's pending
-message machinery.
+continuation lane even though both travel through the hosted loop's between-turn
+pending-message machinery.
 
 The stable rule is that `runtime.turn` owns aggregate posture semantics and
 gateway adapters only project transport/session views from canonical tape.
@@ -237,7 +241,8 @@ canonical runtime events and tape projections directly.
   - once mode resolution commits to interactive execution, CLI boots the
     OpenTUI-backed shell in `alternate-screen`
   - ordinary non-streaming prompts run through the `interactive` hosted-loop
-    profile; streaming follow-up remains a low-level agent-loop continuation
+    profile; streaming queue and `followUp` inputs enter separate between-turn
+    continuation lanes
   - approvals, questions, task browser summaries, subagent footer detail,
     inspect, lineage checkout, session switching, and pager drill-down remain
     presentation over Brewva-owned session state

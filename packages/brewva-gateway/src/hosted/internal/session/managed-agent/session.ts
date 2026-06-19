@@ -106,6 +106,7 @@ import {
   ManagedSessionCommandDispatchGate,
   ManagedSessionCommandMessageRouter,
   ManagedSessionDeferredTurnState,
+  type QueuedPromptEntry,
 } from "./deferred-dispatch.js";
 import { ManagedSessionEventBridge } from "./event-bridge.js";
 import { ManagedSessionLiveTranscript } from "./live-transcript.js";
@@ -192,7 +193,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #toolSchemaSnapshotStore = createToolSchemaSnapshotStore();
   readonly #toolRegistry: ManagedSessionToolRegistry;
   readonly #providerCacheState: ManagedSessionProviderCacheState;
-  readonly #deferredTurnState = new ManagedSessionDeferredTurnState();
+  readonly #deferredTurnState: ManagedSessionDeferredTurnState;
   readonly #commandDispatchGate = new ManagedSessionCommandDispatchGate();
   readonly #compactionFlow = new ManagedSessionCompactionFlowState();
   readonly #compactionLifecycle: ManagedSessionCompactionLifecycle;
@@ -260,6 +261,10 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#cwd = input.cwd;
     this.#runtime = input.runtime;
     this.#settings = input.settings;
+    this.#deferredTurnState = new ManagedSessionDeferredTurnState({
+      queueMode: input.settings.getQueueMode(),
+      followUpMode: input.settings.getFollowUpMode(),
+    });
     this.#catalog = input.catalog;
     this.#resourceLoader = input.resourceLoader;
     this.#ui = input.ui ?? NOOP_UI;
@@ -652,7 +657,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   }
 
   removeQueuedPrompt(promptId: string): boolean {
-    const removed = this.#deferredTurnState.removeQueuedPrompt(promptId, () => true);
+    const removed = this.#deferredTurnState.removeQueuedPrompt(promptId);
     if (!removed) {
       return false;
     }
@@ -687,6 +692,39 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     parts: readonly BrewvaPromptContentPart[],
     options?: BrewvaPromptOptions,
   ): Promise<void> {
+    const initialStatus = await this.runSingleHostedPromptAttempt(parts, options);
+    if (initialStatus === "stopped") {
+      return;
+    }
+
+    while (!this.isStreaming) {
+      const batch = this.#deferredTurnState.consumeNextPromptBatch();
+      if (batch.length === 0) {
+        break;
+      }
+      this.emitQueuedPromptChange();
+      for (const [index, queued] of batch.entries()) {
+        try {
+          const status = await this.runSingleHostedPromptAttempt(queued.parts, {
+            expandPromptTemplates: false,
+            source: options?.source,
+          });
+          if (status === "stopped") {
+            this.restoreUnattemptedPromptEntries(batch.slice(index + 1));
+            return;
+          }
+        } catch (error) {
+          this.restoreUnattemptedPromptEntries(batch.slice(index + 1));
+          throw error;
+        }
+      }
+    }
+  }
+
+  private async runSingleHostedPromptAttempt(
+    parts: readonly BrewvaPromptContentPart[],
+    options?: BrewvaPromptOptions,
+  ): Promise<"completed" | "stopped"> {
     const output = await runHostedTurnEnvelope({
       session: this,
       runtime: this.#runtime,
@@ -698,20 +736,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       throw output.error instanceof Error ? output.error : new Error(String(output.error));
     }
     if (output.status === "cancelled" || output.status === "suspended") {
-      return;
+      return "stopped";
     }
-
-    while (!this.isStreaming) {
-      const queued = this.#deferredTurnState.consumeQueuedPrompt();
-      if (!queued) {
-        break;
-      }
-      this.emitQueuedPromptChange();
-      await this[HOSTED_PROMPT_ATTEMPT_DISPATCH](queued.parts, {
-        expandPromptTemplates: false,
-        source: options?.source,
-      });
-    }
+    return "completed";
   }
 
   async [HOSTED_RUNTIME_TURN_PRELUDE](
@@ -1065,7 +1092,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       isIdle: () => !this.isStreaming,
       signal: this.#agent.signal,
       abort: () => this.#agent.abort(),
-      hasPendingMessages: () => this.#deferredTurnState.hasPending(false),
+      hasPendingMessages: () => this.#deferredTurnState.hasPending(),
       shutdown: () => this.dispose(),
       compact: (request) => {
         this.requestCompaction(request);
@@ -1082,9 +1109,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   private async handleAgentEvent(
     event: BrewvaAgentProtocolEvent,
   ): Promise<BrewvaAgentProtocolEvent> {
-    if (event.type === "message_start" && event.message.role === "user") {
-      this.deleteQueuedMessage(event.message);
-    }
     if (event.type === "steer_applied") {
       this.#recordRuntimeEvent(
         STEER_APPLIED_EVENT_TYPE,
@@ -1199,13 +1223,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     await this.#eventBridge.syncContextState();
   }
 
-  private deleteQueuedMessage(
-    message: Extract<BrewvaAgentProtocolMessage, { role: "user" }>,
-  ): void {
-    const deleted = this.#deferredTurnState.acknowledgeStartedQueuedUser(message);
-    if (!deleted) {
+  private restoreUnattemptedPromptEntries(entries: readonly QueuedPromptEntry[]): void {
+    if (entries.length === 0) {
       return;
     }
+    this.#deferredTurnState.restoreUnattemptedPromptBatch(entries);
     this.emitQueuedPromptChange();
   }
 }

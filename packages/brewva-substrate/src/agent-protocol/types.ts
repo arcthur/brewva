@@ -308,13 +308,9 @@ export interface BrewvaAgentProtocolController {
   abort(): void;
   setTools(tools: BrewvaAgentProtocolTool[]): void;
   setSystemPrompt(prompt: string): void;
-  followUp(message: BrewvaAgentProtocolMessage): void;
-  queue(message: BrewvaAgentProtocolMessage): void;
-  removeQueuedMessage(message: BrewvaAgentProtocolMessage, queue: "queue" | "followUp"): boolean;
   steer(text: string): boolean;
   hasPendingSteer(): boolean;
   appendMessage(message: BrewvaAgentProtocolMessage): void;
-  hasQueuedMessages(): boolean;
 }
 
 export interface BrewvaAgentProtocolStreamContext {

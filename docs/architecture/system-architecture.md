@@ -74,18 +74,18 @@ coordinate system.
 | `Model Attention Ring` | what the model reads, remembers, evicts, recalls, quotes, or compacts, exposed through ordinary model-callable tools                                                     | Workbench, Attention Options   | durable advisory material + request-local   |
 | `Kernel Ring`          | effect authorization, proposal decisions, verification gates, rollback receipts, Recovery WAL, replay, event-tape truth                                                  | Authority                      | durable source of truth + recovery material |
 | `Runtime Physics Ring` | context status, context-window limits, budget accounting, provider request constraints, durability classes, cache safety; does not choose attention for the model        | Efficiency                     | request-local + cache/local                 |
-| `Runtime Turn Ring`    | default turn execution through `runtime.turn`: main turns, provider calls, retry, cache posture, cost, interruption, terminal commit                                     | — (execution edge)             | commits through `Kernel Ring`               |
-| `Substrate Ring`       | session lifecycle, turn orchestration, tool execution phases, request materialization, checkpoint/resume mechanics                                                       | Working projection             | rebuildable                                 |
+| `Runtime Turn Ring`    | execution within one accepted turn through `runtime.turn`: provider calls, tool-result continuation, retry, cache posture, cost, interruption, terminal commit           | — (execution edge)             | commits through `Kernel Ring`               |
+| `Substrate Ring`       | between-turn session coordination: prompt admission, queue/follow-up ordering, host-local interaction phases, resource assembly, and resume handoff                      | Working projection             | rebuildable                                 |
 | `Deliberation Ring`    | recall and precedent search, model-facing guidance, compact prompt templates, candidate preparation, advisory evaluation; does not commit effects or execute model calls | folds into Workbench / Options | rebuildable                                 |
 | `Control Plane Ring`   | scheduling, gateway workers, channel orchestration, subagents, recovery loops, and other opt-in hosted behavior                                                          | Hosted Control                 | rebuildable                                 |
 | `Experience Ring`      | CLI, TUI, gateway clients, channels, operator UX, memory operation visibility, cache/cost diagnostics, approval displays                                                 | Experience                     | cache/local                                 |
 
 Package names may host code from more than one ring, but public contracts
-should expose the narrowest ring that owns the decision. In particular the
-`Substrate Ring` is implemented mainly by `@brewva/brewva-runtime` (through
-`runtime.turn`), not by the `@brewva/brewva-substrate` package — that package
-carries contracts and direct-host assembly mechanism beneath the ring. Do not
-read the `Substrate Ring` name as a claim about the `brewva-substrate` package.
+should expose the narrowest ring that owns the decision. The `Substrate Ring`
+is realized by host/session adapters using shared substrate contracts; the
+similarly named `@brewva/brewva-substrate` package supplies vocabulary and
+mechanisms but does not own turn execution. `runtime.turn` belongs only to the
+`Runtime Turn Ring`.
 
 A projection therefore grants none of the authorities listed under Product
 Shape: because it carries no authority, there is no projection-versus-ring
@@ -229,11 +229,9 @@ compatibility story.
   plugin ports, and agent-protocol message vocabulary. Substrate assembles
   mechanisms for direct hosts; it is not the gateway hosted effect owner, does
   not execute model calls, does not own the turn loop, and does not own
-  compaction trigger or recovery policy. Naming seam: the abstract `Substrate
-Ring` (session lifecycle, turn orchestration, tool phases) is implemented
-  mainly by `@brewva/brewva-runtime` through `runtime.turn`, not by this
-  package — `@brewva/brewva-substrate` is the contract-and-direct-host-assembly
-  layer beneath that ring, and `runtime.turn` is the only turn owner.
+  compaction trigger or recovery policy. Host adapters use these mechanisms for
+  `Substrate Ring` coordination between turns; `runtime.turn` remains the sole
+  implementation of `Runtime Turn Ring` execution.
 - `@brewva/brewva-provider-core`: provider contracts, model catalog lookup,
   provider registration, stream normalization, cache rendering, and driver
   adapters. It is mechanism, not replay or credential authority.

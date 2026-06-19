@@ -96,16 +96,15 @@ Implementation note:
 - attention options expose bounded candidate cards before unbounded content;
   consume, pin, ignore, and verify-plan actions are distinct effects with
   distinct authority posture
-- the `Substrate Ring` owns how the agent loop runs — session lifecycle, turn
-  orchestration, tool execution phases, request materialization, and
-  checkpoint/resume mechanics — but that ring is implemented mainly by
-  `runtime.turn`, not by the `@brewva/brewva-substrate` package. The package is
-  contract vocabulary plus direct-host assembly mechanism; it does not execute
-  model calls and does not own the turn loop
-- turn-execution truth (provider streaming, retry, terminal commit) is owned
-  solely by `runtime.turn`; aggregate session-lifecycle meaning is runtime-owned,
-  and host `SessionPhase` stays a local interaction FSM rather than durable
-  lifecycle truth
+- the `Substrate Ring` owns between-turn session coordination — prompt
+  admission, queue/follow-up ordering, host-local interaction phases, resource
+  assembly, and resume handoff. Host adapters implement those mechanics using
+  shared substrate contracts; the ring does not execute model calls or own
+  durable lifecycle truth
+- the `Runtime Turn Ring` owns execution within one accepted turn. Provider
+  streaming, tool-result continuation, retry, interruption, and terminal commit
+  are owned solely by `runtime.turn`; aggregate session-lifecycle meaning is
+  runtime-owned, and host `SessionPhase` stays a local interaction FSM
 - gateway owns the model-call boundary for main turns, compaction, model
   routing, provider cache policy, and usage accounting — the model-call
   implementation face of the `Runtime Turn Ring` — and delegates
@@ -176,21 +175,22 @@ below are the authority-bearing subset of that topology.
   - operator UX
   - lifecycle adapters
 
-Rings are about authority, not package names. Every ring name ends in `Ring`;
-`Boundary` is reserved for `Effect Boundary` (the tool-invocation execution
-class), not for ring names, and `Plane` is not a coordinate (see Projections,
-Not Planes).
+Rings are about authority, not package names. Every ring name ends in `Ring`.
+`Boundary` is not a ring suffix; `Effect Boundary` remains the name of the
+tool-invocation execution class. `Plane` is not an authority coordinate or
+projection suffix (see Projections, Not Planes).
 
 ## Projections, Not Planes
 
 Projections are read-only views of rings, not a parallel coordinate system.
 Each projection label is a concrete noun — `Workbench`, `Authority`,
 `Efficiency`, `Hosted Control`, `Experience` — never a coordinate of its own.
-"Plane" is retired as a synonym for projection; the word now survives only in
-`Control Plane Ring` (an industry term for the hosted-orchestration ring — a
-ring, not a projection) and in the adjective "control-plane behavior" for the
-work that ring governs. The full ring topology and its projection column live
-in `docs/architecture/system-architecture.md`.
+`Plane` is retired as an authority coordinate and as a synonym for projection.
+Descriptive domain terms such as `control plane`, `query plane`, and
+`control-plane behavior` remain valid but grant no authority. `Control Plane
+Ring` is the authority-owner name for hosted orchestration. The full ring
+topology and its projection column live in
+`docs/architecture/system-architecture.md`.
 
 Product rule:
 
@@ -229,8 +229,11 @@ when it protects authority boundaries instead of hiding them.
 Practical boundary rule:
 
 - if a concern executes a model call, it belongs to the gateway model boundary
-- if a concern decides physical loop mechanics, it belongs to the `Substrate
-Ring` (implemented mainly by `runtime.turn`, not the `brewva-substrate` package)
+- if a concern decides physical execution within an accepted turn, it belongs
+  to the `Runtime Turn Ring` and is implemented by `runtime.turn`
+- if a concern coordinates prompt admission or host interaction between turns,
+  it belongs to the `Substrate Ring`; the similarly named package supplies
+  shared mechanisms but does not own the ring
 - if a concern decides whether an effect may commit, it belongs to the kernel
 - the runtime contract stays narrow even when the substrate grows more capable
 

@@ -45,10 +45,15 @@ describe("substrate entrypoint surface", () => {
 
   test("exports session mechanisms only from the explicit session subpath", async () => {
     const session = await import("@brewva/brewva-substrate/session");
+    const sessionApi = readFileSync(
+      resolve(repoRoot, "packages/brewva-substrate/src/session/api.ts"),
+      "utf8",
+    );
 
     // The low-level turn loop was internalized into runtime.turn; substrate no
     // longer ships a session-host orchestration bypass on this subpath.
     expect("createInMemorySessionHost" in session).toBe(false);
+    expect(sessionApi).not.toContain("BrewvaPromptEnvelope");
     expect(typeof session.BrewvaManagedSessionStore).toBe("function");
     expect(typeof session.advanceSessionPhaseResult).toBe("function");
     expect(session.SESSION_CRASH_POINTS).toContain("tool_executing");

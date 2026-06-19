@@ -22,12 +22,16 @@ import {
   toTurnLoopCustomMessage,
 } from "./session-prompt-dispatch.js";
 
-export type QueuedUserMessage = Extract<BrewvaAgentProtocolMessage, { role: "user" }>;
-
 export interface QueuedPromptEntry {
   view: BrewvaQueuedPromptView;
-  message: QueuedUserMessage;
   parts: BrewvaPromptContentPart[];
+}
+
+type PromptQueueMode = "all" | "one-at-a-time";
+
+export interface ManagedSessionDeferredTurnStateOptions {
+  readonly queueMode?: PromptQueueMode;
+  readonly followUpMode?: PromptQueueMode;
 }
 
 export type PendingQueuedItem =
@@ -37,39 +41,22 @@ export type PendingQueuedItem =
     }
   | { kind: "custom"; message: BrewvaHostCustomMessage };
 
-function toAgentUserContent(
-  parts: readonly BrewvaPromptContentPart[],
-): Extract<BrewvaAgentProtocolMessage, { role: "user" }>["content"] {
-  return parts.map((part) => {
-    if (part.type === "text") {
-      return { type: "text", text: part.text };
-    }
-    if (part.type === "image") {
-      return {
-        type: "image",
-        data: part.data,
-        mimeType: part.mimeType,
-      };
-    }
-    return {
-      type: "file",
-      uri: part.uri,
-      name: part.name,
-      mimeType: part.mimeType,
-      displayText: part.displayText,
-    };
-  });
-}
-
 export class ManagedSessionDeferredTurnState {
   readonly #queuedPrompts: QueuedPromptEntry[] = [];
-  readonly #queuedPromptIdsByMessage = new WeakMap<QueuedUserMessage, string>();
+  readonly #followUpPrompts: QueuedPromptEntry[] = [];
   readonly #pendingNextTurnMessages: Array<
     Extract<BrewvaAgentProtocolMessage, { role: "custom" }>
   > = [];
+  readonly #queueMode: PromptQueueMode;
+  readonly #followUpMode: PromptQueueMode;
+
+  constructor(options: ManagedSessionDeferredTurnStateOptions = {}) {
+    this.#queueMode = options.queueMode ?? "one-at-a-time";
+    this.#followUpMode = options.followUpMode ?? "one-at-a-time";
+  }
 
   getQueuedPromptViews(): readonly BrewvaQueuedPromptView[] {
-    return this.#queuedPrompts.map((entry) => entry.view);
+    return [...this.#queuedPrompts, ...this.#followUpPrompts].map((entry) => entry.view);
   }
 
   enqueueStreamingUserPrompt(
@@ -78,52 +65,29 @@ export class ManagedSessionDeferredTurnState {
   ): QueuedPromptEntry {
     const submittedAt = Date.now();
     const promptId = randomUUID();
-    const message: QueuedUserMessage = {
-      role: "user",
-      content: toAgentUserContent(parts),
-      timestamp: submittedAt,
-    };
     const view: BrewvaQueuedPromptView = Object.freeze({
       promptId,
       text: buildBrewvaPromptText(parts),
       submittedAt,
       behavior,
     });
-    this.#queuedPromptIdsByMessage.set(message, promptId);
-    const entry = { view, message, parts: cloneBrewvaPromptContentParts(parts) };
-    this.#queuedPrompts.push(entry);
+    const entry = { view, parts: cloneBrewvaPromptContentParts(parts) };
+    const queue = behavior === "followUp" ? this.#followUpPrompts : this.#queuedPrompts;
+    queue.push(entry);
     return entry;
   }
 
-  removeQueuedPrompt(
-    promptId: string,
-    removeFromAgent: (message: QueuedUserMessage, behavior: BrewvaPromptQueueBehavior) => boolean,
-  ): boolean {
-    const index = this.#queuedPrompts.findIndex((entry) => entry.view.promptId === promptId);
+  removeQueuedPrompt(promptId: string): boolean {
+    const queue = this.#queueContainingPrompt(promptId);
+    const index = queue.findIndex((entry) => entry.view.promptId === promptId);
     if (index < 0) {
       return false;
     }
-    const entry = this.#queuedPrompts[index];
-    if (!entry || !removeFromAgent(entry.message, entry.view.behavior)) {
+    const entry = queue[index];
+    if (!entry) {
       return false;
     }
-    this.#queuedPrompts.splice(index, 1);
-    this.#queuedPromptIdsByMessage.delete(entry.message);
-    return true;
-  }
-
-  acknowledgeStartedQueuedUser(message: QueuedUserMessage): boolean {
-    const promptId = this.#queuedPromptIdsByMessage.get(message);
-    if (!promptId) {
-      return false;
-    }
-    const index = this.#queuedPrompts.findIndex((entry) => entry.view.promptId === promptId);
-    if (index < 0) {
-      this.#queuedPromptIdsByMessage.delete(message);
-      return false;
-    }
-    this.#queuedPrompts.splice(index, 1);
-    this.#queuedPromptIdsByMessage.delete(message);
+    queue.splice(index, 1);
     return true;
   }
 
@@ -137,16 +101,36 @@ export class ManagedSessionDeferredTurnState {
     return messages;
   }
 
-  consumeQueuedPrompt(): QueuedPromptEntry | null {
-    const entry = this.#queuedPrompts.shift() ?? null;
-    if (entry) {
-      this.#queuedPromptIdsByMessage.delete(entry.message);
-    }
-    return entry;
+  consumeNextPromptBatch(): readonly QueuedPromptEntry[] {
+    return this.#queuedPrompts.length > 0
+      ? this.#drainPromptQueue(this.#queuedPrompts, this.#queueMode)
+      : this.#drainPromptQueue(this.#followUpPrompts, this.#followUpMode);
   }
 
-  hasPending(agentHasQueuedMessages: boolean): boolean {
-    return agentHasQueuedMessages || this.#pendingNextTurnMessages.length > 0;
+  restoreUnattemptedPromptBatch(entries: readonly QueuedPromptEntry[]): void {
+    const queued = entries.filter((entry) => entry.view.behavior === "queue");
+    const followUps = entries.filter((entry) => entry.view.behavior === "followUp");
+    this.#queuedPrompts.unshift(...queued);
+    this.#followUpPrompts.unshift(...followUps);
+  }
+
+  #drainPromptQueue(queue: QueuedPromptEntry[], mode: PromptQueueMode): QueuedPromptEntry[] {
+    const count = mode === "all" ? queue.length : Math.min(queue.length, 1);
+    return queue.splice(0, count);
+  }
+
+  #queueContainingPrompt(promptId: string): QueuedPromptEntry[] {
+    return this.#queuedPrompts.some((entry) => entry.view.promptId === promptId)
+      ? this.#queuedPrompts
+      : this.#followUpPrompts;
+  }
+
+  hasPending(): boolean {
+    return (
+      this.#queuedPrompts.length > 0 ||
+      this.#followUpPrompts.length > 0 ||
+      this.#pendingNextTurnMessages.length > 0
+    );
   }
 }
 

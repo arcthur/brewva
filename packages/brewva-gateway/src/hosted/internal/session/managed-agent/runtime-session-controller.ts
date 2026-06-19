@@ -29,8 +29,6 @@ export interface ManagedRuntimeTurnLease {
 
 export class ManagedRuntimeSessionController implements BrewvaAgentProtocolController {
   readonly #listeners = new Set<RuntimeTurnListener>();
-  readonly #queuedMessages: BrewvaAgentProtocolMessage[] = [];
-  readonly #followUpMessages: BrewvaAgentProtocolMessage[] = [];
   #activeAbortController: AbortController | null = null;
   #activeResolve: (() => void) | null = null;
   #activePromise: Promise<void> | null = null;
@@ -108,24 +106,6 @@ export class ManagedRuntimeSessionController implements BrewvaAgentProtocolContr
     this.#state.systemPrompt = prompt;
   }
 
-  followUp(message: BrewvaAgentProtocolMessage): void {
-    this.#followUpMessages.push(message);
-  }
-
-  queue(message: BrewvaAgentProtocolMessage): void {
-    this.#queuedMessages.push(message);
-  }
-
-  removeQueuedMessage(message: BrewvaAgentProtocolMessage, queue: "queue" | "followUp"): boolean {
-    const messages = queue === "followUp" ? this.#followUpMessages : this.#queuedMessages;
-    const index = messages.indexOf(message);
-    if (index < 0) {
-      return false;
-    }
-    messages.splice(index, 1);
-    return true;
-  }
-
   steer(text: string): boolean {
     if (!this.isRuntimeTurnActive()) {
       return false;
@@ -144,10 +124,6 @@ export class ManagedRuntimeSessionController implements BrewvaAgentProtocolContr
 
   appendMessage(message: BrewvaAgentProtocolMessage): void {
     this.#state.messages.push(message);
-  }
-
-  hasQueuedMessages(): boolean {
-    return this.#queuedMessages.length > 0 || this.#followUpMessages.length > 0;
   }
 
   isRuntimeTurnActive(): boolean {

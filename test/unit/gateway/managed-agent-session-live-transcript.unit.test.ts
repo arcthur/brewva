@@ -39,16 +39,12 @@ function createAgentStub() {
       calls.push("setSystemPrompt");
       prompts.push(prompt);
     },
-    followUp: () => undefined,
-    queue: () => undefined,
-    removeQueuedMessage: () => false,
     steer: () => false,
     hasPendingSteer: () => false,
     appendMessage(message: BrewvaAgentProtocolMessage) {
       calls.push("appendMessage");
       appended.push(message);
     },
-    hasQueuedMessages: () => false,
   } as unknown as BrewvaAgentProtocolController;
   return { agent, calls, replaced, appended, prompts, tools };
 }

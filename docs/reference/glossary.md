@@ -36,7 +36,7 @@
 - Cost Budget: threshold policy for session-level USD spend
 - Channel Gateway: external channel ingress/egress gateway used by `--channel` mode
 - Channel Host: hosted runtime loop behind `brewva --channel ...`; binds channel scopes to agent sessions and runs tool-governed turns
-- Gateway (Control Plane): local daemon exposed via `brewva gateway ...`, providing a typed WebSocket API to control-plane clients
+- Gateway (Control Plane): local daemon exposed via `brewva gateway ...`, providing a typed WebSocket API to control-plane clients; in authority-ring terminology it participates in the `Control Plane Ring`
 - Hosted Extension: the canonical opt-in Brewva hosted session integration unit
   registered through `@brewva/brewva-gateway/extensions`; schema-tagged
   manifests keep it advisory and fail closed
