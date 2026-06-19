@@ -23,7 +23,7 @@ export { recordRuntimeGoalContinuationQueued } from "./internal/session/projecti
 export {
   createHostedHarnessRuntimeExecutionPorts,
   type HostedHarnessRuntimeExecutionPorts,
-} from "./internal/turn-adapter/runtime-turn-execution-ports.js";
+} from "./internal/turn/runtime-turn-execution-ports.js";
 export {
   acquireRuntimeParallelSlot,
   adoptRuntimeLineageOutcome,

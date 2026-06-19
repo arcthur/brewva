@@ -143,6 +143,18 @@ own turn truth, transition truth, or recovery policy. Managed tools receive a
 capability-scoped runtime facade derived from declared `ops.*` and
 `extensions.tools.*` paths.
 
+The hosted turn adaptation splits along its one real physical boundary:
+`hosted/edge/` owns the worker-process turn boundary — the parent/worker message
+protocol and liveness heartbeat — while `hosted/internal/turn/` owns the
+sequentially-coupled chain that feeds `runtime.turn` (envelope, frame projection,
+hosted provider/tool/authority port construction). These are one execution
+skeleton (`runtime.turn`) adapted for hosting, not duplicated turn layers; hook
+lifecycle ports live separately under `hosted/internal/hooks/`. Session-level
+task-stall detection and adjudication live under `hosted/internal/session/watchdog/`;
+the edge worker starts and stops that policy but does not own it. Turn provider
+construction consumes one validated `RuntimeProviderFace` capability rather than
+probing optional methods on the managed session.
+
 Runtime implementation ownership now lives under four semantic roots:
 `runtime/tape`, `runtime/kernel`, `runtime/model`, and `runtime/turn`, with
 read-only projections under `tape-views`. The former `domain/<name>/` seven-file

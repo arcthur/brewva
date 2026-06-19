@@ -7,6 +7,7 @@ import {
   createSessionViewPort,
 } from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";
 import type { HostedRuntimeAdapterPort } from "../../../packages/brewva-gateway/src/hosted/api.js";
+import { createRuntimeProviderFaceFixture } from "../../helpers/runtime-provider-face.js";
 
 function frame(sessionId: string, frameId: string): SessionWireFrame {
   return {
@@ -205,12 +206,16 @@ describe("SessionViewPort session wire cache", () => {
       getRegisteredTools() {
         return [];
       },
-      getRuntimeModelCatalog() {
-        return {
-          async getApiKeyAndHeaders() {
-            return { ok: true };
+      getRuntimeProviderFace() {
+        return createRuntimeProviderFaceFixture({
+          getModelCatalog() {
+            return {
+              async getApiKeyAndHeaders() {
+                return { ok: true as const };
+              },
+            };
           },
-        };
+        });
       },
       createRuntimeToolContext() {
         return {

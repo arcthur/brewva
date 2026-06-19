@@ -10,7 +10,7 @@ import {
 import {
   buildWorkerTestHarnessEnv,
   WORKER_TEST_HARNESS_ENV_KEYS,
-} from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/worker/test-harness.js";
+} from "../../../packages/brewva-gateway/src/hosted/edge/worker/test-harness.js";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { sleep } from "../../helpers/process.js";

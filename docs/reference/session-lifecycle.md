@@ -194,7 +194,7 @@ canonical runtime events and tape projections directly.
    - `managedToolMode=hosted`: register managed Brewva tools through the hosted behavior API
    - `managedToolMode=direct`: provide managed Brewva tools directly from the host
 4. Enter the canonical hosted turn envelope
-   (`packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`)
+   (`packages/brewva-gateway/src/hosted/internal/turn/turn-envelope.ts`)
    - entrypoints construct a session and semantic turn request; they do not
      reimplement profile resolution, turn-id/runtime-turn binding,
      schedule-trigger prelude, WAL resume transitions, or terminal render

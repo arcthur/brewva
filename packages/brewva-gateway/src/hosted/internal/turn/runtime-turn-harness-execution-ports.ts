@@ -7,7 +7,7 @@ import type { ToolActionAdmissionOverrides } from "@brewva/brewva-runtime/securi
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
 import { createHostedRuntimeToolAuthorityResolver } from "./runtime-turn-authority.js";
 import { createHostedRuntimeProviderPort } from "./runtime-turn-provider.js";
-import { isRuntimeAdapterSession } from "./runtime-turn-session.js";
+import { isRuntimeAdapterSession, resolveRuntimeProviderFace } from "./runtime-turn-session.js";
 import { createHostedRuntimeToolExecutorPort } from "./runtime-turn-tool-executor.js";
 import { createVerificationGateRuntimeProviderPort } from "./runtime-turn-verification-gates.js";
 
@@ -26,9 +26,10 @@ export function createHostedHarnessRuntimeExecutionPorts(
   if (!isRuntimeAdapterSession(session)) {
     throw new Error("hosted_harness_runtime_session_incompatible");
   }
+  const providerFace = resolveRuntimeProviderFace(session);
   const provider = createVerificationGateRuntimeProviderPort(
-    createHostedRuntimeProviderPort(session),
-    session,
+    createHostedRuntimeProviderPort(session, providerFace),
+    providerFace,
   );
   return {
     provider,

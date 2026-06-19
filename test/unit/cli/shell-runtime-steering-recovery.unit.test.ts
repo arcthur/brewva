@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { BrewvaPromptToolCall } from "@brewva/brewva-substrate/session";
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import type { ShellEffect } from "../../../packages/brewva-cli/src/shell/domain/effects.js";
+import type { RuntimeProviderFace } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-session.js";
 import { patchDateNow } from "../../helpers/global-state.js";
 import {
   createPromptMessageUpdateEvent,
@@ -261,9 +262,14 @@ describe("shell runtime: steering and recovery", () => {
 
   test("surfaces semantic input failures as notifications instead of rejecting the key handler", async () => {
     const { bundle } = createFakeBundle();
-    Object.assign(bundle.session, {
-      getRuntimeModelCatalog() {
+    const providerFace = (
+      bundle.session as unknown as { getRuntimeProviderFace(): RuntimeProviderFace }
+    ).getRuntimeProviderFace();
+    const modelCatalog = providerFace.getModelCatalog();
+    Object.assign(providerFace, {
+      getModelCatalog() {
         return {
+          ...modelCatalog,
           async getApiKeyAndHeaders() {
             throw new Error("prompt exploded");
           },

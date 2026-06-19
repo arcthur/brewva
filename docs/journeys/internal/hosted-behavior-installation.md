@@ -178,8 +178,8 @@ flowchart TD
 - Runtime adapter boundary:
   `packages/brewva-gateway/src/hosted/internal/session/runtime-ports.ts`
 - Lifecycle-port composition and advisory hooks:
-  `packages/brewva-gateway/src/hosted/internal/turn-adapter/lifecycle/turn-lifecycle-port.ts`,
-  `packages/brewva-gateway/src/hosted/internal/turn-adapter/lifecycle/local-hook-port.ts`
+  `packages/brewva-gateway/src/hosted/internal/hooks/turn-lifecycle-port.ts`,
+  `packages/brewva-gateway/src/hosted/internal/hooks/local-hook-port.ts`
 - Capability gate and host-plugin contract:
   `packages/brewva-substrate/src/host-api/plugin-runner.ts`,
   `packages/brewva-substrate/src/host-api/plugin.ts`

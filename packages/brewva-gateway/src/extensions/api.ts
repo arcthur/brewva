@@ -830,4 +830,4 @@ export type {
   LocalHookPreEffectResult,
   LocalHookRecommendation,
   LocalHookResult,
-} from "../hosted/internal/turn-adapter/lifecycle/local-hook-port.js";
+} from "../hosted/internal/hooks/local-hook-port.js";

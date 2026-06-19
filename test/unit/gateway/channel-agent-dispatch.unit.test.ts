@@ -22,6 +22,7 @@ import {
   fauxToolCall,
   registerFauxProvider,
 } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
+import { createRuntimeProviderFaceFixture } from "../../helpers/runtime-provider-face.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 type RuntimeTurnSession = {
@@ -30,9 +31,7 @@ type RuntimeTurnSession = {
     getSessionId(): string;
   };
   getRegisteredTools(): readonly unknown[];
-  getRuntimeModelCatalog(): {
-    getApiKeyAndHeaders(): Promise<{ ok: true }>;
-  };
+  getRuntimeProviderFace(): ReturnType<typeof createRuntimeProviderFaceFixture>;
   createRuntimeToolContext(): unknown;
 };
 
@@ -118,11 +117,15 @@ function createRuntimeTurnFixture(input: {
         getSessionId: () => input.sessionId,
       },
       getRegisteredTools: () => tools,
-      getRuntimeModelCatalog: () => ({
-        async getApiKeyAndHeaders() {
-          return { ok: true as const };
-        },
-      }),
+      getRuntimeProviderFace: () =>
+        createRuntimeProviderFaceFixture({
+          model,
+          getModelCatalog: () => ({
+            async getApiKeyAndHeaders() {
+              return { ok: true as const };
+            },
+          }),
+        }),
       createRuntimeToolContext: () => ({
         ui: NOOP_UI,
         hasUI: false,

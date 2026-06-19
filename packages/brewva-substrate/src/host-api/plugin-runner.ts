@@ -6,6 +6,7 @@ import {
   type BrewvaBoundaryError,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect, BrewvaSchema } from "@brewva/brewva-effect/primitives";
+import type { BrewvaSourceInfo } from "../contracts/source-info.js";
 import type { BrewvaToolContentPart, BrewvaToolDefinition } from "../contracts/tool.js";
 import {
   buildBrewvaPromptText,
@@ -13,7 +14,6 @@ import {
   cloneBrewvaPromptContentParts,
   type BrewvaPromptContentPart,
 } from "../prompt/content.js";
-import type { BrewvaSourceInfo } from "../provenance/source-info.js";
 import type {
   BrewvaHostBeforeAgentStartEvent,
   BrewvaHostBeforeAgentStartResult,

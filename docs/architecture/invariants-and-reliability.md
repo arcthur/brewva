@@ -119,9 +119,9 @@ recovery, and bounded execution.
 - `packages/brewva-cli/src/operator/inspect/work-card.ts`
 - `packages/brewva-tools/src/families/memory/attention-options.ts`
 - `packages/brewva-gateway/src/extensions/api.ts`
-- `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-verification-gates.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-verification-gates.ts`
 - `packages/brewva-std/src/async.ts`
-- `packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn/turn-envelope.ts`
 - `packages/brewva-gateway/src/channels/effect-serial-queue.ts`
 - `packages/brewva-effect/src/index.ts`
 - `packages/brewva-effect/src/schedules.ts`

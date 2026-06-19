@@ -94,4 +94,4 @@ their own lineage and context-entry identifiers.
 - `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - `packages/brewva-gateway/src/daemon/recovery.ts`
-- `packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn/turn-envelope.ts`

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import process from "node:process";
 import type { HostedRuntimeAdapterOptions as BrewvaRuntimeOptions } from "@brewva/brewva-gateway/hosted";
+import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type { BrewvaManagedPromptSession } from "@brewva/brewva-substrate/session";
 import { createCliOperatorPort } from "../../../packages/brewva-cli/src/runtime/cli-runtime-ports.js";
 import {
@@ -12,6 +13,7 @@ import {
 } from "../../../packages/brewva-cli/src/session/cli-runtime.js";
 import type { ProviderConnectionSeams } from "../../../packages/brewva-gateway/src/hosted/api.js";
 import type { HostedSessionPhase } from "../../../packages/brewva-gateway/src/hosted/internal/session/session-phase/api.js";
+import { createRuntimeProviderFaceFixture } from "../../helpers/runtime-provider-face.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 function createHostedTestRuntime(options: BrewvaRuntimeOptions) {
@@ -36,17 +38,29 @@ describe("cli runtime print mode", () => {
     const runtime = createHostedTestRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-runtime-error-")),
     });
-    const session = {
-      model: {
-        provider: "openai-codex",
-        id: "gpt-5.4-mini",
-        name: "GPT 5.4 Mini",
-        api: "openai-responses",
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128_000,
-        maxTokens: 16_000,
+    const model: BrewvaRegisteredModel = {
+      provider: "openai-codex",
+      id: "gpt-5.4-mini",
+      name: "GPT 5.4 Mini",
+      api: "openai-responses",
+      baseUrl: "",
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128_000,
+      maxTokens: 16_000,
+    };
+    const providerFace = createRuntimeProviderFaceFixture({
+      model,
+      getModelCatalog() {
+        return {
+          async getApiKeyAndHeaders() {
+            return { ok: false as const, error: "No API key for provider: openai-codex" };
+          },
+        };
       },
+    });
+    const session = {
       sessionManager: {
         getSessionId: () => "cli-print-error-session",
       },
@@ -56,12 +70,8 @@ describe("cli runtime print mode", () => {
       getRegisteredTools() {
         return [];
       },
-      getRuntimeModelCatalog() {
-        return {
-          async getApiKeyAndHeaders() {
-            return { ok: false as const, error: "No API key for provider: openai-codex" };
-          },
-        };
+      getRuntimeProviderFace() {
+        return providerFace;
       },
       createRuntimeToolContext() {
         return {

@@ -18,14 +18,15 @@ import {
 import type { BrewvaToolRuntimeCapabilitiesPort } from "@brewva/brewva-tools/contracts";
 import type { ContextEvidenceKind } from "@brewva/brewva-vocabulary/context";
 import { createRecoveryWalStore } from "../../../daemon/api.js";
-import type { CollectSessionPromptOutputSession } from "../turn-adapter/collect-output.js";
+import type { CollectSessionPromptOutputSession } from "../turn/collect-output.js";
 import {
   createHostedRuntimeProviderPort,
   createHostedRuntimeToolAuthorityResolver,
   createHostedRuntimeToolExecutorPort,
   isRuntimeAdapterSession,
-} from "../turn-adapter/runtime-turn-execution-ports.js";
-import { createVerificationGateRuntimeProviderPort } from "../turn-adapter/runtime-turn-verification-gates.js";
+  resolveRuntimeProviderFace,
+} from "../turn/runtime-turn-execution-ports.js";
+import { createVerificationGateRuntimeProviderPort } from "../turn/runtime-turn-verification-gates.js";
 import type { HostedRuntimeOpsPort } from "./runtime-ops-port.js";
 import { createHostedRuntimeOps } from "./runtime-ops.js";
 
@@ -251,10 +252,11 @@ export function createHostedRuntimeAdapter(
     if (sessionRegistry.has(sessionId) || !isRuntimeAdapterSession(session)) {
       return;
     }
+    const providerFace = resolveRuntimeProviderFace(session);
     sessionRegistry.set(sessionId, {
       provider: createVerificationGateRuntimeProviderPort(
-        createHostedRuntimeProviderPort(session),
-        session,
+        createHostedRuntimeProviderPort(session, providerFace),
+        providerFace,
       ),
       toolExecutor: createHostedRuntimeToolExecutorPort(session),
       authority: createHostedRuntimeToolAuthorityResolver(session, {

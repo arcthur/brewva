@@ -119,7 +119,7 @@ describe("hosted lane layout", () => {
       "packages/brewva-gateway/src/hosted/internal/context/",
       "packages/brewva-gateway/src/hosted/internal/compaction/",
       "packages/brewva-gateway/src/hosted/internal/session/tools/",
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/",
+      "packages/brewva-gateway/src/hosted/internal/turn/",
     ];
     const allowedFiles = new Set([
       "packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts",

@@ -7,6 +7,7 @@ import {
   buildBrewvaPromptText,
   type BrewvaPromptContentPart,
 } from "@brewva/brewva-substrate/prompt";
+import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type {
   BrewvaModelPresetState,
   BrewvaPromptSessionEvent,
@@ -43,6 +44,7 @@ import {
   registerFauxProvider,
 } from "../../packages/brewva-provider-core/src/providers/faux/index.js";
 import { createManualShellClock, type ManualShellClock } from "./manual-shell-clock.js";
+import { createRuntimeProviderFaceFixture } from "./runtime-provider-face.js";
 import { createRuntimeInstanceFixture } from "./runtime.js";
 
 /**
@@ -110,6 +112,23 @@ export interface ShellFixture {
 
 function modelKeyOf(model: Pick<BrewvaSessionModelDescriptor, "provider" | "id">): string {
   return `${model.provider}/${model.id}`;
+}
+
+function toRuntimeProviderModel(model: BrewvaSessionModelDescriptor): BrewvaRegisteredModel {
+  return {
+    provider: model.provider,
+    id: model.id,
+    name: model.name ?? model.id,
+    api: model.api ?? "openai-responses",
+    baseUrl: model.baseUrl ?? "",
+    reasoning: model.reasoning,
+    input: [...(model.input ?? ["text"])],
+    cost: model.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+    headers: model.headers,
+    displayName: model.displayName,
+  };
 }
 
 function buildPendingApprovals(options: ShellFixtureOptions): PendingEffectCommitmentRequest[] {
@@ -602,6 +621,16 @@ export function createHostedShellFixture(
       return fauxAssistantMessage("ok");
     }),
   );
+  const runtimeProviderFace = createRuntimeProviderFaceFixture({
+    getModel: () => toRuntimeProviderModel(currentModel),
+    getModelCatalog() {
+      return {
+        async getApiKeyAndHeaders() {
+          return { ok: true as const };
+        },
+      };
+    },
+  });
 
   const session = {
     get model() {
@@ -775,12 +804,8 @@ export function createHostedShellFixture(
     getRegisteredTools() {
       return [];
     },
-    getRuntimeModelCatalog() {
-      return {
-        async getApiKeyAndHeaders() {
-          return { ok: true as const };
-        },
-      };
+    getRuntimeProviderFace() {
+      return runtimeProviderFace;
     },
     createRuntimeToolContext() {
       return {

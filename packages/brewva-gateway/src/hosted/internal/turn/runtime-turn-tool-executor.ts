@@ -12,7 +12,7 @@ import {
 } from "@brewva/brewva-substrate/tools";
 import { resolveToolDisplay } from "../session/tools/tool-output-display.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
-import { isRuntimeAdapterSession } from "./runtime-turn-session.js";
+import { isRuntimeToolSession } from "./runtime-turn-session.js";
 
 function textFromToolResultContent(content: unknown): string {
   if (typeof content === "string") {
@@ -100,7 +100,7 @@ function toolExecutionResultFromHostedUpdate(
 export function createHostedRuntimeToolExecutorPort(
   session: CollectSessionPromptOutputSession,
 ): RuntimeToolExecutorPort {
-  if (!isRuntimeAdapterSession(session)) {
+  if (!isRuntimeToolSession(session)) {
     throw new Error("hosted_runtime_tool_executor_session_incompatible");
   }
   return {

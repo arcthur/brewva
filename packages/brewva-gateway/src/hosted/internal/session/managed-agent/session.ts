@@ -70,23 +70,22 @@ import {
   type ToolSchemaSnapshot,
 } from "../../provider/cache/index.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
-import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../turn-adapter/hosted-prompt-attempt.js";
+import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../turn/hosted-prompt-attempt.js";
 import {
   HOSTED_COMPACTION_BOUNDARY,
   type HostedCompactionBoundary,
-} from "../../turn-adapter/runtime-turn-compaction.js";
+} from "../../turn/runtime-turn-compaction.js";
 import {
   HOSTED_RUNTIME_TURN_CONTEXT,
   HOSTED_RUNTIME_TURN_PRELUDE,
   type HostedRuntimeTurnContext,
   type HostedRuntimeTurnPreludeResult,
-} from "../../turn-adapter/runtime-turn-prelude.js";
-import { readRuntimeVerificationGateEvidenceFromEvent } from "../../turn-adapter/runtime-turn-verification-gates.js";
-import { runHostedTurnEnvelope } from "../../turn-adapter/turn-envelope.js";
+} from "../../turn/runtime-turn-prelude.js";
+import type { RuntimeProviderFace } from "../../turn/runtime-turn-session.js";
+import { runHostedTurnEnvelope } from "../../turn/turn-envelope.js";
 import {
   getRuntimeCompactionGateStatus,
   getRuntimeContextUsage,
-  queryRuntimeEvents,
   type HostedRuntimeAdapterPort,
 } from "../runtime-ports.js";
 import {
@@ -127,6 +126,7 @@ import {
   resolveWorkbenchContextFingerprint,
   WorkbenchContextFingerprintHolder,
 } from "./provider-payload-summary.js";
+import { ManagedSessionRuntimeProviderFace } from "./runtime-provider-face.js";
 import { ManagedRuntimeSessionController } from "./runtime-session-controller.js";
 import {
   REQUIRED_HOSTED_PERSISTENCE_EVENTS,
@@ -187,7 +187,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   readonly #resourceLoader: BrewvaHostedResourceLoader;
   readonly #agent: ManagedRuntimeSessionController;
   readonly #runner: BrewvaHostPluginRunner;
-  readonly #verificationGateManifests: readonly VerificationGateManifest[];
+  readonly #runtimeProviderFace: ManagedSessionRuntimeProviderFace;
   readonly #compactionSummaryGenerator: BrewvaCompactionSummaryGenerator;
   readonly #sessionTitleGenerator: BrewvaSessionTitleGenerator;
   readonly #toolSchemaSnapshotStore = createToolSchemaSnapshotStore();
@@ -217,18 +217,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   #runtimeTurnContext: HostedRuntimeTurnContext | null = null;
   readonly #workbenchContextFingerprint: WorkbenchContextFingerprintHolder;
   readonly #logger: HostedSessionLogger | null;
-  readonly #onProviderAssistantMessage:
-    | ((message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>) => void)
-    | undefined;
-  readonly #prepareRuntimeProviderPayload:
-    | ((input: RuntimeProviderPayloadInput) => Promise<unknown>)
-    | undefined;
-  readonly #observeRuntimeCacheRender:
-    | ((input: RuntimeProviderCacheRenderInput) => void)
-    | undefined;
   readonly #onDispose: (() => void) | undefined;
   readonly #onInitialPersistence: (() => void) | undefined;
-  readonly #modelRole: BrewvaModelRoleAlias | undefined;
   #initialPersistenceEnsured = false;
   #sessionStartEmitted = false;
 
@@ -272,18 +262,29 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.settingsManager = new ManagedSessionSettingsView(input.settings);
     this.modelRegistry = new ManagedSessionModelCatalogView(input.catalog);
     this.#runner = input.runner;
-    this.#verificationGateManifests = input.verificationGateManifests;
     this.#agent = input.agent;
     this.#compactionSummaryGenerator = input.compactionSummaryGenerator;
     this.#sessionTitleGenerator = input.sessionTitleGenerator;
     this.#logger = input.logger ?? null;
-    this.#onProviderAssistantMessage = input.onProviderAssistantMessage;
-    this.#prepareRuntimeProviderPayload = input.prepareRuntimeProviderPayload;
-    this.#observeRuntimeCacheRender = input.observeRuntimeCacheRender;
     this.#workbenchContextFingerprint = input.workbenchContextFingerprint;
     this.#onInitialPersistence = input.onInitialPersistence;
     this.#onDispose = input.onDispose;
-    this.#modelRole = input.modelRole;
+    this.#runtimeProviderFace = new ManagedSessionRuntimeProviderFace({
+      settings: input.settings,
+      catalog: input.catalog,
+      runtime: input.runtime,
+      getSessionId: () => this.sessionManager.getSessionId(),
+      verificationGateManifests: input.verificationGateManifests,
+      modelRole: input.modelRole,
+      getModel: () => {
+        const model = this.#agent.state.model;
+        return model ? input.catalog.find(model.provider, model.id) : undefined;
+      },
+      getModelPresetState: () => this.#modelSelection.getState(),
+      prepareRuntimeProviderPayload: input.prepareRuntimeProviderPayload,
+      observeRuntimeCacheRender: input.observeRuntimeCacheRender,
+      onProviderAssistantMessage: input.onProviderAssistantMessage,
+    });
     this.#liveTranscript = new ManagedSessionLiveTranscript({
       agent: this.#agent,
       clearProviderCacheSessionState: () => this.clearProviderCacheSessionState(),
@@ -630,10 +631,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return this.#modelSelection.getState();
   }
 
-  getRuntimeActiveModelRole(): BrewvaModelRoleAlias {
-    return this.#modelRole ?? "default";
-  }
-
   queueModelPresetForNextTurn(name: string): BrewvaModelPresetSelectionResult {
     return this.#modelSelection.queueModelPresetForNextTurn(name);
   }
@@ -669,8 +666,12 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     return this.#toolRegistry.listRegisteredTools();
   }
 
-  getRuntimeModelCatalog(): BrewvaMutableModelCatalog {
+  getModelCatalogForWorkerHarness(): BrewvaMutableModelCatalog {
     return this.#catalog;
+  }
+
+  getRuntimeProviderFace(): RuntimeProviderFace {
+    return this.#runtimeProviderFace;
   }
 
   createRuntimeToolContext(): BrewvaToolContext {
@@ -787,55 +788,6 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
         await this.syncContextState();
       },
     };
-  }
-
-  getRuntimeProviderCachePolicy() {
-    return this.#settings.getCachePolicy();
-  }
-
-  getRuntimeProviderTransport() {
-    return this.#settings.getTransport();
-  }
-
-  getRuntimeVerificationGateManifests() {
-    return this.#verificationGateManifests;
-  }
-
-  getRuntimeVerificationGateEvidence(sessionId: string) {
-    return queryRuntimeEvents(this.#runtime, sessionId, { last: 100 }).flatMap((event) => {
-      const evidence = readRuntimeVerificationGateEvidenceFromEvent(event);
-      return evidence ? [evidence] : [];
-    });
-  }
-
-  getRuntimeModelRoutingSettings() {
-    return this.#settings.getModelRoutingSettings?.();
-  }
-
-  recordRuntimeProviderCredentialRotated(input: {
-    providerId: string;
-    credentialSlot: string;
-    reason: "quota" | "rate_limit" | "auth" | "manual";
-    cooldownMs: number;
-  }): void {
-    this.#runtime.ops.session.lifecycle.providerCredentialRotated({
-      sessionId: this.sessionManager.getSessionId(),
-      payload: input,
-    });
-  }
-
-  async prepareRuntimeProviderPayload(input: RuntimeProviderPayloadInput): Promise<unknown> {
-    return this.#prepareRuntimeProviderPayload?.(input) ?? input.payload;
-  }
-
-  observeRuntimeCacheRender(input: RuntimeProviderCacheRenderInput): void {
-    this.#observeRuntimeCacheRender?.(input);
-  }
-
-  observeRuntimeAssistantMessage(
-    message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>,
-  ): void {
-    this.#onProviderAssistantMessage?.(message);
   }
 
   private async preparePromptDispatch(
@@ -1143,7 +1095,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       eventForListeners.type === "message_end" &&
       eventForListeners.message.role === "assistant"
     ) {
-      this.#onProviderAssistantMessage?.(eventForListeners.message);
+      this.#runtimeProviderFace.observeAssistantMessage(eventForListeners.message);
     }
     return eventForListeners;
   }

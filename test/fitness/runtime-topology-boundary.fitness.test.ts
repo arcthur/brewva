@@ -40,7 +40,7 @@ describe("runtime topology boundary fitness", () => {
 
   test("keeps envelope translation free of runtime physics decisions", () => {
     const turnEnvelope = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/turn-envelope.ts",
     );
 
     expect(turnEnvelope).not.toMatch(/provider_retry|terminal_commit/u);
@@ -50,7 +50,7 @@ describe("runtime topology boundary fitness", () => {
 
   test("keeps hosted runtime execution ports as an ownership barrel", () => {
     const executionPorts = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-execution-ports.ts",
     );
     const runtimeAssembly = readRepoFile("packages/brewva-runtime/src/runtime/runtime.ts");
 
@@ -64,16 +64,14 @@ describe("runtime topology boundary fitness", () => {
 
   test("keeps live session mux logic in the session-mux adapter", () => {
     const adapter = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-adapter.ts",
     );
     const sessionMuxPath =
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/session-mux/runtime-frame-projection.ts";
+      "packages/brewva-gateway/src/hosted/internal/turn/session-mux/runtime-frame-projection.ts";
     const sessionMux = readRepoFile(sessionMuxPath);
 
     expect(
-      existsSync(
-        join(REPO_ROOT, "packages/brewva-gateway/src/hosted/internal/turn-adapter/session-mux"),
-      ),
+      existsSync(join(REPO_ROOT, "packages/brewva-gateway/src/hosted/internal/turn/session-mux")),
     ).toBe(true);
     expect(adapter).toContain('from "./session-mux/runtime-frame-projection.js"');
     expect(adapter).not.toContain("SESSION_WIRE_SCHEMA");
@@ -86,7 +84,7 @@ describe("runtime topology boundary fitness", () => {
 
   test("keeps provider binding adapter below the topology fold soft ceiling", () => {
     const providerAdapter = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-provider.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-provider.ts",
     );
 
     expect(lineCount(providerAdapter)).toBeLessThanOrEqual(900);

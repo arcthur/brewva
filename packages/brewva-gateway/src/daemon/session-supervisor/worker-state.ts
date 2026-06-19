@@ -6,7 +6,7 @@ import type {
   ParentToWorkerMessage,
   WorkerResultErrorCode,
   WorkerToParentMessage,
-} from "../../hosted/internal/turn-adapter/worker/api.js";
+} from "../../hosted/edge/worker/api.js";
 import type { ChildRegistryEntry } from "../../ingress/api.js";
 import type { StructuredLogger } from "../logger.js";
 import type { RecoveryWalStore } from "../recovery.js";

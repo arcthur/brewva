@@ -6,7 +6,7 @@ import { readRepoFile, repoRoot } from "./shared.js";
 describe("hosted runtime recovery boundary", () => {
   test("hosted turn adapter delegates recovery ownership to the four-port runtime", () => {
     const loop = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-adapter.ts",
     );
 
     expect(loop).toContain("input.runtime.turn");
@@ -21,7 +21,7 @@ describe("hosted runtime recovery boundary", () => {
   });
 
   test("hosted recovery helpers do not reintroduce turn-adapter recovery policy ownership", () => {
-    const state = readRepoFile("packages/brewva-gateway/src/hosted/internal/turn-adapter/state.ts");
+    const state = readRepoFile("packages/brewva-gateway/src/hosted/internal/turn/state.ts");
 
     expect(state).not.toContain("ThreadLoopRecoveryPolicyName");
     expect(state).not.toContain("PromptRecoveryPolicyName");

@@ -13,10 +13,24 @@ import {
   canResolveHostedRuntimeTurnRuntime,
   resolveHostedRuntimeTurnRuntime,
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-turn-runtime.js";
-import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/hosted-prompt-attempt.js";
-import { runHostedRuntimeTurnAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.js";
-import { HOSTED_RUNTIME_TURN_PRELUDE } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-prelude.js";
-import { resolveHostedTurnAdapterProfile } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/state.js";
+import { HOSTED_PROMPT_ATTEMPT_DISPATCH } from "../../../packages/brewva-gateway/src/hosted/internal/turn/hosted-prompt-attempt.js";
+import { runHostedRuntimeTurnAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-adapter.js";
+import { HOSTED_RUNTIME_TURN_PRELUDE } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-prelude.js";
+import { resolveRuntimeProviderFace } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-session.js";
+import { resolveHostedTurnAdapterProfile } from "../../../packages/brewva-gateway/src/hosted/internal/turn/state.js";
+import { createRuntimeProviderFaceFixture } from "../../helpers/runtime-provider-face.js";
+
+function createProviderFace() {
+  return createRuntimeProviderFaceFixture({
+    getModelCatalog() {
+      return {
+        async getApiKeyAndHeaders() {
+          return { ok: true as const };
+        },
+      };
+    },
+  });
+}
 
 const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
   async execute() {
@@ -25,6 +39,24 @@ const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
 };
 
 describe("gateway runtime adapter", () => {
+  test("rejects an incomplete provider face before binding runtime ports", () => {
+    const session = {
+      getRegisteredTools() {
+        return [];
+      },
+      createRuntimeToolContext() {
+        return {};
+      },
+      getRuntimeProviderFace() {
+        return {};
+      },
+    };
+
+    expect(() => resolveRuntimeProviderFace(session as never)).toThrow(
+      "hosted_runtime_provider_face_incompatible",
+    );
+  });
+
   test("hosted adapter delegates turn ownership to runtime.turn", async () => {
     const provider: RuntimeProviderPort = {
       async *stream() {},
@@ -276,12 +308,8 @@ describe("gateway runtime adapter", () => {
       getRegisteredTools() {
         return [];
       },
-      getRuntimeModelCatalog() {
-        return {
-          async getApiKeyAndHeaders() {
-            return { ok: true as const };
-          },
-        };
+      getRuntimeProviderFace() {
+        return createProviderFace();
       },
       createRuntimeToolContext() {
         return {
@@ -320,12 +348,8 @@ describe("gateway runtime adapter", () => {
       getRegisteredTools() {
         return [];
       },
-      getRuntimeModelCatalog() {
-        return {
-          async getApiKeyAndHeaders() {
-            return { ok: true as const };
-          },
-        };
+      getRuntimeProviderFace() {
+        return createProviderFace();
       },
       createRuntimeToolContext() {
         return {
@@ -385,12 +409,8 @@ describe("gateway runtime adapter", () => {
       getRegisteredTools() {
         return [];
       },
-      getRuntimeModelCatalog() {
-        return {
-          async getApiKeyAndHeaders() {
-            return { ok: true as const };
-          },
-        };
+      getRuntimeProviderFace() {
+        return createProviderFace();
       },
       createRuntimeToolContext() {
         return {
@@ -412,12 +432,8 @@ describe("gateway runtime adapter", () => {
       getRegisteredTools() {
         return [];
       },
-      getRuntimeModelCatalog() {
-        return {
-          async getApiKeyAndHeaders() {
-            return { ok: true as const };
-          },
-        };
+      getRuntimeProviderFace() {
+        return createProviderFace();
       },
       createRuntimeToolContext() {
         return {
@@ -446,12 +462,8 @@ describe("gateway runtime adapter", () => {
       getRegisteredTools() {
         return [];
       },
-      getRuntimeModelCatalog() {
-        return {
-          async getApiKeyAndHeaders() {
-            return { ok: true as const };
-          },
-        };
+      getRuntimeProviderFace() {
+        return createProviderFace();
       },
       createRuntimeToolContext() {
         return {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { resolveHostedTurnAdapterProfile } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/state.js";
-import { createMinimalHostedTurnAdapterDiagnostic } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/state.js";
+import { resolveHostedTurnAdapterProfile } from "../../../packages/brewva-gateway/src/hosted/internal/turn/state.js";
+import { createMinimalHostedTurnAdapterDiagnostic } from "../../../packages/brewva-gateway/src/hosted/internal/turn/state.js";
 
 describe("turn adapter diagnostics", () => {
   test("builds a typed minimal diagnostic view for synthetic adapter results", () => {

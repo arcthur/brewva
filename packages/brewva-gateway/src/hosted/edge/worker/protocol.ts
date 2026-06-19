@@ -1,6 +1,6 @@
 import type { ManagedToolMode, SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
-import type { SendPromptTrigger } from "../../../../daemon/api.js";
+import type { SendPromptTrigger } from "../../../daemon/api.js";
 
 export type WorkerResultErrorCode = "session_busy";
 

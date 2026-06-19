@@ -11,4 +11,5 @@ export {
 export {
   canCreateHostedRuntimeExecutionPorts,
   isRuntimeAdapterSession,
+  resolveRuntimeProviderFace,
 } from "./runtime-turn-session.js";

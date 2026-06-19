@@ -71,5 +71,5 @@ maintenance, retrospection, or evidence-gated improvement work.
 
 - `docs/research/decisions/skill-compounding-loop-completeness-and-parameterization-model.md`
 - `packages/brewva-gateway/src/daemon/schedule-runner.ts`
-- `packages/brewva-gateway/src/hosted/internal/turn-adapter/schedule-trigger.ts`
+- `packages/brewva-gateway/src/hosted/internal/turn/schedule-trigger.ts`
 - `packages/brewva-gateway/src/daemon/gateway-daemon.ts`

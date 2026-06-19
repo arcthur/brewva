@@ -1,19 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { defineBrewvaTool } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
-import { createHostedRuntimeToolExecutorPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-tool-executor.js";
+import { createHostedRuntimeToolExecutorPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-tool-executor.js";
 
 function createExecutorSession(tool: ReturnType<typeof defineBrewvaTool>) {
   return {
     getRegisteredTools() {
       return [tool];
-    },
-    getRuntimeModelCatalog() {
-      return {
-        async getApiKeyAndHeaders() {
-          return { ok: true as const };
-        },
-      };
     },
     createRuntimeToolContext() {
       return {};

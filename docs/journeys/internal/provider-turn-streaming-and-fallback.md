@@ -56,7 +56,7 @@ is made inspectable through a request fingerprint and a lossy evidence sink.
 
 ```mermaid
 flowchart TD
-  A["Runtime calls RuntimeProviderPort.stream(input)"] --> B["Pick model + active role"]
+  A["Runtime calls RuntimeProviderPort.stream(input)"] --> B["Read validated RuntimeProviderFace: model + active role"]
   B --> C["Resolve auth (getApiKeyAndHeaders)"]
   C --> D["Build ProviderStreamOptions (cachePolicy, transport, fallback metadata)"]
   D --> E["Driver builds provider payload"]
@@ -74,7 +74,9 @@ flowchart TD
 
 ## Key Steps
 
-1. The hosted provider port resolves auth via the runtime model catalog; an auth
+1. Turn composition validates one `RuntimeProviderFace` and passes that same
+   capability to provider streaming and verification-gate projection. The hosted
+   provider port resolves auth through the face's required model catalog; an auth
    failure becomes a pre-frame attempt error eligible for fallback.
 2. It assembles `ProviderStreamOptions` with the cache policy, transport,
    session id, an `onPayload` hook, an `onCacheRender` hook, and any
@@ -118,6 +120,8 @@ flowchart TD
   and falls back to SSE, recording a session-scoped fallback latch
 - fallback is pre-first-frame only: once any frame has flowed, or the turn is
   aborted, the error is rethrown and the attempt keeps the stream
+- the runtime-provider face requires catalog enumeration; model fallback cannot
+  silently degrade because a session omitted `getAll()`
 - the fallback chain is `fallbackChains[activeRole]` or `fallbackChains.default`
   (one chain, not concatenated), then one appended heuristic same-provider
   candidate; failure classification yields `quota | rate_limit | auth | context
@@ -195,9 +199,12 @@ flowchart TD
   `packages/brewva-provider-core/src/providers/anthropic/request.ts`,
   `packages/brewva-provider-core/src/providers/openai-codex-responses/adapter.ts`
 - Hosted fallback loop (the owner; the execution-ports file is a barrel):
-  `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-provider.ts`
+  `packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-provider.ts`
   (`createHostedRuntimeProviderPort`, `classifyProviderFailure`,
   `providerFallbackMetadata`)
+- Hosted provider capability contract and managed-session implementation:
+  `packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-session.ts`,
+  `packages/brewva-gateway/src/hosted/internal/session/managed-agent/runtime-provider-face.ts`
 - Hosted provider stream + payload pipeline:
   `packages/brewva-gateway/src/hosted/internal/provider/stream.ts`,
   `packages/brewva-gateway/src/hosted/internal/session/managed-agent/provider-payload-pipeline.ts`

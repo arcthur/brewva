@@ -90,6 +90,6 @@ when a replay-backed mode runs.
 - Hosted manifest recording:
   `packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.ts`
 - Provider context identity:
-  `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-provider-context.ts`
+  `packages/brewva-gateway/src/hosted/internal/turn/runtime-provider-context.ts`
 - Session-index projection:
   `packages/brewva-session-index/src/projection/harness.ts`

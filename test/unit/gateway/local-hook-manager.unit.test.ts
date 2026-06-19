@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrewvaHostContext, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
-import { createLocalHookManager } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/lifecycle/local-hook-port.js";
+import { createLocalHookManager } from "../../../packages/brewva-gateway/src/hosted/internal/hooks/local-hook-port.js";
 
 describe("local hook manager", () => {
   test("treats non-advisory hook results as invalid governance receipts", async () => {

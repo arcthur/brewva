@@ -15,13 +15,14 @@ import {
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import { createHostedProviderStreamFunction } from "../../../packages/brewva-gateway/src/hosted/internal/provider/stream.js";
-import { createHostedRuntimeProviderPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.js";
-import { HOSTED_RUNTIME_TURN_CONTEXT } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-prelude.js";
+import { createHostedRuntimeProviderPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-execution-ports.js";
+import { HOSTED_RUNTIME_TURN_CONTEXT } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-prelude.js";
 import {
   fauxAssistantMessage,
   registerFauxProvider,
 } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 import { createProviderEventStream } from "../../helpers/effect-stream.js";
+import { createRuntimeProviderFaceFixture } from "../../helpers/runtime-provider-face.js";
 
 const SOURCE_ID = "hosted-provider-stream-unit-test";
 
@@ -185,20 +186,25 @@ describe("hosted provider stream", () => {
     );
 
     try {
-      const session = {
+      const providerFace = createRuntimeProviderFaceFixture({
         model,
-        getRegisteredTools() {
-          return [];
-        },
-        getRuntimeModelCatalog() {
+        getModelCatalog() {
           return {
             async getApiKeyAndHeaders() {
               return { ok: true as const, apiKey: "unit-key" };
             },
           };
         },
-        observeRuntimeAssistantMessage(message: unknown) {
+        observeAssistantMessage(message) {
           observedMessage = message;
+        },
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
         },
         createRuntimeToolContext() {
           return {
@@ -210,7 +216,7 @@ describe("hosted provider stream", () => {
       };
 
       const frames = [];
-      const provider = createHostedRuntimeProviderPort(session as never);
+      const provider = createHostedRuntimeProviderPort(session as never, providerFace);
       for await (const frame of provider.stream(createRuntimeProviderInput("response-model"))) {
         frames.push(frame);
       }
@@ -277,12 +283,9 @@ describe("hosted provider stream", () => {
     );
 
     try {
-      const session = {
+      const providerFace = createRuntimeProviderFaceFixture({
         model,
-        getRegisteredTools() {
-          return [];
-        },
-        getRuntimeModelCatalog() {
+        getModelCatalog() {
           return {
             getAll() {
               return [model];
@@ -300,17 +303,22 @@ describe("hosted provider stream", () => {
             },
           };
         },
-        getRuntimeModelRoutingSettings() {
+        getModelRoutingSettings() {
           return {
             fallbackChains: {},
             credentialRotation: { enabled: true, cooldownMs: 5_000 },
           };
         },
-        recordRuntimeProviderCredentialRotated(input: unknown) {
+        recordProviderCredentialRotated(input) {
           rotations.push(input);
         },
-        async prepareRuntimeProviderPayload(input: { payload: unknown }) {
-          return input.payload;
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
         },
         createRuntimeToolContext() {
           return {
@@ -322,7 +330,7 @@ describe("hosted provider stream", () => {
       };
 
       const frames = [];
-      const provider = createHostedRuntimeProviderPort(session as never);
+      const provider = createHostedRuntimeProviderPort(session as never, providerFace);
       for await (const frame of provider.stream(createRuntimeProviderInput("rotation-session"))) {
         frames.push(frame);
       }
@@ -390,12 +398,9 @@ describe("hosted provider stream", () => {
     );
 
     try {
-      const session = {
+      const providerFace = createRuntimeProviderFaceFixture({
         model: primary,
-        getRegisteredTools() {
-          return [];
-        },
-        getRuntimeModelCatalog() {
+        getModelCatalog() {
           return {
             getAll() {
               return [primary, backup];
@@ -405,11 +410,19 @@ describe("hosted provider stream", () => {
             },
           };
         },
-        getRuntimeModelRoutingSettings() {
+        getModelRoutingSettings() {
           return {
             fallbackChains: { default: ["unit-provider/backup"] },
             credentialRotation: { enabled: false, cooldownMs: 5_000 },
           };
+        },
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
         },
         createRuntimeToolContext() {
           return {
@@ -422,7 +435,7 @@ describe("hosted provider stream", () => {
 
       const frames = [];
       let thrown: unknown;
-      const provider = createHostedRuntimeProviderPort(session as never);
+      const provider = createHostedRuntimeProviderPort(session as never, providerFace);
       try {
         for await (const frame of provider.stream(createRuntimeProviderInput("post-frame"))) {
           frames.push(frame);
@@ -492,12 +505,9 @@ describe("hosted provider stream", () => {
     );
 
     try {
-      const session = {
+      const providerFace = createRuntimeProviderFaceFixture({
         model: primary,
-        getRegisteredTools() {
-          return [];
-        },
-        getRuntimeModelCatalog() {
+        getModelCatalog() {
           return {
             getAll() {
               return [primary, taskBackup, defaultBackup];
@@ -507,10 +517,10 @@ describe("hosted provider stream", () => {
             },
           };
         },
-        getRuntimeActiveModelRole() {
+        getActiveModelRole() {
           return "task";
         },
-        getRuntimeModelRoutingSettings() {
+        getModelRoutingSettings() {
           return {
             fallbackChains: {
               task: ["unit-provider/task-backup"],
@@ -518,6 +528,14 @@ describe("hosted provider stream", () => {
             },
             credentialRotation: { enabled: false, cooldownMs: 5_000 },
           };
+        },
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
         },
         createRuntimeToolContext() {
           return {
@@ -529,7 +547,7 @@ describe("hosted provider stream", () => {
       };
 
       const frames = [];
-      const provider = createHostedRuntimeProviderPort(session as never);
+      const provider = createHostedRuntimeProviderPort(session as never, providerFace);
       for await (const frame of provider.stream(createRuntimeProviderInput("role-fallback"))) {
         frames.push(frame);
       }
@@ -602,12 +620,9 @@ describe("hosted provider stream", () => {
     );
 
     try {
-      const session = {
+      const providerFace = createRuntimeProviderFaceFixture({
         model: primary,
-        getRegisteredTools() {
-          return [];
-        },
-        getRuntimeModelCatalog() {
+        getModelCatalog() {
           return {
             getAll() {
               return [primary, backup];
@@ -617,11 +632,19 @@ describe("hosted provider stream", () => {
             },
           };
         },
-        getRuntimeModelRoutingSettings() {
+        getModelRoutingSettings() {
           return {
             fallbackChains: { default: ["unit-provider/backup"] },
             credentialRotation: { enabled: false, cooldownMs: 5_000 },
           };
+        },
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
         },
         createRuntimeToolContext() {
           return {
@@ -633,7 +656,7 @@ describe("hosted provider stream", () => {
       };
 
       const frames = [];
-      const provider = createHostedRuntimeProviderPort(session as never);
+      const provider = createHostedRuntimeProviderPort(session as never, providerFace);
       for await (const frame of provider.stream(createRuntimeProviderInput("context-overflow"))) {
         frames.push(frame);
       }
@@ -673,28 +696,34 @@ describe("hosted provider stream", () => {
       SOURCE_ID,
     );
 
-    const session = {
-      model: {
-        provider: "unit-provider",
-        id: "unit-model",
-        name: "Unit Model",
-        api: "runtime-provider-context-test",
-        baseUrl: "https://example.test",
-        reasoning: false,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 8192,
-        maxTokens: 1024,
-      },
-      getRegisteredTools() {
-        return [];
-      },
-      getRuntimeModelCatalog() {
+    const model: BrewvaRegisteredModel = {
+      provider: "unit-provider",
+      id: "unit-model",
+      name: "Unit Model",
+      api: "runtime-provider-context-test",
+      baseUrl: "https://example.test",
+      reasoning: false,
+      input: ["text"],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 8192,
+      maxTokens: 1024,
+    };
+    const providerFace = createRuntimeProviderFaceFixture({
+      model,
+      getModelCatalog() {
         return {
           async getApiKeyAndHeaders() {
             return { ok: true as const, apiKey: "unit-key" };
           },
         };
+      },
+    });
+    const session = {
+      getRegisteredTools() {
+        return [];
+      },
+      getRuntimeProviderFace() {
+        return providerFace;
       },
       createRuntimeToolContext() {
         return {
@@ -705,7 +734,7 @@ describe("hosted provider stream", () => {
       },
     };
 
-    const provider = createHostedRuntimeProviderPort(session as never);
+    const provider = createHostedRuntimeProviderPort(session as never, providerFace);
     for await (const frame of provider.stream({
       turn: { sessionId: "session-1", prompt: "next" },
       prompt: {
@@ -846,17 +875,22 @@ describe("hosted provider stream", () => {
     );
 
     try {
-      const session = {
+      const providerFace = createRuntimeProviderFaceFixture({
         model,
-        getRegisteredTools() {
-          return [];
-        },
-        getRuntimeModelCatalog() {
+        getModelCatalog() {
           return {
             async getApiKeyAndHeaders() {
               return { ok: true as const, apiKey: "unit-key" };
             },
           };
+        },
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
         },
         createRuntimeToolContext() {
           return {
@@ -888,7 +922,7 @@ describe("hosted provider stream", () => {
         cwd: mkdtempSync(join(tmpdir(), "brewva-hosted-provider-continuation-")),
         physics: {
           mode: "real",
-          provider: createHostedRuntimeProviderPort(session as never),
+          provider: createHostedRuntimeProviderPort(session as never, providerFace),
           toolExecutor: {
             async execute() {
               return {
@@ -936,12 +970,9 @@ describe("hosted provider stream", () => {
 
     try {
       const model = fauxProvider.getModel();
-      const session = {
+      const providerFace = createRuntimeProviderFaceFixture({
         model,
-        getRegisteredTools() {
-          return [];
-        },
-        getRuntimeModelCatalog() {
+        getModelCatalog() {
           return {
             getAll() {
               return [model];
@@ -951,21 +982,20 @@ describe("hosted provider stream", () => {
             },
           };
         },
-        async prepareRuntimeProviderPayload(input: {
-          payload: unknown;
-          turn: { sessionId: string; turnId?: string };
-          providerContext: {
-            systemPromptHash: string;
-            messageHashes: readonly string[];
-            activeToolNames: readonly string[];
-            toolSurfaceHash: string;
-          };
-        }) {
+        async prepareProviderPayload(input) {
           observedPrepare = {
             turn: input.turn,
             providerContext: input.providerContext,
           };
           return input.payload;
+        },
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
         },
         createRuntimeToolContext() {
           return {
@@ -976,7 +1006,7 @@ describe("hosted provider stream", () => {
         },
       };
 
-      const provider = createHostedRuntimeProviderPort(session as never);
+      const provider = createHostedRuntimeProviderPort(session as never, providerFace);
       for await (const frame of provider.stream(
         createRuntimeProviderInput("payload-hook-session"),
       )) {

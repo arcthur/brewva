@@ -11,7 +11,7 @@ import type {
 import type { TSchema } from "@sinclair/typebox";
 import type { BrewvaRegisteredModel, BrewvaResolvedRequestAuth } from "../contracts/provider.js";
 import type { BrewvaThinkingLevel } from "../contracts/thinking.js";
-import type { ToolExecutionPhase } from "../execution/tool-phase.js";
+import type { ToolExecutionPhase } from "../tools/tool-phase.js";
 
 type BrewvaAgentProtocolApi = BrewvaRegisteredModel["api"];
 

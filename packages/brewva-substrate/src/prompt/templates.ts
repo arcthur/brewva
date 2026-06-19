@@ -6,7 +6,7 @@ import {
   createBrewvaSyntheticSourceInfo,
   type BrewvaSourceInfo,
   type BrewvaSourceScope,
-} from "../provenance/source-info.js";
+} from "../contracts/source-info.js";
 
 export interface BrewvaPromptTemplate {
   name: string;

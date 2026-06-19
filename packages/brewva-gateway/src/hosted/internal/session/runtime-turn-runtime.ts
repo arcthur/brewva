@@ -1,6 +1,6 @@
 import type { BrewvaRuntime } from "@brewva/brewva-runtime";
-import type { CollectSessionPromptOutputSession } from "../turn-adapter/collect-output.js";
-import { canCreateHostedRuntimeExecutionPorts } from "../turn-adapter/runtime-turn-execution-ports.js";
+import type { CollectSessionPromptOutputSession } from "../turn/collect-output.js";
+import { canCreateHostedRuntimeExecutionPorts } from "../turn/runtime-turn-execution-ports.js";
 import type { HostedRuntimeAdapterPort } from "./runtime-ports.js";
 
 export function canResolveHostedRuntimeTurnRuntime(

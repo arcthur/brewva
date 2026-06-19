@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveHostedTurnAdapterProfile } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/state.js";
+import { resolveHostedTurnAdapterProfile } from "../../../packages/brewva-gateway/src/hosted/internal/turn/state.js";
 
 describe("turn adapter state profiles", () => {
   test("keeps interactive turns on the narrow fast path", () => {

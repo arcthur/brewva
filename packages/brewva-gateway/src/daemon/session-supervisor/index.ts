@@ -32,7 +32,7 @@ import type { RecoveryWalRecord } from "@brewva/brewva-vocabulary/session";
 import type { ManagedToolMode, SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame, SessionWireTurnTrigger } from "@brewva/brewva-vocabulary/wire";
 import { compileSessionWireFrames } from "@brewva/brewva-vocabulary/wire";
-import type { WorkerToParentMessage } from "../../hosted/internal/turn-adapter/worker/api.js";
+import type { WorkerToParentMessage } from "../../hosted/edge/worker/api.js";
 import {
   FileGatewayStateStore,
   type ChildRegistryEntry,
@@ -944,7 +944,7 @@ export class SessionSupervisor implements SessionBackend {
 
   private spawnWorker(): ChildProcess {
     const workerModulePath = fileURLToPath(
-      new URL("../../hosted/internal/turn-adapter/worker/main.js", import.meta.url),
+      new URL("../../hosted/edge/worker/main.js", import.meta.url),
     );
     return fork(workerModulePath, {
       cwd: this.options.defaultCwd,

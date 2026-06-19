@@ -74,4 +74,4 @@ evidence. They do not replace task/claim state or verification reports.
 - `packages/brewva-runtime/src/runtime/turn/impl.ts`
 - `packages/brewva-runtime/src/runtime/kernel/policy/tool-admission-policy.ts`
 - `packages/brewva-runtime/src/runtime/model/impl.ts`
-- `packages/brewva-gateway/src/hosted/internal/turn-adapter/watchdog/task-progress-watchdog.ts`
+- `packages/brewva-gateway/src/hosted/internal/session/watchdog/task-progress-watchdog.ts`

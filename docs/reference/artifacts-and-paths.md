@@ -162,7 +162,8 @@ runtime path.
 
 - Runtime: `packages/brewva-runtime/src`
 - Tools: `packages/brewva-tools/src`
-- Hosted lane internals: `packages/brewva-gateway/src/hosted/internal/{session,turn-adapter}`
+- Hosted lane internals: `packages/brewva-gateway/src/hosted/internal/{session,turn,hooks}`
+- Hosted worker edge: `packages/brewva-gateway/src/hosted/edge`
 - Hosted extension facade: `packages/brewva-gateway/src/extensions`
 - Gateway delegation: `packages/brewva-gateway/src/delegation`
 - CLI: `packages/brewva-cli/src`

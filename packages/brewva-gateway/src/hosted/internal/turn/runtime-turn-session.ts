@@ -1,0 +1,143 @@
+import type {
+  Api,
+  ProviderCachePolicy,
+  ProviderCacheRenderResult,
+  Model as ProviderModel,
+  ProviderPayloadMetadata,
+  SimpleStreamOptions as ProviderStreamOptions,
+} from "@brewva/brewva-provider-core/contracts";
+import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
+import type { BrewvaModelCatalog, BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
+import type {
+  BrewvaModelPresetState,
+  BrewvaModelRoleAlias,
+} from "@brewva/brewva-substrate/session";
+import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import type {
+  VerificationGateEvidence,
+  VerificationGateManifest,
+} from "../../../extensions/api.js";
+import type { HostedModelRoutingSettings } from "../session/settings/settings-store.js";
+import type { CollectSessionPromptOutputSession } from "./collect-output.js";
+import { hasHostedPromptAttemptDispatch } from "./hosted-prompt-attempt.js";
+import type { RuntimeProviderContextSummary } from "./runtime-provider-context.js";
+import { hasHostedRuntimeTurnPrelude } from "./runtime-turn-prelude.js";
+
+export interface RuntimeProviderModelCatalog extends Pick<
+  BrewvaModelCatalog,
+  "getAll" | "getApiKeyAndHeaders"
+> {
+  rotateCredential?(
+    provider: string,
+    reason: "quota" | "rate_limit" | "auth" | "manual",
+    cooldownMs: number,
+  ):
+    | {
+        providerId: string;
+        credentialSlot: string;
+        reason: "quota" | "rate_limit" | "auth" | "manual";
+        cooldownMs: number;
+      }
+    | undefined;
+}
+
+export interface RuntimeProviderFace {
+  readonly model?: BrewvaRegisteredModel;
+  getModelCatalog(): RuntimeProviderModelCatalog;
+  getModelPresetState(): BrewvaModelPresetState;
+  getActiveModelRole(): BrewvaModelRoleAlias;
+  getModelRoutingSettings(): HostedModelRoutingSettings | undefined;
+  recordProviderCredentialRotated(input: {
+    providerId: string;
+    credentialSlot: string;
+    reason: "quota" | "rate_limit" | "auth" | "manual";
+    cooldownMs: number;
+  }): void;
+  getVerificationGateManifests(): readonly VerificationGateManifest[];
+  getVerificationGateEvidence(sessionId: string): readonly VerificationGateEvidence[];
+  getVerificationGateNow?(): number;
+  getProviderCachePolicy(): ProviderCachePolicy;
+  getProviderTransport(): ProviderStreamOptions["transport"];
+  prepareProviderPayload(input: {
+    readonly payload: unknown;
+    readonly model: ProviderModel<Api>;
+    readonly metadata?: ProviderPayloadMetadata;
+    readonly turn: {
+      readonly sessionId: string;
+      readonly turnId?: string;
+    };
+    readonly providerContext: RuntimeProviderContextSummary;
+  }): Promise<unknown>;
+  observeCacheRender(input: {
+    readonly render: ProviderCacheRenderResult;
+    readonly model: ProviderModel<Api>;
+  }): void;
+  observeAssistantMessage(message: BrewvaAgentProtocolAssistantMessage): void;
+}
+
+export interface RuntimeToolSession extends CollectSessionPromptOutputSession {
+  getRegisteredTools(): readonly BrewvaToolDefinition[];
+  createRuntimeToolContext(): BrewvaToolContext;
+}
+
+export interface RuntimeAdapterSession extends RuntimeToolSession {
+  getRuntimeProviderFace(): RuntimeProviderFace;
+}
+
+function isRuntimeProviderFace(value: unknown): value is RuntimeProviderFace {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Partial<RuntimeProviderFace>;
+  return (
+    typeof candidate.getModelCatalog === "function" &&
+    typeof candidate.getModelPresetState === "function" &&
+    typeof candidate.getActiveModelRole === "function" &&
+    typeof candidate.getModelRoutingSettings === "function" &&
+    typeof candidate.recordProviderCredentialRotated === "function" &&
+    typeof candidate.getVerificationGateManifests === "function" &&
+    typeof candidate.getVerificationGateEvidence === "function" &&
+    typeof candidate.getProviderCachePolicy === "function" &&
+    typeof candidate.getProviderTransport === "function" &&
+    typeof candidate.prepareProviderPayload === "function" &&
+    typeof candidate.observeCacheRender === "function" &&
+    typeof candidate.observeAssistantMessage === "function"
+  );
+}
+
+export function resolveRuntimeProviderFace(session: RuntimeAdapterSession): RuntimeProviderFace {
+  const face = session.getRuntimeProviderFace();
+  if (!isRuntimeProviderFace(face)) {
+    throw new Error("hosted_runtime_provider_face_incompatible");
+  }
+  return face;
+}
+
+export function isRuntimeAdapterSession(
+  session: CollectSessionPromptOutputSession,
+): session is RuntimeAdapterSession {
+  if (!isRuntimeToolSession(session)) {
+    return false;
+  }
+  const candidate = session as Partial<RuntimeAdapterSession>;
+  return typeof candidate.getRuntimeProviderFace === "function";
+}
+
+export function isRuntimeToolSession(
+  session: CollectSessionPromptOutputSession,
+): session is RuntimeToolSession {
+  const candidate = session as Partial<RuntimeToolSession>;
+  return (
+    typeof candidate.getRegisteredTools === "function" &&
+    typeof candidate.createRuntimeToolContext === "function"
+  );
+}
+
+export function canCreateHostedRuntimeExecutionPorts(
+  session: CollectSessionPromptOutputSession,
+): boolean {
+  return (
+    isRuntimeAdapterSession(session) &&
+    (!hasHostedPromptAttemptDispatch(session) || hasHostedRuntimeTurnPrelude(session))
+  );
+}

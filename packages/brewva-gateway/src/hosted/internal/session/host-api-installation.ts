@@ -9,17 +9,14 @@ import { createContextTransformLifecycle } from "../context/context-transform.js
 import { registerEventStream } from "../context/evidence/event-stream.js";
 import { registerLedgerWriter } from "../context/evidence/ledger-writer.js";
 import { createReadPathRecoveryLifecycle } from "../context/read-path-recovery.js";
-import { registerProviderRequestRecovery } from "../provider/request/provider-request-recovery.js";
-import { registerProviderRequestReduction } from "../provider/request/provider-request-reduction.js";
-import {
-  createLocalHookManager,
-  type LocalHookPort,
-} from "../turn-adapter/lifecycle/local-hook-port.js";
-import { createRuntimeTurnClockStore } from "../turn-adapter/lifecycle/runtime-turn-clock.js";
+import { createLocalHookManager, type LocalHookPort } from "../hooks/local-hook-port.js";
 import {
   registerTurnLifecyclePorts,
   type TurnLifecyclePort,
-} from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
+} from "../hooks/turn-lifecycle-port.js";
+import { registerProviderRequestRecovery } from "../provider/request/provider-request-recovery.js";
+import { registerProviderRequestReduction } from "../provider/request/provider-request-reduction.js";
+import { createRuntimeTurnClockStore } from "../turn/runtime-turn-clock.js";
 import { createGoalContinuationLifecycle } from "./goal-continuation.js";
 import {
   createHostedRuntimeAdapter,
@@ -116,7 +113,7 @@ export { registerLedgerWriter } from "../context/evidence/ledger-writer.js";
 export {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
-} from "../turn-adapter/lifecycle/runtime-turn-clock.js";
+} from "../turn/runtime-turn-clock.js";
 export {
   createLocalHookManager,
   type LocalHookManager,
@@ -135,11 +132,11 @@ export {
   type LocalHookPreEffectResult,
   type LocalHookRecommendation,
   type LocalHookResult,
-} from "../turn-adapter/lifecycle/local-hook-port.js";
+} from "../hooks/local-hook-port.js";
 export {
   registerTurnLifecyclePorts,
   type TurnLifecyclePort,
-} from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
+} from "../hooks/turn-lifecycle-port.js";
 export { createQualityGateLifecycle, registerQualityGate } from "./tools/quality-gate.js";
 export { registerToolResultDistiller } from "./tools/tool-result-distiller.js";
 export {

@@ -13,7 +13,7 @@ import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controll
 import type { ShellEffect } from "../../../packages/brewva-cli/src/shell/domain/effects.js";
 import type { ProviderConnectionDescriptor } from "../../../packages/brewva-cli/src/shell/domain/overlays/payloads.js";
 import { HostedRuntimeTapeSessionStore } from "../../../packages/brewva-gateway/src/hosted/internal/session/projection/runtime-projection-session-store.js";
-import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-session-transcript.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-session-transcript.js";
 import {
   createHostedShellFixture,
   type HostedShellFixtureOptions,

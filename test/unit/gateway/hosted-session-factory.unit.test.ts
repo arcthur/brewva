@@ -12,7 +12,7 @@ import {
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/session-factory.js";
 import { HostedModelRegistry } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/hosted-model-registry.js";
 import { readHostedSettingsHandle } from "../../../packages/brewva-gateway/src/hosted/internal/session/settings/settings-store.js";
-import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-session-transcript.js";
+import type { StoredSessionMessage } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-session-transcript.js";
 import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";

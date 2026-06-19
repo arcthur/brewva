@@ -1,6 +1,6 @@
 import { startBoundaryInterval, type BoundaryIntervalHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
-import type { HostedRuntimeAdapterPort } from "../../session/runtime-ports.js";
+import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import {
   maybeAdjudicateLatestTaskStall,
   type TaskStallAdjudicator,

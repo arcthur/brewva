@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHostedRuntimeAdapter } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 import { resolveHostedRuntimeTurnRuntime } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-turn-runtime.js";
+import { createRuntimeProviderFaceFixture } from "../../helpers/runtime-provider-face.js";
 
 /**
  * WS1 behavior lock: a hosted session must resolve to exactly one runtime
@@ -17,12 +18,16 @@ function createExecutionPortSession(): never {
     getRegisteredTools() {
       return [];
     },
-    getRuntimeModelCatalog() {
-      return {
-        async getApiKeyAndHeaders() {
-          return { ok: true as const };
+    getRuntimeProviderFace() {
+      return createRuntimeProviderFaceFixture({
+        getModelCatalog() {
+          return {
+            async getApiKeyAndHeaders() {
+              return { ok: true as const };
+            },
+          };
         },
-      };
+      });
     },
     createRuntimeToolContext() {
       return {

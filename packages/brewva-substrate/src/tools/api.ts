@@ -48,7 +48,7 @@ export {
   advanceToolExecutionPhase,
   isToolExecutionPhaseTerminal,
   type ToolExecutionPhase,
-} from "../execution/tool-phase.js";
+} from "./tool-phase.js";
 export {
   buildBrewvaEditDiffPreview,
   createBrewvaEditToolDefinition,

@@ -181,7 +181,7 @@ flowchart TD
 - MCP tools merged into the session tool set:
   `packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.ts`
 - Kernel authority binding for registered tools:
-  `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-authority.ts`
+  `packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-authority.ts`
 - Kernel tool authorizer:
   `packages/brewva-runtime/src/runtime/kernel/impl.ts`
 - External-side-effect action policy:

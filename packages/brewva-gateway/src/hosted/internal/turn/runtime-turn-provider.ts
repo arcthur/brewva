@@ -23,14 +23,8 @@ import {
 } from "../../../policy/model-routing/api.js";
 import { streamProviderMessage } from "../provider/execution-port.js";
 import { isBrewvaModelRoleAlias as isHostedModelRoleAlias } from "../session/settings/model-presets.js";
-import type { CollectSessionPromptOutputSession } from "./collect-output.js";
 import { summarizeProviderContext, toProviderContext } from "./runtime-provider-context.js";
-import {
-  isRuntimeAdapterSession,
-  resolveRuntimeProviderCachePolicy,
-  resolveRuntimeProviderTransport,
-  type RuntimeAdapterSession,
-} from "./runtime-turn-session.js";
+import { type RuntimeAdapterSession, type RuntimeProviderFace } from "./runtime-turn-session.js";
 
 function cloneHeaders(
   headers: Record<string, string> | undefined,
@@ -180,37 +174,34 @@ function credentialRotationReason(
   return undefined;
 }
 
-function activePresetFromSession(
-  session: RuntimeAdapterSession,
+function activePresetFromFace(
+  face: RuntimeProviderFace,
 ): BrewvaModelPresetState["presets"][number] | undefined {
-  const state = session.getModelPresetState?.();
-  return state?.presets.find((preset) => preset.name === state.activeName);
+  const state = face.getModelPresetState();
+  return state.presets.find((preset) => preset.name === state.activeName);
 }
 
 function resolveModelText(
-  session: RuntimeAdapterSession,
+  face: RuntimeProviderFace,
   modelText: string,
 ): BrewvaRegisteredModel | undefined {
-  const catalog = session.getRuntimeModelCatalog();
-  if (!catalog.getAll) {
-    return undefined;
-  }
+  const catalog = face.getModelCatalog();
   const selection = resolveBrewvaModelSelection(modelText, {
-    getAll: () => [...(catalog.getAll?.() ?? [])],
+    getAll: () => [...catalog.getAll()],
   });
   return selection.model;
 }
 
 function fallbackCandidates(input: {
-  session: RuntimeAdapterSession;
+  face: RuntimeProviderFace;
   currentModel: BrewvaRegisteredModel;
   attemptedModelKeys: ReadonlySet<string>;
   activeRole: BrewvaModelRoleAlias;
 }): BrewvaRegisteredModel[] {
-  const catalog = input.session.getRuntimeModelCatalog();
-  const availableModels = catalog.getAll?.() ?? [];
-  const settings = input.session.getRuntimeModelRoutingSettings?.();
-  const activePreset = activePresetFromSession(input.session);
+  const catalog = input.face.getModelCatalog();
+  const availableModels = catalog.getAll();
+  const settings = input.face.getModelRoutingSettings();
+  const activePreset = activePresetFromFace(input.face);
   const candidates: BrewvaRegisteredModel[] = [];
   const push = (model: BrewvaRegisteredModel | undefined) => {
     if (!model) return;
@@ -224,7 +215,7 @@ function fallbackCandidates(input: {
   for (const entry of chain) {
     const modelText = isHostedModelRoleAlias(entry) ? activePreset?.roles[entry] : entry;
     if (modelText) {
-      push(resolveModelText(input.session, modelText));
+      push(resolveModelText(input.face, modelText));
     }
   }
   if (availableModels.length > 0) {
@@ -288,11 +279,12 @@ function frameFromProviderEvent(event: AssistantMessageEvent): RuntimeProviderFr
 
 async function* streamRuntimeProviderAttempt(
   session: RuntimeAdapterSession,
+  face: RuntimeProviderFace,
   input: Parameters<RuntimeProviderPort["stream"]>[0],
   model: BrewvaRegisteredModel,
   providerFallback: Record<string, JsonValue> | undefined,
 ): AsyncGenerator<RuntimeProviderFrame> {
-  const resolvedAuth = await session.getRuntimeModelCatalog().getApiKeyAndHeaders(model);
+  const resolvedAuth = await face.getModelCatalog().getApiKeyAndHeaders(model);
   if (!resolvedAuth.ok) {
     throw new ProviderAttemptError(
       new Error(`hosted_runtime_provider_auth_failed:${resolvedAuth.error}`),
@@ -308,11 +300,11 @@ async function* streamRuntimeProviderAttempt(
     apiKey: resolvedAuth.apiKey,
     headers: cloneHeaders(resolvedAuth.headers),
     sessionId: input.turn.sessionId,
-    cachePolicy: resolveRuntimeProviderCachePolicy(session),
-    transport: resolveRuntimeProviderTransport(session),
+    cachePolicy: face.getProviderCachePolicy(),
+    transport: face.getProviderTransport(),
     ...(providerFallback ? { metadata: { providerFallback } } : {}),
     onPayload: (payload, providerModel, metadata) =>
-      session.prepareRuntimeProviderPayload?.({
+      face.prepareProviderPayload({
         payload,
         model: providerModel,
         metadata,
@@ -321,9 +313,9 @@ async function* streamRuntimeProviderAttempt(
           ...(input.turn.turnId ? { turnId: input.turn.turnId } : {}),
         },
         providerContext: providerContextSummary,
-      }) ?? payload,
+      }),
     onCacheRender: (render, providerModel) =>
-      session.observeRuntimeCacheRender?.({
+      face.observeCacheRender({
         render,
         model: providerModel,
       }),
@@ -341,7 +333,7 @@ async function* streamRuntimeProviderAttempt(
       BrewvaStream.runForEach((event) =>
         BrewvaEffect.promise(async () => {
           if (event.type === "error") {
-            session.observeRuntimeAssistantMessage?.(toTurnLoopAssistantMessage(event.error));
+            face.observeAssistantMessage(toTurnLoopAssistantMessage(event.error));
             await bridge.write({
               kind: "error",
               error: new ProviderAttemptError(
@@ -358,7 +350,7 @@ async function* streamRuntimeProviderAttempt(
             return;
           }
           if (event.type === "done") {
-            session.observeRuntimeAssistantMessage?.(toTurnLoopAssistantMessage(event.message));
+            face.observeAssistantMessage(toTurnLoopAssistantMessage(event.message));
             if (!sawIncrementalFrame) {
               for (const fallback of framesFromAssistantMessage(event.message)) {
                 await bridge.write({ kind: "frame", frame: fallback });
@@ -397,25 +389,23 @@ async function* streamRuntimeProviderAttempt(
 }
 
 export function createHostedRuntimeProviderPort(
-  session: CollectSessionPromptOutputSession,
+  session: RuntimeAdapterSession,
+  face: RuntimeProviderFace,
 ): RuntimeProviderPort {
-  if (!isRuntimeAdapterSession(session)) {
-    throw new Error("hosted_runtime_provider_session_incompatible");
-  }
   return {
     async *stream(input) {
-      const initialModel = session.model;
+      const initialModel = face.model;
       if (!initialModel) {
         throw new Error("hosted_runtime_provider_missing_model");
       }
-      const activeRole = session.getRuntimeActiveModelRole?.() ?? "default";
+      const activeRole = face.getActiveModelRole();
       let activeModel = initialModel;
       let fallbackMetadata: Record<string, JsonValue> | undefined;
       const attempted = new Set<string>();
       while (true) {
         attempted.add(modelKey(activeModel));
         try {
-          yield* streamRuntimeProviderAttempt(session, input, activeModel, fallbackMetadata);
+          yield* streamRuntimeProviderAttempt(session, face, input, activeModel, fallbackMetadata);
           return;
         } catch (error) {
           const attemptError =
@@ -425,17 +415,17 @@ export function createHostedRuntimeProviderPort(
           }
           const reason = classifyProviderFailure(attemptError.causeError);
           const rotationReason = credentialRotationReason(reason);
-          const rotationSettings = session.getRuntimeModelRoutingSettings?.()?.credentialRotation;
+          const rotationSettings = face.getModelRoutingSettings()?.credentialRotation;
           if (rotationReason && rotationSettings?.enabled === true) {
-            const rotation = session
-              .getRuntimeModelCatalog()
+            const rotation = face
+              .getModelCatalog()
               .rotateCredential?.(
                 activeModel.provider,
                 rotationReason,
                 rotationSettings.cooldownMs,
               );
             if (rotation) {
-              session.recordRuntimeProviderCredentialRotated?.(rotation);
+              face.recordProviderCredentialRotated(rotation);
               fallbackMetadata = providerFallbackMetadata({
                 active: true,
                 attemptedModel: activeModel,
@@ -448,7 +438,7 @@ export function createHostedRuntimeProviderPort(
             }
           }
           const [nextModel] = fallbackCandidates({
-            session,
+            face,
             currentModel: activeModel,
             attemptedModelKeys: attempted,
             activeRole,

@@ -23,11 +23,11 @@ import {
   subscribeRuntimeEvents,
   type HostedRuntimeAdapterPort,
 } from "../../session/runtime-ports.js";
+import { buildTranscriptMessagePayload } from "../../turn/runtime-session-transcript.js";
 import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
-} from "../../turn-adapter/lifecycle/runtime-turn-clock.js";
-import { buildTranscriptMessagePayload } from "../../turn-adapter/runtime-session-transcript.js";
+} from "../../turn/runtime-turn-clock.js";
 import { ToolAttemptBindingRegistry } from "./tool-attempt-binding.js";
 
 type MessageHealth = {

@@ -340,10 +340,10 @@ describe("four-port runtime architecture fitness", () => {
     const kernel = readRepoFile("packages/brewva-runtime/src/runtime/kernel/impl.ts");
     const turnRunner = readRepoFile("packages/brewva-runtime/src/runtime/turn/impl.ts");
     const hostedExecutionPorts = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-execution-ports.ts",
     );
     const hostedAuthority = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-authority.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-authority.ts",
     );
     const hostedRuntimeTurn = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/runtime-turn-runtime.ts",
@@ -624,7 +624,7 @@ describe("four-port runtime architecture fitness", () => {
       existsSync(
         resolve(
           repoRoot,
-          "packages/brewva-gateway/src/hosted/internal/turn-adapter/hosted-turn-adapter.ts",
+          "packages/brewva-gateway/src/hosted/internal/turn/hosted-turn-adapter.ts",
         ),
       ),
     ).toBe(false);

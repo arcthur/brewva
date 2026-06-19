@@ -6,10 +6,7 @@ import {
   REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
   ROLLBACK_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/workbench";
-import {
-  subscribeRuntimeEvents,
-  type HostedRuntimeAdapterPort,
-} from "../../session/runtime-ports.js";
+import { subscribeRuntimeEvents, type HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
 export type LocalHookPhase =

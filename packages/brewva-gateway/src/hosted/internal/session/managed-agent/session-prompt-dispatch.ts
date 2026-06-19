@@ -29,7 +29,7 @@ import type {
   BrewvaPromptQueueBehavior,
   BrewvaSessionModelDescriptor,
 } from "@brewva/brewva-substrate/session";
-import type { HostedTurnEnvelopeSource } from "../../turn-adapter/turn-envelope.js";
+import type { HostedTurnEnvelopeSource } from "../../turn/turn-envelope.js";
 import { extractPromptTargetPaths } from "../prompt-paths.js";
 import {
   buildSkillCommandText,

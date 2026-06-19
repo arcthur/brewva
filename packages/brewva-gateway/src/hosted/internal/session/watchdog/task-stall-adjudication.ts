@@ -31,7 +31,7 @@ import {
   queryRuntimeEvents,
   recordHostedRuntimeEvent,
   type HostedRuntimeAdapterPort,
-} from "../../session/runtime-ports.js";
+} from "../runtime-ports.js";
 
 const TASK_STALL_INSPECTION_SCHEMA = "brewva.task-stall-inspection.v1" as const;
 const RECENT_FAILURE_LIMIT = 6;

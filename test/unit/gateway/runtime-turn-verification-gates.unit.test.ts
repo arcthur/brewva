@@ -8,7 +8,7 @@ import {
   type RuntimeProviderPort,
   type RuntimeToolExecutorPort,
 } from "@brewva/brewva-runtime";
-import { createVerificationGateRuntimeProviderPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-verification-gates.js";
+import { createVerificationGateRuntimeProviderPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-verification-gates.js";
 
 const NOOP_TOOL_EXECUTOR: RuntimeToolExecutorPort = {
   async execute() {
@@ -32,7 +32,7 @@ describe("runtime turn verification gates", () => {
         },
       },
       {
-        getRuntimeVerificationGateManifests: () => [
+        getVerificationGateManifests: () => [
           {
             apiVersion: VERIFICATION_GATE_MANIFEST_SCHEMA_V1,
             adapter: "typecheck",
@@ -47,8 +47,8 @@ describe("runtime turn verification gates", () => {
             },
           },
         ],
-        getRuntimeVerificationGateEvidence: () => [],
-        getRuntimeVerificationGateNow: () => 10_000,
+        getVerificationGateEvidence: () => [],
+        getVerificationGateNow: () => 10_000,
       },
     );
     const runtime = createBrewvaRuntime({

@@ -39,17 +39,14 @@ describe("hosted turn envelope boundary", () => {
     );
     expect(
       existsSync(
-        join(
-          repoRoot,
-          "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapters.ts",
-        ),
+        join(repoRoot, "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-adapters.ts"),
       ),
     ).toBe(false);
     expect(
       existsSync(
         join(
           repoRoot,
-          "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.ts",
+          "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-execution-ports.ts",
         ),
       ),
     ).toBe(true);
@@ -58,16 +55,13 @@ describe("hosted turn envelope boundary", () => {
   test("keeps production runtime turn adapter access behind the turn envelope", () => {
     expect(
       existsSync(
-        join(
-          repoRoot,
-          "packages/brewva-gateway/src/hosted/internal/turn-adapter/hosted-turn-adapter.ts",
-        ),
+        join(repoRoot, "packages/brewva-gateway/src/hosted/internal/turn/hosted-turn-adapter.ts"),
       ),
     ).toBe(false);
 
     const allowed = new Set([
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts",
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/turn-envelope.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-adapter.ts",
     ]);
 
     const offenders = listProductionFiles()
@@ -79,10 +73,10 @@ describe("hosted turn envelope boundary", () => {
 
   test("keeps the runtime turn adapter free of legacy collect-output fallback", () => {
     const loop = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-adapter.ts",
     );
     const collectOutput = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/collect-output.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/collect-output.ts",
     );
 
     expect(loop).not.toContain("streamAndCollectLegacyAttempt");
@@ -93,8 +87,8 @@ describe("hosted turn envelope boundary", () => {
 
   test("keeps production profile resolution behind the turn envelope", () => {
     const allowed = new Set([
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts",
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/state.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/turn-envelope.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/state.ts",
     ]);
 
     const offenders = listProductionFiles()
@@ -122,7 +116,7 @@ describe("hosted turn envelope boundary", () => {
 
   test("keeps the turn envelope free of lifecycle spines and transition truth", () => {
     const source = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/turn-envelope.ts",
     );
 
     expect(source).not.toContain("TurnLifecycleSpine");
@@ -138,19 +132,14 @@ describe("hosted turn envelope boundary", () => {
       ),
     ).toBe(false);
     expect(
-      existsSync(
-        join(repoRoot, "packages/brewva-gateway/src/hosted/internal/turn-adapter/recovery"),
-      ),
+      existsSync(join(repoRoot, "packages/brewva-gateway/src/hosted/internal/turn/recovery")),
     ).toBe(false);
   });
 
   test("keeps hosted transition truth out of gateway production code", () => {
     expect(
       existsSync(
-        join(
-          repoRoot,
-          "packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-transition.ts",
-        ),
+        join(repoRoot, "packages/brewva-gateway/src/hosted/internal/turn/turn-transition.ts"),
       ),
     ).toBe(false);
 
@@ -173,9 +162,7 @@ describe("hosted turn envelope boundary", () => {
 
   test("keeps hosted turn adapter code off removed runtime authority and inspect roots", () => {
     const offenders = listProductionFiles()
-      .filter((file) =>
-        file.startsWith("packages/brewva-gateway/src/hosted/internal/turn-adapter/"),
-      )
+      .filter((file) => file.startsWith("packages/brewva-gateway/src/hosted/internal/turn/"))
       .filter((file) => {
         const source = readRepoFile(file);
         return /\bruntime\.(?:authority|inspect)\b/u.test(source);
@@ -216,9 +203,7 @@ describe("hosted turn envelope boundary", () => {
   });
 
   test("keeps worker session-wire relay suppression separate from active turn ownership", () => {
-    const source = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/worker/main.ts",
-    );
+    const source = readRepoFile("packages/brewva-gateway/src/hosted/edge/worker/main.ts");
     const subscriptionMatch = source.match(
       /unsubscribeSessionWire = subscribeRuntimeSessionWire\([\s\S]*?\n    \);/u,
     );

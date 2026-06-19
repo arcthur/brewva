@@ -71,8 +71,6 @@ describe("substrate domain slicing quality guard", () => {
       join(substrateSrc, "session", "api.ts"),
       join(substrateSrc, "prompt", "api.ts"),
       join(substrateSrc, "resources", "api.ts"),
-      join(substrateSrc, "provenance", "api.ts"),
-      join(substrateSrc, "execution", "api.ts"),
       join(substrateSrc, "compaction", "api.ts"),
       join(substrateSrc, "tools", "api.ts"),
       join(substrateSrc, "host-api", "api.ts"),
@@ -85,6 +83,12 @@ describe("substrate domain slicing quality guard", () => {
     }
   });
 
+  test("keeps the retired prompt envelope out of the session surface", () => {
+    const sessionApi = read(join(substrateSrc, "session", "api.ts"));
+
+    expect(sessionApi).not.toContain("BrewvaPromptEnvelope");
+  });
+
   test("keeps internal substrate helpers out of package exports", () => {
     const packageJson = JSON.parse(read(join(substrateRoot, "package.json"))) as {
       exports: Record<string, unknown>;
@@ -94,8 +98,11 @@ describe("substrate domain slicing quality guard", () => {
     expect(packageJson.exports).not.toHaveProperty("./resources/skill-discovery");
     expect(packageJson.exports).not.toHaveProperty("./sdk/session-services");
     expect(packageJson.exports).not.toHaveProperty("./compaction/mechanism");
-    expect(packageJson.exports).not.toHaveProperty("./provenance/source-info");
-    expect(packageJson.exports).not.toHaveProperty("./execution/event-bus");
+    expect(
+      Object.keys(packageJson.exports).filter(
+        (key) => key.startsWith("./provenance") || key.startsWith("./execution"),
+      ),
+    ).toEqual([]);
   });
 
   test("keeps production packages on explicit substrate subpaths", () => {

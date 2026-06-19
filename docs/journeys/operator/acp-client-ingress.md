@@ -170,7 +170,7 @@ flowchart TD
 - Daemon handlers (shared hosted turn):
   `packages/brewva-gateway/src/daemon/gateway-daemon.ts`
 - Wire frame source and vocabulary:
-  `packages/brewva-gateway/src/hosted/internal/turn-adapter/worker/main.ts`
+  `packages/brewva-gateway/src/hosted/edge/worker/main.ts`
   (`sendSessionWireFrame`), `packages/brewva-vocabulary/src/internal/wire.ts`
   (`SessionWireFrame`)
 

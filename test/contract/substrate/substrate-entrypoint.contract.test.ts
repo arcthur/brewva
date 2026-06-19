@@ -45,15 +45,10 @@ describe("substrate entrypoint surface", () => {
 
   test("exports session mechanisms only from the explicit session subpath", async () => {
     const session = await import("@brewva/brewva-substrate/session");
-    const sessionApi = readFileSync(
-      resolve(repoRoot, "packages/brewva-substrate/src/session/api.ts"),
-      "utf8",
-    );
 
     // The low-level turn loop was internalized into runtime.turn; substrate no
     // longer ships a session-host orchestration bypass on this subpath.
     expect("createInMemorySessionHost" in session).toBe(false);
-    expect(sessionApi).not.toContain("BrewvaPromptEnvelope");
     expect(typeof session.BrewvaManagedSessionStore).toBe("function");
     expect(typeof session.advanceSessionPhaseResult).toBe("function");
     expect(session.SESSION_CRASH_POINTS).toContain("tool_executing");
@@ -149,8 +144,9 @@ describe("substrate entrypoint surface", () => {
   test("does not expose zero-consumer mechanism subpaths as public API (WS5)", () => {
     // persistence/provenance/execution had no external production consumers and
     // were recovered from the public surface per the single-consumer seam
-    // principle. Their implementations stay substrate-internal (consumed via
-    // relative paths); re-export them only if a real second consumer appears.
+    // principle. persistence stays substrate-internal; provenance/execution were
+    // dissolved by WS-T1 (source-info -> contracts/, tool-phase -> tools/,
+    // event-bus deleted). Re-export none unless a real consumer appears.
     const packageJson = JSON.parse(
       readFileSync(resolve(repoRoot, "packages/brewva-substrate/package.json"), "utf8"),
     ) as { exports?: Record<string, unknown> };

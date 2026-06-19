@@ -58,7 +58,7 @@ import {
   buildTranscriptMessagePayload,
   readTranscriptMessageFromPayload,
   type StoredSessionMessage,
-} from "../../turn-adapter/runtime-session-transcript.js";
+} from "../../turn/runtime-session-transcript.js";
 import {
   commitRuntimeSessionCompaction,
   createRuntimeLineageNode,

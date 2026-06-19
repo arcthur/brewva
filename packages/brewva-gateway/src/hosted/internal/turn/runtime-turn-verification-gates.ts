@@ -13,9 +13,9 @@ import {
 } from "../../../extensions/api.js";
 
 export interface RuntimeVerificationGateSource {
-  getRuntimeVerificationGateManifests?(): readonly VerificationGateManifest[];
-  getRuntimeVerificationGateEvidence?(sessionId: string): readonly VerificationGateEvidence[];
-  getRuntimeVerificationGateNow?(): number;
+  getVerificationGateManifests(): readonly VerificationGateManifest[];
+  getVerificationGateEvidence(sessionId: string): readonly VerificationGateEvidence[];
+  getVerificationGateNow?(): number;
 }
 
 function readString(value: unknown): string | null {
@@ -82,12 +82,12 @@ function evaluateRuntimeVerificationGates(input: {
   readonly source: RuntimeVerificationGateSource;
   readonly sessionId: string;
 }): KernelVerificationGatePolicyInput[] {
-  const manifests = input.source.getRuntimeVerificationGateManifests?.() ?? [];
+  const manifests = input.source.getVerificationGateManifests();
   if (manifests.length === 0) {
     return [];
   }
-  const evidence = input.source.getRuntimeVerificationGateEvidence?.(input.sessionId) ?? [];
-  const now = input.source.getRuntimeVerificationGateNow?.() ?? Date.now();
+  const evidence = input.source.getVerificationGateEvidence(input.sessionId);
+  const now = input.source.getVerificationGateNow?.() ?? Date.now();
   return manifests.flatMap((manifest) => {
     const evaluation = evaluateVerificationGateManifest({ manifest, evidence, now });
     return evaluation.policyInput ? [evaluation.policyInput] : [];
@@ -112,7 +112,7 @@ function attachVerificationGates(
 
 export function createVerificationGateRuntimeProviderPort(
   provider: RuntimeProviderPort,
-  source: RuntimeVerificationGateSource | null,
+  source: RuntimeVerificationGateSource,
 ): RuntimeProviderPort {
   return {
     async *stream(input) {
@@ -123,12 +123,10 @@ export function createVerificationGateRuntimeProviderPort(
         }
         yield attachVerificationGates(
           frame,
-          source
-            ? evaluateRuntimeVerificationGates({
-                source,
-                sessionId: input.turn.sessionId,
-              })
-            : [],
+          evaluateRuntimeVerificationGates({
+            source,
+            sessionId: input.turn.sessionId,
+          }),
         );
       }
     },

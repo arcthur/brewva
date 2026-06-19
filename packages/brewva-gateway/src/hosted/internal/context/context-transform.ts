@@ -6,7 +6,7 @@ import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
-} from "../turn-adapter/lifecycle/runtime-turn-clock.js";
+} from "../turn/runtime-turn-clock.js";
 import {
   createHostedCompactionController,
   type HostedManualCompact,

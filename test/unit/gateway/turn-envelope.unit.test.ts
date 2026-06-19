@@ -12,12 +12,13 @@ import { createHostedRuntimeAdapter } from "../../../packages/brewva-gateway/src
 import {
   runHostedTurnEnvelope,
   type HostedTurnEnvelopeAdapterResult,
-} from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/turn-envelope.js";
+} from "../../../packages/brewva-gateway/src/hosted/internal/turn/turn-envelope.js";
 import {
   fauxAssistantMessage,
   fauxToolCall,
   registerFauxProvider,
 } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
+import { createRuntimeProviderFaceFixture } from "../../helpers/runtime-provider-face.js";
 
 type TestRuntimeOptions = Omit<BrewvaRuntimeOptions, "physics"> & {
   readonly physics?: BrewvaRuntimeOptions["physics"];
@@ -146,11 +147,15 @@ describe("hosted turn envelope", () => {
             },
           },
         ],
-        getRuntimeModelCatalog: () => ({
-          async getApiKeyAndHeaders() {
-            return { ok: true as const };
-          },
-        }),
+        getRuntimeProviderFace: () =>
+          createRuntimeProviderFaceFixture({
+            model,
+            getModelCatalog: () => ({
+              async getApiKeyAndHeaders() {
+                return { ok: true as const };
+              },
+            }),
+          }),
         createRuntimeToolContext: () => ({
           ui: NOOP_UI,
           hasUI: false,

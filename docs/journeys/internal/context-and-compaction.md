@@ -293,7 +293,7 @@ flowchart TD
 - Provider request recovery (output-budget escalation): `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-recovery.ts`
 - Hook installation: `packages/brewva-gateway/src/hosted/internal/session/host-api-installation.ts`
 - Mid-turn soft cut and compaction resume: `packages/brewva-runtime/src/runtime/turn/impl.ts`,
-  `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-adapter.ts`
+  `packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-adapter.ts`
 - Compaction telemetry: `packages/brewva-gateway/src/hosted/internal/context/hosted-context-telemetry.ts`
 - Turn resume path: owned by `packages/brewva-runtime/src/runtime/turn/impl.ts`
 - Focused compaction inspect surface:

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createRuntimeTurnClockStore } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/lifecycle/runtime-turn-clock.js";
+import { createRuntimeTurnClockStore } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-clock.js";
 
 describe("runtime turn clock", () => {
   test("isolates turn state per store instance", () => {

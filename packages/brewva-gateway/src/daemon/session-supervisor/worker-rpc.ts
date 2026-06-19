@@ -10,10 +10,7 @@ import {
   BrewvaScope,
 } from "@brewva/brewva-effect/primitives";
 import type { BrewvaWalId } from "@brewva/brewva-runtime/core";
-import type {
-  ParentToWorkerMessage,
-  WorkerToParentMessage,
-} from "../../hosted/internal/turn-adapter/worker/api.js";
+import type { ParentToWorkerMessage, WorkerToParentMessage } from "../../hosted/edge/worker/api.js";
 import { validateSessionWireFramePayload } from "../../protocol/api.js";
 import { SessionBackendStateError } from "../session-backend.js";
 import type { SendPromptOutput } from "../session-backend.js";

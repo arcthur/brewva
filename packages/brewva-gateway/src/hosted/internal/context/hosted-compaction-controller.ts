@@ -33,7 +33,7 @@ import {
 import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
-} from "../turn-adapter/lifecycle/runtime-turn-clock.js";
+} from "../turn/runtime-turn-clock.js";
 import {
   ATTENTION_METRIC_EVENT_TYPE,
   buildCompactionInputProvenance,

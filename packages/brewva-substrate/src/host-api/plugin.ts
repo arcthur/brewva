@@ -2,15 +2,15 @@ import { runBoundaryOperation, type BrewvaBoundaryError } from "@brewva/brewva-e
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { ContextState } from "../contracts/context-state.js";
 import type { SessionPhase } from "../contracts/session-phase.js";
+import type { BrewvaSourceInfo } from "../contracts/source-info.js";
 import type {
   BrewvaToolContentPart,
   BrewvaToolContextUsage,
   BrewvaToolDefinition,
 } from "../contracts/tool.js";
-import type { ToolExecutionPhase } from "../execution/tool-phase.js";
 import type { BrewvaPromptContentPart } from "../prompt/content.js";
-import type { BrewvaSourceInfo } from "../provenance/source-info.js";
 import type { BrewvaPromptAssistantMessageEvent } from "../session/prompt-session.js";
+import type { ToolExecutionPhase } from "../tools/tool-phase.js";
 import type { BrewvaToolUiPort } from "./ui.js";
 
 export interface BrewvaHostSessionManagerView {

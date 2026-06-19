@@ -2,9 +2,9 @@ import type { AssistantMessageEventOf } from "@brewva/brewva-provider-core/contr
 import type { ContextState } from "../contracts/context-state.js";
 import type { BrewvaThinkingLevel } from "../contracts/thinking.js";
 import type { BrewvaToolDefinition } from "../contracts/tool.js";
-import type { ToolExecutionPhase } from "../execution/tool-phase.js";
 import type { BrewvaToolUiPort } from "../host-api/ui.js";
 import type { BrewvaPromptContentPart } from "../prompt/content.js";
+import type { ToolExecutionPhase } from "../tools/tool-phase.js";
 
 export type BrewvaPromptQueueBehavior = "queue" | "followUp";
 export type BrewvaPromptInputSource = "interactive" | "extension" | (string & {});

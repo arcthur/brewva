@@ -11,7 +11,7 @@ import {
   GOAL_CONTINUATION_QUEUED_EVENT_TYPE,
   type GoalState,
 } from "@brewva/brewva-vocabulary/goal";
-import type { TurnLifecyclePort } from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
+import type { TurnLifecyclePort } from "../hooks/turn-lifecycle-port.js";
 import {
   queryRuntimeEventRecords,
   recordRuntimeGoalContinuationQueued,

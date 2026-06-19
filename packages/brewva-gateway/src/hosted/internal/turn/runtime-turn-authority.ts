@@ -7,7 +7,7 @@ import {
 } from "@brewva/brewva-runtime/security";
 import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
-import { isRuntimeAdapterSession } from "./runtime-turn-session.js";
+import { isRuntimeToolSession } from "./runtime-turn-session.js";
 
 export function createHostedRuntimeToolAuthorityResolver(
   session: CollectSessionPromptOutputSession,
@@ -15,7 +15,7 @@ export function createHostedRuntimeToolAuthorityResolver(
     readonly actionAdmissionOverrides?: ToolActionAdmissionOverrides;
   } = {},
 ): RuntimeToolAuthorityResolver {
-  if (!isRuntimeAdapterSession(session)) {
+  if (!isRuntimeToolSession(session)) {
     throw new Error("hosted_runtime_tool_authority_session_incompatible");
   }
   const baseRegistry = createActionPolicyRegistry();

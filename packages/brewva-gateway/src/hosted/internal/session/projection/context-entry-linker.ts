@@ -11,7 +11,7 @@ import {
   SESSION_BRANCH_SUMMARY_RECORDED_EVENT_TYPE,
   readTranscriptMessageFromPayload,
   type StoredSessionMessage,
-} from "../../turn-adapter/runtime-session-transcript.js";
+} from "../../turn/runtime-session-transcript.js";
 
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 

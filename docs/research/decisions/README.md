@@ -66,6 +66,7 @@ Every accepted decision inherits these rules:
 - [substrate-sdk-diagnostics-and-compaction-mechanism-ports](./substrate-sdk-diagnostics-and-compaction-mechanism-ports.md)
 - [substrate-turn-loop-internalization](./substrate-turn-loop-internalization.md)
 - [tool-protocol-package-subtraction](./tool-protocol-package-subtraction.md)
+- [turn-adapter-two-layer-split-and-seam-recovery](./turn-adapter-two-layer-split-and-seam-recovery.md)
 - [typed-outcome-and-step-projection-boundary](./typed-outcome-and-step-projection-boundary.md)
 - [managed-tool-capability-single-sourcing](./managed-tool-capability-single-sourcing.md)
 - [model-interface-attention-contract](./model-interface-attention-contract.md)

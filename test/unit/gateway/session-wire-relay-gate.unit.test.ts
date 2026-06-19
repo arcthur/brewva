@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createSessionWireRelayGate } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/worker/relay-gate.js";
+import { createSessionWireRelayGate } from "../../../packages/brewva-gateway/src/hosted/edge/worker/relay-gate.js";
 
 describe("session wire relay gate", () => {
   test("uses explicit pause depth instead of turn busy state for relay suppression", () => {

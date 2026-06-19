@@ -45,7 +45,7 @@ import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { BrewvaCompactionSummaryGenerator } from "../../compaction/summary-generator.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
-import type { RuntimeProviderContextSummary } from "../../turn-adapter/runtime-provider-context.js";
+import type { RuntimeProviderContextSummary } from "../../turn/runtime-provider-context.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { HostedModelRoutingSettings } from "../settings/settings-store.js";
 import type { BrewvaSessionTitleGenerator } from "../title-generator.js";

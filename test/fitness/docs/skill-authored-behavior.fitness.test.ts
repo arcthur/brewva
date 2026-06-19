@@ -149,7 +149,7 @@ describe("skill authored behavior coverage", () => {
     expect(sourceMap).toContain("packages/brewva-tools/src/families/memory/attention-options.ts");
     expect(sourceMap).toContain("packages/brewva-gateway/src/extensions/api.ts");
     expect(sourceMap).toContain(
-      "packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-verification-gates.ts",
+      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-verification-gates.ts",
     );
     expect(sourceMap).toContain(
       "packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts",

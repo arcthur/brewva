@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { toProviderContext } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-provider-context.js";
-import { HOSTED_RUNTIME_TURN_CONTEXT } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-prelude.js";
+import { toProviderContext } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-provider-context.js";
+import { HOSTED_RUNTIME_TURN_CONTEXT } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-prelude.js";
 
 type ToProviderContextSession = Parameters<typeof toProviderContext>[0];
 type ToProviderContextInput = Parameters<typeof toProviderContext>[1];

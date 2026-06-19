@@ -25,7 +25,7 @@ retirement_sensitivity: auto_decay_allowed
 - Continuation-anchor command and tape bridge: `packages/brewva-cli/src/shell/commands/shell-command-registry.ts`, `packages/brewva-cli/src/runtime/cli-runtime-ports.ts`
 - Hosted latest continuation-anchor context: `packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts`
 - Advisory extension and verification gate manifests: `packages/brewva-gateway/src/extensions/api.ts`
-- Runtime turn verification gate bridge: `packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-verification-gates.ts`
+- Runtime turn verification gate bridge: `packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-verification-gates.ts`
 
 ## Recall and Session Query Plane
 

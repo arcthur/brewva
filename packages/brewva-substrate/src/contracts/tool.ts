@@ -2,7 +2,7 @@ import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaOutcome } from "@brewva/brewva-vocabulary/outcome";
 import type { Static, TSchema } from "@sinclair/typebox";
 import type { BrewvaToolUiPort } from "../host-api/ui.js";
-import type { BrewvaSourceInfo } from "../provenance/source-info.js";
+import type { BrewvaSourceInfo } from "./source-info.js";
 
 export interface BrewvaTextContentPart {
   type: "text";

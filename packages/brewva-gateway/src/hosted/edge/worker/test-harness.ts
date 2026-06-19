@@ -1,4 +1,4 @@
-import type { TaskProgressWatchdogOptions } from "../watchdog/task-progress-watchdog.js";
+import type { TaskProgressWatchdogOptions } from "../../internal/session/watchdog/task-progress-watchdog.js";
 
 export const WORKER_TEST_HARNESS_ENV_KEYS = [
   "BREWVA_INTERNAL_GATEWAY_TEST_OVERRIDES",

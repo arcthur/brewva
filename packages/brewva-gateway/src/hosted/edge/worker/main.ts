@@ -27,22 +27,22 @@ import type {
 } from "@brewva/brewva-substrate/provider";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
-import { recordSessionShutdownIfMissing } from "../../../../utils/runtime.js";
+import { recordSessionShutdownIfMissing } from "../../../utils/runtime.js";
 import {
   createHostedSession as createGatewaySession,
   type HostedSessionResult as GatewaySessionResult,
-} from "../../session/init/session-assembly.js";
+} from "../../internal/session/init/session-assembly.js";
 import {
   getRuntimeContextStatus,
   getRuntimeContextUsage,
   getRuntimeLifecycleSnapshot,
   setRuntimeTaskSpec,
   subscribeRuntimeSessionWire,
-} from "../../session/runtime-ports.js";
-import type { HostedSessionLogger } from "../../shared/logger.js";
+} from "../../internal/session/runtime-ports.js";
+import { TaskProgressWatchdog } from "../../internal/session/watchdog/task-progress-watchdog.js";
+import type { HostedSessionLogger } from "../../internal/shared/logger.js";
+import { runHostedTurnEnvelope } from "../../internal/turn/turn-envelope.js";
 import { resolveWorkerSessionShutdownReceipt } from "../shutdown-receipts.js";
-import { runHostedTurnEnvelope } from "../turn-envelope.js";
-import { TaskProgressWatchdog } from "../watchdog/task-progress-watchdog.js";
 import type { ParentToWorkerMessage, WorkerToParentMessage } from "./protocol.js";
 import { createSessionWireRelayGate } from "./relay-gate.js";
 import { resolveWorkerTestHarness, type ResolvedWorkerTestHarness } from "./test-harness.js";
@@ -93,7 +93,7 @@ const hostedSessionLogger: HostedSessionLogger = {
 };
 
 type RuntimeTurnHarnessSession = GatewaySessionResult["session"] & {
-  getRuntimeModelCatalog(): BrewvaMutableModelCatalog;
+  getModelCatalogForWorkerHarness(): BrewvaMutableModelCatalog;
   setModel(model: BrewvaRegisteredModel): Promise<void>;
 };
 
@@ -102,7 +102,7 @@ function isRuntimeTurnHarnessSession(
 ): session is RuntimeTurnHarnessSession {
   const candidate = session as Partial<RuntimeTurnHarnessSession>;
   return (
-    typeof candidate.getRuntimeModelCatalog === "function" &&
+    typeof candidate.getModelCatalogForWorkerHarness === "function" &&
     typeof candidate.setModel === "function"
   );
 }
@@ -194,7 +194,7 @@ async function installWorkerFakeAssistantProvider(input: {
     sourceId,
   );
 
-  const catalog = input.result.session.getRuntimeModelCatalog();
+  const catalog = input.result.session.getModelCatalogForWorkerHarness();
   catalog.registerProvider(providerName, {
     apiKey: "test",
     models: [modelDefinition],

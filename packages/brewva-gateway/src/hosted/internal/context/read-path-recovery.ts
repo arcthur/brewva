@@ -7,8 +7,8 @@ import {
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
+import type { TurnLifecyclePort } from "../hooks/turn-lifecycle-port.js";
 import { queryRuntimeEvents, type HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
-import type { TurnLifecyclePort } from "../turn-adapter/lifecycle/turn-lifecycle-port.js";
 import { makeHostedContextBlock, type HostedContextBlock } from "./hosted-context-blocks.js";
 
 const RECENT_TOOL_RESULT_WINDOW = 12;
