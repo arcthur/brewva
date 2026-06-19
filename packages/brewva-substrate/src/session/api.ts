@@ -4,15 +4,6 @@ export {
   type SessionPhaseEvent,
 } from "./phase-machine.js";
 export {
-  createInMemorySessionHost,
-  type BrewvaPromptEnvelope,
-  type BrewvaPromptKind,
-  type BrewvaPromptQueueMode,
-  type BrewvaQueuedPrompt,
-  type BrewvaSessionHost,
-  type CreateInMemorySessionHostOptions,
-} from "./session-host.js";
-export {
   type BrewvaDiffPreferences,
   type BrewvaDiffStyle,
   type BrewvaDiffWrapMode,
@@ -28,6 +19,7 @@ export {
   type BrewvaModelPresetState,
   type BrewvaPromptAssistantMessageEvent,
   type BrewvaPromptDispatchSession,
+  type BrewvaPromptEnvelope,
   type BrewvaPromptInputSource,
   type BrewvaPromptOptions,
   type BrewvaPromptQueueBehavior,

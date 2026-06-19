@@ -48,12 +48,8 @@ export {
   type BrewvaHostToolResultResult,
   type BrewvaHostTurnEndEvent,
   type BrewvaHostTurnStartEvent,
-  type HostCommandPort,
-  type HostUIPort,
   type InternalHostPlugin,
   type InternalHostPluginApi,
-  type InternalSessionHostPlugin,
-  type InternalSessionHostPluginContext,
   type RuntimePluginCapability,
 } from "./plugin.js";
 export {

@@ -6,46 +6,12 @@ import type {
   BrewvaToolContentPart,
   BrewvaToolContextUsage,
   BrewvaToolDefinition,
-  BrewvaToolResult,
 } from "../contracts/tool.js";
 import type { ToolExecutionPhase } from "../execution/tool-phase.js";
 import type { BrewvaPromptContentPart } from "../prompt/content.js";
 import type { BrewvaSourceInfo } from "../provenance/source-info.js";
 import type { BrewvaPromptAssistantMessageEvent } from "../session/prompt-session.js";
 import type { BrewvaToolUiPort } from "./ui.js";
-
-export interface HostCommandPort {
-  interrupt(): Promise<void> | void;
-  newSession(): Promise<void> | void;
-  reloadSession(): Promise<void> | void;
-}
-
-export interface HostUIPort {
-  setStatus(text: string | undefined): void;
-  notify(message: string, level?: "info" | "warning" | "error"): void;
-}
-
-export interface InternalSessionHostPluginContext {
-  commands: HostCommandPort;
-  ui: HostUIPort;
-}
-
-export interface InternalSessionHostPlugin {
-  name: string;
-  onSessionPhaseChange?(
-    phase: SessionPhase,
-    context: InternalSessionHostPluginContext,
-  ): Promise<void> | void;
-  onToolRegistered?(
-    tool: BrewvaToolDefinition,
-    context: InternalSessionHostPluginContext,
-  ): Promise<void> | void;
-  onToolResult?(
-    toolName: string,
-    result: BrewvaToolResult,
-    context: InternalSessionHostPluginContext,
-  ): Promise<void> | void;
-}
 
 export interface BrewvaHostSessionManagerView {
   getSessionId(): string;

@@ -81,7 +81,11 @@ coordinate system.
 | `Experience Ring`          | CLI, TUI, gateway clients, channels, operator UX, memory operation visibility, cache/cost diagnostics, approval displays                                                 | Experience                     | cache/local                                 |
 
 Package names may host code from more than one ring, but public contracts
-should expose the narrowest ring that owns the decision.
+should expose the narrowest ring that owns the decision. In particular the
+`Substrate Ring` is implemented mainly by `@brewva/brewva-runtime` (through
+`runtime.turn`), not by the `@brewva/brewva-substrate` package — that package
+carries contracts and direct-host assembly mechanism beneath the ring. Do not
+read the `Substrate Ring` name as a claim about the `brewva-substrate` package.
 
 A projection therefore grants none of the authorities listed under Product
 Shape: because it carries no authority, there is no projection-versus-ring
@@ -219,13 +223,17 @@ compatibility story.
   boundary-oriented, while Effect primitive aliases remain explicit through the
   `@brewva/brewva-effect/primitives` subpath.
 - `@brewva/brewva-substrate`: contract-only root vocabulary plus explicit
-  mechanism subpaths for session lifecycle, prompt/resource loading, pure
-  context-budget derivation, token-aware compaction cut-point selection, pure
-  compaction mechanics, host-facing tools, tool protocol vocabulary, host plugin
-  ports, the agent protocol, and the turn-loop substrate. Substrate assembles
+  mechanism subpaths for session lifecycle vocabulary, prompt/resource loading,
+  pure context-budget derivation, token-aware compaction cut-point selection,
+  pure compaction mechanics, host-facing tools, tool protocol vocabulary, host
+  plugin ports, and agent-protocol message vocabulary. Substrate assembles
   mechanisms for direct hosts; it is not the gateway hosted effect owner, does
-  not execute model calls, and does not own compaction trigger or recovery
-  policy.
+  not execute model calls, does not own the turn loop, and does not own
+  compaction trigger or recovery policy. Naming seam: the abstract `Substrate
+Ring` (session lifecycle, turn orchestration, tool phases) is implemented
+  mainly by `@brewva/brewva-runtime` through `runtime.turn`, not by this
+  package — `@brewva/brewva-substrate` is the contract-and-direct-host-assembly
+  layer beneath that ring, and `runtime.turn` is the only turn owner.
 - `@brewva/brewva-provider-core`: provider contracts, model catalog lookup,
   provider registration, stream normalization, cache rendering, and driver
   adapters. It is mechanism, not replay or credential authority.

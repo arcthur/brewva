@@ -5,7 +5,12 @@ import type { BrewvaToolDefinition } from "../contracts/tool.js";
 import type { ToolExecutionPhase } from "../execution/tool-phase.js";
 import type { BrewvaToolUiPort } from "../host-api/ui.js";
 import type { BrewvaPromptContentPart } from "../prompt/content.js";
-import type { BrewvaPromptEnvelope } from "./session-host.js";
+
+export interface BrewvaPromptEnvelope {
+  promptId: string;
+  parts: BrewvaPromptContentPart[];
+  submittedAt: number;
+}
 
 export type BrewvaPromptQueueBehavior = "queue" | "followUp";
 export type BrewvaPromptInputSource = "interactive" | "extension" | (string & {});

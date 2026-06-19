@@ -96,15 +96,24 @@ Implementation note:
 - attention options expose bounded candidate cards before unbounded content;
   consume, pin, ignore, and verify-plan actions are distinct effects with
   distinct authority posture
-- substrate owns how the agent loop runs: session lifecycle, turn orchestration,
-  tool execution phases, request materialization primitives, and session
-  persistence; it does not execute model calls
+- the `Substrate Ring` owns how the agent loop runs — session lifecycle, turn
+  orchestration, tool execution phases, request materialization, and
+  checkpoint/resume mechanics — but that ring is implemented mainly by
+  `runtime.turn`, not by the `@brewva/brewva-substrate` package. The package is
+  contract vocabulary plus direct-host assembly mechanism; it does not execute
+  model calls and does not own the turn loop
+- turn-execution truth (provider streaming, retry, terminal commit) is owned
+  solely by `runtime.turn`; aggregate session-lifecycle meaning is runtime-owned,
+  and host `SessionPhase` stays a local interaction FSM rather than durable
+  lifecycle truth
 - gateway owns the model-call boundary for main turns, compaction, model
-  routing, provider cache policy, and usage accounting — this is the model-call
-  implementation face of the `Runtime Physics Boundary` ring; turn-execution
-  truth (provider streaming, retry, terminal commit) stays owned by `runtime.turn`
+  routing, provider cache policy, and usage accounting — the model-call
+  implementation face of the `Runtime Physics Boundary` ring — and delegates
+  turn execution to `runtime.turn`
 - hosted, CLI, and channel execution surfaces should converge on the same
-  substrate rather than maintaining separate runtime-shaped compatibility shells
+  `runtime.turn` execution truth and shared substrate contracts rather than
+  maintaining separate runtime-shaped compatibility shells; convergence is on
+  the ring semantics, not on importing one monolithic session loop
 - Pi compatibility may survive as import/export and reference material, but not
   as an execution-path dependency
 - repository-level change fitness may consume runtime evidence, but it remains
@@ -212,7 +221,8 @@ when it protects authority boundaries instead of hiding them.
 Practical boundary rule:
 
 - if a concern executes a model call, it belongs to the gateway model boundary
-- if a concern decides physical loop mechanics, it belongs to the substrate
+- if a concern decides physical loop mechanics, it belongs to the `Substrate
+Ring` (implemented mainly by `runtime.turn`, not the `brewva-substrate` package)
 - if a concern decides whether an effect may commit, it belongs to the kernel
 - the runtime contract stays narrow even when the substrate grows more capable
 
