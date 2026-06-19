@@ -55,8 +55,8 @@ public contracts.
     planner, prompt choreography engine, or second session lifecycle owner.
 13. `Repository governance stays adjacent to the kernel.`
     Merge or release trust for repository changes belongs to an adjacent
-    repository-governance plane. The runtime may consume or emit evidence for
-    that plane, but it should not silently absorb repository policy into kernel
+    repository-governance authority. The runtime may consume or emit evidence
+    for that authority, but it should not silently absorb repository policy into kernel
     authority.
 14. `Documentation hierarchy follows authority hierarchy.`
     Documents that describe product shape, orchestration flow, or operator UX
@@ -108,7 +108,7 @@ Implementation note:
   lifecycle truth
 - gateway owns the model-call boundary for main turns, compaction, model
   routing, provider cache policy, and usage accounting — the model-call
-  implementation face of the `Runtime Physics Boundary` ring — and delegates
+  implementation face of the `Runtime Turn Ring` — and delegates
   turn execution to `runtime.turn`
 - hosted, CLI, and channel execution surfaces should converge on the same
   `runtime.turn` execution truth and shared substrate contracts rather than
@@ -147,7 +147,7 @@ Rings refine the four-owner constitution (`Model / Kernel / Tape / Runtime`) int
 authority detail — they are an explanatory layer beneath those four owners, not a
 top-level axis. This is the authority-bearing view of the ring topology. The
 canonical, complete ring list — which adds the implementation rings
-`Substrate Ring`, `Model Attention Boundary`, and `Control Plane` — lives in
+`Substrate Ring`, `Model Attention Ring`, and `Control Plane Ring` — lives in
 `docs/architecture/system-architecture.md`. The two are consistent: the rings
 below are the authority-bearing subset of that topology.
 
@@ -161,7 +161,7 @@ below are the authority-bearing subset of that topology.
   - cache and cost accounting
   - provider request constraints
   - durability classes
-- `Runtime Physics Boundary`
+- `Runtime Turn Ring`
   - main turn model calls
   - LLM-driven compaction
   - model routing
@@ -176,13 +176,21 @@ below are the authority-bearing subset of that topology.
   - operator UX
   - lifecycle adapters
 
-Rings are about authority, not package names.
+Rings are about authority, not package names. Every ring name ends in `Ring`;
+`Boundary` is reserved for `Effect Boundary` (the tool-invocation execution
+class), not for ring names, and `Plane` is not a coordinate (see Projections,
+Not Planes).
 
 ## Projections, Not Planes
 
-Planes are read-only projections of rings, not a parallel coordinate system.
-The full ring topology and its projection column live in
-`docs/architecture/system-architecture.md`.
+Projections are read-only views of rings, not a parallel coordinate system.
+Each projection label is a concrete noun — `Workbench`, `Authority`,
+`Efficiency`, `Hosted Control`, `Experience` — never a coordinate of its own.
+"Plane" is retired as a synonym for projection; the word now survives only in
+`Control Plane Ring` (an industry term for the hosted-orchestration ring — a
+ring, not a projection) and in the adjective "control-plane behavior" for the
+work that ring governs. The full ring topology and its projection column live
+in `docs/architecture/system-architecture.md`.
 
 Product rule:
 

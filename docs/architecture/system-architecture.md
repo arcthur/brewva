@@ -62,23 +62,23 @@ layer under the constitution, not a top-level axis above it; within that layer
 they are the single coordinate system for authority, and projections are views
 over them. This page carries the canonical, complete ring topology;
 `docs/architecture/design-axioms.md` states the authority-bearing subset
-(`Kernel Ring`, `Runtime Physics Ring`, `Runtime Physics Boundary`,
+(`Kernel Ring`, `Runtime Physics Ring`, `Runtime Turn Ring`,
 `Deliberation Ring`, `Experience Ring`).
 
 Each ring may expose a read-only projection that makes its state visible without
 granting authority. A projection is a view over an owner, not a parallel
 coordinate system.
 
-| Ring (authority owner)     | Owns                                                                                                                                                                     | Read-only projection           | Durable state class                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | ------------------------------------------- |
-| `Model Attention Boundary` | what the model reads, remembers, evicts, recalls, quotes, or compacts, exposed through ordinary model-callable tools                                                     | Workbench, Attention Options   | durable advisory material + request-local   |
-| `Kernel Ring`              | effect authorization, proposal decisions, verification gates, rollback receipts, Recovery WAL, replay, event-tape truth                                                  | Authority                      | durable source of truth + recovery material |
-| `Runtime Physics Ring`     | context status, context-window limits, budget accounting, provider request constraints, durability classes, cache safety; does not choose attention for the model        | Efficiency                     | request-local + cache/local                 |
-| `Runtime Physics Boundary` | default turn execution through `runtime.turn`: main turns, provider calls, retry, cache posture, cost, interruption, terminal commit                                     | — (execution edge)             | commits through `Kernel Ring`               |
-| `Substrate Ring`           | session lifecycle, turn orchestration, tool execution phases, request materialization, checkpoint/resume mechanics                                                       | Working projection             | rebuildable                                 |
-| `Deliberation Ring`        | recall and precedent search, model-facing guidance, compact prompt templates, candidate preparation, advisory evaluation; does not commit effects or execute model calls | folds into Workbench / Options | rebuildable                                 |
-| `Control Plane`            | scheduling, gateway workers, channel orchestration, subagents, recovery loops, and other opt-in hosted behavior                                                          | Hosted Control                 | rebuildable                                 |
-| `Experience Ring`          | CLI, TUI, gateway clients, channels, operator UX, memory operation visibility, cache/cost diagnostics, approval displays                                                 | Experience                     | cache/local                                 |
+| Ring (authority owner) | Owns                                                                                                                                                                     | Read-only projection           | Durable state class                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | ------------------------------------------- |
+| `Model Attention Ring` | what the model reads, remembers, evicts, recalls, quotes, or compacts, exposed through ordinary model-callable tools                                                     | Workbench, Attention Options   | durable advisory material + request-local   |
+| `Kernel Ring`          | effect authorization, proposal decisions, verification gates, rollback receipts, Recovery WAL, replay, event-tape truth                                                  | Authority                      | durable source of truth + recovery material |
+| `Runtime Physics Ring` | context status, context-window limits, budget accounting, provider request constraints, durability classes, cache safety; does not choose attention for the model        | Efficiency                     | request-local + cache/local                 |
+| `Runtime Turn Ring`    | default turn execution through `runtime.turn`: main turns, provider calls, retry, cache posture, cost, interruption, terminal commit                                     | — (execution edge)             | commits through `Kernel Ring`               |
+| `Substrate Ring`       | session lifecycle, turn orchestration, tool execution phases, request materialization, checkpoint/resume mechanics                                                       | Working projection             | rebuildable                                 |
+| `Deliberation Ring`    | recall and precedent search, model-facing guidance, compact prompt templates, candidate preparation, advisory evaluation; does not commit effects or execute model calls | folds into Workbench / Options | rebuildable                                 |
+| `Control Plane Ring`   | scheduling, gateway workers, channel orchestration, subagents, recovery loops, and other opt-in hosted behavior                                                          | Hosted Control                 | rebuildable                                 |
+| `Experience Ring`      | CLI, TUI, gateway clients, channels, operator UX, memory operation visibility, cache/cost diagnostics, approval displays                                                 | Experience                     | cache/local                                 |
 
 Package names may host code from more than one ring, but public contracts
 should expose the narrowest ring that owns the decision. In particular the
