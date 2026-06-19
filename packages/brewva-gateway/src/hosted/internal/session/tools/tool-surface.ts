@@ -1,5 +1,3 @@
-import type { CapabilityManifest, CapabilitySelectionReceipt } from "@brewva/brewva-capabilities";
-import { carryCapabilitySelection } from "@brewva/brewva-capabilities";
 import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import type {
   BrewvaHostBeforeAgentStartResult,
@@ -21,6 +19,8 @@ import {
   readLatestSkillSelectionReceipt,
   skillSelectionSummaryForTrace,
 } from "../skills/skill-selection.js";
+import type { CapabilityManifest, CapabilitySelectionReceipt } from "./capability-registry.js";
+import { carryCapabilitySelection } from "./capability-registry.js";
 import {
   formatCapabilitySelectionSection,
   loadRuntimeCapabilityRegistry,

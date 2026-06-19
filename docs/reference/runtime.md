@@ -60,6 +60,12 @@ execution may touch the world:
 Callers observe all physics effects only through streamed `TurnFrame`s and
 canonical tape events.
 
+`runtime.model.materialize(...)` returns `PromptPlan.messages` together with
+`messageSourceEventIds`, an index-aligned provenance vector. Hosted provider
+adapters use this identity to combine a prepared hosted baseline with only the
+current turn's later tape events; provenance never changes tape authority or
+becomes provider-visible content.
+
 ## Canonical Tape
 
 Runtime truth is recorded through a compact canonical event vocabulary:

@@ -75,7 +75,6 @@
     }
   },
   "dependencies": {
-    "@brewva/brewva-capabilities": "workspace:*",
     "@brewva/brewva-channels-telegram": "workspace:*",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-ingress-telegram": "workspace:*",
@@ -92,7 +91,8 @@
     "@sinclair/typebox": "^0.34.49",
     "ajv": "^8.20.0",
     "lru-cache": "^11.5.0",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "yaml": "^2.9.0"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

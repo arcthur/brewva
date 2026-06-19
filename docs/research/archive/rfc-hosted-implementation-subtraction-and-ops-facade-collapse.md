@@ -85,7 +85,7 @@ Out of scope:
 Coordinated with sibling RFCs (referenced, not owned here):
 
 - compaction-orchestrator merge: owned by
-  `rfc-context-operating-system-and-compaction-physics.md`
+  `docs/research/decisions/context-operating-system-and-compaction-physics.md`
 - approval/rollback storage de-duplication: owned by
   `rfc-effect-approval-and-rollback-closure.md`
 
@@ -262,7 +262,7 @@ violations. They are guarded by WS0 behavior locks.
 - Count-based hosted fitness invariants: runtime-instances-per-session = 1,
   `HostedRuntimeAdapterPort` general-consumer count trends to 0, ops-facade hop
   count down. Mirrors the count-based-invariant approach in
-  `rfc-tui-rendering-performance-and-test-harness.md`.
+  `docs/research/decisions/tui-rendering-performance-and-test-harness.md`.
 
 ## Surface Budget
 
@@ -463,7 +463,7 @@ createRuntime }`). Dropped from the adapter; the 3 call sites (cli
 - `docs/architecture/design-axioms.md`
 - `docs/architecture/system-architecture.md`
 - `docs/architecture/invariants-and-reliability.md`
-- `docs/research/active/rfc-context-operating-system-and-compaction-physics.md`
+- `docs/research/decisions/context-operating-system-and-compaction-physics.md`
 - `docs/research/archive/rfc-effect-approval-and-rollback-closure.md`
 - `docs/research/decisions/canonical-hosted-turn-envelope.md`
 - `docs/research/decisions/four-port-runtime-simplification-rfc.md`

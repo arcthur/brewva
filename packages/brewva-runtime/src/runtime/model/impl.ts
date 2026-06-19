@@ -3,6 +3,7 @@ import type {
   CanonicalEvent,
   CheckpointCandidate,
   CheckpointProposalInput,
+  EventId,
   MaterializationInput,
   ModelMaterializationObservation,
   ModelMaterializationObservationQuery,
@@ -337,7 +338,14 @@ export function createModelPort(tape: TapePort): ModelPort {
 
     async materialize(input: MaterializationInput): Promise<PromptPlan> {
       const baseline = tape.replayBaseline(input.sessionId);
-      const messages = baseline.events.flatMap((event) => promptMessagesFromEvent(event));
+      const messages: PromptMessage[] = [];
+      const messageSourceEventIds: EventId[] = [];
+      for (const event of baseline.events) {
+        for (const message of promptMessagesFromEvent(event)) {
+          messages.push(message);
+          messageSourceEventIds.push(event.id);
+        }
+      }
       const admittedBlocks = baseline.events.map((event) =>
         Object.freeze({
           id: event.id,
@@ -361,6 +369,7 @@ export function createModelPort(tape: TapePort): ModelPort {
             : "ready",
         sessionId: input.sessionId,
         messages,
+        messageSourceEventIds,
         admittedBlocks,
         droppedAdvisoryBlocks,
         tokenEstimate,

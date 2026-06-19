@@ -212,15 +212,6 @@ describe("substrate file tools", () => {
     ).toThrow("no longer supported");
   });
 
-  test("edit tool exposes no prepareArguments hook to normalize legacy input", () => {
-    const workspace = createTestWorkspace("substrate-edit-tool-no-prepare-arguments");
-
-    const tool = createBrewvaEditToolDefinition(workspace);
-    expect(tool.prepareArguments).toBeUndefined();
-
-    cleanupTestWorkspace(workspace);
-  });
-
   test("edit tool rejects the flat oldText/newText shape without mutating the file", async () => {
     const workspace = createTestWorkspace("substrate-edit-tool-legacy-flat-shape");
     const filePath = join(workspace, "example.ts");

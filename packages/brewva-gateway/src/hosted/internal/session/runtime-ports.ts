@@ -301,12 +301,6 @@ export function createHostedRuntimeAdapter(
   return freezePort(adapter);
 }
 
-export function toHostedRuntimeAdapterPort(
-  runtime: HostedRuntimeAdapterPort,
-): HostedRuntimeAdapterPort {
-  return runtime;
-}
-
 export function toToolRuntimeAdapterPort(
   runtime: HostedRuntimeAdapterPort,
 ): ToolRuntimeAdapterPort {

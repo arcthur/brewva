@@ -16,7 +16,10 @@ import type {
   BrewvaAgentProtocolToolCall,
 } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import { getHostedRuntimeTurnContextMessages } from "./runtime-turn-prelude.js";
+import {
+  getHostedRuntimeTurnContext,
+  type HostedRuntimeTurnContext,
+} from "./runtime-turn-prelude.js";
 import type { RuntimeAdapterSession } from "./runtime-turn-session.js";
 
 export interface RuntimeProviderContextSummary {
@@ -38,19 +41,28 @@ export function toProviderContext(
     .filter((message) => message.trim().length > 0)
     .join("\n\n");
   const messages: ProviderContext["messages"] = [];
-  for (const message of input.prompt.messages) {
-    const providerMessage = providerMessageFromPromptMessage(message);
-    if (providerMessage) {
-      messages.push(providerMessage);
+  const hostedTurnContext = getHostedRuntimeTurnContext(session);
+  if (hostedTurnContext) {
+    // The hosted baseline owns restored history, the current user message, and
+    // plugin transformations. Runtime materialization contributes only events
+    // committed after that baseline cursor, such as tool continuation results.
+    for (const message of hostedTurnContext.messages) {
+      const providerMessage = providerMessageFromTurnLoop(message);
+      if (providerMessage) {
+        messages.push(providerMessage);
+      }
+    }
+    appendRuntimeTurnDelta(messages, input.prompt, hostedTurnContext);
+  } else {
+    // Raw runtime path: history comes from the runtime tape materialization.
+    for (const message of input.prompt.messages) {
+      const providerMessage = providerMessageFromPromptMessage(message);
+      if (providerMessage) {
+        messages.push(providerMessage);
+      }
     }
   }
-  for (const message of getHostedRuntimeTurnContextMessages(session)) {
-    const providerMessage = providerMessageFromTurnLoop(message);
-    if (providerMessage) {
-      messages.push(providerMessage);
-    }
-  }
-  if (messages.length === 0) {
+  if (!hostedTurnContext && messages.length === 0) {
     messages.push({
       role: "user",
       content: userContentFromPromptContent(input.turn.prompt),
@@ -62,6 +74,52 @@ export function toProviderContext(
     messages,
     tools: toProviderTools(session.getRegisteredTools()),
   };
+}
+
+function appendRuntimeTurnDelta(
+  target: ProviderContext["messages"],
+  prompt: Parameters<RuntimeProviderPort["stream"]>[0]["prompt"],
+  hostedContext: HostedRuntimeTurnContext,
+): void {
+  if (prompt.messageSourceEventIds.length !== prompt.messages.length) {
+    throw new Error("runtime_prompt_message_provenance_mismatch");
+  }
+  const admittedEventIds = new Set(prompt.admittedBlocks.map((block) => block.id));
+  if (prompt.messageSourceEventIds.some((eventId) => !admittedEventIds.has(eventId))) {
+    throw new Error("runtime_prompt_message_provenance_mismatch");
+  }
+  const cursorIndex = hostedContext.runtimeEventCursor
+    ? prompt.admittedBlocks.findIndex((block) => block.id === hostedContext.runtimeEventCursor)
+    : -1;
+  if (
+    hostedContext.runtimeEventCursor &&
+    cursorIndex < 0 &&
+    !prompt.admittedBlocks.some((block) => block.kind === "checkpoint.committed")
+  ) {
+    throw new Error("hosted_runtime_event_cursor_missing");
+  }
+  const candidateBlocks =
+    cursorIndex >= 0 ? prompt.admittedBlocks.slice(cursorIndex + 1) : prompt.admittedBlocks;
+  const deltaEventIds = new Set(
+    candidateBlocks
+      .filter(
+        (block) =>
+          block.kind === "msg.committed" ||
+          block.kind === "tool.committed" ||
+          block.kind === "tool.aborted",
+      )
+      .map((block) => block.id),
+  );
+  for (const [index, message] of prompt.messages.entries()) {
+    const sourceEventId = prompt.messageSourceEventIds[index];
+    if (!sourceEventId || !deltaEventIds.has(sourceEventId)) {
+      continue;
+    }
+    const providerMessage = providerMessageFromPromptMessage(message);
+    if (providerMessage) {
+      target.push(providerMessage);
+    }
+  }
 }
 
 export function summarizeProviderContext(context: ProviderContext): RuntimeProviderContextSummary {

@@ -100,7 +100,9 @@ Implementation note:
   tool execution phases, request materialization primitives, and session
   persistence; it does not execute model calls
 - gateway owns the model-call boundary for main turns, compaction, model
-  routing, provider cache policy, and usage accounting
+  routing, provider cache policy, and usage accounting — this is the model-call
+  implementation face of the `Runtime Physics Boundary` ring; turn-execution
+  truth (provider streaming, retry, terminal commit) stays owned by `runtime.turn`
 - hosted, CLI, and channel execution surfaces should converge on the same
   substrate rather than maintaining separate runtime-shaped compatibility shells
 - Pi compatibility may survive as import/export and reference material, but not
@@ -132,9 +134,11 @@ call`; turn-level bounded recovery may grow later, but cross-agent saga
 
 ## Ring Model
 
-This is the authority-bearing view of the ring topology. The canonical, complete
-ring list — which adds the implementation rings `Substrate Ring`,
-`Model Attention Boundary`, and `Control Plane` — lives in
+Rings refine the four-owner constitution (`Model / Kernel / Tape / Runtime`) into
+authority detail — they are an explanatory layer beneath those four owners, not a
+top-level axis. This is the authority-bearing view of the ring topology. The
+canonical, complete ring list — which adds the implementation rings
+`Substrate Ring`, `Model Attention Boundary`, and `Control Plane` — lives in
 `docs/architecture/system-architecture.md`. The two are consistent: the rings
 below are the authority-bearing subset of that topology.
 
@@ -165,28 +169,11 @@ below are the authority-bearing subset of that topology.
 
 Rings are about authority, not package names.
 
-## Plane Model
+## Projections, Not Planes
 
-- `Authority Plane`
-  - receipts
-  - event tape
-  - WAL and rollback material
-  - approval and verification claims
-- `Workbench Plane`
-  - model-authored notes
-  - evictions and preserved quotes
-  - on-demand recall results selected by the model
-  - compact baselines
-- `Efficiency Plane`
-  - stable prefix identity
-  - provider cache policy
-  - request-local reductions
-  - numeric context status
-- `Control Plane`
-  - recovery
-  - heartbeat
-  - scheduling
-  - delegation orchestration
+Planes are read-only projections of rings, not a parallel coordinate system.
+The full ring topology and its projection column live in
+`docs/architecture/system-architecture.md`.
 
 Product rule:
 

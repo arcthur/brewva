@@ -78,6 +78,7 @@ import {
 import {
   HOSTED_RUNTIME_TURN_CONTEXT,
   HOSTED_RUNTIME_TURN_PRELUDE,
+  type HostedRuntimeTurnContext,
   type HostedRuntimeTurnPreludeResult,
 } from "../../turn-adapter/runtime-turn-prelude.js";
 import { readRuntimeVerificationGateEvidenceFromEvent } from "../../turn-adapter/runtime-turn-verification-gates.js";
@@ -212,7 +213,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
   #turnIndex = 0;
   #turnStartTimestamp = 0;
   #activePromptSource: string | undefined;
-  #runtimeTurnPreparedMessages: readonly BrewvaAgentProtocolMessage[] = [];
+  #runtimeTurnContext: HostedRuntimeTurnContext | null = null;
   readonly #workbenchContextFingerprint: WorkbenchContextFingerprintHolder;
   readonly #logger: HostedSessionLogger | null;
   readonly #onProviderAssistantMessage:
@@ -723,7 +724,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     }
     const previousPromptSource = this.#activePromptSource;
     this.#activePromptSource = prepared.source;
-    this.#runtimeTurnPreparedMessages = prepared.messages;
+    const sessionId = this.sessionManager.getSessionId();
+    this.#runtimeTurnContext = {
+      messages: prepared.messages,
+      runtimeEventCursor: this.#runtime.runtime.tape.list(sessionId).at(-1)?.id ?? null,
+    };
     const runtimeTurn = this.#agent.beginRuntimeTurn();
     return {
       status: "ready",
@@ -731,15 +736,15 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       promptContent: prepared.promptContent,
       signal: runtimeTurn.signal,
       complete: () => {
-        this.#runtimeTurnPreparedMessages = [];
+        this.#runtimeTurnContext = null;
         this.#activePromptSource = previousPromptSource;
         runtimeTurn.complete();
       },
     };
   }
 
-  [HOSTED_RUNTIME_TURN_CONTEXT](): readonly BrewvaAgentProtocolMessage[] {
-    return this.#runtimeTurnPreparedMessages;
+  [HOSTED_RUNTIME_TURN_CONTEXT](): HostedRuntimeTurnContext | null {
+    return this.#runtimeTurnContext;
   }
 
   [HOSTED_COMPACTION_BOUNDARY](): HostedCompactionBoundary {

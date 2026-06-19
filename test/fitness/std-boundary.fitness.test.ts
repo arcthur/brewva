@@ -184,12 +184,12 @@ describe("brewva std utility boundary", () => {
     const offenders: string[] = [];
     const checks: readonly { path: string; pattern: RegExp; message: string }[] = [
       {
-        path: "packages/brewva-acp-adapter/src/index.ts",
+        path: "packages/brewva-cli/src/entry/acp-gateway-agent.ts",
         pattern: /function\s+isRecord\s*\(/u,
         message: "use @brewva/brewva-std/unknown isRecord",
       },
       {
-        path: "packages/brewva-acp-adapter/src/index.ts",
+        path: "packages/brewva-cli/src/entry/acp-gateway-agent.ts",
         pattern: /function\s+readNonEmptyString\s*\(/u,
         message: "use @brewva/brewva-std/text readNonEmptyString",
       },

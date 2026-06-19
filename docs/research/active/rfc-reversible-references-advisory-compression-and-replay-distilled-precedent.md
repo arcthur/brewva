@@ -27,7 +27,7 @@
 - Owner: Runtime, recall, and gateway maintainers
 - Last reviewed: `2026-06-14`
 - Depends on:
-  - [RFC: Context Operating System And Compaction Physics](./rfc-context-operating-system-and-compaction-physics.md)
+  - [Decision: Context Operating System And Compaction Physics](../decisions/context-operating-system-and-compaction-physics.md)
 - Promotion target:
   - `docs/journeys/internal/context-and-compaction.md`
   - `docs/reference/tools/memory-and-recall.md`
@@ -243,7 +243,7 @@ inspectable and demotable.
 ## Source Anchors
 
 Stable docs and project rules:
-`docs/research/active/rfc-context-operating-system-and-compaction-physics.md`,
+`docs/research/decisions/context-operating-system-and-compaction-physics.md`,
 `docs/architecture/design-axioms.md`,
 `docs/architecture/cognitive-product-architecture.md`,
 `docs/architecture/invariants-and-reliability.md`,

@@ -16,7 +16,9 @@ function collectSourceFiles(relativePath: string): string[] {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const absolutePath = resolve(directory, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name === "dist" || entry.name === "node_modules") continue;
+        if (entry.name === "dist" || entry.name === "node_modules" || entry.name === ".tmp") {
+          continue;
+        }
         walk(absolutePath);
         continue;
       }

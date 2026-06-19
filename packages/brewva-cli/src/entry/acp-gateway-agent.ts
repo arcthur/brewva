@@ -685,7 +685,9 @@ export async function runAcpGatewayStdioAgent(options: AcpGatewayStdioOptions = 
   const connected = await createAcpGatewayClientSessionPortFromEnv(options);
   try {
     const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
-    const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
+    // Readable.toWeb yields node's web ReadableStream; the CLI package's DOM lib
+    // narrows the global ReadableStream type, so bridge through unknown at this stdio seam.
+    const input = Readable.toWeb(process.stdin) as unknown as ReadableStream<Uint8Array>;
     const stream = ndJsonStream(output, input);
     const connection = new AgentSideConnection(
       (conn) =>

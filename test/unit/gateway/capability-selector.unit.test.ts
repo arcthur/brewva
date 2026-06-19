@@ -3,7 +3,7 @@ import {
   carryCapabilitySelection,
   parseCapabilityManifestContent,
   selectCapabilities,
-} from "@brewva/brewva-capabilities";
+} from "../../../packages/brewva-gateway/src/hosted/internal/session/tools/capability-registry.js";
 
 function manifest(name: string, riskLevel: "read" | "draft" | "write" = "read") {
   return parseCapabilityManifestContent(

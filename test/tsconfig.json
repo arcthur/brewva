@@ -16,7 +16,6 @@
     { "path": "../packages/brewva-ingress-telegram" },
     { "path": "../packages/brewva-tools" },
     { "path": "../packages/brewva-gateway" },
-    { "path": "../packages/brewva-acp-adapter" },
     { "path": "../packages/brewva-cli" }
   ],
   "include": ["./**/*.ts", "./**/*.tsx", "./**/*.d.ts"]

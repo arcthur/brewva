@@ -1,11 +1,4 @@
 import { basename, resolve } from "node:path";
-import {
-  loadCapabilityRegistry,
-  selectCapabilities,
-  type CapabilityManifest,
-  type CapabilityRegistry,
-  type CapabilitySelectionReceipt,
-} from "@brewva/brewva-capabilities";
 import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import {
   buildBrewvaCapabilitySelectionPromptBlock,
@@ -13,6 +6,13 @@ import {
 } from "@brewva/brewva-substrate/prompt";
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import { recordRuntimeToolCapabilitySelection } from "../runtime-ports.js";
+import {
+  loadCapabilityRegistry,
+  selectCapabilities,
+  type CapabilityManifest,
+  type CapabilityRegistry,
+  type CapabilitySelectionReceipt,
+} from "./capability-registry.js";
 
 export interface CapabilitySelectionRuntimeView {
   identity: {

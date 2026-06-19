@@ -24,7 +24,6 @@ import { createGoalContinuationLifecycle } from "./goal-continuation.js";
 import {
   createHostedRuntimeAdapter,
   getRuntimeOpsPort,
-  toHostedRuntimeAdapterPort,
   toToolRuntimeAdapterPort,
   type HostedRuntimeAdapterOptions,
   type HostedRuntimeAdapterPort,
@@ -328,9 +327,7 @@ export function createHostedBehaviorHostAdapter(
     ],
     register(hostApi) {
       assertHostedBehaviorHostAdapterRuntimeShape(options);
-      const runtime = toHostedRuntimeAdapterPort(
-        options.runtime ?? createHostedRuntimeAdapter(options),
-      );
+      const runtime = options.runtime ?? createHostedRuntimeAdapter(options);
       const executionCoordinator =
         options.toolExecutionCoordinator ?? createHostedToolExecutionCoordinator();
       const allTools =

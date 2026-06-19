@@ -151,7 +151,7 @@ flowchart TD
 ## Code Pointers
 
 - ACP adapter (entire surface):
-  `packages/brewva-acp-adapter/src/index.ts`
+  `packages/brewva-cli/src/entry/acp-gateway-agent.ts`
   (`runAcpGatewayStdioAgent`, `createAcpGatewayAgent`,
   `createAcpGatewayClientSessionPortFromEnv`, `extractAcpPromptText`)
 - CLI flag and dispatch:

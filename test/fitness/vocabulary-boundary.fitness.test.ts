@@ -257,7 +257,7 @@ describe("vocabulary boundary fitness", () => {
         message: "ToolTextOutcomeKind must alias BrewvaOutcomeKind",
       },
       {
-        path: "packages/brewva-acp-adapter/src/index.ts",
+        path: "packages/brewva-cli/src/entry/acp-gateway-agent.ts",
         pattern: /managedToolMode\?:\s*["']hosted["']\s*\|\s*["']direct["']/u,
         message: "AcpGatewayStdioOptions.managedToolMode must use ManagedToolMode",
       },

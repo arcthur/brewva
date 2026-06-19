@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { validateParamsForMethod } from "@brewva/brewva-gateway/protocol";
+import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import {
   createAcpGatewayAgent,
   createAcpGatewayClientSessionPort,
@@ -6,9 +8,7 @@ import {
   toBrewvaSessionAbortParams,
   toBrewvaSessionOpenParams,
   toBrewvaSessionSendParams,
-} from "@brewva/brewva-acp-adapter";
-import { validateParamsForMethod } from "@brewva/brewva-gateway/protocol";
-import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
+} from "../../../packages/brewva-cli/src/entry/acp-gateway-agent.js";
 import { sleep } from "../../helpers/process.js";
 
 type SessionNotification = Parameters<AcpGatewayConnection["sessionUpdate"]>[0];

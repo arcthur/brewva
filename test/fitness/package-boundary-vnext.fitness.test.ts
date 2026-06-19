@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
@@ -17,6 +17,14 @@ const removedPackagePatterns = [
     pattern: /@brewva\/brewva-ingress(?!-telegram)(?=$|[/"'\s,}:])/u,
   },
   {
+    label: "@brewva/brewva-acp-adapter",
+    pattern: /@brewva\/brewva-acp-adapter(?=$|[/"'\s,}:])/u,
+  },
+  {
+    label: "@brewva/brewva-capabilities",
+    pattern: /@brewva\/brewva-capabilities(?=$|[/"'\s,}:])/u,
+  },
+  {
     label: "packages/brewva-box",
     pattern: /packages\/brewva-box(?=$|[/"'\s,}:])/u,
   },
@@ -27,6 +35,14 @@ const removedPackagePatterns = [
   {
     label: "packages/brewva-ingress",
     pattern: /packages\/brewva-ingress(?!-telegram)(?=$|[/"'\s,}:])/u,
+  },
+  {
+    label: "packages/brewva-acp-adapter",
+    pattern: /packages\/brewva-acp-adapter(?=$|[/"'\s,}:])/u,
+  },
+  {
+    label: "packages/brewva-capabilities",
+    pattern: /packages\/brewva-capabilities(?=$|[/"'\s,}:])/u,
   },
 ] as const;
 const removedPackageReferenceAllowlist = new Set([
@@ -40,7 +56,7 @@ function readJson(path: string): unknown {
 function walk(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
-    if (entry === "dist" || entry === "node_modules") continue;
+    if (entry === "dist" || entry === "node_modules" || entry === ".tmp") continue;
     const path = join(dir, entry);
     const stat = statSync(path);
     if (stat.isDirectory()) {
@@ -57,7 +73,7 @@ function walk(dir: string): string[] {
 function packageDirs(): string[] {
   return readdirSync(resolve(repoRoot, "packages"))
     .map((name) => resolve(repoRoot, "packages", name))
-    .filter((path) => statSync(path).isDirectory())
+    .filter((path) => statSync(path).isDirectory() && existsSync(resolve(path, "package.json")))
     .toSorted((left, right) => left.localeCompare(right));
 }
 

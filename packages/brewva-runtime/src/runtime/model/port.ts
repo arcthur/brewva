@@ -39,6 +39,8 @@ export interface PromptPlan {
   readonly status: "ready" | "over_window";
   readonly sessionId: SessionId;
   readonly messages: readonly PromptMessage[];
+  /** Event provenance aligned by index with `messages`. */
+  readonly messageSourceEventIds: readonly EventId[];
   readonly admittedBlocks: readonly PromptBlock[];
   readonly droppedAdvisoryBlocks: readonly PromptBlock[];
   readonly tokenEstimate: number;

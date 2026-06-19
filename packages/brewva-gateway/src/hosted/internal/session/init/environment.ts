@@ -5,7 +5,6 @@ import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import { resolveBrewvaModelSelection } from "../../../../policy/model-routing/api.js";
 import { createHostedRuntimeAdapter } from "../runtime-ports.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
-import { toHostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { HostedSessionSettingsView } from "../session-factory.js";
 import { createHostedSessionFactory, type HostedSessionFactory } from "../session-factory.js";
 import type { CreateHostedSessionOptions } from "./session-assembly.js";
@@ -50,20 +49,13 @@ export function createKernelRuntime(
   options: CreateHostedSessionOptions,
   cwd: string,
 ): HostedRuntimeAdapterPort {
-  return toHostedRuntimeAdapterPort(
+  return (
     options.runtime ??
-      createHostedRuntimeAdapter({
-        cwd,
-        configPath: options.configPath,
-        config: options.config,
-        agentId: options.agentId,
-      }),
+    createHostedRuntimeAdapter({
+      cwd,
+      configPath: options.configPath,
+      config: options.config,
+      agentId: options.agentId,
+    })
   );
-}
-
-export function assertRoutingScopeCompatibility(
-  _runtime: HostedRuntimeAdapterPort,
-  _options: CreateHostedSessionOptions,
-): void {
-  return;
 }

@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
-import { runAcpGatewayStdioAgent } from "@brewva/brewva-acp-adapter";
 import { startBoundaryTimeout, type BoundaryTimeoutHandle } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import {
@@ -48,6 +47,7 @@ import {
 import type { CliInteractiveSessionOptions } from "../session/cli-runtime.js";
 import { runCliPrintSession } from "../session/cli-runtime.js";
 import { createBrewvaSession } from "../session/session.js";
+import { runAcpGatewayStdioAgent } from "./acp-gateway-agent.js";
 import { parseCliArgs, resolveRootSubcommand, type CliArgs, type CliMode } from "./args.js";
 import { printHelp } from "./help.js";
 import { resolveEffectiveCliMode } from "./mode.js";

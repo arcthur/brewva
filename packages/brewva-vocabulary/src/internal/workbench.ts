@@ -177,8 +177,8 @@ export interface WorkbenchEntry extends ProtocolRecord {
   readonly rcr?: readonly RcrReference[];
   /**
    * Model-authored salience hint recorded when the note is written (for example
-   * `"attention_pin"`). Persisted as model-sovereign retention evidence; only
-   * promotion-eligible hints become promotion signals.
+   * `"attention_pin"`). Persisted as model-sovereign retention evidence that a
+   * future model- or operator-initiated promotion flow may consume.
    */
   readonly retentionHint?: string;
   readonly createdAt?: number;

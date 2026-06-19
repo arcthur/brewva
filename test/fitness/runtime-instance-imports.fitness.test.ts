@@ -28,7 +28,7 @@ function listTypeScriptFiles(relativeDir: string): string[] {
   const files: string[] = [];
 
   for (const entry of readdirSync(absoluteDir)) {
-    if (entry === "node_modules" || entry === "dist") {
+    if (entry === "node_modules" || entry === "dist" || entry === ".tmp") {
       continue;
     }
     const absolutePath = resolve(absoluteDir, entry);

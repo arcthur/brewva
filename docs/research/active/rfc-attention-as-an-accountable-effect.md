@@ -3,21 +3,19 @@
 ## Metadata
 
 - Status: active
-- Implementation state: Phase 1 (attention-selection receipts) implemented end to
-  end against a green pipeline. Phase 2 (retention dashboard) and Phase 4
-  (promotion signal) have their aggregation/selection ALGORITHMS implemented as
-  pure, tested vocabulary functions (`projectRetentionDashboard`,
-  `collectRetentionPromotionSignals`); the session-level assembly readers and the
-  inspect surface that renders them fold into the Phase 5 follow-up, so no
-  orphaned glue ships. Phase 3 (attention budget) deferred after a feasibility
-  pass — the objective taxonomy exists but per-tool-call token attribution does
-  not. Phase 5 (surface amplification) spun off as a follow-up.
+- Implementation state: Phase 1 (attention-selection receipts) is implemented.
+  Phase 2 (retention dashboard) and Phase 4 (promotion signal) remain deferred
+  until their session-level readers and inspect or capture consumers land; the
+  earlier zero-caller vocabulary projections were removed so no orphaned
+  algorithm surface ships. Phase 3 (attention budget) is deferred after a
+  feasibility pass — the objective taxonomy exists but per-tool-call token
+  attribution does not. Phase 5 (surface amplification) is a follow-up.
 - Owner: Runtime, gateway, tools, and operator-experience maintainers
 - Last reviewed: `2026-06-16`
 - Depends on:
   - [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](./rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md)
   - [RFC: Effect Approval And Rollback Closure](../archive/rfc-effect-approval-and-rollback-closure.md)
-  - [RFC: Context Operating System And Compaction Physics](./rfc-context-operating-system-and-compaction-physics.md)
+  - [Decision: Context Operating System And Compaction Physics](../decisions/context-operating-system-and-compaction-physics.md)
 - Promotion target:
   - `docs/architecture/design-axioms.md`
   - `docs/architecture/cognitive-product-architecture.md`
@@ -438,17 +436,12 @@ addition: it names existing invariants, it does not widen kernel authority.
 - Fitness: every `attention_consume` emits a receipt; retention survives replay;
   no mutable attention counter is load-bearing.
 
-### Phase 2: Retention Dashboard (cheap after Phase 1)
+### Phase 2: Retention Dashboard (deferred until consumed)
 
-- Aggregation ALGORITHM (implemented): `projectRetentionDashboard` computes
-  consume rate (from the existing `attention.option_consume_ratio`),
-  evict-then-undo rate, and forced-compaction rate from supplied counts. Rates are
-  inconclusive (`null`) without a denominator; attribution is an explicit input
-  defaulting to `unknown`, never inferred. No new emission beyond Phase 1.
-- Deferred to Phase 5: the session-level reader that counts those events from
-  `runtime.ops` and the inspect surface that renders the dashboard. Building the
-  reader now would be orphaned glue, so the algorithm ships pure and the
-  ops-facing assembly lands with its consumer.
+- Implement the replay-derived aggregation together with the session-level
+  reader and inspect surface that consume it. Rates remain inconclusive (`null`)
+  without a denominator; attribution is explicit input defaulting to `unknown`,
+  never inferred. Do not ship another standalone projection before its consumer.
 
 ### Phase 3: Attention Budget Commitment (taxonomy-gated)
 
@@ -461,22 +454,19 @@ addition: it names existing invariants, it does not widen kernel authority.
   kernel admission decision, and actual spend must derive only from existing
   receipts, never from a fresh per-effect classification.
 
-### Phase 4: Promotion Signal Bridge
+### Phase 4: Promotion Signal Bridge (deferred until consumed)
 
-- Selection ALGORITHM (implemented): `collectRetentionPromotionSignals` nominates
-  notes the model marked with a promotion-eligible `retentionHint` or consumed
-  repeatedly; it only nominates. No runtime path writes a `status: active` record
-  from attention signals; promotion stays `knowledge_capture`-gated and
-  model/operator-initiated.
-- Deferred to Phase 5: the session-level reader that assembles candidates from
-  `runtime.ops` and feeds them to the `knowledge_capture` flow, landed with its
-  consumer rather than as orphaned glue.
+- Implement candidate selection together with the session-level reader and the
+  `knowledge_capture` consumer. Eligible notes may be nominated from explicit
+  `retentionHint` values or repeated consumption, but no runtime path writes a
+  `status: active` record from those signals. Promotion remains model/operator
+  initiated and `knowledge_capture` gated.
 
 ### Phase 5: Surface Amplification (non-blocking follow-up)
 
 - Not a promotion gate for this RFC. Includes the session-level readers that
-  assemble the retention dashboard and promotion candidates from `runtime.ops`
-  plus the Phase 2/4 pure projections, and the inspect surface that renders them
+  assemble the retention dashboard and promotion candidates from `runtime.ops`,
+  their co-located Phase 2/4 projections, and the inspect surface that renders them
   (the RFC-counted inspect surface). Also: unify the Work Card payload, then
   switch the default orient surface; distribute the constitution; promote
   `Context Runway`; land the two-tier lexicon doc lint. Tracked for coherence, but
@@ -502,7 +492,8 @@ Required tests and checks:
   thin evidence projects `inconclusive`, never a fake pass/fail
 - no-auto-promotion fitness: no runtime path promotes a note to persistent
   precedent without a model or operator action; RDP gating is unchanged
-- dashboard-attribution fitness: each metric exposes its attribution dimension
+- dashboard-attribution fitness (only if built): each metric exposes its
+  attribution dimension
 - Work Card single-source fitness (non-blocking follow-up): shell, channel, and
   headless consume one schema-tagged Work Card payload before the default surface
   switches
@@ -554,8 +545,9 @@ holds:
   load-bearing for behavior
 - the `retention_hint` silent drop is fixed and regression-guarded, with a typed
   `attention.option.consumed` event and a per-entry consume projection
-- the promotion signal bridge feeds RDP candidates without any runtime
-  auto-promotion, and RDP `knowledge_capture` gating is unchanged
+- if the promotion signal bridge is built, it lands with its RDP consumer,
+  performs no runtime auto-promotion, and leaves `knowledge_capture` gating
+  unchanged
 - budget commitment is either proven verify-only over an objective tape-derived
   actual, or explicitly recorded as taxonomy-gated and deferred — not shipped as
   a guess-based variance projection
@@ -593,4 +585,4 @@ note; it may ship separately.
 - `docs/journeys/operator/interactive-session.md`
 - `docs/research/active/rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md`
 - `docs/research/archive/rfc-effect-approval-and-rollback-closure.md`
-- `docs/research/active/rfc-context-operating-system-and-compaction-physics.md`
+- `docs/research/decisions/context-operating-system-and-compaction-physics.md`

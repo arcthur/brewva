@@ -49,7 +49,6 @@ import {
 } from "../tools/execution-traits.js";
 import {
   applyRuntimeUiSettings,
-  assertRoutingScopeCompatibility,
   createKernelRuntime,
   resolveHostedEnvironment,
   resolveManagedToolMode,
@@ -624,7 +623,6 @@ export async function createHostedSession(
   const environment = resolveHostedEnvironment(options);
   const requestedModelRole = resolveHostedModelRole(options.modelRole);
   const runtime = createKernelRuntime(options, environment.cwd);
-  assertRoutingScopeCompatibility(runtime, options);
 
   const autoSubagentsEnabled = options.enableSubagents !== false;
   const delegationStore = createDelegationStore(runtime, autoSubagentsEnabled);

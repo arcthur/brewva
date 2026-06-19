@@ -54,7 +54,7 @@
     }
   },
   "dependencies": {
-    "@brewva/brewva-acp-adapter": "workspace:*",
+    "@agentclientprotocol/sdk": "^0.14.1",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-gateway": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",

@@ -4,10 +4,6 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "references": [
-    { "path": "../brewva-capabilities" },
-    { "path": "../brewva-std" },
-    { "path": "../brewva-token-estimation" }
-  ],
+  "references": [{ "path": "../brewva-std" }, { "path": "../brewva-token-estimation" }],
   "include": ["src/**/*.ts"]
 }

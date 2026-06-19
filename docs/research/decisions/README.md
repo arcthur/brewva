@@ -6,6 +6,7 @@ Read stable docs first; use this directory only when you need provenance for why
 Every accepted decision inherits these rules:
 
 - Stable docs and code carry the normative contract; decision records do not duplicate the full specification.
+- `Date` is the acceptance date — when the note was promoted into this directory — not the code-landing date.
 - Future changes update stable docs and start from a new active note when the decision changes materially.
 - Generic Why and Non-goals boilerplate is forbidden. Keep only decision-specific non-goals when they preserve a real boundary.
 - Deprecated validation tables, surface budgets, implementation checklists, and promoted lifecycle wording stay out of this directory.
@@ -18,6 +19,7 @@ Every accepted decision inherits these rules:
 - [architecture-doc-precision-review](./architecture-doc-precision-review.md)
 - [action-policy-registry-and-least-privilege-governance](./action-policy-registry-and-least-privilege-governance.md)
 - [advisory-skill-selection-and-cross-root-box-execution](./advisory-skill-selection-and-cross-root-box-execution.md)
+- [authority-rings-and-projection-unification](./authority-rings-and-projection-unification.md)
 - [authority-surface-narrowing-and-runtime-facade-compression](./authority-surface-narrowing-and-runtime-facade-compression.md)
 - [brewva-c2-full-internalization-and-kernel-substrate-boundaries](./brewva-c2-full-internalization-and-kernel-substrate-boundaries.md)
 - [boundary-first-subtraction-and-model-native-recovery](./boundary-first-subtraction-and-model-native-recovery.md)
@@ -29,6 +31,7 @@ Every accepted decision inherits these rules:
 - [convention-lifecycle-governance](./convention-lifecycle-governance.md)
 - [context-control-plane-simplification](./context-control-plane-simplification.md)
 - [context-dependency-layering-and-admission-lanes](./context-dependency-layering-and-admission-lanes.md)
+- [context-operating-system-and-compaction-physics](./context-operating-system-and-compaction-physics.md)
 - [cost-observability-and-budget-governance](./cost-observability-and-budget-governance.md)
 - [default-path-re-hardening-and-advisory-surface-narrowing](./default-path-re-hardening-and-advisory-surface-narrowing.md)
 - [durability-taxonomy-and-rebuildable-surface-narrowing](./durability-taxonomy-and-rebuildable-surface-narrowing.md)
@@ -89,6 +92,7 @@ Every accepted decision inherits these rules:
 - [slash-command-surface-layering-and-control-plane-separation](./slash-command-surface-layering-and-control-plane-separation.md)
 - [tui-runtime-cockpit-refactor](./tui-runtime-cockpit-refactor.md)
 - [tui-bounded-live-cockpit-and-native-scrollback](./tui-bounded-live-cockpit-and-native-scrollback.md)
+- [tui-rendering-performance-and-test-harness](./tui-rendering-performance-and-test-harness.md)
 - [search-token-policy-and-cjk-tokenizer-boundary](./search-token-policy-and-cjk-tokenizer-boundary.md)
 - [session-index-evidence-projection-boundary](./session-index-evidence-projection-boundary.md)
 - [recall-source-typed-retrieval-spine](./recall-source-typed-retrieval-spine.md)

@@ -41,16 +41,6 @@ discipline.
   evidence, separating authoritative replay from forensic scanning, converging
   rewind/redo on one gateway-owned transaction engine, and proving zero-cache
   replay equivalence without widening the four-port runtime.
-- [RFC: Context Operating System And Compaction Physics](./rfc-context-operating-system-and-compaction-physics.md):
-  active RFC for closing Brewva's context-budget loop, making compaction cut
-  points token-aware, and promoting workbench-gated compaction into a runtime
-  contract.
-- [RFC: TUI Rendering Performance And Test Harness](./rfc-tui-rendering-performance-and-test-harness.md):
-  active RFC for removing per-frame full view-model cloning, O(n) per-token
-  projector work, the scroll-sync feedback loop, stale composer write-back,
-  and synchronous keystroke-path filesystem I/O from the interactive shell,
-  moving toward a dual-speed state channel and gated on a deterministic
-  replay benchmark and count-based fitness invariants.
 - [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](./rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md):
   active RFC for re-homing external context-compression capabilities into
   Brewva's authority model: tape-anchored byte-exact reversible references for

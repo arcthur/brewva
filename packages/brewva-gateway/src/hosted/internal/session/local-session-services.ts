@@ -14,7 +14,6 @@ import { createBrewvaManagedAgentSession } from "./managed-agent/session.js";
 import { HostedRuntimeTapeSessionStore } from "./projection/runtime-projection-session-store.js";
 import { createHostedRuntimeAdapter } from "./runtime-ports.js";
 import type { HostedRuntimeAdapterPort } from "./runtime-ports.js";
-import { toHostedRuntimeAdapterPort } from "./runtime-ports.js";
 import type {
   CreateHostedManagedSessionOptions,
   HostedSessionCustomTool,
@@ -293,9 +292,7 @@ export async function createHostedSessionServicesBundle(input: {
   deferPersistenceUntilPrompt?: boolean;
 }): Promise<HostedSessionServicesBundle> {
   const settingsManager = readHostedSettingsHandle(input.settings);
-  const runtime = toHostedRuntimeAdapterPort(
-    input.runtime ?? createHostedRuntimeAdapter({ cwd: input.cwd }),
-  );
+  const runtime = input.runtime ?? createHostedRuntimeAdapter({ cwd: input.cwd });
   const extensions = input.extensions ?? [];
   const resourceLoader = await createHostedResourceLoader({
     cwd: input.cwd,

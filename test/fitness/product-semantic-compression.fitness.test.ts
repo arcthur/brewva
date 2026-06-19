@@ -28,7 +28,9 @@ function listFiles(relativeDir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(absoluteDir, { withFileTypes: true })) {
     const name = entry.name;
-    if (name === "node_modules" || name === ".git" || name === "dist") continue;
+    if (name === "node_modules" || name === ".git" || name === "dist" || name === ".tmp") {
+      continue;
+    }
     const absolutePath = join(absoluteDir, name);
     const relativePath = relative(repoRoot, absolutePath);
     if (entry.isDirectory()) {

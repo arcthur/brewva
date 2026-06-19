@@ -19,7 +19,7 @@ const repoRoot = resolve(import.meta.dir, "../..");
 function listSourceFiles(relativeDir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(resolve(repoRoot, relativeDir))) {
-    if (entry === "node_modules" || entry === "dist") continue;
+    if (entry === "node_modules" || entry === "dist" || entry === ".tmp") continue;
     const relativePath = `${relativeDir}/${entry}`;
     const stats = statSync(resolve(repoRoot, relativePath));
     if (stats.isDirectory()) {

@@ -45,7 +45,7 @@ The runtime is optimized around one question:
 ```mermaid
 flowchart TD
   MODEL["Model<br/>owns attention"]
-  WORKBENCH["Workbench Plane<br/>notes + evictions + on-demand recall"]
+  WORKBENCH["Workbench<br/>notes + evictions + on-demand recall"]
   OPTIONS["Attention Options<br/>bounded candidate cards"]
   WORKCARD["Work Card<br/>goal + context + authority + evidence + continuation"]
   GATEWAY["Gateway Model Boundary<br/>main turn + LLM compaction + cache policy"]

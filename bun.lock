@@ -5,8 +5,6 @@
     "": {
       "name": "brewva",
       "devDependencies": {
-        "@brewva/brewva-acp-adapter": "workspace:*",
-        "@brewva/brewva-capabilities": "workspace:*",
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-cli": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
@@ -79,24 +77,6 @@
         "brewva": "./bin/brewva",
       },
     },
-    "packages/brewva-acp-adapter": {
-      "name": "@brewva/brewva-acp-adapter",
-      "version": "0.1.0",
-      "dependencies": {
-        "@agentclientprotocol/sdk": "^0.14.1",
-        "@brewva/brewva-gateway": "workspace:*",
-        "@brewva/brewva-std": "workspace:*",
-        "@brewva/brewva-vocabulary": "workspace:*",
-      },
-    },
-    "packages/brewva-capabilities": {
-      "name": "@brewva/brewva-capabilities",
-      "version": "0.1.0",
-      "dependencies": {
-        "@brewva/brewva-std": "workspace:*",
-        "yaml": "^2.9.0",
-      },
-    },
     "packages/brewva-channels-telegram": {
       "name": "@brewva/brewva-channels-telegram",
       "version": "0.1.0",
@@ -114,7 +94,7 @@
         "brewva": "./dist/index.js",
       },
       "dependencies": {
-        "@brewva/brewva-acp-adapter": "workspace:*",
+        "@agentclientprotocol/sdk": "^0.14.1",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-gateway": "workspace:*",
         "@brewva/brewva-runtime": "workspace:*",
@@ -147,7 +127,6 @@
       "name": "@brewva/brewva-gateway",
       "version": "0.1.0",
       "dependencies": {
-        "@brewva/brewva-capabilities": "workspace:*",
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
         "@brewva/brewva-ingress-telegram": "workspace:*",
@@ -165,6 +144,7 @@
         "ajv": "^8.20.0",
         "lru-cache": "^11.5.0",
         "ws": "^8.21.0",
+        "yaml": "^2.9.0",
       },
     },
     "packages/brewva-ingress-telegram": {
@@ -371,10 +351,6 @@
     "@borewit/text-codec": ["@borewit/text-codec@0.2.1", "", {}, "sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw=="],
 
     "@brewva/brewva": ["@brewva/brewva@workspace:distribution/brewva"],
-
-    "@brewva/brewva-acp-adapter": ["@brewva/brewva-acp-adapter@workspace:packages/brewva-acp-adapter"],
-
-    "@brewva/brewva-capabilities": ["@brewva/brewva-capabilities@workspace:packages/brewva-capabilities"],
 
     "@brewva/brewva-channels-telegram": ["@brewva/brewva-channels-telegram@workspace:packages/brewva-channels-telegram"],
 

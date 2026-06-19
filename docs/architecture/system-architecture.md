@@ -53,73 +53,41 @@ attention option, hook receipt, renderer, or continuation-anchor summary can
 make evidence visible. None of them grants tool access, account authority,
 budget, model routing, sandbox bypass, approval, adoption, or kernel admission.
 
-## Authority Rings
+## Authority Rings And Their Projections
 
-This is the canonical, complete ring topology. `docs/architecture/design-axioms.md`
-states the authority-bearing subset (`Kernel Ring`, `Runtime Physics Ring`,
-`Runtime Physics Boundary`, `Deliberation Ring`, `Experience Ring`); this page is
-consistent with it and adds the implementation rings `Substrate Ring`,
-`Model Attention Boundary`, and `Control Plane`.
+Rings are the authority detail of the four-owner constitution (`Model owns
+attention. Kernel owns consequence. Tape owns truth. Runtime owns physics.`):
+they refine who owns what beneath those four owners. Rings are an explanatory
+layer under the constitution, not a top-level axis above it; within that layer
+they are the single coordinate system for authority, and projections are views
+over them. This page carries the canonical, complete ring topology;
+`docs/architecture/design-axioms.md` states the authority-bearing subset
+(`Kernel Ring`, `Runtime Physics Ring`, `Runtime Physics Boundary`,
+`Deliberation Ring`, `Experience Ring`).
 
-- `Model Attention Boundary`: the model decides what to read, remember, evict,
-  recall, quote, or compact. This is not a package ring; it is the cognitive
-  ownership boundary exposed through ordinary model-callable tools.
-- `Kernel Ring`: consequence-bearing authority only: effect authorization,
-  proposal decisions, verification gates, rollback receipts, Recovery WAL,
-  replay, and event-tape truth.
-- `Runtime Physics Ring`: derived context status, context-window limits,
-  budget accounting, provider request constraints, durability classes, and
-  cache safety. It nudges or fails closed at physical limits; it does not choose
-  attention for the model.
-- `Runtime Physics Boundary`: the owner of default turn execution. Main turns,
-  provider calls, context-window pressure, retry boundaries, cache posture, cost
-  observation, interruption, and terminal commits pass through `runtime.turn`.
-  Gateway may adapt transport and session multiplexing, but it does not own
-  turn truth or recovery policy.
-- `Substrate Ring`: session lifecycle, turn orchestration, tool execution
-  phases, request materialization primitives, checkpoint/resume mechanics, and
-  substrate-internal persistence helpers. Substrate may prepare requests; it
-  does not call models or own salience.
-- `Deliberation Ring`: recall search, precedent search, model-facing guidance,
-  compact prompt templates, candidate preparation, and advisory evaluation. It
-  may produce candidates and prompts, but it does not commit effects or execute
-  model calls.
-- `Control Plane`: scheduling, gateway workers, channel orchestration,
-  subagents, recovery loops, and other opt-in hosted behavior.
-- `Experience Ring`: CLI, TUI, gateway clients, channels, operator UX, memory
-  operation visibility, cache/cost diagnostics, and approval displays.
+Each ring may expose a read-only projection that makes its state visible without
+granting authority. A projection is a view over an owner, not a parallel
+coordinate system.
 
-Rings define authority. Package names may host code from more than one ring,
-but public contracts should expose the narrowest ring that owns the decision.
+| Ring (authority owner)     | Owns                                                                                                                                                                     | Read-only projection           | Durable state class                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | ------------------------------------------- |
+| `Model Attention Boundary` | what the model reads, remembers, evicts, recalls, quotes, or compacts, exposed through ordinary model-callable tools                                                     | Workbench, Attention Options   | durable advisory material + request-local   |
+| `Kernel Ring`              | effect authorization, proposal decisions, verification gates, rollback receipts, Recovery WAL, replay, event-tape truth                                                  | Authority                      | durable source of truth + recovery material |
+| `Runtime Physics Ring`     | context status, context-window limits, budget accounting, provider request constraints, durability classes, cache safety; does not choose attention for the model        | Efficiency                     | request-local + cache/local                 |
+| `Runtime Physics Boundary` | default turn execution through `runtime.turn`: main turns, provider calls, retry, cache posture, cost, interruption, terminal commit                                     | — (execution edge)             | commits through `Kernel Ring`               |
+| `Substrate Ring`           | session lifecycle, turn orchestration, tool execution phases, request materialization, checkpoint/resume mechanics                                                       | Working projection             | rebuildable                                 |
+| `Deliberation Ring`        | recall and precedent search, model-facing guidance, compact prompt templates, candidate preparation, advisory evaluation; does not commit effects or execute model calls | folds into Workbench / Options | rebuildable                                 |
+| `Control Plane`            | scheduling, gateway workers, channel orchestration, subagents, recovery loops, and other opt-in hosted behavior                                                          | Hosted Control                 | rebuildable                                 |
+| `Experience Ring`          | CLI, TUI, gateway clients, channels, operator UX, memory operation visibility, cache/cost diagnostics, approval displays                                                 | Experience                     | cache/local                                 |
 
-## Operational Planes
+Package names may host code from more than one ring, but public contracts
+should expose the narrowest ring that owns the decision.
 
-Planes describe product behavior:
+A projection therefore grants none of the authorities listed under Product
+Shape: because it carries no authority, there is no projection-versus-ring
+conflict to arbitrate — the ring always owns the decision.
 
-- `Authority Plane`: receipts, event tape, Recovery WAL, rollback snapshots,
-  approval claims, verification evidence, and replay-visible commitments.
-- `Workbench Plane`: model-authored notebook entries, evictions, source
-  references, preserved quotes, on-demand recall results selected by the model,
-  and sanitized compact baselines. It is provenance-bearing and inspectable,
-  but it is not kernel authority.
-- `Attention Options Plane`: bounded candidate cards for recall, precedent,
-  SkillCards, workbench entries, tape evidence, and verification recipes.
-  Content is revealed only through explicit consumption; pins write to the
-  workbench, ignores are session-scoped advisory suppressions, and verify-plan
-  requests do not read files, run commands, or call providers.
-- `Efficiency Plane`: stable prefix identity, provider cache policy, request
-  fingerprints, request-local reductions, numeric context status, cache edit
-  application, and provider cache observations.
-- `Hosted Control Plane`: heartbeat, scheduling, hosted turns, subagents,
-  channel adapters, and hosted extension orchestration. It is opt-in behavior,
-  not the default cognitive path.
-- `Experience Plane`: operator display, approval UX, inspect views, transcript
-  rendering, and cache/cost/memory diagnostics.
-
-Planes do not create authority. If a plane conflicts with a ring, the ring
-wins.
-
-There is no default context-source admission plane. The provider request shape
+There is no default context-source admission path. The provider request shape
 is stable contracts plus active workbench, explicit model-requested details,
 and a small dynamic status tail.
 

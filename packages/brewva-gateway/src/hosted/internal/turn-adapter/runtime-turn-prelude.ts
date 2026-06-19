@@ -26,7 +26,12 @@ export interface HostedRuntimeTurnPreludeSession {
 }
 
 export interface HostedRuntimeTurnContextSession {
-  [HOSTED_RUNTIME_TURN_CONTEXT](): readonly BrewvaAgentProtocolMessage[];
+  [HOSTED_RUNTIME_TURN_CONTEXT](): HostedRuntimeTurnContext | null;
+}
+
+export interface HostedRuntimeTurnContext {
+  readonly messages: readonly BrewvaAgentProtocolMessage[];
+  readonly runtimeEventCursor: string | null;
 }
 
 export function hasHostedRuntimeTurnPrelude(
@@ -40,16 +45,14 @@ export function hasHostedRuntimeTurnPrelude(
   );
 }
 
-export function getHostedRuntimeTurnContextMessages(
-  session: unknown,
-): readonly BrewvaAgentProtocolMessage[] {
+export function getHostedRuntimeTurnContext(session: unknown): HostedRuntimeTurnContext | null {
   if (
     typeof session !== "object" ||
     session === null ||
     typeof (session as Partial<HostedRuntimeTurnContextSession>)[HOSTED_RUNTIME_TURN_CONTEXT] !==
       "function"
   ) {
-    return [];
+    return null;
   }
   return (session as HostedRuntimeTurnContextSession)[HOSTED_RUNTIME_TURN_CONTEXT]();
 }

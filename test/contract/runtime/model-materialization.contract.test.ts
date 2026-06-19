@@ -159,6 +159,16 @@ describe("model materialization", () => {
         isError: false,
       },
     ]);
+    const turnStartedEvent = runtime.tape.list("s1", { type: "turn.started" })[0];
+    const toolCommittedEvent = runtime.tape.list("s1", { type: "tool.committed" })[0];
+    if (!turnStartedEvent || !toolCommittedEvent) {
+      throw new Error("expected_materialized_source_events");
+    }
+    expect(prompt.messageSourceEventIds).toEqual([
+      turnStartedEvent.id,
+      toolCommittedEvent.id,
+      toolCommittedEvent.id,
+    ]);
   });
 
   test("derives provider isError from typed outcome kind", async () => {

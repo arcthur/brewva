@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { runPromiseAtBoundary } from "@brewva/brewva-effect";
 import { BrewvaStream } from "@brewva/brewva-effect/primitives";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
@@ -9,9 +12,11 @@ import {
   registerApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
+import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import { createHostedProviderStreamFunction } from "../../../packages/brewva-gateway/src/hosted/internal/provider/stream.js";
 import { createHostedRuntimeProviderPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-execution-ports.js";
+import { HOSTED_RUNTIME_TURN_CONTEXT } from "../../../packages/brewva-gateway/src/hosted/internal/turn-adapter/runtime-turn-prelude.js";
 import {
   fauxAssistantMessage,
   registerFauxProvider,
@@ -62,6 +67,7 @@ function createRuntimeProviderInput(sessionId: string) {
       status: "ready" as const,
       sessionId,
       messages: [],
+      messageSourceEventIds: [],
       admittedBlocks: [],
       droppedAdvisoryBlocks: [],
       tokenEstimate: 0,
@@ -726,7 +732,11 @@ describe("hosted provider stream", () => {
             isError: false,
           },
         ],
-        admittedBlocks: [],
+        messageSourceEventIds: ["evt-user", "evt-tool", "evt-tool"],
+        admittedBlocks: [
+          { id: "evt-user", kind: "turn.started", text: "find docs", required: true },
+          { id: "evt-tool", kind: "tool.committed", text: "", required: true },
+        ],
         droppedAdvisoryBlocks: [],
         tokenEstimate: 0,
         cache: { stablePrefix: false },
@@ -777,6 +787,142 @@ describe("hosted provider stream", () => {
 
     unregisterApiProviders(SOURCE_ID);
     clearApiProviders();
+  });
+
+  test("keeps hosted context and appends runtime tool results on provider continuation", async () => {
+    const sourceId = `${SOURCE_ID}-hosted-tool-continuation`;
+    const api = "runtime-provider-hosted-tool-continuation-test";
+    const model = createRuntimeModel("unit-model", api);
+    const observedContexts: unknown[][] = [];
+    let calls = 0;
+
+    clearApiProviders();
+    registerApiProvider(
+      {
+        api,
+        stream() {
+          return createProviderEventStream();
+        },
+        streamSimple(_model, context) {
+          calls += 1;
+          observedContexts.push([...context.messages]);
+          const partial = createMessage(api);
+          if (calls === 1) {
+            const toolCall = {
+              type: "toolCall" as const,
+              id: "call-1",
+              name: "read_file",
+              arguments: { path: "README.md" },
+            };
+            return createProviderEventStream([
+              { type: "text_delta", contentIndex: 0, delta: "Checking.", partial },
+              {
+                type: "toolcall_end",
+                contentIndex: 0,
+                toolCall,
+                partial,
+              },
+              {
+                type: "done",
+                reason: "toolUse",
+                message: { ...partial, content: [toolCall] },
+              },
+            ]);
+          }
+          return createProviderEventStream([
+            {
+              type: "done",
+              reason: "stop",
+              message: {
+                ...partial,
+                content: [{ type: "text", text: "done" }],
+                stopReason: "stop",
+              },
+            },
+          ]);
+        },
+      },
+      sourceId,
+    );
+
+    try {
+      const session = {
+        model,
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeModelCatalog() {
+          return {
+            async getApiKeyAndHeaders() {
+              return { ok: true as const, apiKey: "unit-key" };
+            },
+          };
+        },
+        createRuntimeToolContext() {
+          return {
+            getSystemPrompt() {
+              return "";
+            },
+          };
+        },
+        [HOSTED_RUNTIME_TURN_CONTEXT]() {
+          return {
+            messages: [
+              {
+                role: "user" as const,
+                content: [{ type: "text" as const, text: "read README" }],
+                timestamp: 1,
+              },
+              {
+                role: "custom" as const,
+                customType: "plugin-context",
+                content: "plugin-only context",
+                timestamp: 2,
+              },
+            ],
+            runtimeEventCursor: null,
+          };
+        },
+      };
+      const runtime = createBrewvaRuntime({
+        cwd: mkdtempSync(join(tmpdir(), "brewva-hosted-provider-continuation-")),
+        physics: {
+          mode: "real",
+          provider: createHostedRuntimeProviderPort(session as never),
+          toolExecutor: {
+            async execute() {
+              return {
+                outcome: { kind: "ok" as const, value: {} },
+                content: "README contents",
+              };
+            },
+          },
+        },
+      });
+
+      await Array.fromAsync(runtime.turn({ sessionId: "session-1", prompt: "read README" }));
+
+      expect(observedContexts).toHaveLength(2);
+      expect(observedContexts[0]).toHaveLength(2);
+      expect(observedContexts[1]).toHaveLength(5);
+      expect(observedContexts[1]?.[1]).toMatchObject({
+        role: "user",
+        content: [{ type: "text", text: "plugin-only context" }],
+      });
+      expect(observedContexts[1]?.[2]).toMatchObject({
+        role: "assistant",
+        content: [{ type: "text", text: "Checking." }],
+      });
+      expect(observedContexts[1]?.[3]).toMatchObject({ role: "assistant" });
+      expect(observedContexts[1]?.[4]).toMatchObject({
+        role: "toolResult",
+        toolCallId: "call-1",
+        toolName: "read_file",
+      });
+    } finally {
+      unregisterApiProviders(sourceId);
+      clearApiProviders();
+    }
   });
 
   test("passes turn identity and provider context summary to provider payload hooks", async () => {
