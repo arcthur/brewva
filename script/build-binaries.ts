@@ -129,7 +129,7 @@ const DUCKDB_NODE_API_VERSION = readPinnedDependencyVersion(
   BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH,
   "@duckdb/node-api",
 );
-const BOXLITE_VERSION = "0.9.3";
+const BOXLITE_VERSION = "0.9.5";
 
 const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
   "bun-darwin-arm64": "@opentui/core-darwin-arm64",
