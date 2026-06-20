@@ -61,6 +61,16 @@ discipline.
   and the aesthetic (`Model-sovereign, tape-accountable context`) for
   `design-axioms.md`. Surface amplification is a non-blocking follow-up.
 
+- [Axiom Negative-Space Linkage And Decisions Demotion](./axiom-negative-space-and-decisions-demotion.md):
+  active note for connecting the existing normative gradient (`design-axioms` ->
+  `critical-rules` -> `anti-patterns`) instead of adding a new anti-patterns doc.
+  Delivered as per-rule `(axiom N)` source tags in the project rule docs plus a
+  generated `docs/reference/axiom-enforcement.md` view (derived from those tags
+  the way `skill-navigation.md` is derived from skill bodies) that surfaces
+  unenforced axioms as visible negative space, guarded by a regenerate-and-diff
+  fitness, with a one-line `decisions/` pointer. No hand-authored map and no new
+  anti-patterns doc; `decisions/` stays immutable and in place.
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

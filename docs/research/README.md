@@ -52,6 +52,10 @@ net required authored fields require a debt owner and a re-evaluation trigger.
 
 ## Decision Records
 
+The generated `docs/reference/axiom-enforcement.md` is the scannable view of what
+each axiom forbids and which rules enforce it; the records below stay
+provenance-only.
+
 Accepted records under `decisions/` are short, single-decision provenance
 records. They carry only:
 

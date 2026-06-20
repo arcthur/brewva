@@ -243,3 +243,4 @@ Practical boundary rule:
 - `docs/architecture/invariants-and-reliability.md`
 - `docs/reference/runtime.md`
 - `docs/reference/proposal-boundary.md`
+- `docs/reference/axiom-enforcement.md` (generated view of which rules enforce each axiom, and which axioms are unenforced negative space)

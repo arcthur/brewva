@@ -3,6 +3,8 @@
 `docs/research/decisions/` stores accepted, immutable decision records.
 Read stable docs first; use this directory only when you need provenance for why a stable contract exists.
 
+The generated `docs/reference/axiom-enforcement.md` is the scannable view of what each axiom forbids and which rules enforce it; these records stay provenance-only, not a current-rules index.
+
 Every accepted decision inherits these rules:
 
 - Stable docs and code carry the normative contract; decision records do not duplicate the full specification.

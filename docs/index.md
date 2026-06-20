@@ -93,6 +93,7 @@ Workflow walkthroughs:
 - Skills: `docs/reference/skills.md`
 - Skill routing and capability selection: `docs/reference/skill-routing.md`
 - Skill navigation (generated handoff graph): `docs/reference/skill-navigation.md`
+- Axiom enforcement (generated negative-space view): `docs/reference/axiom-enforcement.md`
 - Runtime contract and ports: `docs/reference/runtime.md`
 - Provider streaming: `docs/reference/provider-streaming.md`
 - Hosted dynamic context: `docs/reference/hosted-dynamic-context.md`
