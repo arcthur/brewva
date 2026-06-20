@@ -218,11 +218,32 @@ function replaceDefaultEventResolverWithImeSafeResolver(keymap: BrewvaOpenTuiKey
   });
 }
 
-function registerManagedTextareaLayer(
+/**
+ * Registers the OpenTUI default edit-buffer bindings (cursor movement, word ops,
+ * kill/yank, select, etc.) as a textarea layer for each given keymap `mode`.
+ *
+ * The full editing key set stays available whenever a composer/completion mode
+ * is active. brewva commands never live on bare editing keys — they use the
+ * leader prefix or non-editing ctrl chords — so the few keys brewva owns are
+ * already won by its higher-priority command layers; no reserved-key filtering
+ * is needed. Only `input.newline`/`input.submit` are dropped, because the
+ * composer command layer drives Enter (submit) and Ctrl+J (newline) itself —
+ * this also keeps the default meta+enter / kp-enter submit bindings from
+ * sneaking back in.
+ *
+ * Gating on keymap `mode` rather than a runtime focus check (opencode's
+ * approach) is deliberate: brewva already maintains a mode stack where
+ * composer/completion are exactly the input-focused surfaces, while overlay /
+ * pager / subagentFooter modes are not — so the mode gate gives the same
+ * "active only while editing" guarantee without depending on renderer focus
+ * state. The edit-buffer commands and textarea suspension are reference-counted
+ * per keymap, so they are registered once and a single binding set is shared
+ * across the modes. Covered by keymap-config.unit.test.ts.
+ */
+function registerManagedTextareaLayers(
   keymap: BrewvaOpenTuiKeymap,
   renderer: CliRenderer,
-  mode: "composer" | "completion",
-  reservedKeys: ReadonlySet<string>,
+  modes: readonly ("composer" | "completion")[],
 ): () => void {
   const offCommands = opentuiKeymapAddons.registerEditBufferCommands(keymap, renderer);
   const offSuspension = opentuiKeymapAddons.registerTextareaMappingSuspension(keymap, renderer);
@@ -231,16 +252,15 @@ function registerManagedTextareaLayer(
       opentuiKeymapAddons.createTextareaBindings() as Binding<Renderable, KeyEvent>[]
     ).filter(
       (binding) =>
-        (typeof binding.cmd !== "string" || !BREWVA_OWNED_TEXTAREA_COMMANDS.has(binding.cmd)) &&
-        (typeof binding.key !== "string" || !reservedKeys.has(binding.key)),
+        typeof binding.cmd !== "string" || !BREWVA_OWNED_TEXTAREA_COMMANDS.has(binding.cmd),
     );
-    const offLayer = keymap.registerLayer({
-      priority: TEXTAREA_LAYER_PRIORITY,
-      mode,
-      bindings,
-    });
+    const offLayers = modes.map((mode) =>
+      keymap.registerLayer({ priority: TEXTAREA_LAYER_PRIORITY, mode, bindings }),
+    );
     return () => {
-      offLayer();
+      for (const offLayer of offLayers.toReversed()) {
+        offLayer();
+      }
       offSuspension();
       offCommands();
     };
@@ -258,11 +278,6 @@ export function registerBrewvaKeymap(input: RegisterBrewvaKeymapInput): BrewvaKe
   const config = input.runtime.getTuiConfig();
   const bindings = input.runtime.getKeymapBindings();
   const renderer = input.renderer as CliRenderer;
-  const reservedTextareaKeys = new Set(
-    bindings.definitions.flatMap((definition) =>
-      definition.shortcuts.map((shortcut) => shortcutForOpenTuiKeymap(shortcut)),
-    ),
-  );
 
   disposers.push(registerModeLayerField(keymap));
   disposers.push(replaceDefaultEventResolverWithImeSafeResolver(keymap));
@@ -278,10 +293,7 @@ export function registerBrewvaKeymap(input: RegisterBrewvaKeymapInput): BrewvaKe
   );
   disposers.push(opentuiKeymapAddons.registerEscapeClearsPendingSequence(keymap));
   disposers.push(opentuiKeymapAddons.registerBackspacePopsPendingSequence(keymap));
-  disposers.push(registerManagedTextareaLayer(keymap, renderer, "composer", reservedTextareaKeys));
-  disposers.push(
-    registerManagedTextareaLayer(keymap, renderer, "completion", reservedTextareaKeys),
-  );
+  disposers.push(registerManagedTextareaLayers(keymap, renderer, ["composer", "completion"]));
   disposers.push(
     keymap.registerLayer({
       priority: LAYER_PRIORITY.selection,

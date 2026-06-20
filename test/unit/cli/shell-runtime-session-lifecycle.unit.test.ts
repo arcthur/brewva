@@ -1272,7 +1272,7 @@ describe("shell runtime: session lifecycle", () => {
       kind: "helpHub",
       title: "Help",
     });
-    expect(runtime.getViewState().overlay.active?.lines?.join("\n") ?? "").toContain("Ctrl+K");
+    expect(runtime.getViewState().overlay.active?.lines?.join("\n") ?? "").toContain("Ctrl+P");
 
     runtime.dispose();
   });

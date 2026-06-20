@@ -925,7 +925,7 @@ describe("opentui solid shell runtime: interaction events", () => {
       await testSetup.renderOnce();
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain("Help");
-      expect(frame).toContain("Ctrl+K opens the command palette");
+      expect(frame).toContain("Ctrl+P opens the command palette");
       expect(frame).toContain("Enter runs");
       expect(frame).toContain("Switch model");
     } finally {
@@ -1074,13 +1074,55 @@ describe("opentui solid shell runtime: interaction events", () => {
     try {
       await testSetup.renderOnce();
       await openTuiSolidAct(async () => {
-        testSetup.mockInput.pressKey("a", { ctrl: true });
+        // operator.approvals moved to the leader sequence (ctrl+x then a) so the
+        // composer keeps ctrl+a for line-home editing.
+        testSetup.mockInput.pressKey("x", { ctrl: true });
+        testSetup.mockInput.pressKey("a");
       });
       await Bun.sleep(0);
       await testSetup.renderOnce();
       await testSetup.renderOnce();
 
       expect(runtime.getViewState().overlay.active?.kind).toBe("approval");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("completion mode routes ctrl+p to completion navigation, not the command palette", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+    await runtime.start();
+    runtime.ui.setEditorText("/");
+    await Bun.sleep(CliShellRuntime.COMPLETION_REFRESH_DEBOUNCE_MS + 30);
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      { width: 120, height: 36 },
+    );
+    try {
+      await testSetup.renderOnce();
+      await testSetup.renderOnce();
+      expect(runtime.getViewState().composer.completion?.items.length ?? 0).toBeGreaterThan(0);
+      await openTuiSolidAct(async () => {
+        // ctrl+p is app.commandPalette (global, priority 0) AND completion.previous
+        // (completion layer, priority 20). Higher priority wins, so in completion
+        // mode the completion layer must take ctrl+p, not the command palette.
+        testSetup.mockInput.pressKey("p", { ctrl: true });
+      });
+      await Bun.sleep(0);
+      await testSetup.renderOnce();
+      // ctrl+p stayed in the completion layer (the list is still open and the
+      // selection wrapped to the last item), never opening the command palette.
+      expect(runtime.getViewState().overlay.active?.kind).not.toBe("commandPalette");
+      const completion = runtime.getViewState().composer.completion;
+      expect(completion?.selectedIndex).toBe((completion?.items.length ?? 1) - 1);
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

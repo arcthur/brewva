@@ -12,7 +12,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Search and run available Brewva TUI actions.",
     category: "System",
     discovery: { help: false },
-    shortcuts: ["ctrl+k"],
+    shortcuts: ["ctrl+p"],
     suggested: true,
   },
   {
@@ -44,7 +44,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     title: "Open external editor",
     description: "Edit the current prompt in VISUAL or EDITOR.",
     category: "Composer",
-    shortcuts: ["ctrl+e"],
+    shortcuts: ["leader e"],
   },
   {
     id: "session.new",
@@ -162,7 +162,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Inspect and delete queued prompts for the current session.",
     category: "Session",
     discovery: { help: false },
-    shortcuts: ["ctrl+b"],
+    shortcuts: ["leader q"],
     suggested: true,
   },
   {
@@ -257,7 +257,7 @@ const builtInShellCommands: readonly ShellCommand[] = [
     description: "Review queued operator safety asks.",
     category: "Operator",
     slash: { name: "safety" },
-    shortcuts: ["ctrl+a"],
+    shortcuts: ["leader a"],
   },
   {
     id: "operator.authority",

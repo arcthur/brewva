@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { opentuiKeymapAddons } from "../../../../packages/brewva-cli/runtime/opentui/index.js";
 import { shortcutForOpenTuiKeymap } from "../../../../packages/brewva-cli/runtime/shell/keymap.js";
 import { ShellCommandProvider } from "../../../../packages/brewva-cli/src/shell/commands/command-provider.js";
 import { registerShellCommands } from "../../../../packages/brewva-cli/src/shell/commands/shell-command-registry.js";
@@ -14,6 +15,27 @@ function commandBindings() {
   const provider = new ShellCommandProvider();
   registerShellCommands(provider);
   return provider.keymapCommandBindings();
+}
+
+// brewva drives Enter (submit) and Ctrl+J (newline) through its own command
+// layer, so those two edit-buffer commands are intentionally NOT left to the
+// textarea layer. Keep in sync with BREWVA_OWNED_TEXTAREA_COMMANDS in keymap.tsx.
+const BREWVA_OWNED_TEXTAREA_COMMANDS = new Set(["input.newline", "input.submit"]);
+
+// Every key the OpenTUI managed textarea layer actually binds (cursor / word /
+// kill / select / delete / …), derived from the live default bindings so the
+// guard below stays complete even as OpenTUI grows its editing key set. Keys
+// brewva owns (Enter / Ctrl+J) are excluded.
+function textareaEditingKeys(): Set<string> {
+  return new Set(
+    (opentuiKeymapAddons.createTextareaBindings() as Array<{ key: unknown; cmd: unknown }>)
+      .filter(
+        (binding) =>
+          typeof binding.key === "string" &&
+          !(typeof binding.cmd === "string" && BREWVA_OWNED_TEXTAREA_COMMANDS.has(binding.cmd)),
+      )
+      .map((binding) => binding.key as string),
+  );
 }
 
 describe("brewva tui keymap bindings", () => {
@@ -82,5 +104,41 @@ describe("brewva tui keymap bindings", () => {
         "surface.pageDown",
       ]),
     );
+  });
+
+  test("migrates editing-key commands to leader / non-editing chords", () => {
+    const bindings = buildBrewvaKeymapBindings({ commandBindings: commandBindings() });
+    // Regression: these used to sit on bare textarea editing keys (ctrl+a/e/k,
+    // home/end), shadowing cursor movement and kill/line ops in the composer.
+    expect(bindings.get("operator.approvals")).toEqual(["leader a"]);
+    expect(bindings.get("composer.editor")).toEqual(["leader e"]);
+    expect(bindings.get("session.queue")).toEqual(["leader q"]);
+    expect(bindings.get("app.commandPalette")).toEqual(["ctrl+p"]);
+    expect(bindings.get("surface.top")).toEqual(["ctrl+home"]);
+    expect(bindings.get("surface.bottom")).toEqual(["ctrl+end"]);
+  });
+
+  test("keeps global and composer commands off bare textarea editing keys", () => {
+    // The managed textarea layer no longer filters reserved keys, so a global or
+    // composer command sitting on a textarea editing key would silently steal it
+    // back from the textarea. Guard that against the FULL OpenTUI editing key set.
+    const editingKeys = textareaEditingKeys();
+    // Sanity: the derived set really covers the keys this fix restored.
+    for (const key of ["up", "down", "home", "end", "ctrl+a", "ctrl+e", "ctrl+k"]) {
+      expect(editingKeys.has(key)).toBe(true);
+    }
+    const bindings = buildBrewvaKeymapBindings({ commandBindings: commandBindings() });
+    const offenders = bindings.definitions
+      .filter((definition) => {
+        const layer = definition.layer ?? "global";
+        return layer === "global" || layer === "composer";
+      })
+      .flatMap((definition) =>
+        definition.shortcuts
+          .map((shortcut) => shortcutForOpenTuiKeymap(shortcut))
+          .filter((key) => editingKeys.has(key))
+          .map((key) => `${definition.id}:${key}`),
+      );
+    expect(offenders).toEqual([]);
   });
 });

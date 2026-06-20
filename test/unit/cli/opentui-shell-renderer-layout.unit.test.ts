@@ -962,7 +962,7 @@ describe("opentui solid shell runtime: layout contract", () => {
     }
   });
 
-  test("ctrl+a with no pending approvals renders a visible empty state instead of a blank overlay", async () => {
+  test("the operator-safety shortcut with no pending approvals renders a visible empty state instead of a blank overlay", async () => {
     const { bundle } = createShellFixture();
     const runtime = new CliShellRuntime(bundle, {
       cwd: process.cwd(),
@@ -984,7 +984,10 @@ describe("opentui solid shell runtime: layout contract", () => {
     try {
       await testSetup.renderOnce();
       await openTuiSolidAct(async () => {
-        testSetup.mockInput.pressKey("a", { ctrl: true });
+        // operator.approvals now lives on the leader sequence (ctrl+x then a);
+        // ctrl+a is reserved for textarea line-home editing.
+        testSetup.mockInput.pressKey("x", { ctrl: true });
+        testSetup.mockInput.pressKey("a");
       });
       await Bun.sleep(0);
       await testSetup.renderOnce();
@@ -1065,7 +1068,7 @@ describe("opentui solid shell runtime: layout contract", () => {
       const frame = testSetup.captureCharFrame();
       expect(frame).toContain("Enter");
       expect(frame).toContain("send");
-      expect(frame).toContain("Ctrl+K");
+      expect(frame).toContain("Ctrl+P");
       expect(frame).toContain("/help");
       expect(frame).toContain("Ctrl+O");
       expect(frame).not.toContain("approvals=0");

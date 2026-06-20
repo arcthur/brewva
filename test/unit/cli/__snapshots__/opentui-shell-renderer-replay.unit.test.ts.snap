@@ -29,7 +29,7 @@ exports[`opentui solid shell: streaming replay a replayed stream settles into a 
   ┃  think high                                                                 
   ┃                                                                             
                                                                                 
-    Enter send · Ctrl+K commands · /help · / slash · Ctrl+B queue · Ctrl+O qu   
+    Enter send · Ctrl+P commands · /help · / slash · Leader Q queue · Ctrl+O    
                                                                                 
 "
 `;
