@@ -293,9 +293,24 @@ export function createBrewvaReadToolDefinition(
             resolve(result);
           } catch (error) {
             signal?.removeEventListener("abort", onAbort);
-            if (!aborted) {
-              reject(error instanceof Error ? error : new Error(String(error)));
+            if (aborted) {
+              return;
             }
+            const errorCode =
+              typeof error === "object" && error !== null
+                ? (error as { code?: unknown }).code
+                : undefined;
+            if (errorCode === "EISDIR") {
+              // Reading a directory is a model mistake, not a runtime fault.
+              // Return an actionable error instead of leaking the raw EISDIR.
+              resolve(
+                readRejectedResult(
+                  `read rejected: "${path}" is a directory, not a file. Use glob to list files or grep to search its contents.`,
+                ),
+              );
+              return;
+            }
+            reject(error instanceof Error ? error : new Error(String(error)));
           }
         })();
       });

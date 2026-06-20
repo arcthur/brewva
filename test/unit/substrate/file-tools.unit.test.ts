@@ -72,6 +72,27 @@ describe("substrate file tools", () => {
     cleanupTestWorkspace(workspace);
   });
 
+  test("read tool returns a friendly error for a directory path instead of raw EISDIR", async () => {
+    const workspace = createTestWorkspace("substrate-read-tool-directory");
+    mkdirSync(join(workspace, "src-dir"), { recursive: true });
+
+    const tool = createBrewvaReadToolDefinition(workspace);
+    const result = await tool.execute(
+      "tool-call-dir",
+      { path: "src-dir" },
+      undefined,
+      undefined,
+      undefined as never,
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    const text = extractText(result).toLowerCase();
+    expect(text).toContain("directory");
+    expect(text).toMatch(/glob|grep/);
+
+    cleanupTestWorkspace(workspace);
+  });
+
   test("edit tool applies exact replacements against the original content and returns diff details", async () => {
     const workspace = createTestWorkspace("substrate-edit-tool");
     const filePath = join(workspace, "src", "example.ts");
