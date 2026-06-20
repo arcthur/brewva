@@ -257,7 +257,7 @@ function projectCompactionEvent(event: {
   }
   return {
     compactId: readString(payload.compactId),
-    reason: readString(payload.reason),
+    reason: readString(payload.cutPointReason) ?? readString(payload.reason),
     caller: readString(payload.origin) ?? readString(payload.caller),
     fromTokens: typeof payload.fromTokens === "number" ? payload.fromTokens : null,
     toTokens: typeof payload.toTokens === "number" ? payload.toTokens : null,

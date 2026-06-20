@@ -134,6 +134,7 @@ describe("cli inspect lineage reporting", () => {
       firstKeptEntryId: "entry-0",
       fromTokens: 1000,
       toTokens: 500,
+      cutPointReason: "oversized_active_turn",
       origin: "hosted_recovery",
     });
     runtime.ops.session.compaction.commit(sessionId, {
@@ -219,6 +220,7 @@ describe("cli inspect lineage reporting", () => {
       "compact-0",
       "compact-1",
     ]);
+    expect(compactionProjection.timeline[0]?.reason).toBe("oversized_active_turn");
     expect(compactionProjection.latestProvenance?.readFiles).toEqual([
       "docs/solutions/runtime.md",
       "references/design.md",

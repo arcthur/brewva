@@ -359,7 +359,9 @@ describe("hosted turn envelope compaction boundary", () => {
     ).toBe("compaction_soft_cut_flush_failed");
     expect(adapterCalls).toBe(1);
     expect(flushes.count).toBe(1);
-    expect(settled.count).toBe(0);
+    // Turn-end settlement still runs on a failed flush; pending state was
+    // already drained by the failed flush, so this is a no-op safety net.
+    expect(settled.count).toBe(1);
   });
 
   test("settles pending compaction at turn end for completed turns", async () => {
@@ -380,5 +382,55 @@ describe("hosted turn envelope compaction boundary", () => {
     expect(result.status).toBe("completed");
     expect(settled.count).toBe(1);
     expect(flushes.count).toBe(0);
+  });
+
+  test("fails fast instead of resuming forever when compaction never converges", async () => {
+    const runtime = createRuntime("brewva-turn-envelope-compaction-runaway-");
+    const settled = { count: 0 };
+    const flushes = { count: 0 };
+    // Flush always succeeds, so without a convergence guard the envelope would
+    // resume the suspended turn indefinitely.
+    const session = createBoundarySession({
+      flushResults: Array(50).fill(true),
+      settled,
+      flushes,
+    });
+    let adapterCalls = 0;
+
+    const result = await runHostedTurnEnvelope({
+      session: session as unknown as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId: "compaction-boundary-session",
+      prompt: "trigger",
+      source: "channel",
+      runAdapter: async () => {
+        adapterCalls += 1;
+        // Pathological adapter: keeps asking for compaction. The escape hatch
+        // only exists so a regressed guard surfaces as an assertion failure
+        // rather than an infinite loop.
+        if (adapterCalls > 20) {
+          return createAdapterResult();
+        }
+        return {
+          status: "suspended",
+          reason: "compaction",
+          sourceEventId: null,
+          diagnostic: {
+            sessionId: "compaction-boundary-session",
+            profile: "channel",
+          },
+        };
+      },
+    });
+
+    expect(result.status).toBe("failed");
+    expect(
+      result.status === "failed" && result.error instanceof Error && result.error.message,
+    ).toContain("compaction_resume");
+    expect(adapterCalls).toBeLessThanOrEqual(5);
+    // The guard exits via failure, but turn-end settlement must still drain the
+    // pending compaction request the last suspension left armed, so it does not
+    // leak into the next turn.
+    expect(settled.count).toBe(1);
   });
 });

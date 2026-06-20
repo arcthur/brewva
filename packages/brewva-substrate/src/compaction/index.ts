@@ -5,6 +5,7 @@ export {
   buildBrewvaDeterministicCompactionSummary,
   createBrewvaCompactionSummaryMessage,
   estimateBrewvaSessionEntryTokens,
+  estimateBrewvaCompactedContextTokens,
   estimateBrewvaCompactionTokens,
   findBrewvaCompactionCutPoint,
   projectBrewvaCompactionMessages,

@@ -19,6 +19,12 @@ import {
   type HostedTurnAdapterResult,
 } from "./state.js";
 
+// Compaction normally needs a single resume: the soft-cut flag is consumed once
+// per request, so a healthy turn converges immediately. Allow a small margin for
+// chained soft-cuts, then fail fast instead of resuming a pathological adapter
+// forever.
+const MAX_COMPACTION_RESUME_ATTEMPTS = 3;
+
 export type HostedTurnEnvelopeSource =
   | "gateway"
   | "interactive"
@@ -232,25 +238,33 @@ export async function runHostedTurnEnvelope(
       resolveApproval: input.resolveApproval,
     });
 
+    const compactionFailureResult = (message: string): HostedTurnAdapterResult => ({
+      status: "failed",
+      error: new Error(message),
+      attemptId: "runtime-turn",
+      assistantText: "",
+      toolOutputs: [],
+      diagnostic: createMinimalHostedTurnAdapterDiagnostic({
+        sessionId,
+        turnId,
+        profile,
+        lastDecision: "fail",
+      }),
+    });
+
+    let compactionResumeAttempts = 0;
     while (result.status === "suspended" && result.reason === "compaction") {
       if (!compactionBoundary) {
         break;
       }
+      if (compactionResumeAttempts >= MAX_COMPACTION_RESUME_ATTEMPTS) {
+        result = compactionFailureResult("compaction_resume_attempts_exhausted");
+        break;
+      }
+      compactionResumeAttempts += 1;
       const flushed = await compactionBoundary.flushPendingCompaction();
       if (!flushed) {
-        result = {
-          status: "failed",
-          error: new Error("compaction_soft_cut_flush_failed"),
-          attemptId: "runtime-turn",
-          assistantText: "",
-          toolOutputs: [],
-          diagnostic: createMinimalHostedTurnAdapterDiagnostic({
-            sessionId,
-            turnId,
-            profile,
-            lastDecision: "fail",
-          }),
-        };
+        result = compactionFailureResult("compaction_soft_cut_flush_failed");
         break;
       }
       result = await adapter({
@@ -260,7 +274,12 @@ export async function runHostedTurnEnvelope(
       });
     }
 
-    if (compactionBoundary && result.status === "completed") {
+    if (compactionBoundary) {
+      // Settle on every terminal state, not just completion. When the resume
+      // guard trips, the last suspension left a compaction request armed that
+      // its flush never drained; turn-end settlement clears it so the pending
+      // state does not leak into the next turn. On a flush failure the request
+      // was already drained, so this is a no-op safety net.
       await compactionBoundary.settleTurnEndCompaction();
     }
 

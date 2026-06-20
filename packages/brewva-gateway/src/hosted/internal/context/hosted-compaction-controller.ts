@@ -89,6 +89,8 @@ export interface HostedCompactionController extends HostedContextGateStatePort {
       text?: unknown;
       firstKeptEntryId?: unknown;
       summaryGeneration?: unknown;
+      toTokens?: unknown;
+      cutPointReason?: unknown;
     };
     fromExtension?: unknown;
   }) => Promise<void>;
@@ -109,10 +111,22 @@ interface CompactionGateState {
 
 export const DEFAULT_AUTO_COMPACTION_WATCHDOG_MS = 30_000;
 
-function normalizeUsageTokens(usage: ContextBudgetUsage | undefined): number | null {
-  return typeof usage?.tokens === "number" && Number.isFinite(usage.tokens) && usage.tokens >= 0
-    ? Math.max(0, Math.trunc(usage.tokens))
+function extractToTokens(compactionEntry: unknown): number | null {
+  if (!compactionEntry || typeof compactionEntry !== "object" || Array.isArray(compactionEntry)) {
+    return null;
+  }
+  const value = (compactionEntry as { toTokens?: unknown }).toTokens;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.max(0, Math.trunc(value))
     : null;
+}
+
+function extractCutPointReason(compactionEntry: unknown): string | null {
+  if (!compactionEntry || typeof compactionEntry !== "object" || Array.isArray(compactionEntry)) {
+    return null;
+  }
+  const value = (compactionEntry as { cutPointReason?: unknown }).cutPointReason;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 function extractSourceLeafEntryId(input: unknown): string | null {
@@ -512,7 +526,8 @@ export function createHostedCompactionController(
         extractCompactionEntryId({
           compactionEntry: input.compactionEntry,
         }) ?? `compact:${input.sessionId}:${state.turnIndex}`;
-      const toTokens = normalizeUsageTokens(input.usage);
+      const toTokens = extractToTokens(input.compactionEntry);
+      const cutPointReason = extractCutPointReason(input.compactionEntry);
       const summaryGeneration = extractSummaryGeneration(input.compactionEntry);
       const latestPromptEvidence = getRuntimeContextEvidenceLatest(
         runtime,
@@ -540,6 +555,7 @@ export function createHostedCompactionController(
         referenceContextDigest,
         fromTokens: getRuntimeContextUsage(runtime, input.sessionId)?.tokens ?? null,
         toTokens,
+        ...(cutPointReason ? { cutPointReason } : {}),
         origin: input.fromExtension === true ? "extension_api" : "auto_compaction",
         ...(summaryGeneration ? { summaryGeneration } : {}),
         inputProvenance: buildRuntimeCompactionInputProvenance({

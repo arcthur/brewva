@@ -4,6 +4,7 @@ import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
 import {
   estimateBrewvaSessionEntryTokens,
   selectBrewvaSessionCompactionCutPoint,
+  type BrewvaSessionCompactionCutPoint,
 } from "@brewva/brewva-substrate/compaction";
 import { resolveWindowScaledTokens } from "@brewva/brewva-substrate/context-budget";
 import {
@@ -528,6 +529,7 @@ export class HostedRuntimeTapeSessionStore {
     context: BrewvaSessionContext;
     tokensBefore: number;
     summary: string;
+    cutPointReason: BrewvaSessionCompactionCutPoint["reason"];
   } {
     const branchEntries = this.#getLlmBranch(sourceLeafEntryId);
     const cutPoint = this.#selectCompactionCutPoint(branchEntries);
@@ -560,6 +562,7 @@ export class HostedRuntimeTapeSessionStore {
       context: buildManagedSessionContext(previewEntries, previewEntry.id, previewIndex),
       tokensBefore,
       summary,
+      cutPointReason: cutPoint.reason,
     };
   }
 

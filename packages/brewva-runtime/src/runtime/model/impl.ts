@@ -1,3 +1,4 @@
+import { estimateTokenCount } from "../../utils/token.js";
 import type { ToolExecutionOutcome } from "../kernel/port.js";
 import type {
   CanonicalEvent,
@@ -359,7 +360,10 @@ export function createModelPort(tape: TapePort): ModelPort {
           required: true,
         }),
       );
-      const tokenEstimate = admittedBlocks.reduce((sum, block) => sum + block.text.length, 0);
+      const tokenEstimate = admittedBlocks.reduce(
+        (sum, block) => sum + estimateTokenCount(block.text),
+        0,
+      );
       const maxInputTokens = input.budget?.maxInputTokens;
       const droppedAdvisoryBlocks: PromptPlan["droppedAdvisoryBlocks"] = [];
       const plan: PromptPlan = Object.freeze({

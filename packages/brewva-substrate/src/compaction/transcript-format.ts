@@ -42,11 +42,15 @@ function summarizeUnknownMessageContent(content: unknown): string {
   return normalizeSummaryText(fragments.join(" "));
 }
 
-export function summarizeBrewvaCompactionMessage(message: unknown): string | null {
+export function summarizeBrewvaCompactionMessage(
+  message: unknown,
+  options?: { readonly maxToolResultChars?: number },
+): string | null {
   if (!message || typeof message !== "object") {
     return null;
   }
 
+  const maxToolResultChars = options?.maxToolResultChars ?? COMPACTION_TOOL_RESULT_MAX_CHARS;
   const record = message as {
     role?: unknown;
     content?: unknown;
@@ -68,7 +72,7 @@ export function summarizeBrewvaCompactionMessage(message: unknown): string | nul
     if (body.length === 0) {
       return `toolResult(${toolName})`;
     }
-    return `toolResult(${toolName}): ${truncateForSummary(body, COMPACTION_TOOL_RESULT_MAX_CHARS)}`;
+    return `toolResult(${toolName}): ${truncateForSummary(body, maxToolResultChars)}`;
   }
   if (record.role === "custom") {
     const customType = typeof record.customType === "string" ? record.customType : "custom";
@@ -88,9 +92,12 @@ export function summarizeBrewvaCompactionMessage(message: unknown): string | nul
   return null;
 }
 
-export function serializeBrewvaCompactionConversation(messages: readonly unknown[]): string {
+export function serializeBrewvaCompactionConversation(
+  messages: readonly unknown[],
+  options?: { readonly maxToolResultChars?: number },
+): string {
   return messages
-    .map((message) => summarizeBrewvaCompactionMessage(message) ?? "")
+    .map((message) => summarizeBrewvaCompactionMessage(message, options) ?? "")
     .filter((line) => line.length > 0)
     .join("\n")
     .trim();
@@ -98,6 +105,22 @@ export function serializeBrewvaCompactionConversation(messages: readonly unknown
 
 export function estimateBrewvaCompactionTokens(messages: readonly unknown[]): number {
   return estimateStructuredTokenCount(serializeBrewvaCompactionConversation(messages));
+}
+
+/**
+ * Estimate the token size of a post-compaction context. Unlike
+ * {@link estimateBrewvaCompactionTokens} — which feeds the summary LLM and
+ * truncates large tool results — this keeps retained tool results intact, so
+ * the value reflects what the next provider request actually carries. Using the
+ * truncating estimator for post-compaction sizing under-counts a large kept
+ * tool result and can wrongly clear the compaction gate.
+ */
+export function estimateBrewvaCompactedContextTokens(messages: readonly unknown[]): number {
+  return estimateStructuredTokenCount(
+    serializeBrewvaCompactionConversation(messages, {
+      maxToolResultChars: Number.POSITIVE_INFINITY,
+    }),
+  );
 }
 
 export function estimateBrewvaCompactionMessageTokens(message: unknown): number {

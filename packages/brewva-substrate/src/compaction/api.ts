@@ -22,6 +22,7 @@ export {
   type ProjectBrewvaCompactionMessagesInput,
 } from "./projection.js";
 export {
+  estimateBrewvaCompactedContextTokens,
   estimateBrewvaCompactionTokens,
   serializeBrewvaCompactionConversation,
   summarizeBrewvaCompactionMessage,

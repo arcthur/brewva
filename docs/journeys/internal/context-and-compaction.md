@@ -182,6 +182,11 @@ flowchart TD
   `compaction_required`
 - a failed or absent compaction flush never resumes the soft-cut turn; the
   envelope returns a failed result (`compaction_soft_cut_flush_failed`)
+- the envelope bounds compaction resumes: a converging turn needs a single
+  resume, so after a small fixed number of consecutive compaction suspensions it
+  fails fast (`compaction_resume_attempts_exhausted`) instead of resuming a
+  non-converging turn forever; this is a bounded loop guard inside the envelope,
+  not a separate context-owned lifecycle state machine
 - text-only turns that never reach a tool-result boundary settle pending
   compaction at turn end: the envelope clears the armed stop flag and flushes
   the deferred request so hard-limit pressure does not leak into future turns

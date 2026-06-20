@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BrewvaAgentProtocolController } from "@brewva/brewva-substrate/agent-protocol";
 import {
   buildBrewvaDeterministicCompactionSummary,
+  estimateBrewvaCompactedContextTokens,
   estimateBrewvaCompactionTokens,
 } from "@brewva/brewva-substrate/compaction";
 import type { BrewvaHostContext, BrewvaHostPluginRunner } from "@brewva/brewva-substrate/host-api";
@@ -184,6 +185,8 @@ export class ManagedSessionCompactionLifecycle {
           sourceLeafEntryId: prepared.preview.sourceLeafEntryId,
           firstKeptEntryId: prepared.preview.firstKeptEntryId,
           tokensBefore: prepared.preview.tokensBefore,
+          toTokens: estimateBrewvaCompactedContextTokens(prepared.preview.context.messages),
+          cutPointReason: prepared.preview.cutPointReason,
           summaryGeneration: prepared.summaryGeneration,
         },
         fromExtension: false,

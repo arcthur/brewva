@@ -4,6 +4,8 @@ import {
   BREWVA_EMERGENCY_COMPACTION_SUMMARY_HEADER,
   buildBrewvaDeterministicCompactionSummary,
   createBrewvaCompactionSummaryMessage,
+  estimateBrewvaCompactedContextTokens,
+  estimateBrewvaCompactionTokens,
   estimateBrewvaSessionEntryTokens,
   findBrewvaCompactionCutPoint,
   projectBrewvaCompactionMessages,
@@ -123,6 +125,23 @@ describe("substrate compaction mechanisms", () => {
     expect(summary.startsWith("toolResult(read): ")).toBe(true);
     expect(summary).toContain("more characters truncated");
     expect(summary.length).toBeLessThan(longBody.length);
+  });
+
+  test("compacted-context estimate keeps full tool results that the summary estimate truncates", () => {
+    const bigToolResult = "word ".repeat(8_000);
+    const messages = [
+      { role: "user", content: "go" },
+      { role: "toolResult", toolName: "read", content: [{ type: "text", text: bigToolResult }] },
+    ];
+
+    // The summary-input estimator truncates a retained tool result to a few
+    // hundred tokens. Using it for post-compaction sizing under-counts a large
+    // kept result by an order of magnitude and would wrongly clear the gate.
+    const summaryEstimate = estimateBrewvaCompactionTokens(messages);
+    const contextEstimate = estimateBrewvaCompactedContextTokens(messages);
+
+    expect(summaryEstimate).toBeLessThan(1_000);
+    expect(contextEstimate).toBeGreaterThan(5_000);
   });
 
   test("renders image-bearing tool results as compact placeholders", () => {

@@ -12,6 +12,7 @@ import type {
   BrewvaAgentProtocolThinkingLevel,
   BrewvaAgentProtocolTransport,
 } from "@brewva/brewva-substrate/agent-protocol";
+import type { BrewvaSessionCompactionCutPoint } from "@brewva/brewva-substrate/compaction";
 import type {
   CreateBrewvaHostPluginRunnerOptions,
   BrewvaToolUiPort,
@@ -174,6 +175,7 @@ export interface ManagedAgentSessionStore extends ManagedAgentSessionStoreCore {
     context: BrewvaSessionContext;
     tokensBefore: number;
     summary: string;
+    cutPointReason: BrewvaSessionCompactionCutPoint["reason"];
   };
 }
 
@@ -205,6 +207,8 @@ export interface BuiltDeferredCompactionEvents {
       sourceLeafEntryId: string | null;
       firstKeptEntryId: string;
       tokensBefore: number;
+      toTokens: number;
+      cutPointReason: BrewvaSessionCompactionCutPoint["reason"];
       summaryGeneration: SessionCompactionGenerationMetadata;
     };
     fromExtension: false;
