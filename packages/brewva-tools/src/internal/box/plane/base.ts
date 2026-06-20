@@ -64,7 +64,10 @@ export class BaseBoxPlane implements BoxPlane {
     const fingerprint = fingerprintBoxScope(normalizedScope);
     const exact = this.findByFingerprint(fingerprint);
     if (exact) {
-      return this.createHandle(exact, "reused");
+      const reusable = await this.prepareReusedBox(exact);
+      return reusable === exact
+        ? this.createHandle(exact, "reused")
+        : this.createHandle(reusable, reusable.createReason);
     }
 
     const sameWorkspaceBoxes = [...this.boxes.values()].filter((box) =>
@@ -93,6 +96,15 @@ export class BaseBoxPlane implements BoxPlane {
     }
     await this.persist();
     return this.createHandle(stored, createReason);
+  }
+
+  /**
+   * Hook invoked just before an existing box is reused. Subclasses may return a
+   * replacement box (e.g. a freshly rebuilt one) to refuse reuse when the box is
+   * no longer safe to start. The default reuses the box unchanged.
+   */
+  protected async prepareReusedBox(box: StoredBox): Promise<StoredBox> {
+    return box;
   }
 
   protected async inspectLocked(): Promise<BoxInventory> {

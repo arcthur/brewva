@@ -654,6 +654,106 @@ describe("runtime turn loop", () => {
     expect(runtime.tape.list("s1", { type: "turn.started" })).toHaveLength(1);
   });
 
+  test("continues the turn when an approved tool aborts at execution time", async () => {
+    const requestId = "approval:s1:turn-approved-abort:call-approved-abort";
+    let calls = 0;
+    let executed = 0;
+    let secondCallLastMessage: unknown;
+    const provider: RuntimeProviderPort = {
+      async *stream(input) {
+        calls += 1;
+        if (calls === 2) {
+          // The model is given the aborted tool result and reacts, instead of
+          // the turn dying with approval_resolution_did_not_commit_tool.
+          secondCallLastMessage = input.prompt.messages.at(-1);
+          yield { type: "text", delta: "the tool failed; trying another approach" };
+          return;
+        }
+        yield {
+          type: "tool",
+          call: {
+            toolCallId: "call-approved-abort",
+            toolName: "write_file",
+            args: { path: "README.md" },
+            approval: {
+              required: true,
+              reason: "requires_operator_approval",
+            },
+          },
+        };
+      },
+    };
+    const toolExecutor: RuntimeToolExecutorPort = {
+      async execute() {
+        // Models an approved effectful tool that throws at execution time (e.g.
+        // a box-start failure: libkrun status=-22). The kernel aborts the
+        // commitment rather than committing a receipt.
+        executed += 1;
+        throw new Error("box_exec_failed: simulated effectful failure");
+      },
+    };
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-runtime-turn-approved-abort-")),
+      physics: {
+        mode: "real",
+        provider,
+        toolExecutor,
+      },
+    });
+
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        turnId: "turn-approved-abort",
+        prompt: "write",
+      }),
+    );
+    runtime.kernel.recordApprovalDecision({
+      sessionId: "s1",
+      requestId,
+      decision: "accept",
+      actor: "test",
+    });
+
+    // The resumed turn must not throw approval_resolution_did_not_commit_tool.
+    await Array.fromAsync(
+      runtime.turn({
+        sessionId: "s1",
+        turnId: "turn-approved-abort",
+        prompt: "",
+        resolveApproval: { requestId },
+      }),
+    );
+
+    expect(calls).toBe(2);
+    expect(executed).toBe(1);
+    expect(secondCallLastMessage).toMatchObject({
+      role: "tool",
+      toolCallId: "call-approved-abort",
+      toolName: "write_file",
+      isError: true,
+    });
+    expect(runtime.tape.list("s1").map((event) => event.type)).toEqual([
+      "turn.started",
+      "tool.proposed",
+      "approval.requested",
+      "runtime.suspended",
+      "approval.decided",
+      "tool.started",
+      "tool.aborted",
+      "msg.committed",
+      "turn.ended",
+    ]);
+    // Clean terminal completion, not a failed approval_resolution receipt.
+    expect(runtime.tape.list("s1", { type: "turn.ended" })[0]?.payload).toEqual({
+      cause: "terminal_commit",
+    });
+    expect(runtime.tape.list("s1", { type: "tool.aborted" })[0]?.payload).toMatchObject({
+      commitmentId: "tool:s1:turn-approved-abort:call-approved-abort",
+    });
+    expect(runtime.tape.list("s1", { type: "turn.started" })).toHaveLength(1);
+  });
+
   test("suspends policy-gated tool calls before the executor can run", async () => {
     let executed = false;
     const provider: RuntimeProviderPort = {

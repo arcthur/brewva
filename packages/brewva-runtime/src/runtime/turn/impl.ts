@@ -340,9 +340,16 @@ export function createTurnRunner(input: {
         if (approvalOutcome === "suspend") {
           return;
         }
+        // An approved (allow) tool that aborts at execution time emits a
+        // tool.aborted result the model can observe, exactly like an inline
+        // provider-tool abort. Treat it as a valid continue so the model reacts,
+        // instead of killing the turn with approval_resolution_did_not_commit_tool.
+        const approvedToolAborted =
+          approvalDecision.kind === "allow" && approvalOutcome === "continue";
         if (
           approvalOutcome === "committed" ||
-          decisionIncludesAbortedToolResult(approvalDecision)
+          decisionIncludesAbortedToolResult(approvalDecision) ||
+          approvedToolAborted
         ) {
           committedToolThisTurn = true;
           providerToolContinuations = 1;

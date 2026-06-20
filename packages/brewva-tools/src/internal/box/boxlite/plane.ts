@@ -43,6 +43,17 @@ import {
 
 const SHELL_COMMAND = "sh";
 
+/**
+ * Cap on stacked pre-exec qcow2 snapshots carried into a box reuse. Each
+ * snapshot adds one virtio-blk backing layer, and libkrun rejects the disk at
+ * krun_start_enter (EINVAL/-22) once the chain is deep enough (observed failure
+ * at ~8 stacked layers; boxes with <=3 stay healthy). BoxLite exposes no qcow2
+ * flatten/commit, so a box at or above this depth is rebuilt from its base image
+ * on reuse. Kept low so a single pre-exec snapshot taken after reuse still
+ * starts well under the failure point.
+ */
+const MAX_REUSABLE_SNAPSHOT_CHAIN = 4;
+
 export class BoxLiteBoxPlane extends BaseBoxPlane {
   private readonly options: BoxPlaneOptions;
   private readonly indexPath: string;
@@ -87,6 +98,24 @@ export class BoxLiteBoxPlane extends BaseBoxPlane {
       runningExecCount: 0,
       native,
     };
+  }
+
+  protected override async prepareReusedBox(box: StoredBox): Promise<StoredBox> {
+    if (box.snapshots.length < MAX_REUSABLE_SNAPSHOT_CHAIN || box.runningExecCount > 0) {
+      return box;
+    }
+    // The pre-exec snapshot backing chain has grown deep enough that libkrun's
+    // virtio-blk backend would reject the disk at krun_start_enter (EINVAL/-22).
+    // BoxLite exposes no qcow2 flatten/commit, so rebuild from the base image
+    // instead of reusing the over-deep chain. Workspace roots are bind-mounted to
+    // the host and survive the rebuild; only guest-local mutations outside the
+    // workspace are reset.
+    const { scope, fingerprint } = box;
+    await this.removeStoredBox(box);
+    const rebuilt = await this.createStoredBox(scope, fingerprint, "created");
+    this.boxes.set(rebuilt.id, rebuilt);
+    await this.persist();
+    return rebuilt;
   }
 
   protected override async execStoredBox(box: StoredBox, spec: BoxExecSpec): Promise<BoxExec> {

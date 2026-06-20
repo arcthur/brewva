@@ -4,6 +4,8 @@ import {
   fingerprintBoxScope,
   type BoxScope,
 } from "../../../../packages/brewva-tools/src/internal/box/index.js";
+import { InMemoryBoxPlane } from "../../../../packages/brewva-tools/src/internal/box/plane/in-memory.js";
+import type { StoredBox } from "../../../../packages/brewva-tools/src/internal/box/plane/stored-box.js";
 
 function sessionScope(input: Partial<BoxScope> = {}): BoxScope {
   return {
@@ -138,5 +140,59 @@ describe("box plane scope semantics", () => {
     expect(secondFork.scope.kind).toBe("ephemeral");
     expect(firstFork.scope.id).not.toBe(secondFork.scope.id);
     expect(firstFork.id).not.toBe(secondFork.id);
+  });
+});
+
+/**
+ * Guards the acquireLocked seam that lets a plane refuse to reuse a box (e.g.
+ * the BoxLite plane rebuilds a box whose qcow2 snapshot chain has grown past
+ * libkrun's virtio-blk limit). Exercises the base wiring with a test double so
+ * it stays runnable without a native backend.
+ */
+class ReuseGuardPlane extends InMemoryBoxPlane {
+  shouldRebuild = false;
+  rebuiltFrom: string | undefined;
+
+  protected override async prepareReusedBox(box: StoredBox): Promise<StoredBox> {
+    if (!this.shouldRebuild) {
+      return box;
+    }
+    this.shouldRebuild = false;
+    this.rebuiltFrom = box.id;
+    this.boxes.delete(box.id);
+    const rebuilt = await this.createStoredBox(box.scope, box.fingerprint, "created");
+    this.boxes.set(rebuilt.id, rebuilt);
+    return rebuilt;
+  }
+}
+
+describe("box plane reuse guard", () => {
+  test("reuses the box when prepareReusedBox returns it unchanged", async () => {
+    const plane = new ReuseGuardPlane();
+    const scope = sessionScope();
+
+    const first = await plane.acquire(scope);
+    const second = await plane.acquire(structuredClone(scope));
+
+    expect(second.acquisitionReason).toBe("reused");
+    expect(second.id).toBe(first.id);
+  });
+
+  test("returns the replacement box when prepareReusedBox rebuilds it", async () => {
+    const plane = new ReuseGuardPlane();
+    const scope = sessionScope();
+
+    const first = await plane.acquire(scope);
+    plane.shouldRebuild = true;
+    const second = await plane.acquire(structuredClone(scope));
+
+    expect(plane.rebuiltFrom).toBe(first.id);
+    expect(second.id).not.toBe(first.id);
+    expect(second.acquisitionReason).toBe("created");
+    expect(fingerprintBoxScope(second.scope)).toBe(fingerprintBoxScope(first.scope));
+
+    const inventory = await plane.inspect();
+    expect(inventory.boxes).toHaveLength(1);
+    expect(inventory.boxes[0]?.id).toBe(second.id);
   });
 });
