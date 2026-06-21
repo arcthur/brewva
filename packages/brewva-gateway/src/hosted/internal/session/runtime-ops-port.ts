@@ -1,3 +1,4 @@
+import type { Lossy } from "@brewva/brewva-std/honesty";
 import type {
   BrewvaToolRuntimeCapabilitiesPort,
   WorkerResultsClearInput,
@@ -55,7 +56,10 @@ export type HostedRuntimeOpsExtensions = {
   };
   readonly context: {
     readonly evidence: {
-      append(sessionId: string, payload: object): RuntimeEventRecord;
+      // The evidence sink is the lossy plane: every appended sample is non-authoritative
+      // and may vanish on restart. Demand the `Lossy` honesty class so a durable value
+      // can never be mis-routed here, and so the lossy plane is typed, not conventional.
+      append(sessionId: string, payload: Lossy<object>): RuntimeEventRecord;
     };
     readonly usage: {
       observe(sessionId: string, payload?: ContextBudgetUsage): RuntimeEventRecord;

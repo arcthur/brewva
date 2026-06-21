@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { asLossy } from "@brewva/brewva-std/honesty";
 import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   SUBAGENT_COMPLETED_EVENT_TYPE,
@@ -105,29 +106,35 @@ describe("cli inspect lineage reporting", () => {
         ],
       },
     });
-    runtime.ops.context.evidence.append(sessionId, {
-      kind: "prompt_stability",
-      turn: 1,
-      timestamp: 10,
-      payload: {
-        scopeKey: `${sessionId}::root`,
-        stablePrefixHash: "attention-prefix",
-        dynamicTailHash: "attention-tail",
-        stablePrefix: true,
-        stableTail: true,
-      },
-    });
-    runtime.ops.context.evidence.append(sessionId, {
-      kind: "provider_cache_observation",
-      payload: {
-        status: "warm",
-        bucketKey: "openai:gpt-5.4",
-        stablePrefixHash: "stable-prefix",
-        dynamicTailHash: "dynamic-tail",
-        cacheReadTokens: 42,
-        cacheWriteTokens: 0,
-      },
-    });
+    runtime.ops.context.evidence.append(
+      sessionId,
+      asLossy({
+        kind: "prompt_stability",
+        turn: 1,
+        timestamp: 10,
+        payload: {
+          scopeKey: `${sessionId}::root`,
+          stablePrefixHash: "attention-prefix",
+          dynamicTailHash: "attention-tail",
+          stablePrefix: true,
+          stableTail: true,
+        },
+      }),
+    );
+    runtime.ops.context.evidence.append(
+      sessionId,
+      asLossy({
+        kind: "provider_cache_observation",
+        payload: {
+          status: "warm",
+          bucketKey: "openai:gpt-5.4",
+          stablePrefixHash: "stable-prefix",
+          dynamicTailHash: "dynamic-tail",
+          cacheReadTokens: 42,
+          cacheWriteTokens: 0,
+        },
+      }),
+    );
     runtime.ops.session.compaction.commit(sessionId, {
       compactId: "compact-0",
       summaryDigest: "summary-digest-0",

@@ -101,6 +101,7 @@ export class ManagedSessionProviderPayloadPipeline {
     payload,
     model,
     metadata,
+    transmittedSecrets,
     turn,
     providerContext,
   }: RuntimeProviderPayloadInput): Promise<unknown> => {
@@ -192,6 +193,7 @@ export class ManagedSessionProviderPayloadPipeline {
       workbenchContext,
       providerFallback,
       payload: nextPayload,
+      transmittedSecrets,
     });
     this.#cacheRuntime.lastProviderFingerprint = providerFingerprint;
     const harnessManifest = buildHarnessManifest({

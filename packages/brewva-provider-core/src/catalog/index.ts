@@ -1,28 +1,14 @@
 import type { Api, KnownProvider, Model, Usage } from "../contracts/index.js";
+import {
+  isCodexEligibleModelId,
+  modelSupportsXhigh,
+  OPENAI_CODEX_PROVIDER,
+  synthesizeCodexModel,
+} from "../quirks/index.js";
 import { MODELS } from "./models.generated.js";
 
 // Retained as an extension hook for future provider/model deprecations.
 const RETIRED_MODEL_KEYS = new Set<string>();
-const OPENAI_CODEX_PROVIDER = "openai-codex";
-const OPENAI_CODEX_API = "openai-codex-responses";
-const OPENAI_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
-const OPENAI_CODEX_ZERO_COST = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-};
-const OPENAI_CODEX_LEGACY_MODEL_IDS = new Set([
-  "gpt-5.1",
-  "gpt-5.1-codex-max",
-  "gpt-5.1-codex-mini",
-  "gpt-5.2",
-  "gpt-5.2-codex",
-  "gpt-5.3-codex",
-  "gpt-5.3-codex-spark",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-]);
 
 type ModelApi<
   TProvider extends KnownProvider,
@@ -41,46 +27,16 @@ function isRetiredModel(provider: string, modelId: string): boolean {
   return RETIRED_MODEL_KEYS.has(modelKey(provider, modelId));
 }
 
-function isGptModelAfter54(modelId: string): boolean {
-  const match = /^gpt-(\d+)\.(\d+)(?:$|[-_])/u.exec(modelId);
-  if (!match) {
-    return false;
-  }
-
-  const major = Number.parseInt(match[1] ?? "", 10);
-  const minor = Number.parseInt(match[2] ?? "", 10);
-  return major > 5 || (major === 5 && minor > 4);
-}
-
-function isOpenAICodexModelId(modelId: string): boolean {
-  return OPENAI_CODEX_LEGACY_MODEL_IDS.has(modelId) || isGptModelAfter54(modelId);
-}
-
-function toOpenAICodexModel(model: Model<Api>): Model<"openai-codex-responses"> {
-  return {
-    id: model.id,
-    name: model.name,
-    api: OPENAI_CODEX_API,
-    provider: OPENAI_CODEX_PROVIDER,
-    baseUrl: OPENAI_CODEX_BASE_URL,
-    reasoning: model.reasoning,
-    input: [...model.input],
-    cost: { ...OPENAI_CODEX_ZERO_COST },
-    contextWindow: model.id.includes("gpt-5.5") ? 400_000 : model.contextWindow,
-    maxTokens: model.maxTokens,
-  };
-}
-
 function getOpenAICodexModels(): Model<"openai-codex-responses">[] {
   const openAIModels = MODELS.openai as Record<string, Model<Api>>;
   return Object.values(openAIModels)
     .filter(
       (model) =>
-        isOpenAICodexModelId(model.id) &&
+        isCodexEligibleModelId(model.id) &&
         !isRetiredModel("openai", model.id) &&
         !isRetiredModel(OPENAI_CODEX_PROVIDER, model.id),
     )
-    .map((model) => toOpenAICodexModel(model));
+    .map((model) => synthesizeCodexModel(model));
 }
 
 export function getModel(
@@ -133,28 +89,11 @@ export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage
 }
 
 export function supportsXhighModelId(modelId: string): boolean {
-  if (
-    modelId.includes("gpt-5.2") ||
-    modelId.includes("gpt-5.3") ||
-    modelId.includes("gpt-5.4") ||
-    modelId.includes("gpt-5.5")
-  ) {
-    return true;
-  }
-
-  if (modelId.includes("opus-4-6") || modelId.includes("opus-4.6")) {
-    return true;
-  }
-
-  if (modelId === "deepseek-v4-flash" || modelId === "deepseek-v4-pro") {
-    return true;
-  }
-
-  return false;
+  return modelSupportsXhigh(modelId);
 }
 
 export function supportsXhigh<TApi extends Api>(model: Model<TApi>): boolean {
-  return supportsXhighModelId(model.id);
+  return modelSupportsXhigh(model.id);
 }
 
 export function modelsAreEqual<TApi extends Api>(

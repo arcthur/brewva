@@ -311,9 +311,13 @@ Fingerprint fields include:
 - provider fallback hash
 
 Fingerprints contain hashes and safe labels, not raw prompt content, credentials,
-or provider secrets. The hash fields are opaque SHA-256 hex digests and must be
-compared for equality only; callers must not rely on the historical 16-hex FNV
-width.
+or provider secrets. Beyond stripping secret-named keys, transmitted secret values
+(apiKey/token leaves, length >= 8) supplied via `transmittedSecrets` are scrubbed
+by value from the payload-derived hashes (`stablePrefixHash`, `dynamicTailHash`,
+`requestHash`) using the `redactedValues` option in `@brewva/brewva-std/hash`, so
+an echoed credential cannot survive in a digest. The hash fields are opaque
+SHA-256 hex digests and must be compared for equality only; callers must not rely
+on the historical 16-hex FNV width.
 
 ## Break Detection
 
@@ -425,12 +429,20 @@ Runtime exposes token-cache diagnostics through live, non-authoritative
 inspection:
 
 - `inspect.context.evidence.latest(sessionId, "provider_cache_observation")`
+- `inspect.context.evidence.latest(sessionId, "provider_drift_sample")` — the
+  seam-wide sibling kind on the same lossy sink: non-authoritative fallback/drift
+  diagnoses (`source: "fallback_selection"`; `transport_fallback` deferred),
+  projected by `buildProviderDriftProjection`
 - `inspect.context.visibleRead.getEpoch(sessionId)`
 - `inspect.context.visibleRead.isCurrent(sessionId, state)`
 
-The evidence sink is lossy by contract: `latest(...)` may return `undefined`
-after process restart or when no recent sample is available. Visible-read
-inspection remains authoritative for tool-dispatch staleness checks.
+The evidence sink is lossy by contract and lossy by type: it demands
+`Lossy<object>` (`runtime-ops-port.ts`), and each sample is tagged `asLossy` at
+the sink, so a `Durable` value can never be appended (honesty classes
+`Durable`/`Lossy`/`Advisory` live in `@brewva/brewva-std/honesty`). `latest(...)`
+may return `undefined` after process restart or when no recent sample is
+available. Visible-read inspection remains authoritative for tool-dispatch
+staleness checks.
 
 Maintenance surfaces may observe cache state and advance visible-read epochs,
 but these remain session-local diagnostic or lifecycle operations. They do not

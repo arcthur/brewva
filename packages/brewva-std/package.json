@@ -29,6 +29,12 @@
       "import": "./dist/hash.js",
       "default": "./dist/hash.js"
     },
+    "./honesty": {
+      "types": "./dist/honesty.d.ts",
+      "bun": "./src/honesty.ts",
+      "import": "./dist/honesty.js",
+      "default": "./dist/honesty.js"
+    },
     "./json": {
       "types": "./dist/json.d.ts",
       "bun": "./src/json.ts",

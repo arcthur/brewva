@@ -243,6 +243,7 @@ export interface RuntimeProviderPayloadInput {
   readonly payload: unknown;
   readonly model: ProviderModel<Api>;
   readonly metadata?: ProviderPayloadMetadata;
+  readonly transmittedSecrets?: readonly string[];
   readonly turn: {
     readonly sessionId: string;
     readonly turnId?: string;

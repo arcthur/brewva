@@ -101,7 +101,36 @@ export interface ContextEvidenceSample {
     readonly provider?: string;
     readonly api?: string;
     readonly model?: string;
+    readonly driftSource?: ProviderDriftSource;
+    readonly attemptedProvider?: string;
+    readonly attemptedModel?: string;
+    readonly credentialSlot?: string;
+    readonly requestedTransport?: string;
+    readonly actualTransport?: string;
   };
+}
+
+// "transport_fallback" has no emitter yet — surfacing the Codex WS→SSE latch needs a
+// provider-core surface decision deferred out of WS3; the variant is forward-shaped.
+export type ProviderDriftSource = "fallback_selection" | "transport_fallback";
+
+// A provider-drift sample is a lossy, non-authoritative diagnosis that a
+// non-replay optimization shifted: a model fallback was selected, or a transport
+// fell back. It re-projects facts the fingerprint/fallback metadata already carry
+// into the same evidence sink the cache-break observation uses, so one inspect view
+// can read cache + fallback + transport drift through one path. Never replay truth.
+export interface ProviderDriftSample {
+  readonly source: ProviderDriftSource;
+  readonly provider: string;
+  readonly reason: string | null;
+  readonly attempted?: { readonly provider: string; readonly model: string };
+  readonly selected?: {
+    readonly provider: string;
+    readonly model: string;
+    readonly credentialSlot?: string;
+  };
+  readonly requestedTransport?: string;
+  readonly actualTransport?: string;
 }
 
 export interface ContextStatusView extends ContextStatus {}

@@ -136,6 +136,7 @@ Every accepted decision inherits these rules:
 - [kimi-code-token-cache-adapter](./kimi-code-token-cache-adapter.md)
 - [preparse-normalization-model-capability-and-live-audit-split](./preparse-normalization-model-capability-and-live-audit-split.md)
 - [preset-based-agent-model-routing](./preset-based-agent-model-routing.md)
+- [provider-seam-orthogonality-and-observability](./provider-seam-orthogonality-and-observability.md)
 - [runtime-owned-session-lifecycle-aggregate-and-authority-gate](./runtime-owned-session-lifecycle-aggregate-and-authority-gate.md)
 - [schedule-intent-hardening-and-control-plane-ergonomics](./schedule-intent-hardening-and-control-plane-ergonomics.md)
 - [session-lineage-and-context-admission](./session-lineage-and-context-admission.md)

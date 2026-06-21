@@ -5,7 +5,13 @@ import { stableJsonStringify, toJsonValue, type JsonValue } from "./json.js";
 export interface RedactedStableJsonOptions {
   redactedKeyPattern?: RegExp;
   replacement?: JsonValue;
+  // Literal secret values to scrub wherever they appear as string leaves — not just
+  // under secret-named keys. Use for transmitted secrets (an apiKey/token) in case a
+  // provider response echoes them back into a payload that gets hashed.
+  redactedValues?: readonly string[];
 }
+
+const MIN_REDACTED_VALUE_LENGTH = 8;
 
 export type HashInput = string | Uint8Array;
 
@@ -51,7 +57,7 @@ function redactStableJsonValueInner(
   seen: WeakSet<object>,
 ): JsonValue {
   if (!value || typeof value !== "object") {
-    return toJsonValue(value);
+    return redactLeafValue(value, options);
   }
   if (seen.has(value)) {
     return "[Circular]";
@@ -80,6 +86,24 @@ function testRedactedKeyPattern(pattern: RegExp, key: string): boolean {
   const matched = pattern.test(key);
   pattern.lastIndex = 0;
   return matched;
+}
+
+function redactLeafValue(value: unknown, options: RedactedStableJsonOptions): JsonValue {
+  if (typeof value !== "string") {
+    return toJsonValue(value);
+  }
+  const secrets = options.redactedValues;
+  if (!secrets || secrets.length === 0) {
+    return value;
+  }
+  const replacement = typeof options.replacement === "string" ? options.replacement : "[redacted]";
+  let redacted = value;
+  for (const secret of secrets) {
+    if (secret.length >= MIN_REDACTED_VALUE_LENGTH && redacted.includes(secret)) {
+      redacted = redacted.split(secret).join(replacement);
+    }
+  }
+  return redacted;
 }
 
 function normalizeHashInput(input: HashInput): Uint8Array {

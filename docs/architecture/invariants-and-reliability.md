@@ -62,6 +62,16 @@ recovery, and bounded execution.
     from verification evidence requires an explicit gate manifest converted
     into kernel policy input; adapters must not call admission or mutate
     approval state directly.
+17. Typed honesty classes:
+    lossy telemetry (provider cache and drift evidence) and durable replay facts
+    are distinct phantom-branded types (`Durable`/`Lossy`/`Advisory`). A `Lossy<T>`
+    can never satisfy a durable sink, and credential rotation enters the tape only
+    as `Durable<T>`; mis-routing is a compile error, not a convention.
+18. Pre-first-frame fallback gate:
+    model fallback and credential rotation are reachable only behind a typed
+    `NoFrame` witness proving no provider frame has streamed. Once the first frame
+    streams (`SawFrame`), recovery is unrepresentable — the turn cannot rewrite
+    itself mid-stream.
 
 ## Failure Semantics
 
@@ -69,6 +79,10 @@ recovery, and bounded execution.
   truth.
 - Missing or stale provider cache may cost tokens, but must not change
   authorization, recovery, or committed tool outcomes.
+- Provider drift samples (`provider_drift_sample`, source `fallback_selection`;
+  `transport_fallback` deferred) and cache-break observations are lossy diagnosis:
+  projection-only for inspect, never replay authority, and never re-routed into a
+  durable sink.
 - Verifier blockers are visible verification debt until resolved; they do not
   silently become task truth.
 - Missing attention option evidence produces fewer candidate cards, not hidden
@@ -109,6 +123,20 @@ recovery, and bounded execution.
 | Session wire    | derived live/read model             | rebuild or degrade UI details             |
 | Session lineage | rebuildable state                   | rebuild from tape                         |
 | Provider cache  | performance cache                   | disable or miss without changing truth    |
+
+## Layer Ownership
+
+The provider seam's layers each own exactly one thing. This table is the single
+authority a reviewer points at when a control decision tries to migrate layers
+(e.g. a provider-local retry creeping into the gateway loop, or a projection/cache
+made authoritative).
+
+| Layer         | Owns                                            | Must never own                                  |
+| ------------- | ----------------------------------------------- | ----------------------------------------------- |
+| provider-core | stream lifecycle, normalization, quirk table    | fallback, credential rotation, replay authority |
+| gateway       | model fallback, credential rotation, drift sink | the normalized stream contract, replay truth    |
+| tape          | replay authority (committed runtime facts)      | provider routing, optimization decisions        |
+| cache plane   | a disposable, lossy efficiency plane            | replay authority; gating correctness            |
 
 ## Implementation Anchors
 

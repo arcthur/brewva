@@ -1,4 +1,5 @@
 import { toJsonValue } from "@brewva/brewva-std/json";
+import type { ProviderDriftSample } from "@brewva/brewva-vocabulary/context";
 import {
   stableHarnessId,
   wrapHarnessManifestRecordedAdvisoryPayload,
@@ -39,6 +40,45 @@ function readStringValue(value: unknown): string | undefined {
 
 export function readProviderFallbackActive(value: unknown): boolean {
   return readRecordValue(value)?.active === true;
+}
+
+// Project the raw providerFallback metadata into a fallback-selection drift sample.
+// Returns undefined unless a fallback is active and a selected route is present.
+export function readProviderFallbackSelection(value: unknown): ProviderDriftSample | undefined {
+  const record = readRecordValue(value);
+  if (record?.active !== true) {
+    return undefined;
+  }
+  const attempted = readRecordValue(record.attemptedRoute);
+  const selected = readRecordValue(record.selectedRoute);
+  const selectedProvider = readStringValue(selected?.provider);
+  const selectedModel = readStringValue(selected?.model);
+  if (!selectedProvider || !selectedModel) {
+    return undefined;
+  }
+  const attemptedProvider = readStringValue(attempted?.provider);
+  const attemptedModel = readStringValue(attempted?.model);
+  const credentialSlot = readStringValue(selected?.credentialSlot);
+  // Only a genuine model fallback carries `attempted`. A credential rotation keeps the
+  // same model (attempted === selected) and is distinguished by `credentialSlot` alone,
+  // so omitting `attempted` there avoids a misleading "fell back to the same model".
+  const attemptedFallback =
+    attemptedProvider !== undefined &&
+    attemptedModel !== undefined &&
+    (attemptedProvider !== selectedProvider || attemptedModel !== selectedModel)
+      ? { provider: attemptedProvider, model: attemptedModel }
+      : undefined;
+  return {
+    source: "fallback_selection",
+    provider: selectedProvider,
+    reason: readStringValue(record.reason) ?? null,
+    ...(attemptedFallback ? { attempted: attemptedFallback } : {}),
+    selected: {
+      provider: selectedProvider,
+      model: selectedModel,
+      ...(credentialSlot ? { credentialSlot } : {}),
+    },
+  };
 }
 
 export function turnNumberFromTurnId(turnId: string | undefined): number | undefined {

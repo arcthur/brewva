@@ -1,3 +1,4 @@
+import { asLossy } from "@brewva/brewva-std/honesty";
 import { resolveWindowScaledTokens } from "@brewva/brewva-substrate/context-budget";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
@@ -232,23 +233,26 @@ function observeAndRecordTransientReduction(
     classification: input.classification ?? null,
     expectedCacheBreak: input.expectedCacheBreak ?? false,
   };
-  runtime.ops.context.evidence.append(sessionId, {
-    kind: "transient_reduction",
-    turn: observed.turn,
-    timestamp: observed.updatedAt,
-    payload: {
-      status: observed.status,
-      reason: observed.reason,
-      eligibleToolResults: observed.eligibleToolResults,
-      clearedToolResults: observed.clearedToolResults,
-      clearedChars: observed.clearedChars,
-      estimatedTokenSavings: observed.estimatedTokenSavings,
-      compactionAdvised: observed.compactionAdvised,
-      forcedCompaction: observed.forcedCompaction,
-      classification: observed.classification,
-      expectedCacheBreak: observed.expectedCacheBreak,
-    },
-  });
+  runtime.ops.context.evidence.append(
+    sessionId,
+    asLossy({
+      kind: "transient_reduction",
+      turn: observed.turn,
+      timestamp: observed.updatedAt,
+      payload: {
+        status: observed.status,
+        reason: observed.reason,
+        eligibleToolResults: observed.eligibleToolResults,
+        clearedToolResults: observed.clearedToolResults,
+        clearedChars: observed.clearedChars,
+        estimatedTokenSavings: observed.estimatedTokenSavings,
+        compactionAdvised: observed.compactionAdvised,
+        forcedCompaction: observed.forcedCompaction,
+        classification: observed.classification,
+        expectedCacheBreak: observed.expectedCacheBreak,
+      },
+    }),
+  );
   recordTransientReductionEvidence({
     workspaceRoot: runtime.identity.workspaceRoot,
     sessionId,

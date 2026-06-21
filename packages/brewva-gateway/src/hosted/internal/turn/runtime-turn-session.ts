@@ -6,6 +6,8 @@ import type {
   ProviderPayloadMetadata,
   SimpleStreamOptions as ProviderStreamOptions,
 } from "@brewva/brewva-provider-core/contracts";
+import type { Durable } from "@brewva/brewva-std/honesty";
+import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaModelCatalog, BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type {
@@ -23,6 +25,13 @@ import { hasHostedPromptAttemptDispatch } from "./hosted-prompt-attempt.js";
 import type { RuntimeProviderContextSummary } from "./runtime-provider-context.js";
 import { hasHostedRuntimeTurnPrelude } from "./runtime-turn-prelude.js";
 
+export interface ProviderCredentialRotation {
+  readonly providerId: string;
+  readonly credentialSlot: string;
+  readonly reason: "quota" | "rate_limit" | "auth" | "manual";
+  readonly cooldownMs: number;
+}
+
 export interface RuntimeProviderModelCatalog extends Pick<
   BrewvaModelCatalog,
   "getAll" | "getApiKeyAndHeaders"
@@ -31,14 +40,7 @@ export interface RuntimeProviderModelCatalog extends Pick<
     provider: string,
     reason: "quota" | "rate_limit" | "auth" | "manual",
     cooldownMs: number,
-  ):
-    | {
-        providerId: string;
-        credentialSlot: string;
-        reason: "quota" | "rate_limit" | "auth" | "manual";
-        cooldownMs: number;
-      }
-    | undefined;
+  ): ProviderCredentialRotation | undefined;
 }
 
 export interface RuntimeProviderFace {
@@ -47,11 +49,10 @@ export interface RuntimeProviderFace {
   getModelPresetState(): BrewvaModelPresetState;
   getActiveModelRole(): BrewvaModelRoleAlias;
   getModelRoutingSettings(): HostedModelRoutingSettings | undefined;
-  recordProviderCredentialRotated(input: {
-    providerId: string;
-    credentialSlot: string;
-    reason: "quota" | "rate_limit" | "auth" | "manual";
-    cooldownMs: number;
+  recordProviderCredentialRotated(input: Durable<ProviderCredentialRotation>): void;
+  recordProviderFallbackSelection(input: {
+    readonly providerFallback: Record<string, JsonValue>;
+    readonly turnId?: string;
   }): void;
   getVerificationGateManifests(): readonly VerificationGateManifest[];
   getVerificationGateEvidence(sessionId: string): readonly VerificationGateEvidence[];
@@ -62,6 +63,7 @@ export interface RuntimeProviderFace {
     readonly payload: unknown;
     readonly model: ProviderModel<Api>;
     readonly metadata?: ProviderPayloadMetadata;
+    readonly transmittedSecrets?: readonly string[];
     readonly turn: {
       readonly sessionId: string;
       readonly turnId?: string;
@@ -95,6 +97,7 @@ function isRuntimeProviderFace(value: unknown): value is RuntimeProviderFace {
     typeof candidate.getActiveModelRole === "function" &&
     typeof candidate.getModelRoutingSettings === "function" &&
     typeof candidate.recordProviderCredentialRotated === "function" &&
+    typeof candidate.recordProviderFallbackSelection === "function" &&
     typeof candidate.getVerificationGateManifests === "function" &&
     typeof candidate.getVerificationGateEvidence === "function" &&
     typeof candidate.getProviderCachePolicy === "function" &&

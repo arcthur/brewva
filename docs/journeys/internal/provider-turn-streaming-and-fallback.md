@@ -88,14 +88,18 @@ flowchart TD
    fingerprint after final payload assembly and before streaming.
 5. The stream is sent over the SDK iterable, an SSE reader (Codex), or a
    WebSocket (Codex `auto` transport), and the driver feeds wire events into the
-   composer.
+   composer. Both Codex transports feed the single `runCodexNormalizer`, so
+   transport is orthogonal to normalization and terminal integrity is asserted
+   once regardless of transport.
 6. The composer folds events through a sequential block accumulator (text and
    thinking) and a keyed tool-call folder, emitting normalized
    `AssistantMessageEvent`s and assembling the final `AssistantMessage`.
 7. The hosted port maps frames and flips a saw-frame flag on the first
-   text/thinking delta or tool-call end. On an error before any frame, it
-   classifies the failure and either rotates a credential (retrying the same
-   model) or selects the next fallback model.
+   text/thinking delta or tool-call end. The flag is a typed `SawFrame`/`NoFrame`
+   witness: `classifyRecoverableFailure` accepts only `NoFrame`, so post-frame
+   fallback is unrepresentable. On an error before any frame, it classifies the
+   failure and either rotates a credential (retrying the same model) or selects
+   the next fallback model.
 8. On a committed assistant message, a cache-break detector compares against the
    last fingerprint and appends a `provider_cache_observation` evidence sample.
 
@@ -138,8 +142,10 @@ flowchart TD
   - capability is resolved from api + provider + model + base URL + transport
     (for example Kimi Code is unsupported, Anthropic long retention requires the
     direct base URL, Codex gains a continuation capability off SSE)
-  - the request fingerprint hashes are opaque SHA-256 over redacted payloads
-    (secret-named keys are stripped before hashing)
+  - the request fingerprint hashes are opaque SHA-256 over redacted payloads:
+    secret-named keys are stripped, and transmitted secret values (apiKey/token
+    leaves) are additionally scrubbed by value from the payload-derived hashes, so
+    an echoed credential cannot survive in a digest
   - break detection is bucket-keyed; expected breaks rebase state silently;
     sticky latches are monotonic and cleared on session clear; the tool-schema
     snapshot bumps an epoch on tool-set change
@@ -178,8 +184,15 @@ flowchart TD
   (`providerFallbackActive`). Credential rotation is visible through both the
   tape event and the fingerprint
 - `provider_cache_observation` is an evidence-sink kind appended via the runtime
-  context evidence sink, not a durable event family; it is lossy by contract and
-  may be absent after restart
+  context evidence sink, not a durable event family; it is lossy by contract — the
+  sink type-demands `Lossy<object>` (the `Durable`/`Lossy`/`Advisory` honesty
+  classes in `@brewva/brewva-std/honesty`) — and may be absent after restart
+- `provider_drift_sample` is the seam-wide sibling kind through the same lossy
+  sink: a model fallback selection appends one (`source: "fallback_selection"`;
+  the `transport_fallback` source is typed but deferred — no emitter yet). A
+  same-model credential rotation is distinguished by `credentialSlot` and omits
+  `attempted`. The inspect view `buildProviderDriftProjection` reads the latest
+  sample explicit-pull, projection-only, and fail-closed — never replay authority
 - cache-break diagnostics can be dumped to a directory configured by
   `BREWVA_CACHE_BREAK_DUMP_DIR` (or the related debug env vars); dumps are
   non-authoritative and never enter the tape
@@ -214,6 +227,16 @@ flowchart TD
   `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`
 - Credential-rotation event constant:
   `packages/brewva-vocabulary/src/internal/iteration.ts`
+- Wire-reality quirks table (model synthesis, route predicates, deployment
+  descriptor): `packages/brewva-provider-core/src/quirks/index.ts`
+- Single Codex normalizer across transports — `runCodexNormalizer` in
+  `packages/brewva-provider-core/src/providers/openai-codex-responses/sse.ts`
+  (called from `websocket.ts`)
+- Honesty classes (durable/lossy/advisory phantom brands):
+  `packages/brewva-std/src/honesty.ts`
+- Provider-drift sample emit and inspect projection: `appendProviderDriftSample`
+  in `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`,
+  `packages/brewva-cli/src/operator/inspect/provider-drift.ts`
 
 ## Related Docs
 

@@ -32,11 +32,19 @@ export interface ProviderRequestFingerprintInput {
   workbenchContext?: unknown;
   providerFallback?: unknown;
   payload: unknown;
+  // Literal transmitted secrets (apiKey/token) to scrub from payload-derived hashes,
+  // in case a provider response echoed them back into the request content.
+  transmittedSecrets?: readonly string[];
 }
 
 export function createProviderRequestFingerprint(
   input: ProviderRequestFingerprintInput,
 ): ProviderRequestFingerprint {
+  // Secret-value redaction intentionally covers only the payload-derived hashes below
+  // (request/stablePrefix/dynamicTail) — the only fields that ingest provider wire
+  // content where an echoed apiKey could land. Do not route response-derived content
+  // into the other hash fields without extending secretRedaction to them.
+  const secretRedaction = { redactedValues: input.transmittedSecrets };
   return {
     bucketKey: buildProviderCacheBucketKey({
       provider: input.provider,
@@ -54,9 +62,9 @@ export function createProviderRequestFingerprint(
     toolSchemaSnapshotHash: input.toolSchemaSnapshot.hash,
     toolSchemaOverlayHash: input.toolSchemaSnapshot.overlayHash,
     perToolHashes: { ...input.toolSchemaSnapshot.perToolHashes },
-    stablePrefixHash: redactedStableJsonSha256Hex(input.stablePrefixParts),
-    dynamicTailHash: redactedStableJsonSha256Hex(input.dynamicTailParts),
-    requestHash: redactedStableJsonSha256Hex(input.payload),
+    stablePrefixHash: redactedStableJsonSha256Hex(input.stablePrefixParts, secretRedaction),
+    dynamicTailHash: redactedStableJsonSha256Hex(input.dynamicTailParts, secretRedaction),
+    requestHash: redactedStableJsonSha256Hex(input.payload, secretRedaction),
     channelContextHash: redactedStableJsonSha256Hex(input.channelContext),
     renderedCacheHash: redactedStableJsonSha256Hex(input.renderedCache ?? null),
     cacheCapabilityHash: redactedStableJsonSha256Hex(

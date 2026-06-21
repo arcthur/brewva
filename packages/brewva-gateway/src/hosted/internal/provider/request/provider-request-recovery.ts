@@ -1,3 +1,4 @@
+import { asLossy } from "@brewva/brewva-std/honesty";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { MESSAGE_END_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import {
@@ -214,16 +215,19 @@ export function registerProviderRequestRecovery(
     }
     consumedLengthStopBySession.set(sessionId, stop.eventKey);
     const result = applyOutputBudgetEscalationToPayload(event.payload, Math.trunc(target));
-    runtime.ops.context.evidence.append(sessionId, {
-      kind: "output_budget_escalation",
-      timestamp: Date.now(),
-      payload: {
-        status: result.status,
-        targetMaxTokens: Math.trunc(target),
-        triggerEventKey: stop.eventKey,
-        detail: result.detail,
-      },
-    });
+    runtime.ops.context.evidence.append(
+      sessionId,
+      asLossy({
+        kind: "output_budget_escalation",
+        timestamp: Date.now(),
+        payload: {
+          status: result.status,
+          targetMaxTokens: Math.trunc(target),
+          triggerEventKey: stop.eventKey,
+          detail: result.detail,
+        },
+      }),
+    );
     if (result.status !== "completed") {
       return undefined;
     }

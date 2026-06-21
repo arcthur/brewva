@@ -46,6 +46,13 @@ incrementally, but adapters must emit `toolcall_end` only after the provider
 terminal signal is accepted, so truncated streams cannot dispatch executable
 tool calls.
 
+A provider `StreamFunction` encodes every request, model, or runtime failure that
+occurs while the stream is producing as a terminal `error` event on the
+`ProviderStreamError` channel — so `done | error` is the single completion gate and
+consumers need no `try`/`catch` around stream consumption. A precondition guard (e.g. a
+missing `apiKey`) may still throw at invocation; the hosted path pre-resolves auth, so
+drivers never reach it in production.
+
 `runProviderStream(...)` owns stream lifecycle:
 
 - eager or lazy `start`
@@ -77,7 +84,10 @@ Direct provider stream options may set `maxRetries`, `maxRetryDelayMs`,
 `websocketConnectTimeoutMs`. OpenAI Codex Responses defaults to no transport
 retry; callers opt into retry budgets explicitly, while terminal quota, billing,
 and usage-limit failures remain non-retryable. Codex Responses cache/session
-affinity uses the `session-id` header, not the legacy `session_id` header.
+affinity uses the `session-id` header, not the legacy `session_id` header. Both
+Codex transports (SSE and the `auto` WebSocket) feed the single
+`runCodexNormalizer`, so protocol normalization and terminal-integrity assertion
+happen once: transport selection is orthogonal to normalization.
 
 Gateway-hosted model fallback wraps provider stream attempts above
 provider-core. Fallback is allowed only before any provider frame has been
@@ -130,8 +140,10 @@ optional `parseStatus` signal:
 - `likely_invalid`: a present value violates the schema in a way that is not
   plausibly just a streaming prefix.
 
-The signal is advisory. Final tool-call correctness remains the terminal AJV
-validation of the TypeBox schema.
+The signal is advisory and typed as `Advisory<StreamingParseStatus>` (from the
+`@brewva/brewva-std` honesty brands), so it is structurally unassignable where a
+durable or authoritative value is required. Final tool-call correctness remains
+the terminal AJV validation of the TypeBox schema.
 
 ## Provider Shapes
 
@@ -182,6 +194,10 @@ the next provider turn.
 - Providers may keep provider-specific signatures such as reasoning signatures
   or thought signatures, but those values stay attached to normalized blocks
   instead of creating parallel event families.
+- Wire-boundary usage arithmetic is clamped non-negative: cached-token
+  subtraction (`input_tokens - cached_tokens`, shared by OpenAI Responses and
+  Codex SSE) is `Math.max(0, …)`, so a cache-heavy turn cannot emit negative
+  token counts.
 
 ## Hosted MCP Bridge
 

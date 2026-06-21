@@ -243,7 +243,7 @@ export function processResponsesStream<TApi extends Api>(
           if (response?.usage) {
             const cachedTokens = response.usage.input_tokens_details?.cached_tokens || 0;
             output.usage = {
-              input: (response.usage.input_tokens || 0) - cachedTokens,
+              input: Math.max(0, (response.usage.input_tokens || 0) - cachedTokens),
               output: response.usage.output_tokens || 0,
               cacheRead: cachedTokens,
               cacheWrite: 0,

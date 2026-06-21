@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
-import type { AssistantMessageEvent, Model, Tool } from "@brewva/brewva-provider-core/contracts";
+import type {
+  AssistantMessageEvent,
+  Model,
+  StreamingParseStatus,
+  Tool,
+} from "@brewva/brewva-provider-core/contracts";
 import { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { parseStreamingJson } from "../../../packages/brewva-provider-core/src/parse/json-parse.js";
@@ -40,6 +45,12 @@ function filterToolCallEvents<TType extends ToolCallEventType>(
   return events.filter(
     (event): event is Extract<AssistantMessageEvent, { type: TType }> => event.type === type,
   );
+}
+
+// `parseStatus` is an Advisory<StreamingParseStatus>; unwrap the brand to assert its
+// underlying value. The brand is erased at runtime, so this is a type-only widening.
+function statusValue(status: StreamingParseStatus | undefined): StreamingParseStatus | undefined {
+  return status;
 }
 
 const TEST_MODEL: Model<"openai-responses"> = {
@@ -177,7 +188,7 @@ describe("incremental tool call folder", () => {
     const eventsAfterStart = await collectEvents(stream);
 
     const startEvent = findToolCallEvent(eventsAfterStart, "toolcall_start");
-    expect(startEvent?.parseStatus).toBe("pending");
+    expect(statusValue(startEvent?.parseStatus)).toBe("pending");
   });
 
   test("validates seed arguments when a provider starts with object input", async () => {
@@ -200,8 +211,8 @@ describe("incremental tool call folder", () => {
     const events = await collectEvents(stream);
     const startEvent = findToolCallEvent(events, "toolcall_start");
     const endEvent = findToolCallEvent(events, "toolcall_end");
-    expect(startEvent?.parseStatus).toBe("pending");
-    expect(endEvent?.parseStatus).toBe("pending");
+    expect(statusValue(startEvent?.parseStatus)).toBe("pending");
+    expect(statusValue(endEvent?.parseStatus)).toBe("pending");
   });
 
   test("emits likely_invalid when a present value violates enum constraint", async () => {
@@ -224,7 +235,7 @@ describe("incremental tool call folder", () => {
 
     const events = await collectEvents(stream);
     const startEvent = findToolCallEvent(events, "toolcall_start");
-    expect(startEvent?.parseStatus).toBe("likely_invalid");
+    expect(statusValue(startEvent?.parseStatus)).toBe("likely_invalid");
   });
 
   test("emits pending when required fields are absent but stream is still in progress", async () => {
@@ -249,7 +260,7 @@ describe("incremental tool call folder", () => {
     const events = await collectEvents(stream);
 
     const startEvent = findToolCallEvent(events, "toolcall_start");
-    expect(startEvent?.parseStatus).toBe("pending");
+    expect(statusValue(startEvent?.parseStatus)).toBe("pending");
   });
 
   test("falls back to permissive parse for unknown tools", async () => {
@@ -302,7 +313,7 @@ describe("incremental tool call folder", () => {
     }
 
     const endEvent = findToolCallEvent(events, "toolcall_end");
-    expect(endEvent?.parseStatus).toBe("pending");
+    expect(statusValue(endEvent?.parseStatus)).toBe("pending");
     expect((output.content[0] as any).arguments).toEqual({ path: "/tmp/test.txt" });
   });
 });

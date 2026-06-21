@@ -1,7 +1,9 @@
+import { asLossy } from "@brewva/brewva-std/honesty";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
   ProviderCacheObservationInput,
+  ProviderDriftSample,
 } from "@brewva/brewva-vocabulary/context";
 import type { ContextBundle } from "../../../context/api.js";
 import type { HostedDelegationStore } from "../../../delegation/api.js";
@@ -103,18 +105,21 @@ function recordPromptStability(input: {
       (previousDynamicTailHash === input.observation.dynamicTailHash &&
         previousScopeKey === scopeKey),
   };
-  input.runtime.ops.context.evidence.append(input.sessionId, {
-    kind: "prompt_stability",
-    turn: observed.turn,
-    timestamp: observed.updatedAt,
-    payload: {
-      scopeKey: observed.scopeKey,
-      stablePrefixHash: observed.stablePrefixHash,
-      dynamicTailHash: observed.dynamicTailHash,
-      stablePrefix: observed.stablePrefix,
-      stableTail: observed.stableTail,
-    },
-  });
+  input.runtime.ops.context.evidence.append(
+    input.sessionId,
+    asLossy({
+      kind: "prompt_stability",
+      turn: observed.turn,
+      timestamp: observed.updatedAt,
+      payload: {
+        scopeKey: observed.scopeKey,
+        stablePrefixHash: observed.stablePrefixHash,
+        dynamicTailHash: observed.dynamicTailHash,
+        stablePrefix: observed.stablePrefix,
+        stableTail: observed.stableTail,
+      },
+    }),
+  );
   const contextStatus = getRuntimeContextStatus(input.runtime, input.sessionId, input.usage);
   recordPromptStabilityEvidence({
     workspaceRoot: input.runtime.identity.workspaceRoot,
@@ -217,6 +222,41 @@ export function applyContextMaterializationReceipt(input: {
   }
 }
 
+// One provider-drift primitive: cache breaks, fallback selections, and (follow-up)
+// transport fallbacks all surface through the SAME lossy evidence sink, so one
+// inspect view can read them through one path. A drift sample is a non-authoritative
+// diagnosis — never replay truth, may vanish on restart by design.
+export function appendProviderDriftSample(input: {
+  runtime: HostedRuntimeAdapterPort;
+  sessionId: string;
+  turn: number;
+  sample: ProviderDriftSample;
+}): void {
+  const { sample } = input;
+  input.runtime.ops.context.evidence.append(
+    input.sessionId,
+    asLossy({
+      kind: "provider_drift_sample",
+      turn: input.turn,
+      timestamp: Date.now(),
+      payload: {
+        driftSource: sample.source,
+        provider: sample.provider,
+        reason: sample.reason,
+        ...(sample.selected ? { model: sample.selected.model } : {}),
+        ...(sample.attempted
+          ? { attemptedProvider: sample.attempted.provider, attemptedModel: sample.attempted.model }
+          : {}),
+        ...(sample.selected?.credentialSlot
+          ? { credentialSlot: sample.selected.credentialSlot }
+          : {}),
+        ...(sample.requestedTransport ? { requestedTransport: sample.requestedTransport } : {}),
+        ...(sample.actualTransport ? { actualTransport: sample.actualTransport } : {}),
+      },
+    }),
+  );
+}
+
 export function observeHostedProviderCache(input: {
   runtime: HostedRuntimeAdapterPort;
   sessionId: string;
@@ -230,27 +270,33 @@ export function observeHostedProviderCache(input: {
     render: structuredClone(input.observation.render),
     breakObservation: structuredClone(input.observation.breakObservation),
   };
-  input.runtime.ops.context.evidence.append(input.sessionId, {
-    kind: "provider_cache_observation",
-    turn: observed.turn,
-    timestamp: observed.updatedAt,
-    payload: {
-      source: observed.source,
-      bucketKey: observed.fingerprint.bucketKey,
-      stablePrefixHash: observed.fingerprint.stablePrefixHash,
-      dynamicTailHash: observed.fingerprint.dynamicTailHash,
-      visibleHistoryReductionHash: observed.fingerprint.visibleHistoryReductionHash,
-      workbenchContextHash: observed.fingerprint.workbenchContextHash,
-      status: observed.breakObservation.status,
-      classification: observed.breakObservation.classification,
-      expected: observed.breakObservation.expected,
-      reason: observed.breakObservation.reason,
-      cacheReadTokens: observed.breakObservation.cacheReadTokens,
-      cacheWriteTokens: observed.breakObservation.cacheWriteTokens,
-      cacheMissTokens: observed.breakObservation.cacheMissTokens,
-      changedFields: [...observed.breakObservation.changedFields],
-    },
-  });
+  // The cache-break observation is lossy by contract: latest-per-kind state that
+  // does not survive restart and is never replay authority. Tag it `Lossy` so the
+  // type system keeps it out of any durable sink.
+  input.runtime.ops.context.evidence.append(
+    input.sessionId,
+    asLossy({
+      kind: "provider_cache_observation",
+      turn: observed.turn,
+      timestamp: observed.updatedAt,
+      payload: {
+        source: observed.source,
+        bucketKey: observed.fingerprint.bucketKey,
+        stablePrefixHash: observed.fingerprint.stablePrefixHash,
+        dynamicTailHash: observed.fingerprint.dynamicTailHash,
+        visibleHistoryReductionHash: observed.fingerprint.visibleHistoryReductionHash,
+        workbenchContextHash: observed.fingerprint.workbenchContextHash,
+        status: observed.breakObservation.status,
+        classification: observed.breakObservation.classification,
+        expected: observed.breakObservation.expected,
+        reason: observed.breakObservation.reason,
+        cacheReadTokens: observed.breakObservation.cacheReadTokens,
+        cacheWriteTokens: observed.breakObservation.cacheWriteTokens,
+        cacheMissTokens: observed.breakObservation.cacheMissTokens,
+        changedFields: [...observed.breakObservation.changedFields],
+      },
+    }),
+  );
   recordProviderCacheObservationEvidence({
     workspaceRoot: input.runtime.identity.workspaceRoot,
     sessionId: input.sessionId,

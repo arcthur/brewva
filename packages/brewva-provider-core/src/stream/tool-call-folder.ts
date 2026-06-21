@@ -1,4 +1,5 @@
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { asAdvisory, type Advisory } from "@brewva/brewva-std/honesty";
 import type {
   AssistantMessage,
   ProviderEventSink,
@@ -8,6 +9,15 @@ import type {
 } from "../contracts/index.js";
 import { parseStreamingJson } from "../parse/json-parse.js";
 import type { StreamingParseRegistry } from "../parse/types.js";
+
+// The streaming parse status is an advisory hint, never terminal validation: tag
+// it so a consumer cannot mistake an in-progress parse for an authoritative
+// verdict. Terminal tool-call validation happens separately, after the stream.
+function advisoryParseStatus(
+  status: StreamingParseStatus | undefined,
+): Advisory<StreamingParseStatus> | undefined {
+  return status === undefined ? undefined : asAdvisory(status);
+}
 
 interface ToolCallFolderState {
   contentIndex: number;
@@ -95,7 +105,7 @@ export class IncrementalToolCallFolder {
         type: "toolcall_start",
         contentIndex: nextState.contentIndex,
         partial: self.output,
-        parseStatus: parseResult.parseStatus,
+        parseStatus: advisoryParseStatus(parseResult.parseStatus),
       });
       return nextState.contentIndex;
     });
@@ -136,7 +146,7 @@ export class IncrementalToolCallFolder {
         contentIndex: state.contentIndex,
         delta,
         partial: self.output,
-        parseStatus: state.lastParseStatus,
+        parseStatus: advisoryParseStatus(state.lastParseStatus),
       });
     });
   }
@@ -175,7 +185,7 @@ export class IncrementalToolCallFolder {
           contentIndex: state.contentIndex,
           delta,
           partial: self.output,
-          parseStatus: parseResult.parseStatus,
+          parseStatus: advisoryParseStatus(parseResult.parseStatus),
         });
       }
     });
@@ -208,7 +218,7 @@ export class IncrementalToolCallFolder {
         contentIndex: state.contentIndex,
         toolCall: state.block,
         partial: self.output,
-        parseStatus: parseResult.parseStatus,
+        parseStatus: advisoryParseStatus(parseResult.parseStatus),
       });
       self.#states.delete(key);
       return state.block;

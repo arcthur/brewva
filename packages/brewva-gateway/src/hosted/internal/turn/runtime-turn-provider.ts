@@ -10,6 +10,7 @@ import type {
 import { providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
 import type { RuntimeProviderFrame, RuntimeProviderPort } from "@brewva/brewva-runtime";
 import { createAsyncBridge, linkAbortSignal } from "@brewva/brewva-std/async";
+import { asDurable } from "@brewva/brewva-std/honesty";
 import type { JsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
@@ -132,10 +133,30 @@ type RuntimeProviderQueueItem =
 
 type ProviderFailureReason = "quota" | "rate_limit" | "auth" | "provider" | "context" | "unknown";
 
+// Frame-state witness for the seam's hardest invariant: once any frame has
+// streamed, the turn keeps this provider — no fallback, no credential rotation.
+// Branding the witness makes that a type distinction the recovery path enforces,
+// not a boolean a later edit can forget to check.
+declare const frameWitnessBrand: unique symbol;
+interface SawFrame {
+  readonly frameStreamed: true;
+  readonly [frameWitnessBrand]: true;
+}
+interface NoFrame {
+  readonly frameStreamed: false;
+  readonly [frameWitnessBrand]: true;
+}
+type FrameWitness = SawFrame | NoFrame;
+const SAW_FRAME = { frameStreamed: true } as SawFrame;
+const NO_FRAME = { frameStreamed: false } as NoFrame;
+function frameWitness(streamed: boolean): FrameWitness {
+  return streamed ? SAW_FRAME : NO_FRAME;
+}
+
 class ProviderAttemptError extends Error {
   constructor(
     readonly causeError: unknown,
-    readonly sawFrame: boolean,
+    readonly frame: FrameWitness,
   ) {
     super(causeError instanceof Error ? causeError.message : String(causeError));
     this.name = "ProviderAttemptError";
@@ -163,6 +184,16 @@ function classifyProviderFailure(error: unknown): ProviderFailureReason {
     return "provider";
   }
   return "unknown";
+}
+
+// Recovery (credential rotation, model fallback) is reachable only with proof that
+// no frame streamed. The `NoFrame` parameter makes bypassing the pre-first-frame
+// boundary a compile error rather than a comment to remember.
+function classifyRecoverableFailure(
+  error: ProviderAttemptError,
+  _frame: NoFrame,
+): ProviderFailureReason {
+  return classifyProviderFailure(error.causeError);
 }
 
 function credentialRotationReason(
@@ -284,11 +315,17 @@ async function* streamRuntimeProviderAttempt(
   model: BrewvaRegisteredModel,
   providerFallback: Record<string, JsonValue> | undefined,
 ): AsyncGenerator<RuntimeProviderFrame> {
+  // Record the fallback ROUTE SELECTION before resolving auth, so a selected-but-
+  // never-dispatched fallback (auth failing on the fallback route) still leaves a drift
+  // sample. Dispatch-time fingerprinting stays in the payload pipeline.
+  if (providerFallback) {
+    face.recordProviderFallbackSelection({ providerFallback, turnId: input.turn.turnId });
+  }
   const resolvedAuth = await face.getModelCatalog().getApiKeyAndHeaders(model);
   if (!resolvedAuth.ok) {
     throw new ProviderAttemptError(
       new Error(`hosted_runtime_provider_auth_failed:${resolvedAuth.error}`),
-      false,
+      NO_FRAME,
     );
   }
   const providerAbort = new AbortController();
@@ -308,6 +345,7 @@ async function* streamRuntimeProviderAttempt(
         payload,
         model: providerModel,
         metadata,
+        transmittedSecrets: resolvedAuth.apiKey ? [resolvedAuth.apiKey] : [],
         turn: {
           sessionId: input.turn.sessionId,
           ...(input.turn.turnId ? { turnId: input.turn.turnId } : {}),
@@ -338,7 +376,7 @@ async function* streamRuntimeProviderAttempt(
               kind: "error",
               error: new ProviderAttemptError(
                 new Error(event.error.errorMessage ?? "provider_stream_failed"),
-                sawIncrementalFrame,
+                frameWitness(sawIncrementalFrame),
               ),
             });
             return;
@@ -367,7 +405,9 @@ async function* streamRuntimeProviderAttempt(
     .then(() => {
       bridge.close();
     })
-    .catch((error) => bridge.fail(new ProviderAttemptError(error, sawIncrementalFrame)));
+    .catch((error) =>
+      bridge.fail(new ProviderAttemptError(error, frameWitness(sawIncrementalFrame))),
+    );
 
   try {
     for await (const next of bridge) {
@@ -402,6 +442,7 @@ export function createHostedRuntimeProviderPort(
       let activeModel = initialModel;
       let fallbackMetadata: Record<string, JsonValue> | undefined;
       const attempted = new Set<string>();
+      const rotatedSlotsByModel = new Map<string, Set<string>>();
       while (true) {
         attempted.add(modelKey(activeModel));
         try {
@@ -409,11 +450,16 @@ export function createHostedRuntimeProviderPort(
           return;
         } catch (error) {
           const attemptError =
-            error instanceof ProviderAttemptError ? error : new ProviderAttemptError(error, false);
-          if (attemptError.sawFrame || input.turn.signal?.aborted === true) {
+            error instanceof ProviderAttemptError
+              ? error
+              : new ProviderAttemptError(error, NO_FRAME);
+          if (attemptError.frame.frameStreamed) {
             throw attemptError.causeError;
           }
-          const reason = classifyProviderFailure(attemptError.causeError);
+          if (input.turn.signal?.aborted === true) {
+            throw attemptError.causeError;
+          }
+          const reason = classifyRecoverableFailure(attemptError, attemptError.frame);
           const rotationReason = credentialRotationReason(reason);
           const rotationSettings = face.getModelRoutingSettings()?.credentialRotation;
           if (rotationReason && rotationSettings?.enabled === true) {
@@ -425,16 +471,25 @@ export function createHostedRuntimeProviderPort(
                 rotationSettings.cooldownMs,
               );
             if (rotation) {
-              face.recordProviderCredentialRotated(rotation);
-              fallbackMetadata = providerFallbackMetadata({
-                active: true,
-                attemptedModel: activeModel,
-                selectedModel: activeModel,
-                reason,
-                cacheInvalidated: true,
-                credentialSlot: rotation.credentialSlot,
-              });
-              continue;
+              const rotatedSlots =
+                rotatedSlotsByModel.get(modelKey(activeModel)) ?? new Set<string>();
+              // Each (model, slot) rotates at most once per turn; a repeat means the
+              // slots are ping-ponging (cooldownMs=0 with persistently failing creds), so
+              // stop rotating and fall through to model fallback below instead of looping.
+              if (!rotatedSlots.has(rotation.credentialSlot)) {
+                rotatedSlots.add(rotation.credentialSlot);
+                rotatedSlotsByModel.set(modelKey(activeModel), rotatedSlots);
+                face.recordProviderCredentialRotated(asDurable(rotation));
+                fallbackMetadata = providerFallbackMetadata({
+                  active: true,
+                  attemptedModel: activeModel,
+                  selectedModel: activeModel,
+                  reason,
+                  cacheInvalidated: true,
+                  credentialSlot: rotation.credentialSlot,
+                });
+                continue;
+              }
             }
           }
           const [nextModel] = fallbackCandidates({

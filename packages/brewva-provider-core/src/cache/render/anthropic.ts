@@ -1,4 +1,5 @@
 import type { ProviderCachePolicy, ProviderCacheRenderResult } from "../../contracts/index.js";
+import { isDirectAnthropicHost } from "../../quirks/index.js";
 import { resolveProviderCacheCapability } from "../capability.js";
 import {
   buildRenderBucketKey,
@@ -95,7 +96,7 @@ export function resolveAnthropicCacheRender(input: {
     };
   }
 
-  const isDirectAnthropic = input.baseUrl.includes("api.anthropic.com");
+  const isDirectAnthropic = isDirectAnthropicHost(input.baseUrl);
   const renderedRetention =
     policy.retention === "long" && !isDirectAnthropic ? "short" : policy.retention;
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
+import { asLossy } from "@brewva/brewva-std/honesty";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -12,30 +13,36 @@ describe("context evidence latest inspect surface", () => {
       config: DEFAULT_BREWVA_CONFIG,
     });
 
-    firstRuntime.ops.context.evidence.append(sessionId, {
-      kind: "prompt_stability",
-      turn: 1,
-      timestamp: 10,
-      payload: {
-        scopeKey: "session-evidence::root",
-        stablePrefixHash: "prefix-a",
-        dynamicTailHash: "tail-a",
-        stablePrefix: true,
-        stableTail: true,
-      },
-    });
-    firstRuntime.ops.context.evidence.append(sessionId, {
-      kind: "prompt_stability",
-      turn: 2,
-      timestamp: 20,
-      payload: {
-        scopeKey: "session-evidence::root",
-        stablePrefixHash: "prefix-b",
-        dynamicTailHash: "tail-b",
-        stablePrefix: false,
-        stableTail: false,
-      },
-    });
+    firstRuntime.ops.context.evidence.append(
+      sessionId,
+      asLossy({
+        kind: "prompt_stability",
+        turn: 1,
+        timestamp: 10,
+        payload: {
+          scopeKey: "session-evidence::root",
+          stablePrefixHash: "prefix-a",
+          dynamicTailHash: "tail-a",
+          stablePrefix: true,
+          stableTail: true,
+        },
+      }),
+    );
+    firstRuntime.ops.context.evidence.append(
+      sessionId,
+      asLossy({
+        kind: "prompt_stability",
+        turn: 2,
+        timestamp: 20,
+        payload: {
+          scopeKey: "session-evidence::root",
+          stablePrefixHash: "prefix-b",
+          dynamicTailHash: "tail-b",
+          stablePrefix: false,
+          stableTail: false,
+        },
+      }),
+    );
 
     expect(firstRuntime.ops.context.evidence.latest(sessionId, "prompt_stability")).toEqual({
       kind: "prompt_stability",

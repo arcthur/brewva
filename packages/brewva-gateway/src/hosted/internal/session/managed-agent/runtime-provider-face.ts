@@ -1,3 +1,5 @@
+import type { Durable } from "@brewva/brewva-std/honesty";
+import type { JsonValue } from "@brewva/brewva-std/json";
 import { type BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type {
   BrewvaMutableModelCatalog,
@@ -8,7 +10,11 @@ import type {
   BrewvaModelRoleAlias,
 } from "@brewva/brewva-substrate/session";
 import { type VerificationGateManifest } from "../../../../extensions/api.js";
-import type { RuntimeProviderFace } from "../../turn/runtime-turn-session.js";
+import { appendProviderDriftSample } from "../../context/materialization.js";
+import type {
+  ProviderCredentialRotation,
+  RuntimeProviderFace,
+} from "../../turn/runtime-turn-session.js";
 import { readRuntimeVerificationGateEvidenceFromEvent } from "../../turn/runtime-turn-verification-gates.js";
 import { queryRuntimeEvents, type HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import {
@@ -16,6 +22,7 @@ import {
   type RuntimeProviderCacheRenderInput,
   type RuntimeProviderPayloadInput,
 } from "./session-contracts.js";
+import { readProviderFallbackSelection, turnNumberFromTurnId } from "./session-harness-manifest.js";
 
 /** Owns the explicit provider-facing contract consumed by turn dispatch. */
 export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
@@ -104,15 +111,26 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
     return this.#settings.getModelRoutingSettings?.();
   }
 
-  recordProviderCredentialRotated(input: {
-    providerId: string;
-    credentialSlot: string;
-    reason: "quota" | "rate_limit" | "auth" | "manual";
-    cooldownMs: number;
-  }): void {
+  recordProviderCredentialRotated(input: Durable<ProviderCredentialRotation>): void {
     this.#runtime.ops.session.lifecycle.providerCredentialRotated({
       sessionId: this.#getSessionId(),
       payload: input,
+    });
+  }
+
+  recordProviderFallbackSelection(input: {
+    readonly providerFallback: Record<string, JsonValue>;
+    readonly turnId?: string;
+  }): void {
+    const sample = readProviderFallbackSelection(input.providerFallback);
+    if (!sample) {
+      return;
+    }
+    appendProviderDriftSample({
+      runtime: this.#runtime,
+      sessionId: this.#getSessionId(),
+      turn: turnNumberFromTurnId(input.turnId) ?? 0,
+      sample,
     });
   }
 

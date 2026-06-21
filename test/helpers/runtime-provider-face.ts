@@ -45,6 +45,7 @@ export function createRuntimeProviderFaceFixture(
       return undefined;
     },
     recordProviderCredentialRotated() {},
+    recordProviderFallbackSelection() {},
     getVerificationGateManifests() {
       return [];
     },

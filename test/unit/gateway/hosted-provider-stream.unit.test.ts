@@ -13,6 +13,7 @@ import {
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { asAdvisory } from "@brewva/brewva-std/honesty";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import { createHostedProviderStreamFunction } from "../../../packages/brewva-gateway/src/hosted/internal/provider/stream.js";
 import { createHostedRuntimeProviderPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-execution-ports.js";
@@ -94,21 +95,21 @@ describe("hosted provider stream", () => {
               type: "toolcall_start",
               contentIndex: 0,
               partial,
-              parseStatus: "incomplete",
+              parseStatus: asAdvisory("incomplete"),
             },
             {
               type: "toolcall_delta",
               contentIndex: 0,
               delta: '{"query"',
               partial,
-              parseStatus: "pending",
+              parseStatus: asAdvisory("pending"),
             },
             {
               type: "toolcall_end",
               contentIndex: 0,
               toolCall: { type: "toolCall", id: "call_1", name: "search", arguments: {} },
               partial,
-              parseStatus: "likely_invalid",
+              parseStatus: asAdvisory("likely_invalid"),
             },
             { type: "done", reason: "toolUse", message: partial },
           ]);

@@ -106,6 +106,15 @@ export interface SimpleStreamOptions extends StreamOptions {
   thinkingBudgets?: ThinkingBudgets;
 }
 
+/**
+ * A provider driver. Contract: any request/model/runtime failure that occurs while the
+ * returned stream is producing is encoded as a TERMINAL `error` event on the typed
+ * `ProviderStreamError` channel — never surfaced mid-stream as a throw. `done | error`
+ * is the single completion gate, so consumers never need a try/catch around stream
+ * consumption. A precondition guard (e.g. a missing required `apiKey`) may still throw
+ * synchronously at invocation; the hosted path pre-resolves auth, so drivers never reach
+ * that guard in production.
+ */
 export type StreamFunction<
   TApi extends Api = Api,
   TOptions extends StreamOptions = StreamOptions,

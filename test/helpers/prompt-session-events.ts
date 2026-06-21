@@ -1,3 +1,4 @@
+import { asAdvisory } from "@brewva/brewva-std/honesty";
 import type {
   BrewvaPromptAssistantMessageEvent,
   BrewvaPromptSessionEvent,
@@ -48,7 +49,7 @@ export function createToolcallDeltaAssistantEvent(input: {
     contentIndex: input.contentIndex ?? 0,
     delta: input.delta,
     partial: input.partial,
-    parseStatus: input.parseStatus,
+    parseStatus: input.parseStatus === undefined ? undefined : asAdvisory(input.parseStatus),
   };
 }
 
@@ -63,6 +64,6 @@ export function createToolcallEndAssistantEvent(input: {
     contentIndex: input.contentIndex ?? 0,
     toolCall: input.toolCall,
     partial: input.partial,
-    parseStatus: input.parseStatus,
+    parseStatus: input.parseStatus === undefined ? undefined : asAdvisory(input.parseStatus),
   };
 }

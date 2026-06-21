@@ -34,6 +34,8 @@ export type {
   ProviderCacheObservationInput,
   ProviderCacheObservationState,
   ProviderCacheRenderState,
+  ProviderDriftSample,
+  ProviderDriftSource,
   TransientReductionObservationInput,
   TransientReductionState,
 } from "./internal/context.js";

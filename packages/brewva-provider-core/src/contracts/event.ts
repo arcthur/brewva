@@ -1,3 +1,4 @@
+import type { Advisory } from "@brewva/brewva-std/honesty";
 import type { AssistantMessage, StopReason } from "./message.js";
 import type { ToolCall } from "./tool.js";
 
@@ -15,21 +16,21 @@ export type AssistantMessageEventOf<TAssistantMessage, TToolCall, TStopReason ex
       type: "toolcall_start";
       contentIndex: number;
       partial: TAssistantMessage;
-      parseStatus?: StreamingParseStatus;
+      parseStatus?: Advisory<StreamingParseStatus>;
     }
   | {
       type: "toolcall_delta";
       contentIndex: number;
       delta: string;
       partial: TAssistantMessage;
-      parseStatus?: StreamingParseStatus;
+      parseStatus?: Advisory<StreamingParseStatus>;
     }
   | {
       type: "toolcall_end";
       contentIndex: number;
       toolCall: TToolCall;
       partial: TAssistantMessage;
-      parseStatus?: StreamingParseStatus;
+      parseStatus?: Advisory<StreamingParseStatus>;
     }
   | {
       type: "done";

@@ -8,7 +8,6 @@ import type {
 } from "../../contracts/index.js";
 import { providerTryPromise } from "../../stream/effect-interop.js";
 import type { IncrementalToolCallFolder } from "../../stream/tool-call-folder.js";
-import { processResponsesStream } from "../openai-responses/stream-events.js";
 import {
   clearCodexContinuationState,
   codexSessionGenerationMatches,
@@ -20,7 +19,7 @@ import {
 import type { OpenAICodexResponsesOptions, RequestBody } from "./contract.js";
 import { buildCodexContinuationRequest } from "./request.js";
 import { trackCodexResponse, type CodexResponseTracker } from "./response-tracker.js";
-import { mapCodexEvents } from "./sse.js";
+import { runCodexNormalizer } from "./sse.js";
 import { readWebSocketConstructor } from "./wire.js";
 
 const SESSION_WEBSOCKET_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -137,6 +136,7 @@ async function connectWebSocket(
     throw new Error("WebSocket transport is not available in this runtime");
   }
 
+  // OpenAI-Beta is SSE/HTTP-POST-only; strip it so the wss upgrade never carries it.
   const wsHeaders = headersToRecord(headers);
   delete wsHeaders["OpenAI-Beta"];
   delete wsHeaders["openai-beta"];
@@ -465,8 +465,8 @@ export function processWebSocketStream(
     yield* BrewvaEffect.gen(function* () {
       socket.send(JSON.stringify({ type: "response.create", ...outboundBody }));
       onStart();
-      yield* processResponsesStream(
-        mapCodexEvents(trackCodexResponse(parseWebSocket(socket, options?.signal), tracker)),
+      yield* runCodexNormalizer(
+        trackCodexResponse(parseWebSocket(socket, options?.signal), tracker),
         output,
         stream,
         model,

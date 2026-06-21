@@ -34,6 +34,7 @@ import {
   type InspectDirectory,
 } from "../inspect-analysis.js";
 import { buildContextCockpitReport, type ContextCockpitReport } from "./context-cockpit.js";
+import { buildProviderDriftProjection, type ProviderDriftProjection } from "./provider-drift.js";
 import { deriveRecoveryCapabilities, type RecoveryCapabilities } from "./recovery-capabilities.js";
 
 interface SessionTransitionSnapshot {
@@ -254,6 +255,7 @@ interface InspectReport {
     promotionGaps: string[];
   };
   contextCockpit: ContextCockpitReport;
+  providerDrift: ProviderDriftProjection;
   ledger: {
     path: string;
     rows: number;
@@ -1012,6 +1014,7 @@ function buildInspectReport(
       promotionGaps: contextEvidenceReport.promotionReadiness.gaps,
     },
     contextCockpit: buildContextCockpitReport(runtime, sessionId),
+    providerDrift: buildProviderDriftProjection(runtime, sessionId),
     ledger: {
       path: inspect.ledger.getPath(),
       rows: ledgerRows.length,
@@ -1076,8 +1079,9 @@ function buildSessionInspectReport(input: {
 export {
   buildContextCockpitReport,
   buildInspectReport,
+  buildProviderDriftProjection,
   buildSessionInspectReport,
   resolveInspectDirectory,
   resolveTargetSession,
 };
-export type { ContextCockpitReport, InspectReport, SessionInspectReport };
+export type { ContextCockpitReport, InspectReport, ProviderDriftProjection, SessionInspectReport };

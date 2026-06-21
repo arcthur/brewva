@@ -390,6 +390,82 @@ describe("openai codex responses continuation", () => {
     }
   });
 
+  test("Codex SSE rejects a truncated text stream instead of committing it as a complete stop", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input, _init) =>
+      createSseResponse([
+        { type: "response.created", response: { id: "resp_trunc_text" } },
+        {
+          type: "response.output_item.added",
+          item: {
+            type: "message",
+            id: "msg_trunc",
+            role: "assistant",
+            status: "in_progress",
+            content: [],
+          },
+        },
+        {
+          type: "response.content_part.added",
+          item_id: "msg_trunc",
+          part: { type: "output_text", text: "", annotations: [] },
+        },
+        { type: "response.output_text.delta", item_id: "msg_trunc", delta: "partial" },
+        // Stream ends here: no response.output_item.done, no response.completed.
+      ])) as typeof fetch;
+    try {
+      const events = await collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          { apiKey: createFakeCodexToken(), transport: "sse" },
+        ),
+      );
+      expect(readProviderErrorMessage(events)).toMatch(/truncated|terminal/i);
+      expect(events.some((event) => event.type === "done")).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("Codex SSE rejects a truncated tool-call stream instead of finalizing the call", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input, _init) =>
+      createSseResponse([
+        { type: "response.created", response: { id: "resp_trunc_tool" } },
+        {
+          type: "response.output_item.added",
+          item: {
+            type: "function_call",
+            id: "fc_trunc",
+            call_id: "call_trunc",
+            name: "task_view_state",
+            arguments: "",
+          },
+        },
+        {
+          type: "response.function_call_arguments.delta",
+          item_id: "fc_trunc",
+          delta: '{"partial":',
+        },
+        // Stream ends here: no response.output_item.done, no response.completed.
+      ])) as typeof fetch;
+    try {
+      const events = await collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          { apiKey: createFakeCodexToken(), transport: "sse" },
+        ),
+      );
+      expect(readProviderErrorMessage(events)).toMatch(/truncated|terminal/i);
+      expect(events.some((event) => event.type === "done")).toBe(false);
+      expect(events.some((event) => event.type === "toolcall_end")).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("Codex SSE times out stalled response headers", async () => {
     const originalFetch = globalThis.fetch;
     const controller = new AbortController();
@@ -1108,5 +1184,154 @@ describe("openai codex responses continuation", () => {
 
     expect(outbound.previous_response_id).toBe(undefined);
     expect(outbound.input as unknown).toEqual(fullInput);
+  });
+});
+
+// WS2 standing fitness (RFC "Transport Is Orthogonal To Protocol"): one normalizer,
+// many transports. The same Codex frame sequence must produce the same normalized
+// provider events whether it arrived over SSE or WebSocket, and the WS handshake must
+// carry no SSE-only beta header.
+const PARITY_FRAMES: readonly Record<string, unknown>[] = [
+  { type: "response.created", response: { id: "resp_parity" } },
+  {
+    type: "response.output_item.added",
+    item: { type: "message", id: "msg_p", role: "assistant", status: "in_progress", content: [] },
+  },
+  {
+    type: "response.content_part.added",
+    item_id: "msg_p",
+    part: { type: "output_text", text: "", annotations: [] },
+  },
+  { type: "response.output_text.delta", item_id: "msg_p", delta: "Hello" },
+  { type: "response.output_text.delta", item_id: "msg_p", delta: " world" },
+  {
+    type: "response.output_item.done",
+    item: {
+      type: "message",
+      id: "msg_p",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "Hello world", annotations: [] }],
+    },
+  },
+  {
+    type: "response.completed",
+    response: {
+      id: "resp_parity",
+      status: "completed",
+      usage: {
+        input_tokens: 1,
+        output_tokens: 2,
+        total_tokens: 3,
+        input_tokens_details: { cached_tokens: 0 },
+      },
+    },
+  },
+];
+
+// Normalize away transport-local side effects (the partial snapshot carries a
+// WS-only responseId; we compare the event shapes, not the continuation state).
+function summarizeForParity(events: readonly AssistantMessageEvent[]): string[] {
+  return events.map((event) => {
+    switch (event.type) {
+      case "text_delta":
+        return `text_delta:${event.delta}`;
+      case "text_end":
+        return `text_end:${event.content}`;
+      case "done":
+        return `done:${event.reason}`;
+      default:
+        return event.type;
+    }
+  });
+}
+
+describe("codex transport orthogonality (WS2 standing fitness)", () => {
+  test("the same frames normalize identically over SSE and WebSocket", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input, _init) => createSseResponse(PARITY_FRAMES)) as typeof fetch;
+    let sseEvents: readonly AssistantMessageEvent[];
+    try {
+      sseEvents = await collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          { apiKey: createFakeCodexToken(), sessionId: "parity-sse", transport: "sse" },
+        ),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const originalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
+    (globalThis as { WebSocket?: unknown }).WebSocket = FakeCodexWebSocket;
+    FakeCodexWebSocket.sockets = [];
+    clearCodexSessionState("parity-ws");
+    let wsEvents: readonly AssistantMessageEvent[];
+    try {
+      const run = collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          { apiKey: createFakeCodexToken(), sessionId: "parity-ws", transport: "websocket" },
+        ),
+      );
+      const socket = await waitForSentSocket(0);
+      for (const frame of PARITY_FRAMES) {
+        socket.dispatchMessage(frame);
+      }
+      wsEvents = await run;
+    } finally {
+      (globalThis as { WebSocket?: unknown }).WebSocket = originalWebSocket;
+    }
+
+    // Parity covers complete sequences. Truncation is now rejected by both transports
+    // at the shared normalizer (mapCodexEvents throws on EOF without a terminal event),
+    // so terminal integrity holds regardless of transport — see the SSE truncation tests.
+    expect(summarizeForParity(sseEvents)).toEqual([
+      "start",
+      "text_start",
+      "text_delta:Hello",
+      "text_delta: world",
+      "text_end:Hello world",
+      "done:stop",
+    ]);
+    expect(summarizeForParity(wsEvents)).toEqual(summarizeForParity(sseEvents));
+  });
+
+  test("the WebSocket handshake carries no OpenAI-Beta header (SSE-only)", async () => {
+    const originalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
+    (globalThis as { WebSocket?: unknown }).WebSocket = FakeCodexWebSocket;
+    FakeCodexWebSocket.sockets = [];
+    clearCodexSessionState("parity-beta-absence");
+    try {
+      const run = collectProviderEvents(
+        streamOpenAICodexResponses(
+          CODEX_MODEL,
+          { messages: [] },
+          {
+            apiKey: createFakeCodexToken(),
+            sessionId: "parity-beta-absence",
+            transport: "websocket",
+            // Seed a caller-supplied beta header so the assertion has teeth: only the
+            // connectWebSocket strip can remove it now that the build-then-delete dance
+            // is gone. If the strip regresses, this header survives and the test fails.
+            headers: { "openai-beta": "should-be-stripped" },
+          },
+        ),
+      );
+      const socket = await waitForSentSocket(0);
+      const headers = readFakeWebSocketHeaders(socket);
+      // WHATWG Headers lowercases keys, so "openai-beta" is the operative check; the
+      // exact-case assertion is belt-and-braces.
+      expect(Object.hasOwn(headers, "openai-beta")).toBe(false);
+      expect(Object.hasOwn(headers, "OpenAI-Beta")).toBe(false);
+      for (const frame of PARITY_FRAMES) {
+        socket.dispatchMessage(frame);
+      }
+      await run;
+    } finally {
+      (globalThis as { WebSocket?: unknown }).WebSocket = originalWebSocket;
+    }
   });
 });

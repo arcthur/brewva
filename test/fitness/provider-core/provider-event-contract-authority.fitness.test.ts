@@ -55,7 +55,10 @@ describe("provider event contract authority", () => {
     const substrateIndexSource = readFileSync(substrateIndexPath, "utf8");
 
     expect(providerEventSource).toContain("export type StreamingParseStatus");
-    expect(providerEventSource).toContain("parseStatus?: StreamingParseStatus");
+    expect(providerEventSource).toContain(
+      'import type { Advisory } from "@brewva/brewva-std/honesty"',
+    );
+    expect(providerEventSource).toContain("parseStatus?: Advisory<StreamingParseStatus>");
     expect(providerEventSource).toContain("export type AssistantMessageEventOf");
 
     expect(parseTypesSource).toContain('from "../contracts/event.js"');

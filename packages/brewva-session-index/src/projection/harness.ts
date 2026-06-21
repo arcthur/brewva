@@ -302,18 +302,28 @@ function foldHarnessEvidence(state: HarnessProjectionState, record: BrewvaEventR
 function foldContextEvidence(state: HarnessProjectionState, record: BrewvaEventRecord): void {
   addStateEvent(state, record);
   const payload = isRecord(record.payload) ? record.payload : {};
+  const kind = readString(payload.kind);
   const nested = isRecord(payload.payload) ? payload.payload : payload;
-  const status = readString(nested.status);
-  if (status) {
-    state.cacheStatus = status;
+  // The evidence sink is multi-kind: provider_cache_observation shares it with
+  // transient_reduction, output_budget_escalation, prompt_stability, and
+  // provider_drift_sample. Their `status`/`classification`/`changedFields` mean unrelated
+  // things, so the cache projection must read provider_cache_observation ONLY — otherwise
+  // a reduction's status ("break"/"limited") or an escalation's ("completed") bleeds in.
+  if (kind === "provider_cache_observation") {
+    const status = readString(nested.status);
+    if (status) {
+      state.cacheStatus = status;
+    }
+    if (status === "break" && readString(nested.classification) === "unexpected") {
+      state.cacheUnexpectedBreak = true;
+    }
+    const changedFields = Array.isArray(nested.changedFields) ? nested.changedFields : [];
+    for (const field of changedFields) {
+      if (typeof field === "string" && field.length > 0) state.cacheChangedFields.add(field);
+    }
   }
-  if (status === "break" && readString(nested.classification) === "unexpected") {
-    state.cacheUnexpectedBreak = true;
-  }
-  const changedFields = Array.isArray(nested.changedFields) ? nested.changedFields : [];
-  for (const field of changedFields) {
-    if (typeof field === "string" && field.length > 0) state.cacheChangedFields.add(field);
-  }
+  // Context-budget signals ride on context-status evidence, not the cache/drift kinds;
+  // these fields are absent on the cache observation, so reading them here cannot bleed.
   const usageRatio = readFiniteNumber(nested.usageRatio ?? nested.contextUsageRatio);
   if (usageRatio !== null) {
     state.contextUsageRatio = Math.max(state.contextUsageRatio ?? 0, usageRatio);

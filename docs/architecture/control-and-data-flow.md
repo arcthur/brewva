@@ -104,6 +104,24 @@ flowchart LR
   TAPE --> CLI["operator inspection through projections"]
 ```
 
+## Provider Drift Evidence
+
+```mermaid
+flowchart LR
+  SSE["Codex SSE transport"] --> NORM["runCodexNormalizer"]
+  WS["Codex WebSocket transport"] --> NORM
+  NORM --> EVT["normalized provider events"]
+  FB["fallback selection / cache break"] --> SINK["lossy evidence sink (non-authoritative)"]
+  SINK --> PROJ["buildProviderDriftProjection (explicit-pull, fail-closed)"]
+  PROJ --> INSPECT["inspect view"]
+```
+
+Transport is orthogonal to normalization: both Codex transports feed one
+`runCodexNormalizer`. Drift and cache-break samples are lossy evidence —
+non-authoritative, may vanish on restart by design, never replay truth (the tape
+remains the replay authority). The `transport_fallback` drift source is typed but
+deferred.
+
 ## Persistence Roles
 
 ```mermaid

@@ -41,7 +41,6 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 const DEFAULT_MAX_RETRIES = 0;
 const BASE_DELAY_MS = 1000;
 const DEFAULT_SSE_HEADER_TIMEOUT_MS = 10_000;
-const OPENAI_BETA_RESPONSES_WEBSOCKETS = "responses_websockets=2026-02-06";
 
 class CodexRetryableRequestError extends Error {
   constructor(
@@ -319,9 +318,9 @@ function buildWebSocketHeaders(
   const headers = buildBaseCodexHeaders(initHeaders, additionalHeaders, accountId, token);
   headers.delete("accept");
   headers.delete("content-type");
-  headers.delete("OpenAI-Beta");
-  headers.delete("openai-beta");
-  headers.set("OpenAI-Beta", OPENAI_BETA_RESPONSES_WEBSOCKETS);
+  // No OpenAI-Beta on the WS handshake: it is an SSE/HTTP-POST-only header. The value
+  // previously set here never reached the socket — connectWebSocket strips any beta
+  // header before the upgrade, which remains the single defensive guarantee.
   headers.set("x-client-request-id", requestId);
   headers.set("session-id", requestId);
   return headers;

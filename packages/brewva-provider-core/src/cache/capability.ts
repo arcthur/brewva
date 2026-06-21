@@ -1,4 +1,12 @@
 import type { Api, ProviderCacheCapability, Transport } from "../contracts/index.js";
+import {
+  type DeploymentDescriptor,
+  isDeepSeekRoute,
+  isDirectAnthropicHost,
+  isDirectOpenAIHost,
+  isKimiCodeRoute,
+  modelAdvertisesOpenAIPromptCacheKey,
+} from "../quirks/index.js";
 
 export interface ProviderCacheCapabilityInput {
   api: Api;
@@ -11,13 +19,17 @@ export interface ProviderCacheCapabilityInput {
 export function resolveProviderCacheCapability(
   input: ProviderCacheCapabilityInput,
 ): ProviderCacheCapability {
-  const api = input.api.toLowerCase();
-  const provider = (input.provider ?? "").toLowerCase();
-  const modelId = (input.modelId ?? "").toLowerCase();
-  const baseUrl = (input.baseUrl ?? "").toLowerCase();
-  const transport = input.transport ?? "auto";
+  const descriptor: DeploymentDescriptor = {
+    api: input.api.toLowerCase() as Api,
+    provider: (input.provider ?? "").toLowerCase(),
+    baseUrl: (input.baseUrl ?? "").toLowerCase(),
+    modelId: (input.modelId ?? "").toLowerCase(),
+    transport: input.transport ?? "auto",
+  };
+  const { api, provider, transport } = descriptor;
+  const providerIsOpenAI = provider === "" || provider === "openai";
 
-  if (isKimiCodeCacheRoute({ provider, baseUrl })) {
+  if (isKimiCodeRoute(descriptor)) {
     return {
       strategies: ["unsupported"],
       cacheCounters: "none",
@@ -28,7 +40,7 @@ export function resolveProviderCacheCapability(
     };
   }
 
-  if (api === "openai-completions" && isDeepSeekRoute({ provider, baseUrl })) {
+  if (api === "openai-completions" && isDeepSeekRoute(descriptor)) {
     return {
       strategies: ["implicitPrefix"],
       cacheCounters: "readOnly",
@@ -40,9 +52,11 @@ export function resolveProviderCacheCapability(
   }
 
   if (api === "openai-completions") {
-    const directOpenAI = baseUrl.includes("api.openai.com");
-    const providerIsOpenAI = provider === "" || provider === "openai";
-    if (directOpenAI && providerIsOpenAI && modelSupportsOpenAIPromptCacheKey(modelId)) {
+    if (
+      isDirectOpenAIHost(descriptor.baseUrl) &&
+      providerIsOpenAI &&
+      modelAdvertisesOpenAIPromptCacheKey(descriptor)
+    ) {
       return {
         strategies: ["promptCacheKey", "implicitPrefix"],
         cacheCounters: "readOnly",
@@ -59,7 +73,7 @@ export function resolveProviderCacheCapability(
       strategies: ["explicitCacheMarker"],
       cacheCounters: "readWrite",
       shortRetention: true,
-      longRetention: baseUrl.includes("api.anthropic.com") ? "1h" : "none",
+      longRetention: isDirectAnthropicHost(descriptor.baseUrl) ? "1h" : "none",
       readOnlyWriteMode: "unsupported",
       reason: "anthropic_cache_control",
     };
@@ -86,9 +100,11 @@ export function resolveProviderCacheCapability(
   }
 
   if (api === "openai-responses") {
-    const directOpenAI = baseUrl.includes("api.openai.com");
-    const providerIsOpenAI = provider === "" || provider === "openai";
-    if (directOpenAI && providerIsOpenAI && modelSupportsOpenAIPromptCacheKey(modelId)) {
+    if (
+      isDirectOpenAIHost(descriptor.baseUrl) &&
+      providerIsOpenAI &&
+      modelAdvertisesOpenAIPromptCacheKey(descriptor)
+    ) {
       return {
         strategies: ["promptCacheKey"],
         cacheCounters: "readOnly",
@@ -138,41 +154,4 @@ export function resolveProviderCacheCapability(
     readOnlyWriteMode: "unsupported",
     reason: "provider_cache_capability_unknown",
   };
-}
-
-function isKimiCodeCacheRoute(input: { provider: string; baseUrl: string }): boolean {
-  if (input.provider === "kimi-coding") {
-    return true;
-  }
-  try {
-    const url = new URL(input.baseUrl);
-    return url.hostname === "api.kimi.com" && url.pathname.startsWith("/coding");
-  } catch {
-    return input.baseUrl.includes("api.kimi.com/coding");
-  }
-}
-
-function isDeepSeekRoute(input: { provider: string; baseUrl: string }): boolean {
-  if (input.provider === "deepseek") {
-    return true;
-  }
-  try {
-    const url = new URL(input.baseUrl);
-    return url.hostname === "api.deepseek.com" || url.hostname.endsWith(".deepseek.com");
-  } catch {
-    return input.baseUrl.includes("deepseek.com");
-  }
-}
-
-function modelSupportsOpenAIPromptCacheKey(modelId: string): boolean {
-  if (!modelId) {
-    return false;
-  }
-  return (
-    modelId.startsWith("gpt-") ||
-    modelId.startsWith("o1") ||
-    modelId.startsWith("o3") ||
-    modelId.startsWith("o4") ||
-    modelId.startsWith("chatgpt-")
-  );
 }
