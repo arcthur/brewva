@@ -365,6 +365,14 @@ export class CliShellRuntime {
   readonly #exitPromise: Promise<void>;
   #viewportRows = 24;
   #semanticInputQueue: Promise<void> = Promise.resolve();
+  /**
+   * Monotonic counter bumped on an in-place rewind / redo / undo (see
+   * {@link markRewindBoundary}). Surfaced on {@link peekScrollbackCommits} as
+   * `rewindGeneration` so the scrollback writer can run a CLEARING replay
+   * boundary that skips the abandoned-branch commits — distinct from a session
+   * switch (`#sessionGeneration` / `epoch`), which resets the log entirely.
+   */
+  #rewindGeneration = 0;
   #started = false;
   #disposed = false;
   readonly #effectRunner: ShellEffectRunner;
@@ -594,6 +602,7 @@ export class CliShellRuntime {
       getSessionPort: () => this.#sessionPort,
       getSessionPhase: () => this.#sessionPhase,
       getSessionGeneration: () => this.#sessionGeneration,
+      markRewindBoundary: () => this.markRewindBoundary(),
       getUi: () => this.ui,
       promptMemory: this.#promptMemoryHandler,
       transcriptProjector: this.#transcriptProjector,
@@ -724,26 +733,46 @@ export class CliShellRuntime {
   }
 
   peekScrollbackCommits(cursor: ScrollbackCommitCursor): ScrollbackCommitPeek {
-    // The epoch is the session generation, which the writer uses to detect a log
-    // RESET (since(cursor) would otherwise silently strand the writer if the log
-    // restarted from seq 0 behind a still-advanced cursor). The append-only
-    // ScrollbackCommitLog is reset ONLY on a session switch / full re-hydrate
-    // (the cockpit wireFold.replace() path), which ALWAYS bumps
-    // #sessionGeneration via mountSession — so a reset and an epoch change are
-    // inseparable. A rewind/redo, by contrast, mutates the SAME session in place
-    // (no mountSession) and does NOT reset the log: it keeps growing
-    // monotonically in the same epoch, so the writer's cursor stays valid and new
-    // post-rewind turns commit forward via since(cursor). The rows a rewind
-    // abandons are already in the terminal's immutable native scrollback
-    // (@opentui/core@0.3.4 exposes no scrollback-clear API) and cannot be
-    // un-written — forward progress is the only guarantee, by design.
+    // Two orthogonal replay signals ride alongside the drained slice:
+    //
+    //  - `epoch` (== #sessionGeneration) detects a log RESET. The append-only
+    //    ScrollbackCommitLog is reset ONLY on a session switch / full re-hydrate
+    //    (the cockpit wireFold.replace() path), which ALWAYS bumps
+    //    #sessionGeneration via mountSession — so a reset and an epoch change are
+    //    inseparable. On an epoch change the writer clears native scrollback and
+    //    replays the fresh log from the start.
+    //
+    //  - `rewindGeneration` (== #rewindGeneration) detects an IN-PLACE rewind /
+    //    redo / undo. These mutate the SAME session WITHOUT a mountSession, so
+    //    the epoch does NOT change and the log is NOT reset: it keeps growing
+    //    monotonically, with the abandoned-branch commits still sitting in it
+    //    behind the writer's cursor. The handler bumps #rewindGeneration (via
+    //    markRewindBoundary) right before refreshFromSession, so the next sync
+    //    observes the change, clears native scrollback, SKIPS the abandoned
+    //    commits by advancing its cursor to the current log tail, and re-renders
+    //    the now-shorter transcript via the settled sweep. New post-rewind turns
+    //    then drain forward normally via since(cursor).
     const sessionId = this.#sessionPort.getSessionId();
     const slice = this.#sessionPort.getCockpitScrollbackLog(sessionId).since(cursor);
     return {
       commits: slice.commits,
       cursor: slice.cursor,
       epoch: this.#sessionGeneration,
+      rewindGeneration: this.#rewindGeneration,
     };
+  }
+
+  /**
+   * Signal an IN-PLACE rewind / redo / undo replay boundary. Bumps
+   * #rewindGeneration so the next {@link peekScrollbackCommits} surfaces a
+   * changed `rewindGeneration` and the scrollback writer clears the abandoned
+   * branch rows from native scrollback (skipping the abandoned commits, then
+   * re-sweeping the shorter transcript). Must be called BEFORE the session
+   * handler's refreshFromSession + commit, so the writer's first post-rewind
+   * sync already observes the bumped generation.
+   */
+  markRewindBoundary(): void {
+    this.#rewindGeneration += 1;
   }
 
   getToolDefinitions(): CliShellSessionBundle["toolDefinitions"] {

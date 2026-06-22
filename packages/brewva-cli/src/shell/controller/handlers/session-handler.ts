@@ -69,6 +69,12 @@ export interface ShellSessionHandlerContext {
   getSessionPort(): SessionViewPort;
   getSessionPhase(): SessionPhase;
   getSessionGeneration(): number;
+  /**
+   * Signal an in-place rewind / redo / undo replay boundary BEFORE
+   * refreshFromSession, so the scrollback writer's next sync clears the
+   * abandoned-branch rows from native scrollback (see ShellRuntime.markRewindBoundary).
+   */
+  markRewindBoundary(): void;
   getUi(): CliShellUiPort;
   promptMemory: PromptMemoryDelegate;
   transcriptProjector: TranscriptProjectorDelegate;
@@ -393,6 +399,10 @@ export class ShellSessionHandler {
     this.context.transcriptProjector.setRewindMarker(
       `Session undo applied: reverted ${result.patchSetIds.length} patch set(s) and restored the submitted prompt. Use /redo to restore the undone turn.`,
     );
+    // In-place rewind boundary: the log keeps its abandoned-branch commits, so
+    // signal the writer to clear them from native scrollback (skip-to-tail +
+    // re-sweep) BEFORE the refresh repopulates the shorter transcript.
+    this.context.markRewindBoundary();
     this.context.transcriptProjector.refreshFromSession();
     if (result.restoredPrompt) {
       this.context.commit(
@@ -473,6 +483,10 @@ export class ShellSessionHandler {
     this.context.transcriptProjector.setRewindMarker(
       `Session rewind applied: rewound to turn ${result.checkpoint.turn} and reverted ${result.patchSetIds.length} patch set(s). Use /redo to restore the abandoned branch tip.`,
     );
+    // In-place rewind boundary: the log keeps its abandoned-branch commits, so
+    // signal the writer to clear them from native scrollback (skip-to-tail +
+    // re-sweep) BEFORE the refresh repopulates the shorter transcript.
+    this.context.markRewindBoundary();
     this.context.transcriptProjector.refreshFromSession();
     if (result.restoredPrompt) {
       this.context.commit(
@@ -510,6 +524,10 @@ export class ShellSessionHandler {
     this.context.transcriptProjector.setRewindMarker(
       `Session redo applied: restored the undone turn and reapplied ${result.patchSetIds.length} patch set(s).`,
     );
+    // In-place rewind boundary: the log keeps the pre-redo branch commits, so
+    // signal the writer to clear them from native scrollback (skip-to-tail +
+    // re-sweep) BEFORE the refresh repopulates the redone transcript.
+    this.context.markRewindBoundary();
     this.context.transcriptProjector.refreshFromSession();
     this.context.commit(
       {

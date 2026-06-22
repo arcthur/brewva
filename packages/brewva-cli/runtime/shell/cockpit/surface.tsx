@@ -7,7 +7,7 @@ import type {
   ShellCockpitEffectLedgerItem,
   ShellCockpitProjection,
 } from "../../../src/shell/domain/cockpit/index.js";
-import { TextAttributes } from "../../opentui/index.js";
+import { TextAttributes, type JSX } from "../../opentui/index.js";
 import { SPLIT_BORDER_CHARS, type SessionPalette } from "../palette.js";
 
 function formatMaybe(value: string | number | null | undefined, fallback = "none"): string {
@@ -99,7 +99,7 @@ export function resolveCockpitSurfaceMode(input: {
 function Section(input: {
   title: string;
   theme: SessionPalette;
-  children: unknown;
+  children: JSX.Element;
   accent?: string;
 }) {
   return (

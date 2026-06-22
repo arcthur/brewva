@@ -1,6 +1,21 @@
 export type OpenTuiScreenMode = "alternate-screen" | "split-footer" | "main-screen";
 export type OpenTuiTerminalBackgroundMode = "dark" | "light";
-export type OpenTuiSolidNode = () => unknown;
+
+/**
+ * Opaque view of an OpenTUI/Solid renderable. Kept structural so this
+ * quarantined layer never imports `@opentui/solid` (its public `JSX.Element`
+ * union is OpenTUI-owned). The runtime adapter re-brands these values into the
+ * concrete `JSX.Element` contract at its single `asOpenTuiJsxElement` boundary
+ * before handing them to `render`/`testRender`.
+ */
+export type OpenTuiSolidRenderable = unknown;
+
+/**
+ * A Solid render thunk. The return value is intentionally opaque here so the
+ * quarantine stays `@opentui`-free; the runtime adapter adapts the thunk to
+ * @opentui/solid 0.4.x's `(node: () => JSX.Element)` shape at its boundary.
+ */
+export type OpenTuiSolidNode = () => OpenTuiSolidRenderable;
 
 export interface OpenTuiKeyEvent {
   name: string;

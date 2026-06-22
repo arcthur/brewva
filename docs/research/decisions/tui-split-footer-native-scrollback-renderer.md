@@ -38,6 +38,22 @@
   alt-screen software-scroll repaint produced without DEC-2026 synchronized output.
 - The alt-screen live `scrollbox` transcript, its row-retention window, and its
   throttled streaming-markdown preview are deleted, not retained behind a flag.
+- A session switch, full re-hydrate, or in-place rewind/redo/undo replaces prior
+  history rather than appending: `clearNativeScrollbackForReplay` calls 0.4.1
+  `resetSplitFooterForReplay({ clearSavedLines: true })` to wipe the split-footer +
+  saved lines before re-anchoring (earlier notes wrongly deferred this as absent).
+  A session switch replays the fresh log; rewind/redo/undo skip abandoned commits
+  and re-sweep the shorter transcript via a `rewindGeneration` signal vs the epoch.
+
+## Limitations
+
+- `ScrollbackSurface` exposes only a `readonly width` in 0.4.1 (no setWidth/
+  resize/reflow API), so a mid-stream resize leaves the in-flight turn's live
+  block at its creation width until the `final` re-renders at the current width;
+  `renderer.resize()` resizes only the live renderer, not committed rows.
+- Committed rows are immutable terminal history: a palette change recolors only
+  the trailing live block, and a transcript-preserving editor suspend can
+  bound-repeat a shown prefix. The whole-history clear covers switches + rewinds.
 
 ## Axioms
 

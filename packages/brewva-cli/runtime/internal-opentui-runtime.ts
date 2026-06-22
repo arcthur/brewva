@@ -18,6 +18,7 @@ import {
   useKeyboard,
   useTerminalDimensions,
 } from "@opentui/solid";
+import type { JSX } from "@opentui/solid";
 import { createSignal } from "solid-js";
 import type {
   OpenTuiKeyEvent,
@@ -205,7 +206,7 @@ export function createOpenTuiRoot(renderer: OpenTuiRenderer): OpenTuiRoot {
           rootState.updateNode = (nextNode) => {
             setCurrentNode(() => nextNode);
           };
-          return () => currentNode()();
+          return asOpenTuiJsxElement(() => currentNode()());
         }, solidRenderer);
       }
 
@@ -355,7 +356,7 @@ export async function openTuiTestRender(
   options: OpenTuiTestRenderOptions,
 ): Promise<OpenTuiTestRenderSetup> {
   await initializeOpenTuiTextRendering();
-  return await solidTestRender(node, options);
+  return await solidTestRender(asOpenTuiSolidThunk(node), options);
 }
 
 function normalizeScrollbackDimension(value: number, axis: "width" | "height"): number {
@@ -467,12 +468,44 @@ export async function renderOpenTuiScrollbackLines(
   }
 }
 
+/**
+ * The single boundary where a raw OpenTUI/Solid renderable is branded with the
+ * public `JSX.Element` contract.
+ *
+ * @opentui/solid 0.4.x narrows `render`/`testRender` to `(node: () =>
+ * JSX.Element)`, but the reconciler still produces values that the structural
+ * `JSX.Element` union does not cover: `createElement(tag)` returns a
+ * `BaseRenderable`, and a reactive child is a `() => JSX.Element` thunk (Solid's
+ * `FunctionElement`, which the runtime accepts but the public union omits).
+ * Both are genuine renderables; this helper isolates that representational seam
+ * instead of scattering casts. It is the same brand OpenTUI's own `jsx()`
+ * applies internally.
+ */
+function asOpenTuiJsxElement(node: unknown): JSX.Element {
+  return node as JSX.Element;
+}
+
+/**
+ * Adapt a quarantined {@link OpenTuiSolidNode} (whose return type is opaque so
+ * `src/internal/tui` stays `@opentui`-free) into @opentui/solid 0.4.x's
+ * `(node: () => JSX.Element)` render contract. Routes the thunk's output
+ * through the single {@link asOpenTuiJsxElement} branding seam.
+ */
+function asOpenTuiSolidThunk(node: OpenTuiSolidNode): () => JSX.Element {
+  return () => asOpenTuiJsxElement(node());
+}
+
 export function createOpenTuiSolidElement(
   type: unknown,
   props?: Record<string, unknown> | null,
   ...children: unknown[]
 ): OpenTuiSolidNode {
-  return () => {
+  // This is a hand-rolled equivalent of @opentui/solid's own `jsx()` factory,
+  // which is publicly typed as `(type, props) => JSX.Element` even though a
+  // component returns `unknown` and an intrinsic element resolves to a
+  // `BaseRenderable`. The reconciler treats both as renderable nodes, so we
+  // brand the factory output with the same `JSX.Element` contract OpenTUI uses.
+  return (): JSX.Element => {
     if (typeof type === "function") {
       const componentProps: Record<string, unknown> = { ...props };
       if (children.length === 1) {
@@ -480,7 +513,7 @@ export function createOpenTuiSolidElement(
       } else if (children.length > 1) {
         componentProps.children = children;
       }
-      return (type as (props: Record<string, unknown>) => unknown)({
+      return (type as (props: Record<string, unknown>) => JSX.Element)({
         ...componentProps,
       });
     }
@@ -495,7 +528,7 @@ export function createOpenTuiSolidElement(
     for (const child of children) {
       solidInsert(element, child);
     }
-    return element;
+    return asOpenTuiJsxElement(element);
   };
 }
 
@@ -509,7 +542,7 @@ export async function openTuiSolidTestRender(
 ): Promise<OpenTuiTestRenderSetup> {
   await initializeOpenTuiTextRendering();
   getDataPaths().setMaxListeners(OPEN_TUI_TEST_DATA_PATH_LISTENER_LIMIT);
-  return await solidTestRender(node, options);
+  return await solidTestRender(asOpenTuiSolidThunk(node), options);
 }
 
 export async function runOpenTuiSmoke(
@@ -531,14 +564,16 @@ export async function runOpenTuiSmoke(
   try {
     await solidRender(
       () =>
-        createOpenTuiSolidElement(
-          "box",
-          { style: { padding: 1, flexDirection: "column" } },
-          createOpenTuiSolidElement("text", {
-            content: options.label ?? "Brewva OpenTUI smoke",
-            style: { fg: "#8ab4f8" },
-          })(),
-        )(),
+        asOpenTuiJsxElement(
+          createOpenTuiSolidElement(
+            "box",
+            { style: { padding: 1, flexDirection: "column" } },
+            createOpenTuiSolidElement("text", {
+              content: options.label ?? "Brewva OpenTUI smoke",
+              style: { fg: "#8ab4f8" },
+            })(),
+          )(),
+        ),
       renderer,
     );
     renderer.requestRender();

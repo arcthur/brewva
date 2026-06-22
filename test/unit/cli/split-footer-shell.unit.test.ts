@@ -66,7 +66,7 @@ function buildFakeRuntime(messages: CliShellTranscriptMessage[]): CliShellRuntim
     // falls through to the settled SWEEP, which is exactly the wiring contract this
     // test asserts.
     peekScrollbackCommits() {
-      return { commits: [], cursor: undefined, epoch: 0 };
+      return { commits: [], cursor: undefined, epoch: 0, rewindGeneration: 0 };
     },
     getViewState() {
       return {

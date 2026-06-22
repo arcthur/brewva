@@ -30,3 +30,4 @@ export { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras
 export { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 export { KeymapProvider } from "@opentui/keymap/solid";
 export { render, useKeyboard, usePaste, useRenderer, useTerminalDimensions } from "@opentui/solid";
+export type { JSX } from "@opentui/solid";

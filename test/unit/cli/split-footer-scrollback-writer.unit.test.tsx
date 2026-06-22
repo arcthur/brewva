@@ -94,16 +94,28 @@ function buildCommit(input: CommitInput, seq: number): ScrollbackCommit {
 class ScriptedCommitRuntime {
   private commits: ScrollbackCommit[];
   private epoch: number;
+  private rewindGeneration: number;
   private messages: CliShellTranscriptMessage[];
   readonly peekCursorArgs: ScrollbackCommitCursor[] = [];
+  /**
+   * The message ids returned in each peek slice, one array PER peek call (aligned
+   * with peekCursorArgs by index). After a rewind boundary the writer advances
+   * its cursor past the abandoned commits and re-peeks, so the FINAL slice the
+   * writer actually drains is the one returned from the advanced cursor — a test
+   * asserts THAT slice (servedSlices.at(-1)) omits the abandoned id, proving the
+   * abandoned turn is never drained/re-emitted post-boundary.
+   */
+  readonly servedSlices: string[][] = [];
 
   constructor(input: {
     commitInputs: readonly CommitInput[];
     epoch?: number;
+    rewindGeneration?: number;
     messages?: readonly CliShellTranscriptMessage[];
   }) {
     this.commits = input.commitInputs.map((commit, index) => buildCommit(commit, index));
     this.epoch = input.epoch ?? 0;
+    this.rewindGeneration = input.rewindGeneration ?? 0;
     this.messages = [...(input.messages ?? [])];
   }
 
@@ -117,6 +129,19 @@ class ScriptedCommitRuntime {
     this.epoch = epoch;
   }
 
+  /**
+   * Bump the rewind generation (in-place rewind / redo / undo) so the next peek
+   * triggers the SKIP-to-tail clearing boundary — WITHOUT changing the epoch.
+   */
+  bumpRewindGeneration(): void {
+    this.rewindGeneration += 1;
+  }
+
+  /** Replace the transcript the settled sweep renders (post-rewind shorter set). */
+  setMessages(messages: readonly CliShellTranscriptMessage[]): void {
+    this.messages = [...messages];
+  }
+
   // Arrow-function properties capture `this` lexically (no `this` alias needed);
   // the returned object is cast to the controller port.
   asController(): ShellRendererController {
@@ -127,11 +152,13 @@ class ScriptedCommitRuntime {
           cursor === undefined
             ? [...this.commits]
             : this.commits.filter((entry) => entry.seq > cursor);
+        this.servedSlices.push(slice.map((entry) => entry.message.id));
         const lastSeq = slice.at(-1)?.seq;
         return {
           commits: slice,
           cursor: lastSeq ?? cursor,
           epoch: this.epoch,
+          rewindGeneration: this.rewindGeneration,
         };
       },
       getViewState: () => ({
@@ -176,6 +203,32 @@ const STREAM_ASSISTANT_ID = "wire:s:t:a:assistant:1";
 const COMMITTED_ASSISTANT_ID_0 = "wire:s:t:a:assistant:committed:index:0";
 const COMMITTED_ASSISTANT_ID_1 = "wire:s:t:a:assistant:committed:index:1";
 const ASSISTANT_LOGICAL_ID = "turn:s:t:a:assistant";
+
+// Wrap the renderer's native `resetSplitFooterForReplay` so a test can observe
+// the session-switch replay boundary (the writer clears native scrollback there).
+// Records each call's `clearSavedLines` option and still invokes the real method
+// (so the headless renderer's scrollback state is genuinely reset). `restore`
+// puts the original method back before teardown.
+function spyResetSplitFooterForReplay(renderer: unknown): {
+  calls: Array<{ clearSavedLines: boolean | undefined }>;
+  restore: () => void;
+} {
+  const target = renderer as {
+    resetSplitFooterForReplay(options?: { clearSavedLines?: boolean }): void;
+  };
+  const original = target.resetSplitFooterForReplay.bind(target);
+  const calls: Array<{ clearSavedLines: boolean | undefined }> = [];
+  target.resetSplitFooterForReplay = (options?: { clearSavedLines?: boolean }) => {
+    calls.push({ clearSavedLines: options?.clearSavedLines });
+    original(options);
+  };
+  return {
+    calls,
+    restore() {
+      target.resetSplitFooterForReplay = original;
+    },
+  };
+}
 
 // Count external_output events on the renderer (the observable signal that
 // writeToScrollback enqueued a scrollback commit).
@@ -544,6 +597,183 @@ describe("SplitFooterScrollbackWriter (commit-cursor driven)", () => {
       // re-peeks from undefined.
       expect(runtime.peekCursorArgs).toEqual([undefined, 0, undefined]);
     } finally {
+      shutdownSplitFooterRenderer(renderer);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 6b. Session-switch replay boundary: an epoch change clears the renderer's
+  //     native scrollback (resetSplitFooterForReplay with clearSavedLines) BEFORE
+  //     replaying the new session, so the new session REPLACES the old one in
+  //     scrollback instead of appending below it.
+  // -------------------------------------------------------------------------
+  test("session switch: an epoch change clears native scrollback before replaying the new session", async () => {
+    const renderer = await createHeadlessSplitFooterRenderer({ columns: 80, rows: 40 });
+    const replaySpy = spyResetSplitFooterForReplay(renderer);
+
+    try {
+      const writer = new SplitFooterScrollbackWriter();
+      const runtime = new ScriptedCommitRuntime({
+        commitInputs: [
+          {
+            id: "wire:s1:t:tool:tool-a",
+            logicalId: "turn:s1:t:tool:tool-a",
+            kind: "tool",
+            phase: "final",
+            text: "session one tool",
+          },
+        ],
+        epoch: 0,
+        messages: [],
+      });
+      const controller = runtime.asController();
+
+      const firstCount = await writer.sync({ renderer, runtime: controller });
+      expect(firstCount).toBe(1);
+      // No clear on the FIRST sync: the writer adopts the initial epoch without a
+      // boundary (there is no prior session to replace).
+      expect(replaySpy.calls).toEqual([]);
+      expect(writer.replayBoundaryClearCount).toBe(0);
+
+      // Session switch: bump the epoch and install a NEW log (fresh seq from 0).
+      runtime.setEpoch(1);
+      runtime.setCommitInputs([
+        {
+          id: "wire:s2:t:tool:tool-b",
+          logicalId: "turn:s2:t:tool:tool-b",
+          kind: "tool",
+          phase: "final",
+          text: "session two tool",
+        },
+      ]);
+
+      const secondCount = await writer.sync({ renderer, runtime: controller });
+      // The new session's single tool final was committed (1): the boundary
+      // cleared, then the drain replayed the new log from the start.
+      expect(secondCount).toBe(1);
+      // EXACTLY ONE clear fired, and it requested clearSavedLines (so the
+      // terminal's saved scrollback lines are wiped, not just the live region).
+      expect(replaySpy.calls).toEqual([{ clearSavedLines: true }]);
+      expect(writer.replayBoundaryClearCount).toBe(1);
+    } finally {
+      replaySpy.restore();
+      shutdownSplitFooterRenderer(renderer);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 6c. No clear on a plain streaming sync: progress + a streamed final in the
+  //     SAME epoch must NOT touch the replay boundary (the boundary is for a
+  //     session switch only, never for ordinary streaming).
+  // -------------------------------------------------------------------------
+  test("plain streaming sync: no epoch change -> the replay boundary never fires", async () => {
+    const renderer = await createHeadlessSplitFooterRenderer({ columns: 80, rows: 40 });
+    const replaySpy = spyResetSplitFooterForReplay(renderer);
+
+    try {
+      const writer = new SplitFooterScrollbackWriter();
+      const runtime = new ScriptedCommitRuntime({
+        commitInputs: [
+          {
+            id: STREAM_ASSISTANT_ID,
+            logicalId: ASSISTANT_LOGICAL_ID,
+            kind: "assistant",
+            phase: "progress",
+            text: "Hello",
+          },
+          {
+            id: STREAM_ASSISTANT_ID,
+            logicalId: ASSISTANT_LOGICAL_ID,
+            kind: "assistant",
+            phase: "final",
+            text: "Hello world done",
+          },
+        ],
+        epoch: 0,
+        messages: [],
+      });
+      const controller = runtime.asController();
+
+      const firstCount = await writer.sync({ renderer, runtime: controller });
+      // The streamed turn settled (1) — but no session switch, so no clear.
+      expect(firstCount).toBe(1);
+      expect(replaySpy.calls).toEqual([]);
+      expect(writer.replayBoundaryClearCount).toBe(0);
+
+      // A second sync in the SAME epoch (idempotent) also leaves the boundary
+      // untouched.
+      const secondCount = await writer.sync({ renderer, runtime: controller });
+      expect(secondCount).toBe(0);
+      expect(replaySpy.calls).toEqual([]);
+      expect(writer.replayBoundaryClearCount).toBe(0);
+    } finally {
+      replaySpy.restore();
+      shutdownSplitFooterRenderer(renderer);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 6d. External-editor suspend does NOT clear native scrollback: the editor
+  //     draws on the alt screen, so on exit the committed transcript is still in
+  //     native scrollback. suspend() preserves the cursor/de-dup state and a
+  //     same-epoch resume must NOT fire the replay boundary (no double-clear of
+  //     content that is correctly still on screen).
+  // -------------------------------------------------------------------------
+  test("editor suspend: a same-epoch resume after suspend() does not clear native scrollback", async () => {
+    const renderer = await createHeadlessSplitFooterRenderer({ columns: 80, rows: 40 });
+    const replaySpy = spyResetSplitFooterForReplay(renderer);
+
+    try {
+      const writer = new SplitFooterScrollbackWriter();
+      const runtime = new ScriptedCommitRuntime({
+        commitInputs: [
+          {
+            id: "wire:s:t1:tool:tool-a",
+            logicalId: "turn:s:t1:tool:tool-a",
+            kind: "tool",
+            phase: "final",
+            text: "committed before editor",
+          },
+        ],
+        epoch: 0,
+        messages: [],
+      });
+      const controller = runtime.asController();
+
+      const firstCount = await writer.sync({ renderer, runtime: controller });
+      expect(firstCount).toBe(1);
+      expect(replaySpy.calls).toEqual([]);
+
+      // External-editor round-trip: the host suspends the writer (preserving the
+      // cursor + de-dup state) and the editor returns. The epoch is UNCHANGED.
+      writer.suspend();
+
+      // A post-editor turn appends a new commit at a higher seq in the SAME epoch.
+      runtime.setCommitInputs([
+        {
+          id: "wire:s:t1:tool:tool-a",
+          logicalId: "turn:s:t1:tool:tool-a",
+          kind: "tool",
+          phase: "final",
+          text: "committed before editor",
+        },
+        {
+          id: "wire:s:t2:tool:tool-b",
+          logicalId: "turn:s:t2:tool:tool-b",
+          kind: "tool",
+          phase: "final",
+          text: "committed after editor",
+        },
+      ]);
+
+      const resumeCount = await writer.sync({ renderer, runtime: controller });
+      // The post-editor turn committed forward (1) from the preserved cursor, and
+      // the replay boundary NEVER fired: native scrollback was left intact.
+      expect(resumeCount).toBe(1);
+      expect(replaySpy.calls).toEqual([]);
+      expect(writer.replayBoundaryClearCount).toBe(0);
+    } finally {
+      replaySpy.restore();
       shutdownSplitFooterRenderer(renderer);
     }
   });
@@ -1078,10 +1308,13 @@ describe("SplitFooterScrollbackWriter (commit-cursor driven)", () => {
   //     via since(cursor). This reproduces that: a post-rewind turn must still
   //     commit forward (the writer is never STUCK).
   //
-  //     Inherent platform limitation (documented, not fixable here): the rows the
-  //     rewind abandons are ALREADY in the terminal's native scrollback, which is
-  //     immutable — @opentui/core@0.3.4 has no scrollback-clear API. The writer
-  //     cannot un-write them; it only guarantees forward progress for new turns.
+  //     Scoped behavior (documented, by design): the rows this same-epoch rewind
+  //     abandons stay in the terminal's native scrollback. @opentui/core@0.4.1
+  //     DOES expose a scrollback-clear API (resetSplitFooterForReplay), but the
+  //     writer only fires it at a REPLAY BOUNDARY (epoch/session switch via
+  //     beginReplayBoundary) — an in-place same-epoch rewind never crosses one, so
+  //     no clear runs. The writer does not un-write the abandoned rows here; it
+  //     only guarantees forward progress for new turns.
   // -------------------------------------------------------------------------
   test("rewind: the writer keeps committing forward after a same-epoch log growth (not stuck)", async () => {
     const renderer = await createHeadlessSplitFooterRenderer({ columns: 80, rows: 40 });
@@ -1141,6 +1374,367 @@ describe("SplitFooterScrollbackWriter (commit-cursor driven)", () => {
       expect(thirdCount).toBe(0);
       expect(runtime.peekCursorArgs).toEqual([undefined, 0, 1]);
     } finally {
+      shutdownSplitFooterRenderer(renderer);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 11. FULL rewind replay boundary (the headline of this change). An in-place
+  //     rewind bumps `rewindGeneration` WITHOUT changing the epoch and WITHOUT
+  //     resetting the log. The writer must:
+  //       (a) clear native scrollback EXACTLY ONCE (clearSavedLines: true);
+  //       (b) NOT re-drain the abandoned commits (cursor advanced to the log
+  //           tail, so the abandoned seq is skipped — proven by the re-peek
+  //           slice omitting the abandoned id);
+  //       (c) re-render the now-SHORTER transcript purely via the settled SWEEP;
+  //       (d) keep draining genuinely-new post-rewind turns forward.
+  // -------------------------------------------------------------------------
+  test("rewind: clears native scrollback once and re-sweeps the shorter transcript without re-committing the abandoned turn", async () => {
+    const renderer = await createHeadlessSplitFooterRenderer({ columns: 80, rows: 40 });
+    const replaySpy = spyResetSplitFooterForReplay(renderer);
+    const counter = countExternalOutputEvents(renderer);
+
+    const SURVIVING_ID = "wire:s:t1:a:assistant:committed:index:0";
+    const ABANDONED_ID = "wire:s:t2:a:assistant:committed:index:0";
+    const REWIND_MARKER_ID = "rewind:s:marker";
+    const POST_REWIND_ID = "wire:s:t3:a:assistant:committed:index:0";
+
+    try {
+      const writer = new SplitFooterScrollbackWriter();
+      // Pre-rewind: two committed assistant turns drained from the log (seq 0, 1).
+      // The transcript carries both surviving + abandoned messages.
+      const runtime = new ScriptedCommitRuntime({
+        commitInputs: [
+          {
+            id: SURVIVING_ID,
+            logicalId: "turn:s:t1:a:assistant",
+            kind: "assistant",
+            phase: "final",
+            text: "answer to turn one (surviving)",
+          },
+          {
+            id: ABANDONED_ID,
+            logicalId: "turn:s:t2:a:assistant",
+            kind: "assistant",
+            phase: "final",
+            text: "answer to turn two (abandoned by the rewind)",
+          },
+        ],
+        epoch: 0,
+        rewindGeneration: 0,
+        messages: [
+          textMessage({
+            id: SURVIVING_ID,
+            role: "assistant",
+            text: "answer to turn one (surviving)",
+          }),
+          textMessage({
+            id: ABANDONED_ID,
+            role: "assistant",
+            text: "answer to turn two (abandoned)",
+          }),
+        ],
+      });
+      const controller = runtime.asController();
+
+      // Both pre-rewind turns reached scrollback via the drain (cursor -> seq 1).
+      const firstCount = await writer.sync({ renderer, runtime: controller });
+      expect(firstCount).toBe(2);
+      expect(writer.replayBoundaryClearCount).toBe(0);
+      expect(replaySpy.calls).toEqual([]);
+      const eventsAfterFirst = counter.count;
+      expect(eventsAfterFirst).toBe(2);
+
+      // Rewind to turn 1: SAME epoch, SAME log (abandoned seq-1 commit stays in
+      // it behind the cursor). The handler bumps the rewind generation, then
+      // refreshFromSession rebuilds the SHORTER transcript: the surviving turn +
+      // the rewind marker, WITHOUT the abandoned turn.
+      runtime.bumpRewindGeneration();
+      runtime.setMessages([
+        textMessage({
+          id: SURVIVING_ID,
+          role: "assistant",
+          text: "answer to turn one (surviving)",
+        }),
+        textMessage({ id: REWIND_MARKER_ID, role: "assistant", text: "Session rewind applied." }),
+      ]);
+
+      const rewindCount = await writer.sync({ renderer, runtime: controller });
+
+      // (a) Cleared EXACTLY ONCE, with clearSavedLines (the whole terminal
+      //     scrollback history is wiped, not just the live region).
+      expect(writer.replayBoundaryClearCount).toBe(1);
+      expect(replaySpy.calls).toEqual([{ clearSavedLines: true }]);
+
+      // (c) The shorter transcript (2 messages) re-rendered via the SWEEP: both
+      //     swept messages are settled commits. The abandoned turn is NOT among
+      //     them (it is gone from the transcript), so it is not re-rendered.
+      expect(rewindCount).toBe(2);
+
+      // (b) The cursor advanced to the log tail (seq 1) at the boundary, so the
+      //     re-peek after the clear returns an EMPTY slice — the abandoned seq-1
+      //     commit is skipped, never drained/re-emitted. The peek sequence is:
+      //     [undefined] (first sync), then on the rewind sync [1] (detect rewind
+      //     from the un-advanced cursor) and [1] again (re-peek from the tail).
+      expect(runtime.peekCursorArgs).toEqual([undefined, 1, 1]);
+      const sliceAfterBoundary = runtime.servedSlices.at(-1);
+      expect(sliceAfterBoundary).toEqual([]);
+      // The abandoned id appears in NO post-boundary slice the writer drained.
+      expect(runtime.servedSlices.slice(1).flat()).not.toContain(ABANDONED_ID);
+
+      // The sweep emitted exactly two fresh scrollback rows (one per surviving
+      // message), and nothing for the abandoned turn.
+      expect(counter.count).toBe(eventsAfterFirst + 2);
+
+      // (d) A genuinely-new post-rewind turn appends at a HIGHER seq (2) and
+      //     drains forward normally — the writer is not stuck after the boundary.
+      runtime.setCommitInputs([
+        {
+          id: SURVIVING_ID,
+          logicalId: "turn:s:t1:a:assistant",
+          kind: "assistant",
+          phase: "final",
+          text: "answer to turn one (surviving)",
+        },
+        {
+          id: ABANDONED_ID,
+          logicalId: "turn:s:t2:a:assistant",
+          kind: "assistant",
+          phase: "final",
+          text: "answer to turn two (abandoned)",
+        },
+        {
+          id: POST_REWIND_ID,
+          logicalId: "turn:s:t3:a:assistant",
+          kind: "assistant",
+          phase: "final",
+          text: "answer to the new post-rewind turn",
+        },
+      ]);
+
+      const forwardCount = await writer.sync({ renderer, runtime: controller });
+      // Exactly the new turn committed (1); no second clear (rewind generation
+      // unchanged); the abandoned turn was still skipped.
+      expect(forwardCount).toBe(1);
+      expect(writer.replayBoundaryClearCount).toBe(1);
+      expect(replaySpy.calls).toEqual([{ clearSavedLines: true }]);
+      // The forward drain peeked from the tail (1) and served ONLY the new seq-2
+      // commit — never the abandoned seq-1 commit.
+      expect(runtime.servedSlices.at(-1)).toEqual([POST_REWIND_ID]);
+    } finally {
+      counter.cleanup();
+      replaySpy.restore();
+      shutdownSplitFooterRenderer(renderer);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 12. Redo replay boundary: a redo is another in-place same-epoch mutation
+  //     (rewindGeneration bumps, epoch unchanged). It clears native scrollback
+  //     once and re-sweeps the restored (longer-again) transcript, skipping the
+  //     pre-redo branch commits still sitting in the log behind the cursor.
+  // -------------------------------------------------------------------------
+  test("redo: clears native scrollback once and re-sweeps the restored transcript via the sweep", async () => {
+    const renderer = await createHeadlessSplitFooterRenderer({ columns: 80, rows: 40 });
+    const replaySpy = spyResetSplitFooterForReplay(renderer);
+    const counter = countExternalOutputEvents(renderer);
+
+    const TURN_ONE_ID = "wire:s:t1:a:assistant:committed:index:0";
+    const REDONE_ID = "wire:s:t2:a:assistant:committed:index:0";
+    const REDO_MARKER_ID = "rewind:s:redo-marker";
+
+    try {
+      const writer = new SplitFooterScrollbackWriter();
+      // Post-rewind state: only turn one is in the log/transcript (the writer has
+      // already drained seq 0). A redo will restore turn two.
+      const runtime = new ScriptedCommitRuntime({
+        commitInputs: [
+          {
+            id: TURN_ONE_ID,
+            logicalId: "turn:s:t1:a:assistant",
+            kind: "assistant",
+            phase: "final",
+            text: "answer to turn one",
+          },
+        ],
+        epoch: 0,
+        rewindGeneration: 0,
+        messages: [textMessage({ id: TURN_ONE_ID, role: "assistant", text: "answer to turn one" })],
+      });
+      const controller = runtime.asController();
+
+      const firstCount = await writer.sync({ renderer, runtime: controller });
+      expect(firstCount).toBe(1);
+      expect(writer.replayBoundaryClearCount).toBe(0);
+      const eventsAfterFirst = counter.count;
+      expect(eventsAfterFirst).toBe(1);
+
+      // Redo: same epoch, the handler bumps the rewind generation, then
+      // refreshFromSession rebuilds the RESTORED transcript (turn one + the redone
+      // turn two + a redo marker). The pre-redo log keeps its seq-0 commit behind
+      // the cursor.
+      runtime.bumpRewindGeneration();
+      runtime.setMessages([
+        textMessage({ id: TURN_ONE_ID, role: "assistant", text: "answer to turn one" }),
+        textMessage({ id: REDONE_ID, role: "assistant", text: "answer to turn two (redone)" }),
+        textMessage({ id: REDO_MARKER_ID, role: "assistant", text: "Session redo applied." }),
+      ]);
+
+      const redoCount = await writer.sync({ renderer, runtime: controller });
+
+      // Cleared exactly once with clearSavedLines.
+      expect(writer.replayBoundaryClearCount).toBe(1);
+      expect(replaySpy.calls).toEqual([{ clearSavedLines: true }]);
+      // All three restored messages re-rendered via the sweep.
+      expect(redoCount).toBe(3);
+      // The cursor advanced to the tail (seq 0), so the re-peek after the boundary
+      // serves an empty slice — the pre-redo seq-0 commit is NOT re-drained.
+      expect(runtime.peekCursorArgs).toEqual([undefined, 0, 0]);
+      expect(runtime.servedSlices.at(-1)).toEqual([]);
+      // Exactly three fresh scrollback rows from the sweep (one per restored
+      // message); the pre-redo branch commit was not re-emitted via the drain.
+      expect(counter.count).toBe(eventsAfterFirst + 3);
+    } finally {
+      counter.cleanup();
+      replaySpy.restore();
+      shutdownSplitFooterRenderer(renderer);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 13. Hydrated-history rewind (the last untested quadrant). The surviving
+  //     post-rewind turn lives ONLY in transcript.messages (loaded from durable
+  //     history via a snapshot, which emits NO commits) — it was NEVER appended
+  //     to the commit log. So the settled SWEEP is its SOLE renderer, and the
+  //     cursor-skip-to-tail is trivially safe (the only log commit is the
+  //     abandoned branch). The earlier rewind/redo tests model surviving turns as
+  //     DRAINED commits; this one models them as hydrated (sweep-only) state.
+  //
+  //     The writer must:
+  //       (a) clear native scrollback EXACTLY ONCE (clearSavedLines: true);
+  //       (b) re-render the surviving HYDRATED turn via the SWEEP (not the drain);
+  //       (c) NOT re-drain the abandoned commit (cursor advanced to the tail, so
+  //           the re-peek slice is empty — no double-write);
+  //       (d) handle the cursor correctly (skip-to-tail, then idempotent).
+  // -------------------------------------------------------------------------
+  test("rewind: a hydrated (sweep-only) surviving turn re-renders via the sweep without re-draining the abandoned commit", async () => {
+    const renderer = await createHeadlessSplitFooterRenderer({ columns: 80, rows: 40 });
+    const replaySpy = spyResetSplitFooterForReplay(renderer);
+    const counter = countExternalOutputEvents(renderer);
+
+    // The surviving turn is HYDRATED: present in transcript.messages, absent from
+    // the commit log. The abandoned turn is a LIVE commit (seq 0) the rewind drops.
+    const HYDRATED_SURVIVOR_ID = "wire:s:t1:a:assistant:committed:index:0";
+    const ABANDONED_ID = "wire:s:t2:a:assistant:committed:index:0";
+    const REWIND_MARKER_ID = "rewind:s:marker";
+    const POST_REWIND_ID = "wire:s:t3:a:assistant:committed:index:0";
+
+    try {
+      const writer = new SplitFooterScrollbackWriter();
+      const runtime = new ScriptedCommitRuntime({
+        // Only the abandoned turn is in the log. The surviving turn is hydrated
+        // history (no commit) — the transcript carries both.
+        commitInputs: [
+          {
+            id: ABANDONED_ID,
+            logicalId: "turn:s:t2:a:assistant",
+            kind: "assistant",
+            phase: "final",
+            text: "answer to turn two (abandoned by the rewind)",
+          },
+        ],
+        epoch: 0,
+        rewindGeneration: 0,
+        messages: [
+          textMessage({
+            id: HYDRATED_SURVIVOR_ID,
+            role: "assistant",
+            text: "answer to turn one (hydrated, surviving)",
+          }),
+          textMessage({
+            id: ABANDONED_ID,
+            role: "assistant",
+            text: "answer to turn two (abandoned)",
+          }),
+        ],
+      });
+      const controller = runtime.asController();
+
+      // Pre-rewind sync: the abandoned commit drains (1) and the hydrated survivor
+      // is swept (1). Two distinct rows reach scrollback; no boundary fires yet.
+      const firstCount = await writer.sync({ renderer, runtime: controller });
+      expect(firstCount).toBe(2);
+      expect(writer.replayBoundaryClearCount).toBe(0);
+      expect(replaySpy.calls).toEqual([]);
+      const eventsAfterFirst = counter.count;
+      expect(eventsAfterFirst).toBe(2);
+      // The drain advanced the cursor to the abandoned commit's seq (0).
+      expect(runtime.peekCursorArgs).toEqual([undefined]);
+
+      // Rewind to turn one: SAME epoch, SAME log (the abandoned seq-0 commit stays
+      // behind the cursor). The handler bumps the rewind generation; refreshFrom-
+      // Session rebuilds the SHORTER transcript: the hydrated survivor + the rewind
+      // marker, WITHOUT the abandoned turn. Neither survivor is in the commit log.
+      runtime.bumpRewindGeneration();
+      runtime.setMessages([
+        textMessage({
+          id: HYDRATED_SURVIVOR_ID,
+          role: "assistant",
+          text: "answer to turn one (hydrated, surviving)",
+        }),
+        textMessage({ id: REWIND_MARKER_ID, role: "assistant", text: "Session rewind applied." }),
+      ]);
+
+      const rewindCount = await writer.sync({ renderer, runtime: controller });
+
+      // (a) Cleared EXACTLY ONCE, with clearSavedLines.
+      expect(writer.replayBoundaryClearCount).toBe(1);
+      expect(replaySpy.calls).toEqual([{ clearSavedLines: true }]);
+
+      // (b) Both surviving messages re-rendered via the SWEEP (the drain served an
+      //     empty slice — see (c)). The sweep is the SOLE renderer for the hydrated
+      //     survivor; it was never a commit.
+      expect(rewindCount).toBe(2);
+      expect(counter.count).toBe(eventsAfterFirst + 2);
+
+      // (c) The cursor advanced to the log tail (seq 0) at the boundary, so the
+      //     re-peek after the clear serves an EMPTY slice — the abandoned seq-0
+      //     commit is skipped, never drained/re-emitted (no double-write). Peek
+      //     sequence: [undefined] (first sync), then on the rewind sync [0] (detect
+      //     rewind from the un-advanced cursor) and [0] again (re-peek from tail).
+      expect(runtime.peekCursorArgs).toEqual([undefined, 0, 0]);
+      expect(runtime.servedSlices.at(-1)).toEqual([]);
+      expect(runtime.servedSlices.slice(1).flat()).not.toContain(ABANDONED_ID);
+
+      // (d) A genuinely-new post-rewind turn appends at a HIGHER seq (1) and drains
+      //     forward normally — the cursor (now at the tail) is not stuck.
+      runtime.setCommitInputs([
+        {
+          id: ABANDONED_ID,
+          logicalId: "turn:s:t2:a:assistant",
+          kind: "assistant",
+          phase: "final",
+          text: "answer to turn two (abandoned)",
+        },
+        {
+          id: POST_REWIND_ID,
+          logicalId: "turn:s:t3:a:assistant",
+          kind: "assistant",
+          phase: "final",
+          text: "answer to the new post-rewind turn",
+        },
+      ]);
+
+      const forwardCount = await writer.sync({ renderer, runtime: controller });
+      // Exactly the new turn committed (1); no second clear (rewind generation
+      // unchanged); the abandoned commit was still skipped.
+      expect(forwardCount).toBe(1);
+      expect(writer.replayBoundaryClearCount).toBe(1);
+      expect(replaySpy.calls).toEqual([{ clearSavedLines: true }]);
+      expect(runtime.servedSlices.at(-1)).toEqual([POST_REWIND_ID]);
+    } finally {
+      counter.cleanup();
+      replaySpy.restore();
       shutdownSplitFooterRenderer(renderer);
     }
   });

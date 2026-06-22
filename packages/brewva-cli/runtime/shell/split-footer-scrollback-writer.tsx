@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import { recordDiagnosticError } from "../../src/internal/perf-trace.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import {
   deriveLogicalId,
@@ -50,6 +51,32 @@ function commitSpacerRow(renderer: OpenTuiRenderer, width: number): void {
  */
 function isRendererDestroyed(renderer: OpenTuiRenderer): boolean {
   return (renderer as Partial<SplitFooterRenderer>).isDestroyed === true;
+}
+
+/**
+ * The CliRenderer members the session-switch replay boundary drives that neither
+ * the minimal {@link OpenTuiRenderer} nor {@link SplitFooterRenderer} declares
+ * (they intentionally stay free of OpenTUI-owned types). All three are plain
+ * primitive/promise callbacks, so a local structural cast keeps the OpenTUI
+ * import quarantine intact (this module already casts the same way for
+ * `isDestroyed` / `writeToScrollback`):
+ *
+ *  - `idle`: resolve once the renderer has flushed pending split-footer frames,
+ *    so the clear lands on a settled frame (opencode parity: await footer idle).
+ *  - `resetSplitFooterForReplay`: clear the native scrollback (+ the terminal's
+ *    saved scrollback lines when `clearSavedLines`) so a NEW session REPLACES the
+ *    old one instead of appending below it. Available in @opentui/core 0.4.1.
+ *  - `requestRender`: schedule a repaint after the boundary (defensive; the
+ *    native reset already requests one).
+ */
+interface ReplayCapableRenderer {
+  idle(): Promise<void>;
+  resetSplitFooterForReplay(options?: { clearSavedLines?: boolean }): void;
+  requestRender(): void;
+}
+
+function asReplayCapable(renderer: OpenTuiRenderer): ReplayCapableRenderer {
+  return renderer as unknown as ReplayCapableRenderer;
 }
 
 /**
@@ -142,6 +169,14 @@ export class SplitFooterScrollbackWriter {
   /** Session generation observed last; a change means the log was reset (new session). */
   private lastEpoch: number | undefined;
   /**
+   * Rewind generation observed last; a change WITHOUT an epoch change means an
+   * in-place rewind / redo / undo happened (same session, same log, abandoned
+   * commits still in the log behind the cursor). The writer then clears native
+   * scrollback and SKIPS the abandoned commits (advancing the cursor to the log
+   * tail) instead of replaying the log from the start.
+   */
+  private lastRewindGeneration: number | undefined;
+  /**
    * High-water mark into `transcript.messages` for the settled sweep. This is an
    * OPTIMIZATION, not the correctness mechanism: it keeps the streaming-time sweep
    * O(1) (load-bearing for P2-2 — during a stream the mark sits at the live tail,
@@ -168,6 +203,11 @@ export class SplitFooterScrollbackWriter {
   private labelCommits = 0;
   private spacerCommits = 0;
   private bannerCommits = 0;
+  // Number of native-scrollback replay-boundary clears performed (one per session
+  // switch / epoch change OR per in-place rewind / redo / undo). Observable so a
+  // test can assert the boundary fires on a session switch or a rewind and NOT on
+  // a plain streaming sync or an editor suspend.
+  private replayBoundaryClears = 0;
 
   // Serialization state: a single run loop coalesces concurrent sync requests
   // into one trailing re-run. `currentRun` is the in-flight loop promise so
@@ -201,6 +241,16 @@ export class SplitFooterScrollbackWriter {
   /** Number of splash banner rows committed (0 or 1 per session). */
   get committedBannerCount(): number {
     return this.bannerCommits;
+  }
+
+  /**
+   * Number of native-scrollback replay-boundary clears performed (one per epoch
+   * change / session switch OR per in-place rewind / redo / undo). Stays 0 across
+   * plain streaming syncs and an external-editor suspend, which must NOT clear
+   * native scrollback.
+   */
+  get replayBoundaryClearCount(): number {
+    return this.replayBoundaryClears;
   }
 
   /**
@@ -359,17 +409,65 @@ export class SplitFooterScrollbackWriter {
       return 0;
     }
 
-    // 1. Epoch boundary: a changed session generation means the per-session log
-    //    was reset (new session / full re-hydrate). Reset cursor + state so the
-    //    new session's commits replay from the start, and re-peek from the
-    //    beginning. (Surface clear / full replay framing is PHASE 3; here we just
-    //    rebase the cursor + state.)
+    // 1. Replay boundaries. Two orthogonal signals ride on the peek, handled as
+    //    two clearly-distinguished branches that SHARE the clear primitive
+    //    (clearNativeScrollbackForReplay) but diverge on cursor handling:
+    //
+    //    1a. Epoch change (session switch / full re-hydrate): the per-session log
+    //        was RESET (fresh, monotonic-from-0). Clear native scrollback, then
+    //        replay the new log from the START (cursor -> undefined) so the new
+    //        session REPLACES the old one instead of appending below it.
+    //
+    //    1b. Rewind generation change WITHOUT an epoch change (in-place rewind /
+    //        redo / undo): the SAME log keeps its abandoned-branch commits behind
+    //        the cursor. Clear native scrollback, then — UNLIKE the session switch
+    //        — do NOT replay from undefined (that would re-drain the abandoned
+    //        turns). Instead ADVANCE the cursor to the current log TAIL (skipping
+    //        the abandoned commits) and re-render the now-shorter transcript
+    //        purely via the settled SWEEP (settledScanIndex -> 0). New post-rewind
+    //        turns append at higher seq and drain forward normally.
     let peek = runtime.peekScrollbackCommits(this.cursor);
+
+    // Adopt the initial generations on the first pass (no prior session/branch to
+    // replace), so the very first sync never fires a boundary.
     if (this.lastEpoch === undefined) {
       this.lastEpoch = peek.epoch;
-    } else if (peek.epoch !== this.lastEpoch) {
-      this.resetCommitState();
+    }
+    if (this.lastRewindGeneration === undefined) {
+      this.lastRewindGeneration = peek.rewindGeneration;
+    }
+
+    if (peek.epoch !== this.lastEpoch) {
+      // 1a. Session switch: clear, then rebase cursor + sweep to the start.
+      await this.clearNativeScrollbackForReplay({ renderer, runtime });
+      // clearNativeScrollbackForReplay awaited renderer.idle(); a pass that
+      // resumed after a teardown must bail before re-peeking against a dead renderer.
+      if (this.shouldAbortPass(renderer)) {
+        return 0;
+      }
+      this.cursor = undefined;
+      this.settledScanIndex = 0;
       this.lastEpoch = peek.epoch;
+      // An epoch change supersedes any concurrent rewind signal: the fresh log
+      // replays in full, so adopt the rewind generation without a second clear.
+      this.lastRewindGeneration = peek.rewindGeneration;
+      peek = runtime.peekScrollbackCommits(this.cursor);
+    } else if (peek.rewindGeneration !== this.lastRewindGeneration) {
+      // 1b. In-place rewind / redo / undo: clear, then SKIP the abandoned commits
+      //     by advancing the cursor to the current log tail. peek.cursor is the
+      //     seq of the last commit currently in the log (or the un-advanced cursor
+      //     when the log is empty), so adopting it leaves only genuinely-new
+      //     post-rewind commits to drain. The shorter transcript re-renders via
+      //     the sweep (settledScanIndex -> 0).
+      await this.clearNativeScrollbackForReplay({ renderer, runtime });
+      if (this.shouldAbortPass(renderer)) {
+        return 0;
+      }
+      this.cursor = peek.cursor;
+      this.settledScanIndex = 0;
+      this.lastRewindGeneration = peek.rewindGeneration;
+      // Re-peek from the advanced cursor: the abandoned commits are skipped, so
+      // the slice now carries only post-rewind turns (typically none yet).
       peek = runtime.peekScrollbackCommits(this.cursor);
     }
 
@@ -472,8 +570,9 @@ export class SplitFooterScrollbackWriter {
           kind: "markdown",
           syntaxStyle: getTranscriptSyntaxStyle(palette),
           // Width is captured at the LIVE renderer width when the entry (and its
-          // ScrollbackSurface) is created. @opentui/core@0.3.4's ScrollbackSurface
-          // freezes its width at creation (no resize/reflow API), so a mid-stream
+          // ScrollbackSurface) is created. @opentui/core@0.4.1's ScrollbackSurface
+          // still exposes only a readonly `width` (no setWidth/resize/reflow API;
+          // re-verified against renderer.d.ts ScrollbackSurface), so a mid-stream
           // terminal resize leaves THIS turn's still-live trailing block at the
           // old width until it settles — the `final` then re-renders the whole
           // message via TranscriptMessageView at the current width, and the next
@@ -694,18 +793,107 @@ export class SplitFooterScrollbackWriter {
   }
 
   /**
-   * Clear the commit-driven de-dup state (entries destroyed WITHOUT committing,
-   * sets cleared, cursor + sweep mark rebased to the start). Used on an epoch
-   * boundary (new session) and by reset(). Does NOT touch the
-   * splash/spacer/teardown latches — reset() owns those.
+   * The SHARED clear primitive behind both replay boundaries (session switch and
+   * in-place rewind). After this returns the renderer's native scrollback is
+   * empty and the writer's per-message render state (active entries, de-dup sets,
+   * content/splash gates) is rebased, so the next drain/sweep re-anchors cleanly.
+   *
+   * CRUCIALLY it does NOT touch `this.cursor` or `this.settledScanIndex` — those
+   * encode the divergence between the two boundaries and are owned by the caller:
+   *  - session switch: cursor -> undefined (replay the fresh log from the start);
+   *  - in-place rewind: cursor -> log tail (skip the abandoned commits).
+   *
+   * Mirrors opencode's `resetForReplay` (runtime.lifecycle.ts). Order matters:
+   *
+   *  1. `await renderer.idle()` — let pending split-footer frames flush so the
+   *     clear lands on a settled frame (re-check the abort guard after the await:
+   *     a pass that resumes post-teardown must NOT touch a dead renderer).
+   *  2. `destroyEntriesAndDedup()` — destroy the in-flight streaming entries
+   *     (their ScrollbackSurfaces are bound to scrollback rows about to be
+   *     cleared) and clear the de-dup sets, so the re-render does not skip
+   *     anything as "already committed".
+   *  3. Re-arm the content/splash gates so the boundary re-anchors cleanly: the
+   *     cleared scrollback has no prior content, so the first streamed/swept block
+   *     must not be preceded by a leading spacer, and the one-shot splash banner
+   *     is eligible to fire again.
+   *  4. `resetSplitFooterForReplay({ clearSavedLines: true })` — clear the native
+   *     scrollback AND the terminal's saved scrollback lines (present in
+   *     @opentui/core 0.4.1). It requests a render internally; `requestRender()`
+   *     is belt-and-suspenders.
+   *  5. Re-commit the splash banner — `commitSplashBanner` no-ops for a non-empty
+   *     restored transcript, so a boundary INTO non-empty history skips it.
    */
-  private resetCommitState(): void {
+  private async clearNativeScrollbackForReplay(input: {
+    renderer: OpenTuiRenderer;
+    runtime: ShellRendererController;
+  }): Promise<void> {
+    const { renderer, runtime } = input;
+    const replay = asReplayCapable(renderer);
+
+    await replay.idle().catch(() => {});
+    if (this.shouldAbortPass(renderer)) {
+      return;
+    }
+
+    this.destroyEntriesAndDedup();
+    this.hasCommittedContent = false;
+    this.splashCommitted = false;
+
+    // Soft-fail guard, symmetric with the `idle()` catch above: a pass that
+    // resumed after `idle()` can race a teardown that flips the renderer into a
+    // suspended / wrong-screen-mode state where `resetSplitFooterForReplay`
+    // throws even though `shouldAbortPass` did not yet observe it. A coalesced
+    // trailing pass has no caller-facing promise, so an uncaught throw here would
+    // surface as an unhandled rejection — bail instead of clearing/re-anchoring
+    // against a renderer that can no longer accept the replay reset.
+    //
+    // The genuine teardown race (renderer destroyed / writer disposed) is
+    // EXPECTED and stays silent. A throw while the renderer is still LIVE is a
+    // real reset failure: the boundary is not counted and the splash is not
+    // re-committed, so stale abandoned rows stay visible — record a diagnostic so
+    // that failure is observable (mirrors the renderer host's scrollback-sync
+    // catch) instead of vanishing.
+    try {
+      replay.resetSplitFooterForReplay({ clearSavedLines: true });
+      replay.requestRender();
+    } catch (error) {
+      if (!this.shouldAbortPass(renderer)) {
+        recordDiagnosticError(
+          "scrollbackReplayReset",
+          error instanceof Error ? error.message : String(error),
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+      return;
+    }
+    this.replayBoundaryClears += 1;
+
+    this.commitSplashBanner({ renderer, runtime });
+  }
+
+  /**
+   * Destroy the active streaming entries (WITHOUT committing their remainder) and
+   * clear the per-message de-dup sets. The render-state half of a clear/reset:
+   * it leaves `this.cursor` and `this.settledScanIndex` untouched so callers can
+   * decide whether to replay from the start, skip to the tail, or preserve the
+   * drain position.
+   */
+  private destroyEntriesAndDedup(): void {
     for (const active of this.entries.values()) {
       active.entry.destroy();
     }
     this.entries.clear();
     this.committedMessageIds.clear();
     this.streamedLogicalIds.clear();
+  }
+
+  /**
+   * Full per-session reset: destroy entries + clear de-dup sets AND rebase the
+   * cursor + sweep mark to the start. Used by reset() (new-session teardown).
+   * Does NOT touch the splash/spacer/teardown latches — reset() owns those.
+   */
+  private resetCommitState(): void {
+    this.destroyEntriesAndDedup();
     this.cursor = undefined;
     this.settledScanIndex = 0;
   }
@@ -739,10 +927,13 @@ export class SplitFooterScrollbackWriter {
    * turn's later `final` finds no active entry, so `applyFinal` commits the whole
    * message once via `TranscriptMessageView` — content is preserved. Any STABLE
    * blocks the entry already flushed to native scrollback before the suspend
-   * remain there (immutable; no `@opentui/core@0.3.4` clear API), so the full
-   * re-commit can visually repeat that already-shown prefix. Bounded and rare
-   * (opening an editor mid-stream is an edge), accepted like the other
-   * native-scrollback limitations.
+   * remain there, so the full re-commit can visually repeat that already-shown
+   * prefix. A clear IS available (`resetSplitFooterForReplay`, see
+   * `beginReplayBoundary`), but it is deliberately NOT used here: an editor
+   * suspend is a same-session round-trip that must PRESERVE the visible
+   * transcript, so clearing the terminal's history would be wrong. The bounded
+   * mid-stream repeat is rare (opening an editor mid-stream is an edge) and
+   * accepted, scoped to this same-session suspend path only.
    */
   suspend(): void {
     this.disposed = true;
@@ -772,6 +963,7 @@ export class SplitFooterScrollbackWriter {
     this.disposed = true;
     this.resetCommitState();
     this.lastEpoch = undefined;
+    this.lastRewindGeneration = undefined;
     this.toolRenderCache = createToolRenderCache();
     this.hasCommittedContent = false;
     this.splashCommitted = false;
