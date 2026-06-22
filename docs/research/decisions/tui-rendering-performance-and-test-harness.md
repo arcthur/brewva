@@ -12,7 +12,7 @@
   - `packages/brewva-cli/src/shell/domain/clock.ts`
   - `packages/brewva-cli/src/shell/domain/view-model.ts`
   - `packages/brewva-cli/src/shell/projectors/session-event-coalescing.ts`
-  - `packages/brewva-cli/runtime/shell/streaming-text.ts`
+  - `packages/brewva-cli/runtime/shell/streaming-scrollback-entry.ts`
   - `test/bench/tui-streaming.bench.ts`
 
 ## Decision Summary
@@ -31,4 +31,10 @@ This decision is judged against `docs/architecture/design-axioms.md`:
 
 ## Superseded by
 
-- None.
+- Partially by `tui-split-footer-native-scrollback-renderer.md`. The roughly
+  100-row transcript window and the throttled streaming-markdown preview are
+  superseded: the split-footer renderer commits settled transcript to native
+  scrollback and streams stable blocks through a `StreamingScrollbackEntry`
+  instead of repainting a bounded `scrollbox` window. The clock seam,
+  flush-window event coalescing, structural-sharing view-model projection, and
+  the replay benchmark remain valid and still gate the streaming hot path.

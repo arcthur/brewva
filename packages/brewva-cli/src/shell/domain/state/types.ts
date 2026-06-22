@@ -106,12 +106,6 @@ export interface CliShellViewState {
   surface: {
     followMode: "live" | "scrolled";
     scrollOffset: number;
-    navigationRequest?:
-      | {
-          id: number;
-          kind: "pageUp" | "pageDown" | "top" | "bottom";
-        }
-      | undefined;
   };
   composer: {
     text: string;
@@ -169,14 +163,6 @@ export type CliShellAction =
     }
   | {
       type: "surface.followLive";
-    }
-  | {
-      type: "surface.requestNavigation";
-      request: NonNullable<CliShellViewState["surface"]["navigationRequest"]>;
-    }
-  | {
-      type: "surface.clearNavigation";
-      id: number;
     }
   | {
       type: "composer.setText";

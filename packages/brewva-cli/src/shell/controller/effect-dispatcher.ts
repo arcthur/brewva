@@ -53,7 +53,6 @@ export interface ShellEffectDispatcherContext {
   openActivePagerExternally(): Promise<void>;
   openExternalTranscriptPager(): Promise<boolean>;
   copyLatestAssistantAnswer(): Promise<void>;
-  requestSurfaceNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void;
   toggleSubagentFooter(): void;
   closeSubagentFooter(): void;
   selectSubagentFooterRun(runId: string): void;
@@ -252,9 +251,6 @@ export async function dispatchShellEffect(
     }
     case "transcript.copyLatestAnswer":
       await context.copyLatestAssistantAnswer();
-      return;
-    case "surface.navigate":
-      context.requestSurfaceNavigation(effect.kind);
       return;
     case "subagentFooter.toggle":
       context.toggleSubagentFooter();

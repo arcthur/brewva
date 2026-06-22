@@ -4,8 +4,8 @@ import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { For } from "solid-js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import { renderOpenTuiScrollbackLines } from "../internal-opentui-runtime.js";
-import { createPalette, createScrollAcceleration } from "./palette.js";
-import { ShellRenderProvider } from "./render-context.js";
+import { createPalette } from "./palette.js";
+import { buildShellRenderContext, ShellRenderProvider } from "./render-context.js";
 import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";
 import { TranscriptMessageView } from "./transcript.js";
 
@@ -20,14 +20,7 @@ function TranscriptScrollbackDocument(input: {
   const theme = createPalette(viewState.theme);
   const sessionIdentity = input.runtime.getSessionIdentity();
   const transcriptWidth = Math.max(20, input.width - 8);
-  const shellRenderContext = {
-    runtime: input.runtime,
-    diffStyle: () => viewState.diff.style,
-    diffWrapMode: () => viewState.diff.wrapMode,
-    showThinking: () => viewState.view.showThinking,
-    scrollAcceleration: () =>
-      createScrollAcceleration(input.runtime.getTuiConfig().scroll.acceleration),
-  };
+  const shellRenderContext = buildShellRenderContext(input.runtime);
   return (
     <ShellRenderProvider value={shellRenderContext}>
       <box flexDirection="column" paddingTop={1} paddingBottom={1}>
@@ -44,7 +37,6 @@ function TranscriptScrollbackDocument(input: {
               isLast={index() === input.messages.length - 1}
               assistantLabel={sessionIdentity.assistantLabel}
               modelLabel={sessionIdentity.modelLabel}
-              renderSurface="scrollback"
             />
           )}
         </For>

@@ -99,8 +99,8 @@ flowchart TD
     delivery instead of requiring an explicit queue mode switch.
 12. While queued prompts are waiting, the shell renders up to three one-line
     `(pending)` rows above the model/operator footer. When more than three
-    queued prompts exist, the shell appends `+N more · Ctrl+B to manage`.
-13. `Ctrl+B` opens the queued-prompt overlay, which lets the operator inspect
+    queued prompts exist, the shell appends `+N more · Leader Q to manage`.
+13. `Leader Q` opens the queued-prompt overlay, which lets the operator inspect
     pending prompt details and delete queued entries without aborting the live
     turn.
 
@@ -120,7 +120,7 @@ flowchart TD
   instead of flattening inconclusive validation into failure
 - verification freshness is evaluated against the latest
   `verification_write_marked` boundary, not against any historical passing run
-- interactive queue UX remains queue-only: the pending strip and `Ctrl+B`
+- interactive queue UX remains queue-only: the pending strip and `Leader Q`
   overlay surface queued future turns, while explicit `followUp` delivery
   remains a separate continuation primitive rather than a user-visible queue
   item

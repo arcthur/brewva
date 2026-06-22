@@ -55,7 +55,6 @@ export type ShellEffect =
   | { type: "pager.externalActive" }
   | { type: "transcript.externalPager" }
   | { type: "transcript.copyLatestAnswer" }
-  | { type: "surface.navigate"; kind: "pageUp" | "pageDown" | "top" | "bottom" }
   | { type: "subagentFooter.toggle" }
   | { type: "subagentFooter.close" }
   | { type: "subagentFooter.select"; runId: string }

@@ -311,6 +311,14 @@ function findToolPartLocation(
   return undefined;
 }
 
+export function isStreamingPart(part: CliShellTranscriptPart): boolean {
+  return part.renderMode === "streaming";
+}
+
+export function isStreamingMessage(message: CliShellTranscriptMessage): boolean {
+  return message.renderMode === "streaming" || message.parts.some(isStreamingPart);
+}
+
 export function transcriptRoleLabel(role: CliShellTranscriptRole): string {
   switch (role) {
     case "assistant":

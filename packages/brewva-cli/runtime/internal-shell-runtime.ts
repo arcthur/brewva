@@ -5,6 +5,7 @@ import {
   runCliInteractiveShellEffect,
   runCliInteractiveSessionOperation as runCliInteractiveSessionBaseOperation,
   type CliInteractiveSessionOptions,
+  type CliInteractiveShellLauncher,
   type CliInteractiveSmokeResult,
 } from "../src/session/cli-runtime.js";
 import { renderCliInteractiveOpenTuiShell } from "./opentui-shell-renderer.js";
@@ -13,6 +14,13 @@ import { renderCliInteractiveOpenTuiShell } from "./opentui-shell-renderer.js";
 // package root stays Node-safe; this path is selected by Bun source execution
 // and by packaged Brewva binaries that can load OpenTUI native bindings.
 const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
+
+// The interactive shell uses the split-footer renderer: the transcript is
+// committed to native scrollback and only the footer (composer + status +
+// overlays) stays live, eliminating streaming-markdown repaint flicker.
+const launchCliShell: CliInteractiveShellLauncher = async (bundle, shellOptions) => {
+  await renderCliInteractiveOpenTuiShell(bundle, shellOptions);
+};
 
 export const CLI_INTERNAL_SHELL_RUNTIME_KIND = "bun-runtime";
 
@@ -37,9 +45,7 @@ export async function runCliInteractiveSessionOperation(
     return;
   }
 
-  await runCliInteractiveSessionBaseOperation(session, options, async (bundle, shellOptions) => {
-    await renderCliInteractiveOpenTuiShell(bundle, shellOptions);
-  });
+  await runCliInteractiveSessionBaseOperation(session, options, launchCliShell);
 }
 
 export function runCliInteractiveSessionEffect(
@@ -49,9 +55,7 @@ export function runCliInteractiveSessionEffect(
   if (process.env[BREWVA_SHELL_SMOKE_ENV] === "1") {
     return BrewvaEffect.promise(() => runCliInteractiveSmoke());
   }
-  return runCliInteractiveShellEffect(session, options, async (bundle, shellOptions) => {
-    await renderCliInteractiveOpenTuiShell(bundle, shellOptions);
-  });
+  return runCliInteractiveShellEffect(session, options, launchCliShell);
 }
 
 export async function runCliInteractiveSession(

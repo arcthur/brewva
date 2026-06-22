@@ -52,7 +52,7 @@ Enforced by:
 - `anti-patterns.md` — Reintroducing runtime-stored context evidence slots or legacy `prompt.getStability`, `prompt.getTransientReduction`, and `providerCache.getObservation` ports.
 - `critical-rules.md` — Do not reintroduce `skills.packs`-style filtering or legacy `base/pack/project` taxonomy.
 
-Precedent decisions: `derivation-direction-invariant-and-skill-navigation`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `tui-rendering-performance-and-test-harness`
+Precedent decisions: `derivation-direction-invariant-and-skill-navigation`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `tui-rendering-performance-and-test-harness`, `tui-split-footer-native-scrollback-renderer`
 
 ### Axiom 4 — `Govern effects, not thought paths.`
 
@@ -112,7 +112,7 @@ Enforced by:
 - `anti-patterns.md` — Adding duplicate inspect dashboards or one-off shell/channel/CLI renderers that bypass the shared Work Card projection payload.
 - `critical-rules.md` — Preserve "same evidence, different authority": Work Cards, transcripts, channel inspect, and hosted dynamic context may orient over the same evidence, but kernel admission, capability receipts, sandbox posture, and adoption authority remain separate and authoritative.
 
-Precedent decisions: `authority-rings-and-projection-unification`, `effect-approval-and-rollback-closure`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `trust-substrate-optimization-axis`, `tui-rendering-performance-and-test-harness`
+Precedent decisions: `authority-rings-and-projection-unification`, `effect-approval-and-rollback-closure`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `trust-substrate-optimization-axis`, `tui-rendering-performance-and-test-harness`, `tui-split-footer-native-scrollback-renderer`
 
 ### Axiom 12 — `Product loops are projections, not runtime state machines.`
 

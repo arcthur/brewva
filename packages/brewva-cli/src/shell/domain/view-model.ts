@@ -59,9 +59,6 @@ const BRANCH_PROJECTIONS: {
   }),
   surface: (state) => ({
     ...state.surface,
-    navigationRequest: state.surface.navigationRequest
-      ? { ...state.surface.navigationRequest }
-      : undefined,
   }),
   composer: (state) => ({
     ...state.composer,

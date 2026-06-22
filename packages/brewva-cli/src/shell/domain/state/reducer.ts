@@ -159,25 +159,6 @@ export function reduceCliShellState(
           scrollOffset: 0,
         },
       };
-    case "surface.requestNavigation":
-      return {
-        ...state,
-        surface: {
-          ...state.surface,
-          navigationRequest: action.request,
-        },
-      };
-    case "surface.clearNavigation":
-      if (state.surface.navigationRequest?.id !== action.id) {
-        return state;
-      }
-      return {
-        ...state,
-        surface: {
-          ...state.surface,
-          navigationRequest: undefined,
-        },
-      };
     case "composer.setText":
       return {
         ...state,

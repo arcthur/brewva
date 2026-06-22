@@ -21,9 +21,11 @@ cost posture, rewind targets, and operator observation cursor into a shell-local
 view model. It is rebuildable UI state; it does not add storage authority to the
 projections or the event tape.
 
-The interactive shell transcript lane is bounded live UI state, not a
-full-history projection. Older transcript evidence stays in explicit archive,
-transcript, export, and pager surfaces.
+The interactive shell renders through a `split-footer` layout: settled
+transcript is committed to the terminal's native scrollback, and only the live
+footer is bounded UI state. Neither the committed scrollback nor the footer is a
+full-history projection with storage authority; structured transcript evidence
+stays in explicit archive, transcript, export, and pager surfaces.
 
 ## Session-Index Harness Projection
 

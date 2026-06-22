@@ -1,4 +1,4 @@
-export type OpenTuiScreenMode = "alternate-screen";
+export type OpenTuiScreenMode = "alternate-screen" | "split-footer" | "main-screen";
 export type OpenTuiTerminalBackgroundMode = "dark" | "light";
 export type OpenTuiSolidNode = () => unknown;
 
@@ -80,6 +80,32 @@ export interface OpenTuiRenderer {
   destroy(): void;
 }
 
+/**
+ * The CliRenderer members the split-footer shell actually reads that the
+ * minimal {@link OpenTuiRenderer} does not declare. Only primitive/plain-callback
+ * members are listed here so this stays inside the OpenTUI import quarantine
+ * (no `@opentui/core` types leak into `src/internal/tui`). `createScrollbackSurface`
+ * / `writeToScrollback` are deliberately NOT declared: their `ScrollbackSurface`
+ * and writer types are OpenTUI-owned, so their call sites keep a local structural
+ * cast instead.
+ *
+ *  - `isDestroyed`: post-teardown liveness guard (the scrollback writer bails
+ *    before committing against a dead renderer).
+ *  - `terminalHeight`: stable full-terminal row count (NOT the split render
+ *    region `height`) the footer-height router caps against.
+ *  - `footerHeight`: the fixed footer allocation the router keeps in sync with
+ *    the laid-out footer content height.
+ *  - `on` / `off`: renderer event subscription (`resize` / `frame`) the footer
+ *    router uses to recompute on terminal/layout changes.
+ */
+export interface SplitFooterRenderer extends OpenTuiRenderer {
+  readonly isDestroyed: boolean;
+  readonly terminalHeight: number;
+  footerHeight: number;
+  on(event: string, listener: () => void): void;
+  off(event: string, listener: () => void): void;
+}
+
 export interface OpenTuiRoot {
   render(node: OpenTuiSolidNode): void | Promise<void>;
   unmount(): void;
@@ -94,6 +120,11 @@ export interface OpenTuiSmokeResult {
   backend: "opentui";
   label?: string;
   screenMode: OpenTuiScreenMode;
+}
+
+export interface OpenTuiSplitFooterSmokeResult {
+  backend: "opentui-split-footer";
+  committedRows: number;
 }
 
 export interface OpenTuiTestKeyboardModifiers {
@@ -170,10 +201,6 @@ export function isOpenTuiRuntimeAvailable(): boolean {
   return false;
 }
 
-export async function createOpenTuiCliRenderer(): Promise<OpenTuiRenderer> {
-  throw createUnsupportedRuntimeError();
-}
-
 export function createOpenTuiRoot(_renderer: OpenTuiRenderer): OpenTuiRoot {
   throw createUnsupportedRuntimeError();
 }
@@ -219,5 +246,21 @@ export async function renderOpenTuiScrollbackLines(
 export async function runOpenTuiSmoke(
   _options: OpenTuiSmokeOptions = {},
 ): Promise<OpenTuiSmokeResult> {
+  throw createUnsupportedRuntimeError();
+}
+
+export async function createOpenTuiSplitFooterRenderer(_options?: {
+  footerHeight?: number;
+}): Promise<OpenTuiRenderer> {
+  throw createUnsupportedRuntimeError();
+}
+
+export function shutdownSplitFooterRenderer(_renderer: OpenTuiRenderer): void {
+  throw createUnsupportedRuntimeError();
+}
+
+export async function runOpenTuiSplitFooterSmoke(_options?: {
+  label?: string;
+}): Promise<OpenTuiSplitFooterSmokeResult> {
   throw createUnsupportedRuntimeError();
 }

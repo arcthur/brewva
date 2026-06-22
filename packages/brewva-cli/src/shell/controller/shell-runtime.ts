@@ -61,11 +61,13 @@ import { renderTranscriptAsMarkdown } from "../domain/overlays/projectors/transc
 import { cloneCliShellPromptParts } from "../domain/prompt-parts.js";
 import type { CliShellPromptStorePort } from "../domain/prompt.js";
 import { updateShellIntent } from "../domain/reducer.js";
+import type { ScrollbackCommitPeek } from "../domain/renderer-contract.js";
 import {
   createShellRuntimeState,
   reduceShellRuntimeAction,
   type CliShellRuntimeState,
 } from "../domain/runtime-state.js";
+import type { ScrollbackCommitCursor } from "../domain/scrollback/commit.js";
 import { selectActiveOverlayPayload, selectHasCompletion } from "../domain/selectors.js";
 import { isSessionPhase } from "../domain/session-phase.js";
 import { type CliShellAction, type CliShellViewState } from "../domain/state.js";
@@ -363,7 +365,6 @@ export class CliShellRuntime {
   readonly #exitPromise: Promise<void>;
   #viewportRows = 24;
   #semanticInputQueue: Promise<void> = Promise.resolve();
-  #surfaceNavigationRequestId = 0;
   #started = false;
   #disposed = false;
   readonly #effectRunner: ShellEffectRunner;
@@ -720,6 +721,29 @@ export class CliShellRuntime {
 
   getSessionWireFrames(sessionId: string) {
     return this.#sessionPort.getSessionWireFrames(sessionId);
+  }
+
+  peekScrollbackCommits(cursor: ScrollbackCommitCursor): ScrollbackCommitPeek {
+    // The epoch is the session generation, which the writer uses to detect a log
+    // RESET (since(cursor) would otherwise silently strand the writer if the log
+    // restarted from seq 0 behind a still-advanced cursor). The append-only
+    // ScrollbackCommitLog is reset ONLY on a session switch / full re-hydrate
+    // (the cockpit wireFold.replace() path), which ALWAYS bumps
+    // #sessionGeneration via mountSession — so a reset and an epoch change are
+    // inseparable. A rewind/redo, by contrast, mutates the SAME session in place
+    // (no mountSession) and does NOT reset the log: it keeps growing
+    // monotonically in the same epoch, so the writer's cursor stays valid and new
+    // post-rewind turns commit forward via since(cursor). The rows a rewind
+    // abandons are already in the terminal's immutable native scrollback
+    // (@opentui/core@0.3.4 exposes no scrollback-clear API) and cannot be
+    // un-written — forward progress is the only guarantee, by design.
+    const sessionId = this.#sessionPort.getSessionId();
+    const slice = this.#sessionPort.getCockpitScrollbackLog(sessionId).since(cursor);
+    return {
+      commits: slice.commits,
+      cursor: slice.cursor,
+      epoch: this.#sessionGeneration,
+    };
   }
 
   getToolDefinitions(): CliShellSessionBundle["toolDefinitions"] {
@@ -1543,7 +1567,6 @@ export class CliShellRuntime {
       openActivePagerExternally: () => this.openActivePagerExternally(),
       openExternalTranscriptPager: () => this.openExternalTranscriptPager(),
       copyLatestAssistantAnswer: () => this.copyLatestAssistantAnswer(),
-      requestSurfaceNavigation: (kind) => this.requestSurfaceNavigation(kind),
       toggleSubagentFooter: () => this.toggleSubagentFooter(),
       closeSubagentFooter: () => this.closeSubagentFooter(),
       selectSubagentFooterRun: (runId) => this.selectSubagentFooterRun(runId),
@@ -1818,23 +1841,6 @@ export class CliShellRuntime {
       return false;
     }
     return await this.handleShellIntent(intent);
-  }
-
-  private getSurfacePageStep(): number {
-    return Math.max(3, Math.floor(Math.max(8, this.#viewportRows - 10) / 2));
-  }
-
-  private requestSurfaceNavigation(kind: "pageUp" | "pageDown" | "top" | "bottom"): void {
-    this.commit(
-      {
-        type: "surface.requestNavigation",
-        request: {
-          id: ++this.#surfaceNavigationRequestId,
-          kind,
-        },
-      },
-      { debounceStatus: false },
-    );
   }
 
   private getSelectedSubagentRun() {

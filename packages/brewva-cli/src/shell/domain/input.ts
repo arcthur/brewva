@@ -45,10 +45,6 @@ export type ShellInput =
       readonly scrollOffset: number;
     }
   | {
-      readonly type: "surface.navigationAck";
-      readonly requestId: number;
-    }
-  | {
       readonly type: "session.open";
       readonly sessionId: string;
     };

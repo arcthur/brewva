@@ -96,6 +96,7 @@ Every accepted decision inherits these rules:
 - [tui-runtime-cockpit-refactor](./tui-runtime-cockpit-refactor.md)
 - [tui-bounded-live-cockpit-and-native-scrollback](./tui-bounded-live-cockpit-and-native-scrollback.md)
 - [tui-rendering-performance-and-test-harness](./tui-rendering-performance-and-test-harness.md)
+- [tui-split-footer-native-scrollback-renderer](./tui-split-footer-native-scrollback-renderer.md)
 - [search-token-policy-and-cjk-tokenizer-boundary](./search-token-policy-and-cjk-tokenizer-boundary.md)
 - [session-index-evidence-projection-boundary](./session-index-evidence-projection-boundary.md)
 - [recall-source-typed-retrieval-spine](./recall-source-typed-retrieval-spine.md)

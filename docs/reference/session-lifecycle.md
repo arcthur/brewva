@@ -178,7 +178,7 @@ canonical runtime events and tape projections directly.
    (`packages/brewva-cli/src/index.ts`)
    - prompt resolution happens before interactive fallback decisions
    - the OpenTUI runtime is loaded only after the CLI commits to interactive
-     full-screen execution
+     split-footer execution
    - non-TTY and other low-capability terminals may fall back to one-shot text
      mode when the interactive shell is not viable
 2. Create session + runtime through the stable host entrypoint
@@ -239,7 +239,8 @@ canonical runtime events and tape projections directly.
   product differences stay in operator UX and transport, not in runtime
   authority state
   - once mode resolution commits to interactive execution, CLI boots the
-    OpenTUI-backed shell in `alternate-screen`
+    OpenTUI-backed shell in `split-footer` (transcript committed to native
+    scrollback, only the footer stays live)
   - ordinary non-streaming prompts run through the `interactive` hosted-loop
     profile; streaming queue and `followUp` inputs enter separate between-turn
     continuation lanes

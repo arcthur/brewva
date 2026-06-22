@@ -1,20 +1,28 @@
 export {
+  CodeRenderable,
+  MarkdownRenderable,
   RGBA,
   StyledText,
   SyntaxStyle,
   TextAttributes,
   TextRenderable,
   decodePasteBytes,
+  getTreeSitterClient,
 } from "@opentui/core";
 export type {
+  BlockState,
   BoxRenderable,
   CliRenderer,
+  ColorInput,
   KeyEvent,
   MarkdownOptions,
+  MarkdownTableOptions,
   PasteEvent,
   RenderContext,
   Renderable,
   ScrollAcceleration,
+  ScrollbackSurface,
+  TreeSitterClient,
 } from "@opentui/core";
 export type { Binding, Keymap, Layer } from "@opentui/keymap";
 export * as opentuiKeymapAddons from "@opentui/keymap/addons/opentui";

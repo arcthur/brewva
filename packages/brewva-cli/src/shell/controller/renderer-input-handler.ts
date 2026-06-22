@@ -83,15 +83,6 @@ export async function handleShellRendererInput(
       );
       return true;
     }
-    case "surface.navigationAck":
-      if (context.getState().surface.navigationRequest?.id !== input.requestId) {
-        return true;
-      }
-      context.commit(
-        { type: "surface.clearNavigation", id: input.requestId },
-        { debounceStatus: false, refreshCompletions: false },
-      );
-      return true;
     case "session.open":
       await context.openSessionById(input.sessionId);
       return true;

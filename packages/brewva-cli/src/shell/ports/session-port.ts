@@ -29,6 +29,7 @@ import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { CliInspectPort, CliOperatorPort } from "../../runtime/cli-runtime-ports.js";
 import type { BrewvaSessionResult } from "../../session/session.js";
 import type { ShellCockpitWireFoldSnapshot } from "../domain/cockpit/index.js";
+import type { ScrollbackCommitLog } from "../domain/scrollback/commit.js";
 
 export interface CliShellSessionBundle {
   session: BrewvaManagedPromptSession;
@@ -174,6 +175,13 @@ export interface SessionViewPort {
     sessionId?: string,
     options?: SessionWireFrameReadOptions,
   ): ShellCockpitWireFoldSnapshot;
+  /**
+   * The per-session append-only scrollback commit log. A pure read: returns the
+   * live log object so the renderer can drain it via `since(cursor)` without
+   * mutating it (unlike `getCockpitWireFoldSnapshot`, this never re-hydrates
+   * durable frames into the fold).
+   */
+  getCockpitScrollbackLog(sessionId?: string): ScrollbackCommitLog;
   getTranscriptSeed(): unknown[];
   recordRewindCheckpoint(input: RecordSessionRewindCheckpointInput): Promise<void>;
   rewindSession(input?: SessionRewindInput): Promise<SessionRewindResult>;

@@ -18,7 +18,7 @@ import type {
 } from "../../src/shell/domain/overlays/payloads.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import type { CliShellNotification, ShellViewModel } from "../../src/shell/domain/view-model.js";
-import type { OpenTuiKeyEvent, OpenTuiScrollBoxHandle } from "../internal-opentui-runtime.js";
+import type { OpenTuiKeyEvent } from "../internal-opentui-runtime.js";
 
 export function useShellState(runtime: ShellRendererController): ShellViewModel {
   const [state, setState] = createStore(runtime.getViewState());
@@ -281,83 +281,6 @@ export function logicalCursorFromTextOffset(
     row: Math.max(0, lines.length - 1),
     col: visibleWidth(lastLine),
   };
-}
-
-/**
- * Single source of truth for "close enough to the bottom to count as live".
- * Shared by the scroll effect's transition classification and the
- * navigation sync below; a divergence between the two flips follow-mode
- * back and forth at the boundary.
- */
-export const SURFACE_SCROLL_EPSILON = 1;
-
-export function readSurfaceScrollMetrics(scrollbox: OpenTuiScrollBoxHandle): {
-  maxScrollTop: number;
-  currentOffset: number;
-} {
-  const maxScrollTop = Math.max(0, scrollbox.scrollHeight - scrollbox.viewport.height);
-  return {
-    maxScrollTop,
-    currentOffset: Math.max(0, maxScrollTop - scrollbox.scrollTop),
-  };
-}
-
-export function syncSurfaceStateFromScrollbox(
-  runtime: ShellRendererController,
-  scrollbox: OpenTuiScrollBoxHandle,
-): void {
-  const { maxScrollTop, currentOffset } = readSurfaceScrollMetrics(scrollbox);
-  if (currentOffset <= SURFACE_SCROLL_EPSILON || maxScrollTop === 0) {
-    void runtime.handleInput({
-      type: "surface.scrollSync",
-      followMode: "live",
-      scrollOffset: 0,
-    });
-    return;
-  }
-  void runtime.handleInput({
-    type: "surface.scrollSync",
-    followMode: "scrolled",
-    scrollOffset: currentOffset,
-  });
-}
-
-export function applySurfaceNavigationRequest(input: {
-  runtime: ShellRendererController;
-  scrollbox: OpenTuiScrollBoxHandle;
-  request: NonNullable<ShellViewModel["surface"]["navigationRequest"]>;
-}): void {
-  const pageStep = Math.max(1, Math.floor(Math.max(2, input.scrollbox.viewport.height) / 2));
-
-  switch (input.request.kind) {
-    case "pageUp":
-      input.scrollbox.stickyScroll = false;
-      input.scrollbox.scrollBy(-pageStep);
-      break;
-    case "pageDown":
-      input.scrollbox.stickyScroll = false;
-      input.scrollbox.scrollBy(pageStep);
-      break;
-    case "top":
-      input.scrollbox.stickyScroll = false;
-      input.scrollbox.scrollTo(0);
-      break;
-    case "bottom":
-      input.scrollbox.stickyScroll = true;
-      input.scrollbox.stickyStart = "bottom";
-      input.scrollbox.scrollTo(input.scrollbox.scrollHeight);
-      break;
-    default: {
-      const exhaustiveCheck: never = input.request.kind;
-      void exhaustiveCheck;
-    }
-  }
-
-  syncSurfaceStateFromScrollbox(input.runtime, input.scrollbox);
-  void input.runtime.handleInput({
-    type: "surface.navigationAck",
-    requestId: input.request.id,
-  });
 }
 
 export type {

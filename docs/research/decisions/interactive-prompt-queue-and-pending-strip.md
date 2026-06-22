@@ -25,7 +25,7 @@
 
 - Interactive streaming now defaults to queue. The ordinary composer path submits a future turn when the current turn is still streaming; callers only specify `streamingBehavior` when they need a non-default low-level semantic such as explicit `followUp`.
 - Queue identity is authoritative and prompt-id based. Managed sessions expose queued prompt views carrying `promptId`, text, `submittedAt`, and `behavior`, and queued removal is id-based plus race-safe/idempotent.
-- Queue UX is queue-only and operator-visible. The pending strip renders up to three `(pending)` rows, then `+N more · Ctrl+B to manage`; the queue overlay exposes detail inspection and deletion without aborting the active turn.
+- Queue UX is queue-only and operator-visible. The pending strip renders up to three `(pending)` rows, then `+N more · Leader Q to manage`; the queue overlay exposes detail inspection and deletion without aborting the active turn.
 - `followUp` stays distinct. Explicit `followUp` callers remain explicit continuation flows and do not appear in the queue strip or queue overlay.
 - Queue is not a slash-mode feature. The shell exposes queue management through keybinding/palette discovery rather than a dedicated `/queue` command.
 

@@ -1,645 +1,300 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
-import {
-  buildPromptPartSignature,
-  cloneCliShellPromptParts,
-} from "../../src/shell/domain/prompt-parts.js";
-import type { CliShellPromptPart } from "../../src/shell/domain/prompt.js";
+import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import { buildSubagentFooterView } from "../../src/shell/domain/subagent-footer.js";
-import type {
-  OpenTuiKeyEvent,
-  OpenTuiRenderer,
-  OpenTuiScrollBoxHandle,
-  OpenTuiTextareaHandle,
-} from "../internal-opentui-runtime.js";
-import {
-  decodePasteBytes,
-  type BoxRenderable,
-  type PasteEvent,
-  useKeyboard,
-  usePaste,
-  useRenderer,
-  useTerminalDimensions,
-} from "../opentui/index.js";
+import type { CliShellNotification } from "../../src/shell/domain/view-model.js";
+import type { OpenTuiRenderer, SplitFooterRenderer } from "../internal-opentui-runtime.js";
+import type { BoxRenderable } from "../opentui/index.js";
 import { CockpitDockSurface } from "./cockpit/surface.js";
 import { CompletionOverlay } from "./completion.js";
-import { BrewvaKeymapRoot, registerBrewvaKeymap } from "./keymap.js";
+import { type ComposerKeymapMode, useComposerInputWiring } from "./composer-input-wiring.js";
+import { BrewvaKeymapRoot } from "./keymap.js";
+import { DialogLayoutProvider } from "./overlays/frame.js";
 import { ModalOverlay } from "./overlays/modal-overlay.js";
-import { createPalette, createScrollAcceleration } from "./palette.js";
-import { PromptPanel, createPromptPartStyle } from "./prompt.js";
+import { createScrollAcceleration, type SessionPalette } from "./palette.js";
+import { PromptPanel } from "./prompt.js";
 import { ShellRenderProvider } from "./render-context.js";
-import {
-  copyOpenTuiSelection,
-  copyTextWithShellFeedback,
-  type ClipboardCopy,
-} from "./selection.js";
+import { type ClipboardCopy } from "./selection.js";
 import { SubagentFooterPanel } from "./subagent-footer.js";
-import { ToastStrip } from "./toast.js";
-import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";
-import { createRetainedTranscriptRows } from "./transcript-retention.js";
-import { TranscriptMessageView } from "./transcript.js";
-import {
-  applySurfaceNavigationRequest,
-  cloneOverlayPayload,
-  readSurfaceScrollMetrics,
-  SURFACE_SCROLL_EPSILON,
-  toSemanticInput,
-  textOffsetFromLogicalCursor,
-  logicalCursorFromTextOffset,
-  useShellState,
-} from "./utils.js";
+import { cloneOverlayPayload, renderNotificationSummary } from "./utils.js";
 
-const COMPOSER_EDITOR_SYNC_DEBOUNCE_MS = 80;
+/**
+ * Rows kept clear above the footer when a modal overlay is open, so at least a
+ * sliver of the native scrollback transcript stays visible behind the footer.
+ * Mirrors opencode's per-view row budgets (RunFooter.applyHeight): the footer
+ * never consumes the whole terminal, and a modal taller than the cap scrolls
+ * within its own surface (the overlay components already self-cap to the height
+ * they are given via resolveDialogSurfaceDimensions / internal scrollboxes).
+ */
+const FOOTER_OVERLAY_RESERVE_ROWS = 2;
 
-interface TranscriptScrollSnapshot {
-  readonly scrollTop: number;
-  readonly scrollHeight: number;
-  readonly viewportHeight: number;
-}
+/**
+ * Rows the footer always keeps for the composer (and the inline notification row
+ * directly above it) when the stacked NON-modal secondary surfaces (cockpit dock
+ * + subagent footer + inline completion) would otherwise grow tall enough to push
+ * the composer off the bottom-anchored viewport. The composer box is the LAST
+ * child and content-sized (the footer box is flexShrink={0}); without a cap on
+ * the secondary surfaces a very tall stack on a short terminal overflows the
+ * viewport and the user cannot see what they type. Four rows ≈ the composer's
+ * minimum footprint (top border + one input line + bottom border + a status/hint
+ * line) plus the single notification row. Modals are exempt — they self-cap via
+ * modalHeight and replace (not stack above) the composer.
+ */
+const COMPOSER_RESERVE_ROWS = 4;
 
-type OpenTuiEventHandler = (event?: unknown) => void;
-
-interface OpenTuiEventEmitter {
-  on(event: string, handler: OpenTuiEventHandler): void;
-  off(event: string, handler: OpenTuiEventHandler): void;
-}
-
-function isOpenTuiEventEmitter(value: unknown): value is OpenTuiEventEmitter {
-  if (!value || typeof value !== "object") {
-    return false;
+/**
+ * Combined max-height for the stacked NON-modal secondary surfaces (cockpit dock
+ * + subagent footer + inline completion popup), so they can never consume the
+ * rows reserved for the composer + notification on a short terminal. Returns the
+ * terminal-row budget minus the overlay reserve (a sliver of scrollback) and the
+ * composer reserve, floored at 1 so the container is always at least one row.
+ * When the terminal height is unknown (<= 0) there is no cap (Infinity).
+ *
+ * Pure + exported for isolated unit testing (no renderer mount required).
+ */
+export function resolveStackedSurfaceMaxHeight(terminalRows: number): number {
+  if (!Number.isFinite(terminalRows) || terminalRows <= 0) {
+    return Number.POSITIVE_INFINITY;
   }
-  const candidate = value as Partial<OpenTuiEventEmitter>;
-  return typeof candidate.on === "function" && typeof candidate.off === "function";
+  return Math.max(1, terminalRows - FOOTER_OVERLAY_RESERVE_ROWS - COMPOSER_RESERVE_ROWS);
 }
 
-function readScrollboxMetricEmitters(node: OpenTuiScrollBoxHandle): readonly OpenTuiEventEmitter[] {
-  const candidate = node as OpenTuiScrollBoxHandle & {
-    readonly verticalScrollBar?: unknown;
-    readonly horizontalScrollBar?: unknown;
-  };
-  return [candidate.verticalScrollBar, candidate.horizontalScrollBar, node].filter(
-    isOpenTuiEventEmitter,
-  );
-}
+// ---------------------------------------------------------------------------
+// Inline notification row — mirrors ToastStrip's latest-visible behavior but
+// renders IN FLOW (no position="absolute") so the footer-height router can
+// measure and allocate the correct footerHeight.
+// ---------------------------------------------------------------------------
 
-function setScrollboxStickyTail(node: OpenTuiScrollBoxHandle, enabled: boolean): void {
-  if (node.stickyScroll !== enabled) {
-    node.stickyScroll = enabled;
+const FOOTER_NOTIFICATION_VISIBLE_MS = 5_000;
+
+/**
+ * Returns the text and level-color for the latest notification, or undefined
+ * when there is nothing to show (no notifications, or the latest has expired).
+ * Pure function — testable without Solid.
+ */
+export function buildFooterNotificationRow(
+  notifications: readonly CliShellNotification[],
+  nowMs: number,
+  theme: SessionPalette,
+): { text: string; color: string } | undefined {
+  const latest = notifications.at(-1);
+  if (!latest) {
+    return undefined;
   }
-  if (enabled && node.stickyStart !== "bottom") {
-    node.stickyStart = "bottom";
+  if (nowMs - latest.createdAt >= FOOTER_NOTIFICATION_VISIBLE_MS) {
+    return undefined;
   }
-}
-
-function scrollboxHasManualScroll(node: OpenTuiScrollBoxHandle): boolean {
-  const manualScrollKey = ["_has", "ManualScroll"].join("");
-  const candidate = node as OpenTuiScrollBoxHandle & Record<string, unknown>;
-  return candidate[manualScrollKey] === true;
-}
-
-function sameTranscriptScrollSnapshot(
-  left: TranscriptScrollSnapshot,
-  right: TranscriptScrollSnapshot,
-): boolean {
-  return (
-    Math.abs(left.scrollTop - right.scrollTop) <= SURFACE_SCROLL_EPSILON &&
-    Math.abs(left.scrollHeight - right.scrollHeight) <= SURFACE_SCROLL_EPSILON &&
-    Math.abs(left.viewportHeight - right.viewportHeight) <= SURFACE_SCROLL_EPSILON
-  );
-}
-
-function readTranscriptScrollSnapshot(node: OpenTuiScrollBoxHandle): TranscriptScrollSnapshot {
-  return {
-    scrollTop: Math.max(0, node.scrollTop),
-    scrollHeight: Math.max(0, node.scrollHeight),
-    viewportHeight: Math.max(1, node.viewport.height),
-  };
+  const color =
+    latest.level === "error"
+      ? theme.error
+      : latest.level === "warning"
+        ? theme.warning
+        : theme.text;
+  return { text: renderNotificationSummary(latest), color };
 }
 
 /**
- * Observe scroll metric changes from the scrollbox itself, never from the
- * renderer frame loop. Subscribing to per-frame events turned every content
- * growth tick into a scroll-sync round trip through the domain store
- * (RFC F6); scrollbar change events plus a coarse fallback poll catch
- * everything the follow-mode logic needs.
+ * Renders the latest transient notification INLINE (in normal flow) above the
+ * composer. In-flow placement means the footer-height router correctly measures
+ * the expanded footer and allocates the necessary scrollback rows, preventing
+ * overlap with the transcript.
  */
-const SCROLL_METRIC_FALLBACK_POLL_MS = 150;
+function FooterNotifications(input: {
+  notifications: readonly CliShellNotification[];
+  theme: SessionPalette;
+}) {
+  const [nowMs, setNowMs] = createSignal(Date.now());
 
-function installScrollboxMetricObserver(
-  node: OpenTuiScrollBoxHandle,
-  notify: () => void,
-): () => void {
-  let disposed = false;
-  let lastSnapshot = readTranscriptScrollSnapshot(node);
-  const notifyWhenChanged = (): void => {
-    if (disposed || node.isDestroyed) {
+  // Re-arm the expiry timer whenever the latest notification changes.
+  createEffect(() => {
+    const latest = input.notifications.at(-1);
+    if (!latest) {
       return;
     }
-    const nextSnapshot = readTranscriptScrollSnapshot(node);
-    if (sameTranscriptScrollSnapshot(lastSnapshot, nextSnapshot)) {
+    const now = Date.now();
+    setNowMs(now);
+    const remainingMs = FOOTER_NOTIFICATION_VISIBLE_MS - (now - latest.createdAt);
+    if (remainingMs <= 0) {
       return;
     }
-    lastSnapshot = nextSnapshot;
-    notify();
-  };
+    // Timer.unref() is available in both Node.js (NodeJS.Timeout) and Bun
+    // (bun-types Timer), so no cast is needed.
+    const timer = setTimeout(() => setNowMs(Date.now()), remainingMs + 1);
+    timer.unref?.();
+    onCleanup(() => clearTimeout(timer));
+  });
 
-  const scrollEmitters = readScrollboxMetricEmitters(node);
-  const onScrollMetricChanged: OpenTuiEventHandler = () => {
-    notifyWhenChanged();
-    queueMicrotask(notifyWhenChanged);
-  };
-  for (const scrollEmitter of scrollEmitters) {
-    scrollEmitter.on("change", onScrollMetricChanged);
+  const row = createMemo(() =>
+    buildFooterNotificationRow(input.notifications, nowMs(), input.theme),
+  );
+
+  return (
+    <Show when={row()}>
+      <box width="100%" marginBottom={1}>
+        <text fg={row()!.color} wrapMode="word" width="100%">
+          {row()!.text}
+        </text>
+      </box>
+    </Show>
+  );
+}
+
+/**
+ * Keymap-mode resolver for the footer shell. Resolution order: an active text
+ * selection wins; then an active modal overlay routes to its keymap mode (pager
+ * payloads use the "pager" layer, every other payload uses "overlay") so
+ * Enter/Esc/arrows reach the modal and Esc closes it; then subagent-footer focus
+ * routes to the "subagentFooter" layer (next/select/open/cancel) before
+ * completion; then the completion popup; then the bare composer.
+ *
+ * Exported for isolated unit testing (no renderer mount required).
+ */
+export function resolveFooterKeymapMode(
+  state: ReturnType<ShellRendererController["getViewState"]>,
+  renderer: OpenTuiRenderer,
+): ComposerKeymapMode {
+  if (renderer.getSelection?.()) {
+    return "selection";
   }
-
-  const timer = setInterval(notifyWhenChanged, SCROLL_METRIC_FALLBACK_POLL_MS);
-  queueMicrotask(notifyWhenChanged);
-  return () => {
-    disposed = true;
-    for (const scrollEmitter of scrollEmitters) {
-      scrollEmitter.off("change", onScrollMetricChanged);
-    }
-    clearInterval(timer);
-  };
+  const payload = state.overlay.active?.payload;
+  if (payload?.kind === "pager") {
+    return "pager";
+  }
+  if (payload) {
+    return "overlay";
+  }
+  if (state.focus.active === "subagentFooter") {
+    return "subagentFooter";
+  }
+  if (state.composer.completion) {
+    return "completion";
+  }
+  return "composer";
 }
 
-function supportsOpenTuiKeymap(renderer: OpenTuiRenderer): boolean {
-  const candidate = renderer as unknown as {
-    root?: unknown;
-    keyInput?: unknown;
-    currentFocusedRenderable?: unknown;
-  };
-  return Boolean(candidate.root && candidate.keyInput);
-}
-
+/**
+ * The Brewva OpenTUI interactive shell: renders ONLY the live footer (composer +
+ * status labels). The settled transcript and the in-flight message's stable
+ * blocks are committed to the renderer's native scrollback by
+ * SplitFooterScrollbackWriter (driven from CliInteractiveOpenTuiShellRuntime),
+ * so this component deliberately does NOT render the transcript — that is the
+ * whole point of the split-footer renderer (no per-frame transcript repaint ->
+ * no streaming flicker).
+ *
+ * Composer input is wired via the shared useComposerInputWiring hook (keymap,
+ * keyboard/paste routing into runtime.handleInput, uncontrolled-textarea editor
+ * sync, prompt-part extmarks).
+ *
+ * Footer surfaces:
+ *   - footer-height router (dynamic footerHeight for the split renderer),
+ *     CAPPED to terminalRows - FOOTER_OVERLAY_RESERVE_ROWS so a tall modal
+ *     never consumes the whole terminal
+ *   - Notifications (inline FooterNotifications, not position="absolute" ToastStrip,
+ *     so the height router allocates the correct footer space)
+ *   - ModalOverlay (tool approval, confirm, question, select, sessions, pager,
+ *     inspect, tasks, input, …): rendered IN FLOW via DialogLayoutProvider
+ *     "inline" (no position="absolute", which would float over the tiny footer
+ *     region and be clipped). The footer grows to the modal's height (router),
+ *     overflow scrolls within the modal surface, and resolveFooterKeymapMode
+ *     routes keys to the modal (Esc closes). The composer is hidden while a
+ *     modal is active.
+ *   - CockpitDockSurface (cockpit projection / status dock): in-flow box, gated
+ *     by an active projection, docked ABOVE the composer.
+ *   - SubagentFooterPanel (subagent run footer + focus mode): in-flow box, gated
+ *     by non-empty task runs, docked above the composer. focus.active ===
+ *     "subagentFooter" routes input via resolveFooterKeymapMode's
+ *     "subagentFooter" layer and blocks the composer (promptInputBlocked).
+ *   - CompletionOverlay (slash/@ completion popup): rendered IN FLOW via the
+ *     completion layout="inline" mode (no position="absolute") ABOVE the
+ *     composer so the height router allocates rows for it; tall lists scroll in
+ *     the popup's own scrollbox. resolveFooterKeymapMode's "completion" layer
+ *     already routes arrows/Enter/Esc to it.
+ */
 export function BrewvaOpenTuiShell(input: {
   runtime: ShellRendererController;
-  toolRenderCache?: ToolRenderCache;
   renderer?: OpenTuiRenderer;
   copyTextToClipboard?: ClipboardCopy;
 }) {
-  const toolRenderCache = input.toolRenderCache ?? createToolRenderCache();
-  const toolDefinitions = input.runtime.getToolDefinitions();
-  const state = useShellState(input.runtime);
-  const dimensions = useTerminalDimensions();
-  const renderer = (input.renderer ?? useRenderer()) as OpenTuiRenderer;
-  const theme = createMemo(() => createPalette(state.theme));
-  const scrollAcceleration = createMemo(() =>
-    createScrollAcceleration(input.runtime.getTuiConfig().scroll.acceleration),
+  const wiring = useComposerInputWiring({
+    runtime: input.runtime,
+    renderer: input.renderer,
+    copyTextToClipboard: input.copyTextToClipboard,
+    keymapMode: resolveFooterKeymapMode,
+  });
+  const { state, dimensions, theme } = wiring;
+
+  // Full terminal row count. NOT dimensions()/renderer.height — in split-footer
+  // mode BOTH of those are the render REGION (the footer itself; they track
+  // footerHeight), so any cap derived from them feeds back and collapses the
+  // footer to 1 row. renderer.terminalHeight is the stable terminal height;
+  // track it reactively (it changes on resize, not per frame).
+  const [footerTerminalRows, setFooterTerminalRows] = createSignal(
+    (input.renderer as SplitFooterRenderer | undefined)?.terminalHeight ?? dimensions().height,
   );
+  createEffect(() => {
+    const r = input.renderer as SplitFooterRenderer | undefined;
+    if (!r) {
+      return;
+    }
+    const update = (): void => {
+      setFooterTerminalRows(r.terminalHeight ?? dimensions().height);
+    };
+    update();
+    r.on("resize", update);
+    onCleanup(() => r.off("resize", update));
+  });
+
+  // Footer-height router: the split renderer allocates a FIXED footerHeight, so
+  // size it to the footer's actual laid-out content height (composer + status,
+  // or an active modal overlay) and keep it in sync as content grows/shrinks.
+  // Mirrors opencode's RunFooter.applyHeight: read the rendered footer height
+  // each frame and push changes to renderer.footerHeight. Without this the
+  // footer is stuck at its small initial height and the composer is clipped.
+  //
+  // The height is CAPPED to terminalRows - FOOTER_OVERLAY_RESERVE_ROWS: a tall
+  // modal (e.g. a long sessions/select list) must not consume the whole
+  // terminal. When the laid-out content exceeds the cap the footer is clamped
+  // and the overflow scrolls within the modal surface (the overlay components
+  // self-cap to the height they receive). The reserve keeps a sliver of native
+  // scrollback visible behind the footer.
+  const [footerBox, setFooterBox] = createSignal<BoxRenderable | null>(null);
+  createEffect(() => {
+    const box = footerBox();
+    const renderer = input.renderer as SplitFooterRenderer | undefined;
+    if (!box || !renderer) {
+      return;
+    }
+    const syncFooterHeight = (): void => {
+      // Cap against the FULL TERMINAL height (footerTerminalRows() ==
+      // renderer.terminalHeight). renderer.height AND dimensions() are BOTH the
+      // split-footer render region (== footerHeight), so capping against either
+      // feeds back and collapses the footer to 1 row.
+      const terminalRows = footerTerminalRows();
+      const maxFooterRows =
+        terminalRows > 0
+          ? Math.max(1, terminalRows - FOOTER_OVERLAY_RESERVE_ROWS)
+          : Number.POSITIVE_INFINITY;
+      const height = Math.min(box.height, maxFooterRows);
+      if (height > 0 && height !== renderer.footerHeight) {
+        renderer.footerHeight = height;
+      }
+    };
+    syncFooterHeight();
+    renderer.on("frame", syncFooterHeight);
+    onCleanup(() => renderer.off("frame", syncFooterHeight));
+  });
+
   const shellRenderContext = {
     runtime: input.runtime,
     diffStyle: () => state.diff.style,
     diffWrapMode: () => state.diff.wrapMode,
     showThinking: () => state.view.showThinking,
-    scrollAcceleration,
-  };
-  const showScrollbar = createMemo(() => dimensions().width >= 96);
-  // Belt-and-braces vs seed-scoped message ids alone: ids fix Solid reconcile collisions;
-  // sessionId still differentiates empty transcripts across sessions; endpoints disambiguate same-length swaps.
-  const bundleRefreshKey = createMemo(() => {
-    const messages = state.transcript.messages;
-    const sessionId = input.runtime.getSessionIdentity().sessionId;
-    const firstId = messages[0]?.id ?? "";
-    const lastId = messages.length > 0 ? (messages[messages.length - 1]?.id ?? "") : "";
-    return `${sessionId}:${messages.length}:${firstId}:${lastId}`;
-  });
-  const [scrollbox, setScrollbox] = createSignal<OpenTuiScrollBoxHandle | null>(null);
-  const [textarea, setTextarea] = createSignal<OpenTuiTextareaHandle | null>(null);
-  const [completionContainer, setCompletionContainer] = createSignal<BoxRenderable | null>(null);
-  const [promptAnchor, setPromptAnchor] = createSignal<BoxRenderable | null>(null);
-  // Pure re-run trigger for the scroll effect below: the observer already
-  // deduplicates metric changes, and the effect reads live metrics straight
-  // off the node — a value-bearing signal here would be a second, stale
-  // source of truth.
-  const [scrollMetricsVersion, setScrollMetricsVersion] = createSignal(0);
-  const notifyScrollMetricsChanged = (): void => {
-    setScrollMetricsVersion((version) => version + 1);
+    scrollAcceleration: createMemo(() =>
+      createScrollAcceleration(input.runtime.getTuiConfig().scroll.acceleration),
+    ),
   };
 
-  const promptPartStyle = createMemo(() => createPromptPartStyle(theme()));
-  const filePromptPartStyleId = createMemo(() => promptPartStyle().getStyleId("extmark.file"));
-  const textPromptPartStyleId = createMemo(() => promptPartStyle().getStyleId("extmark.text"));
-  const agentPromptPartStyleId = createMemo(() => promptPartStyle().getStyleId("extmark.agent"));
-  const [promptPartTypeId, setPromptPartTypeId] = createSignal<number | null>(null);
-  const [promptPartIdByExtmarkId, setPromptPartIdByExtmarkId] = createSignal(
-    new Map<number, string>(),
-  );
-  const [appliedPromptPartSignature, setAppliedPromptPartSignature] = createSignal(
-    buildPromptPartSignature(state.composer.parts),
-  );
-  const emptyPromptPartSignature = buildPromptPartSignature([]);
-
-  const promptPartIdMapsEqual = (
-    left: ReadonlyMap<number, string>,
-    right: ReadonlyMap<number, string>,
-  ): boolean => {
-    if (left.size !== right.size) {
-      return false;
-    }
-    for (const [key, value] of left) {
-      if (right.get(key) !== value) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const rebuildPromptPartExtmarks = (
-    node: OpenTuiTextareaHandle,
-    parts: readonly CliShellPromptPart[],
-  ) => {
-    const typeId = promptPartTypeId();
-    if (!typeId || node.isDestroyed) {
-      return;
-    }
-    node.extmarks.clear();
-    const nextMap = new Map<number, string>();
-    for (const part of parts) {
-      const source = part.source.text;
-      if (source.end <= source.start) {
-        continue;
-      }
-      const styleId =
-        part.type === "file"
-          ? filePromptPartStyleId()
-          : part.type === "agent"
-            ? agentPromptPartStyleId()
-            : textPromptPartStyleId();
-      const extmarkId = node.extmarks.create({
-        start: source.start,
-        end: source.end,
-        virtual: true,
-        styleId: styleId ?? undefined,
-        typeId,
-      });
-      nextMap.set(extmarkId, part.id);
-    }
-    setPromptPartIdByExtmarkId(nextMap);
-    setAppliedPromptPartSignature(buildPromptPartSignature(parts));
-  };
-
-  const readPromptPartsFromExtmarks = (node: OpenTuiTextareaHandle): CliShellPromptPart[] => {
-    const typeId = promptPartTypeId();
-    if (!typeId || node.isDestroyed) {
-      return [];
-    }
-    const extmarks = node.extmarks.getAllForTypeId(typeId);
-    if (extmarks.length === 0) {
-      if (promptPartIdByExtmarkId().size > 0) {
-        setPromptPartIdByExtmarkId(new Map());
-      }
-      if (appliedPromptPartSignature() !== emptyPromptPartSignature) {
-        setAppliedPromptPartSignature(emptyPromptPartSignature);
-      }
-      return [];
-    }
-    const partsById = new Map(
-      state.composer.parts.map((part) => [part.id, part] satisfies [string, CliShellPromptPart]),
-    );
-    const nextParts: CliShellPromptPart[] = [];
-    const nextMap = new Map<number, string>();
-    for (const extmark of extmarks) {
-      const partId = promptPartIdByExtmarkId().get(extmark.id);
-      const part = partId ? partsById.get(partId) : undefined;
-      if (!part) {
-        continue;
-      }
-      const nextPart = cloneCliShellPromptParts([part])[0];
-      if (!nextPart) {
-        continue;
-      }
-      nextPart.source.text.start = extmark.start;
-      nextPart.source.text.end = extmark.end;
-      nextParts.push(nextPart);
-      nextMap.set(extmark.id, nextPart.id);
-    }
-    if (!promptPartIdMapsEqual(promptPartIdByExtmarkId(), nextMap)) {
-      setPromptPartIdByExtmarkId(nextMap);
-    }
-    const nextSignature = buildPromptPartSignature(nextParts);
-    if (appliedPromptPartSignature() !== nextSignature) {
-      setAppliedPromptPartSignature(nextSignature);
-    }
-    return nextParts;
-  };
-
-  createEffect(() => {
-    void input.runtime.handleInput({
-      type: "viewport.resize",
-      columns: dimensions().width,
-      rows: dimensions().height,
-    });
-  });
-
-  const copySelection = async (): Promise<boolean> =>
-    await copyOpenTuiSelection({
-      renderer,
-      copyText: input.copyTextToClipboard,
-      notifier: input.runtime.ui,
-    });
-  let composerEditorSyncTimer: ReturnType<typeof setTimeout> | undefined;
-  const clearScheduledComposerEditorSync = (): void => {
-    const timer = composerEditorSyncTimer;
-    if (!timer) {
-      return;
-    }
-    clearTimeout(timer);
-    composerEditorSyncTimer = undefined;
-  };
-  const syncComposerFromEditor = async (): Promise<void> => {
-    clearScheduledComposerEditorSync();
-    const node = textarea();
-    if (!node || node.isDestroyed) {
-      return;
-    }
-    await input.runtime.handleInput({
-      type: "composer.editorSync",
-      text: node.plainText,
-      cursor: textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
-      parts: readPromptPartsFromExtmarks(node),
-    });
-  };
-  const scheduleComposerEditorSync = (): void => {
-    clearScheduledComposerEditorSync();
-    composerEditorSyncTimer = setTimeout(() => {
-      composerEditorSyncTimer = undefined;
-      void syncComposerFromEditor();
-    }, COMPOSER_EDITOR_SYNC_DEBOUNCE_MS);
-  };
-
-  const keymapRenderer = supportsOpenTuiKeymap(renderer) ? renderer : undefined;
-  const keymapController = keymapRenderer
-    ? registerBrewvaKeymap({
-        renderer: keymapRenderer,
-        runtime: input.runtime,
-        copySelection,
-        clearSelection: () => renderer.clearSelection?.(),
-        syncComposerFromEditor,
-      })
-    : undefined;
-
-  onCleanup(() => keymapController?.dispose());
-  onCleanup(() => clearScheduledComposerEditorSync());
-
-  const keymapMode = createMemo(() => {
-    if (renderer.getSelection?.()) {
-      return "selection" as const;
-    }
-    const payload = state.overlay.active?.payload;
-    if (payload?.kind === "pager") {
-      return "pager" as const;
-    }
-    if (payload) {
-      return "overlay" as const;
-    }
-    if (state.focus.active === "subagentFooter") {
-      return "subagentFooter" as const;
-    }
-    if (state.composer.completion) {
-      return "completion" as const;
-    }
-    return "composer" as const;
-  });
-
-  createEffect(() => {
-    keymapController?.setMode(keymapMode());
-  });
-
-  createEffect(() => {
-    if (!renderer.console) {
-      return;
-    }
-    const handleCopySelection = (text: string): void => {
-      void copyTextWithShellFeedback({
-        text,
-        renderer,
-        copyText: input.copyTextToClipboard,
-        notifier: input.runtime.ui,
-      });
-    };
-    renderer.console.onCopySelection = handleCopySelection;
-    onCleanup(() => {
-      if (renderer.console?.onCopySelection === handleCopySelection) {
-        renderer.console.onCopySelection = undefined;
-      }
-    });
-  });
-
-  createEffect(() => {
-    bundleRefreshKey();
-    const sessionId = input.runtime.getSessionIdentity().sessionId;
-    toolRenderCache.resetForSession(sessionId);
-  });
-
-  createEffect(() => {
-    const node = scrollbox();
-    if (!node || node.isDestroyed) {
-      return;
-    }
-    const cleanup = installScrollboxMetricObserver(node, notifyScrollMetricsChanged);
-    notifyScrollMetricsChanged();
-    onCleanup(cleanup);
-  });
-
-  // Scroll position is renderer-local: the continuously drifting offset
-  // during streaming never round-trips through the domain store. Only
-  // follow-mode TRANSITIONS (live <-> scrolled) and explicit navigation
-  // requests reach the runtime, so content growth in scrolled mode causes
-  // zero commits (RFC F6/WS5).
-  createEffect(() => {
-    scrollMetricsVersion();
-    const node = scrollbox();
-    if (!node || node.isDestroyed) {
-      return;
-    }
-    if (state.surface.navigationRequest) {
-      applySurfaceNavigationRequest({
-        runtime: input.runtime,
-        scrollbox: node,
-        request: state.surface.navigationRequest,
-      });
-      return;
-    }
-
-    const { maxScrollTop, currentOffset } = readSurfaceScrollMetrics(node);
-    if (state.surface.followMode === "live") {
-      // Programmatic scrolls (sticky tail, content growth) never set the
-      // manual-scroll flag, so they cannot be re-ingested as user intent.
-      if (scrollboxHasManualScroll(node) && currentOffset > SURFACE_SCROLL_EPSILON) {
-        setScrollboxStickyTail(node, false);
-        void input.runtime.handleInput({
-          type: "surface.scrollSync",
-          followMode: "scrolled",
-          scrollOffset: currentOffset,
-        });
-        return;
-      }
-      setScrollboxStickyTail(node, true);
-      return;
-    }
-
-    if (currentOffset <= SURFACE_SCROLL_EPSILON && maxScrollTop > 0) {
-      setScrollboxStickyTail(node, true);
-      void input.runtime.handleInput({
-        type: "surface.scrollSync",
-        followMode: "live",
-        scrollOffset: 0,
-      });
-      return;
-    }
-    setScrollboxStickyTail(node, false);
-  });
-
-  // The textarea is uncontrolled while the user edits: editor-sourced sync
-  // echoes keep `composer.revision` unchanged and are never written back, so
-  // a stale echo cannot clobber keystrokes typed after it. Only external
-  // composer changes (history navigation, completion accept, prefill,
-  // submit-clear) bump the revision and reach the node. The guard is keyed
-  // to the node as well as the revision: a recreated textarea must receive
-  // the current composer state even though the revision has not moved.
-  let appliedComposerWrite: { node: OpenTuiTextareaHandle; revision: number } | undefined;
-  createEffect(() => {
-    const node = textarea();
-    const revision = state.composer.revision;
-    if (
-      !node ||
-      node.isDestroyed ||
-      (appliedComposerWrite?.node === node && appliedComposerWrite.revision === revision)
-    ) {
-      return;
-    }
-    appliedComposerWrite = { node, revision };
-    const composer = untrack(() => ({ text: state.composer.text, cursor: state.composer.cursor }));
-    if (node.plainText !== composer.text) {
-      node.setText(composer.text);
-    }
-    const desiredCursor = logicalCursorFromTextOffset(composer.text, composer.cursor);
-    if (
-      node.logicalCursor.row !== desiredCursor.row ||
-      node.logicalCursor.col !== desiredCursor.col
-    ) {
-      node.setCursor(desiredCursor.row, desiredCursor.col);
-    }
-  });
-
-  createEffect(() => {
-    const node = textarea();
-    if (!node || node.isDestroyed) {
-      return;
-    }
-    const nextTypeId = node.extmarks.registerType("brewva-prompt-part");
-    setPromptPartTypeId((current) => (current === nextTypeId ? current : nextTypeId));
-  });
-
-  createEffect(() => {
-    const node = textarea();
-    if (!node || node.isDestroyed || promptPartTypeId() === null) {
-      return;
-    }
-    const signature = buildPromptPartSignature(state.composer.parts);
-    if (signature === appliedPromptPartSignature()) {
-      return;
-    }
-    rebuildPromptPartExtmarks(node, state.composer.parts);
-  });
-
-  createEffect(() => {
-    const node = textarea();
-    if (!node || node.isDestroyed) {
-      return;
-    }
-    const syncFromEditor = () => {
-      if (node.isDestroyed) {
-        return;
-      }
-      scheduleComposerEditorSync();
-    };
-    node.editBuffer.on("content-changed", syncFromEditor);
-    node.editBuffer.on("cursor-changed", syncFromEditor);
-    onCleanup(() => {
-      node.editBuffer.off("content-changed", syncFromEditor);
-      node.editBuffer.off("cursor-changed", syncFromEditor);
-    });
-  });
-
-  useKeyboard((event) => {
-    if ((event as { propagationStopped?: boolean }).propagationStopped === true) {
-      return;
-    }
-    if (keymapController) {
-      return;
-    }
-    const key = event as OpenTuiKeyEvent;
-    if (!renderer.getSelection?.()) {
-      return;
-    }
-    if (key.ctrl && key.name.toLowerCase() === "c") {
-      event.preventDefault();
-      event.stopPropagation();
-      void copySelection();
-      return;
-    }
-    if (key.name === "escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      renderer.clearSelection?.();
-      return;
-    }
-    renderer.clearSelection?.();
-  }, {});
-
-  useKeyboard((event) => {
-    if ((event as { propagationStopped?: boolean }).propagationStopped === true) {
-      return;
-    }
-    const semanticInput = toSemanticInput(event as OpenTuiKeyEvent);
-    if (!input.runtime.wantsInput(semanticInput)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    void input.runtime.handleInput(semanticInput);
-  }, {});
-
-  usePaste((event: PasteEvent) => {
-    if (state.overlay.active?.payload?.kind !== "input") {
-      return;
-    }
-    const pastedText = decodePasteBytes(event.bytes).replace(/\r\n/gu, "\n").replace(/\r/gu, "\n");
-    if (pastedText.length === 0) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    void input.runtime.handleInput({
-      key: "paste",
-      text: pastedText,
-      ctrl: false,
-      meta: false,
-      shift: false,
-    });
-  });
-
-  const activeOverlay = createMemo(() => {
-    const active = state.overlay.active;
-    if (!active) {
-      return undefined;
-    }
-    return {
-      ...active,
-      payload: active.payload ? cloneOverlayPayload(active.payload) : undefined,
-    };
-  });
-  const modalOverlay = createMemo(() => {
-    const overlay = activeOverlay();
-    if (!overlay?.payload) {
-      return undefined;
-    }
-    return overlay;
-  });
   const modelLabel = createMemo(() => {
     if (state.status.entries.model) {
       return state.status.entries.model;
@@ -656,6 +311,29 @@ export function BrewvaOpenTuiShell(input: {
   const lineageLabel = createMemo(
     () => state.status.entries.lineage ?? input.runtime.getSessionIdentity().lineageLabel ?? "",
   );
+  // The active modal overlay (if any). Clone the payload so the overlay
+  // components — some of which mutate draft slices locally — never write back
+  // into the reducer-owned store snapshot.
+  const modalOverlay = createMemo(() => {
+    const active = state.overlay.active;
+    if (!active?.payload) {
+      return undefined;
+    }
+    return { ...active, payload: cloneOverlayPayload(active.payload) };
+  });
+  // Block the composer while a modal overlay is active (input routes to the
+  // modal via resolveFooterKeymapMode), while the subagent footer holds focus
+  // (input routes to the footer), or when a cockpit composer policy requests it.
+  const promptInputBlocked = createMemo(
+    () =>
+      Boolean(state.overlay.active) ||
+      state.focus.active === "subagentFooter" ||
+      (state.cockpit.projection?.composerPolicy ?? "active") === "block",
+  );
+
+  // Subagent run footer view (tabs + optional inspect detail), built from the
+  // operator task runs and the subagent-footer focus state; visible only when
+  // there are task runs.
   const subagentFooterView = createMemo(() =>
     buildSubagentFooterView({
       runs: state.operator.taskRuns,
@@ -663,151 +341,136 @@ export function BrewvaOpenTuiShell(input: {
       getSessionWireFrames: (sessionId) => input.runtime.getSessionWireFrames(sessionId),
     }),
   );
-  const transcriptWidth = createMemo(() => Math.max(20, dimensions().width - 6));
-  const transcriptRows = createRetainedTranscriptRows(() => state.transcript.messages);
-  const composerPolicy = createMemo(() => state.cockpit.projection?.composerPolicy ?? "active");
-  const promptInputBlocked = createMemo(
-    () =>
-      Boolean(state.overlay.active) ||
-      state.focus.active === "subagentFooter" ||
-      composerPolicy() === "block",
+
+  // Anchor + container for the inline completion popup. The popup renders in
+  // flow (layout="inline"), so it does not depend on the anchor's absolute
+  // coordinates, but the component's prop contract still requires them.
+  const [promptAnchor, setPromptAnchor] = createSignal<BoxRenderable | null>(null);
+  const [completionContainer, setCompletionContainer] = createSignal<BoxRenderable | null>(null);
+
+  // Height handed to the inline modal: the full terminal minus the reserve, so
+  // the overlay components' proportional surface math (resolveDialogSurface
+  // Dimensions, resolveHighDensityPickerRows) self-caps to a surface that fits
+  // inside the capped footer. The height router clamps the footer to the same
+  // bound, so a modal taller than this scrolls within its own surface.
+  const modalHeight = createMemo(() =>
+    Math.max(1, footerTerminalRows() - FOOTER_OVERLAY_RESERVE_ROWS),
   );
 
-  const shell = (
+  // Combined cap for the stacked secondary surfaces (cockpit + subagent +
+  // completion) so they reserve rows for the composer on a short terminal
+  // (FIX C). Rendered into a maxHeight + overflow="hidden" container so a tall
+  // stack clips instead of pushing the composer (last child) off-screen.
+  // `undefined` means no cap (terminal height unknown) — leaves the normal
+  // few-surfaces layout untouched.
+  const stackedSurfaceMaxHeight = createMemo<number | undefined>(() => {
+    const cap = resolveStackedSurfaceMaxHeight(footerTerminalRows());
+    return Number.isFinite(cap) ? cap : undefined;
+  });
+
+  const footer = (
     <ShellRenderProvider value={shellRenderContext}>
       <box
-        width="100%"
-        height="100%"
-        flexDirection="row"
-        backgroundColor={theme().background}
-        onMouseUp={() => {
-          void copySelection();
+        ref={(node: BoxRenderable) => {
+          setFooterBox(node);
+          setCompletionContainer(node);
         }}
+        width="100%"
+        flexShrink={0}
+        flexDirection="column"
+        paddingLeft={2}
+        paddingRight={2}
+        backgroundColor={theme().background}
       >
-        <box
-          ref={(node: BoxRenderable) => setCompletionContainer(node)}
-          flexGrow={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          paddingRight={2}
-          gap={1}
+        <Show
+          when={modalOverlay()}
+          fallback={
+            <>
+              {/* Stacked secondary surfaces (cockpit dock + subagent footer +
+                  inline completion) render IN FLOW above the composer, each gated
+                  by its own visibility, so the height router allocates rows for
+                  them. They share a combined max-height (FIX C): on a short
+                  terminal a tall stack clips here (overflow="hidden") instead of
+                  pushing the composer — the last child — off the bottom edge.
+                  flexShrink={1} lets the container yield to the composer; the cap
+                  is undefined (no constraint) when the terminal height is unknown,
+                  so the normal few-surfaces layout is unchanged. */}
+              <box
+                flexDirection="column"
+                width="100%"
+                flexShrink={1}
+                overflow="hidden"
+                maxHeight={stackedSurfaceMaxHeight()}
+              >
+                <CockpitDockSurface
+                  projection={state.cockpit.projection}
+                  theme={theme()}
+                  width={dimensions().width}
+                />
+                <SubagentFooterPanel
+                  runtime={input.runtime}
+                  view={subagentFooterView()}
+                  theme={theme()}
+                  width={dimensions().width}
+                  height={dimensions().height}
+                  shortcutLabel={(id) => input.runtime.getShortcutLabel(id)}
+                />
+                {/* Inline completion popup: rendered ABOVE the composer (render
+                    order) via layout="inline"; the "completion" keymap layer
+                    routes arrows/Enter/Esc to it. */}
+                <Show when={state.composer.completion && !state.overlay.active}>
+                  <CompletionOverlay
+                    runtime={input.runtime}
+                    completion={state.composer.completion!}
+                    anchor={promptAnchor}
+                    container={completionContainer}
+                    width={dimensions().width}
+                    height={dimensions().height}
+                    theme={theme()}
+                    layout="inline"
+                  />
+                </Show>
+              </box>
+              <FooterNotifications notifications={state.notifications} theme={theme()} />
+              <PromptPanel
+                runtime={input.runtime}
+                composer={state.composer}
+                queue={state.queue}
+                status={state.status}
+                overlayActive={promptInputBlocked()}
+                theme={theme()}
+                width={dimensions().width}
+                assistantLabel={assistantLabel()}
+                modelLabel={modelLabel()}
+                thinkingLevel={thinkingLevel()}
+                lineageLabel={lineageLabel()}
+                tuiConfig={input.runtime.getTuiConfig()}
+                shortcutLabel={(id) => input.runtime.getShortcutLabel(id)}
+                syncComposerFromEditor={wiring.syncComposerFromEditor}
+                setAnchor={(node: BoxRenderable) => setPromptAnchor(node)}
+                setTextarea={(node) => wiring.setTextarea(node)}
+              />
+            </>
+          }
         >
-          <scrollbox
-            ref={(node: OpenTuiScrollBoxHandle) => setScrollbox(node)}
-            viewportOptions={{
-              paddingRight: showScrollbar() ? 1 : 0,
-            }}
-            verticalScrollbarOptions={{
-              visible: showScrollbar(),
-              trackOptions: {
-                backgroundColor: theme().backgroundElement,
-                foregroundColor: theme().border,
-              },
-            }}
-            stickyScroll={state.surface.followMode === "live"}
-            stickyStart="bottom"
-            viewportCulling={true}
-            flexGrow={1}
-            scrollAcceleration={scrollAcceleration()}
-            backgroundColor={theme().background}
-          >
-            <For each={transcriptRows.rows()}>
-              {(message, index) => {
-                return (
-                  <box
-                    id={`transcript-row:${message.id}`}
-                    width="100%"
-                    flexDirection="column"
-                    flexShrink={0}
-                    overflow="visible"
-                  >
-                    <TranscriptMessageView
-                      message={message}
-                      theme={theme()}
-                      toolDefinitions={toolDefinitions}
-                      toolRenderCache={toolRenderCache}
-                      transcriptWidth={transcriptWidth()}
-                      showToolDetails={state.view.toolDetails}
-                      index={index()}
-                      isLast={index() === transcriptRows.rowCount() - 1}
-                      assistantLabel={assistantLabel()}
-                      modelLabel={modelLabel()}
-                      renderSurface="interactive"
-                    />
-                  </box>
-                );
-              }}
-            </For>
-          </scrollbox>
-
-          <CockpitDockSurface
-            projection={state.cockpit.projection}
-            theme={theme()}
-            width={dimensions().width}
-          />
-
-          <SubagentFooterPanel
-            runtime={input.runtime}
-            view={subagentFooterView()}
-            theme={theme()}
-            width={dimensions().width}
-            height={dimensions().height}
-            shortcutLabel={(id) => input.runtime.getShortcutLabel(id)}
-          />
-
-          <PromptPanel
-            runtime={input.runtime}
-            composer={state.composer}
-            queue={state.queue}
-            status={state.status}
-            overlayActive={promptInputBlocked()}
-            theme={theme()}
-            width={dimensions().width}
-            assistantLabel={assistantLabel()}
-            modelLabel={modelLabel()}
-            thinkingLevel={thinkingLevel()}
-            lineageLabel={lineageLabel()}
-            tuiConfig={input.runtime.getTuiConfig()}
-            shortcutLabel={(id) => input.runtime.getShortcutLabel(id)}
-            syncComposerFromEditor={syncComposerFromEditor}
-            setAnchor={(node) => setPromptAnchor(node)}
-            setTextarea={(node) => setTextarea(node)}
-          />
-
-          <ToastStrip
-            notifications={state.notifications}
-            theme={theme()}
-            inboxShortcutLabel={input.runtime.getShortcutLabel("operator.inbox")}
-          />
-
-          <Show when={state.composer.completion && !state.overlay.active}>
-            <CompletionOverlay
-              runtime={input.runtime}
-              completion={state.composer.completion!}
-              anchor={promptAnchor}
-              container={completionContainer}
-              width={dimensions().width}
-              height={dimensions().height}
-              theme={theme()}
-            />
-          </Show>
-
-          <Show when={modalOverlay()}>
-            <ModalOverlay
-              overlay={modalOverlay()!}
-              width={dimensions().width}
-              height={dimensions().height}
-              theme={theme()}
-            />
-          </Show>
-        </box>
+          {(overlay) => (
+            <DialogLayoutProvider mode="inline">
+              <ModalOverlay
+                overlay={overlay()}
+                width={dimensions().width}
+                height={modalHeight()}
+                theme={theme()}
+              />
+            </DialogLayoutProvider>
+          )}
+        </Show>
       </box>
     </ShellRenderProvider>
   );
 
-  return keymapController ? (
-    <BrewvaKeymapRoot controller={keymapController}>{shell}</BrewvaKeymapRoot>
+  return wiring.keymapController ? (
+    <BrewvaKeymapRoot controller={wiring.keymapController}>{footer}</BrewvaKeymapRoot>
   ) : (
-    shell
+    footer
   );
 }

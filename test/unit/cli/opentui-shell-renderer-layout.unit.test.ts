@@ -8,14 +8,12 @@ import {
   CURRENT_DELEGATION_CONTRACT_VERSION,
   type DelegationRunRecord,
 } from "@brewva/brewva-vocabulary/delegation";
-import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { createTestRenderer } from "@opentui/core/testing";
 import {
   createOpenTuiRoot,
   createOpenTuiSolidElement,
   openTuiSolidAct,
   openTuiSolidTestRender,
-  settleOpenTuiTextRendering,
 } from "../../../packages/brewva-cli/runtime/internal-opentui-runtime.js";
 import { BrewvaOpenTuiShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
 import { resolveDiffView } from "../../../packages/brewva-cli/runtime/shell/diff-view.js";
@@ -30,22 +28,6 @@ import {
 import { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/controller/shell-runtime.js";
 import { createManualShellClock } from "../../helpers/manual-shell-clock.js";
 import { createShellFixture } from "../../helpers/shell-fixture.js";
-
-function readOpenTuiRendererRoot(renderer: unknown): unknown {
-  return (renderer as { root?: unknown }).root;
-}
-
-function wireFrame(
-  input: Omit<SessionWireFrame, "schema" | "sessionId" | "source" | "durability">,
-): SessionWireFrame {
-  return {
-    schema: SESSION_WIRE_SCHEMA,
-    sessionId: "session-1",
-    source: "live",
-    durability: "durable",
-    ...input,
-  } as SessionWireFrame;
-}
 
 function findRenderedRow(frame: string, needle: string): number {
   const row = frame.split("\n").findIndex((candidate) => candidate.includes(needle));
@@ -122,19 +104,11 @@ describe("opentui solid shell runtime: layout contract", () => {
   });
 
   test("renders shell chrome and notifications through the Solid shell", async () => {
-    const { bundle } = createShellFixture({
-      transcriptSeed: [
-        {
-          role: "assistant",
-          content: [
-            {
-              type: "text",
-              text: "Hello from the Solid Brewva shell",
-            },
-          ],
-        },
-      ],
-    });
+    // Footer-only shell: the transcript lives in native scrollback (not in the
+    // captured frame). This asserts the live footer chrome — the prompt
+    // placeholder ("Ask Brewva …") and the inline notification ("Solid shell
+    // notice") rendered by FooterNotifications.
+    const { bundle } = createShellFixture();
 
     const clock = createManualShellClock();
     const runtime = new CliShellRuntime(bundle, {
@@ -167,369 +141,6 @@ describe("opentui solid shell runtime: layout contract", () => {
       expect(frame).toContain("Brewva");
       expect(frame).toContain("Solid");
       expect(frame).toContain("notice");
-    } finally {
-      runtime.dispose();
-      testSetup.renderer.destroy();
-    }
-  });
-
-  test("hides the passive cockpit header from the default shell body", async () => {
-    const { bundle } = createShellFixture();
-    const runtime = new CliShellRuntime(bundle, {
-      cwd: process.cwd(),
-      openSession: async () => bundle,
-      createSession: async () => bundle,
-      operatorPollIntervalMs: 60_000,
-    });
-
-    await runtime.start();
-
-    const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
-      {
-        width: 120,
-        height: 80,
-      },
-    );
-
-    try {
-      await testSetup.renderOnce();
-      await testSetup.renderOnce();
-      await settleOpenTuiTextRendering(readOpenTuiRendererRoot(testSetup.renderer));
-      await testSetup.renderOnce();
-      const frame = testSetup.captureCharFrame();
-
-      expect(runtime.getViewState().cockpit.projection?.schema).toBe(
-        "brewva.shell-cockpit.projection.v1",
-      );
-      expect(frame).not.toContain("Runtime idle");
-      expect(frame).not.toContain("Work no active goal");
-      expect(frame).not.toContain("Decisions");
-      expect(frame).not.toContain("Effects");
-      expect(frame).not.toContain("Attention");
-      expect(frame).not.toContain("archive leader");
-    } finally {
-      runtime.dispose();
-      testSetup.renderer.destroy();
-    }
-  });
-
-  test("docks active cockpit effects below the transcript and above the prompt", async () => {
-    const { bundle } = createShellFixture({
-      transcriptSeed: [
-        {
-          role: "assistant",
-          stopReason: "stop",
-          content: [{ type: "text", text: "Transcript anchor row." }],
-          timestamp: 200,
-        },
-      ],
-      sessionWireBySessionId: {
-        "session-1": [
-          wireFrame({
-            type: "tool.finished",
-            frameId: "frame:effect-write",
-            ts: Date.now() - 1_000,
-            turnId: "turn:1",
-            attemptId: "attempt:1",
-            toolCallId: "tool-call-write",
-            toolName: "exec",
-            verdict: "ok",
-            isError: false,
-            text: "patched files",
-          }),
-        ],
-      },
-    });
-    const runtime = new CliShellRuntime(bundle, {
-      cwd: process.cwd(),
-      openSession: async () => bundle,
-      createSession: async () => bundle,
-      operatorPollIntervalMs: 60_000,
-    });
-
-    await runtime.start();
-
-    const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
-      {
-        width: 120,
-        height: 36,
-      },
-    );
-
-    try {
-      await testSetup.renderOnce();
-      await testSetup.renderOnce();
-      await settleOpenTuiTextRendering(readOpenTuiRendererRoot(testSetup.renderer));
-      await testSetup.renderOnce();
-      const frame = testSetup.captureCharFrame();
-      const transcriptRow = findRenderedRow(frame, "Transcript anchor row.");
-      const effectsRow = findRenderedRow(frame, "Effects");
-      const promptRow = findRenderedRow(frame, "Ask Brewva or type / for commands");
-
-      expect(transcriptRow).toBeLessThan(effectsRow);
-      expect(effectsRow).toBeLessThan(promptRow);
-    } finally {
-      runtime.dispose();
-      testSetup.renderer.destroy();
-    }
-  });
-
-  test("renders the latest assistant answer from the transcript surface", async () => {
-    const { bundle } = createShellFixture({
-      transcriptSeed: [
-        {
-          role: "assistant",
-          stopReason: "stop",
-          content: [{ type: "text", text: "I am Brewva, your coding agent." }],
-          timestamp: 200,
-        },
-      ],
-    });
-    const runtime = new CliShellRuntime(bundle, {
-      cwd: process.cwd(),
-      openSession: async () => bundle,
-      createSession: async () => bundle,
-      operatorPollIntervalMs: 60_000,
-    });
-
-    await runtime.start();
-
-    const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
-      {
-        width: 120,
-        height: 80,
-      },
-    );
-
-    try {
-      await testSetup.renderOnce();
-      await testSetup.renderOnce();
-      await settleOpenTuiTextRendering(readOpenTuiRendererRoot(testSetup.renderer));
-      await testSetup.renderOnce();
-      const frame = testSetup.captureCharFrame();
-
-      expect(frame).not.toContain("Answer");
-      expect(frame).not.toContain("Effects");
-      expect(frame).not.toContain("Assistant answer");
-      expect(frame).not.toContain("committed");
-      expect(frame).toContain("I am Brewva");
-    } finally {
-      runtime.dispose();
-      testSetup.renderer.destroy();
-    }
-  });
-
-  test("renders transcript assistant answer content as markdown", async () => {
-    const answer = [
-      "# Result",
-      "",
-      "- **Fast** streaming",
-      "- Markdown rendering",
-      "",
-      "```ts",
-      "const value = 1",
-      "```",
-      "",
-      "Final paragraph.",
-    ].join("\n");
-    const { bundle } = createShellFixture({
-      transcriptSeed: [
-        {
-          role: "assistant",
-          stopReason: "stop",
-          content: [{ type: "text", text: answer }],
-          timestamp: 200,
-        },
-      ],
-    });
-    const runtime = new CliShellRuntime(bundle, {
-      cwd: process.cwd(),
-      openSession: async () => bundle,
-      createSession: async () => bundle,
-      operatorPollIntervalMs: 60_000,
-    });
-
-    await runtime.start();
-
-    const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
-      {
-        width: 120,
-        height: 80,
-      },
-    );
-
-    try {
-      await testSetup.renderOnce();
-      await testSetup.renderOnce();
-      await settleOpenTuiTextRendering(readOpenTuiRendererRoot(testSetup.renderer));
-      await testSetup.renderOnce();
-      const frame = testSetup.captureCharFrame();
-
-      expect(frame).not.toContain("Answer");
-      expect(frame).not.toContain("Assistant answer");
-      expect(frame).not.toContain("committed");
-      expect(frame).toContain("Result");
-      expect(frame).toContain("Fast streaming");
-      expect(frame).toContain("Markdown rendering");
-      expect(frame).toContain("const value = 1");
-      expect(frame).toContain("Final paragraph.");
-      expect(frame).not.toContain("# Result");
-      expect(frame).not.toContain("**Fast**");
-      expect(frame).not.toContain("```ts");
-    } finally {
-      runtime.dispose();
-      testSetup.renderer.destroy();
-    }
-  });
-
-  test("reserves bottom padding under docked cockpit effect metadata", async () => {
-    const { bundle } = createShellFixture({
-      sessionWireBySessionId: {
-        "session-1": [
-          wireFrame({
-            type: "tool.started",
-            frameId: "frame:read-start",
-            ts: Date.now() - 1_000,
-            turnId: "turn:1",
-            attemptId: "attempt:1",
-            toolCallId: "tool-call-read",
-            toolName: "read",
-          }),
-        ],
-      },
-    });
-    const runtime = new CliShellRuntime(bundle, {
-      cwd: process.cwd(),
-      openSession: async () => bundle,
-      createSession: async () => bundle,
-      operatorPollIntervalMs: 60_000,
-    });
-
-    await runtime.start();
-
-    const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
-      {
-        width: 100,
-        height: 24,
-      },
-    );
-
-    try {
-      await testSetup.renderOnce();
-      await testSetup.renderOnce();
-      await settleOpenTuiTextRendering(readOpenTuiRendererRoot(testSetup.renderer));
-      await testSetup.renderOnce();
-      const rows = testSetup.captureCharFrame().split("\n");
-      const metaRow = findRenderedRow(rows.join("\n"), "running | workspace_read");
-      const rowBelowMeta = rows[metaRow + 1] ?? "";
-
-      expect(rowBelowMeta).toContain("┃");
-      expect(rowBelowMeta).not.toContain("Ask Brewva or type / for commands");
-    } finally {
-      runtime.dispose();
-      testSetup.renderer.destroy();
-    }
-  });
-
-  test("hides redundant active runtime progress before provider output arrives", async () => {
-    const { bundle } = createShellFixture({
-      sessionWireBySessionId: {
-        "session-1": [
-          wireFrame({
-            type: "turn.input",
-            frameId: "frame:turn-input",
-            ts: Date.now() - 5_000,
-            turnId: "turn:1",
-            promptText: "Who are you?",
-            trigger: { kind: "interactive" },
-          }),
-        ],
-      },
-    });
-    const runtime = new CliShellRuntime(bundle, {
-      cwd: process.cwd(),
-      openSession: async () => bundle,
-      createSession: async () => bundle,
-      operatorPollIntervalMs: 60_000,
-    });
-
-    await runtime.start();
-
-    const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
-      {
-        width: 120,
-        height: 80,
-      },
-    );
-
-    try {
-      await testSetup.renderOnce();
-      await testSetup.renderOnce();
-      const frame = testSetup.captureCharFrame();
-
-      expect(frame).not.toContain("Running");
-      expect(frame).not.toContain("Waiting for provider response");
-      expect(frame).not.toContain("elapsed");
-    } finally {
-      runtime.dispose();
-      testSetup.renderer.destroy();
-    }
-  });
-
-  test("hides streaming thinking progress from the default transcript surface", async () => {
-    const { bundle } = createShellFixture({
-      sessionWireBySessionId: {
-        "session-1": [
-          wireFrame({
-            type: "turn.input",
-            frameId: "frame:turn-input",
-            ts: Date.now() - 5_000,
-            turnId: "turn:1",
-            promptText: "Explain the runtime.",
-            trigger: { kind: "interactive" },
-          }),
-          wireFrame({
-            type: "assistant.delta",
-            frameId: "frame:thinking-1",
-            ts: Date.now() - 4_000,
-            turnId: "turn:1",
-            attemptId: "attempt:1",
-            lane: "thinking",
-            delta: "Need to identify the runtime boundaries first.",
-          }),
-        ],
-      },
-    });
-    const runtime = new CliShellRuntime(bundle, {
-      cwd: process.cwd(),
-      openSession: async () => bundle,
-      createSession: async () => bundle,
-      operatorPollIntervalMs: 60_000,
-    });
-
-    await runtime.start();
-
-    const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
-      {
-        width: 120,
-        height: 80,
-      },
-    );
-
-    try {
-      await testSetup.renderOnce();
-      await testSetup.renderOnce();
-      const frame = testSetup.captureCharFrame();
-
-      expect(frame).not.toContain("Streaming thinking");
-      expect(frame).not.toContain("Need to identify the runtime boundaries first.");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();
@@ -1572,7 +1183,7 @@ describe("opentui solid shell runtime: layout contract", () => {
       createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
       {
         width: 100,
-        height: 28,
+        height: 48,
       },
     );
 

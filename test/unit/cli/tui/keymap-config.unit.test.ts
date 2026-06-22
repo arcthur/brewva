@@ -64,14 +64,14 @@ describe("brewva tui keymap bindings", () => {
         "app.commandPalette": "leader p",
         "app.help": "none",
         "selection.copy": "none",
-        "surface.pageUp": "pgup",
+        "overlay.pageUp": "pgup",
       },
     });
 
     expect(bindings.get("app.commandPalette")).toEqual(["leader p"]);
     expect(bindings.get("app.help")).toEqual([]);
     expect(bindings.get("selection.copy")).toEqual([]);
-    expect(bindings.get("surface.pageUp")).toEqual(["pageup"]);
+    expect(bindings.get("overlay.pageUp")).toEqual(["pageup"]);
     expect(formatShortcutLabel(bindings.get("app.commandPalette")[0])).toBe("Leader P");
 
     expect(() =>
@@ -100,8 +100,8 @@ describe("brewva tui keymap bindings", () => {
         "composer.submit",
         "completion.accept",
         "overlay.close",
+        "overlay.pageDown",
         "selection.copy",
-        "surface.pageDown",
       ]),
     );
   });
@@ -114,8 +114,6 @@ describe("brewva tui keymap bindings", () => {
     expect(bindings.get("composer.editor")).toEqual(["leader e"]);
     expect(bindings.get("session.queue")).toEqual(["leader q"]);
     expect(bindings.get("app.commandPalette")).toEqual(["ctrl+p"]);
-    expect(bindings.get("surface.top")).toEqual(["ctrl+home"]);
-    expect(bindings.get("surface.bottom")).toEqual(["ctrl+end"]);
   });
 
   test("keeps global and composer commands off bare textarea editing keys", () => {

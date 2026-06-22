@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, Show, createMemo, type JSX } from "solid-js";
+import { For, Show, createContext, createMemo, type JSX, useContext } from "solid-js";
 import { truncateToWidth, visibleWidth } from "../../../src/internal/tui/index.js";
 import { TextAttributes } from "../../opentui/index.js";
 import {
@@ -16,6 +16,44 @@ import {
 import type { SessionPalette } from "../palette.js";
 import { useShellRenderContext } from "../render-context.js";
 import { windowSelection } from "../utils.js";
+
+/**
+ * Dialog layout mode. "absolute" is the alternate-screen default: the frame
+ * floats `position="absolute"` over a full-screen backdrop. "inline" renders
+ * the frame IN FLOW (no absolute positioning, no full-screen backdrop) so the
+ * split-footer footer's height router can measure it and allocate footer rows.
+ *
+ * Every overlay funnels through {@link DialogFrame} (directly, or via
+ * {@link OverlaySurface}/{@link DialogSelectFrame}), so reading the mode here —
+ * rather than threading a prop through ~30 overlay components — switches all
+ * modal kinds at the single chokepoint. Default is "absolute", so the
+ * interactive shell (which never provides the context) is unchanged.
+ */
+export type DialogLayoutMode = "absolute" | "inline";
+
+const DialogLayoutContext = createContext<DialogLayoutMode>("absolute");
+
+/**
+ * Provider that forces every nested {@link DialogFrame} to render with the
+ * given layout. The split-footer footer wraps its inline ModalOverlay in
+ * `<DialogLayoutProvider mode="inline">`; the alternate-screen shell never
+ * wraps, so the default "absolute" applies.
+ */
+export function DialogLayoutProvider(input: {
+  mode: DialogLayoutMode;
+  children: JSX.Element;
+}): JSX.Element {
+  return DialogLayoutContext.Provider({
+    value: input.mode,
+    get children() {
+      return input.children;
+    },
+  });
+}
+
+export function useDialogLayoutMode(): DialogLayoutMode {
+  return useContext(DialogLayoutContext);
+}
 
 export function truncateDialogText(text: string, maxWidth: number): string {
   const boundedWidth = Math.max(0, Math.trunc(maxWidth));
@@ -41,7 +79,35 @@ export function DialogFrame(input: {
   children: JSX.Element;
 }) {
   const ctx = useShellRenderContext();
+  const layout = useDialogLayoutMode();
   const verticalAlign = input.verticalAlign ?? "topInset";
+  const panel = (
+    <box
+      width={resolveDialogWidth(input.width, input.size)}
+      backgroundColor={input.theme.backgroundPanel}
+      flexShrink={0}
+      paddingTop={1}
+      onMouseUp={(e) => {
+        e.stopPropagation();
+      }}
+    >
+      {input.children}
+    </box>
+  );
+
+  // Inline (split-footer footer): render IN FLOW so the footer-height router
+  // measures the modal and allocates footer rows. No full-screen backdrop and
+  // no top inset — the footer grows from the composer line down, capped by the
+  // router. The panel keeps its own click-to-stop so the inner content's
+  // mouse handlers still work.
+  if (layout === "inline") {
+    return (
+      <box width="100%" flexShrink={0} flexDirection="column" alignItems="center">
+        {panel}
+      </box>
+    );
+  }
+
   return (
     <box
       position="absolute"
@@ -66,16 +132,7 @@ export function DialogFrame(input: {
         });
       }}
     >
-      <box
-        width={resolveDialogWidth(input.width, input.size)}
-        backgroundColor={input.theme.backgroundPanel}
-        paddingTop={1}
-        onMouseUp={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        {input.children}
-      </box>
+      {panel}
     </box>
   );
 }

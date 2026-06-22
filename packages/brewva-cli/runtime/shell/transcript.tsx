@@ -23,7 +23,6 @@ import {
   type SessionPalette,
 } from "./palette.js";
 import { useShellRenderContext } from "./render-context.js";
-import { createStreamingText } from "./streaming-text.js";
 import {
   asRecord,
   inferFiletype,
@@ -44,7 +43,26 @@ import {
 } from "./tool-render.js";
 import { classifyTranscriptTextBlock } from "./transcript-markdown.js";
 
-export type TranscriptRenderSurface = "interactive" | "scrollback";
+/**
+ * The `▣ <assistantLabel> · <modelLabel>` header rendered beneath an assistant
+ * message. Shared between the live transcript (AssistantMessageView) and the
+ * split-footer streaming path, which commits this same row to native scrollback
+ * once a streamed text-only message settles so it matches a settled message's
+ * layout. The caller owns the surrounding `<box paddingLeft={3}>` placement.
+ */
+export function AssistantLabelLine(input: {
+  theme: SessionPalette;
+  assistantLabel: string;
+  modelLabel: string;
+}) {
+  return (
+    <text marginTop={1}>
+      <span style={{ fg: input.theme.accent }}>▣ </span>
+      <span style={{ fg: input.theme.text }}>{input.assistantLabel}</span>
+      <span style={{ fg: input.theme.textMuted }}> · {input.modelLabel}</span>
+    </text>
+  );
+}
 
 export function TextLineBlock(input: {
   lines: readonly string[];
@@ -81,47 +99,20 @@ function safetyToneColor(theme: SessionPalette, tone: OperatorSafetyShellTone): 
   }
 }
 
-function StreamingMarkdownBlock(input: { content: string; theme: SessionPalette }) {
-  // The in-flight response renders as real markdown: OpenTUI's streaming
-  // mode parses incrementally (only the trailing block is unstable), and
-  // the content accessor is throttled to ~10Hz so re-parse/re-layout cost
-  // is paid per interval, not per 16ms flush (RFC F8/WS6). When the
-  // message stabilizes the switch in TranscriptTextBlockView swaps to the
-  // finalized markdown branch with the full text.
-  const context = useShellRenderContext();
-  const content = createStreamingText(
-    () => input.content,
-    () => true,
-    { clock: context.runtime.getClock() },
-  );
-  return <MarkdownTranscriptBlock content={content()} theme={input.theme} streaming={true} />;
-}
-
 function TranscriptTextBlockView(input: {
   content: string;
   theme: SessionPalette;
-  streamingPreview: boolean;
-  renderSurface: TranscriptRenderSurface;
   markdownStreaming: boolean;
 }) {
   const classification = createMemo(() => classifyTranscriptTextBlock({ content: input.content }));
   const mermaidSource = createMemo(() => {
-    if (input.streamingPreview || input.renderSurface === "interactive") {
-      return undefined;
-    }
     const current = classification();
     return current.kind === "mermaid" ? current.source : undefined;
   });
   return (
     <Switch>
-      <Match when={input.streamingPreview}>
-        <StreamingMarkdownBlock content={input.content} theme={input.theme} />
-      </Match>
       <Match when={mermaidSource()}>
         {(source) => <MermaidBlock source={source()} theme={input.theme} />}
-      </Match>
-      <Match when={input.renderSurface === "interactive"}>
-        <MarkdownTranscriptBlock content={input.content} theme={input.theme} streaming={false} />
       </Match>
       <Match when={true}>
         <MarkdownTranscriptBlock
@@ -276,20 +267,14 @@ function BlockTool(input: {
 function TextPartView(input: {
   part: Extract<CliShellTranscriptPart, { type: "text" }>;
   theme: SessionPalette;
-  renderSurface: TranscriptRenderSurface;
 }) {
   const content = createMemo(() => input.part.text.trim());
-  const streamingPreview = createMemo(
-    () => input.renderSurface === "interactive" && input.part.renderMode === "streaming",
-  );
   return (
     <Show when={content().length > 0}>
       <box id={`text-${input.part.id}`} paddingLeft={3} marginTop={1} flexShrink={0}>
         <TranscriptTextBlockView
           content={content()}
           theme={input.theme}
-          streamingPreview={streamingPreview()}
-          renderSurface={input.renderSurface}
           markdownStreaming={input.part.renderMode === "streaming"}
         />
       </box>
@@ -300,21 +285,11 @@ function TextPartView(input: {
 function ReasoningPartView(input: {
   part: Extract<CliShellTranscriptPart, { type: "reasoning" }>;
   theme: SessionPalette;
-  renderSurface: TranscriptRenderSurface;
 }) {
   const shellContext = useShellRenderContext();
   const content = createMemo(() => input.part.text.replace("[REDACTED]", "").trim());
   const streaming = createMemo(() => input.part.renderMode === "streaming");
-  const useStreamingCodePath = createPersistentStreamingCodePath(streaming);
-  const streamingPreview = createMemo(() => input.renderSurface === "interactive" && streaming());
-  const codeStreaming = createMemo(() => !streamingPreview() && useStreamingCodePath());
-  const previewText = createMemo(() => {
-    const firstLine = content()
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .find((line) => line.length > 0);
-    return firstLine ? `Thinking: ${firstLine}` : "Thinking";
-  });
+  const codeStreaming = createPersistentStreamingCodePath(streaming);
   return (
     <Show when={shellContext.showThinking() && content().length > 0}>
       <box
@@ -325,23 +300,14 @@ function ReasoningPartView(input: {
         border={["left"]}
         borderColor={input.theme.backgroundElement}
       >
-        <Switch>
-          <Match when={streamingPreview()}>
-            <text fg={input.theme.textMuted} wrapMode="none">
-              {previewText()}
-            </text>
-          </Match>
-          <Match when={true}>
-            <code
-              filetype="markdown"
-              drawUnstyledText={!codeStreaming()}
-              streaming={codeStreaming()}
-              syntaxStyle={getReasoningSyntaxStyle(input.theme)}
-              content={`_Thinking:_ ${content()}`}
-              fg={input.theme.textMuted}
-            />
-          </Match>
-        </Switch>
+        <code
+          filetype="markdown"
+          drawUnstyledText={!codeStreaming()}
+          streaming={codeStreaming()}
+          syntaxStyle={getReasoningSyntaxStyle(input.theme)}
+          content={`_Thinking:_ ${content()}`}
+          fg={input.theme.textMuted}
+        />
       </box>
     </Show>
   );
@@ -952,30 +918,6 @@ function GenericToolView(input: {
   );
 }
 
-function isTerminalToolStatus(status: CliShellTranscriptToolPart["status"]): boolean {
-  return status === "completed" || status === "error";
-}
-
-function StreamingToolPreview(input: { part: CliShellTranscriptToolPart; theme: SessionPalette }) {
-  const text = createMemo(() =>
-    formatOperatorSafetyShellTitle(
-      input.part.safety,
-      `${input.part.toolName} ${summarizeInput(input.part.args)}`.trim(),
-    ),
-  );
-  return (
-    <InlineTool
-      icon="·"
-      pending={input.part.safety.statusText}
-      complete={true}
-      text={text()}
-      part={input.part}
-      theme={input.theme}
-      errorText={readToolErrorText(input.part)}
-    />
-  );
-}
-
 function ToolPartView(input: {
   part: CliShellTranscriptToolPart;
   theme: SessionPalette;
@@ -983,19 +925,9 @@ function ToolPartView(input: {
   toolRenderCache: ToolRenderCache;
   transcriptWidth: number;
   showDetails: boolean;
-  renderSurface: TranscriptRenderSurface;
 }) {
-  const streamingPreview = createMemo(
-    () =>
-      input.renderSurface === "interactive" &&
-      input.part.renderMode === "streaming" &&
-      !isTerminalToolStatus(input.part.status),
-  );
   return (
     <Switch>
-      <Match when={streamingPreview()}>
-        <StreamingToolPreview part={input.part} theme={input.theme} />
-      </Match>
       <Match when={input.part.toolName === "read"}>
         <ReadToolView part={input.part} theme={input.theme} />
       </Match>
@@ -1040,7 +972,6 @@ function AssistantMessageView(input: {
   isLast: boolean;
   assistantLabel: string;
   modelLabel: string;
-  renderSurface: TranscriptRenderSurface;
 }) {
   return (
     <>
@@ -1048,22 +979,10 @@ function AssistantMessageView(input: {
         {(part) => {
           const current = part();
           if (current.type === "text") {
-            return (
-              <TextPartView
-                part={current}
-                theme={input.theme}
-                renderSurface={input.renderSurface}
-              />
-            );
+            return <TextPartView part={current} theme={input.theme} />;
           }
           if (current.type === "reasoning") {
-            return (
-              <ReasoningPartView
-                part={current}
-                theme={input.theme}
-                renderSurface={input.renderSurface}
-              />
-            );
+            return <ReasoningPartView part={current} theme={input.theme} />;
           }
           if (current.type === "tool") {
             return (
@@ -1074,7 +993,6 @@ function AssistantMessageView(input: {
                 toolRenderCache={input.toolRenderCache}
                 transcriptWidth={input.transcriptWidth}
                 showDetails={input.showToolDetails}
-                renderSurface={input.renderSurface}
               />
             );
           }
@@ -1083,11 +1001,11 @@ function AssistantMessageView(input: {
       </Index>
       <Show when={input.isLast || input.message.renderMode !== "streaming"}>
         <box paddingLeft={3}>
-          <text marginTop={1}>
-            <span style={{ fg: input.theme.accent }}>▣ </span>
-            <span style={{ fg: input.theme.text }}>{input.assistantLabel}</span>
-            <span style={{ fg: input.theme.textMuted }}> · {input.modelLabel}</span>
-          </text>
+          <AssistantLabelLine
+            theme={input.theme}
+            assistantLabel={input.assistantLabel}
+            modelLabel={input.modelLabel}
+          />
         </box>
       </Show>
     </>
@@ -1101,25 +1019,16 @@ function ToolMessageView(input: {
   toolRenderCache: ToolRenderCache;
   transcriptWidth: number;
   showToolDetails: boolean;
-  renderSurface: TranscriptRenderSurface;
 }) {
   return (
     <Index each={input.message.parts}>
       {(part) => {
         const current = part();
         if (current.type === "text") {
-          return (
-            <TextPartView part={current} theme={input.theme} renderSurface={input.renderSurface} />
-          );
+          return <TextPartView part={current} theme={input.theme} />;
         }
         if (current.type === "reasoning") {
-          return (
-            <ReasoningPartView
-              part={current}
-              theme={input.theme}
-              renderSurface={input.renderSurface}
-            />
-          );
+          return <ReasoningPartView part={current} theme={input.theme} />;
         }
         if (current.type === "tool") {
           return (
@@ -1130,7 +1039,6 @@ function ToolMessageView(input: {
               toolRenderCache={input.toolRenderCache}
               transcriptWidth={input.transcriptWidth}
               showDetails={input.showToolDetails}
-              renderSurface={input.renderSurface}
             />
           );
         }
@@ -1227,7 +1135,6 @@ export function TranscriptMessageView(input: {
   isLast: boolean;
   assistantLabel: string;
   modelLabel: string;
-  renderSurface: TranscriptRenderSurface;
 }) {
   if (input.message.role === "user") {
     return <UserMessageView message={input.message} theme={input.theme} index={input.index} />;
@@ -1244,7 +1151,6 @@ export function TranscriptMessageView(input: {
         isLast={input.isLast}
         assistantLabel={input.assistantLabel}
         modelLabel={input.modelLabel}
-        renderSurface={input.renderSurface}
       />
     );
   }
@@ -1260,7 +1166,6 @@ export function TranscriptMessageView(input: {
         toolRenderCache={input.toolRenderCache}
         transcriptWidth={input.transcriptWidth}
         showToolDetails={input.showToolDetails}
-        renderSurface={input.renderSurface}
       />
     );
   }

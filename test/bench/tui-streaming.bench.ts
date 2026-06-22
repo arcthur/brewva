@@ -1,21 +1,26 @@
 /**
- * TUI streaming replay benchmark.
+ * TUI split-footer streaming commit benchmark.
  *
- * Replays a synthetic assistant token stream through the full interactive
- * stack — shell runtime, Solid view layer, OpenTUI test renderer — with a
- * manual clock controlling the streaming cadence, and measures the real
- * wall-clock cost of each render cycle. The cadence is simulated; the work
- * is real. Per-frame cost must fit the 16ms budget at 60fps.
+ * Measures the incremental native-scrollback commit cost as markdown streams
+ * in through the split-footer renderer pipeline. Each streaming chunk triggers
+ * a SplitFooterScrollbackWriter.sync() call which drives:
+ *   - settled-message commits (one commitSolidToScrollback per stable message)
+ *   - StreamingScrollbackEntry.update() for the active streaming-text tail
+ *     (incremental stable-block commits; unstable trailing block stays live)
+ *
+ * The cadence is simulated via a manual clock; the commit work is real.
+ * Per-chunk sync cost reflects the incremental markdown-parse + scrollback
+ * commit latency that would budget the input/render loop in a live session.
  *
  * Usage:
- *   bun run script/bench-tui-streaming.ts [--history N] [--chars N]
- *     [--chunk N] [--interval N] [--width N] [--height N] [--json]
+ *   bun run bench:tui [--history N] [--chars N] [--chunk N]
+ *     [--interval N] [--width N] [--json]
  */
 import {
-  createOpenTuiSolidElement,
-  openTuiSolidTestRender,
+  createHeadlessSplitFooterRenderer,
+  shutdownSplitFooterRenderer,
 } from "../../packages/brewva-cli/runtime/internal-opentui-runtime.js";
-import { BrewvaOpenTuiShell } from "../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
+import { SplitFooterScrollbackWriter } from "../../packages/brewva-cli/runtime/shell/split-footer-scrollback-writer.js";
 import {
   createPromptMessageUpdateEvent,
   createTextDeltaAssistantEvent,
@@ -29,9 +34,7 @@ interface BenchArgs {
   chunk: number;
   interval: number;
   width: number;
-  height: number;
   json: boolean;
-  singleBlock: boolean;
 }
 
 function parseArgs(argv: readonly string[]): BenchArgs {
@@ -41,9 +44,7 @@ function parseArgs(argv: readonly string[]): BenchArgs {
     chunk: 4,
     interval: 10,
     width: 100,
-    height: 36,
     json: false,
-    singleBlock: false,
   };
   const numericFlags: Record<string, (value: number) => void> = {
     "--history": (value) => (args.history = value),
@@ -51,16 +52,11 @@ function parseArgs(argv: readonly string[]): BenchArgs {
     "--chunk": (value) => (args.chunk = value),
     "--interval": (value) => (args.interval = value),
     "--width": (value) => (args.width = value),
-    "--height": (value) => (args.height = value),
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === "--json") {
       args.json = true;
-      continue;
-    }
-    if (flag === "--single-block") {
-      args.singleBlock = true;
       continue;
     }
     const apply = flag === undefined ? undefined : numericFlags[flag];
@@ -93,11 +89,11 @@ function buildSeedHistory(messageCount: number): unknown[] {
   return messages;
 }
 
-interface FrameSample {
-  /** Wall time of runtime work (event projection + store reconcile). */
+interface CommitSample {
+  /** Wall time for writer.sync() — streaming entry update + any stable-block commit. */
   syncMs: number;
-  /** Wall time of the renderer pass (layout + paint). */
-  renderMs: number;
+  /** Number of stable markdown blocks committed to scrollback so far. */
+  blocksCommitted: number;
 }
 
 function percentile(sorted: readonly number[], ratio: number): number {
@@ -127,104 +123,124 @@ function round(value: number): number {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  // Start a real shell runtime fixture with a seed transcript so the projector
+  // is in a realistic state when streaming begins (history already settled).
   const fixture = await startShellRuntimeFixture({
     transcriptSeed: buildSeedHistory(args.history),
   });
-  const { runtime, clock } = fixture;
 
-  const testSetup = await openTuiSolidTestRender(
-    createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime }),
-    {
-      width: args.width,
-      height: args.height,
-      gatherStats: true,
-    },
-  );
+  // Headless split-footer renderer backed by in-memory streams.
+  // externalOutputMode="capture-stdout" routes commitSolidToScrollback through
+  // the real scrollback pipeline without touching a live terminal.
+  const renderer = await createHeadlessSplitFooterRenderer({
+    columns: args.width,
+    rows: 36,
+  });
 
-  const samples: FrameSample[] = [];
+  const writer = new SplitFooterScrollbackWriter();
+
+  const samples: CommitSample[] = [];
+
   try {
-    await testSetup.renderOnce();
-    await testSetup.renderOnce();
-
-    // Paragraph-structured prose by default: markdown re-parses only the
-    // trailing block, which is what real responses look like. The
-    // --single-block flag keeps the adversarial one-giant-paragraph shape
-    // that forces a full re-layout per throttle flush.
+    // Paragraph-structured prose: each paragraph boundary triggers a markdown
+    // block commit, matching real assistant response shape.
     const word = "brewva ";
     const paragraph = `${word.repeat(56).trimEnd()}\n\n`;
-    const body = (
-      args.singleBlock
-        ? word.repeat(Math.ceil(args.chars / word.length))
-        : paragraph.repeat(Math.ceil(args.chars / paragraph.length))
-    ).slice(0, args.chars);
+    const body = paragraph.repeat(Math.ceil(args.chars / paragraph.length)).slice(0, args.chars);
     const chunks = chunkText(body, args.chunk);
-    let lastRenderedEmit = fixture.emitCount();
-    for (const chunk of chunks) {
-      const syncStart = performance.now();
+
+    // Helper: emit one streaming delta through the fixture + advance the clock.
+    const emitDelta = (delta: string) => {
       fixture.emitSessionEvent(
         createPromptMessageUpdateEvent({
           assistantMessageEvent: createTextDeltaAssistantEvent({
-            delta: chunk,
+            delta,
             partial: undefined,
           }),
         }),
       );
-      clock.advance(args.interval);
+      fixture.clock.advance(args.interval);
+    };
+
+    // Warmup: prime the renderer pipeline (tree-sitter warm, scrollback surface
+    // allocated, JIT hot) before the timed run.
+    const warmupChunks = chunks.slice(0, Math.min(20, Math.floor(chunks.length * 0.05)));
+    for (const chunk of warmupChunks) {
+      emitDelta(chunk);
+      await writer.sync({ renderer, runtime: fixture.runtime, width: args.width });
+    }
+    // Reset so warmup commits do not count in the timed results.
+    writer.reset();
+
+    // Timed measurement: stream a fresh assistant turn chunk-by-chunk.
+    // sync() is called after every chunk because the streaming-entry.update()
+    // cost (markdown parse + incremental stable-block commit) is the quantity
+    // we are measuring, independent of whether the runtime projector re-emitted.
+    for (const chunk of chunks) {
+      emitDelta(chunk);
+
+      const syncStart = performance.now();
+      await writer.sync({ renderer, runtime: fixture.runtime, width: args.width });
       const syncMs = performance.now() - syncStart;
 
-      if (fixture.emitCount() > lastRenderedEmit) {
-        lastRenderedEmit = fixture.emitCount();
-        const renderStart = performance.now();
-        await testSetup.renderOnce();
-        const renderMs = performance.now() - renderStart;
-        samples.push({ syncMs, renderMs });
-      }
+      const writerInternal = writer as unknown as {
+        activeEntry?: { entry: { committedBlocks: number } };
+      };
+      samples.push({
+        syncMs,
+        blocksCommitted: writerInternal.activeEntry?.entry?.committedBlocks ?? 0,
+      });
     }
-    clock.runAll();
-    await testSetup.renderOnce();
 
-    const sync = summarize(samples.map((sample) => sample.syncMs));
-    const render = summarize(samples.map((sample) => sample.renderMs));
-    const frame = summarize(samples.map((sample) => sample.syncMs + sample.renderMs));
-    const nativeStats = testSetup.getNativeStats?.() ?? null;
+    // Final drain: settle the active streaming-text entry (commit its remainder).
+    fixture.clock.runAll();
+    const finalStart = performance.now();
+    await writer.sync({ renderer, runtime: fixture.runtime, width: args.width });
+    await writer.whenIdle();
+    const finalMs = performance.now() - finalStart;
+
+    const sync = summarize(samples.map((s) => s.syncMs));
+    const totalCommitMs = sync.totalMs + round(finalMs);
+    const commitsPerSec =
+      sync.count === 0 ? 0 : round((sync.count * 1_000) / Math.max(totalCommitMs, 0.001));
+    const maxBlocksCommitted = samples.reduce((max, s) => Math.max(max, s.blocksCommitted), 0);
+
     const report = {
       scenario: {
         historyMessages: args.history,
         streamedChars: args.chars,
         chunkSize: args.chunk,
         simulatedIntervalMs: args.interval,
-        terminal: { width: args.width, height: args.height },
+        width: args.width,
       },
       deltas: chunks.length,
-      renderedFrames: samples.length,
+      measuredSyncs: samples.length,
       emits: fixture.emitCount(),
-      frame,
+      maxBlocksCommitted,
       sync,
-      render,
-      nativeStats,
-      frameBudgetMs: 16,
-      withinBudget: frame.p95Ms <= 16,
+      finalDrainMs: round(finalMs),
+      totalCommitMs,
+      commitsPerSec,
     };
 
     if (args.json) {
       console.log(JSON.stringify(report, null, 2));
     } else {
       console.log(`scenario: history=${args.history} chars=${args.chars} chunk=${args.chunk}`);
-      console.log(`deltas=${report.deltas} frames=${report.renderedFrames} emits=${report.emits}`);
       console.log(
-        `frame  mean=${frame.meanMs}ms p50=${frame.p50Ms}ms p95=${frame.p95Ms}ms max=${frame.maxMs}ms`,
+        `deltas=${report.deltas} syncs=${report.measuredSyncs} emits=${report.emits} blocks=${maxBlocksCommitted}`,
       );
       console.log(
         `sync   mean=${sync.meanMs}ms p50=${sync.p50Ms}ms p95=${sync.p95Ms}ms max=${sync.maxMs}ms`,
       );
       console.log(
-        `render mean=${render.meanMs}ms p50=${render.p50Ms}ms p95=${render.p95Ms}ms max=${render.maxMs}ms`,
+        `sync   total=${sync.totalMs}ms final-drain=${report.finalDrainMs}ms commits/sec=${commitsPerSec}`,
       );
-      console.log(`budget: p95 ${frame.p95Ms}ms vs 16ms -> ${report.withinBudget ? "OK" : "OVER"}`);
     }
   } finally {
     fixture.dispose();
-    testSetup.renderer.destroy();
+    shutdownSplitFooterRenderer(renderer);
   }
 }
 

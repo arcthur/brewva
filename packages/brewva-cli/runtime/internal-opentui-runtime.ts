@@ -1,7 +1,12 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
-import { createCliRenderer, getDataPaths, getTreeSitterClient } from "@opentui/core";
+import {
+  TextRenderable,
+  createCliRenderer,
+  getDataPaths,
+  getTreeSitterClient,
+} from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import {
   createElement as createSolidElement,
@@ -22,7 +27,9 @@ import type {
   OpenTuiScrollbackRenderOptions,
   OpenTuiSmokeOptions,
   OpenTuiSmokeResult,
+  OpenTuiSplitFooterSmokeResult,
   OpenTuiScreenMode,
+  SplitFooterRenderer,
   OpenTuiSolidNode,
   OpenTuiTerminalBackgroundMode,
   OpenTuiTextareaHandle,
@@ -118,19 +125,6 @@ export const OPEN_TUI_RUNTIME_KIND = "bun-runtime";
 
 export function isOpenTuiRuntimeAvailable(): boolean {
   return true;
-}
-
-export async function createOpenTuiCliRenderer(): Promise<OpenTuiRenderer> {
-  await initializeOpenTuiTextRendering();
-  const renderer = await createCliRenderer(createCliRendererConfig());
-  if (isOpenTuiStatsEnabled()) {
-    (
-      renderer as unknown as {
-        configureDebugOverlay(options: { enabled: boolean }): void;
-      }
-    ).configureDebugOverlay({ enabled: true });
-  }
-  return renderer;
 }
 
 /**
@@ -560,10 +554,155 @@ export async function runOpenTuiSmoke(
   };
 }
 
+/**
+ * Create a split-footer renderer. Reuses `createCliRendererConfig` so all
+ * brewva-wide defaults (mouse, kitty keyboard, fps, etc.) are preserved;
+ * only the three split-footer keys are overridden.
+ */
+export async function createOpenTuiSplitFooterRenderer(options?: {
+  footerHeight?: number;
+}): Promise<OpenTuiRenderer> {
+  await initializeOpenTuiTextRendering();
+  return await createCliRenderer(
+    createCliRendererConfig({
+      screenMode: "split-footer",
+      footerHeight: options?.footerHeight ?? 1,
+      externalOutputMode: "capture-stdout",
+    }),
+  );
+}
+
+/**
+ * Gracefully tear down a split-footer renderer. Order matters: switch
+ * external output back to passthrough before leaving split-footer mode, so
+ * pending stdout is not captured into the now-dead scrollback pipeline.
+ */
+export function shutdownSplitFooterRenderer(renderer: OpenTuiRenderer): void {
+  // Cast to CliRenderer to access the runtime setters not declared on the
+  // minimal OpenTuiRenderer interface.
+  const cli = renderer as unknown as {
+    isDestroyed: boolean;
+    externalOutputMode: string;
+    screenMode: string;
+    destroy(): void;
+  };
+
+  if (cli.isDestroyed) {
+    return;
+  }
+
+  if (cli.externalOutputMode === "capture-stdout") {
+    cli.externalOutputMode = "passthrough";
+  }
+
+  if (cli.screenMode === "split-footer") {
+    cli.screenMode = "main-screen";
+  }
+
+  if (!cli.isDestroyed) {
+    cli.destroy();
+  }
+}
+
+/**
+ * Render a Solid node and commit it to the renderer's native scrollback.
+ *
+ * Requires the renderer to be in split-footer mode with externalOutputMode
+ * "capture-stdout" — the underlying writeToScrollback will throw otherwise.
+ * Mirrors the writer construction in renderOpenTuiScrollbackLines but targets
+ * the live renderer directly (no test renderer, no string capture).
+ */
+export function commitSolidToScrollback(
+  renderer: OpenTuiRenderer,
+  node: OpenTuiSolidNode,
+  options: { width: number },
+): void {
+  const { width } = options;
+  const writer = createScrollbackWriter(() => node() as never, { width });
+  (
+    renderer as unknown as {
+      writeToScrollback(write: typeof writer): void;
+    }
+  ).writeToScrollback(writer);
+}
+
+/**
+ * Create a headless split-footer renderer backed by in-memory streams.
+ * Suitable for unit tests that exercise the scrollback commit pipeline without
+ * a real terminal.  The caller is responsible for calling
+ * shutdownSplitFooterRenderer when done.
+ */
+export async function createHeadlessSplitFooterRenderer(options?: {
+  footerHeight?: number;
+  columns?: number;
+  rows?: number;
+}): Promise<OpenTuiRenderer> {
+  await initializeOpenTuiTextRendering();
+  return await createCliRenderer(
+    createCliRendererConfig({
+      stdin: createHeadlessStdin(),
+      stdout: createHeadlessStdout(options?.columns ?? 80, options?.rows ?? 24),
+      bufferedOutput: "memory",
+      screenMode: "split-footer",
+      footerHeight: options?.footerHeight ?? 1,
+      externalOutputMode: "capture-stdout",
+    }),
+  );
+}
+
+/**
+ * Headless smoke test for the split-footer + ScrollbackSurface pipeline.
+ * Creates a renderer with in-memory headless streams, renders a TextRenderable
+ * onto a scrollback surface, commits the rows, then shuts down cleanly.
+ * Returns the number of committed rows so callers can assert the pipeline
+ * produced output.
+ */
+export async function runOpenTuiSplitFooterSmoke(options?: {
+  label?: string;
+}): Promise<OpenTuiSplitFooterSmokeResult> {
+  const renderer = await createCliRenderer(
+    createCliRendererConfig({
+      stdin: createHeadlessStdin(),
+      stdout: createHeadlessStdout(),
+      bufferedOutput: "memory",
+      screenMode: "split-footer",
+      footerHeight: 1,
+      externalOutputMode: "capture-stdout",
+    }),
+  );
+
+  let committedRows = 0;
+
+  try {
+    const surface = renderer.createScrollbackSurface();
+
+    const renderable = new TextRenderable(surface.renderContext, {
+      content: options?.label ?? "Brewva split-footer smoke",
+      width: "100%",
+    });
+    surface.root.add(renderable);
+
+    surface.render();
+
+    if (surface.height > 0) {
+      surface.commitRows(0, surface.height);
+      committedRows = surface.height;
+    }
+  } finally {
+    shutdownSplitFooterRenderer(renderer);
+  }
+
+  return {
+    backend: "opentui-split-footer",
+    committedRows,
+  };
+}
+
 export type {
   OpenTuiKeyEvent,
   OpenTuiRenderer,
   OpenTuiRoot,
   OpenTuiScrollBoxHandle,
   OpenTuiTextareaHandle,
+  SplitFooterRenderer,
 };

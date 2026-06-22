@@ -29,6 +29,14 @@ describe("cli contract: Brewva-native runtime boundary", () => {
       "shell",
       "app.tsx",
     );
+    const scrollbackWriterPath = resolve(
+      repoRoot,
+      "packages",
+      "brewva-cli",
+      "runtime",
+      "shell",
+      "split-footer-scrollback-writer.tsx",
+    );
     const solidPromptPath = resolve(
       repoRoot,
       "packages",
@@ -121,6 +129,9 @@ describe("cli contract: Brewva-native runtime boundary", () => {
       ? readFileSync(runtimeEntryPath, "utf8")
       : "";
     const solidShellSource = existsSync(solidShellPath) ? readFileSync(solidShellPath, "utf8") : "";
+    const scrollbackWriterSource = existsSync(scrollbackWriterPath)
+      ? readFileSync(scrollbackWriterPath, "utf8")
+      : "";
     const solidPromptSource = existsSync(solidPromptPath)
       ? readFileSync(solidPromptPath, "utf8")
       : "";
@@ -167,11 +178,16 @@ describe("cli contract: Brewva-native runtime boundary", () => {
     expect(runtimeEntrySource).toContain("renderCliInteractiveOpenTuiShell");
     expect(runtimeEntrySource).not.toContain("renderCliInteractiveShell");
     expect(runtimeEntrySource).not.toContain("BREWVA_TUI_ENGINE");
-    expect(solidShellSource).toContain("getToolDefinitions()");
+    // The interactive shell renders only the live footer (composer + completion
+    // + overlays); the transcript — and therefore tool rendering — is committed
+    // to native scrollback by the SplitFooterScrollbackWriter.
     expect(solidShellSource).toContain("CompletionOverlay");
     expect(solidShellSource).toContain("promptAnchor");
+    expect(solidShellSource).toContain("PromptPanel");
     expect(solidShellSource).not.toContain("_customTools");
-    expect(solidShellSource).toContain("resetForSession");
+    expect(scrollbackWriterSource).toContain("getToolDefinitions()");
+    expect(scrollbackWriterSource).toContain("resetForSession");
+    expect(scrollbackWriterSource).toContain("TranscriptMessageView");
     expect(solidPromptSource).toContain("setAnchor(node: BoxRenderable): void;");
     expect(solidPromptSource).not.toContain("CompletionOverlay");
 

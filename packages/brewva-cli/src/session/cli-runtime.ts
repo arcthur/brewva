@@ -13,6 +13,7 @@ import type {
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { SessionPromptSnapshot } from "@brewva/brewva-vocabulary/session";
+import type { OpenTuiScreenMode } from "../internal/tui/internal-opentui-runtime.js";
 import {
   extractMessageError,
   extractVisibleTextFromMessage,
@@ -44,7 +45,7 @@ export interface CliInteractiveSessionOptions extends CliInteractiveShellOptions
 
 export interface CliInteractiveSmokeResult {
   backend: "opentui";
-  screenMode: "alternate-screen";
+  screenMode: OpenTuiScreenMode;
   label?: string;
 }
 

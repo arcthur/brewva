@@ -12,12 +12,10 @@
   - `docs/reference/working-projection.md`
 - Code anchors:
   - `packages/brewva-cli/runtime/shell/app.tsx`
-  - `packages/brewva-cli/runtime/shell/transcript-retention.ts`
   - `packages/brewva-cli/runtime/shell/cockpit/surface.tsx`
   - `packages/brewva-cli/src/shell/domain/cockpit/`
   - `packages/brewva-cli/src/shell/projectors/transcript-projector.ts`
   - `test/unit/cli/opentui-shell-renderer-interaction-events.unit.test.ts`
-  - `test/unit/cli/transcript-retention.unit.test.ts`
 
 ## Decision Summary
 
@@ -75,4 +73,7 @@ that assert full-history top navigation inside the base cockpit.
 
 ## Superseded by
 
-- None.
+- `tui-split-footer-native-scrollback-renderer.md`. The bounded-`scrollbox`
+  cockpit premise is replaced: settled transcript is now committed to the
+  terminal's immutable native scrollback rather than rendered inside an
+  alt-screen `scrollbox`, and the renderer-local row-retention window is removed.

@@ -20,7 +20,6 @@ export function createCliShellState(): CliShellViewState {
     surface: {
       followMode: "live",
       scrollOffset: 0,
-      navigationRequest: undefined,
     },
     composer: {
       text: "",

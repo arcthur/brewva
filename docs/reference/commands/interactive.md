@@ -19,22 +19,26 @@ attention posture, sessions, subagent footer detail, and pager drill-down.
   explicit-pull archive or pager surfaces, not the default spatial model
 - transient operator details render through overlays, pagers, notifications,
   and first-class decision surfaces
-- the shell uses `alternate-screen`
+- the shell uses `split-footer`: the transcript is committed to the
+  terminal's native scrollback and only the footer (composer, status,
+  overlays) stays live, so streaming never repaints the whole transcript
 - OpenTUI loads only after CLI mode resolution commits to interactive
-  full-screen execution
+  execution
 
 ## Keyboard Defaults
 
 - `Enter`: submit composer
 - `Ctrl-J` / `Alt-Enter`: insert newline
-- `Ctrl-E`: open external editor or external pager
-- `Ctrl-B`: manage queued prompts
-- `Ctrl-A` / `Ctrl-O` / `Ctrl-T` / `Ctrl-G` / `Ctrl-I` / `Ctrl-N`: open
-  approvals, questions, tasks, sessions, inspect, and inbox
+- `Leader E`: open the current prompt in the external editor
+- `Ctrl-E`: open the active pager overlay in the external pager
+- `Leader Q`: manage queued prompts
+- `Leader A`: open approvals
+- `Ctrl-O` / `Ctrl-T` / `Ctrl-G` / `Ctrl-I` / `Ctrl-N`: open
+  questions, tasks, sessions, inspect, and inbox
 - `Leader T`: open the bounded cockpit archive for visible refs
 - `Leader W`: open the attention drawer
 - `Shift-Tab`: cycle model preset for the next turn
-- `PageUp` / `PageDown`: scroll the cockpit or active detail surface
+- `PageUp` / `PageDown`: page the active overlay or subagent footer
 - `Esc`: dismiss completion or leave overlay
 
 ## Slash Commands
