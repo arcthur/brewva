@@ -450,6 +450,8 @@ describe("kernel tool transaction", () => {
       sessionId: "kernel-session",
       toolCallId: "call-restart",
       toolName: "read",
+      proposalManifestId: "manifest-restart",
+      proposalToolIdentityHash: "identity-restart",
     });
     const commitmentId = expectAllow(decision);
 
@@ -464,6 +466,14 @@ describe("kernel tool transaction", () => {
       "tool.proposed",
       "tool.committed",
     ]);
+    expect(reader.tape.list("kernel-session", { type: "tool.proposed" })[0]?.payload).toMatchObject(
+      {
+        call: {
+          proposalManifestId: "manifest-restart",
+          proposalToolIdentityHash: "identity-restart",
+        },
+      },
+    );
   });
 
   test("beginToolCall is idempotent for an active commitment", async () => {
@@ -516,6 +526,38 @@ describe("kernel tool transaction", () => {
       "tool.proposed",
       "tool.aborted",
     ]);
+  });
+
+  test("beginToolCall fails closed when a provider reuses a tool call id with a different receipt", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-kernel-receipt-mismatch-")),
+      physics: { mode: "noop" },
+    });
+
+    const first = await runtime.kernel.beginToolCall({
+      sessionId: "kernel-session",
+      toolCallId: "call-receipt-mismatch",
+      toolName: "read",
+      args: { path: "README.md" },
+      proposalManifestId: "manifest-1",
+      proposalToolIdentityHash: "identity-1",
+    });
+    expectAllow(first);
+
+    const second = await runtime.kernel.beginToolCall({
+      sessionId: "kernel-session",
+      toolCallId: "call-receipt-mismatch",
+      toolName: "read",
+      args: { path: "README.md" },
+      proposalManifestId: "manifest-2",
+      proposalToolIdentityHash: "identity-2",
+    });
+
+    expect(second).toMatchObject({
+      kind: "block",
+      commitmentId: "tool:kernel-session:call-receipt-mismatch",
+      reason: "tool_commitment_call_mismatch",
+    });
   });
 
   test("abortToolCall fails closed when no proposed commitment exists", async () => {

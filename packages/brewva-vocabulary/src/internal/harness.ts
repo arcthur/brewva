@@ -76,10 +76,27 @@ export interface HarnessManifestPromptIdentity {
   readonly stabilityHash?: string;
 }
 
+export interface HarnessManifestPerToolIdentity {
+  readonly name: string;
+  /** hash(name + description + parameters) for the tool as advertised. */
+  readonly identityHash: string;
+}
+
 export interface HarnessManifestToolIdentity {
   readonly activeToolNames?: readonly string[];
   readonly toolSchemaSnapshotHash?: string;
   readonly toolSurfaceEventId?: string;
+  /**
+   * Per-tool identity for the surface advertised in this attempt: each entry's
+   * `identityHash` = hash(name + description + parameters). Unlike
+   * `toolSchemaSnapshotHash` (whole-surface, schema-only) this pins each tool's
+   * full advertised identity — including the description the model actually saw —
+   * so a commitment that references this manifest can be verified per tool at
+   * execution time. Modeled as a list, not a keyed record, so tool names stay
+   * values (like `activeToolNames`) and never become manifest keys subject to the
+   * field-name redaction check.
+   */
+  readonly perToolIdentity?: readonly HarnessManifestPerToolIdentity[];
 }
 
 export interface HarnessManifestSkillSelection {

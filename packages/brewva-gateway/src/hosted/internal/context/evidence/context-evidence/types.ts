@@ -12,6 +12,7 @@ export interface PromptStabilityEvidenceSample {
   dynamicTailHash: string;
   stablePrefix: boolean;
   stableTail: boolean;
+  changedTailBlocks?: readonly string[];
   compactionAdvised: boolean;
   forcedCompaction: boolean;
   usageRatio: number | null;

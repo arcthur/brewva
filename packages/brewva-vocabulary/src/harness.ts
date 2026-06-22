@@ -30,6 +30,7 @@ export type {
   HarnessManifest,
   HarnessManifestCapabilitySelection,
   HarnessManifestContextIdentity,
+  HarnessManifestPerToolIdentity,
   HarnessManifestPluginIdentity,
   HarnessManifestPromptIdentity,
   HarnessManifestRuntimeIdentity,

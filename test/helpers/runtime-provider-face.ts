@@ -20,6 +20,7 @@ export function createRuntimeProviderFaceFixture(
   input: RuntimeProviderFaceFixtureInput,
 ): RuntimeProviderFace {
   const { getModel, getModelCatalog, model, ...overrides } = input;
+  let proposalAttempt = 0;
   const defaults: RuntimeProviderFace = {
     getModelCatalog() {
       const catalog = getModelCatalog();
@@ -63,8 +64,15 @@ export function createRuntimeProviderFaceFixture(
     getProviderTransport() {
       return undefined;
     },
-    async prepareProviderPayload({ payload }) {
-      return payload;
+    async prepareProviderPayload({ payload, providerContext }) {
+      proposalAttempt += 1;
+      return {
+        payload,
+        proposalReceipt: {
+          manifestId: `fixture-proposal-${proposalAttempt}`,
+          perToolIdentity: providerContext.perToolIdentity,
+        },
+      };
     },
     observeCacheRender() {},
     observeAssistantMessage() {},

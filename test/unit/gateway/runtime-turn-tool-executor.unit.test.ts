@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { defineBrewvaTool } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
+import { advertisedToolIdentity } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-provider-context.js";
 import { createHostedRuntimeToolExecutorPort } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-tool-executor.js";
 
-function createExecutorSession(tool: ReturnType<typeof defineBrewvaTool>) {
+type DefinedTool = ReturnType<typeof defineBrewvaTool>;
+
+function createExecutorSession(tool: DefinedTool) {
   return {
     getRegisteredTools() {
       return [tool];
@@ -15,6 +18,72 @@ function createExecutorSession(tool: ReturnType<typeof defineBrewvaTool>) {
 }
 
 describe("runtime turn tool executor", () => {
+  test("verifies the identity persisted on the canonical commitment", async () => {
+    const tool = defineBrewvaTool({
+      name: "canonical_receipt_probe",
+      label: "Canonical Receipt Probe",
+      description: "Executes from a canonical proposal receipt.",
+      parameters: Type.Object({ value: Type.String() }),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const executor = createHostedRuntimeToolExecutorPort({
+      getRegisteredTools() {
+        return [tool];
+      },
+      createRuntimeToolContext() {
+        return {};
+      },
+    } as never);
+
+    const result = await executor.execute(
+      {
+        id: "commitment-canonical-receipt",
+        call: {
+          sessionId: "s1",
+          toolCallId: "call-canonical-receipt",
+          toolName: tool.name,
+          args: { value: "x" },
+          proposalManifestId: "manifest-canonical",
+          proposalToolIdentityHash: advertisedToolIdentity(tool),
+        },
+      },
+      {},
+    );
+
+    expect(result.outcome).toEqual({ kind: "ok", value: {} });
+  });
+
+  test("fails closed when a referenced proposal omits its canonical tool identity", async () => {
+    const tool = defineBrewvaTool({
+      name: "missing_canonical_identity_probe",
+      label: "Missing Canonical Identity Probe",
+      description: "Must not fall back to an advisory receipt resolver.",
+      parameters: Type.Object({}),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const executor = createHostedRuntimeToolExecutorPort(createExecutorSession(tool));
+
+    expect(
+      executor.execute(
+        {
+          id: "commitment-missing-canonical-identity",
+          call: {
+            sessionId: "s1",
+            toolCallId: "call-missing-canonical-identity",
+            toolName: tool.name,
+            args: {},
+            proposalManifestId: "manifest-advisory-only",
+          },
+        },
+        {},
+      ),
+    ).rejects.toThrow("hosted_runtime_tool_not_advertised:missing_canonical_identity_probe");
+  });
+
   test("fails closed when a tool outcome does not match its output schema", async () => {
     const tool = defineBrewvaTool({
       name: "schema_probe",
@@ -65,9 +134,10 @@ describe("runtime turn tool executor", () => {
   });
 
   // RFC: Checked Invariants And Disciplined Peer Borrowing — item C.
-  // Execution binds the tool identity advertised at proposal (turn start), so a
-  // mid-turn surface drift cannot make a tool_call run a different tool.
-  test("fails closed when a tool's identity drifts between proposal and execution", async () => {
+  // Execution binds the tool identity advertised in the proposal receipt the
+  // commitment references, so a mid-turn surface drift cannot make a tool_call run
+  // a different tool than the one the model was offered.
+  test("fails closed when a tool's parameters drift from the advertised receipt", async () => {
     const proposed = defineBrewvaTool({
       name: "drift_probe",
       label: "Drift Probe",
@@ -86,31 +156,130 @@ describe("runtime turn tool executor", () => {
         return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
       },
     });
-    let current: unknown = proposed;
-    const session = {
-      getRegisteredTools() {
-        return [current];
-      },
-      createRuntimeToolContext() {
-        return {};
-      },
-    } as never;
-    const executor = createHostedRuntimeToolExecutorPort(session);
-    current = drifted;
+    const executor = createHostedRuntimeToolExecutorPort(createExecutorSession(drifted));
 
     try {
       await executor.execute(
         {
           id: "commitment-drift",
-          call: { sessionId: "s1", toolCallId: "call-drift", toolName: "drift_probe", args: {} },
+          call: {
+            sessionId: "s1",
+            toolCallId: "call-drift",
+            toolName: "drift_probe",
+            args: {},
+            proposalManifestId: "m1",
+            proposalToolIdentityHash: advertisedToolIdentity(proposed),
+          },
         },
         {},
       );
       expect.unreachable("expected identity drift to fail closed");
     } catch (error) {
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain("tool_identity_drift:drift_probe");
+      expect((error as Error).message).toContain("hosted_runtime_tool_identity_drift:drift_probe");
     }
+  });
+
+  // The identity includes the description the model saw, which the old
+  // parameters-only fingerprint missed.
+  test("fails closed when only a tool's description drifts from the receipt", async () => {
+    const proposed = defineBrewvaTool({
+      name: "desc_probe",
+      label: "Desc Probe",
+      description: "Original description the model was shown.",
+      parameters: Type.Object({ value: Type.String() }),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const reworded = defineBrewvaTool({
+      name: "desc_probe",
+      label: "Desc Probe",
+      description: "A different description swapped in after the model decided.",
+      parameters: Type.Object({ value: Type.String() }),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const executor = createHostedRuntimeToolExecutorPort(createExecutorSession(reworded));
+
+    try {
+      await executor.execute(
+        {
+          id: "commitment-desc",
+          call: {
+            sessionId: "s1",
+            toolCallId: "call-desc",
+            toolName: "desc_probe",
+            args: {},
+            proposalManifestId: "m1",
+            proposalToolIdentityHash: advertisedToolIdentity(proposed),
+          },
+        },
+        {},
+      );
+      expect.unreachable("expected a description drift to fail closed");
+    } catch (error) {
+      expect((error as Error).message).toContain("hosted_runtime_tool_identity_drift:desc_probe");
+    }
+  });
+
+  // A tool registered after the request was advertised was never offered to the
+  // model in that proposal; running it would bypass the gate, so it fails closed.
+  test("fails closed when a tool was not advertised in the referenced receipt", async () => {
+    const lateTool = defineBrewvaTool({
+      name: "late_probe",
+      label: "Late Probe",
+      description: "Registered after the proposal was advertised.",
+      parameters: Type.Object({}),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const executor = createHostedRuntimeToolExecutorPort(createExecutorSession(lateTool));
+
+    try {
+      await executor.execute(
+        {
+          id: "commitment-late",
+          call: {
+            sessionId: "s1",
+            toolCallId: "call-late",
+            toolName: "late_probe",
+            args: {},
+            proposalManifestId: "m1",
+          },
+        },
+        {},
+      );
+      expect.unreachable("expected an unadvertised tool to fail closed");
+    } catch (error) {
+      expect((error as Error).message).toContain("hosted_runtime_tool_not_advertised:late_probe");
+    }
+  });
+
+  // An approval resumed from a persisted request that predates proposal receipts
+  // carries neither receipt field; it passes this compatibility gate and still
+  // clears ordinary not-found and schema validation.
+  test("allows a commitment with no proposal receipt reference", async () => {
+    const tool = defineBrewvaTool({
+      name: "resumed_probe",
+      label: "Resumed Probe",
+      description: "Resumed from a persisted approval.",
+      parameters: Type.Object({}),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const executor = createHostedRuntimeToolExecutorPort(createExecutorSession(tool));
+
+    const result = await executor.execute(
+      {
+        id: "commitment-resumed",
+        call: { sessionId: "s1", toolCallId: "call-resumed", toolName: "resumed_probe", args: {} },
+      },
+      {},
+    );
+    expect(result.outcome).toEqual({ kind: "ok", value: {} });
   });
 
   test("passes through inconclusive outcomes without mapping them to tool errors", async () => {

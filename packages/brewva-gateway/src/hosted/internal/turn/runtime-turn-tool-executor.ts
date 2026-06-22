@@ -12,6 +12,7 @@ import {
 } from "@brewva/brewva-substrate/tools";
 import { resolveToolDisplay } from "../session/tools/tool-output-display.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
+import { advertisedToolIdentity } from "./runtime-provider-context.js";
 import { isRuntimeToolSession } from "./runtime-turn-session.js";
 
 function textFromToolResultContent(content: unknown): string {
@@ -97,8 +98,34 @@ function toolExecutionResultFromHostedUpdate(
   };
 }
 
-function toolIdentity(tool: BrewvaToolDefinition): string {
-  return JSON.stringify(tool.parameters ?? null);
+// Verify the live registration against the identity persisted with the canonical
+// `tool.proposed` commitment. The HarnessManifest id is correlation-only; advisory
+// manifest events never become execution authority. Legacy commitments with neither
+// field predate proposal receipts and pass this gate, while a partial receipt fails
+// closed.
+function verifyProposalToolIdentity(input: {
+  readonly proposalManifestId: string | undefined;
+  readonly proposalToolIdentityHash: string | undefined;
+  readonly tool: BrewvaToolDefinition;
+}): void {
+  const { proposalManifestId, proposalToolIdentityHash, tool } = input;
+  if (proposalManifestId === undefined && proposalToolIdentityHash === undefined) {
+    return;
+  }
+  if (proposalManifestId === undefined) {
+    throw new Error(`hosted_runtime_tool_proposal_unresolved:${tool.name}`);
+  }
+  if (proposalToolIdentityHash === undefined) {
+    throw new Error(`hosted_runtime_tool_not_advertised:${tool.name}`);
+  }
+  const live = advertisedToolIdentity({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+  });
+  if (proposalToolIdentityHash !== live) {
+    throw new Error(`hosted_runtime_tool_identity_drift:${tool.name}`);
+  }
 }
 
 export function createHostedRuntimeToolExecutorPort(
@@ -107,29 +134,24 @@ export function createHostedRuntimeToolExecutorPort(
   if (!isRuntimeToolSession(session)) {
     throw new Error("hosted_runtime_tool_executor_session_incompatible");
   }
-  // Snapshot each registered tool's identity once when the executor is built. The
-  // registered tool surface is stable for a session — refreshTools rebuilds the
-  // index without changing identity, and setActiveTools only narrows the visible
-  // subset — so this snapshot is the identity the model was offered. At execution
-  // a tool whose identity drifted from it fails closed, so a tool_call cannot
-  // silently run a different tool than the one proposed; a name absent from the
-  // snapshot (a tool registered later) is allowed (RFC: Checked Invariants And
-  // Disciplined Peer Borrowing, item C).
-  const proposalIdentities = new Map<string, string>(
-    session.getRegisteredTools().map((tool) => [tool.name, toolIdentity(tool)]),
-  );
+  // Every new hosted commitment carries the advertised tool identity as a canonical
+  // proposal fact. The executor compares that fact with the live registration, so a
+  // call cannot run a drifted or unadvertised tool and never needs an advisory
+  // manifest resolver.
+  const toolSession = session;
   return {
     async execute(commitment, input): Promise<ToolExecutionResult> {
-      const tool = session
+      const tool = toolSession
         .getRegisteredTools()
         .find((candidate) => candidate.name === commitment.call.toolName);
       if (!tool) {
         throw new Error(`hosted_runtime_tool_not_found:${commitment.call.toolName}`);
       }
-      const proposalIdentity = proposalIdentities.get(commitment.call.toolName);
-      if (proposalIdentity !== undefined && proposalIdentity !== toolIdentity(tool)) {
-        throw new Error(`hosted_runtime_tool_identity_drift:${commitment.call.toolName}`);
-      }
+      verifyProposalToolIdentity({
+        proposalManifestId: commitment.call.proposalManifestId,
+        proposalToolIdentityHash: commitment.call.proposalToolIdentityHash,
+        tool,
+      });
       const rawArgs = commitment.call.args ?? {};
       const preparedArgs = tool.prepareArguments ? tool.prepareArguments(rawArgs) : rawArgs;
       const result = await tool.execute(

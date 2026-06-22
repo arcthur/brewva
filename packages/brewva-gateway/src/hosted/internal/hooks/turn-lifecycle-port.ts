@@ -62,10 +62,18 @@ export type HostedLifecyclePhase = (typeof HOSTED_LIFECYCLE_PHASES)[number];
 /**
  * The hosted turn-lifecycle spine, declared by coarse, ordered phase buckets
  * rather than a flat inline array (RFC: Checked Invariants And Disciplined Peer
- * Borrowing, item E). A module may legitimately appear in more than one phase;
- * the bucket pins where its ports run in the spine. Ports keep their declared
- * order within a phase, and phases run in `HOSTED_LIFECYCLE_PHASES` order, so the
- * spine order is a named, readable invariant instead of code position.
+ * Borrowing, item E).
+ *
+ * The phases are ORDERING TIERS, not strict lifecycle gates. A port is collected
+ * once per handler type (`collectHandlers` below) and each handler fires on its own
+ * event in the flattened tier order; the phase names describe where internal ports
+ * typically sit, and a module may legitimately span more than one tier
+ * (`contextTransform` and `toolSurface` each hold two). The `teardown` tier is
+ * simply "last": external user ports live there so their handlers run after every
+ * internal port of the same type. So a tier fixes relative order within each
+ * handler type — it does not restrict which lifecycle events a tier's ports handle
+ * (a `teardown` port may still carry a `beforeAgentStart` handler, which then runs
+ * after the internal `beforeAgentStart` ports).
  */
 export type HostedLifecyclePhasePorts = Readonly<
   Record<HostedLifecyclePhase, readonly TurnLifecyclePort[]>

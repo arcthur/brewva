@@ -10,7 +10,7 @@ import type {
   PromptToolCall,
   RuntimeProviderPort,
 } from "@brewva/brewva-runtime";
-import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
+import { redactedStableJsonSha256Hex, stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type {
   BrewvaAgentProtocolMessage,
   BrewvaAgentProtocolToolCall,
@@ -22,11 +22,22 @@ import {
 } from "./runtime-turn-prelude.js";
 import type { RuntimeAdapterSession } from "./runtime-turn-session.js";
 
+export interface RuntimeProviderToolIdentity {
+  readonly name: string;
+  readonly identityHash: string;
+}
+
 export interface RuntimeProviderContextSummary {
   readonly systemPromptHash: string;
   readonly messageHashes: readonly string[];
   readonly activeToolNames: readonly string[];
   readonly toolSurfaceHash: string;
+  /**
+   * Per-tool identity for the surface advertised in this request. It is copied
+   * into the canonical proposal receipt and may also be projected into advisory
+   * evidence. Each `identityHash` = hash(name + description + parameters).
+   */
+  readonly perToolIdentity: readonly RuntimeProviderToolIdentity[];
 }
 
 export function toProviderContext(
@@ -122,6 +133,23 @@ function appendRuntimeTurnDelta(
   }
 }
 
+// Identity of a tool AS ADVERTISED to the model: name + description + parameters.
+// Description is included because the model reads it and it changes tool semantics
+// — a parameters-only fingerprint cannot catch a description swap. Hashed with the
+// same redacting helper as the rest of the summary so the canonical proposal,
+// advisory evidence, and the executor all compare like for like.
+export function advertisedToolIdentity(tool: {
+  readonly name: string;
+  readonly description: string;
+  readonly parameters: unknown;
+}): string {
+  return stableJsonSha256Hex({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters ?? null,
+  });
+}
+
 export function summarizeProviderContext(context: ProviderContext): RuntimeProviderContextSummary {
   const tools = context.tools ?? [];
   return {
@@ -135,6 +163,14 @@ export function summarizeProviderContext(context: ProviderContext): RuntimeProvi
         parametersHash: hashJson(tool.parameters),
       })),
     ),
+    perToolIdentity: tools.map((tool) => ({
+      name: tool.name,
+      identityHash: advertisedToolIdentity({
+        name: tool.name,
+        description: tool.description ?? "",
+        parameters: tool.parameters,
+      }),
+    })),
   };
 }
 

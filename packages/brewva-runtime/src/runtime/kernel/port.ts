@@ -11,6 +11,14 @@ export interface ToolCallProposal {
   readonly toolName: string;
   readonly args?: Record<string, unknown>;
   readonly cwd?: string;
+  /**
+   * Opaque id of the hosted `HarnessManifest` for audit correlation. Execution
+   * authority comes from `proposalToolIdentityHash`, which is persisted with the
+   * canonical proposal rather than recovered from the advisory manifest.
+   */
+  readonly proposalManifestId?: string;
+  /** Canonical hash of the advertised tool identity for this proposal. */
+  readonly proposalToolIdentityHash?: string;
   readonly approval?: {
     readonly required: boolean;
     readonly reason: string;

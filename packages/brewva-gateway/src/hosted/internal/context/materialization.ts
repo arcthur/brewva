@@ -2,6 +2,7 @@ import { asLossy } from "@brewva/brewva-std/honesty";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
+  PromptStabilityState,
   ProviderCacheObservationInput,
   ProviderDriftSample,
 } from "@brewva/brewva-vocabulary/context";
@@ -106,7 +107,24 @@ function recordPromptStability(input: {
     (previous as { tailBlockHashes?: unknown } | undefined)?.tailBlockHashes,
   );
   const scopeChanged = previousScopeKey !== undefined && previousScopeKey !== scopeKey;
-  const observed = {
+  const currentTailBlockHashes = input.observation.tailBlockHashes;
+  // Borrowed diff algebra (RFC item A): record the structured per-block change so
+  // prefix/tail instability says which block moved, not just that something did.
+  // A scope change resets the baseline — the previous scope's blocks are a
+  // different surface, so diffing against them would report spurious churn; treat a
+  // scope change as no prior baseline. Compute whenever either side is non-empty so
+  // an emptied tail (previous had blocks, current has none) reports them all removed
+  // instead of silently dropping the removal.
+  const tailDiffPrevious = scopeChanged ? undefined : previousTailBlockHashes;
+  const tailDiff =
+    currentTailBlockHashes || tailDiffPrevious
+      ? diffKeyedBlocks(tailDiffPrevious, currentTailBlockHashes ?? {})
+      : undefined;
+  const changedTailBlocks =
+    tailDiff && tailDiff.added.length + tailDiff.updated.length + tailDiff.removed.length > 0
+      ? [...tailDiff.added, ...tailDiff.updated, ...tailDiff.removed].toSorted()
+      : undefined;
+  const observed: PromptStabilityState = {
     turn: input.observation.turn,
     updatedAt: Date.now(),
     scopeKey,
@@ -120,14 +138,12 @@ function recordPromptStability(input: {
       previous === undefined ||
       (previousDynamicTailHash === input.observation.dynamicTailHash &&
         previousScopeKey === scopeKey),
+    ...(currentTailBlockHashes ? { tailBlockHashes: currentTailBlockHashes } : {}),
+    ...(changedTailBlocks ? { changedTailBlocks } : {}),
   };
-  const currentTailBlockHashes = input.observation.tailBlockHashes;
-  // Borrowed diff algebra (RFC item A): when tail blocks are present, record the
-  // structured per-block change so prefix/tail instability says which block moved,
-  // not just that something did.
-  const tailDiff = currentTailBlockHashes
-    ? diffKeyedBlocks(previousTailBlockHashes, currentTailBlockHashes)
-    : undefined;
+  // One computation feeds both the lossy inspect payload and the typed
+  // PromptStabilityState recorded below, so "which block changed" reaches the typed
+  // evidence path, not just the raw payload (closing RFC item A's evidence consumer).
   input.runtime.ops.context.evidence.append(
     input.sessionId,
     asLossy({
@@ -141,15 +157,7 @@ function recordPromptStability(input: {
         stablePrefix: observed.stablePrefix,
         stableTail: observed.stableTail,
         ...(currentTailBlockHashes ? { tailBlockHashes: currentTailBlockHashes } : {}),
-        ...(tailDiff
-          ? {
-              changedTailBlocks: [
-                ...tailDiff.added,
-                ...tailDiff.updated,
-                ...tailDiff.removed,
-              ].toSorted(),
-            }
-          : {}),
+        ...(changedTailBlocks ? { changedTailBlocks } : {}),
       },
     }),
   );

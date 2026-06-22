@@ -145,4 +145,99 @@ describe("hosted context materialization", () => {
 
     expect(calls).toEqual(["advisory", "composed"]);
   });
+
+  function materializeTurn(
+    runtime: ReturnType<typeof createRuntimeFixture>,
+    telemetry: ReturnType<typeof createTelemetry>["telemetry"],
+    input: {
+      sessionId: string;
+      turn: number;
+      scope?: string;
+      blocks: { id: string; content: string }[];
+    },
+  ): void {
+    const rendered: HostedContextRenderResult = {
+      blocks: input.blocks.map((block) => ({ ...block, estimatedTokens: 1 })),
+      content: input.blocks.map((block) => block.content).join(""),
+      totalTokens: input.blocks.length,
+      surfacedDelegationRunIds: [],
+    };
+    applyContextMaterializationReceipt({
+      runtime,
+      telemetry,
+      receipt: buildContextMaterializationReceipt({
+        sessionId: input.sessionId,
+        turn: input.turn,
+        ...(input.scope ? { contextScopeId: input.scope } : {}),
+        systemPrompt: "System prompt",
+        contextBundle: contextBundleFor(rendered),
+        rendered,
+        gateStatus: gateStatus({}),
+        pendingCompactionReason: null,
+        workbenchContextRendered: input.blocks.length > 0,
+        surfacedDelegationRunIds: [],
+      }),
+    });
+  }
+
+  // P2#3 + P3#7: an emptied tail must report its previous blocks removed (not
+  // silently drop the removal), and the structured change must reach the typed
+  // prompt_stability evidence payload, not only an opaque one.
+  test("an emptied tail reports its previous blocks removed in evidence", () => {
+    const runtime = createRuntimeFixture();
+    const { telemetry } = createTelemetry();
+    materializeTurn(runtime, telemetry, {
+      sessionId: "s-empty",
+      turn: 1,
+      scope: "scope",
+      blocks: [
+        { id: "workbench", content: "W" },
+        { id: "recall", content: "R" },
+      ],
+    });
+    materializeTurn(runtime, telemetry, {
+      sessionId: "s-empty",
+      turn: 2,
+      scope: "scope",
+      blocks: [],
+    });
+    const evidence = runtime.ops.context.evidence.latest("s-empty", "prompt_stability");
+    expect(evidence?.payload).toEqual(
+      expect.objectContaining({ changedTailBlocks: ["recall", "workbench"] }),
+    );
+  });
+
+  // P2#3: a scope change resets the per-block baseline — the new scope's blocks are
+  // "added", never diffed against the previous scope's surface.
+  test("a scope change resets the per-block baseline", () => {
+    const runtime = createRuntimeFixture();
+    const { telemetry } = createTelemetry();
+    materializeTurn(runtime, telemetry, {
+      sessionId: "s-scope",
+      turn: 1,
+      scope: "scope-a",
+      blocks: [{ id: "a", content: "A" }],
+    });
+    materializeTurn(runtime, telemetry, {
+      sessionId: "s-scope",
+      turn: 2,
+      scope: "scope-b",
+      blocks: [{ id: "b", content: "B" }],
+    });
+    const evidence = runtime.ops.context.evidence.latest("s-scope", "prompt_stability");
+    expect(evidence?.payload).toEqual(expect.objectContaining({ changedTailBlocks: ["b"] }));
+  });
+
+  // L1: a stable tail (identical blocks turn-over-turn) records no changedTailBlocks
+  // — the field is present only when something actually changed, matching its name.
+  test("a stable tail records no changedTailBlocks", () => {
+    const runtime = createRuntimeFixture();
+    const { telemetry } = createTelemetry();
+    const blocks = [{ id: "workbench", content: "W" }];
+    materializeTurn(runtime, telemetry, { sessionId: "s-stable", turn: 1, scope: "scope", blocks });
+    materializeTurn(runtime, telemetry, { sessionId: "s-stable", turn: 2, scope: "scope", blocks });
+    const evidence = runtime.ops.context.evidence.latest("s-stable", "prompt_stability");
+    expect(evidence?.payload).toMatchObject({ stableTail: true });
+    expect("changedTailBlocks" in ((evidence?.payload ?? {}) as object)).toBe(false);
+  });
 });

@@ -152,6 +152,9 @@ export function recordPromptStabilityEvidence(input: {
     dynamicTailHash: input.observed.dynamicTailHash,
     stablePrefix: input.observed.stablePrefix,
     stableTail: input.observed.stableTail,
+    ...(input.observed.changedTailBlocks
+      ? { changedTailBlocks: input.observed.changedTailBlocks }
+      : {}),
     compactionAdvised: input.compactionAdvised === true,
     forcedCompaction: input.forcedCompaction === true,
     usageRatio: input.usageRatio ?? null,
@@ -250,6 +253,10 @@ function parseContextEvidenceSample(raw: unknown): ContextEvidenceSample | null 
       dynamicTailHash,
       stablePrefix,
       stableTail,
+      ...(Array.isArray(record.changedTailBlocks) &&
+      record.changedTailBlocks.every((block) => typeof block === "string")
+        ? { changedTailBlocks: record.changedTailBlocks as readonly string[] }
+        : {}),
       compactionAdvised: toBoolean(record.compactionAdvised) ?? false,
       forcedCompaction: toBoolean(record.forcedCompaction) ?? false,
       usageRatio: toFiniteNumber(record.usageRatio),

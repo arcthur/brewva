@@ -56,4 +56,25 @@ describe("host plugin capability invariants", () => {
       [...HOSTED_BEHAVIOR_CAPABILITIES].toSorted(),
     );
   });
+
+  // The matrix generator reads HOSTED_BEHAVIOR_CAPABILITIES by regex over source
+  // text (it lives in the `script` TS project and cannot import gateway internals).
+  // A refactor that broke the regex would desync the matrix while the
+  // regenerate-and-diff freshness gate still passed — both sides wrong together.
+  // This imports the real declared set and asserts the generated matrix's
+  // `hosted_behavior` column equals it, so regex drift fails loudly here even when
+  // freshness stays green.
+  test("the generated matrix's hosted_behavior column matches the real declared set", () => {
+    const matrix = readFileSync(
+      join(process.cwd(), "docs/reference/host-plugin-capabilities.md"),
+      "utf8",
+    );
+    const advertised = [
+      ...matrix.matchAll(/^\|\s*`([^`]+)`\s*\|\s*`[^`]+`\s*\|\s*(yes|no)\s*\|$/gmu),
+    ]
+      .filter((row) => row[2] === "yes")
+      .map((row) => row[1]!)
+      .toSorted();
+    expect(advertised).toEqual([...HOSTED_BEHAVIOR_CAPABILITIES].toSorted());
+  });
 });

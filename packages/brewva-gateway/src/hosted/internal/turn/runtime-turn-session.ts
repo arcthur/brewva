@@ -22,7 +22,10 @@ import type {
 import type { HostedModelRoutingSettings } from "../session/settings/settings-store.js";
 import type { CollectSessionPromptOutputSession } from "./collect-output.js";
 import { hasHostedPromptAttemptDispatch } from "./hosted-prompt-attempt.js";
-import type { RuntimeProviderContextSummary } from "./runtime-provider-context.js";
+import type {
+  RuntimeProviderContextSummary,
+  RuntimeProviderToolIdentity,
+} from "./runtime-provider-context.js";
 import { hasHostedRuntimeTurnPrelude } from "./runtime-turn-prelude.js";
 
 export interface ProviderCredentialRotation {
@@ -41,6 +44,16 @@ export interface RuntimeProviderModelCatalog extends Pick<
     reason: "quota" | "rate_limit" | "auth" | "manual",
     cooldownMs: number,
   ): ProviderCredentialRotation | undefined;
+}
+
+export interface RuntimeProviderProposalReceipt {
+  readonly manifestId: string;
+  readonly perToolIdentity: readonly RuntimeProviderToolIdentity[];
+}
+
+export interface PreparedRuntimeProviderPayload {
+  readonly payload: unknown;
+  readonly proposalReceipt?: RuntimeProviderProposalReceipt;
 }
 
 export interface RuntimeProviderFace {
@@ -69,7 +82,7 @@ export interface RuntimeProviderFace {
       readonly turnId?: string;
     };
     readonly providerContext: RuntimeProviderContextSummary;
-  }): Promise<unknown>;
+  }): Promise<PreparedRuntimeProviderPayload>;
   observeCacheRender(input: {
     readonly render: ProviderCacheRenderResult;
     readonly model: ProviderModel<Api>;

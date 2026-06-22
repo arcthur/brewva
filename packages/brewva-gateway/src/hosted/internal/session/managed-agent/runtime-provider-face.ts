@@ -12,6 +12,7 @@ import type {
 import { type VerificationGateManifest } from "../../../../extensions/api.js";
 import { appendProviderDriftSample } from "../../context/materialization.js";
 import type {
+  PreparedRuntimeProviderPayload,
   ProviderCredentialRotation,
   RuntimeProviderFace,
 } from "../../turn/runtime-turn-session.js";
@@ -35,7 +36,7 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
   readonly #getModel: () => BrewvaRegisteredModel | undefined;
   readonly #getModelPresetState: () => BrewvaModelPresetState;
   readonly #prepareRuntimeProviderPayload:
-    | ((input: RuntimeProviderPayloadInput) => Promise<unknown>)
+    | ((input: RuntimeProviderPayloadInput) => Promise<PreparedRuntimeProviderPayload>)
     | undefined;
   readonly #observeRuntimeCacheRender:
     | ((input: RuntimeProviderCacheRenderInput) => void)
@@ -53,7 +54,9 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
     modelRole?: BrewvaModelRoleAlias;
     getModel: () => BrewvaRegisteredModel | undefined;
     getModelPresetState: () => BrewvaModelPresetState;
-    prepareRuntimeProviderPayload?: (input: RuntimeProviderPayloadInput) => Promise<unknown>;
+    prepareRuntimeProviderPayload?: (
+      input: RuntimeProviderPayloadInput,
+    ) => Promise<PreparedRuntimeProviderPayload>;
     observeRuntimeCacheRender?: (input: RuntimeProviderCacheRenderInput) => void;
     onProviderAssistantMessage?: (
       message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>,
@@ -134,8 +137,10 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
     });
   }
 
-  async prepareProviderPayload(input: RuntimeProviderPayloadInput): Promise<unknown> {
-    return this.#prepareRuntimeProviderPayload?.(input) ?? input.payload;
+  async prepareProviderPayload(
+    input: RuntimeProviderPayloadInput,
+  ): Promise<PreparedRuntimeProviderPayload> {
+    return this.#prepareRuntimeProviderPayload?.(input) ?? { payload: input.payload };
   }
 
   observeCacheRender(input: RuntimeProviderCacheRenderInput): void {

@@ -309,6 +309,8 @@ function sameToolCall(left: ToolCallProposal, right: ToolCallProposal): boolean 
     left.approval?.required === right.approval?.required &&
     left.approval?.reason === right.approval?.reason &&
     left.approval?.expiresAt === right.approval?.expiresAt &&
+    left.proposalManifestId === right.proposalManifestId &&
+    left.proposalToolIdentityHash === right.proposalToolIdentityHash &&
     stableJsonStringify(left.args ?? {}) === stableJsonStringify(right.args ?? {})
   );
 }

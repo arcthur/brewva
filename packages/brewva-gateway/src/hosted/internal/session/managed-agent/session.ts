@@ -81,7 +81,10 @@ import {
   type HostedRuntimeTurnContext,
   type HostedRuntimeTurnPreludeResult,
 } from "../../turn/runtime-turn-prelude.js";
-import type { RuntimeProviderFace } from "../../turn/runtime-turn-session.js";
+import type {
+  PreparedRuntimeProviderPayload,
+  RuntimeProviderFace,
+} from "../../turn/runtime-turn-session.js";
 import { runHostedTurnEnvelope } from "../../turn/turn-envelope.js";
 import {
   getRuntimeCompactionGateStatus,
@@ -242,7 +245,9 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     onProviderAssistantMessage?: (
       message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>,
     ) => void;
-    prepareRuntimeProviderPayload?: (input: RuntimeProviderPayloadInput) => Promise<unknown>;
+    prepareRuntimeProviderPayload?: (
+      input: RuntimeProviderPayloadInput,
+    ) => Promise<PreparedRuntimeProviderPayload>;
     observeRuntimeCacheRender?: (input: RuntimeProviderCacheRenderInput) => void;
     workbenchContextFingerprint: WorkbenchContextFingerprintHolder;
     onInitialPersistence?: () => void;

@@ -1,3 +1,4 @@
+import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaAgentProtocolController } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaHostContext, BrewvaHostPluginRunner } from "@brewva/brewva-substrate/host-api";
 import type { ExpectedProviderCacheBreak } from "@brewva/brewva-vocabulary/context";
@@ -7,6 +8,7 @@ import {
   type ToolSchemaSnapshot,
 } from "../../provider/cache/index.js";
 import { consumeProviderRequestReductionExpectedCacheBreak } from "../../provider/request/provider-request-reduction.js";
+import type { PreparedRuntimeProviderPayload } from "../../turn/runtime-turn-session.js";
 import {
   getRuntimeContextEvidenceLatest,
   getRuntimeVisibleReadEpoch,
@@ -51,6 +53,22 @@ export interface CreateProviderPayloadPipelineOptions {
     input: Parameters<ManagedSessionProviderCacheState["observeStickyLatches"]>[0],
   ) => ReturnType<ManagedSessionProviderCacheState["observeStickyLatches"]>;
   readonly readWorkbenchContextFingerprint: () => WorkbenchContextFingerprintInput;
+}
+
+function providerToolSurfaceHash(payload: unknown, api: string): string {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return stableJsonSha256Hex({ present: false });
+  }
+  const payloadRecord = payload as Record<string, unknown>;
+  const record =
+    api === "google-genai" &&
+    typeof payloadRecord.config === "object" &&
+    payloadRecord.config !== null &&
+    !Array.isArray(payloadRecord.config)
+      ? (payloadRecord.config as Record<string, unknown>)
+      : payloadRecord;
+  const present = Object.prototype.hasOwnProperty.call(record, "tools");
+  return stableJsonSha256Hex({ present, ...(present ? { tools: record.tools } : {}) });
 }
 
 /**
@@ -104,10 +122,11 @@ export class ManagedSessionProviderPayloadPipeline {
     transmittedSecrets,
     turn,
     providerContext,
-  }: RuntimeProviderPayloadInput): Promise<unknown> => {
+  }: RuntimeProviderPayloadInput): Promise<PreparedRuntimeProviderPayload> => {
     if (!this.#isSessionReady()) {
-      return payload;
+      return { payload };
     }
+    const advertisedToolSurfaceHash = providerToolSurfaceHash(payload, model.api);
     const providerPayloadResult = await this.#runner.emitBeforeProviderRequest(
       {
         type: "before_provider_request",
@@ -119,6 +138,9 @@ export class ManagedSessionProviderPayloadPipeline {
       this.#createHostContext(),
     );
     const nextPayload = providerPayloadResult.payload;
+    if (providerToolSurfaceHash(nextPayload, model.api) !== advertisedToolSurfaceHash) {
+      throw new Error("hosted_provider_payload_tool_surface_mutation");
+    }
     this.#cacheRuntime.lastExpectedProviderCacheBreak =
       consumeProviderRequestReductionExpectedCacheBreak(nextPayload);
     const channelContext = this.#resolveChannelContext();
@@ -224,6 +246,7 @@ export class ManagedSessionProviderPayloadPipeline {
       tools: {
         activeToolNames: toolSchemaSnapshot.tools.map((tool) => tool.name).toSorted(),
         toolSchemaSnapshotHash: toolSchemaSnapshot.hash,
+        perToolIdentity: providerContext.perToolIdentity,
       },
       skillSelection: readHarnessSkillSelection(this.#runtime, this.#sessionId),
       capabilitySelection: readHarnessCapabilitySelection(this.#runtime, this.#sessionId),
@@ -268,7 +291,13 @@ export class ManagedSessionProviderPayloadPipeline {
       manifest: harnessManifest,
       turnId: turn.turnId,
     });
-    return nextPayload;
+    return {
+      payload: nextPayload,
+      proposalReceipt: {
+        manifestId: harnessManifest.manifestId,
+        perToolIdentity: providerContext.perToolIdentity,
+      },
+    };
   };
 
   observeCacheRender = ({ render, model }: RuntimeProviderCacheRenderInput): void => {

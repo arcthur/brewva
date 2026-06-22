@@ -20,6 +20,11 @@ describe("prompt stability per-block diff (RFC item A)", () => {
     expect(diff).toEqual({ added: ["a", "b"], updated: [], removed: [] });
   });
 
+  test("an empty current set marks every previous block removed (emptied tail)", () => {
+    const diff = diffKeyedBlocks({ a: "h1", b: "h2" }, {});
+    expect(diff).toEqual({ added: [], updated: [], removed: ["a", "b"] });
+  });
+
   test("observation hashes each tail block by id", () => {
     const observation = buildPromptStabilityObservation({
       systemPrompt: "sys",

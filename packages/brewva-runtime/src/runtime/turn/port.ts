@@ -30,6 +30,13 @@ export interface RuntimeProviderToolCall {
   readonly toolName: string;
   readonly args?: Record<string, unknown>;
   readonly cwd?: string;
+  /**
+   * Opaque hosted `HarnessManifest` id for audit correlation. The canonical
+   * proposal carries the execution-bearing identity separately.
+   */
+  readonly proposalManifestId?: string;
+  /** Canonical hash of the tool identity advertised in this provider attempt. */
+  readonly proposalToolIdentityHash?: string;
   readonly verificationGates?: readonly KernelVerificationGatePolicyInput[];
   readonly approval?: {
     readonly required: boolean;

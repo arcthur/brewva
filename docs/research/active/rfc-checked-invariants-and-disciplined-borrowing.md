@@ -16,9 +16,10 @@
   `runtime.md` and pinned by a boundary-guard fitness; F's Phase-2
   `capability x plugin` matrix as a generated authority inventory
   (`docs/reference/host-plugin-capabilities.md`), pinned by a regenerate-and-diff
-  freshness fitness; and C — the tool-identity guard — where the executor snapshots
-  each tool's session-scoped identity (the registered surface is session-stable) and
-  fails closed on a same-name drift; and A —
+  freshness fitness; and C — the tool-identity guard — where each canonical
+  `tool.proposed` commitment carries the advertised tool's identity hash while the
+  per-request `HarnessManifest` remains an advisory audit correlation, and the
+  executor fails closed on drift or on a tool never advertised in that request; and A —
   opencode's diff algebra (`diffKeyedBlocks`) applied to the reachable dynamic-tail
   blocks as structured per-block stability evidence (the systemPrompt prefix stays
   scoped until `getBaseSystemPrompt` exposes a document). Borrowing item D is
@@ -259,19 +260,25 @@ Internal implementation anchors (verified current-state):
   (`appendTargetScopedProjectInstructions` reads project-instruction files;
   `applyPromptOverlay` applies the assembled `systemPrompt` outside the
   projection)
-- `packages/brewva-gateway/src/hosted/internal/session/tools/tool-surface.ts`
-  (no in-flight tool-identity guard)
+- `packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-tool-executor.ts`
+  (the canonical-receipt in-flight tool-identity guard),
+  `.../turn/runtime-turn-provider.ts` (attempt-local receipt projection), and
+  `packages/brewva-runtime/src/runtime/kernel/impl.ts` (receipt-bearing commitment
+  equality and persistence)
 
 External comparison anchors (contrasts and borrow targets in sibling repos, not
 brewva paths):
 
-- `/Users/bytedance/new_py/opencode/packages/opencode/src/system-context/registry.ts`
-  (the `baseline/update/removed` algebra to borrow; the open registry to reject)
-- `/Users/bytedance/new_py/opencode` tool registry identity check (the in-flight
-  drift guard to borrow as item C)
-- `/Users/bytedance/new_py/pi-mono/packages/coding-agent`
-  (`renderCall` / `renderResult` ergonomics to port into the advisory ring;
-  unbounded extension authority to reject)
+- `/Users/bytedance/new_py/opencode/packages/core/src/system-context/index.ts` @
+  `660a00d3` (the `baseline/update/removed` keyed-block algebra borrowed as A — plus
+  the richer `generation` / `unavailable` / `reconcile` semantics brewva does not
+  yet need; the open registry to reject)
+- `/Users/bytedance/new_py/opencode/packages/core/src/tool/registry.ts` @
+  `660a00d3` (the identity captured in the `materialize()` closure and validated by
+  `settle()` — the materialize-scoped drift guard borrowed as item C)
+- `/Users/bytedance/new_py/pi-mono/packages/coding-agent` (`renderCall` /
+  `renderResult` ergonomics — already present in brewva, see item D; unbounded
+  extension authority to reject)
 
 ## Architecture Proposal
 
@@ -288,7 +295,11 @@ legitimately spans more than one phase: `contextTransform` and `toolSurface` eac
 hold two non-adjacent slots today. A per-port unique tag would instead hide that.
 A fitness test asserts the bucket order and that every port declares its bucket.
 This is descriptive structure over the existing array, not a new dispatcher —
-runtime behavior is unchanged.
+runtime behavior is unchanged. The names are mnemonics for where internal ports
+usually sit, but the phases are ordering tiers, not lifecycle gates: a tier fixes
+relative order within each handler type and `teardown` is simply the last tier
+(where external user ports run), so a tier does not constrain which events its ports
+handle.
 
 #### F. Capability x plugin matrix + invariant fitness
 
@@ -343,26 +354,40 @@ hash, and runtime-config hash — persisted to tape by `recordRuntimeHarnessMani
 (`provider-payload-pipeline.ts`). That is exactly G1's byte-exact audit; there is
 nothing to build.
 
-#### C. In-flight tool-identity guard — landed (fail-closed)
+#### C. In-flight tool-identity guard — landed (fail-closed, receipt-bound)
 
 Reachability trace resolved it as real: tool execution re-read the live set —
 `runtime-turn-tool-executor.ts` resolved `commitment.call.toolName` against the
-current `getRegisteredTools()`, not a proposal-time snapshot — while
+current `getRegisteredTools()`, not the surface advertised for that request — while
 `setActiveTools` / `refreshTools` are exposed on `runner.actions`, so a mid-turn
 surface change could make a `tool_call` run a different tool than the one the model
 was offered.
 
-Landed: the executor snapshots each registered tool's identity (its parameters
-schema) once when it is built — the registered surface is session-stable
-(`refreshTools` rebuilds the index without changing identity; `setActiveTools` only
-narrows the visible subset), so that snapshot is the identity the model was offered.
-At execution it compares the resolved tool's live identity against the snapshot; a
-drift throws `hosted_runtime_tool_identity_drift:<tool>` — fail-closed, in brewva's
-capability-gate style (axiom 16: tool-surface identity is correctness-bearing). With
-no drift, behavior is unchanged (the regression suite is green); a same-name schema
-drift is caught instead of silently running the drifted tool, and a name registered
-later is allowed. If the registered surface ever becomes per-turn dynamic, the
-snapshot moves to turn scope.
+Landed, bound to the canonical proposal rather than a session snapshot. Each provider
+request records a per-attempt `HarnessManifest` carrying the per-tool identity —
+hash(name + description + parameters) of the surface advertised in that request,
+from the one `summarizeProviderContext` source. Provider payload hooks may still
+mutate messages or budgets, but changing the native `tools` surface fails before the
+request is sent, so the certified canonical surface cannot diverge from the
+transmitted one.
+
+The provider preparation callback returns an attempt-local receipt. Tool frames copy
+the matching tool identity into `proposalToolIdentityHash` and retain
+`proposalManifestId` only for audit correlation. The kernel persists both fields on
+the canonical `tool.proposed` commitment and treats receipt differences as commitment
+mismatches. At execution the hosted executor compares the live tool identity directly
+with the canonical commitment. A drift throws
+`hosted_runtime_tool_identity_drift:<tool>`; a tool absent from that receipt throws
+`hosted_runtime_tool_not_advertised:<tool>` — both fail-closed, in brewva's
+capability-gate style (axiom 16: tool-surface identity is correctness-bearing). This
+is opencode's materialize-time identity binding — `settle()` validating the identity
+captured in the `materialize()` closure — expressed as a replayable canonical
+proposal fact. The HarnessManifest stays advisory, preserving brewva's authority
+separation, while its audit view and the canonical proposal derive from the same
+attempt-local source. The binding includes the description the model saw, which the
+old parameters-only fingerprint missed. A commitment with neither receipt field (an
+approval that predates the feature) passes for compatibility; a partial receipt fails
+closed.
 
 #### H. Remove the dead placeholder
 
@@ -440,8 +465,11 @@ pending: there is nothing to port.
 
 ### Phase 4: In-flight tool-identity guard
 
-- C at the tool-surface seam: advisory drift evidence first, fail-closed reject
-  second, scoped to one accepted turn.
+- C at the tool-surface seam, bound to the canonical proposal: the per-request
+  `HarnessManifest` keeps the advisory audit view, while `tool.proposed` persists
+  the matching tool's `proposalToolIdentityHash` and audit-only
+  `proposalManifestId`. The executor verifies the live registration directly
+  against the commitment — fail-closed on drift or on an unadvertised tool.
 
 ### Phase 5: Borrowing (resolved)
 
@@ -468,8 +496,10 @@ pending: there is nothing to port.
   appears on tape and replay reproduces it; G2 — `runtime.md` documents exactly
   what `materialize()` guarantees versus what the hosted lane re-renders, with a
   test pinning that the hosted assembly path is the documented one.
-- tool-identity fitness: a `tool_call` whose surface identity drifted between
-  proposal and execution is rejected or flagged, never silently executed.
+- tool-identity fitness: a `tool_call` whose tool drifted from the receipt's
+  advertised identity, or whose tool was never advertised in that request, is
+  rejected (fail-closed), never silently executed; a call with no receipt
+  reference is allowed past the gate.
 - dead-code fitness: `assertHostedBehaviorHostAdapterRuntimeShape` is removed or
   carries a real assertion.
 - docs verification with `bun run test:docs`; formatting with
@@ -534,9 +564,6 @@ promotion gate for the checked-invariant core.
   `recordRuntimeHarnessManifest` already tapes it.
 - F (matrix scope): should the `capability x plugin` matrix include the advisory
   extension ring's ambient capability class, or stay internal-plugin-only?
-- C (turn scope): C snapshots session-scoped because the registered surface is
-  session-stable; if a future path makes it per-turn dynamic (e.g. an MCP
-  `tools/list_changed` handler), the snapshot moves to turn scope.
 
 ## Alternatives Considered
 

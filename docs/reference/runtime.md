@@ -136,6 +136,14 @@ calls. Runtime engine code executes approved commitments and completes them
 through `kernel.commitToolResult(...)`; abort paths complete through
 `kernel.abortToolCall(...)`.
 
+Hosted proposal receipts preserve the authority split. `proposalManifestId`
+correlates the commitment with an advisory HarnessManifest, while
+`proposalToolIdentityHash` is persisted on canonical `tool.proposed` and is the
+execution-bearing identity checked against the live registration. Provider payload
+hooks may not mutate the transmitted `tools` surface after that identity is derived.
+Receipt fields participate in commitment equality, so reusing a tool-call id with a
+different proposal fails closed.
+
 Kernel does not execute tools. Runtime owns tool process lifetime, abort
 signals, parallel leases, provider loops, and cost observations. Provider tool
 frames are converted into `kernel.beginToolCall(...)` decisions. Approved

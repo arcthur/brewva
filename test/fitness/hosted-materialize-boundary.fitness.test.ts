@@ -35,4 +35,18 @@ describe("hosted materialize boundary (RFC item G)", () => {
       /appendTargetScopedProjectInstructions|applyPromptOverlay|getBaseSystemPrompt/,
     );
   });
+
+  // A structural anchor for the same boundary that does not depend on helper names.
+  // The two guards above read source strings (a rename can false-flag them); this
+  // one pins the materialize() OUTPUT CONTRACT: `PromptPlan` must never grow a
+  // `systemPrompt` field, because the environment systemPrompt is merged outside the
+  // projection. It trips only on the real regression (systemPrompt added to the
+  // contract), not on a rename. Full runtime replay-equivalence stays G's future work.
+  test("PromptPlan, materialize's output contract, declares no systemPrompt", () => {
+    const modelPort = readRepoFile("packages/brewva-runtime/src/runtime/model/port.ts");
+    const promptPlan = /export interface PromptPlan \{([\s\S]*?)\n\}/u.exec(modelPort);
+    // Sanity that the regex matched the real contract: PromptPlan declares messages.
+    expect(promptPlan?.[1]).toContain("messages");
+    expect(promptPlan![1]).not.toMatch(/systemPrompt/u);
+  });
 });

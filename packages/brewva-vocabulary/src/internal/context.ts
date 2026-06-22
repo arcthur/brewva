@@ -170,6 +170,9 @@ export interface PromptStabilityState extends ProtocolRecord {
   readonly dynamicTailHash: string;
   readonly stablePrefix: boolean;
   readonly stableTail: boolean;
+  readonly tailBlockHashes?: Readonly<Record<string, string>>;
+  /** Ids of the dynamic-tail blocks that were added, updated, or removed vs the prior turn (RFC item A). */
+  readonly changedTailBlocks?: readonly string[];
 }
 
 export interface ProviderCacheBreakObservation {

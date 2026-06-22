@@ -25,7 +25,11 @@ import {
 import { streamProviderMessage } from "../provider/execution-port.js";
 import { isBrewvaModelRoleAlias as isHostedModelRoleAlias } from "../session/settings/model-presets.js";
 import { summarizeProviderContext, toProviderContext } from "./runtime-provider-context.js";
-import { type RuntimeAdapterSession, type RuntimeProviderFace } from "./runtime-turn-session.js";
+import {
+  type RuntimeAdapterSession,
+  type RuntimeProviderFace,
+  type RuntimeProviderProposalReceipt,
+} from "./runtime-turn-session.js";
 
 function cloneHeaders(
   headers: Record<string, string> | undefined,
@@ -308,6 +312,33 @@ function frameFromProviderEvent(event: AssistantMessageEvent): RuntimeProviderFr
   return null;
 }
 
+// Project the attempt-local receipt onto the canonical tool proposal. The manifest
+// id stays an audit correlation; the per-tool identity hash is the execution-bearing
+// fact persisted by `tool.proposed`. A tool absent from the receipt carries only the
+// manifest id so the executor can reject it as unadvertised.
+function stampProposalReceipt(
+  frame: RuntimeProviderFrame,
+  receipt: RuntimeProviderProposalReceipt | undefined,
+): RuntimeProviderFrame {
+  if (frame.type !== "tool") {
+    return frame;
+  }
+  if (receipt === undefined) {
+    throw new Error("hosted_runtime_provider_missing_proposal_receipt");
+  }
+  const identityHash = receipt.perToolIdentity.find(
+    (entry) => entry.name === frame.call.toolName,
+  )?.identityHash;
+  return {
+    ...frame,
+    call: {
+      ...frame.call,
+      proposalManifestId: receipt.manifestId,
+      ...(identityHash ? { proposalToolIdentityHash: identityHash } : {}),
+    },
+  };
+}
+
 async function* streamRuntimeProviderAttempt(
   session: RuntimeAdapterSession,
   face: RuntimeProviderFace,
@@ -332,6 +363,7 @@ async function* streamRuntimeProviderAttempt(
   const unlinkAbort = linkAbortSignal(input.turn.signal, providerAbort);
   const providerContext = toProviderContext(session, input);
   const providerContextSummary = summarizeProviderContext(providerContext);
+  let attemptProposalReceipt: RuntimeProviderProposalReceipt | undefined;
   const options: ProviderStreamOptions = {
     signal: providerAbort.signal,
     apiKey: resolvedAuth.apiKey,
@@ -340,8 +372,8 @@ async function* streamRuntimeProviderAttempt(
     cachePolicy: face.getProviderCachePolicy(),
     transport: face.getProviderTransport(),
     ...(providerFallback ? { metadata: { providerFallback } } : {}),
-    onPayload: (payload, providerModel, metadata) =>
-      face.prepareProviderPayload({
+    onPayload: async (payload, providerModel, metadata) => {
+      const prepared = await face.prepareProviderPayload({
         payload,
         model: providerModel,
         metadata,
@@ -351,7 +383,10 @@ async function* streamRuntimeProviderAttempt(
           ...(input.turn.turnId ? { turnId: input.turn.turnId } : {}),
         },
         providerContext: providerContextSummary,
-      }),
+      });
+      attemptProposalReceipt = prepared.proposalReceipt;
+      return prepared.payload;
+    },
     onCacheRender: (render, providerModel) =>
       face.observeCacheRender({
         render,
@@ -412,7 +447,7 @@ async function* streamRuntimeProviderAttempt(
   try {
     for await (const next of bridge) {
       if (next.kind === "frame") {
-        yield next.frame;
+        yield stampProposalReceipt(next.frame, attemptProposalReceipt);
         continue;
       }
       if (next.kind === "error") {

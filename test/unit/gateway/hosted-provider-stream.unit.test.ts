@@ -20,6 +20,7 @@ import { createHostedRuntimeProviderPort } from "../../../packages/brewva-gatewa
 import { HOSTED_RUNTIME_TURN_CONTEXT } from "../../../packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-prelude.js";
 import {
   fauxAssistantMessage,
+  fauxToolCall,
   registerFauxProvider,
 } from "../../../packages/brewva-provider-core/src/providers/faux/index.js";
 import { createProviderEventStream } from "../../helpers/effect-stream.js";
@@ -820,75 +821,66 @@ describe("hosted provider stream", () => {
   });
 
   test("keeps hosted context and appends runtime tool results on provider continuation", async () => {
-    const sourceId = `${SOURCE_ID}-hosted-tool-continuation`;
     const api = "runtime-provider-hosted-tool-continuation-test";
-    const model = createRuntimeModel("unit-model", api);
+    const fauxProvider = registerFauxProvider({
+      provider: "faux-provider-hosted-tool-continuation",
+      api,
+      tokenSize: { min: 1, max: 1 },
+    });
+    const model = fauxProvider.getModel();
     const observedContexts: unknown[][] = [];
-    let calls = 0;
-
-    clearApiProviders();
-    registerApiProvider(
-      {
-        api,
-        stream() {
-          return createProviderEventStream();
-        },
-        streamSimple(_model, context) {
-          calls += 1;
-          observedContexts.push([...context.messages]);
-          const partial = createMessage(api);
-          if (calls === 1) {
-            const toolCall = {
-              type: "toolCall" as const,
-              id: "call-1",
-              name: "read_file",
-              arguments: { path: "README.md" },
-            };
-            return createProviderEventStream([
-              { type: "text_delta", contentIndex: 0, delta: "Checking.", partial },
-              {
-                type: "toolcall_end",
-                contentIndex: 0,
-                toolCall,
-                partial,
-              },
-              {
-                type: "done",
-                reason: "toolUse",
-                message: { ...partial, content: [toolCall] },
-              },
-            ]);
-          }
-          return createProviderEventStream([
-            {
-              type: "done",
-              reason: "stop",
-              message: {
-                ...partial,
-                content: [{ type: "text", text: "done" }],
-                stopReason: "stop",
-              },
-            },
-          ]);
-        },
+    let attempts = 0;
+    fauxProvider.setResponses([
+      (context) => {
+        observedContexts.push([...context.messages]);
+        return fauxAssistantMessage(
+          [
+            { type: "text", text: "Checking." },
+            fauxToolCall("read_file", { path: "README.md" }, { id: "call-1" }),
+          ],
+          { stopReason: "toolUse" },
+        );
       },
-      sourceId,
-    );
+      (context) => {
+        observedContexts.push([...context.messages]);
+        return fauxAssistantMessage("done");
+      },
+    ]);
 
     try {
       const providerFace = createRuntimeProviderFaceFixture({
         model,
         getModelCatalog() {
           return {
+            getAll() {
+              return [model];
+            },
             async getApiKeyAndHeaders() {
               return { ok: true as const, apiKey: "unit-key" };
+            },
+          };
+        },
+        async prepareProviderPayload({ payload, providerContext }) {
+          attempts += 1;
+          return {
+            payload,
+            proposalReceipt: {
+              manifestId: `manifest-${attempts}`,
+              perToolIdentity: providerContext.perToolIdentity,
             },
           };
         },
       });
       const session = {
         getRegisteredTools() {
-          return [];
+          return [
+            {
+              name: "read_file",
+              label: "Read File",
+              description: "Read a file.",
+              parameters: { type: "object", properties: {} },
+            },
+          ];
         },
         getRuntimeProviderFace() {
           return providerFace;
@@ -955,8 +947,7 @@ describe("hosted provider stream", () => {
         toolName: "read_file",
       });
     } finally {
-      unregisterApiProviders(sourceId);
-      clearApiProviders();
+      fauxProvider.unregister();
     }
   });
 
@@ -988,7 +979,7 @@ describe("hosted provider stream", () => {
             turn: input.turn,
             providerContext: input.providerContext,
           };
-          return input.payload;
+          return { payload: input.payload };
         },
       });
       const session = {
@@ -1023,6 +1014,133 @@ describe("hosted provider stream", () => {
           toolSurfaceHash: expect.any(String),
         },
       });
+    } finally {
+      fauxProvider.unregister();
+    }
+  });
+
+  test("stamps tool frames with the receipt returned for that provider attempt", async () => {
+    const fauxProvider = registerFauxProvider({
+      provider: "faux-provider-attempt-receipt",
+      api: "faux-provider-attempt-receipt",
+      tokenSize: { min: 1, max: 1 },
+    });
+    fauxProvider.setResponses([
+      fauxAssistantMessage([fauxToolCall("receipt_probe", {}, { id: "call-receipt" })], {
+        stopReason: "toolUse",
+      }),
+    ]);
+
+    try {
+      const model = fauxProvider.getModel();
+      const providerFace = createRuntimeProviderFaceFixture({
+        model,
+        getModelCatalog() {
+          return {
+            getAll() {
+              return [model];
+            },
+            async getApiKeyAndHeaders() {
+              return { ok: true as const, apiKey: "unit-key" };
+            },
+          };
+        },
+        async prepareProviderPayload({ payload }) {
+          return {
+            payload,
+            proposalReceipt: {
+              manifestId: "manifest-attempt",
+              perToolIdentity: [{ name: "receipt_probe", identityHash: "identity-attempt" }],
+            },
+          };
+        },
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
+        },
+        createRuntimeToolContext() {
+          return {
+            getSystemPrompt() {
+              return "";
+            },
+          };
+        },
+      };
+
+      const frames = [];
+      const provider = createHostedRuntimeProviderPort(session as never, providerFace);
+      for await (const frame of provider.stream(createRuntimeProviderInput("attempt-receipt"))) {
+        frames.push(frame);
+      }
+
+      expect(frames.find((frame) => frame.type === "tool")).toMatchObject({
+        type: "tool",
+        call: {
+          toolCallId: "call-receipt",
+          toolName: "receipt_probe",
+          proposalManifestId: "manifest-attempt",
+          proposalToolIdentityHash: "identity-attempt",
+        },
+      });
+    } finally {
+      fauxProvider.unregister();
+    }
+  });
+
+  test("fails closed when a live tool frame has no proposal receipt", async () => {
+    const fauxProvider = registerFauxProvider({
+      provider: "faux-provider-missing-receipt",
+      api: "faux-provider-missing-receipt",
+      tokenSize: { min: 1, max: 1 },
+    });
+    fauxProvider.setResponses([
+      fauxAssistantMessage([fauxToolCall("receipt_probe", {}, { id: "call-no-receipt" })], {
+        stopReason: "toolUse",
+      }),
+    ]);
+
+    try {
+      const model = fauxProvider.getModel();
+      const providerFace = createRuntimeProviderFaceFixture({
+        model,
+        getModelCatalog() {
+          return {
+            getAll() {
+              return [model];
+            },
+            async getApiKeyAndHeaders() {
+              return { ok: true as const, apiKey: "unit-key" };
+            },
+          };
+        },
+        async prepareProviderPayload({ payload }) {
+          return { payload };
+        },
+      });
+      const session = {
+        getRegisteredTools() {
+          return [];
+        },
+        getRuntimeProviderFace() {
+          return providerFace;
+        },
+        createRuntimeToolContext() {
+          return {
+            getSystemPrompt() {
+              return "";
+            },
+          };
+        },
+      };
+      const provider = createHostedRuntimeProviderPort(session as never, providerFace);
+
+      expect(
+        Array.fromAsync(provider.stream(createRuntimeProviderInput("missing-receipt"))),
+      ).rejects.toThrow("hosted_runtime_provider_missing_proposal_receipt");
     } finally {
       fauxProvider.unregister();
     }
