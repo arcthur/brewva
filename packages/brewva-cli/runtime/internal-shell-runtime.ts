@@ -15,9 +15,8 @@ import { renderCliInteractiveOpenTuiShell } from "./opentui-shell-renderer.js";
 // and by packaged Brewva binaries that can load OpenTUI native bindings.
 const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 
-// The interactive shell uses the split-footer renderer: the transcript is
-// committed to native scrollback and only the footer (composer + status +
-// overlays) stays live, eliminating streaming-markdown repaint flicker.
+// The interactive shell renders the transcript, composer, and overlays live in
+// a full-screen alternate-screen renderer.
 const launchCliShell: CliInteractiveShellLauncher = async (bundle, shellOptions) => {
   await renderCliInteractiveOpenTuiShell(bundle, shellOptions);
 };

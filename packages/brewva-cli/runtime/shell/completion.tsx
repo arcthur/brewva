@@ -25,19 +25,6 @@ function truncateCompletionText(text: string, maxWidth: number): string {
   return `${truncateToWidth(text, boundedWidth - 1)}…`;
 }
 
-/**
- * Layout mode for the completion popup.
- *
- * "absolute" is the alternate-screen default: the popup floats
- * `position="absolute"` anchored to the composer (above or below it depending
- * on available space). "inline" renders the popup IN FLOW (no absolute
- * positioning) so the split-footer footer's height router can measure it and
- * allocate footer rows; the footer renders it ABOVE the composer (render order),
- * which is where a bottom-docked footer wants it. The default is "absolute", so
- * the interactive shell is unchanged.
- */
-export type CompletionLayoutMode = "absolute" | "inline";
-
 export function CompletionOverlay(input: {
   runtime: ShellRendererController;
   completion: NonNullable<ShellViewModel["composer"]["completion"]>;
@@ -46,20 +33,12 @@ export function CompletionOverlay(input: {
   width: number;
   height: number;
   theme: SessionPalette;
-  /** Defaults to "absolute" (alternate-screen float). The split-footer footer passes "inline". */
-  layout?: CompletionLayoutMode;
 }) {
   const shellContext = useShellRenderContext();
-  const layout = (): CompletionLayoutMode => input.layout ?? "absolute";
   let scrollbox: OpenTuiScrollBoxHandle | undefined;
   const [pointerMode, setPointerMode] = createSignal<"keyboard" | "mouse">("keyboard");
   const [positionTick, setPositionTick] = createSignal(0);
   createEffect(() => {
-    // Inline mode is in flow: there is no absolute anchor to track, so skip the
-    // position-polling timer entirely.
-    if (layout() === "inline") {
-      return;
-    }
     const anchor = input.anchor();
     if (!anchor) {
       return;
@@ -89,12 +68,6 @@ export function CompletionOverlay(input: {
   });
   const position = createMemo(() => {
     positionTick();
-    // Inline (split-footer footer): no anchor-relative offset — the popup is in
-    // flow, full-width inside the footer's content area, and the footer-height
-    // router caps the footer height. x/y are unused by the inline branch.
-    if (layout() === "inline") {
-      return { x: 0, y: 0, width: Math.max(16, input.width - 4) };
-    }
     const anchor = input.anchor();
     if (!anchor) {
       return {
@@ -115,12 +88,6 @@ export function CompletionOverlay(input: {
   });
   const overlayContentHeight = createMemo(() => {
     const count = input.completion.items.length || 1;
-    // Inline: the popup is in flow, so it cannot float above/below an anchor —
-    // cap to the list length (max 10 rows). The footer-height router caps the
-    // overall footer; the internal scrollbox handles overflow past 10 rows.
-    if (layout() === "inline") {
-      return Math.min(10, count);
-    }
     const spaceAbove = Math.max(1, position().y);
     const spaceBelow = Math.max(1, input.height - position().y - 1);
     return Math.min(10, count, Math.max(spaceAbove, spaceBelow));
@@ -166,23 +133,15 @@ export function CompletionOverlay(input: {
       node.scrollBy(selectedIndex + 1 - scrollBottom);
     }
   });
-  // In flow (inline) the popup is a normal block above the composer with a small
-  // gap; floating (absolute) it is positioned over the anchor. The border, width
-  // and the scrolling body below are shared between both modes.
-  const containerProps = createMemo(() =>
-    layout() === "inline"
-      ? ({
-          flexShrink: 0,
-          marginBottom: 1,
-          width: position().width,
-        } as const)
-      : ({
-          position: "absolute",
-          zIndex: COMPLETION_Z_INDEX,
-          left: position().x,
-          top: overlayTop(),
-          width: position().width,
-        } as const),
+  const containerProps = createMemo(
+    () =>
+      ({
+        position: "absolute",
+        zIndex: COMPLETION_Z_INDEX,
+        left: position().x,
+        top: overlayTop(),
+        width: position().width,
+      }) as const,
   );
   return (
     <box

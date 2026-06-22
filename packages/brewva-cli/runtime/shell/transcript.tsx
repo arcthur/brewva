@@ -45,10 +45,8 @@ import { classifyTranscriptTextBlock } from "./transcript-markdown.js";
 
 /**
  * The `▣ <assistantLabel> · <modelLabel>` header rendered beneath an assistant
- * message. Shared between the live transcript (AssistantMessageView) and the
- * split-footer streaming path, which commits this same row to native scrollback
- * once a streamed text-only message settles so it matches a settled message's
- * layout. The caller owns the surrounding `<box paddingLeft={3}>` placement.
+ * message (AssistantMessageView). The caller owns the surrounding
+ * `<box paddingLeft={3}>` placement.
  */
 export function AssistantLabelLine(input: {
   theme: SessionPalette;

@@ -1600,14 +1600,6 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       }
       return cockpitWireFold.snapshot(targetSessionId);
     },
-    getCockpitScrollbackLog(targetSessionId = bundle.session.sessionManager.getSessionId()) {
-      // Pure read: hand back the live per-session log so the renderer drains it
-      // via since(cursor). Deliberately does NOT hydrate durable frames (that
-      // would emit no commits anyway, since hydrate projects with
-      // projectTranscript:false) — the log is populated only by the live
-      // remember(frame) path during an interactive turn.
-      return cockpitWireFold.scrollbackLog(targetSessionId);
-    },
     getTranscriptSeed() {
       const messages = bundle.session.sessionManager.buildSessionContext?.().messages;
       if (Array.isArray(messages) && messages.length > 0) {

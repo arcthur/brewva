@@ -2,41 +2,8 @@ import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { ShellClock } from "./clock.js";
 import type { ShellInput } from "./input.js";
-import type { ScrollbackCommit, ScrollbackCommitCursor } from "./scrollback/commit.js";
 import type { BrewvaResolvedKeymapBindings, BrewvaTuiConfig } from "./tui.js";
 import type { ShellViewModel } from "./view-model.js";
-
-/**
- * A drained slice of the append-only scrollback commit log for the current
- * session, plus two orthogonal replay signals.
- *
- * The writer drains incrementally: it passes the cursor it last acknowledged
- * and receives the commits strictly after it.
- *
- *  - `epoch` is the session generation. When it changes the per-session commit
- *    log was RESET for a NEW session (or a full re-hydrate), so the writer runs
- *    a CLEARING replay boundary and replays the (fresh, empty-then-refilled) log
- *    from the start (cursor -> undefined).
- *  - `rewindGeneration` is bumped on an IN-PLACE rewind / redo / undo of the
- *    SAME session. Unlike a session switch these mutate the session WITHOUT a
- *    mountSession, so the epoch does NOT change and the append-only log is NOT
- *    reset — it keeps growing monotonically, the abandoned-branch commits still
- *    sitting in it behind the writer's cursor. When THIS signal changes (and the
- *    epoch did not) the writer runs the SAME clear primitive but then ADVANCES
- *    its cursor to the current log TAIL (skipping the abandoned commits) and
- *    re-renders the now-shorter transcript purely via the settled sweep, so the
- *    abandoned rows are gone from native scrollback and only genuinely-new
- *    post-rewind turns drain forward.
- *
- * The two signals are deliberately distinct: a session switch replays the log;
- * a rewind skips the abandoned tail and re-sweeps the shorter transcript.
- */
-export interface ScrollbackCommitPeek {
-  readonly commits: readonly ScrollbackCommit[];
-  readonly cursor: ScrollbackCommitCursor;
-  readonly epoch: number;
-  readonly rewindGeneration: number;
-}
 
 export interface ShellRendererNotifier {
   notify(message: string, level?: "info" | "warning" | "error"): void;
@@ -59,13 +26,6 @@ export interface ShellRendererController {
    */
   getClock(): ShellClock;
   getSessionWireFrames(sessionId: string): readonly SessionWireFrame[];
-  /**
-   * Drain the current session's append-only scrollback commit log from
-   * `cursor`. A pure read — the log is never mutated by the reader. Returns the
-   * commits strictly after `cursor`, the advanced cursor, and the session
-   * `epoch` (so the writer can detect a session switch / log reset).
-   */
-  peekScrollbackCommits(cursor: ScrollbackCommitCursor): ScrollbackCommitPeek;
   getToolDefinitions(): ReadonlyMap<string, BrewvaToolDefinition>;
   getTuiConfig(): BrewvaTuiConfig;
   getKeymapBindings(): BrewvaResolvedKeymapBindings;

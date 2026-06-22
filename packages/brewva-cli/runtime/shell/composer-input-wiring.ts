@@ -98,13 +98,11 @@ export interface ComposerInputWiringInput {
 }
 
 /**
- * Shared composer + keyboard/keymap/paste wiring for the footer shell.
+ * Shared composer + keyboard/keymap/paste wiring for the interactive shell.
  *
  * Owns the uncontrolled-textarea editor-sync loop, prompt-part extmark
  * lifecycle, keymap registration + mode tracking, the viewport-resize report,
  * and the keyboard/paste handlers that route into `runtime.handleInput(...)`.
- * The shell renders only this composer (plus overlays) live; the transcript is
- * committed to native scrollback (see SplitFooterScrollbackWriter).
  */
 export function useComposerInputWiring(input: ComposerInputWiringInput): ComposerInputWiring {
   const state = useShellState(input.runtime);

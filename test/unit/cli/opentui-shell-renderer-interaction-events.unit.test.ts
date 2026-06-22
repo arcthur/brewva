@@ -20,7 +20,7 @@ import {
   type OpenTuiRenderer,
   type OpenTuiKeyEvent,
 } from "../../../packages/brewva-cli/runtime/internal-opentui-runtime.js";
-import { BrewvaOpenTuiShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
+import { BrewvaFullScreenShell } from "../../../packages/brewva-cli/runtime/opentui-shell-renderer.js";
 import { toSemanticInput } from "../../../packages/brewva-cli/runtime/shell/utils.js";
 import {
   createCliInspectPort,
@@ -41,10 +41,9 @@ interface FakeOpenTuiSelectionRenderer extends OpenTuiRenderer {
   };
   getSelection(): { getSelectedText(): string } | null;
   clearSelection(): void;
-  // Split-footer shell wires a per-frame footer-height router that reads/writes
-  // `footerHeight` and subscribes via `on("frame", ...)`. A custom renderer must
-  // satisfy that contract (no-op listener registry is fine: the test renderer,
-  // not this fake, drives actual frames).
+  // Satisfy the broader renderer surface the shell may read (footerHeight /
+  // event subscription); a no-op listener registry is fine — the test renderer,
+  // not this fake, drives actual frames.
   footerHeight: number;
   on(event: string, listener: () => void): void;
   off(event: string, listener: () => void): void;
@@ -662,7 +661,7 @@ describe("opentui solid shell runtime: interaction events", () => {
 
     await runtime.start();
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 24,
@@ -723,7 +722,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 120,
         height: 36,
@@ -769,7 +768,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 120,
         height: 36,
@@ -811,7 +810,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 120,
         height: 36,
@@ -874,7 +873,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 70,
         height: 24,
@@ -920,7 +919,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 30,
@@ -959,7 +958,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await Bun.sleep(CliShellRuntime.COMPLETION_REFRESH_DEBOUNCE_MS + 30);
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       { width: 120, height: 36 },
     );
     try {
@@ -1092,7 +1091,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 30,
@@ -1153,7 +1152,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 30,
@@ -1251,7 +1250,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await Bun.sleep(0);
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 30,
@@ -1309,7 +1308,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 30,
@@ -1358,7 +1357,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
         renderer: selection.renderer,
         copyTextToClipboard: async (text: string) => {
@@ -1410,7 +1409,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
       }),
       {
@@ -1456,7 +1455,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
       }),
       {
@@ -1496,7 +1495,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
       }),
       {
@@ -1551,7 +1550,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
       }),
       {
@@ -1628,7 +1627,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: rendererRuntime,
       }),
       {
@@ -1685,7 +1684,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: rendererRuntime,
       }),
       {
@@ -1729,7 +1728,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
       }),
       {
@@ -1771,7 +1770,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
       }),
       {
@@ -1829,7 +1828,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
       }),
       {
@@ -1875,7 +1874,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     await runtime.start();
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, {
+      createOpenTuiSolidElement(BrewvaFullScreenShell, {
         runtime: runtime,
         renderer: selection.renderer,
         copyTextToClipboard: async (text: string) => {
@@ -1928,7 +1927,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 28,
@@ -1993,7 +1992,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 28,
@@ -2068,7 +2067,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 28,
@@ -2129,7 +2128,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 28,
@@ -2182,7 +2181,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     });
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 28,
@@ -2241,7 +2240,7 @@ describe("opentui solid shell runtime: interaction events", () => {
     runtime.ui.notify("latest notification", "warning");
 
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 28,
@@ -2321,7 +2320,7 @@ describe("opentui solid shell runtime: interaction events", () => {
 
     await runtime.start();
     const testSetup = await openTuiSolidTestRender(
-      createOpenTuiSolidElement(BrewvaOpenTuiShell, { runtime: runtime }),
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
       {
         width: 100,
         height: 28,

@@ -27,15 +27,7 @@ describe("cli contract: Brewva-native runtime boundary", () => {
       "brewva-cli",
       "runtime",
       "shell",
-      "app.tsx",
-    );
-    const scrollbackWriterPath = resolve(
-      repoRoot,
-      "packages",
-      "brewva-cli",
-      "runtime",
-      "shell",
-      "split-footer-scrollback-writer.tsx",
+      "fullscreen-app.tsx",
     );
     const solidPromptPath = resolve(
       repoRoot,
@@ -129,9 +121,6 @@ describe("cli contract: Brewva-native runtime boundary", () => {
       ? readFileSync(runtimeEntryPath, "utf8")
       : "";
     const solidShellSource = existsSync(solidShellPath) ? readFileSync(solidShellPath, "utf8") : "";
-    const scrollbackWriterSource = existsSync(scrollbackWriterPath)
-      ? readFileSync(scrollbackWriterPath, "utf8")
-      : "";
     const solidPromptSource = existsSync(solidPromptPath)
       ? readFileSync(solidPromptPath, "utf8")
       : "";
@@ -178,16 +167,13 @@ describe("cli contract: Brewva-native runtime boundary", () => {
     expect(runtimeEntrySource).toContain("renderCliInteractiveOpenTuiShell");
     expect(runtimeEntrySource).not.toContain("renderCliInteractiveShell");
     expect(runtimeEntrySource).not.toContain("BREWVA_TUI_ENGINE");
-    // The interactive shell renders only the live footer (composer + completion
-    // + overlays); the transcript — and therefore tool rendering — is committed
-    // to native scrollback by the SplitFooterScrollbackWriter.
+    // The interactive shell renders the transcript, composer, completion, and
+    // overlays live in a full-screen alternate-screen scrollbox.
     expect(solidShellSource).toContain("CompletionOverlay");
     expect(solidShellSource).toContain("promptAnchor");
     expect(solidShellSource).toContain("PromptPanel");
+    expect(solidShellSource).toContain("TranscriptMessageView");
     expect(solidShellSource).not.toContain("_customTools");
-    expect(scrollbackWriterSource).toContain("getToolDefinitions()");
-    expect(scrollbackWriterSource).toContain("resetForSession");
-    expect(scrollbackWriterSource).toContain("TranscriptMessageView");
     expect(solidPromptSource).toContain("setAnchor(node: BoxRenderable): void;");
     expect(solidPromptSource).not.toContain("CompletionOverlay");
 

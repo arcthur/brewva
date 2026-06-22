@@ -27,10 +27,9 @@ export function ShellRenderProvider(input: {
 }
 
 /**
- * Build a ShellRenderContextValue from a live runtime. Used by both the
- * per-message settled path (SplitFooterScrollbackWriter.syncSettled) and the
- * batch scrollback path (TranscriptScrollbackDocument), so both render
- * identically.
+ * Build a ShellRenderContextValue from a live runtime. Used by the batch
+ * transcript-scrollback render path (the external-pager transcript export) so it
+ * renders identically to the live shell.
  */
 export function buildShellRenderContext(runtime: ShellRendererController): ShellRenderContextValue {
   const viewState = runtime.getViewState();

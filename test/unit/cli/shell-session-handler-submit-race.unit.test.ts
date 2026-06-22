@@ -35,7 +35,6 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
-      markRewindBoundary() {},
       getUi: () =>
         ({
           notify() {},
@@ -117,7 +116,6 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
-      markRewindBoundary() {},
       getUi: () =>
         ({
           notify() {},
@@ -225,7 +223,6 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
-      markRewindBoundary() {},
       getUi: () =>
         ({
           notify() {},
@@ -333,7 +330,6 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
-      markRewindBoundary() {},
       getUi: () =>
         ({
           notify() {},
@@ -433,7 +429,6 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
-      markRewindBoundary() {},
       getUi: () =>
         ({
           notify(message: string) {
@@ -512,7 +507,6 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
-      markRewindBoundary() {},
       getUi: () =>
         ({
           notify() {},
@@ -600,7 +594,6 @@ describe("ShellSessionHandler submitComposer", () => {
         turn: 1,
       }),
       getSessionGeneration: () => 1,
-      markRewindBoundary() {},
       getUi: () =>
         ({
           notify() {},

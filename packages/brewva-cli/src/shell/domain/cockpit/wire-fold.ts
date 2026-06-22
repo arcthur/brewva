@@ -4,12 +4,6 @@ import type {
   ToolOutputView,
 } from "@brewva/brewva-vocabulary/wire";
 import {
-  deriveLogicalId,
-  ScrollbackCommitLog,
-  type ScrollbackCommitKind,
-  type ScrollbackCommitPhase,
-} from "../scrollback/commit.js";
-import {
   buildTextTranscriptMessage,
   upsertToolExecutionIntoTranscriptMessages,
   type CliShellTranscriptMessage,
@@ -254,12 +248,6 @@ class ShellCockpitSessionWireFold {
   #transcriptMessages: CliShellTranscriptMessage[] = [];
   #transcriptVersion = 0;
   #transcriptSegmentSequence = 0;
-  /**
-   * Append-only side-channel mirroring transcript transitions as typed,
-   * stable-keyed commits. Additive: the transcript-state output is unchanged
-   * and nothing consumes this log yet (the writer is a later phase).
-   */
-  readonly #scrollbackLog = new ScrollbackCommitLog();
   #latestWireRef: ShellCockpitFoldedSourceRef | null = null;
   #latestCommittedAnswer: ShellCockpitFoldedAnswer | undefined;
 
@@ -282,7 +270,6 @@ class ShellCockpitSessionWireFold {
     this.#toolCalls.clear();
     this.#latestWireRef = null;
     this.#latestCommittedAnswer = undefined;
-    this.#scrollbackLog.reset();
     this.clearTranscriptProjection();
     for (const frame of [...frames].toSorted(compareFrames)) {
       const key = frameKey(frame);
@@ -358,26 +345,6 @@ class ShellCockpitSessionWireFold {
       transcriptVersion: this.#transcriptVersion,
       transcriptMessages,
     };
-  }
-
-  scrollbackLog(): ScrollbackCommitLog {
-    return this.#scrollbackLog;
-  }
-
-  private emitScrollbackCommit(input: {
-    readonly message: CliShellTranscriptMessage | null;
-    readonly kind: ScrollbackCommitKind;
-    readonly phase: ScrollbackCommitPhase;
-  }): void {
-    if (!input.message) {
-      return;
-    }
-    this.#scrollbackLog.append({
-      logicalId: deriveLogicalId(input.message),
-      kind: input.kind,
-      phase: input.phase,
-      message: input.message,
-    });
   }
 
   private recordClock(ref: string, ts: number): void {
@@ -649,16 +616,6 @@ class ShellCockpitSessionWireFold {
     }
     this.#dirtyAssistantSegmentKeys.add(key);
     this.#transcriptVersion += 1;
-    this.emitScrollbackCommit({
-      message: buildTextTranscriptMessage({
-        id: segment.messageId,
-        role: "assistant",
-        text: segment.text,
-        renderMode: "streaming",
-      }),
-      kind: "assistant",
-      phase: "progress",
-    });
   }
 
   /**
@@ -718,7 +675,6 @@ class ShellCockpitSessionWireFold {
         renderMode: "stable",
       });
       this.upsertTranscriptMessage(turnId, message);
-      this.emitScrollbackCommit({ message, kind: "assistant", phase: "final" });
     }
   }
 
@@ -755,15 +711,6 @@ class ShellCockpitSessionWireFold {
     );
     this.recordTranscriptMessage(frame.turnId, fallbackMessageId);
     this.#transcriptVersion += 1;
-    this.emitScrollbackCommit({
-      message: this.findTranscriptMessageById(fallbackMessageId),
-      kind: "tool",
-      phase: input.resultMode === "finish" ? "final" : "progress",
-    });
-  }
-
-  private findTranscriptMessageById(id: string): CliShellTranscriptMessage | null {
-    return this.#transcriptMessages.find((message) => message.id === id) ?? null;
   }
 
   private transcriptMessagesForTurn(turnId: string): CliShellTranscriptMessage[] {
@@ -807,11 +754,6 @@ class ShellCockpitSessionWireFold {
     );
     this.recordTranscriptMessage(input.turnId, fallbackMessageId);
     this.#transcriptVersion += 1;
-    this.emitScrollbackCommit({
-      message: this.findTranscriptMessageById(fallbackMessageId),
-      kind: "tool",
-      phase: "final",
-    });
   }
 
   private replayCommittedTranscript(
@@ -859,7 +801,6 @@ class ShellCockpitSessionWireFold {
           renderMode: "stable",
         });
         this.upsertTranscriptMessage(frame.turnId, message);
-        this.emitScrollbackCommit({ message, kind: "assistant", phase: "final" });
         continue;
       }
       this.upsertCommittedTranscriptToolOutput({
@@ -899,7 +840,6 @@ class ShellCockpitSessionWireFold {
       renderMode: "stable",
     });
     this.upsertTranscriptMessage(frame.turnId, message);
-    this.emitScrollbackCommit({ message, kind: "assistant", phase: "final" });
   }
 
   private applyFrame(
@@ -1068,7 +1008,6 @@ export function createShellCockpitWireFoldStore(): {
   hydrateSession(sessionId: string, frames: readonly SessionWireFrame[]): void;
   replaceSession(sessionId: string, frames: readonly SessionWireFrame[]): void;
   snapshot(sessionId: string): ShellCockpitWireFoldSnapshot;
-  scrollbackLog(sessionId: string): ScrollbackCommitLog;
 } {
   const folds = new Map<string, ShellCockpitSessionWireFold>();
   const foldFor = (sessionId: string): ShellCockpitSessionWireFold => {
@@ -1091,9 +1030,6 @@ export function createShellCockpitWireFoldStore(): {
     },
     snapshot(sessionId) {
       return foldFor(sessionId).snapshot();
-    },
-    scrollbackLog(sessionId) {
-      return foldFor(sessionId).scrollbackLog();
     },
   };
 }
