@@ -38,6 +38,7 @@ import type {
   InternalHostPluginApi,
   RuntimePluginCapability,
 } from "./plugin.js";
+import { ALL_RUNTIME_PLUGIN_CAPABILITIES } from "./plugin.js";
 
 type PluginHandler<TKey extends keyof BrewvaHostPluginEventMap> = (
   event: BrewvaHostPluginEventMap[TKey],
@@ -176,21 +177,6 @@ export interface BrewvaHostPluginRunner {
     ctx: BrewvaHostContext,
   ): Promise<BrewvaHostMessageEndResult | undefined>;
 }
-
-const ALL_RUNTIME_PLUGIN_CAPABILITIES: readonly RuntimePluginCapability[] = [
-  "tool_registration.write",
-  "tool_surface.write",
-  "system_prompt.write",
-  "context_messages.write",
-  "provider_payload.write",
-  "input_parts.write",
-  "turn_input.handle",
-  "tool_call.block",
-  "tool_result.write",
-  "message_visibility.write",
-  "assistant_message.enqueue",
-  "user_message.enqueue",
-];
 
 function createCapabilitySet(
   capabilities: readonly RuntimePluginCapability[],

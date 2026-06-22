@@ -1,4 +1,8 @@
-import type { InternalHostPlugin, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import type {
+  InternalHostPlugin,
+  InternalHostPluginApi,
+  RuntimePluginCapability,
+} from "@brewva/brewva-substrate/host-api";
 import { defineInternalHostPlugin } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
@@ -186,10 +190,6 @@ export interface CreateHostedBehaviorHostAdapterOptions extends HostedRuntimeAda
   hostedToolDefinitionsByName?: ReadonlyMap<string, BrewvaToolDefinition>;
 }
 
-function assertHostedBehaviorHostAdapterRuntimeShape(
-  _options: CreateHostedBehaviorHostAdapterOptions,
-): void {}
-
 function buildManagedTools(
   runtime: HostedRuntimeAdapterPort,
   options: Pick<
@@ -276,54 +276,61 @@ function installHostedBehavior(
   registerToolResultDistiller(hostApi, runtime);
   registerProviderRequestRecovery(hostApi, runtime);
   registerProviderRequestReduction(hostApi, runtime);
-  registerTurnLifecyclePorts(hostApi, [
-    localHookManager.lifecycle,
-    {
-      beforeAgentStart: skillSelection.beforeAgentStart,
-    },
-    {
-      turnStart: contextTransform.turnStart,
-      sessionCompact: contextTransform.sessionCompact,
-      sessionShutdown: contextTransform.sessionShutdown,
-    },
-    {
-      beforeAgentStart: toolSurface.beforeAgentStart,
-    },
-    {
-      input: qualityGate.input,
-      beforeAgentStart: contextTransform.beforeAgentStart,
-      toolResult: qualityGate.toolResult,
-    },
-    {
-      toolResult: readPathRecovery.toolResult,
-    },
-    {
-      toolResult: toolSurface.toolResult,
-      sessionShutdown: toolSurface.sessionShutdown,
-    },
-    goalContinuation,
-    ...userPorts,
-  ]);
+  registerTurnLifecyclePorts(hostApi, {
+    pre_model: [
+      localHookManager.lifecycle,
+      { beforeAgentStart: skillSelection.beforeAgentStart },
+      {
+        turnStart: contextTransform.turnStart,
+        sessionCompact: contextTransform.sessionCompact,
+        sessionShutdown: contextTransform.sessionShutdown,
+      },
+      { beforeAgentStart: toolSurface.beforeAgentStart },
+    ],
+    model_io: [
+      {
+        input: qualityGate.input,
+        beforeAgentStart: contextTransform.beforeAgentStart,
+        toolResult: qualityGate.toolResult,
+      },
+    ],
+    post_tool: [
+      { toolResult: readPathRecovery.toolResult },
+      {
+        toolResult: toolSurface.toolResult,
+        sessionShutdown: toolSurface.sessionShutdown,
+      },
+    ],
+    teardown: [goalContinuation, ...userPorts],
+  });
 }
+
+/**
+ * The fixed capability set the internal `hosted_behavior` plugin declares — the
+ * single source of truth for the hosted authority surface. The journey doc
+ * `hosted-behavior-installation.md` mirrors it and a drift-guard fitness keeps
+ * the two in lockstep (RFC: Checked Invariants And Disciplined Peer Borrowing,
+ * item F).
+ */
+export const HOSTED_BEHAVIOR_CAPABILITIES = [
+  "tool_registration.write",
+  "tool_surface.write",
+  "system_prompt.write",
+  "context_messages.write",
+  "provider_payload.write",
+  "input_parts.write",
+  "tool_call.block",
+  "tool_result.write",
+  "assistant_message.enqueue",
+] as const satisfies readonly RuntimePluginCapability[];
 
 export function createHostedBehaviorHostAdapter(
   options: CreateHostedBehaviorHostAdapterOptions = {},
 ): InternalHostPlugin {
   return defineInternalHostPlugin({
     name: "hosted_behavior",
-    capabilities: [
-      "tool_registration.write",
-      "tool_surface.write",
-      "system_prompt.write",
-      "context_messages.write",
-      "provider_payload.write",
-      "input_parts.write",
-      "tool_call.block",
-      "tool_result.write",
-      "assistant_message.enqueue",
-    ],
+    capabilities: HOSTED_BEHAVIOR_CAPABILITIES,
     register(hostApi) {
-      assertHostedBehaviorHostAdapterRuntimeShape(options);
       const runtime = options.runtime ?? createHostedRuntimeAdapter(options);
       const executionCoordinator =
         options.toolExecutionCoordinator ?? createHostedToolExecutionCoordinator();

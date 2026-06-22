@@ -51,6 +51,9 @@ export {
   type InternalHostPlugin,
   type InternalHostPluginApi,
   type RuntimePluginCapability,
+  type RuntimePluginCapabilityEffect,
+  RUNTIME_PLUGIN_CAPABILITY_EFFECTS,
+  ALL_RUNTIME_PLUGIN_CAPABILITIES,
 } from "./plugin.js";
 export {
   type BrewvaInteractiveQuestionRequest,

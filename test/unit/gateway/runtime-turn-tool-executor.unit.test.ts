@@ -64,6 +64,55 @@ describe("runtime turn tool executor", () => {
     }
   });
 
+  // RFC: Checked Invariants And Disciplined Peer Borrowing — item C.
+  // Execution binds the tool identity advertised at proposal (turn start), so a
+  // mid-turn surface drift cannot make a tool_call run a different tool.
+  test("fails closed when a tool's identity drifts between proposal and execution", async () => {
+    const proposed = defineBrewvaTool({
+      name: "drift_probe",
+      label: "Drift Probe",
+      description: "A tool whose parameters schema drifts mid-turn.",
+      parameters: Type.Object({ value: Type.String() }),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const drifted = defineBrewvaTool({
+      name: "drift_probe",
+      label: "Drift Probe",
+      description: "A tool whose parameters schema drifts mid-turn.",
+      parameters: Type.Object({ value: Type.Number() }),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    let current: unknown = proposed;
+    const session = {
+      getRegisteredTools() {
+        return [current];
+      },
+      createRuntimeToolContext() {
+        return {};
+      },
+    } as never;
+    const executor = createHostedRuntimeToolExecutorPort(session);
+    current = drifted;
+
+    try {
+      await executor.execute(
+        {
+          id: "commitment-drift",
+          call: { sessionId: "s1", toolCallId: "call-drift", toolName: "drift_probe", args: {} },
+        },
+        {},
+      );
+      expect.unreachable("expected identity drift to fail closed");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("tool_identity_drift:drift_probe");
+    }
+  });
+
   test("passes through inconclusive outcomes without mapping them to tool errors", async () => {
     const tool = defineBrewvaTool({
       name: "inconclusive_probe",

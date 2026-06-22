@@ -337,19 +337,51 @@ export interface BrewvaHostPluginEventMap {
   tool_result: BrewvaHostToolResultEvent;
 }
 
-export type RuntimePluginCapability =
-  | "tool_registration.write"
-  | "tool_surface.write"
-  | "system_prompt.write"
-  | "context_messages.write"
-  | "provider_payload.write"
-  | "input_parts.write"
-  | "turn_input.handle"
-  | "tool_call.block"
-  | "tool_result.write"
-  | "message_visibility.write"
-  | "assistant_message.enqueue"
-  | "user_message.enqueue";
+export type RuntimePluginCapabilityEffect =
+  | "tool-registration"
+  | "tool-surface-write"
+  | "prompt-write"
+  | "context-write"
+  | "provider-payload-write"
+  | "input-parts-write"
+  | "input-handling"
+  | "tool-call-control"
+  | "tool-result-write"
+  | "message-visibility-write"
+  | "message-enqueue";
+
+/**
+ * Single source of truth for the internal host-plugin capability set: every
+ * capability is tagged with the effect class it authorizes. `RuntimePluginCapability`
+ * and `ALL_RUNTIME_PLUGIN_CAPABILITIES` both derive from this map, so a capability
+ * is declared in exactly one place and cannot drift from its inventory.
+ *
+ * Invariant (RFC: Checked Invariants And Disciplined Peer Borrowing, item F):
+ * exactly one capability carries the `context-write` effect class
+ * (`context_messages.write`). There is no context-source registration path; the
+ * guard is the positive allowlist in
+ * `test/fitness/host-plugin-capability-invariants.fitness.test.ts`, never a name denylist.
+ */
+export const RUNTIME_PLUGIN_CAPABILITY_EFFECTS = {
+  "tool_registration.write": "tool-registration",
+  "tool_surface.write": "tool-surface-write",
+  "system_prompt.write": "prompt-write",
+  "context_messages.write": "context-write",
+  "provider_payload.write": "provider-payload-write",
+  "input_parts.write": "input-parts-write",
+  "turn_input.handle": "input-handling",
+  "tool_call.block": "tool-call-control",
+  "tool_result.write": "tool-result-write",
+  "message_visibility.write": "message-visibility-write",
+  "assistant_message.enqueue": "message-enqueue",
+  "user_message.enqueue": "message-enqueue",
+} as const satisfies Record<string, RuntimePluginCapabilityEffect>;
+
+export type RuntimePluginCapability = keyof typeof RUNTIME_PLUGIN_CAPABILITY_EFFECTS;
+
+export const ALL_RUNTIME_PLUGIN_CAPABILITIES: readonly RuntimePluginCapability[] = Object.keys(
+  RUNTIME_PLUGIN_CAPABILITY_EFFECTS,
+) as RuntimePluginCapability[];
 
 type BrewvaHostPluginHandlerResult<TKey extends keyof BrewvaHostPluginEventMap> =
   TKey extends "before_agent_start"

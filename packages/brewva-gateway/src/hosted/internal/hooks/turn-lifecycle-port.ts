@@ -55,6 +55,22 @@ export interface TurnLifecyclePort {
   ) => MaybePromise<void | undefined>;
 }
 
+export const HOSTED_LIFECYCLE_PHASES = ["pre_model", "model_io", "post_tool", "teardown"] as const;
+
+export type HostedLifecyclePhase = (typeof HOSTED_LIFECYCLE_PHASES)[number];
+
+/**
+ * The hosted turn-lifecycle spine, declared by coarse, ordered phase buckets
+ * rather than a flat inline array (RFC: Checked Invariants And Disciplined Peer
+ * Borrowing, item E). A module may legitimately appear in more than one phase;
+ * the bucket pins where its ports run in the spine. Ports keep their declared
+ * order within a phase, and phases run in `HOSTED_LIFECYCLE_PHASES` order, so the
+ * spine order is a named, readable invariant instead of code position.
+ */
+export type HostedLifecyclePhasePorts = Readonly<
+  Record<HostedLifecyclePhase, readonly TurnLifecyclePort[]>
+>;
+
 function isPromiseLike<T>(value: MaybePromise<T>): value is Promise<T> {
   return (
     typeof value === "object" &&
@@ -222,8 +238,9 @@ function collectHandlers<TKey extends keyof TurnLifecyclePort>(
 
 export function registerTurnLifecyclePorts(
   extensionApi: ExtensionAPI,
-  ports: readonly TurnLifecyclePort[],
+  portsByPhase: HostedLifecyclePhasePorts,
 ): void {
+  const ports = HOSTED_LIFECYCLE_PHASES.flatMap((phase) => portsByPhase[phase]);
   const sessionStart = collectHandlers(ports, "sessionStart");
   const turnStart = collectHandlers(ports, "turnStart");
   const input = collectHandlers(ports, "input");

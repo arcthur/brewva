@@ -118,9 +118,7 @@ flowchart TD
 - the authority boundary is the four-port runtime plus the substrate capability
   gate. Hosted behavior reaches the runtime only through a narrowed adapter
   port, never the runtime root. The `hosted_behavior` plugin declares a fixed
-  capability set (tool registration/surface write, system-prompt write,
-  context-messages write, provider-payload write, input-parts write,
-  tool-call block, tool-result write, assistant-message enqueue)
+  capability set, enumerated by exact name below; nothing widens it
 - the substrate runner enforces capability per mutating operation and per
   mutating handler result; a plugin lacking the capability throws and a
   violation is recorded
@@ -132,6 +130,28 @@ flowchart TD
 - local hooks are advisory only: results are observe or recommend, invalid
   shapes normalize to an advisory note, and they record governance decisions but
   never block
+
+The `hosted_behavior` plugin declares exactly these capabilities by name; a
+drift-guard fitness keeps this list and the `HOSTED_BEHAVIOR_CAPABILITIES`
+constant in lockstep:
+
+<!-- hosted-behavior-capabilities -->
+
+```text
+tool_registration.write
+tool_surface.write
+system_prompt.write
+context_messages.write
+provider_payload.write
+input_parts.write
+tool_call.block
+tool_result.write
+assistant_message.enqueue
+```
+
+It does not declare `turn_input.handle`, `message_visibility.write`, or
+`user_message.enqueue`: those exist in the capability enum but stay outside the
+hosted authority surface.
 
 ## Failure And Recovery
 

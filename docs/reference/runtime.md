@@ -66,6 +66,17 @@ adapters use this identity to combine a prepared hosted baseline with only the
 current turn's later tape events; provenance never changes tape authority or
 becomes provider-visible content.
 
+The hosted provider request is therefore a hybrid, not `PromptPlan` alone. The
+prepared baseline — restored history, the current user message, and plugin
+transforms — comes from the rebuildable hosted session projection store, not from
+`tape.replayBaseline`; `materialize()` contributes only the post-cursor committed
+tape events; and the environment-derived system prompt (project instructions,
+base prompt, before-agent-start overlay) is set on hosted agent state outside the
+projection. Replay reproduces the committed tape events exactly, but the baseline
+projection and the system prompt are re-rendered from the current store and
+environment — so `PromptPlan` is the runtime.turn projection, not a byte-exact
+record of what the hosted lane sent.
+
 ## Canonical Tape
 
 Runtime truth is recorded through a compact canonical event vocabulary:

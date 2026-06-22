@@ -71,6 +71,20 @@ discipline.
   fitness, with a one-line `decisions/` pointer. No hand-authored map and no new
   anti-patterns doc; `decisions/` stays immutable and in place.
 
+- [RFC: Checked Invariants And Disciplined Peer Borrowing](./rfc-checked-invariants-and-disciplined-borrowing.md):
+  active RFC for upgrading load-bearing runtime invariants from documented
+  promises to checked artifacts — coarse-bucket phases for the hosted
+  turn-lifecycle-port array, a generated `capability x plugin` matrix plus an
+  allowlist fitness guarding the no-context-source invariant (context-write
+  capabilities `== {context_messages.write}`) and a `hosted_behavior`
+  capability-set drift guard, an explicit replay-contract boundary for the hosted
+  lane's parallel message assembly (which does not pass through `materialize()`),
+  a reachability-gated in-flight tool-identity guard, and removal of a dead
+  placeholder — and for disciplined peer borrowing (`opencode`'s snapshot diff
+  algebra into materialization cache stability, `pi-mono`'s call/result rendering
+  ergonomics into the advisory ring) under the line `Borrow the mechanism, never
+the authority shape`.
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

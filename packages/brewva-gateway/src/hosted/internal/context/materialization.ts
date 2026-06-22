@@ -18,7 +18,7 @@ import {
 } from "./evidence/context-evidence.js";
 import type { HostedContextRenderResult } from "./hosted-context-blocks.js";
 import type { HostedContextTelemetry } from "./hosted-context-telemetry.js";
-import { buildPromptStabilityObservation } from "./prompt-stability.js";
+import { buildPromptStabilityObservation, diffKeyedBlocks } from "./prompt-stability.js";
 
 type VisibleReadState = Parameters<
   HostedRuntimeAdapterPort["ops"]["context"]["visibleRead"]["rememberState"]
@@ -71,6 +71,19 @@ function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function readHashRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const result: Record<string, string> = {};
+  for (const [key, hash] of Object.entries(value)) {
+    if (typeof hash === "string") {
+      result[key] = hash;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 function recordPromptStability(input: {
   runtime: HostedRuntimeAdapterPort;
   sessionId: string;
@@ -89,6 +102,9 @@ function recordPromptStability(input: {
   const previousScopeKey = readString(previous?.scopeKey);
   const previousStablePrefixHash = readString(previous?.stablePrefixHash);
   const previousDynamicTailHash = readString(previous?.dynamicTailHash);
+  const previousTailBlockHashes = readHashRecord(
+    (previous as { tailBlockHashes?: unknown } | undefined)?.tailBlockHashes,
+  );
   const scopeChanged = previousScopeKey !== undefined && previousScopeKey !== scopeKey;
   const observed = {
     turn: input.observation.turn,
@@ -105,6 +121,13 @@ function recordPromptStability(input: {
       (previousDynamicTailHash === input.observation.dynamicTailHash &&
         previousScopeKey === scopeKey),
   };
+  const currentTailBlockHashes = input.observation.tailBlockHashes;
+  // Borrowed diff algebra (RFC item A): when tail blocks are present, record the
+  // structured per-block change so prefix/tail instability says which block moved,
+  // not just that something did.
+  const tailDiff = currentTailBlockHashes
+    ? diffKeyedBlocks(previousTailBlockHashes, currentTailBlockHashes)
+    : undefined;
   input.runtime.ops.context.evidence.append(
     input.sessionId,
     asLossy({
@@ -117,6 +140,16 @@ function recordPromptStability(input: {
         dynamicTailHash: observed.dynamicTailHash,
         stablePrefix: observed.stablePrefix,
         stableTail: observed.stableTail,
+        ...(currentTailBlockHashes ? { tailBlockHashes: currentTailBlockHashes } : {}),
+        ...(tailDiff
+          ? {
+              changedTailBlocks: [
+                ...tailDiff.added,
+                ...tailDiff.updated,
+                ...tailDiff.removed,
+              ].toSorted(),
+            }
+          : {}),
       },
     }),
   );
@@ -161,6 +194,7 @@ export function buildContextMaterializationReceipt(
       composedContent: input.rendered.content,
       contextScopeId: input.contextScopeId,
       turn: input.turn,
+      tailBlocks: input.rendered.blocks,
     }),
     pendingCompactionReason: input.pendingCompactionReason,
     gateRequired: input.gateStatus.required ?? false,
