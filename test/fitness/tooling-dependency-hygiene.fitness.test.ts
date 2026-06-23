@@ -22,7 +22,7 @@ describe("tooling dependency hygiene", () => {
     expect(packageJson.devDependencies?.knip).toMatch(/^\^6\.\d+\.\d+$/u);
     expect(packageJson.scripts?.["lint:unused"]).toBe("knip --dependencies --no-progress");
     expect(packageJson.scripts?.check).toContain("bun run lint:unused");
-    expect(knipConfig.ignoreBinaries).toEqual(expect.arrayContaining(["codesign", "tar", "file"]));
+    expect(knipConfig.ignoreBinaries).toEqual(expect.arrayContaining(["codesign", "file"]));
     expect(knipConfig.ignoreDependencies).toEqual(["@vscode/tree-sitter-wasm"]);
   });
 });

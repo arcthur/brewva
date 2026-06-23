@@ -23,10 +23,6 @@
     "distribution/brewva": {
       "entry": ["bin/*.js"],
       "project": ["bin/*.js"]
-    },
-    "distribution/worker": {
-      "entry": ["*.ts"],
-      "project": ["*.ts"]
     }
   },
   "ignoreWorkspaces": [
@@ -34,7 +30,7 @@
     "distribution/brewva-linux-arm64",
     "distribution/brewva-linux-x64"
   ],
-  "ignoreBinaries": ["codesign", "tar", "file"],
+  "ignoreBinaries": ["codesign", "file", "python3", "taskkill"],
   "ignoreDependencies": ["@vscode/tree-sitter-wasm"],
   "ignoreUnresolved": [
     "../../config.js",
