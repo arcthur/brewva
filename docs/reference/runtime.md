@@ -215,6 +215,37 @@ policies, and reasoning-revert-resume state machines must not become default
 runtime concepts again. They either become canonical tape projections, explicit
 tools, or deleted legacy code.
 
+## Durability
+
+The append-only logs that back replay — the event tape (`tape.dir`) and the
+Recovery WAL — are crash-safe at two named levels (`DURABILITY_LEVELS`):
+
+- `process_crash`: between flush boundaries the logs survive a process or worker
+  kill, because the OS page cache outlives the process. This is the case recovery
+  is built for.
+- `power_loss`: at a flush boundary — a committed `turn.ended` or
+  `checkpoint.committed` event, or a terminal Recovery WAL mark — the logs are
+  fsync'd to disk and survive host power loss or an OS crash.
+
+Full-file rewrites (Recovery WAL compaction) are atomic — a tmp write, fsync,
+rename, and parent-directory fsync — so a crash mid-rewrite never truncates a log
+or loses the watermark marker. On load a torn trailing line (a partial final
+record left by a crash) is truncated and the log continues, never merging a new
+record onto half-written bytes.
+
+Recovery delivery is `at_least_once` (`EFFECT_DELIVERY`): a restart re-drives the
+accepted envelope and external effects are deduped best-effort (dedupe key plus
+event id), not exactly-once.
+
+The event tape fails closed on a malformed record because it is replay truth. The
+Recovery WAL, being durable-transient, instead quarantines a malformed line —
+isolating it, preserving it for forensic repair, surfacing it through
+`brewva inspect`, and continuing to recover the healthy rows. A corrupt
+ingress-watermark snapshot line is quarantined the same way; its value is never
+trusted, so the polling offset falls back to the watermark rebuilt from the
+surviving rows' ingressSequence (row-derived), and cold-starts only when no
+surviving row carries one.
+
 ## Generated Surface
 
 <!-- generated:runtime-surface start -->

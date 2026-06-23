@@ -11,7 +11,7 @@ import {
 import { resolve } from "node:path";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { toJsonValue } from "@brewva/brewva-std/json";
-import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
+import { flushDurable, loadAppendOnly } from "@brewva/brewva-std/node/fs";
 import { isSupportedToolOutcomeVersion } from "@brewva/brewva-std/tool-outcome-version";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { redactUnknown } from "../../security/redact.js";
@@ -427,16 +427,6 @@ export function classifyTapeRecord(line: string): TapeRecordClassification {
   return { ok: true, event };
 }
 
-function parsePersistedEvent(line: string, filePath: string): CanonicalEvent {
-  const classified = classifyTapeRecord(line);
-  if (!classified.ok) {
-    throw new Error(
-      `unsupported_tape_schema:${classified.tag} Remove or archive ${filePath}, then rebuild derived session-index state.`,
-    );
-  }
-  return classified.event;
-}
-
 function isCustomEventPayload(value: unknown): value is CustomEventPayload {
   if (!isRecord(value)) {
     return false;
@@ -587,7 +577,14 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
     if (!persistence?.enabled) {
       return;
     }
-    writeSync(getAppendFileDescriptor(event.sessionId), `${JSON.stringify(event)}\n`);
+    const fileDescriptor = getAppendFileDescriptor(event.sessionId);
+    writeSync(fileDescriptor, `${JSON.stringify(event)}\n`);
+    // Boundary fsync, not per event: a committed turn and a checkpoint are the
+    // units guaranteed power-loss durable; between them the tape is process-crash
+    // durable. (See DURABILITY_LEVELS.)
+    if (event.type === "turn.ended" || event.type === "checkpoint.committed") {
+      flushDurable(fileDescriptor);
+    }
   }
 
   function appendEventToMemory(event: CanonicalEvent): CanonicalEvent {
@@ -622,8 +619,13 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
       if (existing) {
         return cloneEvent(existing);
       }
-      const committed = appendEventToMemory(event);
+      // Durable commit point: persist (and, at a turn/checkpoint boundary, fsync)
+      // before the event enters memory. A failed persist then leaves eventsById
+      // untouched, so a same-id retry is not swallowed by the dedupe guard above and
+      // re-writes to disk — the tape stays the replay authority, never a memory-only
+      // event the dedupe guard pins out of the durable log.
       persistEvent(event);
+      const committed = appendEventToMemory(event);
       return committed;
     },
   });
@@ -688,16 +690,30 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
       if (parsedFileSizes.get(filePath) === size) {
         continue;
       }
-      forEachUtf8LineSync(filePath, (line) => {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          return;
-        }
-        const event = parsePersistedEvent(trimmed, filePath);
-        appendEventToMemory(event);
-        recovered.add(event.sessionId);
+      loadAppendOnly<CanonicalEvent>(filePath, {
+        classify: (line) => {
+          const classified = classifyTapeRecord(line);
+          return classified.ok
+            ? { ok: true, value: classified.event }
+            : { ok: false, issueClass: classified.issueClass, tag: classified.tag };
+        },
+        onRecord: (event) => {
+          appendEventToMemory(event);
+          recovered.add(event.sessionId);
+        },
+        onIssue: (issue) => {
+          if (issue.kind === "torn_tail") {
+            return; // tolerate and repair the torn trailing line; the tape self-heals
+          }
+          // A malformed, newline-terminated line is real corruption: fail closed.
+          throw new Error(
+            `unsupported_tape_schema:${issue.tag} Remove or archive ${filePath}, then rebuild derived session-index state.`,
+          );
+        },
       });
-      parsedFileSizes.set(filePath, size);
+      // Re-stat after load: a torn-tail repair shrinks the file, and caching the
+      // pre-repair size would skip re-parsing appends that grow back under it.
+      parsedFileSizes.set(filePath, statSync(filePath).size);
     }
     recoveredSessions = [...recovered].toSorted();
     return recoveredSessions;
@@ -710,6 +726,7 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
 
   async function close(): Promise<void> {
     for (const fd of appendFileDescriptors.values()) {
+      flushDurable(fd); // make any post-boundary appends durable before shutdown
       closeSync(fd);
     }
     appendFileDescriptors.clear();

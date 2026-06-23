@@ -85,6 +85,25 @@ discipline.
   ergonomics into the advisory ring) under the line `Borrow the mechanism, never
 the authority shape`.
 
+- [Durable Steering Inbox](./durable-steering-inbox.md): open design question
+  split out of the crash-safe substrate RFC's former "E" — whether the volatile
+  in-session steer / queue / next-turn inbox needs durable storage at all, and if
+  so where. Three options (re-home onto the Recovery WAL, a session-scoped
+  sidecar, or do not persist the enqueue→consume window), weighing the
+  WAL-identity-widening cost of the obvious reuse against a sidecar and against
+  measured loss for interactive sessions. Lean: measure first; prefer a sidecar
+  over widening the WAL if durability is warranted.
+- [Tree History And Multi-Writer Substrate](./tree-history-and-multi-writer-substrate.md):
+  the future-facing model fork the crash-safe substrate RFC is table stakes for
+  but does not resolve. Frames two decision axes — history shape (brewva's
+  linear+replay vs a nullable parent-pointer field vs a full tree like
+  pi-mono/claude-code; opencode is sequence-event-sourced, not a tree) and writer
+  model (single-writer-per-session today vs multi-writer/distributed, which changes
+  the substrate itself, not just adds fsync). Lean: linear is a deliberate,
+  auditable choice not a deficiency; a nullable parent-pointer is the cheap
+  forward-compatible hook if branching lands; multi-writer is requirement-triggered,
+  not pre-built.
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

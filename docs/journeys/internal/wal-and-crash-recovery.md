@@ -142,7 +142,8 @@ flowchart TD
   was admitted locally. The Telegram polling watermark can advance from a row in
   any status because retry is local to WAL recovery, not upstream redelivery
 - the polling restart offset is `ingressWatermark + 1` for the Telegram
-  channel; an absent watermark yields no offset, which is a cold start
+  channel; an absent watermark — no marker and no surviving row carrying a
+  sequence — yields no offset, which is a cold start
 - the recoverable status set is `pending` and `inflight`; the terminal status
   set is `done`, `failed`, and `expired`
 - canonical recovery causes are runtime-owned, not WAL-owned: `approval_pending`,
@@ -155,15 +156,29 @@ flowchart TD
 - TTL is chosen by source; the default Recovery WAL configuration uses a 5-minute
   base TTL, a 10-minute schedule-turn TTL, a 24-hour tool-turn TTL,
   `maxRetries` of 2, and a 1-hour compaction horizon
+- durability is named at two levels (`DURABILITY_LEVELS`): between flush
+  boundaries the logs are `process_crash` durable (the OS page cache outlives a
+  process or worker kill, the case recovery is built for); at a flush boundary —
+  a committed `turn.ended` or `checkpoint.committed` event, or a terminal WAL
+  mark — they are `power_loss` durable (fsync'd to disk). Full-file rewrites (WAL
+  compaction) are atomic (tmp write, fsync, rename, parent-directory fsync), and a
+  torn trailing line left by a crash is truncated on load, so a crash never
+  truncates a log or merges a new record onto a half-written one. Recovery
+  delivery is `at_least_once` (`EFFECT_DELIVERY`): replay re-drives the accepted
+  envelope, and external effects are deduped best-effort, not exactly-once
 
 ## Failure And Recovery
 
-- the Recovery WAL fails closed: `assertHealthy` throws
-  `recovery_wal_integrity_error` when any integrity issue was recorded during
-  load (non-object lines, invalid JSON, schema-invalid rows, each tagged
-  `<file>:<line>:<reason>`), and it guards append, update, list, watermark, and
-  compaction. The runtime refuses to accept or recover from a corrupted WAL
-  until the rows are repaired
+- the Recovery WAL quarantines and continues (it is durable-transient, not
+  truth): a malformed row (non-object line, invalid JSON, or schema-invalid row,
+  each tagged `<file>:<line>:<reason>`) is isolated from the live set, preserved
+  on disk through compaction for forensic repair, and surfaced through the
+  `brewva inspect` `recoveryWal` block — while append, update, list, watermark,
+  and recovery keep serving the healthy rows, so one unrecoverable row never
+  wedges the daemon. A corrupt ingress-watermark snapshot line is quarantined the
+  same way; its value is never trusted, so the polling offset falls back to the
+  watermark rebuilt from the surviving rows' ingressSequence (row-derived), and
+  cold-starts only when no surviving row carries one
 - a WAL file removed at runtime is detected and resets in-memory state, the id
   counter, and the watermark, so a manually-cleared WAL starts clean instead of
   erroring
@@ -175,12 +190,14 @@ flowchart TD
   `pending` or `inflight` when the OS killed the process are re-scanned by
   `recover()` on the next start. State this precisely: not every worker crash
   auto-replays — only work that never reached a terminal WAL row does
-- event-tape corruption is a separate failure: `parsePersistedEvent` throws
-  `unsupported_tape_schema` with a remediation hint, and damaged tape rows
-  degrade hydration with explicit `event_tape` issues instead of collapsing into
-  an empty-but-healthy session
-- compaction preserves the ingress watermark, so polling restart does not fall
-  back to full upstream redelivery
+- event-tape corruption is a separate failure: the strict tape reader
+  (`classifyTapeRecord`) throws `unsupported_tape_schema` with a remediation hint,
+  while the read-only forensic scan surfaces damaged tape rows as explicit
+  `event_tape` issues instead of collapsing into an empty-but-healthy session
+- compaction preserves the ingress watermark and rewrites the file atomically
+  (tmp + rename), so polling restart does not fall back to full upstream
+  redelivery and a crash mid-compaction cannot truncate the log or lose the
+  watermark marker
 
 ## Observability
 
@@ -233,7 +250,7 @@ flowchart TD
   `packages/brewva-gateway/src/daemon/session-supervisor/turn-queue.ts`
 - Event tape (append-only truth):
   `packages/brewva-runtime/src/runtime/tape/impl.ts`
-  (`createRuntimeTape`, `loadFromDisk`, `parsePersistedEvent`)
+  (`createRuntimeTape`, `loadFromDisk`, `classifyTapeRecord`)
 - Tape port interfaces: `packages/brewva-runtime/src/runtime/tape/port.ts`
 - Recovery WAL event-type constants:
   `packages/brewva-vocabulary/src/internal/session.ts` (re-exported via

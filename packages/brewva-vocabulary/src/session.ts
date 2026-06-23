@@ -3,6 +3,9 @@ export {
   listSessionRewindTargets,
 } from "./internal/session-rewind.js";
 
+export { DURABILITY_LEVELS, EFFECT_DELIVERY } from "./internal/durability.js";
+export type { DurabilityLevel, EffectDelivery } from "./internal/durability.js";
+
 export {
   ATTENTION_OPTION_PROJECTION_SCHEMA_V1,
   decideContinuationAnchorRelevance,

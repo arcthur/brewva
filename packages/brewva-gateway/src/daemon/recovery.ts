@@ -1,7 +1,12 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { asBrewvaWalId, type BrewvaWalId } from "@brewva/brewva-runtime/core";
-import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
+import {
+  appendFileDurable,
+  loadAppendOnly,
+  rewriteFileAtomic,
+  scanAppendOnly,
+} from "@brewva/brewva-std/node/fs";
 import type {
   BrewvaEventQuery,
   BrewvaEventRecord,
@@ -17,6 +22,11 @@ import type {
 import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 type WalRecord = Record<string, unknown>;
+interface QuarantinedWalLine {
+  readonly lineNumber: number;
+  readonly text: string;
+  readonly issueClass: string;
+}
 export type RecoveryWalStoredRecord = RecoveryWalRecord & {
   readonly schema: typeof RECOVERY_WAL_ROW_SCHEMA;
   readonly scope: string;
@@ -43,7 +53,7 @@ type SchedulerIntentRecord = ScheduleIntentProjectionRecord & {
   readonly updatedAt: number;
   readonly nextRunAt?: number | null;
 };
-interface RecoveryWalConfig extends WalRecord {
+export interface RecoveryWalConfig extends WalRecord {
   readonly dir?: string;
   readonly toolTurnTtlMs?: number;
   readonly scheduleTurnTtlMs?: number;
@@ -56,7 +66,7 @@ const RECOVERY_WAL_ROW_SCHEMA = "brewva.recovery-wal.v1";
 const RECOVERY_WAL_WATERMARK_SCHEMA = "brewva.recovery-wal.watermark.v1";
 const DEFAULT_RECOVERY_WAL_DIR = ".orchestrator/recovery-wal";
 const TERMINAL_WAL_STATUSES = new Set(["done", "failed", "expired"]);
-const RECOVERABLE_WAL_STATUSES = new Set(["pending", "inflight"]);
+export const RECOVERABLE_WAL_STATUSES = new Set(["pending", "inflight"]);
 
 function readRecord(value: unknown): WalRecord {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -222,6 +232,134 @@ export interface SchedulerService {
   listIntents(query?: WalRecord): readonly SchedulerIntentRecord[];
 }
 
+function ttlForSource(config: RecoveryWalConfig, source: string, override?: unknown): number {
+  if (typeof override === "number" && Number.isFinite(override) && override > 0) {
+    return Math.trunc(override);
+  }
+  if (source === "tool" && typeof config.toolTurnTtlMs === "number") {
+    return Math.trunc(config.toolTurnTtlMs);
+  }
+  if (source === "schedule" && typeof config.scheduleTurnTtlMs === "number") {
+    return Math.trunc(config.scheduleTurnTtlMs);
+  }
+  return typeof config.defaultTtlMs === "number" ? Math.trunc(config.defaultTtlMs) : 300_000;
+}
+
+function toStoredRecord(
+  row: WalRecord,
+  scope: string,
+  config: RecoveryWalConfig,
+): RecoveryWalStoredRecord | null {
+  if (
+    row.schema !== RECOVERY_WAL_ROW_SCHEMA ||
+    typeof row.walId !== "string" ||
+    typeof row.source !== "string" ||
+    typeof row.status !== "string" ||
+    !isTurnEnvelope(row.envelope)
+  ) {
+    return null;
+  }
+  const createdAt = readFiniteNumber(row.createdAt, Date.now());
+  const updatedAt = readFiniteNumber(row.updatedAt, createdAt);
+  const ttlMs = readFiniteNumber(row.ttlMs, ttlForSource(config, row.source));
+  const attempts = readFiniteNumber(row.attempts, 0);
+  const walId = asBrewvaWalId(row.walId);
+  return Object.freeze({
+    ...row,
+    schema: RECOVERY_WAL_ROW_SCHEMA,
+    id: typeof row.id === "string" ? row.id : walId,
+    walId,
+    scope,
+    source: row.source,
+    status: row.status,
+    sessionId: row.envelope.sessionId,
+    envelope: row.envelope,
+    createdAt,
+    updatedAt,
+    ttlMs,
+    attempts,
+    ...(typeof row.dedupeKey === "string" ? { dedupeKey: row.dedupeKey } : {}),
+  });
+}
+
+type WalRecordClassification =
+  | { readonly ok: true; readonly kind: "watermark"; readonly ingressWatermark: number }
+  | { readonly ok: true; readonly kind: "row"; readonly record: RecoveryWalStoredRecord }
+  | { readonly ok: false; readonly issueClass: string };
+
+// One grammar shared by the strict store loader and the read-only forensic
+// scanner: every byte sequence the loader quarantines, the scanner localizes, and
+// vice versa, so the two readers cannot drift.
+function classifyWalRecord(
+  line: string,
+  scope: string,
+  config: RecoveryWalConfig,
+): WalRecordClassification {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return { ok: false, issueClass: "invalid_json" };
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, issueClass: "not_object" };
+  }
+  const row = readRecord(parsed);
+  if (row.schema === RECOVERY_WAL_WATERMARK_SCHEMA) {
+    return typeof row.ingressWatermark === "number" && Number.isFinite(row.ingressWatermark)
+      ? { ok: true, kind: "watermark", ingressWatermark: Math.trunc(row.ingressWatermark) }
+      : { ok: false, issueClass: "watermark_invalid" };
+  }
+  const stored = toStoredRecord(row, scope, config);
+  return stored
+    ? { ok: true, kind: "row", record: stored }
+    : { ok: false, issueClass: "invalid_schema" };
+}
+
+export interface RecoveryWalForensicScan {
+  readonly filePath: string;
+  readonly exists: boolean;
+  readonly rows: readonly RecoveryWalStoredRecord[];
+  readonly tornTail: boolean;
+  readonly issues: readonly string[];
+}
+
+/**
+ * Read-only forensic scan of a Recovery WAL file, the WAL counterpart to the
+ * tape's `scanTapeFileForensics`. It never truncates or repairs — unlike the
+ * strict store loader, which repairs a torn tail on load — so a non-owner reader
+ * (`brewva inspect`) can see the WAL's healthy rows and quarantined lines without
+ * the read mutating the file. Both readers classify through the one
+ * `classifyWalRecord` grammar. A crash-torn final line is reported as `tornTail`,
+ * not a quarantine issue.
+ */
+export function scanRecoveryWalForensics(
+  filePath: string,
+  options: { readonly scope: string; readonly config: RecoveryWalConfig },
+): RecoveryWalForensicScan {
+  // Last write wins per walId, mirroring the store's records map: the scan
+  // reflects current row state, not every historical transition line.
+  const rowsByWalId = new Map<string, RecoveryWalStoredRecord>();
+  const issues: string[] = [];
+  const scan = scanAppendOnly(filePath, (line) => {
+    const classified = classifyWalRecord(line.text, options.scope, options.config);
+    if (classified.ok) {
+      if (classified.kind === "row") {
+        rowsByWalId.set(classified.record.walId, classified.record);
+      }
+      return;
+    }
+    issues.push(`${filePath}:${line.lineNumber}:${classified.issueClass}`);
+  });
+  return Object.freeze({
+    filePath,
+    exists: scan.exists,
+    rows: Object.freeze([...rowsByWalId.values()]),
+    tornTail: scan.tornTail,
+    issues: Object.freeze(issues),
+  });
+}
+
 export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): RecoveryWalStore {
   const scope = options.scope ?? "default";
   const enabled = options.enabled ?? true;
@@ -237,34 +375,15 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
   const nowProvider = options.now;
   const now = nowProvider ? () => nowProvider() : () => Date.now();
   const records = new Map<string, RecoveryWalStoredRecord>();
-  const integrityIssues: string[] = [];
+  const quarantine: QuarantinedWalLine[] = [];
   let idCounter = 0;
   let ingressWatermark: number | undefined;
   let loaded = false;
-
-  function ttlForSource(source: string, override?: unknown): number {
-    if (typeof override === "number" && Number.isFinite(override) && override > 0) {
-      return Math.trunc(override);
-    }
-    if (source === "tool" && typeof config.toolTurnTtlMs === "number") {
-      return Math.trunc(config.toolTurnTtlMs);
-    }
-    if (source === "schedule" && typeof config.scheduleTurnTtlMs === "number") {
-      return Math.trunc(config.scheduleTurnTtlMs);
-    }
-    return typeof config.defaultTtlMs === "number" ? Math.trunc(config.defaultTtlMs) : 300_000;
-  }
 
   function compactAfterMs(): number {
     return typeof config.compactAfterMs === "number"
       ? Math.trunc(config.compactAfterMs)
       : 3_600_000;
-  }
-
-  function assertHealthy(): void {
-    if (integrityIssues.length > 0) {
-      throw new Error(`recovery_wal_integrity_error:${integrityIssues.join(";")}`);
-    }
   }
 
   function walLine(value: WalRecord | RecoveryWalStoredRecord): string {
@@ -277,7 +396,9 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
 
   function appendWalLine(value: WalRecord): void {
     ensureWalDir();
-    appendFileSync(walFilePath, walLine(value), "utf8");
+    // The WAL is low-frequency (a few transitions per turn), so fsync every
+    // append: a flushed row is power-loss durable, not merely in the page cache.
+    appendFileDurable(walFilePath, walLine(value));
   }
 
   function rewriteWalFile(): void {
@@ -296,7 +417,10 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
     for (const record of records.values()) {
       lines.push(walLine(record));
     }
-    writeFileSync(walFilePath, lines.join(""), "utf8");
+    for (const entry of quarantine) {
+      lines.push(`${entry.text}\n`); // preserve quarantined lines for forensic repair
+    }
+    rewriteFileAtomic(walFilePath, lines.join(""));
   }
 
   function resetIfWalFileWasRemoved(): void {
@@ -304,7 +428,7 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
       return;
     }
     records.clear();
-    integrityIssues.length = 0;
+    quarantine.length = 0;
     idCounter = 0;
     ingressWatermark = undefined;
     loaded = true;
@@ -318,86 +442,59 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
     return match ? Number(match[1]) : null;
   }
 
-  function toStoredRecord(row: WalRecord): RecoveryWalStoredRecord | null {
-    if (
-      row.schema !== RECOVERY_WAL_ROW_SCHEMA ||
-      typeof row.walId !== "string" ||
-      typeof row.source !== "string" ||
-      typeof row.status !== "string" ||
-      !isTurnEnvelope(row.envelope)
-    ) {
-      return null;
-    }
-    const createdAt = readFiniteNumber(row.createdAt, Date.now());
-    const updatedAt = readFiniteNumber(row.updatedAt, createdAt);
-    const ttlMs = readFiniteNumber(row.ttlMs, ttlForSource(row.source));
-    const attempts = readFiniteNumber(row.attempts, 0);
-    const walId = asBrewvaWalId(row.walId);
-    return Object.freeze({
-      ...row,
-      schema: RECOVERY_WAL_ROW_SCHEMA,
-      id: typeof row.id === "string" ? row.id : walId,
-      walId,
-      scope,
-      source: row.source,
-      status: row.status,
-      sessionId: row.envelope.sessionId,
-      envelope: row.envelope,
-      createdAt,
-      updatedAt,
-      ttlMs,
-      attempts,
-      ...(typeof row.dedupeKey === "string" ? { dedupeKey: row.dedupeKey } : {}),
-    });
-  }
-
-  function applyLoadedLine(value: unknown, lineNumber: number): void {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      integrityIssues.push(`${walFilePath}:${lineNumber}:not_object`);
-      return;
-    }
-    const row = readRecord(value);
-    if (row.schema === RECOVERY_WAL_WATERMARK_SCHEMA) {
-      if (typeof row.ingressWatermark === "number" && Number.isFinite(row.ingressWatermark)) {
-        ingressWatermark = Math.max(ingressWatermark ?? 0, Math.trunc(row.ingressWatermark));
-      }
-      return;
-    }
-    const stored = toStoredRecord(row);
-    if (!stored) {
-      integrityIssues.push(`${walFilePath}:${lineNumber}:invalid_schema`);
-      return;
-    }
-    const numericId = recordIdNumber(stored.walId);
-    if (numericId !== null) {
-      idCounter = Math.max(idCounter, numericId);
-    }
-    records.set(stored.walId, stored);
-    observeIngressWatermark(stored.envelope);
-  }
-
   function loadFromDisk(): void {
     if (loaded) {
       return;
     }
     loaded = true;
     records.clear();
-    integrityIssues.length = 0;
+    quarantine.length = 0;
     idCounter = 0;
     ingressWatermark = undefined;
-    if (!existsSync(walFilePath)) {
-      return;
-    }
-    forEachUtf8LineSync(walFilePath, (rawLine, lineNumber) => {
-      const line = rawLine.trim();
-      if (!line) {
-        return;
-      }
-      try {
-        applyLoadedLine(JSON.parse(line), lineNumber);
-      } catch {
-        integrityIssues.push(`${walFilePath}:${lineNumber}:invalid_json`);
-      }
+    loadAppendOnly<
+      | { readonly kind: "watermark"; readonly ingressWatermark: number }
+      | { readonly kind: "row"; readonly record: RecoveryWalStoredRecord }
+    >(walFilePath, {
+      classify: (line) => {
+        const classified = classifyWalRecord(line, scope, config);
+        if (!classified.ok) {
+          return { ok: false, issueClass: classified.issueClass, tag: "wal" };
+        }
+        return classified.kind === "watermark"
+          ? {
+              ok: true,
+              value: { kind: "watermark", ingressWatermark: classified.ingressWatermark },
+            }
+          : { ok: true, value: { kind: "row", record: classified.record } };
+      },
+      onRecord: (value) => {
+        if (value.kind === "watermark") {
+          ingressWatermark = Math.max(ingressWatermark ?? 0, value.ingressWatermark);
+          return;
+        }
+        const stored = value.record;
+        const numericId = recordIdNumber(stored.walId);
+        if (numericId !== null) {
+          idCounter = Math.max(idCounter, numericId);
+        }
+        records.set(stored.walId, stored);
+        observeIngressWatermark(stored.envelope);
+      },
+      onIssue: (issue) => {
+        if (issue.kind === "torn_tail") {
+          return; // a torn trailing line is a crash artifact, repaired on load
+        }
+        // Quarantine, don't wedge: isolate one bad line, keep recovering the rest.
+        // A corrupt watermark snapshot line is quarantined here too; its value is
+        // simply never applied, so the high-watermark falls back to whatever the
+        // surviving rows' ingressSequence rebuilds (row-derived), cold-starting only
+        // when no surviving row carries one. Surfaced, never silently ignored.
+        quarantine.push({
+          lineNumber: issue.lineNumber,
+          text: issue.text,
+          issueClass: issue.issueClass,
+        });
+      },
     });
   }
 
@@ -431,7 +528,6 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
     extra: WalRecord = {},
   ): RecoveryWalStoredRecord | undefined {
     loadFromDisk();
-    assertHealthy();
     const current = records.get(id);
     if (!current || TERMINAL_WAL_STATUSES.has(current.status)) {
       return undefined;
@@ -442,8 +538,10 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
       updatedAt: now(),
       ...extra,
     }) as RecoveryWalStoredRecord;
-    records.set(id, next);
+    // Durable commit point: persist the transition before it is visible in memory,
+    // so a failed append leaves the prior record intact and the caller sees the error.
     appendWalLine(next);
+    records.set(id, next);
     return next;
   }
 
@@ -453,7 +551,7 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
     isWalEnabled: () => enabled,
     getIntegrityIssues: () => {
       loadFromDisk();
-      return [...integrityIssues];
+      return quarantine.map((entry) => `${walFilePath}:${entry.lineNumber}:${entry.issueClass}`);
     },
     appendPending(
       envelope: TurnEnvelope,
@@ -461,16 +559,14 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
       appendOptions: RecoveryWalAppendPendingOptions = {},
     ): RecoveryWalStoredRecord {
       loadFromDisk();
-      assertHealthy();
       resetIfWalFileWasRemoved();
       const createdAt = now();
       const normalizedSource = source.trim().length > 0 ? source : "gateway";
-      const ttlMs = ttlForSource(normalizedSource, appendOptions.ttlMs);
+      const ttlMs = ttlForSource(config, normalizedSource, appendOptions.ttlMs);
       const dedupeKey =
         typeof appendOptions.dedupeKey === "string" && appendOptions.dedupeKey.trim().length > 0
           ? appendOptions.dedupeKey
           : undefined;
-      observeIngressWatermark(envelope);
       if (dedupeKey) {
         for (const current of records.values()) {
           if (current.dedupeKey !== dedupeKey || TERMINAL_WAL_STATUSES.has(current.status)) {
@@ -482,7 +578,7 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
           update(current.walId, "expired");
         }
       }
-      const walId = asBrewvaWalId(`wal-${++idCounter}`);
+      const walId = asBrewvaWalId(`wal-${idCounter + 1}`);
       const stored: RecoveryWalStoredRecord = Object.freeze({
         schema: RECOVERY_WAL_ROW_SCHEMA,
         walId,
@@ -499,8 +595,15 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
         ...(appendOptions && typeof appendOptions === "object" ? appendOptions : {}),
         envelope,
       });
-      records.set(walId, stored);
+      // Durable commit point: persist (and fsync) the row before any in-memory state
+      // moves. A failed append then leaves the store exactly as it was — no ghost row
+      // a later dedupe could hand back as "durably accepted", no consumed id, no
+      // advanced watermark. The id is consumed and the watermark advances only here,
+      // after the durable accept.
       appendWalLine(stored);
+      records.set(walId, stored);
+      idCounter += 1;
+      observeIngressWatermark(envelope);
       return stored;
     },
     markInflight(id: string): RecoveryWalStoredRecord | undefined {
@@ -518,22 +621,18 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
     markExpired: (id: string) => update(id, "expired"),
     listPending(): readonly RecoveryWalStoredRecord[] {
       refreshFromDisk();
-      assertHealthy();
       return [...records.values()].filter((record) => RECOVERABLE_WAL_STATUSES.has(record.status));
     },
     listCurrent(): readonly RecoveryWalStoredRecord[] {
       refreshFromDisk();
-      assertHealthy();
       return [...records.values()];
     },
     getIngressHighWatermark(..._args: unknown[]): number | undefined {
       refreshFromDisk();
-      assertHealthy();
       return ingressWatermark;
     },
     compact(): RecoveryWalCompactResult {
       refreshFromDisk();
-      assertHealthy();
       const at = now();
       let removed = 0;
       let scanned = 0;

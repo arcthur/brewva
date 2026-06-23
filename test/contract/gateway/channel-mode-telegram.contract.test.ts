@@ -274,7 +274,7 @@ describe("gateway contract: telegram channel dispatch", () => {
     expect(recoveredOffset).toBe(11);
   });
 
-  test("fails closed before launcher startup when the telegram wal is malformed", async () => {
+  test("quarantines a malformed telegram wal line and still starts the channel from a cold-start offset", async () => {
     const workspace = createTestWorkspace("channel-telegram-malformed-wal");
     const configPath = writeChannelConfig(workspace);
     const walDir = join(workspace, DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal.dir);
@@ -286,9 +286,32 @@ describe("gateway contract: telegram channel dispatch", () => {
         token: "bot-token",
       },
     };
+    const abortController = new AbortController();
     let launcherCalled = false;
-    const previousExitCode = process.exitCode ?? 0;
-    process.exitCode = 0;
+    let recoveredOffset: number | undefined;
+
+    const launcher: ChannelModeLauncher = (input) => {
+      launcherCalled = true;
+      recoveredOffset = (
+        input as {
+          recovery?: { initialPollingOffset?: number };
+        }
+      ).recovery?.initialPollingOffset;
+      const bridge = {
+        async start(): Promise<void> {
+          abortController.abort();
+        },
+        async stop(): Promise<void> {
+          return;
+        },
+        async sendTurn(): Promise<Record<string, never>> {
+          return {};
+        },
+      };
+      return {
+        bridge: bridge as unknown as ChannelTurnBridge,
+      };
+    };
 
     try {
       await runChannelMode({
@@ -298,32 +321,27 @@ describe("gateway contract: telegram channel dispatch", () => {
         verbose: false,
         channel: "telegram",
         channelConfig,
+        shutdownSignal: abortController.signal,
         dependencies: {
           launchers: {
-            telegram: () => {
-              launcherCalled = true;
-              return {
-                bridge: {
-                  async start(): Promise<void> {
-                    return;
-                  },
-                  async stop(): Promise<void> {
-                    return;
-                  },
-                  async sendTurn(): Promise<Record<string, never>> {
-                    return {};
-                  },
-                } as unknown as ChannelTurnBridge,
-              };
-            },
+            telegram: launcher,
           },
         },
       });
 
-      expect(launcherCalled).toBe(false);
-      expect(process.exitCode).toBe(1);
+      // Quarantine-and-continue: a single malformed WAL line no longer wedges
+      // channel startup. The channel starts; with no recoverable watermark it
+      // cold-starts (undefined offset) rather than failing closed.
+      expect(launcherCalled).toBe(true);
+      expect(recoveredOffset).toBe(undefined);
+      // The malformed line is surfaced (quarantined), never silently dropped.
+      const store = createRecoveryWalStore({
+        workspaceRoot: workspace,
+        config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
+        scope: "channel-telegram",
+      });
+      expect(store.getIntegrityIssues().length).toBeGreaterThanOrEqual(1);
     } finally {
-      process.exitCode = previousExitCode;
       cleanupTestWorkspace(workspace);
     }
   });

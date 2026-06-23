@@ -223,44 +223,50 @@ describe("recovery WAL properties", () => {
     },
   });
 
-  propertyTest("WAL malformed complete rows surface integrity errors", {
-    propertyId: "runtime.recovery-wal.malformed-row-integrity-error",
-    layer: "contract",
-    timeoutMs: 1_000,
-    arbitraries: [fc.string({ minLength: 1, maxLength: 40 })],
-    predicate: (badLine) => {
-      const workspace = createTestWorkspace("recovery-wal-property-corrupt");
-      const store = createRecoveryWalStore({
-        workspaceRoot: workspace,
-        config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
-        scope: "corrupt",
-      });
-      try {
-        store.appendPending(
-          envelopeFor({
-            turnId: "turn-corrupt",
-            sessionId: "session-corrupt",
-            channel: "telegram",
-          }),
-          "channel",
-        );
-
-        appendFileSync(
-          recoveryWalFilePath(workspace, "corrupt"),
-          `\n${JSON.stringify({ schema: "bad" })}\n${badLine.trim() || "not-json"}\n`,
-          "utf8",
-        );
-
-        const reloaded = createRecoveryWalStore({
+  propertyTest(
+    "WAL malformed complete rows are quarantined and surfaced without wedging recovery",
+    {
+      propertyId: "runtime.recovery-wal.malformed-row-quarantine",
+      layer: "contract",
+      timeoutMs: 1_000,
+      arbitraries: [fc.string({ minLength: 1, maxLength: 40 })],
+      predicate: (badLine) => {
+        const workspace = createTestWorkspace("recovery-wal-property-corrupt");
+        const store = createRecoveryWalStore({
           workspaceRoot: workspace,
           config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
           scope: "corrupt",
         });
+        try {
+          const healthy = store.appendPending(
+            envelopeFor({
+              turnId: "turn-corrupt",
+              sessionId: "session-corrupt",
+              channel: "telegram",
+            }),
+            "channel",
+          );
 
-        expect(() => reloaded.listPending()).toThrow("recovery_wal_integrity_error");
-      } finally {
-        cleanupWorkspace(workspace);
-      }
+          appendFileSync(
+            recoveryWalFilePath(workspace, "corrupt"),
+            `\n${JSON.stringify({ schema: "bad" })}\n${badLine.trim() || "not-json"}\n`,
+            "utf8",
+          );
+
+          const reloaded = createRecoveryWalStore({
+            workspaceRoot: workspace,
+            config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
+            scope: "corrupt",
+          });
+
+          // The durable-transient log isolates the malformed rows and keeps
+          // recovering the healthy one, surfacing the bad rows rather than throwing.
+          expect(reloaded.listPending().map((row) => row.walId)).toEqual([healthy.walId]);
+          expect(reloaded.getIntegrityIssues().length).toBeGreaterThanOrEqual(1);
+        } finally {
+          cleanupWorkspace(workspace);
+        }
+      },
     },
-  });
+  );
 });

@@ -44,19 +44,19 @@ describe("tape forensic scanner (RFC WS1)", () => {
     expect(scan.issues[0]?.tailLocal).toBe(false);
   });
 
-  test("an unterminated incomplete final line is diagnosed as a torn tail", () => {
+  test("an unterminated incomplete final line is a torn tail, not a corruption issue", () => {
     const first = validRecord("e1");
     const filePath = tempTape(`${first}\n{"id":"e2","type":"turn.started"`);
     const scan = scanTapeFileForensics(filePath, sessionId);
 
+    // The strict reader drops a torn final line by the byte-level rule; the
+    // forensic scan must agree — flag `tornTail`, but never count the torn line as
+    // a record or report it as corruption (that would over-report damage the
+    // daemon silently self-heals).
     expect(scan.validRecords).toBe(1);
     expect(scan.lastValidEventId).toBe("e1");
     expect(scan.tornTail).toBe(true);
-    expect(scan.issues).toHaveLength(1);
-    expect(scan.issues[0]?.tailLocal).toBe(true);
-    expect(scan.issues[0]?.issueClass).toBe("malformed_json");
-    // Byte offset points at the first byte of the torn record, for truncate repair.
-    expect(scan.issues[0]?.byteOffset).toBe(Buffer.byteLength(`${first}\n`, "utf8"));
+    expect(scan.issues).toHaveLength(0);
   });
 
   test("an unknown canonical event type is reported with its tag", () => {

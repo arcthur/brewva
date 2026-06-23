@@ -1,6 +1,10 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
+import {
+  RECOVERABLE_WAL_STATUSES,
+  type RecoveryWalStoredRecord,
+  scanRecoveryWalForensics,
+} from "@brewva/brewva-gateway/daemon";
 import {
   buildContextEvidenceReport,
   type ContextEvidenceAggregateReport,
@@ -283,6 +287,8 @@ interface InspectReport {
       toolCallId: string | null;
       toolName: string | null;
     }>;
+    quarantinedCount: number;
+    quarantined: readonly string[];
   };
   snapshots: {
     sessionDir: string;
@@ -579,24 +585,9 @@ function pathExists(path: string): boolean {
 }
 
 function listSessionPendingRecoveryWal(
-  runtime: HostedRuntimeAdapterPort,
-  inspect: CliInspectPort,
+  pendingRows: readonly RecoveryWalStoredRecord[],
   sessionId: string,
-  recoveryWalDir?: string | null,
 ): InspectReport["recoveryWal"]["pendingRows"] {
-  const pendingRows =
-    typeof recoveryWalDir === "string" &&
-    recoveryWalDir.trim().length > 0 &&
-    recoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
-      ? createRecoveryWalStore({
-          workspaceRoot: runtime.identity.workspaceRoot,
-          config: {
-            ...runtime.config.infrastructure.recoveryWal,
-            dir: recoveryWalDir,
-          },
-          scope: "runtime",
-        }).listPending()
-      : inspect.recovery.listPending();
   return pendingRows
     .filter((row: { sessionId: string }) => row.sessionId === sessionId)
     .map(
@@ -786,24 +777,26 @@ function buildInspectReport(
     sanitizeSessionIdForPath(sessionId),
   );
   const patchHistoryPath = join(snapshotSessionDir, PATCH_HISTORY_FILE);
-  const sessionPendingRecoveryWal = listSessionPendingRecoveryWal(
-    runtime,
-    inspect,
-    sessionId,
-    effectiveRecoveryWalDir,
-  );
-  const recoveryWalPendingRows =
+  const recoveryWalConfig =
     typeof effectiveRecoveryWalDir === "string" &&
     effectiveRecoveryWalDir !== runtime.config.infrastructure.recoveryWal.dir
-      ? createRecoveryWalStore({
-          workspaceRoot: runtime.identity.workspaceRoot,
-          config: {
-            ...runtime.config.infrastructure.recoveryWal,
-            dir: effectiveRecoveryWalDir,
-          },
-          scope: "runtime",
-        }).listPending()
-      : inspect.recovery.listPending();
+      ? { ...runtime.config.infrastructure.recoveryWal, dir: effectiveRecoveryWalDir }
+      : runtime.config.infrastructure.recoveryWal;
+  // Read-only forensic scan: surfacing the WAL's pending and quarantined rows
+  // must not mutate the file. Repairing a torn tail belongs to the owning
+  // daemon's strict load, not to a read-only `brewva inspect`.
+  const recoveryWalScan = scanRecoveryWalForensics(walFilePath, {
+    scope: "runtime",
+    config: recoveryWalConfig,
+  });
+  const recoveryWalPendingRows = recoveryWalScan.rows.filter((row) =>
+    RECOVERABLE_WAL_STATUSES.has(row.status),
+  );
+  const sessionPendingRecoveryWal = listSessionPendingRecoveryWal(
+    recoveryWalPendingRows,
+    sessionId,
+  );
+  const recoveryWalQuarantine = recoveryWalScan.issues;
 
   const report: InspectReport = {
     sessionId,
@@ -1033,6 +1026,8 @@ function buildInspectReport(
       pendingCount: recoveryWalPendingRows.length,
       pendingSessionCount: sessionPendingRecoveryWal.length,
       pendingRows: sessionPendingRecoveryWal,
+      quarantinedCount: recoveryWalQuarantine.length,
+      quarantined: recoveryWalQuarantine,
     },
     snapshots: {
       sessionDir: snapshotSessionDir,

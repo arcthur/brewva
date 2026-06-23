@@ -140,7 +140,7 @@ export function formatInspectDiagnosticText(report: InspectReport): string {
     `Context cockpit cache: status=${report.contextCockpit.cachePosture.status} read=${report.contextCockpit.cachePosture.cacheReadTokens} write=${report.contextCockpit.cachePosture.cacheWriteTokens}`,
     `Ledger: rows=${report.ledger.rows} integrity=${report.ledger.integrityValid ? "valid" : "invalid"} path=${report.ledger.path}`,
     `Projection: enabled=${report.projection.enabled ? "yes" : "no"} working=${report.projection.workingExists ? "present" : "missing"} path=${report.projection.workingPath}`,
-    `Recovery WAL: enabled=${report.recoveryWal.enabled ? "yes" : "no"} pending=${report.recoveryWal.pendingCount} sessionPending=${report.recoveryWal.pendingSessionCount} file=${report.recoveryWal.filePath}`,
+    `Recovery WAL: enabled=${report.recoveryWal.enabled ? "yes" : "no"} pending=${report.recoveryWal.pendingCount} sessionPending=${report.recoveryWal.pendingSessionCount} quarantined=${report.recoveryWal.quarantinedCount} file=${report.recoveryWal.filePath}`,
     `Snapshots: sessionDir=${report.snapshots.sessionDirExists ? "present" : "missing"} patchHistory=${report.snapshots.patchHistoryExists ? "present" : "missing"} path=${report.snapshots.patchHistoryPath}`,
     `Consistency: ledger=${report.consistency.ledgerIntegrity} pendingRecoveryWal=${report.consistency.pendingRecoveryWal}`,
   ];
@@ -227,6 +227,11 @@ export function formatInspectDiagnosticText(report: InspectReport): string {
       lines.push(
         `Recovery WAL row: source=${row.source} status=${row.status} turnId=${row.turnId} channel=${row.channel} tool=${row.toolName ?? "n/a"} toolCallId=${row.toolCallId ?? "n/a"} updatedAt=${row.updatedAt ?? "n/a"}`,
       );
+    }
+  }
+  if (report.recoveryWal.quarantined.length > 0) {
+    for (const issue of report.recoveryWal.quarantined.slice(0, 5)) {
+      lines.push(`Recovery WAL quarantined: ${issue}`);
     }
   }
   if (report.configLoad.warnings.length > 0) {

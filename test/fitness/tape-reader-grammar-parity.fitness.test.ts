@@ -46,4 +46,25 @@ describe("strict and forensic tape readers share one grammar (RFC WS3)", () => {
     expect(scan.issues.length).toBeGreaterThan(0);
     expect(scan.lastValidEventId).toBe("e1");
   });
+
+  test("an unterminated final line agrees between readers whether it is valid, wrong-schema, or a fragment", () => {
+    // The three shapes a crash can leave in the final line, all without a
+    // terminating newline. The strict reader drops every one by the byte rule; the
+    // forensic scanner must agree — flag tornTail, raise no corruption issue, and
+    // leave the last valid id at the surviving prefix.
+    const tornTails = [
+      validRecord("e2"), // (a) a complete, valid event
+      JSON.stringify({ id: "e2", sessionId, type: "bogus.type", timestamp: 2, payload: {} }), // (b) valid JSON, unknown type
+      '{"id":"e2","type":"turn.started"', // (c) a truncated fragment
+    ];
+    for (const tail of tornTails) {
+      const { adapter, path } = adapterAndTapePath(`${validRecord("e1")}\n${tail}`);
+      // Scan first: read-only, before the strict read truncates the torn tail.
+      const scan = scanTapeFileForensics(path, sessionId);
+      expect(scan.tornTail).toBe(true);
+      expect(scan.issues).toEqual([]);
+      expect(scan.lastValidEventId).toBe("e1");
+      expect(adapter.runtime.tape.list(sessionId).map((event) => event.id)).toEqual(["e1"]);
+    }
+  });
 });

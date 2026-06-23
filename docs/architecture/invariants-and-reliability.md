@@ -101,10 +101,17 @@ recovery, and bounded execution.
   cancellation, rollback, recovery, and failure evidence must still be recorded
   through runtime events, receipts, WAL, or ledger rows when the boundary
   requires it.
+- Both append-only logs are crash-safe at named boundaries: WAL compaction is an
+  atomic `tmp`-write + `fsync` + `rename`, tape and WAL `fsync` at `turn.ended` /
+  `checkpoint.committed` / terminal-WAL marks (`power_loss` durable there,
+  `process_crash` durable between), a torn trailing line is truncated on load, and
+  the durable write is the commit point — memory moves only after it succeeds, so a
+  failed write leaves no ghost record. Recovery delivery is `at_least_once`.
 - The unified `getIntegrity` durability aggregation is currently a healthy stub;
-  live integrity signals are the Recovery WAL fail-closed guard, hydration
-  (which surfaces `event_tape` damage), and ledger chain verification (see
-  `docs/journeys/internal/wal-and-crash-recovery.md`).
+  live integrity signals are the Recovery WAL quarantine surface (a malformed row
+  is isolated and reported through `brewva inspect`, not a fail-closed halt),
+  hydration (which surfaces `event_tape` damage), and ledger chain verification
+  (see `docs/journeys/internal/wal-and-crash-recovery.md`).
 - Promise/Effect boundary crossings are adapter mechanics. Repeated boundary
   crossings inside provider stream core, channel queue core, tool execution
   internals, or runtime package code are reliability bugs, not implementation
@@ -112,17 +119,17 @@ recovery, and bounded execution.
 
 ## State Roles
 
-| Surface         | Role                                | Failure posture                           |
-| --------------- | ----------------------------------- | ----------------------------------------- |
-| Event tape      | durable source of truth             | data loss affects replay correctness      |
-| Recovery WAL    | durable transient recovery material | stale entries recover, expire, or compact |
-| Evidence ledger | durable evidence                    | row issues degrade audit, not tape replay |
-| Projection      | rebuildable state                   | rebuild from tape/workspace               |
-| Work Card       | shared projection payload           | rebuild or render diagnostic drill-down   |
-| Attention cards | candidate projection                | omit or consume explicitly                |
-| Session wire    | derived live/read model             | rebuild or degrade UI details             |
-| Session lineage | rebuildable state                   | rebuild from tape                         |
-| Provider cache  | performance cache                   | disable or miss without changing truth    |
+| Surface         | Role                                | Failure posture                                                      |
+| --------------- | ----------------------------------- | -------------------------------------------------------------------- |
+| Event tape      | durable source of truth             | data loss affects replay correctness                                 |
+| Recovery WAL    | durable transient recovery material | malformed rows quarantine; stale entries recover, expire, or compact |
+| Evidence ledger | durable evidence                    | row issues degrade audit, not tape replay                            |
+| Projection      | rebuildable state                   | rebuild from tape/workspace                                          |
+| Work Card       | shared projection payload           | rebuild or render diagnostic drill-down                              |
+| Attention cards | candidate projection                | omit or consume explicitly                                           |
+| Session wire    | derived live/read model             | rebuild or degrade UI details                                        |
+| Session lineage | rebuildable state                   | rebuild from tape                                                    |
+| Provider cache  | performance cache                   | disable or miss without changing truth                               |
 
 ## Layer Ownership
 

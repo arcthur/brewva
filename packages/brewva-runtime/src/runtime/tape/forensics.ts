@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { scanAppendOnly } from "@brewva/brewva-std/node/fs";
 import { classifyTapeRecord, type TapeRecordIssueClass } from "./impl.js";
 
 export { resolveTapeFilePath } from "./path.js";
@@ -64,64 +64,34 @@ export function emptyTapeForensicScan(sessionId: string): TapeForensicScan {
 }
 
 export function scanTapeFileForensics(filePath: string, sessionId: string): TapeForensicScan {
-  if (!existsSync(filePath)) {
-    return emptyScan(sessionId, filePath, false);
-  }
-  const raw = readFileSync(filePath, "utf8");
-  if (raw.length === 0) {
-    return emptyScan(sessionId, filePath, true);
-  }
-
-  // Split on newlines while tracking byte offsets. A terminating newline yields a
-  // trailing empty segment (not a record); its absence means the final segment is
-  // unterminated — the signature of a crash mid-append.
-  const segments = raw.split("\n");
-  const endsWithNewline = raw.endsWith("\n");
-  let lastNonEmptyIndex = -1;
-  for (let i = segments.length - 1; i >= 0; i -= 1) {
-    if ((segments[i] ?? "").trim().length > 0) {
-      lastNonEmptyIndex = i;
-      break;
-    }
-  }
-
   const issues: TapeForensicIssue[] = [];
-  let byteOffset = 0;
   let totalRecords = 0;
   let validRecords = 0;
   let lastValidEventId: string | null = null;
-  let tornTail = false;
-
-  for (let i = 0; i < segments.length; i += 1) {
-    const segment = segments[i] ?? "";
-    const segmentBytes = Buffer.byteLength(segment, "utf8");
-    const trimmed = segment.trim();
-    if (trimmed.length > 0) {
-      totalRecords += 1;
-      const classified = classifyTapeRecord(trimmed);
-      if (classified.ok) {
-        validRecords += 1;
-        lastValidEventId = classified.event.id;
-      } else {
-        const isLastNonEmpty = i === lastNonEmptyIndex;
-        if (isLastNonEmpty && !endsWithNewline && classified.issueClass === "malformed_json") {
-          tornTail = true;
-        }
-        issues.push(
-          Object.freeze({
-            line: i + 1,
-            byteOffset,
-            issueClass: classified.issueClass,
-            tag: classified.tag,
-            tailLocal: isLastNonEmpty,
-          }),
-        );
-      }
+  // The torn-tail boundary is decided once, in scanAppendOnly, byte-for-byte the
+  // same as the strict reader truncates — so the forensic scan and the strict
+  // load agree on which final line is a torn write rather than a real record.
+  const scan = scanAppendOnly(filePath, (line) => {
+    totalRecords += 1;
+    const classified = classifyTapeRecord(line.text);
+    if (classified.ok) {
+      validRecords += 1;
+      lastValidEventId = classified.event.id;
+      return;
     }
-    // Advance past this segment plus its "\n" delimiter (every segment except the last).
-    byteOffset += segmentBytes + (i < segments.length - 1 ? 1 : 0);
+    issues.push(
+      Object.freeze({
+        line: line.lineNumber,
+        byteOffset: line.byteOffset,
+        issueClass: classified.issueClass,
+        tag: classified.tag,
+        tailLocal: line.isLastRecord,
+      }),
+    );
+  });
+  if (!scan.exists) {
+    return emptyScan(sessionId, filePath, false);
   }
-
   return Object.freeze({
     sessionId,
     filePath,
@@ -129,7 +99,7 @@ export function scanTapeFileForensics(filePath: string, sessionId: string): Tape
     totalRecords,
     validRecords,
     lastValidEventId,
-    tornTail,
+    tornTail: scan.tornTail,
     issues: Object.freeze(issues),
   });
 }

@@ -17,6 +17,24 @@ This document uses Brewva's stable four-class durability taxonomy:
 - `cache`: latency or UX helper material that may be dropped without changing
   correctness
 
+## Crash-Safety Discipline
+
+Both append-only logs survive the crash they exist to recover from, at named
+durability boundaries:
+
+- durability is `process_crash` durable between boundaries (the OS page cache
+  outlives a process or worker kill) and `power_loss` durable at a boundary — a
+  committed `turn.ended` / `checkpoint.committed` event or a terminal Recovery WAL
+  mark is `fsync`'d to disk
+- Recovery WAL compaction is an atomic full-file rewrite (`tmp` write + `fsync` +
+  `rename` + parent-directory `fsync`), so a crash mid-rewrite never truncates the
+  log or loses the watermark marker
+- a torn trailing line (a partial final record with no terminating newline) is
+  truncated on load; the durable write is the commit point, so in-memory state
+  moves only after it succeeds and a failed write leaves no ghost record
+- recovery delivery is `at_least_once`: a restart re-drives the accepted envelope
+  and external effects are deduped best-effort, not exactly-once
+
 ## Root Ownership
 
 - `.brewva/tape/`: canonical runtime truth and replay authority

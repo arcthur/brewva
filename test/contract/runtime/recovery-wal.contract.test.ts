@@ -174,14 +174,14 @@ describe("Recovery WAL store", () => {
     expect(store.listCurrent().map((row) => row.status)).toEqual(["done"]);
   });
 
-  test("given malformed wal lines, when store reloads, then integrity failure is surfaced", () => {
+  test("given malformed wal lines, when store reloads, then they are quarantined and surfaced without wedging recovery", () => {
     const workspace = createTestWorkspace("recovery-wal-corrupt-lines");
     const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       scope: "channel-telegram",
     });
-    store.appendPending(createEnvelope("turn-corrupt"), "channel");
+    const healthy = store.appendPending(createEnvelope("turn-corrupt"), "channel");
     appendFileSync(
       recoveryWalFilePath(workspace, "channel-telegram"),
       '\n{"schema":"bad"}\nnot-json\n',
@@ -193,7 +193,10 @@ describe("Recovery WAL store", () => {
       config: DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal,
       scope: "channel-telegram",
     });
-    expect(() => reloaded.listPending()).toThrow("recovery_wal_integrity_error");
+    // Quarantine-and-continue: the durable-transient log isolates the bad rows and
+    // keeps recovering the healthy one rather than failing closed on every op.
+    expect(reloaded.listPending().map((row) => row.walId)).toEqual([healthy.walId]);
+    expect(reloaded.getIntegrityIssues()).toHaveLength(2);
   });
 
   test("given terminal records beyond retention window, when compact runs, then stale records are dropped", () => {
