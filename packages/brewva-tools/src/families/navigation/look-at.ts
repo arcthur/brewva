@@ -7,7 +7,11 @@ import type { BrewvaToolRuntime } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
-import { resolveScopedPath, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
+import {
+  describeTargetScopeRejection,
+  resolveScopedPath,
+  resolveToolTargetScope,
+} from "../../runtime-port/target-scope.js";
 import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { buildReadPathDiscoveryObservationPayload } from "./read-path-discovery.js";
 
@@ -130,7 +134,12 @@ export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): Too
       const absolute = resolveScopedPath(params.file_path, scope);
       if (!absolute) {
         return errTextResult(
-          `look_at rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
+          describeTargetScopeRejection({
+            tool: "look_at",
+            subject: "path",
+            allowedRoots: scope.allowedRoots,
+            offending: params.file_path,
+          }),
         );
       }
       if (!existsSync(absolute)) {

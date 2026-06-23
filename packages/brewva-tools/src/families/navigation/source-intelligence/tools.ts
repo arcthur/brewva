@@ -8,7 +8,11 @@ import type { BrewvaBundledToolRuntime } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";
 import { registerToolRuntimeClearStateListener } from "../../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../../runtime-port/parallel-read.js";
-import { resolveScopedPath, resolveToolTargetScope } from "../../../runtime-port/target-scope.js";
+import {
+  describeTargetScopeRejection,
+  resolveScopedPath,
+  resolveToolTargetScope,
+} from "../../../runtime-port/target-scope.js";
 import { errTextResult, okTextResult } from "../../../utils/result.js";
 import { normalizeSearchAdvisorPath, registerSearchIntent } from "../search-advisor.js";
 import {
@@ -88,17 +92,19 @@ function resolveToolPaths(input: {
   readonly entries: readonly string[] | undefined;
   readonly baseCwd: string;
   readonly scope: ReturnType<typeof resolveToolTargetScope>;
-}): string[] | null {
+}):
+  | { readonly kind: "ok"; readonly paths: string[] }
+  | { readonly kind: "err"; offending: string } {
   const requested = input.entries && input.entries.length > 0 ? input.entries : ["."];
   const out: string[] = [];
   for (const entry of requested) {
     const resolved = resolveScopedPath(entry, input.scope, { relativeTo: input.baseCwd });
     if (!resolved) {
-      return null;
+      return { kind: "err", offending: entry };
     }
     out.push(resolved);
   }
-  return [...new Set(out)];
+  return { kind: "ok", paths: [...new Set(out)] };
 }
 
 function ensureExistingFile(filePath: string): string | null {
@@ -300,7 +306,12 @@ export function createSourceIntelligenceTools(options?: {
         const absolutePath = resolveScopedPath(params.file_path, scope);
         if (!absolutePath) {
           return errTextResult(
-            `code_outline rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
+            describeTargetScopeRejection({
+              tool: "code_outline",
+              subject: "path",
+              allowedRoots: scope.allowedRoots,
+              offending: params.file_path,
+            }),
           );
         }
         const fileError = ensureExistingFile(absolutePath);
@@ -377,16 +388,22 @@ export function createSourceIntelligenceTools(options?: {
       }),
       async execute(_id, params, signal, _onUpdate, ctx) {
         const scope = resolveToolTargetScope(codeDigestFactory.runtime, ctx);
-        const roots = resolveToolPaths({
+        const rootsResult = resolveToolPaths({
           entries: params.paths,
           baseCwd: scope.baseCwd,
           scope,
         });
-        if (!roots) {
+        if (rootsResult.kind === "err") {
           return errTextResult(
-            `code_digest rejected: paths escape target roots (${scope.allowedRoots.join(", ")}).`,
+            describeTargetScopeRejection({
+              tool: "code_digest",
+              subject: "path",
+              allowedRoots: scope.allowedRoots,
+              offending: rootsResult.offending,
+            }),
           );
         }
+        const roots = rootsResult.paths;
         const missingRoot = roots.map((root) => ensureExistingPath(root)).find(Boolean);
         if (missingRoot) {
           return errTextResult(missingRoot);
@@ -552,7 +569,12 @@ export function createSourceIntelligenceTools(options?: {
         const absolutePath = resolveScopedPath(params.path, scope);
         if (!absolutePath) {
           return errTextResult(
-            `code_surface rejected: path escapes target roots (${scope.allowedRoots.join(", ")}).`,
+            describeTargetScopeRejection({
+              tool: "code_surface",
+              subject: "path",
+              allowedRoots: scope.allowedRoots,
+              offending: params.path,
+            }),
           );
         }
         const pathError = ensureExistingPath(absolutePath);
@@ -609,16 +631,22 @@ export function createSourceIntelligenceTools(options?: {
         }),
         async execute(_id, params, signal, _onUpdate, ctx) {
           const scope = resolveToolTargetScope(factory.runtime, ctx);
-          const roots = resolveToolPaths({
+          const rootsResult = resolveToolPaths({
             entries: params.paths,
             baseCwd: scope.baseCwd,
             scope,
           });
-          if (!roots) {
+          if (rootsResult.kind === "err") {
             return errTextResult(
-              `${name} rejected: paths escape target roots (${scope.allowedRoots.join(", ")}).`,
+              describeTargetScopeRejection({
+                tool: name,
+                subject: "path",
+                allowedRoots: scope.allowedRoots,
+                offending: rootsResult.offending,
+              }),
             );
           }
+          const roots = rootsResult.paths;
           const missingRoot = roots.map((root) => ensureExistingPath(root)).find(Boolean);
           if (missingRoot) {
             return errTextResult(missingRoot);
@@ -685,16 +713,22 @@ export function createSourceIntelligenceTools(options?: {
       }),
       async execute(_id, params, signal, _onUpdate, ctx) {
         const scope = resolveToolTargetScope(codeCyclesFactory.runtime, ctx);
-        const roots = resolveToolPaths({
+        const rootsResult = resolveToolPaths({
           entries: params.paths,
           baseCwd: scope.baseCwd,
           scope,
         });
-        if (!roots) {
+        if (rootsResult.kind === "err") {
           return errTextResult(
-            `code_cycles rejected: paths escape target roots (${scope.allowedRoots.join(", ")}).`,
+            describeTargetScopeRejection({
+              tool: "code_cycles",
+              subject: "path",
+              allowedRoots: scope.allowedRoots,
+              offending: rootsResult.offending,
+            }),
           );
         }
+        const roots = rootsResult.paths;
         const missingRoot = roots.map((root) => ensureExistingPath(root)).find(Boolean);
         if (missingRoot) {
           return errTextResult(missingRoot);
@@ -755,7 +789,12 @@ export function createSourceIntelligenceTools(options?: {
             : undefined;
           if (params.file_path && !absolutePath) {
             return errTextResult(
-              `${name} rejected: file_path escapes target roots (${scope.allowedRoots.join(", ")}).`,
+              describeTargetScopeRejection({
+                tool: name,
+                subject: "file_path",
+                allowedRoots: scope.allowedRoots,
+                offending: params.file_path,
+              }),
             );
           }
           if (absolutePath) {

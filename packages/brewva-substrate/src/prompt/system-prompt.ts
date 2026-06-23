@@ -37,6 +37,11 @@ export interface BrewvaSystemPromptCapabilitySelection {
   selectionReason?: string;
 }
 
+export interface WorktreeInfo {
+  path: string;
+  branch?: string;
+}
+
 export interface BuildBrewvaSystemPromptDocumentOptions {
   customInstructions?: string;
   selectedTools?: string[];
@@ -46,6 +51,7 @@ export interface BuildBrewvaSystemPromptDocumentOptions {
   cwd?: string;
   projectInstructions?: readonly BrewvaSystemPromptProjectInstruction[];
   capabilitySelection?: BrewvaSystemPromptCapabilitySelection;
+  worktrees?: readonly WorktreeInfo[];
 }
 
 export const BREWVA_SYSTEM_PROMPT_ENVIRONMENT_BLOCK_ID = "environment";
@@ -167,11 +173,24 @@ function buildProjectInstructionsText(
   return lines.join("\n");
 }
 
+function renderWorktreeLines(worktrees: readonly WorktreeInfo[] | undefined): string {
+  if (!worktrees || worktrees.length <= 1) {
+    return "";
+  }
+  const lines = worktrees.map((worktree) => {
+    const branch = worktree.branch ? ` [${worktree.branch}]` : "";
+    return `- ${worktree.path}${branch}`;
+  });
+  return `\nGit worktrees inside the current target root:\n${lines.join("\n")}`;
+}
+
 export function renderBrewvaSystemPromptEnvironmentBlockText(input: {
   date: string;
   cwd: string;
+  worktrees?: readonly WorktreeInfo[];
 }): string {
-  return `Current date: ${input.date}\nCurrent working directory: ${input.cwd}`;
+  const base = `Current date: ${input.date}\nCurrent working directory: ${input.cwd}`;
+  return `${base}${renderWorktreeLines(input.worktrees)}`;
 }
 
 export function buildBrewvaProjectInstructionsPromptBlock(
@@ -302,7 +321,7 @@ export function buildBrewvaSystemPromptDocument(
     id: BREWVA_SYSTEM_PROMPT_ENVIRONMENT_BLOCK_ID,
     stability: "session",
     authority: "contract",
-    text: renderBrewvaSystemPromptEnvironmentBlockText({ date, cwd }),
+    text: renderBrewvaSystemPromptEnvironmentBlockText({ date, cwd, worktrees: options.worktrees }),
   });
 
   return {
@@ -319,7 +338,7 @@ export function renderBrewvaSystemPromptText(document: BrewvaSystemPromptDocumen
 }
 
 const ENVIRONMENT_BLOCK_PATTERN =
-  /\n\nCurrent date: \d{4}-\d{2}-\d{2}\nCurrent working directory: .+$/u;
+  /\n\nCurrent date: \d{4}-\d{2}-\d{2}\nCurrent working directory: [\s\S]+$/u;
 
 function appendPlainSystemPromptSection(input: { systemPrompt: string; section: string }): string {
   const section = input.section.trim();

@@ -93,6 +93,33 @@ describe("grep managed tool", () => {
     expect(text).not.toContain("other.md");
   });
 
+  test("glob workdir rejection includes the rejected path and recovery guidance", async () => {
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), "brewva-glob-workdir-")));
+    const outsideRoot = realpathSync(mkdtempSync(join(tmpdir(), "brewva-glob-outside-")));
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = requireDefined(
+      buildBrewvaTools({ runtime }).find((candidate) => candidate.name === "glob"),
+      "expected glob tool",
+    );
+
+    const result = await tool.execute(
+      "tc-glob-workdir-rejection",
+      {
+        pattern: "**/*",
+        workdir: outsideRoot,
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-glob-workdir-rejection"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain(`glob rejected: workdir escapes target roots (${workspace}).`);
+    expect(text).toContain(`Rejected workdir: ${outsideRoot}`);
+    expect(text).toContain("Stay inside a target root");
+  });
+
   test("allows glob paths from canonical turn prompts that mention sibling roots", async () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), "brewva-glob-workspace-")));
     const siblingRoot = realpathSync(mkdtempSync(join(tmpdir(), "brewva-glob-sibling-")));

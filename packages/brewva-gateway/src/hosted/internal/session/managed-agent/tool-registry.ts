@@ -3,11 +3,13 @@ import type { BrewvaHostToolInfo } from "@brewva/brewva-substrate/host-api";
 import {
   buildBrewvaSystemPromptDocument,
   renderBrewvaSystemPromptText,
+  type WorktreeInfo,
 } from "@brewva/brewva-substrate/prompt";
 import type { BrewvaHostedResourceLoader } from "@brewva/brewva-substrate/resources";
 import type { BrewvaToolContext, BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import { outcomeIsError } from "@brewva/brewva-vocabulary/outcome";
 import type { ToolSchemaSnapshot, ToolSchemaSnapshotTool } from "../../provider/cache/index.js";
+import { collectGitWorktrees } from "./git-worktrees.js";
 
 function toAgentTool(
   tool: BrewvaToolDefinition,
@@ -88,12 +90,14 @@ export class ManagedSessionToolRegistry {
   readonly #toolPromptSnippets = new Map<string, string>();
   readonly #toolPromptGuidelines = new Map<string, string[]>();
   readonly #cwd: string;
+  readonly #worktrees: readonly WorktreeInfo[];
   readonly #resourceLoader: BrewvaHostedResourceLoader;
   readonly #resolveSchemaSnapshot: ManagedSessionToolRegistryOptions["resolveSchemaSnapshot"];
   #baseSystemPrompt = "";
 
   constructor(options: ManagedSessionToolRegistryOptions) {
     this.#cwd = options.cwd;
+    this.#worktrees = collectGitWorktrees(options.cwd);
     this.#resourceLoader = options.resourceLoader;
     this.#resolveSchemaSnapshot = options.resolveSchemaSnapshot;
   }
@@ -230,6 +234,7 @@ export class ManagedSessionToolRegistry {
   private rebuildSystemPrompt(activeToolNames: readonly string[]): string {
     return buildManagedSessionBaseSystemPrompt({
       cwd: this.#cwd,
+      worktrees: this.#worktrees,
       resourceLoader: this.#resourceLoader,
       activeToolNames,
       toolPromptInputs: this.buildPromptInputs(activeToolNames),
@@ -255,6 +260,7 @@ export class ManagedSessionToolRegistry {
 
 export function buildManagedSessionBaseSystemPrompt(input: {
   cwd: string;
+  worktrees?: readonly WorktreeInfo[];
   resourceLoader: BrewvaHostedResourceLoader;
   activeToolNames: readonly string[];
   toolPromptInputs: {
@@ -268,6 +274,7 @@ export function buildManagedSessionBaseSystemPrompt(input: {
   }
   const document = buildBrewvaSystemPromptDocument({
     cwd: input.cwd,
+    worktrees: input.worktrees,
     selectedTools: [...input.activeToolNames],
     toolSnippets: input.toolPromptInputs.toolSnippets,
     promptGuidelines: input.toolPromptInputs.promptGuidelines,

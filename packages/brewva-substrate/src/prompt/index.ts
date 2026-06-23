@@ -28,4 +28,5 @@ export {
   type BrewvaPromptAuthority,
   type BrewvaPromptStability,
   type BuildBrewvaSystemPromptDocumentOptions,
+  type WorktreeInfo,
 } from "./api.js";

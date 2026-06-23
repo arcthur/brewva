@@ -44,8 +44,11 @@ export {
   type ReadTextBatchOptions,
 } from "./parallel-read.js";
 export {
+  describeTargetScopeRejection,
   isPathInsideRoots,
   resolveScopedPath,
   resolveToolTargetScope,
+  TARGET_SCOPE_REJECTION_GUIDANCE,
+  type TargetScopeRejection,
   type ToolTargetScope,
 } from "./target-scope.js";

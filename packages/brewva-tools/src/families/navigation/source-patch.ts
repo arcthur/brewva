@@ -42,6 +42,7 @@ import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
+  describeTargetScopeRejection,
   resolveScopedPath,
   resolveToolTargetScope,
   type ToolTargetScope,
@@ -929,7 +930,12 @@ export function createSourceReadTool(options?: {
       const absolutePath = resource.path ?? pathFromResourceUri(params.uri, scope);
       if (!absolutePath) {
         return errTextResult(
-          `source_read rejected: uri escapes target roots (${scope.allowedRoots.join(", ")}).`,
+          describeTargetScopeRejection({
+            tool: "source_read",
+            subject: "uri",
+            allowedRoots: scope.allowedRoots,
+            offending: params.uri,
+          }),
           { ok: false, reason: "path_outside_target" },
         );
       }

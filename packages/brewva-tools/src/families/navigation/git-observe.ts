@@ -4,7 +4,11 @@ import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-subs
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
-import { isPathInsideRoots, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
+import {
+  describeTargetScopeRejection,
+  isPathInsideRoots,
+  resolveToolTargetScope,
+} from "../../runtime-port/target-scope.js";
 import { errTextResult, okTextResult, textResultForOutcome } from "../../utils/result.js";
 
 interface GitObserveToolOptions extends BrewvaToolOptions {
@@ -127,6 +131,7 @@ async function runGitCommand(
 }
 
 function resolveWorkdir(
+  toolName: string,
   options: BrewvaToolOptions["runtime"],
   ctx: unknown,
   value: unknown,
@@ -137,7 +142,14 @@ function resolveWorkdir(
       ? resolve(scope.baseCwd, value.trim())
       : scope.baseCwd;
   if (!isPathInsideRoots(workdir, scope.allowedRoots)) {
-    throw new Error(`workdir_outside_target:${scope.allowedRoots.join(",")}`);
+    throw new Error(
+      describeTargetScopeRejection({
+        tool: toolName,
+        subject: "workdir",
+        allowedRoots: scope.allowedRoots,
+        offending: workdir,
+      }),
+    );
   }
   return workdir;
 }
@@ -184,12 +196,11 @@ export function createGitStatusTool(options: GitObserveToolOptions): ToolDefinit
       async execute(_toolCallId, params, signal, _onUpdate, ctx) {
         let cwd: string;
         try {
-          cwd = resolveWorkdir(runtime, ctx, params.workdir);
+          cwd = resolveWorkdir("git_status", runtime, ctx, params.workdir);
         } catch (error) {
-          return errTextResult(
-            `git_status rejected: ${error instanceof Error ? error.message : String(error)}.`,
-            { ok: false },
-          );
+          return errTextResult(error instanceof Error ? error.message : String(error), {
+            ok: false,
+          });
         }
         const result = await runGitCommand(
           {
@@ -247,12 +258,11 @@ export function createGitDiffTool(options: GitObserveToolOptions): ToolDefinitio
       async execute(_toolCallId, params, signal, _onUpdate, ctx) {
         let cwd: string;
         try {
-          cwd = resolveWorkdir(runtime, ctx, params.workdir);
+          cwd = resolveWorkdir("git_diff", runtime, ctx, params.workdir);
         } catch (error) {
-          return errTextResult(
-            `git_diff rejected: ${error instanceof Error ? error.message : String(error)}.`,
-            { ok: false },
-          );
+          return errTextResult(error instanceof Error ? error.message : String(error), {
+            ok: false,
+          });
         }
         const paths = Array.isArray(params.paths)
           ? params.paths.map((entry) => entry.trim()).filter((entry) => entry.length > 0)
@@ -320,12 +330,11 @@ export function createGitLogTool(options: GitObserveToolOptions): ToolDefinition
       async execute(_toolCallId, params, signal, _onUpdate, ctx) {
         let cwd: string;
         try {
-          cwd = resolveWorkdir(runtime, ctx, params.workdir);
+          cwd = resolveWorkdir("git_log", runtime, ctx, params.workdir);
         } catch (error) {
-          return errTextResult(
-            `git_log rejected: ${error instanceof Error ? error.message : String(error)}.`,
-            { ok: false },
-          );
+          return errTextResult(error instanceof Error ? error.message : String(error), {
+            ok: false,
+          });
         }
         const paths = Array.isArray(params.paths)
           ? params.paths.map((entry) => entry.trim()).filter((entry) => entry.length > 0)

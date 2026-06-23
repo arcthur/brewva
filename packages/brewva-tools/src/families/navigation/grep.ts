@@ -13,6 +13,7 @@ import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
+  describeTargetScopeRejection,
   isPathInsideRoots,
   resolveScopedPath,
   resolveToolTargetScope,
@@ -126,7 +127,12 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       const cwd = params.workdir ? resolve(scope.baseCwd, params.workdir) : scope.baseCwd;
       if (!isPathInsideRoots(cwd, scope.allowedRoots)) {
         return errTextResult(
-          `grep rejected: workdir escapes target roots (${scope.allowedRoots.join(", ")}).`,
+          describeTargetScopeRejection({
+            tool: "grep",
+            subject: "workdir",
+            allowedRoots: scope.allowedRoots,
+            offending: cwd,
+          }),
           {
             ok: false,
             reason: "workdir_outside_target",
@@ -144,12 +150,20 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
         const absolutePath = resolveScopedPath(entry, scope, { relativeTo: cwd });
         if (!absolutePath) {
-          return errTextResult(`grep rejected: path escapes target roots (${entry}).`, {
-            ok: false,
-            reason: "path_outside_target",
-            path: entry,
-            targetRoots: scope.allowedRoots,
-          });
+          return errTextResult(
+            describeTargetScopeRejection({
+              tool: "grep",
+              subject: "path",
+              allowedRoots: scope.allowedRoots,
+              offending: entry,
+            }),
+            {
+              ok: false,
+              reason: "path_outside_target",
+              path: entry,
+              targetRoots: scope.allowedRoots,
+            },
+          );
         }
         const relativePath = relative(cwd, absolutePath);
         paths.push(
@@ -491,7 +505,12 @@ export function createGlobTool(options: GrepToolOptions): ToolDefinition {
       const cwd = params.workdir ? resolve(scope.baseCwd, params.workdir) : scope.baseCwd;
       if (!isPathInsideRoots(cwd, scope.allowedRoots)) {
         return errTextResult(
-          `glob rejected: workdir escapes target roots (${scope.allowedRoots.join(", ")}).`,
+          describeTargetScopeRejection({
+            tool: "glob",
+            subject: "workdir",
+            allowedRoots: scope.allowedRoots,
+            offending: cwd,
+          }),
           {
             ok: false,
             reason: "workdir_outside_target",
@@ -509,12 +528,20 @@ export function createGlobTool(options: GrepToolOptions): ToolDefinition {
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
         const absolutePath = resolveScopedPath(entry, scope, { relativeTo: cwd });
         if (!absolutePath) {
-          return errTextResult(`glob rejected: path escapes target roots (${entry}).`, {
-            ok: false,
-            reason: "path_outside_target",
-            path: entry,
-            targetRoots: scope.allowedRoots,
-          });
+          return errTextResult(
+            describeTargetScopeRejection({
+              tool: "glob",
+              subject: "path",
+              allowedRoots: scope.allowedRoots,
+              offending: entry,
+            }),
+            {
+              ok: false,
+              reason: "path_outside_target",
+              path: entry,
+              targetRoots: scope.allowedRoots,
+            },
+          );
         }
         const relativePath = relative(cwd, absolutePath);
         paths.push(

@@ -301,3 +301,27 @@ export function resolveScopedPath(
   const absolute = resolve(options.relativeTo ?? scope.baseCwd, candidate);
   return isPathInsideRoots(absolute, scope.allowedRoots) ? absolute : null;
 }
+
+export const TARGET_SCOPE_REJECTION_GUIDANCE =
+  "Stay inside a target root: do not pass a parent directory, sibling worktree, or the home directory. " +
+  "Use a relative path from the current working directory, or omit workdir to default to the target root. " +
+  "A .claude/worktrees/<name> path is usable only when it is inside one of the target roots.";
+
+export interface TargetScopeRejection {
+  tool: string;
+  subject: "workdir" | "path" | "uri" | "file_path";
+  allowedRoots: readonly string[];
+  offending?: string;
+}
+
+/**
+ * Render a navigation/scope rejection with actionable guidance so the agent can
+ * self-correct instead of retrying the same escaping path. The boundary itself
+ * is enforced by {@link isPathInsideRoots}; this only shapes the message.
+ */
+export function describeTargetScopeRejection(input: TargetScopeRejection): string {
+  const header = `${input.tool} rejected: ${input.subject} escapes target roots (${input.allowedRoots.join(", ")}).`;
+  const offendingLine =
+    input.offending === undefined ? "" : `\nRejected ${input.subject}: ${input.offending}`;
+  return `${header}${offendingLine}\n${TARGET_SCOPE_REJECTION_GUIDANCE}`;
+}

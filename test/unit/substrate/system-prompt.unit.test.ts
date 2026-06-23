@@ -171,3 +171,54 @@ describe("Brewva system prompt document", () => {
     ).toBe("Current date: 2026-05-21\nCurrent working directory: /repo");
   });
 });
+
+describe("Brewva system prompt worktree awareness", () => {
+  test("environment block lists linked worktrees with their branches", () => {
+    const text = renderBrewvaSystemPromptEnvironmentBlockText({
+      date: "2026-06-23",
+      cwd: "/repo",
+      worktrees: [
+        { path: "/repo", branch: "main" },
+        { path: "/repo/.claude/worktrees/feat", branch: "feature-x" },
+      ],
+    });
+
+    expect(text).toContain("Current working directory: /repo");
+    expect(text).toContain("/repo/.claude/worktrees/feat");
+    expect(text).toContain("feature-x");
+  });
+
+  test("environment block omits the worktree section without linked worktrees", () => {
+    const single = renderBrewvaSystemPromptEnvironmentBlockText({
+      date: "2026-06-23",
+      cwd: "/repo",
+      worktrees: [{ path: "/repo", branch: "main" }],
+    });
+    const none = renderBrewvaSystemPromptEnvironmentBlockText({
+      date: "2026-06-23",
+      cwd: "/repo",
+    });
+
+    expect(single).toBe("Current date: 2026-06-23\nCurrent working directory: /repo");
+    expect(none).toBe("Current date: 2026-06-23\nCurrent working directory: /repo");
+  });
+
+  test("appends hosted turn sections before a multi-line worktree environment block", () => {
+    const systemPrompt = renderBrewvaSystemPromptText(
+      buildBrewvaSystemPromptDocument({
+        cwd: "/repo",
+        worktrees: [
+          { path: "/repo", branch: "main" },
+          { path: "/repo/.claude/worktrees/feat", branch: "feature-x" },
+        ],
+      }),
+    );
+    const result = appendBrewvaSystemPromptTextSection({
+      systemPrompt,
+      section: "# CapabilitySelection\nselected: files",
+    });
+
+    expect(result.indexOf("# CapabilitySelection")).toBeLessThan(result.indexOf("Current date:"));
+    expect(result).toContain("feature-x");
+  });
+});

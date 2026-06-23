@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
@@ -213,6 +213,27 @@ describe("source intelligence managed tools", () => {
     expect(details.budget?.renderedTokens ?? Infinity).toBeLessThanOrEqual(
       details.budget?.maxTokens ?? 0,
     );
+  });
+
+  test("code_digest path rejection includes the rejected path and recovery guidance", async () => {
+    const workspace = realpathSync(makeWorkspace());
+    const outsideRoot = realpathSync(mkdtempSync(join(tmpdir(), "brewva-code-outside-")));
+    const tools = createSourceIntelligenceTools({ runtime: runtimeFor(workspace) });
+    const codeDigest = requireTool(tools, "code_digest");
+
+    const result = await codeDigest.execute(
+      "tc-code-digest-path-rejection",
+      { paths: [outsideRoot], max_tokens: 400, limit: 5 },
+      undefined,
+      undefined,
+      fakeContext("source-intelligence-path-rejection"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain(`code_digest rejected: path escapes target roots (${workspace}).`);
+    expect(text).toContain(`Rejected path: ${outsideRoot}`);
+    expect(text).toContain("Stay inside a target root");
   });
 
   test("code_digest bounds root parsing to selected digest files", async () => {
