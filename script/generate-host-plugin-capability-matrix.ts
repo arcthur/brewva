@@ -50,7 +50,9 @@ const INTERNAL_PLUGINS: readonly InternalPlugin[] = [
 ];
 
 function render(): string {
-  const capabilities = [...ALL_RUNTIME_PLUGIN_CAPABILITIES].toSorted();
+  const capabilities = [...ALL_RUNTIME_PLUGIN_CAPABILITIES].toSorted((left, right) =>
+    left.localeCompare(right),
+  );
   const header = [
     "Capability",
     "Effect class",
