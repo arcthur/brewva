@@ -85,14 +85,6 @@ discipline.
   ergonomics into the advisory ring) under the line `Borrow the mechanism, never
 the authority shape`.
 
-- [Durable Steering Inbox](./durable-steering-inbox.md): open design question
-  split out of the crash-safe substrate RFC's former "E" — whether the volatile
-  in-session steer / queue / next-turn inbox needs durable storage at all, and if
-  so where. Three options (re-home onto the Recovery WAL, a session-scoped
-  sidecar, or do not persist the enqueue→consume window), weighing the
-  WAL-identity-widening cost of the obvious reuse against a sidecar and against
-  measured loss for interactive sessions. Lean: measure first; prefer a sidecar
-  over widening the WAL if durability is warranted.
 - [Tree History And Multi-Writer Substrate](./tree-history-and-multi-writer-substrate.md):
   the future-facing model fork the crash-safe substrate RFC is table stakes for
   but does not resolve. Frames two decision axes — history shape (brewva's

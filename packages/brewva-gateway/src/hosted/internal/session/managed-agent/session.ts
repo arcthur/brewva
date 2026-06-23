@@ -107,6 +107,7 @@ import { ManagedSessionCompactionLifecycle } from "./compaction-lifecycle.js";
 import {
   ManagedSessionCommandDispatchGate,
   ManagedSessionCommandMessageRouter,
+  drainDeferredPromptQueue,
   ManagedSessionDeferredTurnState,
   type QueuedPromptEntry,
 } from "./deferred-dispatch.js";
@@ -153,6 +154,7 @@ import {
   prepareManagedPromptDispatch,
   type ManagedPromptDispatchDeps,
 } from "./session-prompt-dispatch.js";
+import { createSteeringSidecarStore } from "./steering-sidecar.js";
 import {
   ManagedSessionToolRegistry,
   type ManagedSessionToolApplicationDeps,
@@ -259,7 +261,14 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     this.#deferredTurnState = new ManagedSessionDeferredTurnState({
       queueMode: input.settings.getQueueMode(),
       followUpMode: input.settings.getFollowUpMode(),
+      store: createSteeringSidecarStore({
+        cwd: input.cwd,
+        sessionId: input.sessionStore.getSessionId(),
+      }),
     });
+    // Restart recovery: rebuild any unconsumed in-session injections from the
+    // sidecar before the session starts serving turns.
+    this.#deferredTurnState.restoreFromSidecar();
     this.#catalog = input.catalog;
     this.#resourceLoader = input.resourceLoader;
     this.#ui = input.ui ?? NOOP_UI;
@@ -573,6 +582,11 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     if (!options.deferPersistenceUntilPrompt) {
       await session.ensureInitialPersistence();
     }
+    // Restart recovery: execute any user prompts the steering sidecar restored.
+    // The post-dispatch drain loop would otherwise never reach them absent a fresh
+    // prompt() — e.g. an autonomous session that crashed after its active turn but
+    // before draining the queue.
+    await session.recoverDeferredPrompts();
     return session;
   }
 
@@ -702,28 +716,50 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
     if (initialStatus === "stopped") {
       return;
     }
+    await this.drainDeferredPrompts(options?.source);
+  }
 
-    while (!this.isStreaming) {
-      const batch = this.#deferredTurnState.consumeNextPromptBatch();
-      if (batch.length === 0) {
-        break;
-      }
-      this.emitQueuedPromptChange();
-      for (const [index, queued] of batch.entries()) {
-        try {
-          const status = await this.runSingleHostedPromptAttempt(queued.parts, {
+  /**
+   * Drain queued / follow-up prompts one batch at a time, running each as a turn.
+   * Shared by the post-dispatch loop and restart recovery. An attempt that returns
+   * (committed or stopped) durably retires its prompt; only an attempt that never
+   * returns — a crash mid-turn — stays pending and re-enqueues (at_least_once).
+   */
+  private async drainDeferredPrompts(source: BrewvaPromptOptions["source"]): Promise<void> {
+    await drainDeferredPromptQueue(
+      {
+        deferredTurnState: this.#deferredTurnState,
+        isStreaming: () => this.isStreaming,
+        runAttempt: (parts, attemptSource) =>
+          this.runSingleHostedPromptAttempt(parts, {
             expandPromptTemplates: false,
-            source: options?.source,
-          });
-          if (status === "stopped") {
-            this.restoreUnattemptedPromptEntries(batch.slice(index + 1));
-            return;
-          }
-        } catch (error) {
-          this.restoreUnattemptedPromptEntries(batch.slice(index + 1));
-          throw error;
-        }
-      }
+            source: attemptSource,
+          }),
+        onQueueChanged: () => this.emitQueuedPromptChange(),
+        restoreUnattempted: (entries) => this.restoreUnattemptedPromptEntries(entries),
+      },
+      source,
+    );
+  }
+
+  /**
+   * Drain user prompts restored from the steering sidecar on restart. The
+   * post-dispatch loop only runs after a fresh `prompt()`; without this, a crash
+   * between "active turn finished" and "queued prompt drained" would restore the
+   * prompt but never execute it — no new dispatch arrives for an autonomous or
+   * scheduled session. A failure is isolated so one bad restored prompt does not
+   * wedge session startup.
+   */
+  async recoverDeferredPrompts(): Promise<void> {
+    if (this.#deferredTurnState.getQueuedPromptViews().length === 0) {
+      return;
+    }
+    try {
+      await this.drainDeferredPrompts(undefined);
+    } catch (error) {
+      this.#logger?.warn("managed_agent_session_steering_recovery_failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

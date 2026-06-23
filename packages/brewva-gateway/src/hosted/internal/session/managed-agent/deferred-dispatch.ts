@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { toJsonValue } from "@brewva/brewva-std/json";
 import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type {
   BrewvaHostCommandContext,
@@ -21,6 +22,7 @@ import {
   promptPartsFromCustomMessage,
   toTurnLoopCustomMessage,
 } from "./session-prompt-dispatch.js";
+import type { SteeringSidecarStore } from "./steering-sidecar.js";
 
 export interface QueuedPromptEntry {
   view: BrewvaQueuedPromptView;
@@ -32,6 +34,8 @@ type PromptQueueMode = "all" | "one-at-a-time";
 export interface ManagedSessionDeferredTurnStateOptions {
   readonly queueMode?: PromptQueueMode;
   readonly followUpMode?: PromptQueueMode;
+  /** When present, in-session injections are persisted to a per-session sidecar. */
+  readonly store?: SteeringSidecarStore;
 }
 
 export type PendingQueuedItem =
@@ -41,18 +45,20 @@ export type PendingQueuedItem =
     }
   | { kind: "custom"; message: BrewvaHostCustomMessage };
 
+type NextTurnMessage = Extract<BrewvaAgentProtocolMessage, { role: "custom" }>;
+
 export class ManagedSessionDeferredTurnState {
   readonly #queuedPrompts: QueuedPromptEntry[] = [];
   readonly #followUpPrompts: QueuedPromptEntry[] = [];
-  readonly #pendingNextTurnMessages: Array<
-    Extract<BrewvaAgentProtocolMessage, { role: "custom" }>
-  > = [];
+  readonly #pendingNextTurnMessages: NextTurnMessage[] = [];
   readonly #queueMode: PromptQueueMode;
   readonly #followUpMode: PromptQueueMode;
+  readonly #store: SteeringSidecarStore | undefined;
 
   constructor(options: ManagedSessionDeferredTurnStateOptions = {}) {
     this.#queueMode = options.queueMode ?? "one-at-a-time";
     this.#followUpMode = options.followUpMode ?? "one-at-a-time";
+    this.#store = options.store;
   }
 
   getQueuedPromptViews(): readonly BrewvaQueuedPromptView[] {
@@ -72,6 +78,13 @@ export class ManagedSessionDeferredTurnState {
       behavior,
     });
     const entry = { view, parts: cloneBrewvaPromptContentParts(parts) };
+    // Durable commit point: persist before the in-memory queue moves.
+    this.#store?.appendInjection({
+      id: promptId,
+      channel: behavior,
+      payload: toJsonValue(entry.parts),
+      submittedAt,
+    });
     const queue = behavior === "followUp" ? this.#followUpPrompts : this.#queuedPrompts;
     queue.push(entry);
     return entry;
@@ -87,15 +100,19 @@ export class ManagedSessionDeferredTurnState {
     if (!entry) {
       return false;
     }
+    this.#store?.markConsumed(promptId);
     queue.splice(index, 1);
     return true;
   }
 
-  pushNextTurnMessage(message: Extract<BrewvaAgentProtocolMessage, { role: "custom" }>): void {
+  pushNextTurnMessage(message: NextTurnMessage): void {
+    // Next-turn custom messages are advisory, transient turn context (injected
+    // into the next provider call, never a tape event of their own), so they are
+    // held in memory only and not persisted to the steering sidecar.
     this.#pendingNextTurnMessages.push(message);
   }
 
-  consumeNextTurnMessages(): readonly Extract<BrewvaAgentProtocolMessage, { role: "custom" }>[] {
+  consumeNextTurnMessages(): readonly NextTurnMessage[] {
     const messages = [...this.#pendingNextTurnMessages];
     this.#pendingNextTurnMessages.length = 0;
     return messages;
@@ -131,6 +148,84 @@ export class ManagedSessionDeferredTurnState {
       this.#followUpPrompts.length > 0 ||
       this.#pendingNextTurnMessages.length > 0
     );
+  }
+
+  /**
+   * Durably retire a prompt once its turn has succeeded. The consume loop calls
+   * this after the attempt commits, not at drain time: a crash inside the
+   * enqueue->consume window must re-enqueue the prompt on restart, not lose it.
+   */
+  markPromptConsumed(promptId: string): void {
+    this.#store?.markConsumed(promptId);
+  }
+
+  /**
+   * Rebuild the in-memory queues from the durable sidecar after a restart. Each
+   * surviving row replays into its channel with its original id, so consume and
+   * remove keep addressing it. A no-op when no store is attached.
+   */
+  restoreFromSidecar(): void {
+    if (!this.#store) {
+      return;
+    }
+    for (const record of this.#store.loadPending()) {
+      const parts = cloneBrewvaPromptContentParts(
+        record.payload as unknown as BrewvaPromptContentPart[],
+      );
+      const view: BrewvaQueuedPromptView = Object.freeze({
+        promptId: record.id,
+        text: buildBrewvaPromptText(parts),
+        submittedAt: record.submittedAt,
+        behavior: record.channel,
+      });
+      const entry = { view, parts };
+      (record.channel === "followUp" ? this.#followUpPrompts : this.#queuedPrompts).push(entry);
+    }
+  }
+}
+
+export interface DeferredPromptDrainDeps {
+  readonly deferredTurnState: ManagedSessionDeferredTurnState;
+  readonly isStreaming: () => boolean;
+  readonly runAttempt: (
+    parts: readonly BrewvaPromptContentPart[],
+    source: BrewvaPromptOptions["source"],
+  ) => Promise<"completed" | "stopped">;
+  readonly onQueueChanged: () => void;
+  readonly restoreUnattempted: (entries: readonly QueuedPromptEntry[]) => void;
+}
+
+/**
+ * Drain queued / follow-up prompts one batch at a time, running each through
+ * `runAttempt`. Shared by the post-dispatch loop and restart recovery so the two
+ * paths are identical and the drain is independently testable. A prompt is retired
+ * (`markPromptConsumed`) only after its attempt returns, so a crash mid-turn
+ * (runAttempt never resolves) leaves it pending to re-enqueue — at_least_once.
+ */
+export async function drainDeferredPromptQueue(
+  deps: DeferredPromptDrainDeps,
+  source: BrewvaPromptOptions["source"],
+): Promise<void> {
+  while (!deps.isStreaming()) {
+    const batch = deps.deferredTurnState.consumeNextPromptBatch();
+    if (batch.length === 0) {
+      break;
+    }
+    deps.onQueueChanged();
+    for (const [index, queued] of batch.entries()) {
+      try {
+        const status = await deps.runAttempt(queued.parts, source);
+        deps.deferredTurnState.markPromptConsumed(queued.view.promptId);
+        if (status === "stopped") {
+          deps.restoreUnattempted(batch.slice(index + 1));
+          return;
+        }
+      } catch (error) {
+        deps.deferredTurnState.markPromptConsumed(queued.view.promptId);
+        deps.restoreUnattempted(batch.slice(index + 1));
+        throw error;
+      }
+    }
   }
 }
 

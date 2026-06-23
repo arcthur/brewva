@@ -35,4 +35,4 @@ These obey `docs/architecture/design-axioms.md`:
 
 ## Open follow-ups
 
-- The durable steering inbox and the tree-history / multi-writer fork remain active notes under `docs/research/active/`; the WAL forensic / quarantine signal feeds the inspect-replay WS1 integrity surface rather than duplicating it.
+- The tree-history / multi-writer fork remains an active note under `docs/research/active/`; the durable steering inbox has since been promoted to `docs/research/decisions/durable-steering-inbox.md`. The WAL forensic / quarantine signal feeds the inspect-replay WS1 integrity surface rather than duplicating it.

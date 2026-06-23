@@ -45,6 +45,7 @@ is the most common review error, so it is stated up front:
 - in-flight reconstruction and worker-crash disposition
 - WAL compaction with watermark preservation
 - WAL and event-tape integrity failure handling
+- the per-session steering sidecar for in-session injection durability
 
 ## Out Of Scope
 
@@ -166,6 +167,15 @@ flowchart TD
   truncates a log or merges a new record onto a half-written one. Recovery
   delivery is `at_least_once` (`EFFECT_DELIVERY`): replay re-drives the accepted
   envelope, and external effects are deduped best-effort, not exactly-once
+- a third durable surface, the per-session **steering sidecar**
+  (`.brewva/steering/<session>.jsonl`), protects the in-session injection window
+  the WAL does not: deferred user prompts (steer / queue / follow-up) are durably
+  appended on enqueue and tombstoned on consume, and a restart rebuilds the
+  unconsumed queue. It reuses the same crash-safe primitives but stays
+  session-scoped rather than widening the gateway-ingress WAL; a prompt is retired
+  only after its turn returns, so a crash inside the window re-enqueues it
+  (`at_least_once`). Next-turn custom messages are advisory transient context, held
+  in memory only
 
 ## Failure And Recovery
 

@@ -246,6 +246,16 @@ trusted, so the polling offset falls back to the watermark rebuilt from the
 surviving rows' ingressSequence (row-derived), and cold-starts only when no
 surviving row carries one.
 
+A third durable surface, the per-session **steering sidecar**
+(`.brewva/steering/<encodeURIComponent(sessionId)>.jsonl`), protects the in-session
+injection window the Recovery WAL does not. Deferred user prompts (steer / queue /
+follow-up) are durably appended on enqueue and tombstoned on consume; a restart
+rebuilds the unconsumed queue from the sidecar. It reuses the same crash-safe
+primitives (durable append, torn-tail repair) but stays session-scoped rather than
+widening the gateway-ingress WAL. A prompt is retired only after its turn returns,
+so a crash inside the window re-enqueues it rather than losing it (`at_least_once`).
+Next-turn custom messages are advisory transient context, held in memory only.
+
 ## Generated Surface
 
 <!-- generated:runtime-surface start -->

@@ -38,6 +38,7 @@ durability boundaries:
 ## Root Ownership
 
 - `.brewva/tape/`: canonical runtime truth and replay authority
+- `.brewva/steering/`: per-session durable-transient log of unconsumed in-session prompt injections
 - `.orchestrator/`: rollback material, recovery WAL, and rebuildable derived caches
 - `.brewva/`: operator config, control-plane state, addons, channel metadata, and optional helper material
 
@@ -61,6 +62,10 @@ shape (`projection.dir=.orchestrator/projection`,
   - canonical `custom` records may carry advisory `runtime.ops` rows, but they
     cannot carry commitment authority
   - startup validates this directory and fails fast on non-canonical rows
+- Steering sidecar (`durable transient`): `.brewva/steering/<encodeURIComponent(sessionId)>.jsonl`
+  - per-session log of deferred user-prompt injections (steer / queue / follow-up);
+    appended on enqueue, tombstoned on consume, and the unconsumed survivors replay
+    on restart. Next-turn custom messages are transient context and are not persisted.
 - Working projection file (`rebuildable state`): `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/<projection.workingFile>` — read by inspect when present; not currently written by the runtime. Projections are recomputed from tape on demand, with no persisted unit log or cache-state file.
 - These projection files are rebuildable execution helpers. They are not the
   history-view baseline and they are not receipt authority.

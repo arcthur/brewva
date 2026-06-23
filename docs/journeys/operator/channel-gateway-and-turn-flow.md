@@ -104,6 +104,11 @@ flowchart TD
 - approval screen state is process-local cache; approval truth remains derived
   from runtime events, and callback routing does not fall back to the current
   focus when no exact replayable request match exists
+- in-session user-prompt injections (steer / queue / follow-up) are durable in a
+  per-session steering sidecar (`.brewva/steering/<session>.jsonl`), separate from
+  the Recovery WAL: a crash inside the enqueue->consume window re-enqueues the
+  prompt on restart, and restored prompts drain even without a new inbound turn, so
+  an autonomous or scheduled session does not strand a queued steer
 
 ## Observability
 

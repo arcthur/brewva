@@ -91,7 +91,7 @@ Precedent decisions: `gateway-control-tape-and-receipt-first-control-plane`, `tr
 
 Enforced by: _no tagged rule — negative space._
 
-Precedent decisions: `effect-approval-and-rollback-closure`
+Precedent decisions: `durable-steering-inbox`, `effect-approval-and-rollback-closure`
 
 ### Axiom 9 — `Resource expansion is negotiated, not assumed.`
 
@@ -103,7 +103,7 @@ Precedent decisions: _none._
 
 Enforced by: _no tagged rule — negative space._
 
-Precedent decisions: _none._
+Precedent decisions: `durable-steering-inbox`
 
 ### Axiom 11 — `Same evidence is not shared authority.`
 
@@ -112,7 +112,7 @@ Enforced by:
 - `anti-patterns.md` — Adding duplicate inspect dashboards or one-off shell/channel/CLI renderers that bypass the shared Work Card projection payload.
 - `critical-rules.md` — Preserve "same evidence, different authority": Work Cards, transcripts, channel inspect, and hosted dynamic context may orient over the same evidence, but kernel admission, capability receipts, sandbox posture, and adoption authority remain separate and authoritative.
 
-Precedent decisions: `authority-rings-and-projection-unification`, `effect-approval-and-rollback-closure`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `trust-substrate-optimization-axis`, `tui-rendering-performance-and-test-harness`, `tui-split-footer-native-scrollback-renderer`
+Precedent decisions: `authority-rings-and-projection-unification`, `durable-steering-inbox`, `effect-approval-and-rollback-closure`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `trust-substrate-optimization-axis`, `tui-rendering-performance-and-test-harness`, `tui-split-footer-native-scrollback-renderer`
 
 ### Axiom 12 — `Product loops are projections, not runtime state machines.`
 
@@ -132,7 +132,7 @@ Precedent decisions: _none._
 
 Enforced by: _no tagged rule — negative space._
 
-Precedent decisions: `authority-rings-and-projection-unification`, `derivation-direction-invariant-and-skill-navigation`
+Precedent decisions: `authority-rings-and-projection-unification`, `derivation-direction-invariant-and-skill-navigation`, `durable-steering-inbox`
 
 ### Axiom 15 — `Public width should compress toward authority width.`
 
