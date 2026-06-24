@@ -118,6 +118,17 @@ should be projection-visible. Performance-only state may remain local.
 Replay uses stored sanitized compaction baselines. It does not regenerate a
 different summary with a newer model.
 
+The session history model is linear-append + replay, single-writer per session:
+each session's event tape is one append-only file with one writer, and undo / redo
+/ rewind come from the replay / `PatchSet` engine, not tree navigation. Canonical
+events carry an optional, additive `parentId` — the append-only hook for structural
+branching — while sub-agent history stays per-session-isolated and is linked across
+sessions by `parentSessionId`, not by a shared multi-writer log. A
+multi-writer-with-CAS substrate is deliberately not built; only multi-host
+distribution would trigger it, and even then as single-writer plus a selective lease
+rather than a rewrite. See
+`docs/research/decisions/tree-history-and-multi-writer-substrate.md`.
+
 ## Runtime Surface
 
 Runtime construction uses `createBrewvaRuntime(...)`, which returns one frozen

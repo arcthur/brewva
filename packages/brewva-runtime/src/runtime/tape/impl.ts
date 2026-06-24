@@ -19,6 +19,7 @@ import type {
   Baseline,
   CanonicalEvent,
   CanonicalEventType,
+  EventId,
   CustomEventPayload,
   CostSummaryView,
   RecoveryHistoryView,
@@ -371,6 +372,8 @@ export interface RuntimeTape {
   readonly commit: TapeCommitPort;
   loadFromDisk(): readonly string[];
   listSessionIds(): readonly string[];
+  /** The session's current leaf (latest committed event id), recoverable across restart. */
+  getLeaf(sessionId: string): EventId | undefined;
   close(): Promise<void>;
 }
 
@@ -540,6 +543,10 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
   // call, which previously blocked the event loop for seconds and stalled
   // the interactive shell's operator/cockpit refresh.
   const parsedFileSizes = new Map<string, number>();
+  // Per-session leaf: the latest committed event id (the current branch tip). It is
+  // the default parent of the next event and a recoverable cursor rebuilt from disk
+  // on restart. (tree-history Axis 1(b) — parent-pointer hook.)
+  const leafBySession = new Map<string, EventId>();
 
   function sessionEvents(sessionId: string): CanonicalEvent[] {
     let events = eventsBySession.get(sessionId);
@@ -601,11 +608,16 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
     const replayEvent = freezeCanonicalEvent(cloneInitialEvent(event));
     assertCanonicalEventPayload(replayEvent);
     appendEventToMemory(replayEvent);
+    leafBySession.set(replayEvent.sessionId, replayEvent.id); // replay tip is the leaf
   }
 
   const commit: TapeCommitPort = Object.freeze({
     commit(input: TapeCommitInput) {
       assertCanonicalEventPayload(input as CanonicalEvent);
+      // Parent defaults to the session's current leaf (a linear chain); an explicit
+      // parentId forks from an earlier ancestor (branch-at-N). Append-only either
+      // way — a branch is a new edge, never a rewrite.
+      const parentId = input.parentId ?? leafBySession.get(input.sessionId);
       const event = freezeCanonicalEvent({
         ...input,
         ...(input.payload !== undefined
@@ -613,6 +625,11 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
           : {}),
         id: input.id ?? `evt_${randomUUID()}`,
         timestamp: input.timestamp ?? Date.now(),
+        // Overwrite any inbound parentId with the resolved one, and only ever a
+        // string: a stray null or undefined collapses to undefined and is omitted
+        // on disk, so `parentId` stays exactly two states (absent, or a real id) —
+        // the additive invariant projections and the replay engine rely on.
+        parentId: typeof parentId === "string" ? parentId : undefined,
       } as CanonicalEvent);
       assertCanonicalEventPayload(event);
       const existing = eventsById.get(event.id);
@@ -626,6 +643,7 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
       // event the dedupe guard pins out of the durable log.
       persistEvent(event);
       const committed = appendEventToMemory(event);
+      leafBySession.set(event.sessionId, event.id); // the new tip becomes the leaf
       return committed;
     },
   });
@@ -699,6 +717,7 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
         },
         onRecord: (event) => {
           appendEventToMemory(event);
+          leafBySession.set(event.sessionId, event.id); // file order is the chain tip
           recovered.add(event.sessionId);
         },
         onIssue: (issue) => {
@@ -732,7 +751,12 @@ export function createRuntimeTape(persistence?: RuntimeTapePersistence): Runtime
     appendFileDescriptors.clear();
   }
 
-  return Object.freeze({ tape, commit, loadFromDisk, listSessionIds, close });
+  function getLeaf(sessionId: string): EventId | undefined {
+    loadFromDisk(); // rebuild the leaf from disk so it survives a restart
+    return leafBySession.get(sessionId);
+  }
+
+  return Object.freeze({ tape, commit, loadFromDisk, listSessionIds, getLeaf, close });
 }
 
 export function isCanonicalEventType(value: string): value is CanonicalEventType {

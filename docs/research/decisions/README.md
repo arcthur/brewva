@@ -39,6 +39,7 @@ Every accepted decision inherits these rules:
 - [durability-taxonomy-and-rebuildable-surface-narrowing](./durability-taxonomy-and-rebuildable-surface-narrowing.md)
 - [crash-safe-durable-substrate](./crash-safe-durable-substrate.md)
 - [durable-steering-inbox](./durable-steering-inbox.md)
+- [tree-history-and-multi-writer-substrate](./tree-history-and-multi-writer-substrate.md)
 - [consequence-aware-effect-commitment-model](./consequence-aware-effect-commitment-model.md)
 - [effect-native-runtime-foundation](./effect-native-runtime-foundation.md)
 - [effect-infrastructure-island-boundary-rfc](./effect-infrastructure-island-boundary-rfc.md)

@@ -223,6 +223,14 @@ export interface CanonicalEventBase<TType extends CanonicalEventType, TPayload> 
   readonly sessionId: SessionId;
   readonly type: TType;
   readonly timestamp: number;
+  /**
+   * The event this one descends from in the session's history — the previous leaf
+   * by default, or an explicit ancestor for a structural branch (fork-at-N).
+   * Nullable and additive: pre-parent-pointer tapes load with it undefined, and a
+   * projection that does not navigate history simply ignores it. Append-only truth
+   * is preserved; this only adds tree navigability on top of the linear file.
+   */
+  readonly parentId?: EventId;
   readonly turnId?: string;
   readonly attemptId?: string;
   readonly payload?: TPayload;

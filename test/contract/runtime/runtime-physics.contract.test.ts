@@ -39,6 +39,7 @@ function sourceEvents(): CanonicalEvent[] {
       sessionId: "source-session",
       type: "msg.committed",
       timestamp: 2,
+      parentId: "evt-source-start",
       payload: { text: "recorded answer" },
     },
   ];
@@ -204,6 +205,15 @@ describe("runtime physics declaration", () => {
       "msg.committed",
       "turn.ended",
     ]);
+    // Every forked event's parentId is remapped into the target session — no edge
+    // points at a source id absent from the new tape (P1-b regression).
+    const forkedEvents = runtime.tape.list("fork-session");
+    const forkedIds = new Set(forkedEvents.map((event) => event.id));
+    for (const event of forkedEvents) {
+      if (event.parentId !== undefined) {
+        expect(forkedIds.has(event.parentId)).toBe(true);
+      }
+    }
   });
 
   test("replay-then-real keeps persisted source tape intact when the target forks in the same workspace", async () => {

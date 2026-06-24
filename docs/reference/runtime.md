@@ -126,6 +126,18 @@ from the latest checkpoint and includes only the compact baseline plus later
 events, so Model can reduce context pressure without creating a second truth
 store.
 
+Every canonical event carries an optional `parentId` — the event it descends from
+in the session's history. By default it is the session's previous leaf (a linear
+chain under the single-writer-per-session invariant); an explicit `parentId` forks
+from an earlier ancestor (branch-at-N), the append-only way to express structural
+branching without rewriting truth. It is additive and stays exactly two on-disk
+states — absent (a pre-parent-pointer tape, or a chain root) or a real event id,
+never a literal null — and a projection that does not navigate history ignores it.
+The tape exposes the session's current leaf via `getLeaf(sessionId)` — a recoverable
+cursor rebuilt from disk on restart. Navigating or forking a branch, and tolerating
+a fork's unverified parent edge, is the replay engine's concern; the tape only
+records the parent edge.
+
 ## Tool Transaction Boundary
 
 The stable transaction boundary is `single tool-call granularity`.

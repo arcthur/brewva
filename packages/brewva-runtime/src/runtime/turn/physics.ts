@@ -134,6 +134,11 @@ function cloneReplayEventForTarget(
     ...event,
     id: eventIdMap.get(event.id) ?? forkReplayEventId(event.id, targetSessionId),
     sessionId: targetSessionId,
+    // Remap the parent edge into the target session: a parent inside the forked
+    // range maps to its new id; a parent outside it (the fork's chain root) and a
+    // parentless event both become undefined. Without this the cloned tape would
+    // carry parentIds pointing at source ids absent from the new session.
+    parentId: event.parentId !== undefined ? eventIdMap.get(event.parentId) : undefined,
     ...(payload === undefined ? {} : { payload }),
   } as CanonicalEvent;
 }
