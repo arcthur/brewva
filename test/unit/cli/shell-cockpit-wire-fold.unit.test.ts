@@ -630,6 +630,70 @@ describe("shell cockpit wire fold", () => {
     ]);
   });
 
+  test("keeps two same-customType customs in one turn as distinct rows", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "my question",
+      }),
+    );
+    // Two custom messages of the SAME customType in one turn (e.g. one extension
+    // hook emitting more than one): distinct frameIds must keep them as separate
+    // rows instead of the second upserting over the first.
+    fold.remember(
+      frame({
+        type: "custom.message",
+        frameId: "frame:custom-1",
+        ts: 1_001,
+        turnId: "turn-1",
+        customType: "brewva-skill-selection",
+        content: "first card",
+        display: true,
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "custom.message",
+        frameId: "frame:custom-2",
+        ts: 1_002,
+        turnId: "turn-1",
+        customType: "brewva-skill-selection",
+        content: "second card",
+        display: true,
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "assistant.delta",
+        frameId: "frame:delta",
+        ts: 1_003,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta: "the answer",
+      }),
+    );
+
+    const transcript = fold.snapshot("session-1").transcriptMessages.map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+
+    // Both same-customType customs survive as distinct rows (frameId disambiguates
+    // the row id), matching the durable side's keep-both behaviour.
+    expect(transcript).toEqual([
+      { role: "user", text: "my question" },
+      { role: "custom", text: "first card" },
+      { role: "custom", text: "second card" },
+      { role: "assistant", text: "the answer" },
+    ]);
+  });
+
   test("holds a custom.message that arrives before its turn.input", () => {
     const fold = createShellCockpitWireFoldStore();
     // The custom frame is produced in the prelude and can arrive before turn.input.

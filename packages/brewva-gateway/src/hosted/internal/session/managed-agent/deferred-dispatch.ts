@@ -348,6 +348,10 @@ export class ManagedSessionCommandMessageRouter {
     }
 
     if (options?.deliverAs === "transcript") {
+      // Out-of-band transcript push: persists a durable custom_message record but
+      // emits no custom.message wire frame -- there is no turnId here and the live
+      // wire-fold transcript is turn-scoped, so this surfaces on history rebuild,
+      // not in the current live session. See BrewvaHostCustomMessageDelivery.
       await this.#deps.appendPassiveCustomMessage(customMessage, { transcript: true });
       return;
     }

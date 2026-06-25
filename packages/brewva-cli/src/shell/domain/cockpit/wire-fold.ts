@@ -149,8 +149,12 @@ function transcriptCustomMessageId(input: {
   readonly sessionId: string;
   readonly turnId: string;
   readonly customType: string;
+  readonly frameId: string;
 }): string {
-  return `${transcriptMessagePrefix(input.sessionId)}${input.turnId}:custom:${input.customType}`;
+  // Include the unique, stable frameId so two custom messages of the same
+  // customType within one turn get distinct rows instead of the second
+  // upserting over the first, matching the durable side's keep-both behaviour.
+  return `${transcriptMessagePrefix(input.sessionId)}${input.turnId}:custom:${input.customType}:${input.frameId}`;
 }
 
 function readReplayItemSequence(input: { readonly sequence?: number }): number | undefined {
@@ -260,7 +264,7 @@ class ShellCockpitSessionWireFold {
    */
   readonly #pendingCustomByTurn = new Map<
     string,
-    Array<{ readonly customType: string; readonly content: string }>
+    Array<{ readonly customType: string; readonly content: string; readonly frameId: string }>
   >();
   readonly #transcriptAssistantSegments = new Map<string, MutableTranscriptAssistantSegment>();
   /**
@@ -605,6 +609,7 @@ class ShellCockpitSessionWireFold {
     turnId: string,
     customType: string,
     content: string,
+    frameId: string,
   ): void {
     // Flush pending assistant segments first so the custom row cannot be
     // appended ahead of an earlier turn's lazily-materialized answer.
@@ -612,7 +617,7 @@ class ShellCockpitSessionWireFold {
     this.upsertTranscriptMessage(
       turnId,
       buildTextTranscriptMessage({
-        id: transcriptCustomMessageId({ sessionId, turnId, customType }),
+        id: transcriptCustomMessageId({ sessionId, turnId, customType, frameId }),
         role: "custom",
         text: content,
         renderMode: "stable",
@@ -957,6 +962,7 @@ class ShellCockpitSessionWireFold {
                 frame.turnId,
                 custom.customType,
                 custom.content,
+                custom.frameId,
               );
             }
           }
@@ -985,10 +991,15 @@ class ShellCockpitSessionWireFold {
               frame.turnId,
               frame.customType,
               frame.content,
+              frame.frameId,
             );
           } else {
             const pending = this.#pendingCustomByTurn.get(frame.turnId) ?? [];
-            pending.push({ customType: frame.customType, content: frame.content });
+            pending.push({
+              customType: frame.customType,
+              content: frame.content,
+              frameId: frame.frameId,
+            });
             this.#pendingCustomByTurn.set(frame.turnId, pending);
           }
         }

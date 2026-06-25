@@ -81,6 +81,15 @@ export interface BrewvaHostCustomMessage {
   details?: unknown;
 }
 
+// Delivery modes for a host-injected custom message:
+// - "queue" / "followUp": fold into the prompt stream (may trigger or queue a turn).
+// - "nextTurn": inject at the start of the next turn.
+// - "transcript": persist a durable custom_message transcript record (shown on
+//   seed/history rebuild) without triggering a turn. NOTE: this is an out-of-band
+//   push with no turnId, so it does NOT enter the live wire-fold transcript, which
+//   is turn-scoped -- a displayable "transcript" custom surfaces on the next
+//   history rebuild, not in the current live session. For live in-session display
+//   use a turn-scoped origin (a `before_agent_start` custom message) instead.
 export type BrewvaHostCustomMessageDelivery = "queue" | "followUp" | "nextTurn" | "transcript";
 
 export interface BrewvaHostSessionStartEvent {
