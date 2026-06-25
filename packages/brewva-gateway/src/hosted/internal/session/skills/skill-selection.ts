@@ -686,9 +686,16 @@ export function formatSkillSelectionSection(selection: SkillSelectionResult): st
 function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): BrewvaHostCustomMessage {
   const explicitSkillMentionNames = explicitSkillMentionNamesFromReceipt(receipt);
   const visibleSelection = receipt.renderedSkillCount > 0 || explicitSkillMentionNames.length > 0;
+  const selectedSkillsSummary =
+    receipt.renderedSkillReasons.length > 0
+      ? receipt.renderedSkillReasons
+          .map((skill) => `${skill.name} (${skill.reasons.join("+")})`)
+          .join(", ")
+      : "none";
   return {
     customType: "brewva-skill-selection",
     content: [
+      `Selected Skills: ${selectedSkillsSummary}`,
       `Available Brewva SkillCards: ${receipt.availableSkillCount}`,
       `Candidate Brewva SkillCards: ${receipt.candidateSkillCount}`,
       `Rendered Brewva SkillCards: ${receipt.renderedSkillCount}`,

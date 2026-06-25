@@ -439,6 +439,9 @@ describe("hosted advisory skill shortlist context", () => {
     expect(result?.message?.content).toContain("Rendered Brewva SkillCards: 1");
     expect(result?.message?.content).toContain("Prompt Paths: 0");
     expect(result?.message?.content).toContain("Selection Mode: shortlist_prompt_context");
+    expect(result?.message?.content).toContain(
+      "Selected Skills: code-review (explicit_mention+name_match)",
+    );
     expect(result?.message?.details).toMatchObject({
       selectionId: expect.stringMatching(/^skill_selection_[a-f0-9]{16}$/u),
       explicitSkillMentionNames: ["code-review"],
