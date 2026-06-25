@@ -187,28 +187,33 @@ describe("shell transcript projector", () => {
         lane: "answer",
         delta,
       });
-    const injectCustom = (text: string) =>
-      projector.handleSessionEvent({
-        type: "message_end",
-        message: {
-          role: "custom",
-          customType: "brewva-skill-selection",
-          content: text,
-          display: true,
-        },
-      } as unknown as BrewvaPromptSessionEvent);
+    const rememberCustom = (turnId: string, frameId: string, ts: number, content: string) =>
+      fold.remember({
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId,
+        ts,
+        source: "live",
+        durability: "cache",
+        type: "custom.message",
+        turnId,
+        customType: "brewva-skill-selection",
+        content,
+        display: true,
+      });
 
-    // Turn 1: user prompt, a skill card injected at turn start, then the answer.
+    // Turn 1: optimistic user placeholder, then the turn's wire frames (the
+    // custom skill card enters through wire-fold, not a free-floating message).
     projector.appendMessage(buildTextTranscriptMessage({ id: "user:1", role: "user", text: "q1" }));
     rememberInput("turn-1", "fi-1", 1_000, "q1");
-    injectCustom("Selected Skills: architecture");
+    rememberCustom("turn-1", "fc-1", 1_000, "Selected Skills: architecture");
     rememberAnswer("turn-1", "fd-1", 1_001, "a1");
     projector.refreshFromWireFold();
 
-    // Turn 2: the second skill card must land inside turn 2, not hoisted to the front.
+    // Turn 2: the second skill card lands inside turn 2, not hoisted to the front.
     projector.appendMessage(buildTextTranscriptMessage({ id: "user:2", role: "user", text: "q2" }));
     rememberInput("turn-2", "fi-2", 2_000, "q2");
-    injectCustom("Selected Skills: review");
+    rememberCustom("turn-2", "fc-2", 2_000, "Selected Skills: review");
     rememberAnswer("turn-2", "fd-2", 2_001, "a2");
     projector.refreshFromWireFold();
 
@@ -224,6 +229,88 @@ describe("shell transcript projector", () => {
       { role: "custom", text: "Selected Skills: review" },
       { role: "assistant", text: "a2" },
     ]);
+  });
+
+  test("keeps the CLI-only rewind marker at the tail past a custom row across refreshes", () => {
+    const fold = createShellCockpitWireFoldStore();
+    const { getMessages, projector } = createProjectorHarness({
+      getWireFoldSnapshot: () => fold.snapshot("session-1"),
+    });
+    fold.remember({
+      schema: SESSION_WIRE_SCHEMA,
+      sessionId: asBrewvaSessionId("session-1"),
+      frameId: "fi-1",
+      ts: 1_000,
+      source: "live",
+      durability: "cache",
+      type: "turn.input",
+      turnId: "turn-1",
+      trigger: "user",
+      promptText: "q1",
+    });
+    fold.remember({
+      schema: SESSION_WIRE_SCHEMA,
+      sessionId: asBrewvaSessionId("session-1"),
+      frameId: "fc-1",
+      ts: 1_000,
+      source: "live",
+      durability: "cache",
+      type: "custom.message",
+      turnId: "turn-1",
+      customType: "brewva-skill-selection",
+      content: "Selected Skills: review",
+      display: true,
+    });
+    fold.remember({
+      schema: SESSION_WIRE_SCHEMA,
+      sessionId: asBrewvaSessionId("session-1"),
+      frameId: "fd-1",
+      ts: 1_001,
+      source: "live",
+      durability: "cache",
+      type: "assistant.delta",
+      turnId: "turn-1",
+      attemptId: "attempt-1",
+      lane: "answer",
+      delta: "a1",
+    });
+    projector.setRewindMarker("rewound to turn-1");
+    projector.refreshFromWireFold();
+
+    const snapshotRoles = () =>
+      getMessages().map((message) => ({
+        role: message.role,
+        text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+      }));
+
+    // The rewind marker is a CLI-only overlay appended after the wire snapshot,
+    // landing after the turn's custom (skill card) row, not hoisted.
+    expect(snapshotRoles()).toEqual([
+      { role: "user", text: "q1" },
+      { role: "custom", text: "Selected Skills: review" },
+      { role: "assistant", text: "a1" },
+      { role: "custom", text: "rewound to turn-1" },
+    ]);
+
+    // A later frame triggers a wholesale replace; the marker survives at the tail
+    // and is not duplicated by the rebuild.
+    fold.remember({
+      schema: SESSION_WIRE_SCHEMA,
+      sessionId: asBrewvaSessionId("session-1"),
+      frameId: "fd-2",
+      ts: 1_002,
+      source: "live",
+      durability: "cache",
+      type: "assistant.delta",
+      turnId: "turn-1",
+      attemptId: "attempt-1",
+      lane: "answer",
+      delta: " more",
+    });
+    projector.refreshFromWireFold();
+    const after = snapshotRoles();
+    expect(after.at(-1)).toEqual({ role: "custom", text: "rewound to turn-1" });
+    expect(after.filter((entry) => entry.text === "rewound to turn-1")).toHaveLength(1);
   });
 
   test("projects runtime turn input as an active model phase", () => {

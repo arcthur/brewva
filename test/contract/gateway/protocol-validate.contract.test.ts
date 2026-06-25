@@ -217,6 +217,59 @@ describe("gateway protocol validator", () => {
     expect(result.ok).toBe(true);
   });
 
+  test("given custom message frame with live cache semantics, when validating payload, then validation succeeds", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "live:custom-message",
+      ts: 1,
+      source: "live",
+      durability: "cache",
+      type: "custom.message",
+      turnId: "turn-1",
+      customType: "brewva-skill-selection",
+      content: "Selected Skills: review",
+      display: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("given custom message frame with empty turnId, when validating payload, then validation fails", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "live:custom-message",
+      ts: 1,
+      source: "live",
+      durability: "cache",
+      type: "custom.message",
+      turnId: "",
+      customType: "brewva-skill-selection",
+      content: "Selected Skills: review",
+      display: true,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  test("given custom message frame with durable provenance, when validating payload, then validation fails", () => {
+    const result = validateSessionWireFramePayload({
+      schema: "brewva.session-wire.v2",
+      sessionId: "session-1",
+      frameId: "event:custom-message",
+      ts: 1,
+      source: "replay",
+      durability: "durable",
+      sourceEventId: "event-1",
+      sourceEventType: "custom.message",
+      type: "custom.message",
+      turnId: "turn-1",
+      customType: "brewva-skill-selection",
+      content: "Selected Skills: review",
+      display: true,
+    });
+    expect(result.ok).toBe(false);
+  });
+
   test("given open vocabulary turn transition strings, when validating payload, then validation succeeds", () => {
     const result = validateSessionWireFramePayload({
       schema: "brewva.session-wire.v2",

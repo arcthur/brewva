@@ -6,11 +6,18 @@ export const HOSTED_RUNTIME_TURN_PRELUDE: unique symbol = Symbol("brewva.hostedR
 
 export const HOSTED_RUNTIME_TURN_CONTEXT: unique symbol = Symbol("brewva.hostedRuntimeTurnContext");
 
+export interface HostedRuntimeTurnCustomMessage {
+  readonly customType: string;
+  readonly content: string;
+  readonly display: boolean;
+}
+
 export type HostedRuntimeTurnPreludeResult =
   | {
       readonly status: "ready";
       readonly promptText: string;
       readonly promptContent: readonly BrewvaPromptContentPart[];
+      readonly customMessages: readonly HostedRuntimeTurnCustomMessage[];
       readonly signal?: AbortSignal;
       readonly complete?: () => void | Promise<void>;
     }

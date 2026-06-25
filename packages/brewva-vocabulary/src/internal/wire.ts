@@ -581,6 +581,13 @@ export type SessionWireFrame =
       readonly trigger: SessionWireTurnTrigger;
     })
   | (SessionWireFrameBase & {
+      readonly type: "custom.message";
+      readonly turnId: string;
+      readonly customType: string;
+      readonly content: string;
+      readonly display: boolean;
+    })
+  | (SessionWireFrameBase & {
       readonly type: "turn.transition";
       readonly turnId: string;
       readonly reason: string;

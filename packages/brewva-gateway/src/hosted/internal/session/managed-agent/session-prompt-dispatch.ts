@@ -77,6 +77,15 @@ export function appendTargetScopedProjectInstructions(input: {
   });
 }
 
+// Single source of truth for a custom message's display default, shared by the
+// durable/context projection (toTurnLoopCustomMessage) and the display wire
+// frame (the dispatch result's customMessages). Without one helper the two
+// paths drifted (`?? true` vs `?? false`), so a producer that omitted `display`
+// would persist-and-show in history yet be dropped from the live transcript.
+function resolveCustomMessageDisplay(message: BrewvaHostCustomMessage): boolean {
+  return message.display ?? true;
+}
+
 export function toTurnLoopCustomMessage(
   message: BrewvaHostCustomMessage,
 ): Extract<BrewvaAgentProtocolMessage, { role: "custom" }> {
@@ -84,7 +93,7 @@ export function toTurnLoopCustomMessage(
     role: "custom",
     customType: message.customType,
     content: message.content,
-    display: message.display ?? true,
+    display: resolveCustomMessageDisplay(message),
     ...(message.excludeFromContext !== undefined
       ? { excludeFromContext: message.excludeFromContext }
       : {}),
@@ -260,6 +269,11 @@ export async function prepareManagedPromptDispatch(
     promptText,
     promptContent: cloneBrewvaPromptContentParts(currentParts),
     messages,
+    customMessages: (beforeStart?.messages ?? []).map((message) => ({
+      customType: message.customType,
+      content: message.content,
+      display: resolveCustomMessageDisplay(message),
+    })),
     source: normalizePromptSource(options?.source),
   };
 }

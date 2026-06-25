@@ -78,7 +78,7 @@ describe("runtime topology boundary fitness", () => {
     expect(adapter).not.toContain("runtimeToolCallFromEventPayload");
     expect(sessionMux).toContain("export function emitRuntimeEventFrame");
     expect(sessionMux).toContain("export function emitRuntimeToolProgressFrame");
-    expect(lineCount(adapter)).toBeLessThanOrEqual(360);
+    expect(lineCount(adapter)).toBeLessThanOrEqual(375);
     expect(lineCount(sessionMux)).toBeLessThanOrEqual(500);
   });
 

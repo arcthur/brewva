@@ -14,6 +14,7 @@ import {
 import {
   appendAssistantSegmentDelta,
   emitRuntimeAssistantDeltaFrame,
+  emitRuntimeCustomMessageFrames,
   emitRuntimeEventFrame,
   emitRuntimeReasonDeltaFrame,
   emitRuntimeToolProgressFrame,
@@ -194,6 +195,16 @@ export async function runHostedRuntimeTurnAdapter(
   const toolLifecycle = new RuntimeWireToolLifecycleTracker();
 
   try {
+    // Project the prelude's custom messages (e.g. skill SkillCards) as
+    // custom.message wire frames; wire-fold orders each within its turn.
+    emitRuntimeCustomMessageFrames({
+      sessionId,
+      turnId: input.turnId,
+      customMessages: prompt.prelude?.customMessages ?? [],
+      timestamp: Date.now(),
+      onFrame: input.onFrame,
+      nextSequence: nextFrameSequence,
+    });
     for await (const frame of input.runtime.turn({
       sessionId,
       ...(input.turnId ? { turnId: input.turnId } : {}),

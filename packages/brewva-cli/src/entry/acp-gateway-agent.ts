@@ -572,6 +572,7 @@ export function createAcpGatewayAgent(options: AcpGatewayAgentOptions): Agent {
           case "replay.complete":
           case "session.status":
           case "turn.input":
+          case "custom.message":
           case "attempt.started":
           case "attempt.superseded":
           case "approval.requested":

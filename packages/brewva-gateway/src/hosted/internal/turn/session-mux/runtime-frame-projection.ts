@@ -174,6 +174,44 @@ export function emitRuntimeAssistantDeltaFrame(input: {
   });
 }
 
+export function emitRuntimeCustomMessageFrames(input: {
+  readonly sessionId: string;
+  readonly turnId?: string;
+  readonly customMessages: readonly {
+    readonly customType: string;
+    readonly content: string;
+    readonly display: boolean;
+  }[];
+  readonly timestamp: number;
+  readonly onFrame?: (frame: SessionWireFrame) => void;
+  readonly nextSequence: () => number;
+}): void {
+  for (const custom of input.customMessages) {
+    if (!custom.display) {
+      continue;
+    }
+    emitRuntimeBranchFrame({
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      onFrame: input.onFrame,
+      nextSequence: input.nextSequence,
+      build: (frameId, wireSessionId) => ({
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: wireSessionId,
+        frameId,
+        ts: input.timestamp,
+        source: "live",
+        durability: "cache",
+        type: "custom.message",
+        turnId: input.turnId ?? "",
+        customType: custom.customType,
+        content: custom.content,
+        display: custom.display,
+      }),
+    });
+  }
+}
+
 export function emitRuntimeReasonDeltaFrame(input: {
   readonly sessionId: string;
   readonly turnId?: string;

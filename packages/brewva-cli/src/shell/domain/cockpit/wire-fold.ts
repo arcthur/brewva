@@ -145,6 +145,14 @@ function transcriptUserMessageId(input: {
   return `${transcriptMessagePrefix(input.sessionId)}${input.turnId}:user`;
 }
 
+function transcriptCustomMessageId(input: {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly customType: string;
+}): string {
+  return `${transcriptMessagePrefix(input.sessionId)}${input.turnId}:custom:${input.customType}`;
+}
+
 function readReplayItemSequence(input: { readonly sequence?: number }): number | undefined {
   return typeof input.sequence === "number" && Number.isFinite(input.sequence)
     ? input.sequence
@@ -245,6 +253,15 @@ class ShellCockpitSessionWireFold {
   readonly #activeAnswerKeys = new Set<string>();
   readonly #toolCalls = new Map<string, MutableToolCall>();
   readonly #transcriptMessageIdsByTurn = new Map<string, Set<string>>();
+  /**
+   * Custom messages whose `custom.message` frame arrived before their turn's
+   * `turn.input`, held until the user row is projected so they never land ahead
+   * of their own prompt. Keyed by turn id.
+   */
+  readonly #pendingCustomByTurn = new Map<
+    string,
+    Array<{ readonly customType: string; readonly content: string }>
+  >();
   readonly #transcriptAssistantSegments = new Map<string, MutableTranscriptAssistantSegment>();
   /**
    * Assistant segments whose accumulated text has not been materialized
@@ -547,6 +564,9 @@ class ShellCockpitSessionWireFold {
     this.#transcriptMessageIdsByTurn.clear();
     this.#transcriptAssistantSegments.clear();
     this.#dirtyAssistantSegmentKeys.clear();
+    // Drop any custom rows still held for a turn whose user row never landed, so
+    // the hold buffer cannot accumulate across the store's lifetime.
+    this.#pendingCustomByTurn.clear();
     this.#transcriptMessages = [];
     this.#transcriptVersion += 1;
   }
@@ -578,6 +598,26 @@ class ShellCockpitSessionWireFold {
           ];
     this.recordTranscriptMessage(turnId, message.id);
     this.#transcriptVersion += 1;
+  }
+
+  private projectTranscriptCustomMessage(
+    sessionId: string,
+    turnId: string,
+    customType: string,
+    content: string,
+  ): void {
+    // Flush pending assistant segments first so the custom row cannot be
+    // appended ahead of an earlier turn's lazily-materialized answer.
+    this.materializeDirtyAssistantSegments();
+    this.upsertTranscriptMessage(
+      turnId,
+      buildTextTranscriptMessage({
+        id: transcriptCustomMessageId({ sessionId, turnId, customType }),
+        role: "custom",
+        text: content,
+        renderMode: "stable",
+      }),
+    );
   }
 
   private removeTranscriptMessagesForTurn(turnId: string): void {
@@ -798,19 +838,23 @@ class ShellCockpitSessionWireFold {
       order += 1;
     }
 
-    const committedUserMessageId = transcriptUserMessageId({
-      sessionId: frame.sessionId,
-      turnId: frame.turnId,
-    });
-    const committedUserMessage = this.transcriptMessagesView().find(
-      (message) => message.id === committedUserMessageId,
-    );
+    // The committed frame reproduces only assistant segments and tool outputs,
+    // so every other row this turn projected (the user prompt and any custom
+    // messages, e.g. skill SkillCards) must be captured before the rebuild and
+    // restored ahead of the replayed output, or the input-side rows vanish on
+    // commit. Preserve by exclusion so a future injected role is never dropped.
+    const turnMessageIds = this.#transcriptMessageIdsByTurn.get(frame.turnId);
+    const preservedInputMessages = turnMessageIds
+      ? this.transcriptMessagesView().filter(
+          (message) =>
+            turnMessageIds.has(message.id) &&
+            message.role !== "assistant" &&
+            message.role !== "tool",
+        )
+      : [];
     this.removeTranscriptMessagesForTurn(frame.turnId);
-    // Re-project the turn's user prompt first. The committed frame carries only
-    // assistant segments and tool outputs, so without restoring it the rebuild
-    // would drop the user row that turn.input projected.
-    if (committedUserMessage) {
-      this.upsertTranscriptMessage(frame.turnId, committedUserMessage);
+    for (const message of preservedInputMessages) {
+      this.upsertTranscriptMessage(frame.turnId, message);
     }
     for (const item of sortCommittedTranscriptReplayItems(replayItems)) {
       if (item.kind === "assistant") {
@@ -884,10 +928,10 @@ class ShellCockpitSessionWireFold {
         }
         if (options.projectTranscript) {
           // Project the user prompt into the ordered transcript at the head of
-          // its turn, so the folded snapshot is a complete, correctly ordered
-          // transcript (user -> assistant -> tool) rather than assistant/tool
-          // only. Without this the projector has to splice in free-floating
-          // user messages and cannot interleave them across turns.
+          // its turn, so the folded snapshot is the complete, correctly ordered
+          // transcript (user -> custom -> assistant -> tool) and the projector
+          // can degrade to a wholesale replace instead of splicing free-floating
+          // rows per type.
           //
           // Flush any still-pending assistant segments from earlier turns first.
           // Assistant text accumulates lazily (materialized on read), so without
@@ -903,6 +947,50 @@ class ShellCockpitSessionWireFold {
               renderMode: "stable",
             }),
           );
+          // Flush any custom messages that arrived before this turn's user row.
+          const pendingCustom = this.#pendingCustomByTurn.get(frame.turnId);
+          if (pendingCustom) {
+            this.#pendingCustomByTurn.delete(frame.turnId);
+            for (const custom of pendingCustom) {
+              this.projectTranscriptCustomMessage(
+                frame.sessionId,
+                frame.turnId,
+                custom.customType,
+                custom.content,
+              );
+            }
+          }
+        }
+        break;
+      case "custom.message":
+        if (!frame.turnId) {
+          // Fail closed: a turn-less custom cannot be ordered or flushed, so omit
+          // it rather than parking it under an empty key that never drains.
+          break;
+        }
+        if (options.projectTranscript && frame.display) {
+          // Custom messages (e.g. skill SkillCards) are injected at turn start and
+          // belong after the turn's user row, before the answer. The custom frame
+          // can arrive before turn.input (it is produced in the prelude); if the
+          // user row is not projected yet, hold the custom and flush it when
+          // turn.input lands so it never lands ahead of its own prompt.
+          const userProjected = this.transcriptMessagesView().some(
+            (message) =>
+              message.id ===
+              transcriptUserMessageId({ sessionId: frame.sessionId, turnId: frame.turnId }),
+          );
+          if (userProjected) {
+            this.projectTranscriptCustomMessage(
+              frame.sessionId,
+              frame.turnId,
+              frame.customType,
+              frame.content,
+            );
+          } else {
+            const pending = this.#pendingCustomByTurn.get(frame.turnId) ?? [];
+            pending.push({ customType: frame.customType, content: frame.content });
+            this.#pendingCustomByTurn.set(frame.turnId, pending);
+          }
         }
         break;
       case "attempt.started":

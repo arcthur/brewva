@@ -803,6 +803,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       status: "ready",
       promptText: prepared.promptText,
       promptContent: prepared.promptContent,
+      customMessages: prepared.customMessages,
       signal: runtimeTurn.signal,
       complete: () => {
         this.#runtimeTurnContext = null;

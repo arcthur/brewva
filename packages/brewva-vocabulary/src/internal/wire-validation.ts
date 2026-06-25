@@ -222,6 +222,24 @@ export function validateSessionWireFramePayload(
         }
       }
       return { ok: true, frame: asSessionWireFrame(value) };
+    case "custom.message":
+      if (
+        !isNonEmptyString(value.turnId) ||
+        !isNonEmptyString(value.customType) ||
+        typeof value.content !== "string" ||
+        typeof value.display !== "boolean"
+      ) {
+        // A turn-less custom cannot be ordered within the transcript; reject it
+        // here so the projection fails closed instead of holding it forever.
+        return { ok: false, error: "custom.message payload is invalid" };
+      }
+      {
+        const semanticsError = requireLiveCacheSemantics(value, type);
+        if (semanticsError) {
+          return { ok: false, error: semanticsError };
+        }
+      }
+      return { ok: true, frame: asSessionWireFrame(value) };
     case "turn.transition":
       if (
         typeof value.turnId !== "string" ||

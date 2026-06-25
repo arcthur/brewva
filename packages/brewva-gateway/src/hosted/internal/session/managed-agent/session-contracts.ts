@@ -227,12 +227,19 @@ export type ProviderCacheObserverView = Pick<
   "lastProviderFingerprint" | "lastCacheRender"
 >;
 
+export interface PreparedCustomMessage {
+  readonly customType: string;
+  readonly content: string;
+  readonly display: boolean;
+}
+
 export type PreparedManagedPromptDispatch =
   | {
       readonly status: "ready";
       readonly promptText: string;
       readonly promptContent: readonly BrewvaPromptContentPart[];
       readonly messages: readonly BrewvaAgentProtocolMessage[];
+      readonly customMessages: readonly PreparedCustomMessage[];
       readonly source: string | undefined;
     }
   | {

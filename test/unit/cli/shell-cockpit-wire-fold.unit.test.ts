@@ -582,6 +582,152 @@ describe("shell cockpit wire fold", () => {
     ]);
   });
 
+  test("projects custom.message frames after the turn's user row", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "my question",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "custom.message",
+        frameId: "frame:custom",
+        ts: 1_001,
+        turnId: "turn-1",
+        customType: "brewva-skill-selection",
+        content: "Selected Skills: review",
+        display: true,
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "assistant.delta",
+        frameId: "frame:delta",
+        ts: 1_002,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta: "the answer",
+      }),
+    );
+
+    const transcript = fold.snapshot("session-1").transcriptMessages.map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+
+    // The custom (skill card) row lands after the user row and before the answer.
+    expect(transcript).toEqual([
+      { role: "user", text: "my question" },
+      { role: "custom", text: "Selected Skills: review" },
+      { role: "assistant", text: "the answer" },
+    ]);
+  });
+
+  test("holds a custom.message that arrives before its turn.input", () => {
+    const fold = createShellCockpitWireFoldStore();
+    // The custom frame is produced in the prelude and can arrive before turn.input.
+    fold.remember(
+      frame({
+        type: "custom.message",
+        frameId: "frame:custom",
+        ts: 1_001,
+        turnId: "turn-1",
+        customType: "brewva-skill-selection",
+        content: "Selected Skills: review",
+        display: true,
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "my question",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "assistant.delta",
+        frameId: "frame:delta",
+        ts: 1_002,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta: "the answer",
+      }),
+    );
+
+    const transcript = fold.snapshot("session-1").transcriptMessages.map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+
+    // The early custom is held and flushed after the user row, not ahead of it.
+    expect(transcript).toEqual([
+      { role: "user", text: "my question" },
+      { role: "custom", text: "Selected Skills: review" },
+      { role: "assistant", text: "the answer" },
+    ]);
+  });
+
+  test("drops a custom.message with an empty turnId instead of holding it", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "my question",
+      }),
+    );
+    // A turn-less custom cannot be ordered; it must fail closed (be omitted),
+    // never parked under an empty key where it would leak and never display.
+    fold.remember(
+      frame({
+        type: "custom.message",
+        frameId: "frame:custom",
+        ts: 1_001,
+        turnId: "",
+        customType: "brewva-skill-selection",
+        content: "should not show",
+        display: true,
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "assistant.delta",
+        frameId: "frame:delta",
+        ts: 1_002,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta: "the answer",
+      }),
+    );
+
+    const transcript = fold.snapshot("session-1").transcriptMessages.map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+
+    // The turn-less custom is omitted; the rest of the turn is unaffected.
+    expect(transcript).toEqual([
+      { role: "user", text: "my question" },
+      { role: "assistant", text: "the answer" },
+    ]);
+  });
+
   test("keeps the projected user row after a turn commits", () => {
     const fold = createShellCockpitWireFoldStore();
     fold.remember(
@@ -618,6 +764,58 @@ describe("shell cockpit wire fold", () => {
     // projected instead of dropping it on commit.
     expect(transcript).toEqual([
       { role: "user", text: "my question" },
+      { role: "assistant", text: "the answer" },
+    ]);
+  });
+
+  test("keeps the projected custom row after a turn commits", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "my question",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "custom.message",
+        frameId: "frame:custom",
+        ts: 1_001,
+        turnId: "turn-1",
+        customType: "brewva-skill-selection",
+        content: "Selected Skills: review",
+        display: true,
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "turn.committed",
+        frameId: "frame:commit",
+        ts: 1_040,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "the answer",
+        assistantSegments: [{ text: "the answer", ts: 1_030, sequence: 1 }],
+        toolOutputs: [],
+      }),
+    );
+
+    const transcript = fold.snapshot("session-1").transcriptMessages.map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+
+    // Regression: the committed frame carries no custom row, so replay must
+    // preserve the input-side custom (skill card) row alongside the user row
+    // rather than dropping the whole feature the moment the turn commits.
+    expect(transcript).toEqual([
+      { role: "user", text: "my question" },
+      { role: "custom", text: "Selected Skills: review" },
       { role: "assistant", text: "the answer" },
     ]);
   });
