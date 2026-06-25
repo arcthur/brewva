@@ -30,7 +30,7 @@ stays in explicit archive, transcript, export, and pager surfaces.
 ## Session-Index Harness Projection
 
 `HarnessTraceSnapshot` is a session-index projection over canonical tape and
-hosted advisory evidence. It is stored in DuckDB table
+hosted advisory evidence. It is stored in the session-index SQLite table
 `session_harness_trace_snapshots` and is rebuilt from events; it is not a
 durable source of truth.
 

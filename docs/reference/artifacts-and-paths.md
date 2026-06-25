@@ -105,9 +105,7 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - runtime renders these into structured narrative context blocks with source provenance
   - these files are operator-editable narrative inputs, not kernel authority
 - Session query plane:
-  - `.brewva/session-index/session-index.duckdb`
-  - `.brewva/session-index/read-snapshot.json`
-  - `.brewva/session-index/snapshots/*.duckdb`
+  - `.brewva/session-index/session-index.sqlite`
   - rebuildable state only
   - stores session digests, target-root rows, event rows, event token indexes,
     lineage nodes, lineage summaries, lineage outcomes, adopted outcomes,
@@ -116,13 +114,13 @@ helper material, not session-state durability surfaces in the taxonomy above.
   - session candidate tokens include aggregated searchable event text, not only
     task and digest text, so long sessions remain discoverable beyond the digest
     summary window
-  - one writer updates the primary DuckDB file; non-writer processes read the
-    latest published snapshot when the primary file is locked
+  - one writer updates the SQLite file under WAL; non-writer processes read the
+    live database directly (no published-snapshot copy)
   - the writer lease is guarded by PID plus heartbeat timestamp; stale locks are
     recoverable and the index can be rebuilt from event tape
   - schema version bumps do not require durable migrations; the writer rewrites
-    rebuildable rows from event tape and republishes snapshots for the current
-    schema
+    rebuildable rows from event tape for the current schema in one transaction,
+    so readers keep the prior consistent index until the single commit
   - indexed tape evidence contracts live under
     `@brewva/brewva-session-index/evidence`; recall consumes typed rows rather
     than duplicating search-text extraction
@@ -137,7 +135,7 @@ helper material, not session-state durability surfaces in the taxonomy above.
     weights in broker memory; they are rebuilt from durable recall feedback
     evidence rather than acting as source-of-truth memory
   - explicit curation feedback and passive utility observations remain durable
-    tape-visible events; the DuckDB file is not source-of-truth memory
+    tape-visible events; the SQLite file is not source-of-truth memory
   - abandoned lineage branches remain on tape; index materialization may narrow
     active-lineage views, but it does not prune or rewrite event authority
 - Heartbeat policy remains separate control-plane material:

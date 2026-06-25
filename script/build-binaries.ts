@@ -112,12 +112,6 @@ const BREWVA_SHELL_SMOKE_ENV = "BREWVA_SHELL_SMOKE";
 const BREWVA_OPENTUI_SUPPORTED_ENV = "BREWVA_OPENTUI_SUPPORTED";
 const BREWVA_OPENTUI_ENV_PREFIX = "BREWVA_OPENTUI_*";
 const ROOT_PACKAGE_JSON_PATH = join(process.cwd(), "package.json");
-const BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH = join(
-  process.cwd(),
-  "packages",
-  "brewva-session-index",
-  "package.json",
-);
 const BREWVA_TOOLS_PACKAGE_JSON_PATH = join(
   process.cwd(),
   "packages",
@@ -125,10 +119,6 @@ const BREWVA_TOOLS_PACKAGE_JSON_PATH = join(
   "package.json",
 );
 const OPEN_TUI_VERSION = readPinnedDependencyVersion(ROOT_PACKAGE_JSON_PATH, "@opentui/core");
-const DUCKDB_NODE_API_VERSION = readPinnedDependencyVersion(
-  BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH,
-  "@duckdb/node-api",
-);
 const BOXLITE_VERSION = "0.9.5";
 
 const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
@@ -137,12 +127,6 @@ const OPEN_TUI_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"]
   "bun-linux-x64": "@opentui/core-linux-x64",
   "bun-linux-arm64": "@opentui/core-linux-arm64",
   "bun-windows-x64": "@opentui/core-win32-x64",
-};
-
-const DUCKDB_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
-  "bun-darwin-arm64": "@duckdb/node-bindings-darwin-arm64",
-  "bun-linux-x64": "@duckdb/node-bindings-linux-x64",
-  "bun-linux-arm64": "@duckdb/node-bindings-linux-arm64",
 };
 
 const BOXLITE_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
@@ -163,7 +147,6 @@ const OXC_PARSER_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target
   "bun-windows-x64": "@oxc-parser/binding-win32-x64-msvc",
 };
 
-const DUCKDB_RUNTIME_PACKAGES = ["@duckdb/node-api", "@duckdb/node-bindings"] as const;
 const BOXLITE_RUNTIME_PACKAGES = ["@boxlite-ai/boxlite"] as const;
 const OXC_PARSER_RUNTIME_PACKAGES = ["oxc-parser", "@oxc-project/types"] as const;
 const WEB_TREE_SITTER_VERSION = readPinnedDependencyVersion(
@@ -382,19 +365,6 @@ async function ensurePackagedDependency(packageName: string, version: string): P
   return repoPackagePath;
 }
 
-async function copyDuckDBRuntimeAssets(outDir: string, platform: PlatformTarget): Promise<void> {
-  const nativePackage = DUCKDB_NATIVE_PACKAGE_BY_TARGET[platform.target];
-  if (!nativePackage) {
-    return;
-  }
-
-  const targetNodeModules = join(outDir, "node_modules");
-  for (const packageName of [...DUCKDB_RUNTIME_PACKAGES, nativePackage]) {
-    const source = await ensurePackagedDependency(packageName, DUCKDB_NODE_API_VERSION);
-    copyDirectory(source, packagePath(targetNodeModules, packageName));
-  }
-}
-
 async function copyBoxLiteRuntimeAssets(outDir: string, platform: PlatformTarget): Promise<void> {
   const nativePackage = BOXLITE_NATIVE_PACKAGE_BY_TARGET[platform.target];
   if (!nativePackage) {
@@ -541,7 +511,8 @@ async function copyRuntimeAssets(outDir: string, platform: PlatformTarget): Prom
   copyDirectory(BREWVA_THEME_ASSETS_DIR, join(outDir, "theme"));
   copyDirectory(BREWVA_EXPORT_HTML_ASSETS_DIR, join(outDir, "export-html"));
   copyDirectory(join(process.cwd(), "skills"), join(outDir, "skills"));
-  await copyDuckDBRuntimeAssets(outDir, platform);
+  // bun:sqlite is built into the Bun runtime, so the session-index engine needs
+  // no native-asset staging here (unlike BoxLite / oxc-parser / tree-sitter).
   await copyBoxLiteRuntimeAssets(outDir, platform);
   await copyOxcParserRuntimeAssets(outDir, platform);
   await copyTreeSitterRuntimeAssets(outDir);

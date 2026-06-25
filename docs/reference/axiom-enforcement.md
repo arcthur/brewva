@@ -39,7 +39,7 @@ Enforced by:
 
 - `critical-rules.md` — Keep runtime governance deterministic and avoid embedding adaptive cognition in the kernel.
 
-Precedent decisions: `context-operating-system-and-compaction-physics`, `derivation-direction-invariant-and-skill-navigation`
+Precedent decisions: `context-operating-system-and-compaction-physics`, `derivation-direction-invariant-and-skill-navigation`, `session-index-read-model-engine`
 
 ### Axiom 3 — `Subtraction beats switches.`
 
@@ -52,7 +52,7 @@ Enforced by:
 - `anti-patterns.md` — Reintroducing runtime-stored context evidence slots or legacy `prompt.getStability`, `prompt.getTransientReduction`, and `providerCache.getObservation` ports.
 - `critical-rules.md` — Do not reintroduce `skills.packs`-style filtering or legacy `base/pack/project` taxonomy.
 
-Precedent decisions: `derivation-direction-invariant-and-skill-navigation`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `tree-history-and-multi-writer-substrate`, `tui-rendering-performance-and-test-harness`, `tui-split-footer-native-scrollback-renderer`
+Precedent decisions: `derivation-direction-invariant-and-skill-navigation`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `session-index-read-model-engine`, `tree-history-and-multi-writer-substrate`, `tui-rendering-performance-and-test-harness`, `tui-split-footer-native-scrollback-renderer`
 
 ### Axiom 4 — `Govern effects, not thought paths.`
 
@@ -74,10 +74,10 @@ Precedent decisions: `effect-approval-and-rollback-closure`, `gateway-control-ta
 
 Enforced by:
 
-- `anti-patterns.md` — Treating `.brewva/session-index/session-index.duckdb` as source-of-truth memory or replay authority.
+- `anti-patterns.md` — Treating `.brewva/session-index/session-index.sqlite` as source-of-truth memory or replay authority.
 - `anti-patterns.md` — Writing history-view baseline artifact files as compaction authority instead of deriving baseline state from `session_compact` receipts.
 - `critical-rules.md` — Keep continuation anchors replayable: `session.continuationAnchor` and `tape_handoff` record anchors that Work Cards, transcripts, export bundles, channel inspect, and hosted context can display without becoming new truth stores.
-- `critical-rules.md` — Keep DuckDB session index state rebuildable and non-authoritative; event tape remains replay authority.
+- `critical-rules.md` — Keep SQLite session index state rebuildable and non-authoritative; event tape remains replay authority.
 
 Precedent decisions: `context-operating-system-and-compaction-physics`, `effect-approval-and-rollback-closure`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `tree-history-and-multi-writer-substrate`, `trust-substrate-optimization-axis`
 
@@ -112,7 +112,7 @@ Enforced by:
 - `anti-patterns.md` — Adding duplicate inspect dashboards or one-off shell/channel/CLI renderers that bypass the shared Work Card projection payload.
 - `critical-rules.md` — Preserve "same evidence, different authority": Work Cards, transcripts, channel inspect, and hosted dynamic context may orient over the same evidence, but kernel admission, capability receipts, sandbox posture, and adoption authority remain separate and authoritative.
 
-Precedent decisions: `authority-rings-and-projection-unification`, `durable-steering-inbox`, `effect-approval-and-rollback-closure`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `tree-history-and-multi-writer-substrate`, `trust-substrate-optimization-axis`, `tui-rendering-performance-and-test-harness`, `tui-split-footer-native-scrollback-renderer`
+Precedent decisions: `authority-rings-and-projection-unification`, `durable-steering-inbox`, `effect-approval-and-rollback-closure`, `gateway-control-tape-and-receipt-first-control-plane`, `hosted-control-plane-subtraction`, `session-index-read-model-engine`, `tree-history-and-multi-writer-substrate`, `trust-substrate-optimization-axis`, `tui-rendering-performance-and-test-harness`, `tui-split-footer-native-scrollback-renderer`
 
 ### Axiom 12 — `Product loops are projections, not runtime state machines.`
 

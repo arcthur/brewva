@@ -9,6 +9,8 @@ import type {
 import { mapSessionRow, type SessionRow } from "../projection/rows.js";
 import { normalizeRoots } from "../roots.js";
 import { buildInList, type SqlParams } from "../sql/params.js";
+import { encodeTokensToMatchExpression } from "../sqlite/surrogate.js";
+import { logisticBm25Score, type Bm25ScoredRow } from "./fts.js";
 import type { SessionIndexQueryPort } from "./port.js";
 import { buildSessionScopeSql } from "./scope.js";
 
@@ -31,25 +33,26 @@ export async function querySessionDigestRows(input: {
   const targetRoots = normalizeRoots(input.query.targetRoots, input.workspaceRoot);
   const params: SqlParams = {
     currentSessionId: input.query.currentSessionId,
+    ftsExpr: encodeTokensToMatchExpression(queryTokens),
     limit: Math.max(1, Math.trunc(input.query.limit)),
   };
-  const tokenFilter = buildInList("token", queryTokens, params);
   const scopeFilter = buildSessionScopeSql({
     scope: input.query.scope,
     targetRoots,
     workspaceRoot: input.workspaceRoot,
     params,
   });
-  const tokenMatchesExpression = "coalesce(token_scores.token_matches, 0)";
-  const tokenJoin = `
+  // FTS5 bm25() is only defined inside a MATCH query, so coverage scoring moves
+  // into a subquery joined back to `sessions`. A LEFT JOIN keeps the
+  // currentSessionId fallback row (which has no match, hence a NULL bm25_score).
+  const matchJoin = `
     left join (
-      select session_id, count(distinct token) as token_matches
-      from session_tokens
-      where token in (${tokenFilter})
-      group by session_id
-    ) token_scores on token_scores.session_id = sessions.session_id
+      select session_id, bm25(session_fts) as bm25_score
+      from session_fts
+      where session_fts match $ftsExpr
+    ) fts on fts.session_id = sessions.session_id
   `;
-  const rows = await input.port.selectRows<SessionRow>(
+  const rows = await input.port.selectRows<SessionRow & Bm25ScoredRow>(
     `
       select
         sessions.session_id,
@@ -60,13 +63,14 @@ export async function querySessionDigestRows(input: {
         sessions.target_roots_json,
         sessions.task_goal,
         sessions.digest_text,
-        ${tokenMatchesExpression} as token_matches
+        fts.bm25_score as bm25_score
       from sessions
-      ${tokenJoin}
+      ${matchJoin}
       where ${scopeFilter}
-        and (${tokenMatchesExpression} > 0 or sessions.session_id = $currentSessionId)
+        and (fts.bm25_score is not null or sessions.session_id = $currentSessionId)
       order by
-        ${tokenMatchesExpression} desc,
+        case when fts.bm25_score is null then 1 else 0 end asc,
+        fts.bm25_score asc,
         case when sessions.session_id = $currentSessionId then 1 else 0 end desc,
         sessions.last_event_at desc
       limit $limit
@@ -74,8 +78,7 @@ export async function querySessionDigestRows(input: {
     params,
   );
 
-  const denominator = queryTokens.length;
-  return rows.map((row) => mapSessionRow(row, Number(row.token_matches ?? 0) / denominator));
+  return rows.map((row) => mapSessionRow(row, logisticBm25Score(row.bm25_score)));
 }
 
 export async function listSessionDigestRows(input: {
@@ -95,8 +98,7 @@ export async function listSessionDigestRows(input: {
         primary_root,
         target_roots_json,
         task_goal,
-        digest_text,
-        0 as token_matches
+        digest_text
       from sessions
       order by last_event_at desc
       limit $limit
@@ -122,8 +124,7 @@ export async function getSessionDigestRow(input: {
         primary_root,
         target_roots_json,
         task_goal,
-        digest_text,
-        0 as token_matches
+        digest_text
       from sessions
       where session_id = $sessionId
       limit 1

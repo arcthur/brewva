@@ -31,4 +31,4 @@
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/session-index-read-model-engine.md` (engine superseded: SQLite + FTS5 replaces DuckDB; the rebuildable-state semantics are kept by the successor).

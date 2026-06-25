@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import {
@@ -24,23 +24,6 @@ import {
   type SessionIndexTaskSource,
   type SessionIndexWorkerResult,
 } from "./api.js";
-import {
-  acquireDuckDBInstance,
-  type DuckDBConnection,
-  type DuckDBInstanceHandle,
-  type DuckDBModule,
-} from "./duckdb/instance.js";
-import {
-  checkpointSessionIndex,
-  clearSessionIndexRows,
-  deleteSessionRows,
-  ensureSessionIndexSchema,
-  listIndexedSessionIds,
-  readIndexedSessionState,
-  readSessionIndexStatusCounts,
-  runSessionIndexTransaction,
-} from "./duckdb/lifecycle.js";
-import { selectOne, selectRows, type JsonRow } from "./duckdb/query.js";
 import { acquireWriteLease, type WriteLease } from "./lease/write-lease.js";
 import { listSessionBoxes as listProjectedSessionBoxes } from "./projection/box.js";
 import {
@@ -64,76 +47,51 @@ import {
   querySessionDigestRows,
 } from "./query/digests.js";
 import { type SessionIndexQueryPort } from "./query/port.js";
+import type { JsonRow } from "./query/port.js";
 import {
   getTapeEventRow,
   listRecentSessionRows,
   queryTapeEvidenceRows,
 } from "./query/tape-evidence.js";
-import {
-  pruneReadSnapshots,
-  resolvePublishedReadSnapshotPath,
-  type ReadSnapshotManifest,
-  writeReadSnapshotManifest,
-} from "./snapshot/manifest.js";
 import { type SqlParams } from "./sql/params.js";
+import {
+  acquireSqliteInstance,
+  type SqliteConnection,
+  type SqliteInstanceHandle,
+} from "./sqlite/instance.js";
+import {
+  checkpointSessionIndex,
+  deleteSessionRows,
+  ensureSessionIndexSchema,
+  hasSchemaMismatch,
+  listIndexedSessionIds,
+  readIndexedSessionState,
+  readSessionIndexStatusCounts,
+  runSessionIndexTransaction,
+} from "./sqlite/lifecycle.js";
+import { selectOne, selectRows } from "./sqlite/query.js";
 import { SESSION_INDEX_UNAVAILABLE, SessionIndexUnavailableError } from "./unavailable.js";
 
-const DEFAULT_DB_RELATIVE_PATH = join(".brewva", "session-index", "session-index.duckdb");
+const DEFAULT_DB_RELATIVE_PATH = join(".brewva", "session-index", "session-index.sqlite");
 const DEFAULT_LOCK_RELATIVE_PATH = join(".brewva", "session-index", "write.lock");
-const DEFAULT_SNAPSHOT_MANIFEST_RELATIVE_PATH = join(
-  ".brewva",
-  "session-index",
-  "read-snapshot.json",
-);
-const DEFAULT_SNAPSHOT_DIR_RELATIVE_PATH = join(".brewva", "session-index", "snapshots");
-const DUCKDB_NODE_API_PACKAGE = ["@duckdb", "node-api"].join("/");
 const CATCH_UP_DEBOUNCE_MS = 5_000;
-
-let duckdbModulePromise: Promise<DuckDBModule> | undefined;
 
 export async function createSessionIndex(input: CreateSessionIndexInput): Promise<SessionIndex> {
   const workspaceRoot = resolve(input.workspaceRoot);
   const dbPath = resolve(input.dbPath ?? join(workspaceRoot, DEFAULT_DB_RELATIVE_PATH));
-  const snapshotManifestPath = resolve(
-    join(workspaceRoot, DEFAULT_SNAPSHOT_MANIFEST_RELATIVE_PATH),
-  );
-  const snapshotDir = resolve(join(workspaceRoot, DEFAULT_SNAPSHOT_DIR_RELATIVE_PATH));
   mkdirSync(dirname(dbPath), { recursive: true });
 
-  let duckdb: DuckDBModule;
-  try {
-    duckdb = await loadDuckDB();
-  } catch (error) {
-    return new UnavailableSessionIndex(dbPath, unavailableMessage(error));
-  }
-
+  // Writer election: the writer opens read-write and establishes WAL; every
+  // non-writer opens the SAME db read-only and reads the live WAL (snapshot
+  // isolation), so there is no physical reader-snapshot copy to publish anymore.
   const lease = acquireWriteLease(resolve(join(workspaceRoot, DEFAULT_LOCK_RELATIVE_PATH)));
-  const readSnapshotPath = lease.acquired
-    ? undefined
-    : resolvePublishedReadSnapshotPath({
-        manifestPath: snapshotManifestPath,
-        snapshotDir,
-        schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
-      });
-  if (!lease.acquired && !readSnapshotPath) {
-    return new UnavailableSessionIndex(
-      dbPath,
-      "session index writer lease unavailable and no read snapshot is published",
-    );
-  }
-  const openDbPath = readSnapshotPath ?? dbPath;
-  const openReadOnly = Boolean(readSnapshotPath);
-  let instanceHandle: DuckDBInstanceHandle | undefined;
+  let instanceHandle: SqliteInstanceHandle | undefined;
   try {
-    instanceHandle = await acquireDuckDBInstance(duckdb, openDbPath, openReadOnly);
-    const connection = await instanceHandle.instance.connect();
-    const index = new DuckDBSessionIndex({
+    instanceHandle = acquireSqliteInstance(dbPath, !lease.acquired);
+    const index = new SqliteSessionIndex({
       workspaceRoot,
       dbPath,
-      readSnapshotPath,
-      snapshotManifestPath,
-      snapshotDir,
-      connection,
+      connection: instanceHandle.connection,
       events: input.events,
       task: input.task,
       writerLease: lease,
@@ -150,13 +108,6 @@ export async function createSessionIndex(input: CreateSessionIndexInput): Promis
     instanceHandle?.release();
     return new UnavailableSessionIndex(dbPath, unavailableMessage(error));
   }
-}
-
-async function loadDuckDB(): Promise<DuckDBModule> {
-  // Keep DuckDB out of Bun's compiled binary bundle; binary builds copy the
-  // target native runtime packages beside the executable.
-  duckdbModulePromise ??= import(DUCKDB_NODE_API_PACKAGE) as Promise<DuckDBModule>;
-  return await duckdbModulePromise;
 }
 
 function unavailableMessage(error: unknown): string {
@@ -253,40 +204,39 @@ class UnavailableSessionIndex implements SessionIndex {
   async close(): Promise<void> {}
 }
 
-class DuckDBSessionIndex implements SessionIndex {
+class SqliteSessionIndex implements SessionIndex {
   readonly dbPath: string;
   private readonly workspaceRoot: string;
-  private readonly readSnapshotPath: string | undefined;
-  private readonly snapshotManifestPath: string;
-  private readonly snapshotDir: string;
-  private readonly connection: DuckDBConnection;
+  private readonly connection: SqliteConnection;
   private readonly events: SessionIndexEventSource;
   private readonly task: SessionIndexTaskSource;
   private readonly writerLease: WriteLease;
-  private readonly instanceHandle: DuckDBInstanceHandle;
+  private readonly instanceHandle: SqliteInstanceHandle;
   private readonly unsubscribeFromEvents: (() => void) | undefined;
   private closed = false;
   private catchUpDirty = true;
   private lastCatchUpCheckedAt = 0;
   private lastCatchUpStatus: SessionIndexStatus | undefined;
+  // Serializes writer transactions. Every public query enters via
+  // ensureAvailable() -> catchUp(); without this gate two concurrent queries both
+  // pass the synchronous debounce, both issue BEGIN on the shared single
+  // connection, and the second throws "cannot start a transaction within a
+  // transaction". The write lease is per-process, not per-call — query methods are
+  // independently awaitable. catchUp callers coalesce onto the in-flight run;
+  // rebuild serializes after it.
+  private writerInFlight: Promise<SessionIndexStatus> | undefined;
 
   constructor(input: {
     workspaceRoot: string;
     dbPath: string;
-    readSnapshotPath?: string;
-    snapshotManifestPath: string;
-    snapshotDir: string;
-    connection: DuckDBConnection;
+    connection: SqliteConnection;
     events: SessionIndexEventSource;
     task: SessionIndexTaskSource;
     writerLease: WriteLease;
-    instanceHandle: DuckDBInstanceHandle;
+    instanceHandle: SqliteInstanceHandle;
   }) {
     this.workspaceRoot = input.workspaceRoot;
     this.dbPath = input.dbPath;
-    this.readSnapshotPath = input.readSnapshotPath;
-    this.snapshotManifestPath = input.snapshotManifestPath;
-    this.snapshotDir = input.snapshotDir;
     this.connection = input.connection;
     this.events = input.events;
     this.task = input.task;
@@ -324,7 +274,6 @@ class DuckDBSessionIndex implements SessionIndex {
         indexedSessions: counts.indexedSessions,
         indexedEvents: counts.indexedEvents,
         ...(this.writerLease.acquired ? {} : { staleReason: "write_lease_unavailable" }),
-        ...(this.readSnapshotPath ? { readSnapshotPath: this.readSnapshotPath } : {}),
         ...(counts.lastIndexedAt === undefined
           ? {}
           : {
@@ -343,7 +292,13 @@ class DuckDBSessionIndex implements SessionIndex {
   }
 
   async catchUp(): Promise<SessionIndexStatus> {
-    return await this.catchUpInternal(false);
+    if (this.writerInFlight) {
+      return await this.writerInFlight;
+    }
+    this.writerInFlight = this.catchUpInternal().finally(() => {
+      this.writerInFlight = undefined;
+    });
+    return await this.writerInFlight;
   }
 
   async rebuild(): Promise<SessionIndexStatus> {
@@ -355,13 +310,32 @@ class DuckDBSessionIndex implements SessionIndex {
         message: "session index writer lease unavailable",
       };
     }
+    // Serialize behind any in-flight catch-up so the two never overlap a BEGIN on
+    // the shared connection (same writer gate as catchUp). rebuild has no
+    // production callers and is operator-initiated, so it is not expected to race
+    // another rebuild.
+    while (this.writerInFlight) {
+      await this.writerInFlight.catch(() => {});
+    }
+    this.writerInFlight = this.rebuildInternal().finally(() => {
+      this.writerInFlight = undefined;
+    });
+    return await this.writerInFlight;
+  }
+
+  private async rebuildInternal(): Promise<SessionIndexStatus> {
     try {
       await ensureSessionIndexSchema(this.connection);
-      await clearSessionIndexRows(this.connection);
-      this.catchUpDirty = true;
-      this.lastCatchUpCheckedAt = 0;
-      this.lastCatchUpStatus = undefined;
-      return await this.catchUpInternal(true);
+      // RFC posture A: a full rebuild clears and reprojects every session inside
+      // ONE transaction, so concurrent read-only handles keep seeing the prior
+      // WAL snapshot until the single commit flips them to the rebuilt index.
+      await this.fullRebuildInTransaction();
+      await checkpointSessionIndex(this.connection);
+      const status = await this.status();
+      this.lastCatchUpStatus = status;
+      this.lastCatchUpCheckedAt = Date.now();
+      this.catchUpDirty = false;
+      return status;
     } catch (error) {
       return {
         ok: false,
@@ -372,13 +346,12 @@ class DuckDBSessionIndex implements SessionIndex {
     }
   }
 
-  private async catchUpInternal(force: boolean): Promise<SessionIndexStatus> {
+  private async catchUpInternal(): Promise<SessionIndexStatus> {
     if (!this.writerLease.acquired) {
       return await this.status();
     }
     const now = Date.now();
     if (
-      !force &&
       !this.catchUpDirty &&
       this.lastCatchUpStatus &&
       now - this.lastCatchUpCheckedAt < CATCH_UP_DEBOUNCE_MS
@@ -388,20 +361,21 @@ class DuckDBSessionIndex implements SessionIndex {
 
     try {
       await ensureSessionIndexSchema(this.connection);
-      let changed = !resolvePublishedReadSnapshotPath({
-        manifestPath: this.snapshotManifestPath,
-        snapshotDir: this.snapshotDir,
-        schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
-      });
-      const sessionIds = uniqueNonEmptyStrings([
-        ...this.events.records.listSessionIds(),
-        ...(await listIndexedSessionIds(this.connection)),
-      ]);
-      for (const sessionId of sessionIds) {
-        changed = (await this.indexSession(sessionId)) || changed;
-      }
-      if (changed) {
-        await this.publishReadSnapshot();
+      // A schema-version bump needs a full rebuild; take it inside ONE transaction
+      // (RFC posture A) so concurrent read-only handles never see a cleared or
+      // half-rebuilt index — the same publish barrier rebuild() uses. Steady-state
+      // catch-up stays per-session incremental (small, frequent transactions).
+      if (await hasSchemaMismatch(this.connection)) {
+        await this.fullRebuildInTransaction();
+        await checkpointSessionIndex(this.connection);
+      } else {
+        const sessionIds = uniqueNonEmptyStrings([
+          ...this.events.records.listSessionIds(),
+          ...(await listIndexedSessionIds(this.connection)),
+        ]);
+        for (const sessionId of sessionIds) {
+          await this.indexSession(sessionId);
+        }
       }
       const status = await this.status();
       this.lastCatchUpStatus = status;
@@ -570,13 +544,11 @@ class DuckDBSessionIndex implements SessionIndex {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    try {
-      this.connection.closeSync();
-    } finally {
-      this.unsubscribeFromEvents?.();
-      this.writerLease.release();
-      this.instanceHandle.release();
-    }
+    // The connection is the ref-counted cached Database; releasing the handle
+    // closes it when the last reference drops. Do not close it directly.
+    this.unsubscribeFromEvents?.();
+    this.writerLease.release();
+    this.instanceHandle.release();
   }
 
   private queryPort(): SessionIndexQueryPort {
@@ -596,7 +568,31 @@ class DuckDBSessionIndex implements SessionIndex {
     if (!status.ok) throw new SessionIndexUnavailableError(status.message);
   }
 
-  private async indexSession(sessionId: string): Promise<boolean> {
+  /**
+   * Clear and reproject every session inside ONE transaction. Reads inside the
+   * transaction see the in-progress deletes (so each session reprojects fresh),
+   * and concurrent read-only handles keep the previous WAL snapshot until commit.
+   */
+  private async fullRebuildInTransaction(): Promise<void> {
+    const indexedIds = await listIndexedSessionIds(this.connection);
+    const sessionIds = uniqueNonEmptyStrings([
+      ...this.events.records.listSessionIds(),
+      ...indexedIds,
+    ]);
+    await runSessionIndexTransaction(this.connection, async () => {
+      for (const sessionId of indexedIds) {
+        await deleteSessionRows(this.connection, sessionId);
+      }
+      for (const sessionId of sessionIds) {
+        await this.indexSession(sessionId, { inline: true });
+      }
+    });
+  }
+
+  private async indexSession(
+    sessionId: string,
+    options: { inline?: boolean } = {},
+  ): Promise<boolean> {
     const sourceUri = `canonical-tape:${sessionId}`;
     const records = this.events.records.list(sessionId);
     const previous = await readIndexedSessionState(this.connection, sessionId);
@@ -617,7 +613,7 @@ class DuckDBSessionIndex implements SessionIndex {
       sequence: reset ? index : previous.indexedEventCount + index,
     }));
 
-    return await runSessionIndexTransaction(this.connection, async () => {
+    const work = async (): Promise<boolean> => {
       if (reset) {
         await deleteSessionRows(this.connection, sessionId);
       }
@@ -635,34 +631,10 @@ class DuckDBSessionIndex implements SessionIndex {
         sourceCursor: records.length,
       });
       return true;
-    });
-  }
-
-  private async publishReadSnapshot(): Promise<void> {
-    await checkpointSessionIndex(this.connection);
-    mkdirSync(this.snapshotDir, { recursive: true });
-
-    const publishedAt = Date.now();
-    const snapshotFile = `session-index-${publishedAt}-${process.pid}-${Math.random()
-      .toString(16)
-      .slice(2)}.duckdb`;
-    const tempPath = join(this.snapshotDir, `${snapshotFile}.tmp`);
-    const snapshotPath = join(this.snapshotDir, snapshotFile);
-
-    rmSync(tempPath, { force: true });
-    copyFileSync(this.dbPath, tempPath);
-    renameSync(tempPath, snapshotPath);
-
-    const status = await this.status();
-    const manifest: ReadSnapshotManifest = {
-      schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
-      snapshotFile,
-      publishedAt,
-      writerPid: process.pid,
-      indexedSessions: status.ok ? status.indexedSessions : 0,
-      indexedEvents: status.ok ? status.indexedEvents : 0,
     };
-    writeReadSnapshotManifest(this.snapshotManifestPath, manifest);
-    pruneReadSnapshots(this.snapshotDir, snapshotFile);
+
+    // When the caller already owns a transaction (full rebuild), run inline:
+    // SQLite forbids nested BEGIN, and the outer commit is the publish barrier.
+    return options.inline ? await work() : await runSessionIndexTransaction(this.connection, work);
   }
 }

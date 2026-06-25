@@ -646,20 +646,34 @@ function main(): void {
       workspaceRoot: isolatedWorkspace,
       events: hostedRuntime.ops.events,
       task: hostedRuntime.ops.task,
-      dbPath: join(isolatedWorkspace, ".brewva", "session-index", "dist-smoke.duckdb"),
+      dbPath: join(isolatedWorkspace, ".brewva", "session-index", "dist-smoke.sqlite"),
     });
     const sessionIndexStatus = await sessionIndex.catchUp();
     await sessionIndex.close();
-    if (!sessionIndexStatus.ok) {
+    // The session index is a Bun-only runtime: it opens bun:sqlite lazily at the
+    // I/O edge (packages/brewva-session-index/src/sqlite/instance.ts), so the import
+    // graph stays Node-loadable but the engine itself only runs under Bun. This
+    // smoke executes under Node, so — exactly like the cli internal-shell-runtime
+    // stub asserted above — the index must DEGRADE GRACEFULLY to an unavailable
+    // status (never a hard module-load crash) whose message names the missing
+    // bun:sqlite builtin. Actual indexing behavior (indexedSessions / indexedEvents
+    // over a real corpus) is covered by the package's Bun unit tests, e.g.
+    // test/unit/session-index/rebuild-equivalence.unit.test.ts.
+    if (sessionIndexStatus.ok) {
       throw new Error(
-        "dist session-index smoke failed: " +
+        "dist session-index smoke failed: expected Node-side unavailable degradation for the Bun-only index, got ok",
+      );
+    }
+    if (
+      sessionIndexStatus.error !== "session_index_unavailable" ||
+      !sessionIndexStatus.message.includes("bun:sqlite")
+    ) {
+      throw new Error(
+        "dist session-index smoke failed: expected unavailable due to a missing bun:sqlite builtin, got " +
           sessionIndexStatus.error +
           " " +
           sessionIndexStatus.message,
       );
-    }
-    if (sessionIndexStatus.indexedSessions < 1 || sessionIndexStatus.indexedEvents < 1) {
-      throw new Error("dist session-index smoke failed: expected indexed session events");
     }
     console.log(JSON.stringify(resolved));
   `;

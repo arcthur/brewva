@@ -1,9 +1,10 @@
 import { chunkArray } from "@brewva/brewva-std/collections";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type { SessionIndexRewindTarget } from "../api.js";
-import type { DuckDBConnection } from "../duckdb/instance.js";
 import type { SessionIndexQueryPort } from "../query/port.js";
 import type { SqlParams } from "../sql/params.js";
+import type { SqliteConnection } from "../sqlite/instance.js";
+import { run } from "../sqlite/query.js";
 import {
   extractSessionRewindTargetProjection,
   mapSessionRewindTargetRow,
@@ -39,12 +40,12 @@ export async function listSessionRewindTargets(input: {
 }
 
 export async function rebuildSessionRewindTargetProjection(input: {
-  connection: DuckDBConnection;
+  connection: SqliteConnection;
   sessionId: string;
   records: readonly BrewvaEventRecord[];
 }): Promise<void> {
   const projections = extractSessionRewindTargetProjection(input.sessionId, input.records);
-  await input.connection.run("delete from session_rewind_targets where session_id = $sessionId", {
+  await run(input.connection, "delete from session_rewind_targets where session_id = $sessionId", {
     sessionId: input.sessionId,
   });
   if (projections.length === 0) return;
@@ -67,16 +68,17 @@ export async function rebuildSessionRewindTargetProjection(input: {
         $sessionId${index},
         $checkpointId${index},
         $turn${index},
-        cast($timestamp${index} as double),
+        cast($timestamp${index} as real),
         $promptPreview${index},
         $patchSetCountAfter${index},
         $fileSummaryJson${index},
         $lineageKind${index},
         $rewoundBy${index},
-        cast($rewoundAt${index} as double)
+        cast($rewoundAt${index} as real)
       )`;
     });
-    await input.connection.run(
+    await run(
+      input.connection,
       `
         insert into session_rewind_targets (
           session_id,

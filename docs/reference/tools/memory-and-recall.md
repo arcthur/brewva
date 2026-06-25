@@ -28,13 +28,13 @@ Read-path retrieval is split across three package owners:
 - `@brewva/brewva-search` owns normalization, mandatory CJK segmentation, and
   query/content token policy.
 - `@brewva/brewva-session-index` owns rebuildable indexed evidence projection
-  from event tape into typed DuckDB query rows.
+  from event tape into typed SQLite + FTS5 query rows.
 - `@brewva/brewva-recall` owns product semantics: source families, ranking,
   trust labels, evidence strength, curation, stable IDs, and context rendering.
 
 Recall consumes session-index evidence rows instead of reconstructing event
-search text. DuckDB remains rebuildable helper state; event tape remains
-runtime replay authority.
+search text. The SQLite + FTS5 index remains rebuildable helper state; event
+tape remains runtime replay authority.
 
 ## Surfaces
 

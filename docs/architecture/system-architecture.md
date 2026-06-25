@@ -260,10 +260,10 @@ compatibility story.
   adapters. It is mechanism, not replay or credential authority.
 - `@brewva/brewva-search`: shared search normalization, CJK segmentation, and
   semantic query/content tokenization policy. It does not own event evidence,
-  DuckDB state, or recall ranking.
-- `@brewva/brewva-session-index`: rebuildable DuckDB read model over session
-  event tapes. It owns indexed evidence projection and typed query rows, while
-  event tape remains runtime replay authority.
+  session-index state, or recall ranking.
+- `@brewva/brewva-session-index`: rebuildable SQLite + FTS5 read model over
+  session event tapes. It owns indexed evidence projection and typed query rows,
+  while event tape remains runtime replay authority.
 - `@brewva/brewva-recall`: source-typed recall over session-index tape evidence
   and repository precedent. Recall is an on-demand tool substrate, not a
   per-turn context admission pipeline.

@@ -8,6 +8,8 @@ import type {
 } from "../api.js";
 import { mapEventRow, type EventRow } from "../projection/rows.js";
 import { buildInList, type SqlParams } from "../sql/params.js";
+import { encodeTokensToMatchExpression } from "../sqlite/surrogate.js";
+import { logisticBm25Score, type Bm25ScoredRow } from "./fts.js";
 import type { SessionIndexQueryPort } from "./port.js";
 
 interface RecentSessionRow {
@@ -27,11 +29,14 @@ export async function queryTapeEvidenceRows(input: {
   await input.port.ensureAvailable();
 
   const params: SqlParams = {
+    ftsExpr: encodeTokensToMatchExpression(queryTokens),
     limit: Math.max(1, Math.trunc(input.query.limit)),
   };
   const sessionFilter = buildInList("session", sessionIds, params);
-  const tokenFilter = buildInList("token", queryTokens, params);
-  const rows = await input.port.selectRows<EventRow & { token_matches: bigint | number }>(
+  // bm25(event_fts) ranks the matching events; the MATCH constraint scopes to
+  // events whose surrogate-encoded body contains any query token, then the
+  // session_id allowlist narrows to the requested sessions.
+  const rows = await input.port.selectRows<EventRow & Bm25ScoredRow>(
     `
       select
         events.event_id,
@@ -43,28 +48,17 @@ export async function queryTapeEvidenceRows(input: {
         events.search_text,
         events.source_uri,
         events.source_sequence,
-        count(distinct event_tokens.token) as token_matches
-      from event_tokens
-      inner join events on events.event_id = event_tokens.event_id
-      where event_tokens.session_id in (${sessionFilter})
-        and event_tokens.token in (${tokenFilter})
-      group by
-        events.event_id,
-        events.session_id,
-        events.timestamp,
-        events.turn,
-        events.type,
-        events.payload_json,
-        events.search_text,
-        events.source_uri,
-        events.source_sequence
-      order by token_matches desc, events.timestamp desc
+        bm25(event_fts) as bm25_score
+      from event_fts
+      inner join events on events.event_id = event_fts.event_id
+      where event_fts match $ftsExpr
+        and event_fts.session_id in (${sessionFilter})
+      order by bm25(event_fts) asc, events.timestamp desc
       limit $limit
     `,
     params,
   );
-  const denominator = queryTokens.length;
-  return rows.map((row) => mapEventRow(row, Number(row.token_matches ?? 0) / denominator));
+  return rows.map((row) => mapEventRow(row, logisticBm25Score(row.bm25_score)));
 }
 
 export async function getTapeEventRow(input: {

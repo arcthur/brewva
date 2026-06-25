@@ -23,8 +23,8 @@ export function buildSessionScopeSql(input: {
     input.params[separatorKey] = sep;
     return `
       session_target_roots.target_root = $${rootKey}
-      or starts_with(session_target_roots.target_root, $${prefixKey})
-      or starts_with($${rootKey}, session_target_roots.target_root || $${separatorKey})
+      or instr(session_target_roots.target_root, $${prefixKey}) = 1
+      or instr($${rootKey}, session_target_roots.target_root || $${separatorKey}) = 1
     `;
   });
   input.params.repositoryRoot = input.workspaceRoot;

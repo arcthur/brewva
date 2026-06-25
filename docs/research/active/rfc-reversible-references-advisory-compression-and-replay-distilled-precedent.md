@@ -22,7 +22,7 @@
     `distillFailurePatterns` → `renderRdpCandidate`, brewva-recall) plus the
     operator-invoked `script/rdp-distill.ts` job. Failures are identified by the
     authoritative outcome verdict (`"fail"`). Deferred: the LLM enrichment pass,
-    the DuckDB query-plane read path, and `knowledge_search` over
+    the SQLite query-plane read path, and `knowledge_search` over
     `.brewva/knowledge/**`.
 - Owner: Runtime, recall, and gateway maintainers
 - Last reviewed: `2026-06-14`
@@ -229,7 +229,7 @@ inspectable and demotable.
   until a `session_compact` receipt is committed.
 - **Learning is opt-in control-plane, not background runtime.** RDP runs as an
   explicitly invoked job, not on the turn path. Its input is the rebuildable
-  `brewva-session-index` DuckDB plane over tape, not external agent logs. Its
+  `brewva-session-index` SQLite plane over tape, not external agent logs. Its
   output is _promotion candidates_ in the warm `.brewva/knowledge/**` layer, never
   `status: active` records written directly. Promotion to an active
   `docs/solutions/**` precedent runs only through `knowledge_capture` with the
@@ -284,7 +284,7 @@ External comparison anchors:
 | ------------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | CCR store + `headroom_retrieve` tool       | Tape (truth) + Workbench (advisory)                            | content-addressed tape events, `recall_search`, Dropped Digests allowlist, compaction provenance | RCR: vocabulary-owned tape-ref eviction/compaction notes + redaction-bounded `recall_expand` reproducing the previously model-visible span |
 | ContentRouter auto-detect + auto-apply     | Deliberation ring (advisory); Runtime physics (emergency only) | `context.contributor` advisory slot, attention candidates, deterministic emergency cut           | ACR: content-shape detector to inspectable reduction candidates; bounded emergency cut-shape hint                                          |
-| `learn` (scrape logs to instruction files) | Control plane (opt-in) to cold-knowledge plane                 | `brewva-session-index` DuckDB over tape, `docs/solutions/**`, `knowledge_search`                 | RDP: replay-distilled promotion candidates, `knowledge_capture`-gated, explicit-pull only                                                  |
+| `learn` (scrape logs to instruction files) | Control plane (opt-in) to cold-knowledge plane                 | `brewva-session-index` SQLite over tape, `docs/solutions/**`, `knowledge_search`                 | RDP: replay-distilled promotion candidates, `knowledge_capture`-gated, explicit-pull only                                                  |
 
 ## Architecture Proposal
 
@@ -406,7 +406,7 @@ attention mutation, no admission.
 Add an opt-in control-plane job (operator-invoked CLI command and/or a hosted
 routine) that distills precedent from tape:
 
-- **Input:** the rebuildable `brewva-session-index` DuckDB query plane over the
+- **Input:** the rebuildable `brewva-session-index` SQLite query plane over the
   session event tapes. Query for `tool.committed` failures, `tool.aborted`
   events, and repeated retries against the same target. This is replay-derived
   and rebuildable; it is not external agent log scraping.
@@ -441,9 +441,9 @@ identifies failures by the authoritative outcome verdict (`"fail"`), groups
 recurring `(toolName, failureClass)` patterns, and renders an
 investigation-record-shaped candidate with the Observed Resolution left for human
 or `knowledge_capture` review. It currently reads `events.records` over tape
-(still rebuildable, replay-derived) rather than the DuckDB query plane, and ships
+(still rebuildable, replay-derived) rather than the SQLite query plane, and ships
 as `script/rdp-distill.ts` rather than a gateway routine. The LLM enrichment pass,
-the DuckDB read path, and the hosted-routine form are tracked follow-ups.
+the SQLite read path, and the hosted-routine form are tracked follow-ups.
 
 ## How To Implement
 

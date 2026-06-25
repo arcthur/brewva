@@ -11,33 +11,43 @@ import type {
   SessionLineageOutcomeRecord,
   SessionLineageSummaryRecord,
 } from "@brewva/brewva-vocabulary/session";
-import type { DuckDBConnection } from "../duckdb/instance.js";
 import type { SqlParams } from "../sql/params.js";
+import type { SqliteConnection } from "../sqlite/instance.js";
+import { run } from "../sqlite/query.js";
 
 export async function rebuildSessionLineageProjection(input: {
-  connection: DuckDBConnection;
+  connection: SqliteConnection;
   sessionId: string;
   records: readonly BrewvaEventRecord[];
 }): Promise<void> {
   const state = deriveSessionLineageState(input.records);
-  await input.connection.run("delete from session_lineage_nodes where session_id = $sessionId", {
+  await run(input.connection, "delete from session_lineage_nodes where session_id = $sessionId", {
     sessionId: input.sessionId,
   });
-  await input.connection.run(
+  await run(
+    input.connection,
     "delete from session_lineage_summaries where session_id = $sessionId",
-    { sessionId: input.sessionId },
+    {
+      sessionId: input.sessionId,
+    },
   );
-  await input.connection.run("delete from session_lineage_outcomes where session_id = $sessionId", {
-    sessionId: input.sessionId,
-  });
-  await input.connection.run(
+  await run(
+    input.connection,
+    "delete from session_lineage_outcomes where session_id = $sessionId",
+    {
+      sessionId: input.sessionId,
+    },
+  );
+  await run(
+    input.connection,
     "delete from session_lineage_adopted_outcomes where session_id = $sessionId",
     { sessionId: input.sessionId },
   );
-  await input.connection.run("delete from session_context_entries where session_id = $sessionId", {
+  await run(input.connection, "delete from session_context_entries where session_id = $sessionId", {
     sessionId: input.sessionId,
   });
-  await input.connection.run(
+  await run(
+    input.connection,
     "delete from session_active_lineage_nodes where session_id = $sessionId",
     { sessionId: input.sessionId },
   );
@@ -67,7 +77,7 @@ export async function rebuildSessionLineageProjection(input: {
 }
 
 async function insertSessionLineageNodes(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
   rows: readonly SessionLineageNodeRecord[],
 ): Promise<void> {
@@ -90,10 +100,11 @@ async function insertSessionLineageNodes(
         $forkPointJson${index},
         $title${index},
         $eventId${index},
-        cast($timestamp${index} as double)
+        cast($timestamp${index} as real)
       )`;
     });
-    await connection.run(
+    await run(
+      connection,
       `
         insert into session_lineage_nodes (
           session_id,
@@ -112,7 +123,7 @@ async function insertSessionLineageNodes(
 }
 
 async function insertSessionLineageSummaries(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
   rows: readonly SessionLineageSummaryRecord[],
 ): Promise<void> {
@@ -137,10 +148,11 @@ async function insertSessionLineageSummaries(
         $summary${index},
         $detailsArtifactRef${index},
         $eventId${index},
-        cast($timestamp${index} as double)
+        cast($timestamp${index} as real)
       )`;
     });
-    await connection.run(
+    await run(
+      connection,
       `
         insert into session_lineage_summaries (
           session_id,
@@ -160,7 +172,7 @@ async function insertSessionLineageSummaries(
 }
 
 async function insertSessionLineageOutcomes(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
   rows: readonly SessionLineageOutcomeRecord[],
 ): Promise<void> {
@@ -185,10 +197,11 @@ async function insertSessionLineageOutcomes(
         $outcomeRef${index},
         $detailsArtifactRef${index},
         $eventId${index},
-        cast($timestamp${index} as double)
+        cast($timestamp${index} as real)
       )`;
     });
-    await connection.run(
+    await run(
+      connection,
       `
         insert into session_lineage_outcomes (
           session_id,
@@ -208,7 +221,7 @@ async function insertSessionLineageOutcomes(
 }
 
 async function insertSessionLineageAdoptedOutcomes(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
   rows: readonly SessionLineageOutcomeAdoptionRecord[],
 ): Promise<void> {
@@ -235,10 +248,11 @@ async function insertSessionLineageAdoptedOutcomes(
         $summary${index},
         $adoptedEntryId${index},
         $eventId${index},
-        cast($timestamp${index} as double)
+        cast($timestamp${index} as real)
       )`;
     });
-    await connection.run(
+    await run(
+      connection,
       `
         insert into session_lineage_adopted_outcomes (
           session_id,
@@ -259,7 +273,7 @@ async function insertSessionLineageAdoptedOutcomes(
 }
 
 async function insertSessionContextEntries(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
   rows: readonly ContextEntryRecord[],
 ): Promise<void> {
@@ -288,10 +302,11 @@ async function insertSessionContextEntries(
         $admission${index},
         $presentTo${index},
         $eventId${index},
-        cast($timestamp${index} as double)
+        cast($timestamp${index} as real)
       )`;
     });
-    await connection.run(
+    await run(
+      connection,
       `
         insert into session_context_entries (
           session_id,
@@ -313,7 +328,7 @@ async function insertSessionContextEntries(
 }
 
 async function insertSessionActiveLineageNodes(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
   contextEntries: readonly ContextEntryRecord[],
 ): Promise<void> {
@@ -335,10 +350,11 @@ async function insertSessionActiveLineageNodes(
         $sessionId${index},
         $lineageNodeId${index},
         $lastContextEntryId${index},
-        cast($lastContextEntryAt${index} as double)
+        cast($lastContextEntryAt${index} as real)
       )`;
     });
-    await connection.run(
+    await run(
+      connection,
       `
         insert into session_active_lineage_nodes (
           session_id,

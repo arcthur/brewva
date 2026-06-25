@@ -113,7 +113,7 @@ Out of scope:
 - widening `createBrewvaRuntime(...)` beyond the four-port runtime root
 - reintroducing runtime `hosted`, `operator`, `authority`, `inspect`, or private
   tape commit seams
-- making DuckDB, projections, Work Cards, or recovery previews authoritative
+- making the SQLite session index, projections, Work Cards, or recovery previews authoritative
 - silently ignoring malformed middle rows in authoritative replay
 - automatically rewriting event tape during startup
 - generic rollback for untracked shell, network, credential, or remote effects
@@ -617,7 +617,7 @@ evidence before it adds richer controls.
 - strict runtime replay continues rejecting malformed authority rows
 - forensic scanning reports damage without supplying resumable state
 - zero-cache rebuild equals normalized persisted projection
-- deleting projection and DuckDB artifacts does not change recovery outcomes
+- deleting projection and SQLite session-index artifacts does not change recovery outcomes
 - WAL corruption blocks mutation and remains visible
 - active lineage excludes abandoned-branch patch sets
 - partial rollback compensates or reports an explicit partial result
@@ -671,7 +671,7 @@ Promote when:
   operations cannot provide compensation, exact redo, or honest partial state.
 - **Make tape parsing tolerant everywhere:** rejected because skipping
   authority rows may authorize a state that never existed.
-- **Use projection or DuckDB as recovery authority:** rejected because both are
+- **Use projection or the SQLite session index as recovery authority:** rejected because both are
   rebuildable query surfaces.
 - **Copy transcript-tree persistence from another agent:** rejected because it
   would collapse provider materialization and runtime consequence into one

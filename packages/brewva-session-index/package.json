@@ -1,7 +1,7 @@
 {
   "name": "@brewva/brewva-session-index",
   "version": "0.1.0",
-  "description": "DuckDB-backed rebuildable session query plane for Brewva.",
+  "description": "SQLite + FTS5 rebuildable session query plane for Brewva.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,8 +23,7 @@
   "dependencies": {
     "@brewva/brewva-search": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
-    "@brewva/brewva-vocabulary": "workspace:*",
-    "@duckdb/node-api": "1.5.2-r.1"
+    "@brewva/brewva-vocabulary": "workspace:*"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"

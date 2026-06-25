@@ -51,7 +51,6 @@ export interface SessionRow {
   target_roots_json: string;
   task_goal: string | null;
   digest_text: string;
-  token_matches?: bigint | number;
 }
 
 export interface SessionBoxRow {

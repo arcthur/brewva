@@ -5,7 +5,10 @@ import type {
 } from "@brewva/brewva-vocabulary/harness";
 import type { SESSION_INDEX_UNAVAILABLE } from "./unavailable.js";
 
-export const SESSION_INDEX_SCHEMA_VERSION = 7;
+// Version 8 marks the SQLite + FTS5 schema generation (session_fts / event_fts),
+// distinct from the DuckDB-era token tables that also carried version 7; on any
+// stale lower-version index `hasSchemaMismatch` triggers a full rebuild.
+export const SESSION_INDEX_SCHEMA_VERSION = 8;
 
 export type SessionIndexScope = "session_local" | "user_repository_root" | "workspace_wide";
 
@@ -175,7 +178,6 @@ export type SessionIndexStatus =
       indexedSessions: number;
       indexedEvents: number;
       staleReason?: string;
-      readSnapshotPath?: string;
       lastIndexedAt?: number;
       indexAgeMs?: number;
     }

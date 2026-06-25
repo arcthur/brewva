@@ -1,10 +1,10 @@
 import { SESSION_INDEX_SCHEMA_VERSION } from "../api.js";
 import { SESSION_INDEX_SCHEMA_SQL } from "../schema/sql.js";
-import type { DuckDBConnection } from "./instance.js";
-import { selectOne, selectRows } from "./query.js";
+import type { SqliteConnection } from "./instance.js";
+import { run, selectOne, selectRows } from "./query.js";
 
 interface IndexStateRow {
-  indexed_event_count?: bigint | number;
+  indexed_event_count?: number;
 }
 
 interface SessionIdRow {
@@ -12,13 +12,13 @@ interface SessionIdRow {
 }
 
 interface StatusRow {
-  indexed_sessions: bigint | number;
-  indexed_events: bigint | number;
+  indexed_sessions: number;
+  indexed_events: number;
   last_indexed_at?: number | null;
 }
 
 interface SchemaMismatchRow {
-  mismatched_rows: bigint | number;
+  mismatched_rows: number;
 }
 
 export interface IndexedSessionState {
@@ -43,9 +43,12 @@ const STATUS_COUNTS_SQL = `
     (select max(last_indexed_at) from index_state) as last_indexed_at
 `;
 
+// Per-session row owners. The former event_tokens / session_tokens plain tables
+// are now the event_fts / session_fts FTS5 virtual tables; both carry a
+// session_id column so a per-session delete still works.
 const DELETE_SESSION_TABLES = [
-  "event_tokens",
-  "session_tokens",
+  "event_fts",
+  "session_fts",
   "session_target_roots",
   "session_box",
   "session_rewind_targets",
@@ -64,13 +67,12 @@ const DELETE_SESSION_TABLES = [
   "index_state",
 ] as const;
 
-export async function ensureSessionIndexSchema(connection: DuckDBConnection): Promise<void> {
-  await connection.run(SESSION_INDEX_SCHEMA_SQL);
-  await clearIndexRowsIfSchemaChanged(connection);
+export async function ensureSessionIndexSchema(connection: SqliteConnection): Promise<void> {
+  connection.exec(SESSION_INDEX_SCHEMA_SQL);
 }
 
 export async function readSessionIndexStatusCounts(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
 ): Promise<SessionIndexStatusCounts> {
   const counts = await selectOne<StatusRow>(connection, STATUS_COUNTS_SQL);
   const lastIndexedAt =
@@ -78,70 +80,64 @@ export async function readSessionIndexStatusCounts(
       ? counts.last_indexed_at
       : undefined;
   return {
-    indexedSessions: Number(counts?.indexed_sessions ?? 0),
-    indexedEvents: Number(counts?.indexed_events ?? 0),
+    indexedSessions: counts?.indexed_sessions ?? 0,
+    indexedEvents: counts?.indexed_events ?? 0,
     ...(lastIndexedAt === undefined ? {} : { lastIndexedAt }),
   };
 }
 
 export async function readIndexedSessionState(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
 ): Promise<IndexedSessionState | undefined> {
-  const row = await selectOne<IndexStateRow>(connection, INDEXED_SESSION_STATE_SQL, {
-    sessionId,
-  });
-  return row ? { indexedEventCount: Number(row.indexed_event_count ?? 0) } : undefined;
+  const row = await selectOne<IndexStateRow>(connection, INDEXED_SESSION_STATE_SQL, { sessionId });
+  return row ? { indexedEventCount: row.indexed_event_count ?? 0 } : undefined;
 }
 
-export async function listIndexedSessionIds(connection: DuckDBConnection): Promise<string[]> {
+export async function listIndexedSessionIds(connection: SqliteConnection): Promise<string[]> {
   const rows = await selectRows<SessionIdRow>(connection, INDEXED_SESSION_IDS_SQL);
   return rows.map((row) => row.session_id);
 }
 
 export async function deleteSessionRows(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
 ): Promise<void> {
   for (const table of DELETE_SESSION_TABLES) {
-    await connection.run(`delete from ${table} where session_id = $sessionId`, { sessionId });
+    await run(connection, `delete from ${table} where session_id = $sessionId`, { sessionId });
   }
 }
 
-export async function clearSessionIndexRows(connection: DuckDBConnection): Promise<void> {
-  await runSessionIndexTransaction(connection, async () => {
-    for (const table of DELETE_SESSION_TABLES) {
-      await connection.run(`delete from ${table}`);
-    }
-  });
-}
-
-async function clearIndexRowsIfSchemaChanged(connection: DuckDBConnection): Promise<void> {
+/**
+ * True when any indexed session was written under a different schema version —
+ * the signal that a full rebuild is required (taken inside one transaction, RFC
+ * posture A) rather than an incremental catch-up. Detection is decoupled from
+ * clearing so the clear + reproject can share a single publish-barrier transaction.
+ */
+export async function hasSchemaMismatch(connection: SqliteConnection): Promise<boolean> {
   const row = await selectOne<SchemaMismatchRow>(
     connection,
     "select count(*) as mismatched_rows from index_state where schema_version <> $schemaVersion",
     { schemaVersion: SESSION_INDEX_SCHEMA_VERSION },
   );
-  if (Number(row?.mismatched_rows ?? 0) > 0) {
-    await clearSessionIndexRows(connection);
-  }
+  return (row?.mismatched_rows ?? 0) > 0;
 }
 
 export async function runSessionIndexTransaction<T>(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   work: () => Promise<T>,
 ): Promise<T> {
-  await connection.run("begin transaction");
+  await run(connection, "begin");
   try {
     const result = await work();
-    await connection.run("commit");
+    await run(connection, "commit");
     return result;
   } catch (error) {
-    await connection.run("rollback");
+    await run(connection, "rollback");
     throw error;
   }
 }
 
-export async function checkpointSessionIndex(connection: DuckDBConnection): Promise<void> {
-  await connection.run("checkpoint");
+export async function checkpointSessionIndex(connection: SqliteConnection): Promise<void> {
+  await run(connection, "PRAGMA wal_checkpoint(TRUNCATE)");
 }

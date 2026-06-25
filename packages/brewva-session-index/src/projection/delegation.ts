@@ -49,10 +49,11 @@ import type {
   SessionIndexWorkerResult,
 } from "../api.js";
 import { SESSION_INDEX_SCHEMA_VERSION } from "../api.js";
-import type { DuckDBConnection } from "../duckdb/instance.js";
 import { parsePayload, readString } from "../json.js";
 import type { SessionIndexQueryPort } from "../query/port.js";
 import { buildInList, type SqlParams } from "../sql/params.js";
+import type { SqliteConnection } from "../sqlite/instance.js";
+import { run as runSql } from "../sqlite/query.js";
 
 const DELEGATION_LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
   SUBAGENT_SPAWNED_EVENT_TYPE,
@@ -258,17 +259,26 @@ function buildWorkerRecord(payload: Record<string, unknown>, event: DelegationPr
 }
 
 export async function rebuildSessionDelegationProjection(input: {
-  connection: DuckDBConnection;
+  connection: SqliteConnection;
   sessionId: string;
   records: readonly BrewvaEventRecord[];
 }): Promise<void> {
-  await input.connection.run("delete from session_delegation_runs where session_id = $sessionId", {
-    sessionId: input.sessionId,
-  });
-  await input.connection.run("delete from session_worker_results where session_id = $sessionId", {
-    sessionId: input.sessionId,
-  });
-  await input.connection.run(
+  await runSql(
+    input.connection,
+    "delete from session_delegation_runs where session_id = $sessionId",
+    {
+      sessionId: input.sessionId,
+    },
+  );
+  await runSql(
+    input.connection,
+    "delete from session_worker_results where session_id = $sessionId",
+    {
+      sessionId: input.sessionId,
+    },
+  );
+  await runSql(
+    input.connection,
     "delete from session_projection_cursors where session_id = $sessionId and projection in ('delegation_runs', 'parallel_budget')",
     { sessionId: input.sessionId },
   );
@@ -1079,7 +1089,7 @@ function buildRunProjection(
 }
 
 async function insertDelegationRuns(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   rows: readonly RunProjection[],
   cursorEventCount: number,
 ): Promise<void> {
@@ -1103,9 +1113,10 @@ async function insertDelegationRuns(
       params[`eventId${index}`] = row.eventId;
       params[`cursorEventCount${index}`] = cursorEventCount;
       params[`schemaVersion${index}`] = SESSION_INDEX_SCHEMA_VERSION;
-      return `($sessionId${index}, $runId${index}, $status${index}, $taskPath${index}, $nickname${index}, $delegate${index}, $agent${index}, $kind${index}, $childSessionId${index}, $summary${index}, $error${index}, $deliveryHandoffState${index}, $recordJson${index}, cast($updatedAt${index} as double), $eventId${index}, $cursorEventCount${index}, $schemaVersion${index})`;
+      return `($sessionId${index}, $runId${index}, $status${index}, $taskPath${index}, $nickname${index}, $delegate${index}, $agent${index}, $kind${index}, $childSessionId${index}, $summary${index}, $error${index}, $deliveryHandoffState${index}, $recordJson${index}, cast($updatedAt${index} as real), $eventId${index}, $cursorEventCount${index}, $schemaVersion${index})`;
     });
-    await connection.run(
+    await runSql(
+      connection,
       `
         insert into session_delegation_runs (
           session_id, run_id, status, task_path, nickname, delegate, agent, kind,
@@ -1119,7 +1130,7 @@ async function insertDelegationRuns(
 }
 
 async function insertWorkerResults(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   rows: readonly WorkerProjection[],
   cursorEventCount: number,
 ): Promise<void> {
@@ -1136,9 +1147,10 @@ async function insertWorkerResults(
       params[`eventId${index}`] = row.eventId;
       params[`cursorEventCount${index}`] = cursorEventCount;
       params[`schemaVersion${index}`] = SESSION_INDEX_SCHEMA_VERSION;
-      return `($sessionId${index}, $workerId${index}, $status${index}, $summary${index}, $patchSetId${index}, $recordJson${index}, cast($updatedAt${index} as double), $eventId${index}, $cursorEventCount${index}, $schemaVersion${index})`;
+      return `($sessionId${index}, $workerId${index}, $status${index}, $summary${index}, $patchSetId${index}, $recordJson${index}, cast($updatedAt${index} as real), $eventId${index}, $cursorEventCount${index}, $schemaVersion${index})`;
     });
-    await connection.run(
+    await runSql(
+      connection,
       `
         insert into session_worker_results (
           session_id, worker_id, status, summary, patch_set_id, record_json,
@@ -1151,7 +1163,7 @@ async function insertWorkerResults(
 }
 
 async function insertProjectionCursor(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   input: {
     sessionId: string;
     projection: string;
@@ -1159,12 +1171,13 @@ async function insertProjectionCursor(
     latestEventId?: string;
   },
 ): Promise<void> {
-  await connection.run(
+  await runSql(
+    connection,
     `
       insert into session_projection_cursors (
         session_id, projection, event_count, latest_event_id, schema_version, updated_at
       ) values (
-        $sessionId, $projection, $eventCount, $latestEventId, $schemaVersion, cast($updatedAt as double)
+        $sessionId, $projection, $eventCount, $latestEventId, $schemaVersion, cast($updatedAt as real)
       )
     `,
     {

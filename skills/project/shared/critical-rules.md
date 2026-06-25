@@ -19,7 +19,7 @@ owner: runtime-maintainers
 - Do not reintroduce local alias schemes such as `@/...`.
 - Do not mix `src` and `dist` class types at public boundaries.
 - Do not import from `distribution/**` packages inside workspace package code; treat distribution as release output.
-- Keep DuckDB session index state rebuildable and non-authoritative; event tape remains replay authority. (axiom 6)
+- Keep SQLite session index state rebuildable and non-authoritative; event tape remains replay authority. (axiom 6)
 - Keep Work Card inspect as the default operator projection. Context,
   authority, skills, inbox, diff, timeline, and raw replay are explicit
   drill-downs; diagnostic and raw modes are forensic escape hatches, not the

@@ -31,7 +31,7 @@ unsafe manifest payloads are rejected at that vocabulary boundary.
 
 ## Projection Semantics
 
-`session_harness_trace_snapshots` is a DuckDB session-index projection table.
+`session_harness_trace_snapshots` is a SQLite session-index projection table.
 It stores `brewva.harness.trace_snapshot.v1` JSON rows derived from:
 
 - `harness.manifest.recorded`

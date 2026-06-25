@@ -1,7 +1,7 @@
-import type { JsonRow } from "../duckdb/query.js";
 import type { SqlParams } from "../sql/params.js";
 
-export type { JsonRow };
+/** A query result row — engine-agnostic; any object shape the projection expects. */
+export type JsonRow = object;
 
 export interface SessionIndexQueryPort {
   ensureAvailable(): Promise<void>;

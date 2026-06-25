@@ -24,11 +24,12 @@ import {
   type OutcomeVerdict,
 } from "@brewva/brewva-vocabulary/outcome";
 import { SESSION_INDEX_SCHEMA_VERSION } from "../api.js";
-import type { DuckDBConnection } from "../duckdb/instance.js";
-import type { JsonRow } from "../duckdb/query.js";
 import { isRecord, readString } from "../json.js";
+import type { JsonRow } from "../query/port.js";
 import type { SessionIndexQueryPort } from "../query/port.js";
 import type { SqlParams } from "../sql/params.js";
+import type { SqliteConnection } from "../sqlite/instance.js";
+import { run } from "../sqlite/query.js";
 
 export { clusterHarnessTraceSnapshots as clusterHarnessPatternCandidates } from "@brewva/brewva-vocabulary/harness";
 
@@ -99,7 +100,7 @@ export function projectSessionHarnessTraceSnapshots(
 }
 
 export async function rebuildSessionHarnessProjection(input: {
-  readonly connection: DuckDBConnection;
+  readonly connection: SqliteConnection;
   readonly sessionId: string;
   readonly records: readonly BrewvaEventRecord[];
 }): Promise<void> {
@@ -107,7 +108,8 @@ export async function rebuildSessionHarnessProjection(input: {
     sessionId: input.sessionId,
     records: input.records,
   });
-  await input.connection.run(
+  await run(
+    input.connection,
     "delete from session_harness_trace_snapshots where session_id = $sessionId",
     { sessionId: input.sessionId },
   );
@@ -536,7 +538,7 @@ function buildSignals(state: HarnessProjectionState): HarnessTraceSignal[] {
 }
 
 async function insertHarnessTraceSnapshots(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   snapshots: readonly HarnessTraceSnapshot[],
 ): Promise<void> {
   for (const chunk of chunkArray(snapshots, 100)) {
@@ -567,11 +569,12 @@ async function insertHarnessTraceSnapshots(
         $signalKindsJson${index},
         $manifestJson${index},
         $snapshotJson${index},
-        cast($updatedAt${index} as double),
+        cast($updatedAt${index} as real),
         $schemaVersion${index}
       )`;
     });
-    await connection.run(
+    await run(
+      connection,
       `
         insert into session_harness_trace_snapshots (
           snapshot_id,

@@ -28,7 +28,7 @@ retirement_sensitivity: review_only
 - Passing full gateway hosted adapter bundles into leaf modules that only need a
   hosted, tool, or operator port.
 - Adding managed-tool runtime calls without updating `requiredCapabilities` metadata and scoped-runtime tests.
-- Treating `.brewva/session-index/session-index.duckdb` as source-of-truth memory or replay authority. (axiom 6)
+- Treating `.brewva/session-index/session-index.sqlite` as source-of-truth memory or replay authority. (axiom 6)
 - Adding user-facing SQL surfaces over the session index before a typed API exists for the product need.
 - Adding package-local search tokenizers or optional Chinese-tokenizer fallbacks outside `@brewva/brewva-search`.
 - Authoring a second schema source for provider tool arguments instead of

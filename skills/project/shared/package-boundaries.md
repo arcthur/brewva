@@ -20,7 +20,7 @@ owner: runtime-maintainers
 | `@brewva/brewva-search`            | shared normalization, mandatory CJK segmentation, and semantic query/content token policy                                                                                                                                                                 | recall ranking or event evidence projection                                             |
 | `@brewva/brewva-token-estimation`  | leaf model token estimation primitives                                                                                                                                                                                                                    | model routing or provider policy                                                        |
 | `@brewva/brewva-recall`            | curated root plus explicit broker, knowledge, and evidence subpaths for on-demand recall search, curation semantics, trust labels, and result rendering                                                                                                   | event tape authority or database ownership                                              |
-| `@brewva/brewva-session-index`     | curated root plus explicit evidence subpath for the rebuildable DuckDB query plane over session event tapes                                                                                                                                               | replay authority, tokenization policy, SQL UI                                           |
+| `@brewva/brewva-session-index`     | curated root plus explicit evidence subpath for the rebuildable SQLite + FTS5 query plane over session event tapes                                                                                                                                        | replay authority, tokenization policy, SQL UI                                           |
 | `@brewva/brewva-std`               | leaf standard primitives for async, collections, hashing, JSON, markdown, text, unknown readers, outcome-version vocabulary, and Node-only filesystem helpers                                                                                             | product policy, runtime authority, or domains                                           |
 | `@brewva/brewva-tools`             | family-sliced concrete tool adapters, pure tool contracts, managed-tool registry and execution metadata, runtime-port helpers, internal BoxLite execution, and default bundle assembly                                                                    | hosted capability-selection policy, orchestration policy, or model routing              |
 | `@brewva/brewva-mcp-adapter`       | MCP protocol translation into substrate tool descriptors and guarded MCP client calls                                                                                                                                                                     | managed-tool capability policy or hosted UX                                             |
@@ -92,8 +92,8 @@ owner: runtime-maintainers
 <!-- generated:runtime-subpaths end -->
 
 - skill outputs and runtime artifacts must stay explicit and auditable
-- DuckDB session indexes are rebuildable query state; event tape remains replay
-  authority
+- SQLite + FTS5 session indexes are rebuildable query state; event tape remains
+  replay authority
 - search tokenization stays centralized in `@brewva/brewva-search`, including
   query/content token-mode policy and session-index token materialization
 - recall broker/knowledge/evidence imports use explicit

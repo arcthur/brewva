@@ -1,12 +1,14 @@
 import { chunkArray, uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import { SESSION_INDEX_SCHEMA_VERSION, type SessionIndexTaskSource } from "../api.js";
-import type { DuckDBConnection } from "../duckdb/instance.js";
-import { selectRows } from "../duckdb/query.js";
-import { buildSessionFieldTokenRows, type SessionTokenInsertRow } from "../evidence/tokens.js";
+import { buildEventSearchTokenRows, buildSessionFieldTokenRows } from "../evidence/tokens.js";
 import { isRecord, readString } from "../json.js";
 import { normalizeRoot, normalizeRoots } from "../roots.js";
 import type { SqlParams } from "../sql/params.js";
+import type { SqliteConnection } from "../sqlite/instance.js";
+import { run, selectRows } from "../sqlite/query.js";
+import { encodeTokensToColumn } from "../sqlite/surrogate.js";
 import { compactText } from "../text.js";
 import { rebuildSessionBoxProjection } from "./box.js";
 import { rebuildSessionDelegationProjection } from "./delegation.js";
@@ -18,7 +20,7 @@ import { rowToEventRecord, type EventRow } from "./rows.js";
 const MAX_DIGEST_SNIPPETS = 20;
 
 export async function rebuildSessionProjection(input: {
-  connection: DuckDBConnection;
+  connection: SqliteConnection;
   workspaceRoot: string;
   task: SessionIndexTaskSource;
   sessionId: string;
@@ -57,7 +59,8 @@ export async function rebuildSessionProjection(input: {
   ).slice(0, MAX_DIGEST_SNIPPETS);
   const digestText = compactText([taskGoal, ...digestSnippets].filter(Boolean).join(" "), 2_400);
 
-  await input.connection.run(
+  await run(
+    input.connection,
     `
       insert or replace into sessions (
         session_id,
@@ -76,7 +79,7 @@ export async function rebuildSessionProjection(input: {
         $taskGoal,
         $digestText,
         $eventCount,
-        cast($lastEventAt as double)
+        cast($lastEventAt as real)
       )
     `,
     {
@@ -91,7 +94,7 @@ export async function rebuildSessionProjection(input: {
     },
   );
 
-  await input.connection.run("delete from session_target_roots where session_id = $sessionId", {
+  await run(input.connection, "delete from session_target_roots where session_id = $sessionId", {
     sessionId: input.sessionId,
   });
   await insertSessionTargetRoots(input.connection, input.sessionId, targetRoots);
@@ -121,24 +124,45 @@ export async function rebuildSessionProjection(input: {
     records,
   });
 
-  await input.connection.run("delete from session_tokens where session_id = $sessionId", {
+  // One FTS5 row per session: task_goal + digest_text + per-event search-text
+  // tokens (the union that formerly populated session_tokens, including the
+  // event_text rows that used to come from `event_tokens`). Tokens are deduped
+  // to mirror the old `distinct` aggregation, then surrogate-encoded into a single
+  // `body` so FTS5's ascii tokenizer is a pure passthrough.
+  await run(input.connection, "delete from session_fts where session_id = $sessionId", {
     sessionId: input.sessionId,
   });
-  await insertSessionTokens(input.connection, [
+  const sessionBodyTokens = uniqueNonEmptyStrings([
     ...buildSessionFieldTokenRows({
       sessionId: input.sessionId,
       sourceField: "task_goal",
       value: taskGoal ?? "",
-    }),
+    }).map((row) => row.token),
     ...buildSessionFieldTokenRows({
       sessionId: input.sessionId,
       sourceField: "digest_text",
       value: digestText,
-    }),
+    }).map((row) => row.token),
+    ...rows.flatMap((row) =>
+      buildEventSearchTokenRows({
+        eventId: row.event_id,
+        sessionId: row.session_id,
+        type: row.type,
+        timestamp: row.timestamp,
+        searchText: row.search_text,
+      }).map((tokenRow) => tokenRow.token),
+    ),
   ]);
-  await insertSessionEventTokens(input.connection, input.sessionId);
+  if (sessionBodyTokens.length > 0) {
+    await run(
+      input.connection,
+      "insert into session_fts (session_id, body) values ($sessionId, $body)",
+      { sessionId: input.sessionId, body: encodeTokensToColumn(sessionBodyTokens) },
+    );
+  }
 
-  await input.connection.run(
+  await run(
+    input.connection,
     `
       insert or replace into index_state (
         session_id,
@@ -152,10 +176,10 @@ export async function rebuildSessionProjection(input: {
       ) values (
         $sessionId,
         $sourceUri,
-        cast($sourceCursor as bigint),
-        cast($mtimeMs as double),
+        cast($sourceCursor as integer),
+        cast($mtimeMs as real),
         $indexedEventCount,
-        cast($lastIndexedAt as double),
+        cast($lastIndexedAt as real),
         'ok',
         $schemaVersion
       )
@@ -173,7 +197,7 @@ export async function rebuildSessionProjection(input: {
 }
 
 async function insertSessionTargetRoots(
-  connection: DuckDBConnection,
+  connection: SqliteConnection,
   sessionId: string,
   targetRoots: readonly string[],
 ): Promise<void> {
@@ -184,7 +208,8 @@ async function insertSessionTargetRoots(
       params[`targetRoot${index}`] = targetRoot;
       return `($sessionId${index}, $targetRoot${index})`;
     });
-    await connection.run(
+    await run(
+      connection,
       `
         insert into session_target_roots (session_id, target_root)
         values ${values.join(", ")}
@@ -194,47 +219,10 @@ async function insertSessionTargetRoots(
   }
 }
 
-async function insertSessionTokens(
-  connection: DuckDBConnection,
-  rows: readonly SessionTokenInsertRow[],
-): Promise<void> {
-  for (const chunk of chunkArray(rows, 500)) {
-    const params: SqlParams = {};
-    const values = chunk.map((row, index) => {
-      params[`token${index}`] = row.token;
-      params[`sessionId${index}`] = row.sessionId;
-      params[`sourceField${index}`] = row.sourceField;
-      return `($token${index}, $sessionId${index}, $sourceField${index})`;
-    });
-    await connection.run(
-      `
-        insert into session_tokens (token, session_id, source_field)
-        values ${values.join(", ")}
-      `,
-      params,
-    );
-  }
-}
-
-async function insertSessionEventTokens(
-  connection: DuckDBConnection,
-  sessionId: string,
-): Promise<void> {
-  await connection.run(
-    `
-      insert into session_tokens (token, session_id, source_field)
-      select distinct token, session_id, 'event_text'
-      from event_tokens
-      where session_id = $sessionId
-    `,
-    { sessionId },
-  );
-}
-
 function extractTaskGoal(events: readonly BrewvaEventRecord[]): string | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (!event || event.type !== "task_event" || !isRecord(event.payload)) {
+    if (!event || event.type !== TASK_EVENT_TYPE || !isRecord(event.payload)) {
       continue;
     }
     const spec = isRecord(event.payload.spec) ? event.payload.spec : undefined;

@@ -66,18 +66,19 @@ describe("binary packaging contract", () => {
     expect(buildScriptSource).toContain(
       'readPinnedDependencyVersion(ROOT_PACKAGE_JSON_PATH, "@opentui/core")',
     );
-    expect(buildScriptSource).toContain("BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH");
-    expect(buildScriptSource).toContain(
-      "const DUCKDB_NODE_API_VERSION = readPinnedDependencyVersion(",
-    );
-    expect(buildScriptSource).toContain('"@duckdb/node-api"');
     expect(buildScriptSource).toContain("BREWVA_TOOLS_PACKAGE_JSON_PATH");
     expect(buildScriptSource).toContain('"oxc-parser"');
     expect(buildScriptSource).not.toContain('const OPEN_TUI_VERSION = "');
-    expect(buildScriptSource).not.toContain(
-      'readPinnedDependencyVersion(ROOT_PACKAGE_JSON_PATH, "@duckdb/node-api")',
-    );
     expect(buildScriptSource).not.toContain('const OXC_PARSER_VERSION = "');
+    // The session-index engine is now SQLite + FTS5; bun:sqlite is built into the
+    // Bun runtime, so packaging stages no DuckDB native bindings and reads no
+    // pinned @duckdb/node-api version from the session-index manifest.
+    expect(buildScriptSource).not.toContain("BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH");
+    expect(buildScriptSource).not.toContain("DUCKDB_NODE_API_VERSION");
+    expect(buildScriptSource).not.toContain("@duckdb/node-api");
+    expect(buildScriptSource).not.toContain(
+      'readPinnedDependencyVersion(BREWVA_SESSION_INDEX_PACKAGE_JSON_PATH, "@duckdb/node-api")',
+    );
   });
 
   test("packages only BoxLite-supported binary targets and stages native bindings", () => {
@@ -92,16 +93,17 @@ describe("binary packaging contract", () => {
     expect(buildScriptSource).not.toContain('target: "bun-windows-x64"');
     expect(buildScriptSource).not.toContain('target: "bun-linux-x64-musl"');
     expect(buildScriptSource).not.toContain('target: "bun-linux-arm64-musl"');
-    expect(buildScriptSource).not.toContain(
-      '"bun-linux-x64-musl": "@duckdb/node-bindings-linux-x64"',
-    );
-    expect(buildScriptSource).not.toContain(
-      '"bun-linux-arm64-musl": "@duckdb/node-bindings-linux-arm64"',
-    );
     expect(buildScriptSource).toContain("@boxlite-ai/boxlite-darwin-arm64");
     expect(buildScriptSource).toContain("@boxlite-ai/boxlite-linux-x64-gnu");
     expect(buildScriptSource).toContain("@boxlite-ai/boxlite-linux-arm64-gnu");
     expect(buildScriptSource).toContain("copyBoxLiteRuntimeAssets");
+    // The genuinely-native staging path (BoxLite above) still exists, but the
+    // session-index engine no longer ships a native binding: bun:sqlite is part
+    // of the Bun runtime, so no DuckDB per-target binding map or copy step remains.
+    expect(buildScriptSource).not.toContain("DUCKDB_NATIVE_PACKAGE_BY_TARGET");
+    expect(buildScriptSource).not.toContain("DUCKDB_RUNTIME_PACKAGES");
+    expect(buildScriptSource).not.toContain("copyDuckDBRuntimeAssets");
+    expect(buildScriptSource).not.toContain("@duckdb/node-bindings");
   });
 
   test("CI and launcher expose only BoxLite-supported binary targets", () => {

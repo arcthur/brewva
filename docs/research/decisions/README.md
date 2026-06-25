@@ -105,6 +105,7 @@ Every accepted decision inherits these rules:
 - [recall-source-typed-retrieval-spine](./recall-source-typed-retrieval-spine.md)
 - [recall-first-compounding-intelligence-and-experience-products](./recall-first-compounding-intelligence-and-experience-products.md)
 - [duckdb-session-query-plane](./duckdb-session-query-plane.md)
+- [session-index-read-model-engine](./session-index-read-model-engine.md)
 - [repository-native-compound-knowledge-and-review-ensemble](./repository-native-compound-knowledge-and-review-ensemble.md)
 - [trust-substrate-optimization-axis](./trust-substrate-optimization-axis.md)
 - [skill-distribution-refresh-and-catalog-surface](./skill-distribution-refresh-and-catalog-surface.md)
