@@ -59,6 +59,18 @@ function toolResultStatus(input: { result?: unknown; isError?: boolean }): "comp
   return result?.verdict === "fail" ? "error" : "completed";
 }
 
+/**
+ * Extracts the turn id from a wire-owned transcript message id of the shape
+ * `wire:<sessionId>:<turnId>:...`. Returns undefined for non-wire ids.
+ */
+function turnIdFromWireId(id: string | undefined, ownedPrefix: string): string | undefined {
+  if (!id || !id.startsWith(ownedPrefix)) {
+    return undefined;
+  }
+  const turnId = id.slice(ownedPrefix.length).split(":")[0];
+  return turnId && turnId.length > 0 ? turnId : undefined;
+}
+
 export class ShellTranscriptProjector {
   #assistantEntryId: string | undefined;
   /**
@@ -75,6 +87,19 @@ export class ShellTranscriptProjector {
   readonly #rewindTranscriptMarkersBySessionId = new Map<string, CliShellTranscriptMessage>();
   readonly #toolProjectionInputByCallId = new Map<string, ToolProjectionInputState>();
   readonly #toolSafetyByCallId = new Map<string, OperatorSafetyShellToolView>();
+  /**
+   * Maps a free-floating custom message's transcript id to the wire-fold turn
+   * it was injected during. `refreshFromWireFold` uses it to interleave custom
+   * messages (e.g. skill SkillCards) into their turn instead of hoisting them
+   * to the front of the transcript.
+   */
+  readonly #customTurnIdById = new Map<string, string>();
+  /**
+   * Monotonic suffix for non-assistant `message_end` ids so two messages
+   * committed in the same millisecond cannot collide (custom-message turn
+   * attribution keys off this id).
+   */
+  #fallbackEntrySequence = 0;
 
   constructor(private readonly context: ShellTranscriptProjectorContext) {}
 
@@ -149,10 +174,50 @@ export class ShellTranscriptProjector {
       return false;
     }
 
-    const nextMessages = [
-      ...current.filter((message) => !message.id.startsWith(ownedPrefix)),
-      ...snapshot.transcriptMessages,
-    ];
+    // Only drop the free-floating user messages once the snapshot actually
+    // carries their ordered copies. If a projection has no user rows (e.g. an
+    // empty or rebuild-intermediate snapshot), keep them so a user's prompts
+    // can never vanish.
+    const snapshotProvidesUser = snapshot.transcriptMessages.some(
+      (message) => message.role === "user",
+    );
+    // Free-floating (non-wire) messages that survive the snapshot replace.
+    // User messages (id `user:<ts>`) are dropped once the snapshot carries their
+    // ordered copies. The rest is partitioned into custom messages — interleaved
+    // into their turn below — and everything else (rewind markers, untracked
+    // customs) which stays ahead of the wire transcript as before.
+    const floating = current.filter(
+      (message) =>
+        !message.id.startsWith(ownedPrefix) &&
+        !(snapshotProvidesUser && message.id.startsWith("user:")),
+    );
+    const customsByTurn = new Map<string, CliShellTranscriptMessage[]>();
+    const leadingFloating: CliShellTranscriptMessage[] = [];
+    for (const message of floating) {
+      const turnId = message.role === "custom" ? this.#customTurnIdById.get(message.id) : undefined;
+      if (turnId) {
+        const list = customsByTurn.get(turnId) ?? [];
+        list.push(message);
+        customsByTurn.set(turnId, list);
+      } else {
+        leadingFloating.push(message);
+      }
+    }
+    const interleaved: CliShellTranscriptMessage[] = [];
+    for (const wireMessage of snapshot.transcriptMessages) {
+      interleaved.push(wireMessage);
+      // Place a turn's custom messages right after its user row (skill SkillCards
+      // are injected at turn start, before the assistant answer).
+      const turnId = turnIdFromWireId(wireMessage.id, ownedPrefix);
+      if (turnId && wireMessage.role === "user" && customsByTurn.has(turnId)) {
+        interleaved.push(...(customsByTurn.get(turnId) ?? []));
+        customsByTurn.delete(turnId);
+      }
+    }
+    // Customs whose turn produced no wire user row (e.g. injected before the
+    // turn.input frame landed) fall to the end rather than vanishing.
+    const orphanCustoms = [...customsByTurn.values()].flat();
+    const nextMessages = [...leadingFloating, ...interleaved, ...orphanCustoms];
     this.#assistantDraftText = undefined;
     this.#wireFoldTranscriptSignature = nextSignature;
     this.rebuildToolSafetyCache(nextMessages);
@@ -165,6 +230,25 @@ export class ShellTranscriptProjector {
       return;
     }
     this.replaceMessages([...this.context.getMessages(), message], options);
+  }
+
+  /**
+   * The turn id of the most recent wire-fold transcript row, used to attribute
+   * a freshly injected custom message to the turn it belongs to.
+   */
+  private currentWireTurnId(): string | undefined {
+    const snapshot = this.context.getWireFoldSnapshot?.();
+    if (!snapshot) {
+      return undefined;
+    }
+    const ownedPrefix = `wire:${this.context.getSessionId()}:`;
+    for (let index = snapshot.transcriptMessages.length - 1; index >= 0; index -= 1) {
+      const turnId = turnIdFromWireId(snapshot.transcriptMessages[index]?.id, ownedPrefix);
+      if (turnId) {
+        return turnId;
+      }
+    }
+    return undefined;
   }
 
   handleSessionEvent(event: BrewvaPromptSessionEvent): boolean {
@@ -256,12 +340,20 @@ export class ShellTranscriptProjector {
         return false;
       }
 
-      this.appendMessage(
-        buildTranscriptMessageFromMessage(event.message, {
-          id: `${role ?? "message"}:end:${Date.now()}`,
-          renderMode: "stable",
-        }),
-      );
+      const fallbackMessage = buildTranscriptMessageFromMessage(event.message, {
+        id: `${role ?? "message"}:end:${Date.now()}:${(this.#fallbackEntrySequence += 1)}`,
+        renderMode: "stable",
+      });
+      if (fallbackMessage && role === "custom") {
+        // Tag this custom message (e.g. a skill SkillCard) with the turn it was
+        // injected during, so refreshFromWireFold can interleave it into that
+        // turn instead of hoisting it to the front of the transcript.
+        const turnId = this.currentWireTurnId();
+        if (turnId) {
+          this.#customTurnIdById.set(fallbackMessage.id, turnId);
+        }
+      }
+      this.appendMessage(fallbackMessage);
       this.resetAssistantDraft();
       return true;
     }

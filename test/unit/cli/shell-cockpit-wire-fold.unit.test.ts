@@ -201,6 +201,67 @@ describe("shell cockpit wire fold", () => {
     });
   });
 
+  test("projects user prompts into the ordered transcript interleaved across turns", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input:1",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "first question",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "assistant.delta",
+        frameId: "frame:delta:1",
+        ts: 1_001,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta: "answer one",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input:2",
+        ts: 2_000,
+        turnId: "turn-2",
+        trigger: "user",
+        promptText: "second question",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "assistant.delta",
+        frameId: "frame:delta:2",
+        ts: 2_001,
+        turnId: "turn-2",
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta: "answer two",
+      }),
+    );
+
+    const snapshot = fold.snapshot("session-1");
+    const transcript = snapshot.transcriptMessages.map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+
+    // Regression: the second user prompt must follow the first turn's answer,
+    // not be hoisted ahead of it (the bug was user1, user2, assistant1, ...).
+    expect(transcript).toEqual([
+      { role: "user", text: "first question" },
+      { role: "assistant", text: "answer one" },
+      { role: "user", text: "second question" },
+      { role: "assistant", text: "answer two" },
+    ]);
+  });
+
   test("keeps high-volume thinking delta refs bounded to the latest progress", () => {
     const fold = createShellCockpitWireFoldStore();
     fold.remember(
@@ -518,6 +579,46 @@ describe("shell cockpit wire fold", () => {
         toolCallId: undefined,
         renderMode: "streaming",
       },
+    ]);
+  });
+
+  test("keeps the projected user row after a turn commits", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "my question",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "turn.committed",
+        frameId: "frame:commit",
+        ts: 1_040,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "the answer",
+        assistantSegments: [{ text: "the answer", ts: 1_030, sequence: 1 }],
+        toolOutputs: [],
+      }),
+    );
+
+    const transcript = fold.snapshot("session-1").transcriptMessages.map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+
+    // Regression: committed-transcript replay rebuilds the turn from assistant
+    // and tool frames only, so it must restore the user row that turn.input
+    // projected instead of dropping it on commit.
+    expect(transcript).toEqual([
+      { role: "user", text: "my question" },
+      { role: "assistant", text: "the answer" },
     ]);
   });
 

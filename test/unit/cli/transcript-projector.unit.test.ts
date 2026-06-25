@@ -8,7 +8,10 @@ import type { BrewvaPromptSessionEvent, SessionPhase } from "@brewva/brewva-subs
 import { SESSION_WIRE_SCHEMA, type SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { createShellCockpitWireFoldStore } from "../../../packages/brewva-cli/src/shell/domain/cockpit/wire-fold.js";
 import type { CliShellAction } from "../../../packages/brewva-cli/src/shell/domain/state.js";
-import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
+import {
+  buildTextTranscriptMessage,
+  type CliShellTranscriptMessage,
+} from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 import { projectRuntimeTurnSessionWireFrames } from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";
 import type { CliShellUiPort } from "../../../packages/brewva-cli/src/shell/ports/ui-port.js";
 import { ShellTranscriptProjector } from "../../../packages/brewva-cli/src/shell/projectors/transcript-projector.js";
@@ -89,6 +92,138 @@ describe("shell transcript projector", () => {
         },
       ],
     });
+  });
+
+  test("interleaves user prompts with folded wire turns instead of hoisting them", () => {
+    const fold = createShellCockpitWireFoldStore();
+    const { getMessages, projector } = createProjectorHarness({
+      getWireFoldSnapshot: () => fold.snapshot("session-1"),
+    });
+    const rememberInput = (turnId: string, frameId: string, ts: number, promptText: string) =>
+      fold.remember({
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId,
+        ts,
+        source: "live",
+        durability: "cache",
+        type: "turn.input",
+        turnId,
+        trigger: "user",
+        promptText,
+      });
+    const rememberAnswer = (turnId: string, frameId: string, ts: number, delta: string) =>
+      fold.remember({
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId,
+        ts,
+        source: "live",
+        durability: "cache",
+        type: "assistant.delta",
+        turnId,
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta,
+      });
+
+    // Turn 1: instant-feedback user row is appended, then the folded answer arrives.
+    projector.appendMessage(
+      buildTextTranscriptMessage({ id: "user:1", role: "user", text: "first question" }),
+    );
+    rememberInput("turn-1", "frame-input-1", 1_000, "first question");
+    rememberAnswer("turn-1", "frame-delta-1", 1_001, "answer one");
+    projector.refreshFromWireFold();
+
+    // Turn 2: the second prompt must follow turn 1's answer, not sit beside turn 1's prompt.
+    projector.appendMessage(
+      buildTextTranscriptMessage({ id: "user:2", role: "user", text: "second question" }),
+    );
+    rememberInput("turn-2", "frame-input-2", 2_000, "second question");
+    rememberAnswer("turn-2", "frame-delta-2", 2_001, "answer two");
+    projector.refreshFromWireFold();
+
+    const transcript = getMessages().map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+    expect(transcript).toEqual([
+      { role: "user", text: "first question" },
+      { role: "assistant", text: "answer one" },
+      { role: "user", text: "second question" },
+      { role: "assistant", text: "answer two" },
+    ]);
+  });
+
+  test("interleaves custom messages (skill cards) into their turn, not the front", () => {
+    const fold = createShellCockpitWireFoldStore();
+    const { getMessages, projector } = createProjectorHarness({
+      getWireFoldSnapshot: () => fold.snapshot("session-1"),
+    });
+    const rememberInput = (turnId: string, frameId: string, ts: number, promptText: string) =>
+      fold.remember({
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId,
+        ts,
+        source: "live",
+        durability: "cache",
+        type: "turn.input",
+        turnId,
+        trigger: "user",
+        promptText,
+      });
+    const rememberAnswer = (turnId: string, frameId: string, ts: number, delta: string) =>
+      fold.remember({
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId,
+        ts,
+        source: "live",
+        durability: "cache",
+        type: "assistant.delta",
+        turnId,
+        attemptId: "attempt-1",
+        lane: "answer",
+        delta,
+      });
+    const injectCustom = (text: string) =>
+      projector.handleSessionEvent({
+        type: "message_end",
+        message: {
+          role: "custom",
+          customType: "brewva-skill-selection",
+          content: text,
+          display: true,
+        },
+      } as unknown as BrewvaPromptSessionEvent);
+
+    // Turn 1: user prompt, a skill card injected at turn start, then the answer.
+    projector.appendMessage(buildTextTranscriptMessage({ id: "user:1", role: "user", text: "q1" }));
+    rememberInput("turn-1", "fi-1", 1_000, "q1");
+    injectCustom("Selected Skills: architecture");
+    rememberAnswer("turn-1", "fd-1", 1_001, "a1");
+    projector.refreshFromWireFold();
+
+    // Turn 2: the second skill card must land inside turn 2, not hoisted to the front.
+    projector.appendMessage(buildTextTranscriptMessage({ id: "user:2", role: "user", text: "q2" }));
+    rememberInput("turn-2", "fi-2", 2_000, "q2");
+    injectCustom("Selected Skills: review");
+    rememberAnswer("turn-2", "fd-2", 2_001, "a2");
+    projector.refreshFromWireFold();
+
+    const transcript = getMessages().map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+    expect(transcript).toEqual([
+      { role: "user", text: "q1" },
+      { role: "custom", text: "Selected Skills: architecture" },
+      { role: "assistant", text: "a1" },
+      { role: "user", text: "q2" },
+      { role: "custom", text: "Selected Skills: review" },
+      { role: "assistant", text: "a2" },
+    ]);
   });
 
   test("projects runtime turn input as an active model phase", () => {

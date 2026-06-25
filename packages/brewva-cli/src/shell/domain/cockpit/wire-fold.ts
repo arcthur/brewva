@@ -138,6 +138,13 @@ function transcriptToolMessageId(input: {
   return `${transcriptMessagePrefix(input.sessionId)}${input.turnId}:tool:${input.toolCallId}`;
 }
 
+function transcriptUserMessageId(input: {
+  readonly sessionId: string;
+  readonly turnId: string;
+}): string {
+  return `${transcriptMessagePrefix(input.sessionId)}${input.turnId}:user`;
+}
+
 function readReplayItemSequence(input: { readonly sequence?: number }): number | undefined {
   return typeof input.sequence === "number" && Number.isFinite(input.sequence)
     ? input.sequence
@@ -791,7 +798,20 @@ class ShellCockpitSessionWireFold {
       order += 1;
     }
 
+    const committedUserMessageId = transcriptUserMessageId({
+      sessionId: frame.sessionId,
+      turnId: frame.turnId,
+    });
+    const committedUserMessage = this.transcriptMessagesView().find(
+      (message) => message.id === committedUserMessageId,
+    );
     this.removeTranscriptMessagesForTurn(frame.turnId);
+    // Re-project the turn's user prompt first. The committed frame carries only
+    // assistant segments and tool outputs, so without restoring it the rebuild
+    // would drop the user row that turn.input projected.
+    if (committedUserMessage) {
+      this.upsertTranscriptMessage(frame.turnId, committedUserMessage);
+    }
     for (const item of sortCommittedTranscriptReplayItems(replayItems)) {
       if (item.kind === "assistant") {
         const message = buildTextTranscriptMessage({
@@ -861,6 +881,28 @@ class ShellCockpitSessionWireFold {
           activity.progressLabel = "Waiting for provider response";
           activity.providerBuffered = true;
           activity.committed = false;
+        }
+        if (options.projectTranscript) {
+          // Project the user prompt into the ordered transcript at the head of
+          // its turn, so the folded snapshot is a complete, correctly ordered
+          // transcript (user -> assistant -> tool) rather than assistant/tool
+          // only. Without this the projector has to splice in free-floating
+          // user messages and cannot interleave them across turns.
+          //
+          // Flush any still-pending assistant segments from earlier turns first.
+          // Assistant text accumulates lazily (materialized on read), so without
+          // this a later turn's prompt would be appended ahead of an earlier
+          // turn's answer row.
+          this.materializeDirtyAssistantSegments();
+          this.upsertTranscriptMessage(
+            frame.turnId,
+            buildTextTranscriptMessage({
+              id: transcriptUserMessageId({ sessionId: frame.sessionId, turnId: frame.turnId }),
+              role: "user",
+              text: frame.promptText,
+              renderMode: "stable",
+            }),
+          );
         }
         break;
       case "attempt.started":
