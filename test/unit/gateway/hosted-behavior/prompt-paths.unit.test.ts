@@ -26,4 +26,24 @@ describe("hosted prompt path helpers", () => {
     );
     expect(pathGlobMatches("packages/**/*.ts", ["packages/index.md"])).toBe(false);
   });
+
+  test("splits paths separated by full-width (CJK) punctuation", () => {
+    const fwComma = String.fromCodePoint(0xff0c); // fullwidth comma
+    const idComma = String.fromCodePoint(0x3001); // ideographic comma
+    const idStop = String.fromCodePoint(0x3002); // ideographic full stop
+    // Full-width comma between two absolute paths must not glue them into one token.
+    expect(extractPromptTargetPaths(`/Users/me/opencode${fwComma}/Users/me/hermes-agent`)).toEqual([
+      "/Users/me/opencode",
+      "/Users/me/hermes-agent",
+    ]);
+    // Ideographic comma between two relative paths (the trailing boundary must accept it).
+    expect(extractPromptTargetPaths(`packages/a.ts${idComma}packages/b.ts`)).toEqual([
+      "packages/a.ts",
+      "packages/b.ts",
+    ]);
+    // A path immediately followed by a full stop should still be extracted.
+    expect(extractPromptTargetPaths(`Review docs/reference/skills.md${idStop}`)).toEqual([
+      "docs/reference/skills.md",
+    ]);
+  });
 });

@@ -1,6 +1,23 @@
 const PROMPT_PATH_CANDIDATE_PATTERN =
   /(?:^|[\s`'"])((?:\/|\.{1,2}\/)[^\s`'",;:!?]+|[A-Za-z0-9_.@()-]+\/[A-Za-z0-9_./@()+-]+)(?=$|[\s`'",;:!?])/gu;
 
+// Full-width / CJK punctuation that should delimit file paths, in addition to
+// the ASCII delimiters baked into PROMPT_PATH_CANDIDATE_PATTERN. Listed by code
+// point so this source stays ASCII-only. Real filesystem paths never contain
+// these, so normalizing them to spaces lets prompts that separate multiple
+// paths with Chinese punctuation split instead of gluing paths into one token.
+const CJK_PATH_DELIMITERS = String.fromCodePoint(
+  0xff0c, // fullwidth comma
+  0x3001, // ideographic comma
+  0xff1b, // fullwidth semicolon
+  0xff1a, // fullwidth colon
+  0xff01, // fullwidth exclamation mark
+  0xff1f, // fullwidth question mark
+  0x3002, // ideographic full stop
+  0x3000, // ideographic space
+);
+const CJK_PATH_DELIMITER_PATTERN = new RegExp(`[${CJK_PATH_DELIMITERS}]`, "gu");
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -36,9 +53,13 @@ function globToRegExp(glob: string): RegExp {
 }
 
 export function extractPromptTargetPaths(promptText: string): string[] {
+  // Normalize full-width / CJK path delimiters to spaces first, so the
+  // ASCII-oriented candidate pattern can split paths that a prompt separates
+  // with Chinese punctuation. Real paths never contain these code points.
+  const normalizedPrompt = promptText.replace(CJK_PATH_DELIMITER_PATTERN, " ");
   const paths: string[] = [];
   const seen = new Set<string>();
-  for (const match of promptText.matchAll(PROMPT_PATH_CANDIDATE_PATTERN)) {
+  for (const match of normalizedPrompt.matchAll(PROMPT_PATH_CANDIDATE_PATTERN)) {
     const candidate = match[1]
       ?.replace(/[)\].,;:!?]+$/u, "")
       .replace(/^[([<{]+/u, "")
