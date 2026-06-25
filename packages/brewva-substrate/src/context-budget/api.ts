@@ -93,6 +93,7 @@ export type CompactionPolicySkipReason =
   | "agent_active_manual_compaction_unsafe"
   | "auto_compaction_in_flight"
   | "auto_compaction_breaker_open"
+  | "compaction_ineffective"
   | "recovery_active"
   | "target_context_not_smaller"
   | "usage_unknown";
@@ -106,6 +107,13 @@ export interface CompactionPolicyInputs {
   readonly recoveryPosture?: "idle" | "active";
   readonly autoCompactionInFlight?: boolean;
   readonly autoCompactionBreakerOpen?: boolean;
+  /**
+   * Auto-path thrash guard: true when recent committed compaction receipts show
+   * the last `minCompactionShrinkAttempts` reductions all stayed below
+   * `minCompactionShrinkRatio`. Derived by {@link readAutoCompactionIneffective}
+   * from receipt evidence, mirroring how `autoCompactionBreakerOpen` is derived.
+   */
+  readonly autoCompactionIneffective?: boolean;
   readonly currentContextWindow?: number;
   readonly targetContextWindow?: number;
   readonly usageKnown?: boolean;
@@ -165,6 +173,46 @@ export function readAutoCompactionBreakerOpen(
         return true;
       }
     }
+  }
+  return false;
+}
+
+export interface CompactionShrinkSample {
+  readonly fromTokens?: number | null;
+  readonly toTokens?: number | null;
+}
+
+/**
+ * Pure auto-compaction thrash guard. Given recent compaction receipts ordered
+ * newest-first, returns true when the most recent `minAttempts` receipts that
+ * carry a usable token pair all reduced context by less than `minShrinkRatio`
+ * (reduction ratio = `(fromTokens - toTokens) / fromTokens`). Receipts without a
+ * usable `fromTokens` (> 0) / `toTokens` (>= 0) pair are ignored, so missing data
+ * never blocks; a single recent reduction at or above the floor resets the guard.
+ * A non-positive `minShrinkRatio`, or fewer than `minAttempts` usable receipts,
+ * disables the guard (returns false). Mirrors {@link readAutoCompactionBreakerOpen}:
+ * receipt evidence in, boolean out.
+ */
+export function readAutoCompactionIneffective(
+  receipts: readonly CompactionShrinkSample[],
+  minShrinkRatio: number,
+  minAttempts: number,
+): boolean {
+  const floor = clampUnitRatio(minShrinkRatio);
+  if (floor <= 0) return false;
+  const requiredAttempts =
+    typeof minAttempts === "number" && Number.isFinite(minAttempts) && minAttempts >= 1
+      ? Math.trunc(minAttempts)
+      : 1;
+  let considered = 0;
+  for (const receipt of receipts) {
+    const from = positiveFinite(receipt.fromTokens);
+    const to = finiteNonNegative(receipt.toTokens);
+    if (from === null || to === null) continue;
+    const reductionRatio = Math.min(1, Math.max(0, (from - to) / from));
+    if (reductionRatio >= floor) return false;
+    considered += 1;
+    if (considered >= requiredAttempts) return true;
   }
   return false;
 }
@@ -458,6 +506,13 @@ export function decideCompaction(input: CompactionPolicyInputs): CompactionPolic
   }
   if (input.autoCompactionBreakerOpen === true) {
     return { decision: "skip", caller: input.caller, reason: "auto_compaction_breaker_open" };
+  }
+  if (input.autoCompactionIneffective === true && reason !== "hard_limit") {
+    // Post-cooldown thrash guard. `recent_compaction` above already defers the
+    // within-`minTurnsBetween` window; this catches the session that resumes
+    // compacting once the cooldown clears yet keeps shrinking below the floor.
+    // Hard-limit pressure bypasses it (handled by the reason check).
+    return { decision: "skip", caller: input.caller, reason: "compaction_ineffective" };
   }
   return { decision: "execute", caller: input.caller, reason };
 }

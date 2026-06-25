@@ -109,6 +109,7 @@ export interface ContextEvidenceSessionReport {
   compactionEvents: number;
   compactionGenerationEvents: number;
   llmPrimaryCompactionEvents: number;
+  workbenchPrimaryCompactionEvents: number;
   deterministicEmergencyCompactionEvents: number;
   compactionGenerationInputTokens: number;
   compactionGenerationOutputTokens: number;
@@ -174,6 +175,7 @@ export interface ContextEvidenceAggregateReport {
   totalCompactionEvents: number;
   totalCompactionGenerationEvents: number;
   totalLlmPrimaryCompactionEvents: number;
+  totalWorkbenchPrimaryCompactionEvents: number;
   totalDeterministicEmergencyCompactionEvents: number;
   totalCompactionGenerationInputTokens: number;
   totalCompactionGenerationOutputTokens: number;

@@ -1,6 +1,7 @@
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { resolveCachePosture, type CachePosture } from "@brewva/brewva-token-estimation";
+import type { ContextCompactionGateStatus } from "@brewva/brewva-vocabulary/context";
 import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { RECALL_RESULTS_SURFACED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
@@ -352,6 +353,51 @@ export function formatCockpitCompactionProvenance(value: unknown): string {
     ? attention.verifyPlanRefs.length
     : 0;
   return `${schema}:hiddenRecallSearch=${hiddenRecallSearch}:attention=${consumed}/${pinned}/${ignored}/${verifyPlans}`;
+}
+
+function ledgerNum(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "n/a";
+}
+
+function ledgerRatio(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "n/a";
+}
+
+/**
+ * Pure context-ledger projection: renders the budget derivation the compaction
+ * gate used (window -> advisory/hard limits -> predicted growth -> usage ->
+ * pressure -> gate -> last receipt -> cache) as one line. It reads `gate.status`
+ * verbatim and computes nothing new, so the ledger can never disagree with the
+ * policy that gated the turn.
+ */
+export function formatContextLedgerLine(input: {
+  readonly gate: ContextCompactionGateStatus;
+  readonly pendingReason: string | null;
+  readonly lastCompactId: string | null;
+  readonly cacheStatus: string;
+}): string {
+  const status = input.gate.status;
+  const pressure = status.forcedCompaction
+    ? "forced"
+    : status.predictedOverflow
+      ? "predicted_overflow"
+      : status.compactionAdvised
+        ? "advised"
+        : "ok";
+  const gateState = input.gate.required === true ? "armed" : "open";
+  const reason = input.gate.reason ?? input.pendingReason ?? "none";
+  return [
+    "Context ledger:",
+    `window=${ledgerNum(status.tokensTotal)}`,
+    `advisory=${ledgerNum(status.autoCompactLimitTokens)}(${ledgerRatio(status.compactionThresholdRatio)})`,
+    `hard=${ledgerNum(status.effectiveTokensTotal)}(${ledgerRatio(status.hardLimitRatio)})`,
+    `growth=${ledgerNum(status.predictedTurnGrowthTokens)}`,
+    `usage=${ledgerNum(status.tokensUsed)}(${ledgerRatio(status.usageRatio)})`,
+    `pressure=${pressure}`,
+    `gate=${gateState}:${reason}`,
+    `lastReceipt=${input.lastCompactId ?? "none"}`,
+    `cache=${input.cacheStatus}`,
+  ].join(" ");
 }
 
 export function buildContextCockpitReport(

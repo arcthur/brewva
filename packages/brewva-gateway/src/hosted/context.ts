@@ -57,6 +57,9 @@ export {
 } from "./internal/context/hosted-context-telemetry.js";
 export {
   buildContextEvidenceReport,
+  deriveContextEvidenceRecommendation,
   persistContextEvidenceReport,
   type ContextEvidenceAggregateReport,
+  type ContextEvidenceRecommendation,
+  type ContextEvidenceRecommendationInput,
 } from "./internal/context/evidence/context-evidence.js";

@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import {
   buildContextEvidenceReport,
   createHostedRuntimeAdapter,
+  deriveContextEvidenceRecommendation,
   persistContextEvidenceReport,
 } from "@brewva/brewva-gateway/hosted";
 
@@ -12,6 +13,7 @@ interface CliOptions {
   baselineUncachedInputTokensPerUsefulTurn?: number;
   promptCacheHitStopLossFloor?: number;
   inputCostRegressionLimit?: number;
+  recommend: boolean;
 }
 
 function printUsage(): void {
@@ -20,6 +22,7 @@ function printUsage(): void {
       "Usage: bun run script/report-context-evidence.ts [workspace-root] [--session <session-id>...]",
       "       [--long-session-turns <n>] [--baseline-uncached-input-per-turn <tokens>]",
       "       [--cache-hit-floor <ratio>] [--input-cost-regression-limit <ratio>]",
+      "       [--recommend]  emit an evidence-fit ratio recommendation instead of the report",
     ].join("\n"),
   );
 }
@@ -67,6 +70,7 @@ function parseArgs(argv: readonly string[]): CliOptions | null {
   let baselineUncachedInputTokensPerUsefulTurn: number | undefined;
   let promptCacheHitStopLossFloor: number | undefined;
   let inputCostRegressionLimit: number | undefined;
+  let recommend = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -76,6 +80,10 @@ function parseArgs(argv: readonly string[]): CliOptions | null {
     if (argument === "--help" || argument === "-h") {
       printUsage();
       return null;
+    }
+    if (argument === "--recommend") {
+      recommend = true;
+      continue;
     }
     if (argument === "--session") {
       const sessionId = argv[index + 1]?.trim();
@@ -135,6 +143,7 @@ function parseArgs(argv: readonly string[]): CliOptions | null {
     baselineUncachedInputTokensPerUsefulTurn,
     promptCacheHitStopLossFloor,
     inputCostRegressionLimit,
+    recommend,
   };
 }
 
@@ -158,6 +167,20 @@ function main(): void {
     workspaceRoot: options.workspaceRoot,
     report,
   });
+
+  if (options.recommend) {
+    const contextBudget = runtime.config.infrastructure.contextBudget;
+    const recommendation = deriveContextEvidenceRecommendation({
+      warm: report.aggregate.totalPostCompactionCacheWarmObservations,
+      reset: report.aggregate.totalPostCompactionCacheResetObservations,
+      advisoryRatio: contextBudget.thresholds.advisoryRatio,
+      hardRatio: contextBudget.thresholds.hardRatio,
+      tailProtectRatio: contextBudget.compaction.tailProtectRatio,
+    });
+    console.log(JSON.stringify(recommendation, null, 2));
+    return;
+  }
+
   console.log(JSON.stringify(report, null, 2));
 }
 

@@ -6,6 +6,7 @@ import {
   formatCockpitRecallResults,
   formatCockpitResourceRefs,
   formatCockpitSkillInvocations,
+  formatContextLedgerLine,
 } from "./context-cockpit.js";
 import type { InspectReport } from "./report.js";
 import { buildTaskWorkCardProjection, formatTaskWorkCardText } from "./work-card.js";
@@ -80,6 +81,12 @@ export function formatInspectCompactionText(report: InspectReport): string {
     .join(" ");
   const lines = [
     `Session: ${projection.sessionId}`,
+    formatContextLedgerLine({
+      gate: report.contextCockpit.context.gate,
+      pendingReason: report.contextCockpit.context.pendingCompactionReason,
+      lastCompactId: report.contextCockpit.compaction.latestBaseline?.compactId ?? null,
+      cacheStatus: report.contextCockpit.cachePosture.status,
+    }),
     `Compaction timeline: events=${projection.timeline.length}`,
     latest
       ? `Compaction latest: compact=${latest.compactId ?? "n/a"} caller=${latest.caller ?? "n/a"} reason=${latest.reason ?? "n/a"} tokens=${latest.fromTokens ?? "n/a"}->${latest.toTokens ?? "n/a"} firstKept=${latest.firstKeptEntryId ?? "n/a"} summaryDigest=${latest.summaryDigest ?? "n/a"}`
@@ -130,7 +137,7 @@ export function formatInspectDiagnosticText(report: InspectReport): string {
     `Recovery preview: nextReceiptOwner=${report.delegation.recoveryPreview.nextReceiptOwner} primitives=${report.delegation.recoveryPreview.primitives.map((primitive) => primitive.kind).join(",") || "none"}`,
     `Operator safety: pendingAsks=${report.operatorSafety.pendingAsks} denials=${report.operatorSafety.denials} receipts=${renderList(report.operatorSafety.receiptIds)}`,
     "Hosted transitions: removed source=canonical_tape",
-    `Context evidence: ready=${report.contextEvidence.promotionReady ? "yes" : "no"} gaps=${renderList(report.contextEvidence.promotionGaps)} compactions=${report.contextEvidence.totalCompactionEvents} generation=${report.contextEvidence.totalCompactionGenerationEvents} llmPrimary=${report.contextEvidence.totalLlmPrimaryCompactionEvents} deterministicEmergency=${report.contextEvidence.totalDeterministicEmergencyCompactionEvents} genTokens=${report.contextEvidence.totalCompactionGenerationTokens} genCacheRead=${report.contextEvidence.totalCompactionGenerationCacheReadTokens} genCacheWrite=${report.contextEvidence.totalCompactionGenerationCacheWriteTokens} genCost=$${report.contextEvidence.totalCompactionGenerationCostUsd.toFixed(6)}`,
+    `Context evidence: ready=${report.contextEvidence.promotionReady ? "yes" : "no"} gaps=${renderList(report.contextEvidence.promotionGaps)} compactions=${report.contextEvidence.totalCompactionEvents} generation=${report.contextEvidence.totalCompactionGenerationEvents} llmPrimary=${report.contextEvidence.totalLlmPrimaryCompactionEvents} workbenchPrimary=${report.contextEvidence.totalWorkbenchPrimaryCompactionEvents} deterministicEmergency=${report.contextEvidence.totalDeterministicEmergencyCompactionEvents} genTokens=${report.contextEvidence.totalCompactionGenerationTokens} genCacheRead=${report.contextEvidence.totalCompactionGenerationCacheReadTokens} genCacheWrite=${report.contextEvidence.totalCompactionGenerationCacheWriteTokens} genCost=$${report.contextEvidence.totalCompactionGenerationCostUsd.toFixed(6)}`,
     `Context cockpit: policy=${report.contextCockpit.sideEffectPolicy} workbench=${report.contextCockpit.workbench.activeCount} visibleReadEpoch=${report.contextCockpit.context.visibleReadEpoch}`,
     `Context cockpit skills: invocations=${formatCockpitSkillInvocations(report.contextCockpit.skills.invocationRecords)}`,
     `Context cockpit resources: refs=${formatCockpitResourceRefs(report.contextCockpit.skills.resourceRefs)}`,

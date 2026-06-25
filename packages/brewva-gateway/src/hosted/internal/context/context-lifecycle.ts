@@ -70,6 +70,7 @@ export interface ContextAutoCompactionEligibilityInput {
   readonly recoveryPosture?: "idle" | "active";
   readonly autoCompactionInFlight?: boolean;
   readonly autoCompactionBreakerOpen?: boolean;
+  readonly autoCompactionIneffective?: boolean;
 }
 
 export interface ContextLifecycleDecision {
@@ -96,6 +97,7 @@ export interface ContextLifecycleDecisionInput {
     readonly recoveryPosture?: "idle" | "active";
     readonly autoCompactionInFlight?: boolean;
     readonly autoCompactionBreakerOpen?: boolean;
+    readonly autoCompactionIneffective?: boolean;
   };
   readonly transientReduction?: ContextTransientReductionEligibilityInput;
 }
@@ -326,6 +328,7 @@ export function decideAutoCompactionEligibility(
     recoveryPosture: input.recoveryPosture,
     autoCompactionInFlight: input.autoCompactionInFlight,
     autoCompactionBreakerOpen: input.autoCompactionBreakerOpen,
+    autoCompactionIneffective: input.autoCompactionIneffective,
   });
 }
 
@@ -367,6 +370,7 @@ export function decideContextLifecycle(
             recoveryPosture: input.autoCompaction.recoveryPosture,
             autoCompactionInFlight: input.autoCompaction.autoCompactionInFlight,
             autoCompactionBreakerOpen: input.autoCompaction.autoCompactionBreakerOpen,
+            autoCompactionIneffective: input.autoCompaction.autoCompactionIneffective,
           })
         : null,
     transientReduction: input.transientReduction

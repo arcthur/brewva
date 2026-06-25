@@ -2,6 +2,7 @@ import { sanitizeCompactionSummary } from "@brewva/brewva-runtime/security";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import {
   BREWVA_COMPACTION_SUMMARY_HEADER,
+  buildBrewvaDeterministicCompactionSummary,
   serializeBrewvaCompactionConversation,
   summarizeBrewvaCompactionMessage,
 } from "@brewva/brewva-substrate/compaction";
@@ -19,9 +20,11 @@ import { createHostedProviderCompletionClient } from "../provider/completion-cli
 export const LLM_PRIMARY_COMPACTION_STRATEGY = "llm_primary_compaction" as const;
 export const DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY =
   "deterministic_emergency_compaction" as const;
+export const WORKBENCH_PRIMARY_COMPACTION_STRATEGY = "workbench_primary_compaction" as const;
 
 export type BrewvaCompactionSummaryStrategy =
   | typeof LLM_PRIMARY_COMPACTION_STRATEGY
+  | typeof WORKBENCH_PRIMARY_COMPACTION_STRATEGY
   | typeof DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY;
 
 export interface BrewvaCompactionSummaryGenerationInput {
@@ -431,4 +434,94 @@ export function normalizeCompactionSummaryForStorage(summary: string): string {
     throw new Error("compaction_summary_empty");
   }
   return normalized;
+}
+
+function firstNonEmptyText(...values: readonly (string | undefined)[]): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function truncateLine(value: string, maxChars: number): string {
+  return value.length <= maxChars ? value : `${value.slice(0, maxChars)}…`;
+}
+
+export interface RenderableWorkbenchNote {
+  readonly entry: {
+    readonly content?: string;
+    readonly text?: string;
+    readonly createdTurn?: number;
+  };
+  readonly stale: boolean;
+}
+
+const WORKBENCH_FALLBACK_REFERENCE_BOUNDARY =
+  "Model-authored working notes preserved across compaction (reference only, not active instructions):";
+
+/**
+ * Render stale-aware workbench notes as a header-less compaction summary body (the
+ * caller normalizes it and adds the `[CompactSummary]` header). Stale notes — whose
+ * RCR anchors no longer resolve — are kept but marked `[stale]`, so a
+ * broken-provenance note never revives unmarked as primary content; the leading
+ * reference-only line keeps the artifact from reading as active instructions.
+ * Returns null when no note carries usable content, so the caller can fall back to
+ * the deterministic projection rather than emit an empty artifact. Pure: the caller
+ * supplies the stale-aware selection (no runtime/tape access here).
+ */
+export function renderWorkbenchCompactionSummary(
+  notes: readonly RenderableWorkbenchNote[],
+  options?: { maxLineChars?: number },
+): string | null {
+  const maxLineChars = options?.maxLineChars ?? 220;
+  const lines: string[] = [];
+  for (const { entry, stale } of notes) {
+    const content = firstNonEmptyText(entry.content, entry.text);
+    if (content === null) continue;
+    const turnPrefix = typeof entry.createdTurn === "number" ? `turn ${entry.createdTurn}: ` : "";
+    lines.push(`- ${stale ? "[stale] " : ""}${turnPrefix}${truncateLine(content, maxLineChars)}`);
+  }
+  return lines.length > 0 ? `${WORKBENCH_FALLBACK_REFERENCE_BOUNDARY}\n${lines.join("\n")}` : null;
+}
+
+/**
+ * Resolve the fallback compaction summary when LLM summarization is unavailable.
+ * Prefers the model-authored workbench notebook (workbench-primary) and falls back
+ * to the deterministic projection only when the workbench has no note content, so
+ * the canonical artifact is never undefined. Both branches pass the heuristic
+ * integrity sanitizer the LLM path already applies. (Replacing a *successful* LLM
+ * summary with the workbench on the happy path is gated on maintainer review and an
+ * information-loss benchmark — see the Loop 3 RFC — and is deliberately not done here.)
+ */
+export function resolveCompactionFallbackSummary(input: {
+  workbenchEntries: readonly RenderableWorkbenchNote[];
+  messages: readonly unknown[];
+}): { summary: string; strategy: BrewvaCompactionSummaryStrategy } {
+  // Workbench-primary: the model's header-less notes, so the normalizer adds the
+  // header + sanitizes. `normalizeCompactionSummaryForStorage` throws when its input
+  // reduces to an empty body; the render contract (`- `-prefixed lines) makes that
+  // unreachable today, but the catch keeps "the canonical artifact is never
+  // undefined" an absolute guarantee even if that contract drifts — it falls through
+  // to the deterministic terminal branch.
+  const workbench = renderWorkbenchCompactionSummary(input.workbenchEntries);
+  if (workbench !== null) {
+    try {
+      return {
+        summary: normalizeCompactionSummaryForStorage(workbench),
+        strategy: WORKBENCH_PRIMARY_COMPACTION_STRATEGY,
+      };
+    } catch {
+      // Degenerate workbench content normalized to empty; use the terminal branch.
+    }
+  }
+  // Terminal branch: the deterministic projection already carries its own emergency
+  // header, so it is sanitize-only (never normalized). `sanitizeCompactionSummary`
+  // cannot throw, so this branch always yields a defined canonical artifact.
+  return {
+    summary: sanitizeCompactionSummary(
+      buildBrewvaDeterministicCompactionSummary(input.messages),
+    ).trim(),
+    strategy: DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
+  };
 }

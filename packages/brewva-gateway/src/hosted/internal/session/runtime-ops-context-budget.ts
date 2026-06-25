@@ -11,6 +11,7 @@ import {
   type ContextBudgetUsage,
 } from "@brewva/brewva-vocabulary/context";
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
+import { deriveAutoCompactionIneffectiveFromReceipts } from "../context/auto-compaction-ineffective.js";
 import type { HostedRuntimeOpsContext } from "./runtime-ops-context.js";
 import type { RuntimeCompactionRequestInput } from "./runtime-ops-port.js";
 
@@ -98,6 +99,15 @@ export function createContextBudgetRuntimeController(ctx: HostedRuntimeOpsContex
     return readAutoCompactionBreakerOpen(events);
   }
 
+  function deriveAutoCompactionIneffective(sessionId: string): boolean {
+    const compaction = ctx.runtime.config.infrastructure.contextBudget.compaction;
+    return deriveAutoCompactionIneffectiveFromReceipts(
+      ctx.queryStructuredEvents(sessionId, { type: "session.compaction.committed" }),
+      compaction.minCompactionShrinkRatio,
+      compaction.minCompactionShrinkAttempts,
+    );
+  }
+
   function deriveState(sessionId: string, inputUsage?: ContextBudgetUsage) {
     const usage = inputUsage ?? ctx.state.latestContextUsage.get(sessionId);
     return deriveContextBudgetState({
@@ -163,6 +173,7 @@ export function createContextBudgetRuntimeController(ctx: HostedRuntimeOpsContex
             ? payload.autoCompactionInFlight
             : undefined,
         autoCompactionBreakerOpen: deriveAutoCompactionBreakerOpen(sessionId),
+        autoCompactionIneffective: deriveAutoCompactionIneffective(sessionId),
       });
       return {
         eligible: decision.decision === "execute",

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { BrewvaAgentProtocolController } from "@brewva/brewva-substrate/agent-protocol";
 import {
-  buildBrewvaDeterministicCompactionSummary,
   estimateBrewvaCompactedContextTokens,
   estimateBrewvaCompactionTokens,
 } from "@brewva/brewva-substrate/compaction";
@@ -18,12 +17,13 @@ import {
   sameSessionMessages,
 } from "../../compaction/flow.js";
 import {
-  DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
   generateCompactionSummaryWithPromptTooLargeRetry,
   LLM_PRIMARY_COMPACTION_STRATEGY,
   normalizeCompactionSummaryForStorage,
+  resolveCompactionFallbackSummary,
   type BrewvaCompactionSummaryGenerator,
 } from "../../compaction/summary-generator.js";
+import { selectStaleAwareWorkbenchEntriesForSession } from "../../context/workbench-staleness.js";
 import { recordRuntimeAssistantCost, type HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type {
   BuiltDeferredCompactionEvents,
@@ -44,6 +44,9 @@ export interface ManagedSessionCompactionLifecycleOptions {
   replaceMessages: (messages: unknown) => Promise<void>;
   markSessionCompacted: () => Promise<void>;
 }
+
+/** Cap on workbench notes promoted into a workbench-primary fallback summary. */
+const FALLBACK_WORKBENCH_SUMMARY_MAX_ENTRIES = 20;
 
 export class ManagedSessionCompactionLifecycle {
   readonly #cwd: string;
@@ -105,9 +108,20 @@ export class ManagedSessionCompactionLifecycle {
         usage: generated.usage,
       };
     } catch (error) {
+      // LLM summarization failed: prefer the model-authored workbench notebook,
+      // falling back to the deterministic projection only when it has no note
+      // content, so the canonical artifact is never undefined.
+      const fallback = resolveCompactionFallbackSummary({
+        workbenchEntries: selectStaleAwareWorkbenchEntriesForSession(
+          this.#runtime,
+          input.sessionId,
+          FALLBACK_WORKBENCH_SUMMARY_MAX_ENTRIES,
+        ),
+        messages: input.messages,
+      });
       return {
-        summary: buildBrewvaDeterministicCompactionSummary(input.messages),
-        strategy: DETERMINISTIC_EMERGENCY_COMPACTION_STRATEGY,
+        summary: fallback.summary,
+        strategy: fallback.strategy,
         fallbackReason: compactionFallbackReason(error),
       };
     }

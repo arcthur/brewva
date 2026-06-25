@@ -91,6 +91,9 @@ export {
 } from "./provider.js";
 export {
   buildContextEvidenceReport,
+  deriveContextEvidenceRecommendation,
   persistContextEvidenceReport,
   type ContextEvidenceAggregateReport,
+  type ContextEvidenceRecommendation,
+  type ContextEvidenceRecommendationInput,
 } from "./context.js";

@@ -85,6 +85,20 @@ discipline.
   ergonomics into the advisory ring) under the line `Borrow the mechanism, never
 the authority shape`.
 
+- [RFC: Peer-Distilled Context Loops — Compaction Effectiveness, Reference Staleness, And The Context Ledger](./rfc-peer-distilled-context-loops.md):
+  active RFC distilling the residue from two mature peers (`opencode`,
+  `hermes`) after most of their compaction techniques prove already-covered or
+  axiom-rejected: a `compaction_ineffective` skip posture for the pure policy
+  (the hermes anti-thrashing borrow), render-time staleness verification of a
+  workbench note's digest-bound `rcr` anchors (the live-reference companion to
+  RCR's reversal-time check), making the model-authored workbench the primary
+  compaction _fallback_ artifact (the happy-path summary switch stays gated on a
+  benchmark), closing the evidence-fit feedback loop as a reviewed aggregate
+  `report:context-evidence --recommend` posture while the policy stays pure, and
+  one unified explicit-pull context-ledger line in the shared inspect host's
+  compaction surface. Under the grammar `Compaction must prove it shrank; a
+reference must prove it still resolves`.
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

@@ -38,6 +38,7 @@ import {
   buildContextMaterializationReceipt,
 } from "./materialization.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
+import { selectStaleAwareWorkbenchEntriesForSession } from "./workbench-staleness.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
 
@@ -293,12 +294,17 @@ function buildWorkbenchBlock(
   runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): HostedContextBlock | null {
-  const entries = listRuntimeWorkbenchEntries(runtime, sessionId);
-  if (entries.length === 0) {
+  // Read-time staleness companion to RCR's reversal check: a note whose digest-bound
+  // anchors no longer resolve is flagged and, when the rendered set is capped, dropped
+  // before live notes (downgraded, never deleted). The same stale-aware selection
+  // feeds the workbench-primary compaction fallback, so neither path diverges.
+  const rendered = selectStaleAwareWorkbenchEntriesForSession(runtime, sessionId, 12);
+  if (rendered.length === 0) {
     return null;
   }
+
   const lines = ["[Workbench]"];
-  for (const entry of entries.slice(-12)) {
+  for (const { entry, stale } of rendered) {
     lines.push(
       [
         `- id=${entry.id}`,
@@ -306,6 +312,7 @@ function buildWorkbenchBlock(
         `turn=${entry.createdTurn}`,
         `digest=${entry.digest.slice(0, 12)}`,
         `reversible=${entry.reversible ? "true" : "false"}`,
+        ...(stale ? ["stale=true"] : []),
         `reason=${entry.reason}`,
       ].join(" "),
     );

@@ -94,6 +94,34 @@ describe("compaction post-compaction token count", () => {
     expect(committed).toMatchObject({ compactId: "compact-1", toTokens: 321 });
   });
 
+  test("threads compaction-entry tokensBefore into the committed receipt fromTokens", async () => {
+    const runtime = createRuntimeFixture();
+    const sessionId = "compact-fromtokens-session";
+    const controller = createHostedCompactionController(
+      runtime,
+      createHostedContextTelemetry(runtime),
+    );
+
+    // No provider usage is observed; the authoritative pre-compaction count rides
+    // on the entry (like toTokens) so a shrink ratio can be derived from the receipt.
+    await controller.sessionCompact({
+      sessionId,
+      compactionEntry: {
+        id: "compact-1",
+        summary: "summary",
+        firstKeptEntryId: "entry-1",
+        tokensBefore: 9_000,
+        toTokens: 321,
+      },
+    });
+
+    const committed = runtime.ops.events.records
+      .query(sessionId, { type: "session.compaction.committed" })
+      .at(-1)?.payload;
+
+    expect(committed).toMatchObject({ compactId: "compact-1", fromTokens: 9_000, toTokens: 321 });
+  });
+
   test("records the post-compaction estimate, not a stale pre-compaction usage reading", async () => {
     const runtime = createRuntimeFixture();
     const sessionId = "compact-totokens-usage-session";
@@ -169,5 +197,13 @@ describe("compaction post-compaction token count", () => {
     expect(built.compactEvent.compactionEntry).toMatchObject({
       cutPointReason: "oversized_active_turn",
     });
+  });
+
+  test("build threads the pre-compaction token count from the preview onto the compaction entry", () => {
+    const built = createCompactionLifecycle().build(createPreparedCompaction());
+
+    // Locks the auto-path link feeding the effectiveness guard: preview.tokensBefore
+    // must ride on the compaction entry so the committed receipt carries fromTokens.
+    expect(built.compactEvent.compactionEntry).toMatchObject({ tokensBefore: 9_000 });
   });
 });

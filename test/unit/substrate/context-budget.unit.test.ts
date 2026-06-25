@@ -3,6 +3,7 @@ import {
   decideCompaction,
   deriveContextBudgetState,
   readAutoCompactionBreakerOpen,
+  readAutoCompactionIneffective,
   resolveWindowScaledTokens,
 } from "@brewva/brewva-substrate/context-budget";
 import type { ContextBudgetUsage } from "@brewva/brewva-vocabulary/context";
@@ -331,6 +332,83 @@ describe("readAutoCompactionBreakerOpen", () => {
         { type: "context.compaction.auto.completed", timestamp: 4, id: "completed" },
       ]),
     ).toBe(false);
+  });
+});
+
+describe("readAutoCompactionIneffective", () => {
+  test("returns false when fewer than minAttempts usable receipts exist", () => {
+    expect(readAutoCompactionIneffective([], 0.1, 1)).toBe(false);
+    expect(readAutoCompactionIneffective([{ fromTokens: 1_000, toTokens: 950 }], 0.1, 2)).toBe(
+      false,
+    );
+  });
+
+  test("returns true when the most recent usable reduction stays below the floor", () => {
+    expect(readAutoCompactionIneffective([{ fromTokens: 1_000, toTokens: 950 }], 0.1, 1)).toBe(
+      true,
+    );
+  });
+
+  test("resets when the most recent usable reduction clears the floor", () => {
+    expect(
+      readAutoCompactionIneffective(
+        [
+          { fromTokens: 1_000, toTokens: 400 },
+          { fromTokens: 1_000, toTokens: 980 },
+        ],
+        0.1,
+        1,
+      ),
+    ).toBe(false);
+  });
+
+  test("ignores receipts without a usable fromTokens/toTokens pair", () => {
+    expect(
+      readAutoCompactionIneffective(
+        [
+          { fromTokens: null, toTokens: 5 },
+          { fromTokens: 0, toTokens: 0 },
+          { fromTokens: 1_000, toTokens: 950 },
+        ],
+        0.1,
+        1,
+      ),
+    ).toBe(true);
+  });
+
+  test("requires every one of the most recent minAttempts reductions below the floor", () => {
+    expect(
+      readAutoCompactionIneffective(
+        [
+          { fromTokens: 1_000, toTokens: 950 },
+          { fromTokens: 1_000, toTokens: 960 },
+        ],
+        0.1,
+        2,
+      ),
+    ).toBe(true);
+    expect(
+      readAutoCompactionIneffective(
+        [
+          { fromTokens: 1_000, toTokens: 950 },
+          { fromTokens: 1_000, toTokens: 300 },
+        ],
+        0.1,
+        2,
+      ),
+    ).toBe(false);
+  });
+
+  test("a zero floor disables the guard", () => {
+    expect(readAutoCompactionIneffective([{ fromTokens: 1_000, toTokens: 1_000 }], 0, 1)).toBe(
+      false,
+    );
+  });
+
+  test("treats a context that grew (toTokens > fromTokens) as a zero reduction below the floor", () => {
+    expect(readAutoCompactionIneffective([{ fromTokens: 1_000, toTokens: 1_100 }], 0.1, 1)).toBe(
+      true,
+    );
   });
 });
 

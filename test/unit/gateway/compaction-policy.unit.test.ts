@@ -96,6 +96,47 @@ describe("decideCompaction", () => {
     });
   });
 
+  test("auto compaction skips when recent compactions were ineffective, but hard limit bypasses", () => {
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: gate({ compactionAdvised: true }),
+        hasUI: true,
+        idle: true,
+        recoveryPosture: "idle",
+        autoCompactionIneffective: true,
+      }),
+    ).toEqual({
+      decision: "skip",
+      caller: "auto",
+      reason: "compaction_ineffective",
+    });
+
+    // Hard-limit pressure bypasses the ineffective guard: correctness over thrash-avoidance.
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: gate({ forcedCompaction: true }),
+        hasUI: true,
+        idle: true,
+        recoveryPosture: "idle",
+        autoCompactionIneffective: true,
+      }),
+    ).toEqual({ decision: "execute", caller: "auto", reason: "hard_limit" });
+
+    // An effective recent history (flag false) still executes normally.
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: gate({ compactionAdvised: true }),
+        hasUI: true,
+        idle: true,
+        recoveryPosture: "idle",
+        autoCompactionIneffective: false,
+      }),
+    ).toEqual({ decision: "execute", caller: "auto", reason: "usage_threshold" });
+  });
+
   test("model downshift uses the same pressure decision over the target window", () => {
     expect(
       decideCompaction({

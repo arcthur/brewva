@@ -226,6 +226,62 @@ describe("hosted runtime context ops", () => {
     });
   });
 
+  test("auto compaction skips as ineffective when recent committed reductions stay below the shrink floor", () => {
+    const runtime = contextRuntime();
+    const usage = {
+      tokens: 8_000,
+      contextWindow: 10_000,
+      percent: 80,
+      maxOutputTokens: 1_000,
+    };
+
+    runtime.ops.context.lifecycle.onTurnStart("session-ineffective", 10);
+    // Two committed receipts at old turns (turnsSinceCompaction >= windowTurns, so
+    // the recent-compaction guard does not fire) that each reduced context ~5% —
+    // below the 0.1 default shrink floor, so the auto path should defer.
+    runtime.ops.session.compaction.commit("session-ineffective", {
+      compactId: "c-a",
+      sourceTurn: 1,
+      firstKeptEntryId: "e1",
+      fromTokens: 10_000,
+      toTokens: 9_600,
+    });
+    runtime.ops.session.compaction.commit("session-ineffective", {
+      compactId: "c-b",
+      sourceTurn: 2,
+      firstKeptEntryId: "e2",
+      fromTokens: 10_000,
+      toTokens: 9_500,
+    });
+
+    expect(
+      runtime.ops.context.compaction.resolveEligibility({
+        sessionId: "session-ineffective",
+        usage,
+        hasUI: true,
+        idle: true,
+      }),
+    ).toEqual({ eligible: false, reason: "compaction_ineffective", decision: "skip" });
+
+    // An effective recent reduction (40%) clears the guard on the next check.
+    runtime.ops.session.compaction.commit("session-ineffective", {
+      compactId: "c-c",
+      sourceTurn: 3,
+      firstKeptEntryId: "e3",
+      fromTokens: 10_000,
+      toTokens: 6_000,
+    });
+
+    expect(
+      runtime.ops.context.compaction.resolveEligibility({
+        sessionId: "session-ineffective",
+        usage,
+        hasUI: true,
+        idle: true,
+      }),
+    ).toEqual({ eligible: true, reason: "usage_threshold", decision: "execute" });
+  });
+
   test("recent compaction is rebuilt from session compaction receipts after process-local state is gone", () => {
     const runtime = contextRuntime();
 

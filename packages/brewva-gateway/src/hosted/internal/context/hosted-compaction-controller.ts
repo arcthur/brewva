@@ -34,6 +34,7 @@ import {
   createRuntimeTurnClockStore,
   type RuntimeTurnClockStore,
 } from "../turn/runtime-turn-clock.js";
+import { deriveAutoCompactionIneffectiveFromReceipts } from "./auto-compaction-ineffective.js";
 import {
   ATTENTION_METRIC_EVENT_TYPE,
   buildCompactionInputProvenance,
@@ -90,6 +91,7 @@ export interface HostedCompactionController extends HostedContextGateStatePort {
       firstKeptEntryId?: unknown;
       summaryGeneration?: unknown;
       toTokens?: unknown;
+      tokensBefore?: unknown;
       cutPointReason?: unknown;
     };
     fromExtension?: unknown;
@@ -116,6 +118,16 @@ function extractToTokens(compactionEntry: unknown): number | null {
     return null;
   }
   const value = (compactionEntry as { toTokens?: unknown }).toTokens;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.max(0, Math.trunc(value))
+    : null;
+}
+
+function extractTokensBefore(compactionEntry: unknown): number | null {
+  if (!compactionEntry || typeof compactionEntry !== "object" || Array.isArray(compactionEntry)) {
+    return null;
+  }
+  const value = (compactionEntry as { tokensBefore?: unknown }).tokensBefore;
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? Math.max(0, Math.trunc(value))
     : null;
@@ -277,6 +289,18 @@ function isAutoCompactionBreakerOpen(
   return readAutoCompactionBreakerOpen(events);
 }
 
+function isAutoCompactionIneffective(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): boolean {
+  const compaction = runtime.config.infrastructure.contextBudget.compaction;
+  return deriveAutoCompactionIneffectiveFromReceipts(
+    queryRuntimeEvents(runtime, sessionId, { type: "session.compaction.committed" }),
+    compaction.minCompactionShrinkRatio,
+    compaction.minCompactionShrinkAttempts,
+  );
+}
+
 function buildRuntimeCompactionInputProvenance(input: {
   readonly runtime: HostedRuntimeAdapterPort;
   readonly sessionId: string;
@@ -377,6 +401,7 @@ export function createHostedCompactionController(
         recoveryPosture: "idle",
         autoCompactionInFlight: state.autoCompactionInFlight,
         autoCompactionBreakerOpen: isAutoCompactionBreakerOpen(runtime, input.sessionId),
+        autoCompactionIneffective: isAutoCompactionIneffective(runtime, input.sessionId),
       });
 
       if (eligibility.decision === "skip" && eligibility.reason === "no_request") {
@@ -428,6 +453,15 @@ export function createHostedCompactionController(
           sessionId: input.sessionId,
           turn: state.turnIndex,
           reason: "auto_compaction_breaker_open",
+        });
+        return;
+      }
+
+      if (eligibility.decision === "skip" && eligibility.reason === "compaction_ineffective") {
+        telemetry.emitCompactionSkipped({
+          sessionId: input.sessionId,
+          turn: state.turnIndex,
+          reason: "compaction_ineffective",
         });
         return;
       }
@@ -527,6 +561,7 @@ export function createHostedCompactionController(
           compactionEntry: input.compactionEntry,
         }) ?? `compact:${input.sessionId}:${state.turnIndex}`;
       const toTokens = extractToTokens(input.compactionEntry);
+      const tokensBefore = extractTokensBefore(input.compactionEntry);
       const cutPointReason = extractCutPointReason(input.compactionEntry);
       const summaryGeneration = extractSummaryGeneration(input.compactionEntry);
       const latestPromptEvidence = getRuntimeContextEvidenceLatest(
@@ -553,7 +588,8 @@ export function createHostedCompactionController(
           compactionEntry: input.compactionEntry,
         }),
         referenceContextDigest,
-        fromTokens: getRuntimeContextUsage(runtime, input.sessionId)?.tokens ?? null,
+        fromTokens:
+          tokensBefore ?? getRuntimeContextUsage(runtime, input.sessionId)?.tokens ?? null,
         toTokens,
         ...(cutPointReason ? { cutPointReason } : {}),
         origin: input.fromExtension === true ? "extension_api" : "auto_compaction",

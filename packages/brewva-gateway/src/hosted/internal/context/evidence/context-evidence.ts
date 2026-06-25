@@ -184,6 +184,7 @@ function sumMessageUsageMetrics(events: readonly { payload?: unknown }[]): Messa
 interface CompactionGenerationMetrics {
   events: number;
   llmPrimaryEvents: number;
+  workbenchPrimaryEvents: number;
   deterministicEmergencyEvents: number;
   inputTokens: number;
   outputTokens: number;
@@ -198,6 +199,7 @@ function emptyCompactionGenerationMetrics(): CompactionGenerationMetrics {
   return {
     events: 0,
     llmPrimaryEvents: 0,
+    workbenchPrimaryEvents: 0,
     deterministicEmergencyEvents: 0,
     inputTokens: 0,
     outputTokens: 0,
@@ -235,6 +237,9 @@ function readCompactionGenerationMetrics(payload: unknown): CompactionGeneration
   if (summaryGeneration.strategy === "llm_primary_compaction") {
     metrics.llmPrimaryEvents = 1;
   }
+  if (summaryGeneration.strategy === "workbench_primary_compaction") {
+    metrics.workbenchPrimaryEvents = 1;
+  }
   if (summaryGeneration.strategy === "deterministic_emergency_compaction") {
     metrics.deterministicEmergencyEvents = 1;
   }
@@ -264,6 +269,7 @@ function sumCompactionGenerationMetrics(
     return {
       events: sum.events + current.events,
       llmPrimaryEvents: sum.llmPrimaryEvents + current.llmPrimaryEvents,
+      workbenchPrimaryEvents: sum.workbenchPrimaryEvents + current.workbenchPrimaryEvents,
       deterministicEmergencyEvents:
         sum.deterministicEmergencyEvents + current.deterministicEmergencyEvents,
       inputTokens: sum.inputTokens + current.inputTokens,
@@ -735,6 +741,90 @@ function countContinuationAnchorsFollowedByCompaction(input: {
   ).length;
 }
 
+const RECOMMENDATION_SCHEMA = "brewva.context-evidence.recommendation.v1" as const;
+const DEFAULT_RECOMMENDATION_MIN_SAMPLE_SIZE = 10;
+const DEFAULT_RECOMMENDATION_RESET_RATIO_REVIEW_THRESHOLD = 0.5;
+
+export interface ContextEvidenceRecommendationInput {
+  /** Post-compaction observations whose provider cache stayed warm. */
+  readonly warm: number;
+  /** Post-compaction observations whose provider cache reset. */
+  readonly reset: number;
+  readonly advisoryRatio: number;
+  readonly hardRatio: number;
+  readonly tailProtectRatio: number;
+  readonly minSampleSize?: number;
+  readonly resetRatioReviewThreshold?: number;
+}
+
+export interface ContextEvidenceRecommendation {
+  readonly schema: typeof RECOMMENDATION_SCHEMA;
+  readonly sampleSize: number;
+  readonly observedCacheResetRatio: number | null;
+  readonly currentAdvisoryRatio: number;
+  readonly currentHardRatio: number;
+  readonly currentTailProtectRatio: number;
+  readonly posture: "hold" | "review" | "insufficient_evidence";
+  readonly rationale: string;
+}
+
+/**
+ * Pure, conservative evidence-fit recommendation derived from the report's
+ * post-compaction cache warm/reset counts and the live config ratios. It never
+ * auto-applies and never fabricates a target ratio: it reports the observed reset
+ * ratio against the current ratios with a `hold` / `review` / `insufficient_evidence`
+ * posture so an operator can decide a reviewed config edit. Per-model breakdown and
+ * a specific recommended ratio are intentionally out of scope — cache observations
+ * do not yet carry a model id (see the RFC Open Questions).
+ */
+export function deriveContextEvidenceRecommendation(
+  input: ContextEvidenceRecommendationInput,
+): ContextEvidenceRecommendation {
+  const warm = Math.max(0, Math.trunc(input.warm));
+  const reset = Math.max(0, Math.trunc(input.reset));
+  const sampleSize = warm + reset;
+  const observedCacheResetRatio = sampleSize > 0 ? reset / sampleSize : null;
+  const minSampleSize =
+    typeof input.minSampleSize === "number" && input.minSampleSize > 0
+      ? Math.trunc(input.minSampleSize)
+      : DEFAULT_RECOMMENDATION_MIN_SAMPLE_SIZE;
+  const reviewThreshold =
+    typeof input.resetRatioReviewThreshold === "number" &&
+    input.resetRatioReviewThreshold >= 0 &&
+    input.resetRatioReviewThreshold <= 1
+      ? input.resetRatioReviewThreshold
+      : DEFAULT_RECOMMENDATION_RESET_RATIO_REVIEW_THRESHOLD;
+
+  const base: Omit<ContextEvidenceRecommendation, "posture" | "rationale"> = {
+    schema: RECOMMENDATION_SCHEMA,
+    sampleSize,
+    observedCacheResetRatio,
+    currentAdvisoryRatio: input.advisoryRatio,
+    currentHardRatio: input.hardRatio,
+    currentTailProtectRatio: input.tailProtectRatio,
+  };
+
+  if (observedCacheResetRatio === null || sampleSize < minSampleSize) {
+    return {
+      ...base,
+      posture: "insufficient_evidence",
+      rationale: `Need at least ${minSampleSize} post-compaction cache observations before recommending a change; observed ${sampleSize}.`,
+    };
+  }
+  if (observedCacheResetRatio >= reviewThreshold) {
+    return {
+      ...base,
+      posture: "review",
+      rationale: `Compaction reset the provider cache in ${(observedCacheResetRatio * 100).toFixed(0)}% of ${sampleSize} observations (>= ${(reviewThreshold * 100).toFixed(0)}% review threshold); review advisoryRatio/minTurnsBetween to compact on a more cache-stable boundary, then adopt any change as a reviewed config edit.`,
+    };
+  }
+  return {
+    ...base,
+    posture: "hold",
+    rationale: `Post-compaction cache stayed warm in ${((1 - observedCacheResetRatio) * 100).toFixed(0)}% of ${sampleSize} observations; current ratios look healthy.`,
+  };
+}
+
 export function buildContextEvidenceReport(
   runtime: Pick<HostedRuntimeAdapterPort, "identity" | "ops">,
   options: ContextEvidenceReportOptions = {},
@@ -950,6 +1040,7 @@ export function buildContextEvidenceReport(
         compactionEvents: compactionEvents.length,
         compactionGenerationEvents: compactionGeneration.events,
         llmPrimaryCompactionEvents: compactionGeneration.llmPrimaryEvents,
+        workbenchPrimaryCompactionEvents: compactionGeneration.workbenchPrimaryEvents,
         deterministicEmergencyCompactionEvents: compactionGeneration.deterministicEmergencyEvents,
         compactionGenerationInputTokens: compactionGeneration.inputTokens,
         compactionGenerationOutputTokens: compactionGeneration.outputTokens,
@@ -1062,6 +1153,10 @@ export function buildContextEvidenceReport(
     ),
     totalLlmPrimaryCompactionEvents: sessions.reduce(
       (sum, session) => sum + session.llmPrimaryCompactionEvents,
+      0,
+    ),
+    totalWorkbenchPrimaryCompactionEvents: sessions.reduce(
+      (sum, session) => sum + session.workbenchPrimaryCompactionEvents,
       0,
     ),
     totalDeterministicEmergencyCompactionEvents: sessions.reduce(

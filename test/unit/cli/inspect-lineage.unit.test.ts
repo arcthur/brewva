@@ -222,6 +222,9 @@ describe("cli inspect lineage reporting", () => {
     expect(compactionText).toContain("readFiles=docs/solutions/runtime.md,references/design.md");
     expect(compactionText).toContain("Compaction timeline: events=2");
     expect(compactionText).toContain("Compaction latest: compact=compact-1");
+    expect(compactionText).toContain("Context ledger:");
+    expect(compactionText).toContain("lastReceipt=compact-1");
+    expect(compactionText).toContain("cache=warm");
     expect(compactionProjection.timeline).toHaveLength(2);
     expect(compactionProjection.timeline.map((entry) => entry.compactId)).toEqual([
       "compact-0",
