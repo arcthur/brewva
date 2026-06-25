@@ -99,6 +99,15 @@ the authority shape`.
   compaction surface. Under the grammar `Compaction must prove it shrank; a
 reference must prove it still resolves`.
 
+- [RFC: Transcript As A Single Ordered Truth Source](./rfc-transcript-single-ordered-truth-source.md):
+  RFC (landed) collapsing the CLI transcript onto a single ordered truth
+  source — wire-fold's `snapshot.transcriptMessages` — so `refreshFromWireFold`
+  degrades from per-message-type splicing to `replaceMessages(snapshot)` plus a
+  CLI-only rewind overlay. Custom messages become a gateway-origin
+  `custom.message` wire frame; free-floating messages stay optimistic
+  placeholders replaced wholesale by the snapshot, retiring the projector-level
+  multi-turn-ordering patches.
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a
