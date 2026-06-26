@@ -88,6 +88,33 @@ export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage
   return usage.cost;
 }
 
+/**
+ * Provider cache WRITE / READ price multipliers relative to base input price
+ * (e.g. Anthropic write = 1.25, read = 0.1). Sourced from the model catalog's
+ * `cost` table — never inferred from token volumes. Returns null when the base
+ * input price is absent so a missing-pricing case never fabricates a multiplier.
+ */
+export function resolveCacheCostMultipliers(cost: {
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+}): { writeMultiplier: number; readMultiplier: number } | null {
+  if (
+    !Number.isFinite(cost.input) ||
+    !Number.isFinite(cost.cacheRead) ||
+    !Number.isFinite(cost.cacheWrite) ||
+    cost.input <= 0 ||
+    cost.cacheRead < 0 ||
+    cost.cacheWrite < 0
+  ) {
+    return null;
+  }
+  return {
+    writeMultiplier: cost.cacheWrite / cost.input,
+    readMultiplier: cost.cacheRead / cost.input,
+  };
+}
+
 export function supportsXhighModelId(modelId: string): boolean {
   return modelSupportsXhigh(modelId);
 }

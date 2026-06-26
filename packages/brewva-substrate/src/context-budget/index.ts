@@ -22,3 +22,9 @@ export {
   type ContextBudgetStateInput,
   type ContextBudgetThresholdConfig,
 } from "./api.js";
+export {
+  compactionBreakEvenReads,
+  computeNetReuseValue,
+  type NetReuseEstimate,
+  type NetReuseInputs,
+} from "./compaction-economics.js";

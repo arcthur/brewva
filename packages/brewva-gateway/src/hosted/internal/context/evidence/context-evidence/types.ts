@@ -1,5 +1,9 @@
+import type { NetReuseInputs } from "@brewva/brewva-substrate/context-budget";
+
 export const CONTEXT_EVIDENCE_SAMPLE_SCHEMA = "brewva.context_evidence.sample.v2";
-export const CONTEXT_EVIDENCE_REPORT_SCHEMA = "brewva.context_evidence.report.v2";
+// v3: `wasteful` is now the per-cut net-reuse verdict (netReuseValue < 0),
+// replacing the aggregate cache-creation-ratio heuristic (RFC Phase 3).
+export const CONTEXT_EVIDENCE_REPORT_SCHEMA = "brewva.context_evidence.report.v3";
 
 export interface PromptStabilityEvidenceSample {
   schema: typeof CONTEXT_EVIDENCE_SAMPLE_SCHEMA;
@@ -69,10 +73,35 @@ export type ContextEvidenceEconomicVerdictKind =
   | "unaccounted_break"
   | "wasteful";
 
+// Per-verdict provenance so a verdict can be joined back to the specific
+// compaction it came from and to the cache observation that confirms it. When the
+// grade is `measured`, the joined observation's status/expected/reason are recorded
+// so the measurement is auditable (confirm vs refute).
+export interface ContextEvidenceVerdictSource {
+  kind: ContextEvidenceEconomicVerdictKind;
+  compactId?: string;
+  observationTurn?: number;
+  observationStatus?: "cold" | "warm" | "break";
+  observationExpected?: boolean;
+  observationReason?: string | null;
+}
+
+// Honesty grade (axiom 7): `measured` only when an informative post-compaction
+// cache observation (status cold/warm/break — never `limited`) joins this verdict;
+// `estimated` when only the economic prediction resolved; `inconclusive` when not
+// even that resolved.
+export type ContextEvidenceVerdictGrade = "measured" | "estimated" | "inconclusive";
+
 export interface ContextEvidenceEconomicVerdict {
   kind: ContextEvidenceEconomicVerdictKind;
   reason: string;
   metrics: Record<string, number | null>;
+  // Additive economics fields (RFC: quantified-compaction-economics). Optional and
+  // projection-tolerant: consumers tolerate their absence on the v2 schema.
+  source?: ContextEvidenceVerdictSource;
+  netReuseValue?: number | null;
+  netReuseInputs?: NetReuseInputs | null;
+  grade?: ContextEvidenceVerdictGrade;
 }
 
 export interface ContextEvidenceSessionReport {

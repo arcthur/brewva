@@ -103,6 +103,7 @@ describe("provider core surface contract", () => {
       "registerExternalApiProvider",
       "registerTypedApiProvider",
       "resolveAnthropicCacheRender",
+      "resolveCacheCostMultipliers",
       "resolveGoogleGenAICacheRender",
       "resolveOpenAICompletionsCacheRender",
       "resolveOpenAIResponsesCacheRender",

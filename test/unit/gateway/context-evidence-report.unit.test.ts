@@ -157,55 +157,53 @@ describe("context evidence report continuation anchor metrics", () => {
     const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
     const session = report.sessions.find((entry) => entry.sessionId === sessionId);
 
+    // No session model is recorded, so net-reuse economics stay null and the
+    // per-cut `wasteful` verdict (Phase 3) does not fire — only the cache-impact
+    // verdicts do.
     expect(session?.economicVerdicts.map((entry) => entry.kind).toSorted()).toEqual([
       "cache_regression",
       "unaccounted_break",
-      "wasteful",
     ]);
     expect(report.aggregate.economicVerdictCounts).toEqual({
       cache_regression: 1,
       unaccounted_break: 1,
-      wasteful: 1,
+      wasteful: 0,
     });
   });
 
-  test("uses total input-side tokens for next-turn cache waste verdicts", () => {
+  test("emits a per-cut wasteful verdict from a net-reuse loss (Phase 3)", () => {
     const runtime = createRuntimeInstanceFixture({
-      cwd: mkdtempSync(join(tmpdir(), "brewva-context-evidence-next-turn-economics-")),
+      cwd: mkdtempSync(join(tmpdir(), "brewva-context-evidence-net-reuse-loss-")),
     });
-    const sessionId = "next-turn-economic-verdict-session";
+    const sessionId = "net-reuse-loss-session";
 
     runtime.runtime.kernel.recordAdvisoryEvent({
       sessionId,
       namespace: "runtime.ops",
-      kind: "message.end",
+      kind: "model_select",
       version: 1,
-      payload: {
-        role: "assistant",
-        usage: {
-          input: 0,
-          output: 0,
-          cacheRead: 0,
-          cacheWrite: 80,
-        },
+      payload: { provider: "anthropic", model: "claude-haiku-4-5" },
+    });
+    // Small shave (dT=2000) under a large retained suffix (S=toTokens=50000):
+    // netReuseValue = -55500 < 0 → wasteful. cacheImpact unchanged → no regression.
+    runtime.ops.session.compaction.commit(sessionId, {
+      compactId: "compact-loss",
+      sanitizedSummary: "summary",
+      fromTokens: 52_000,
+      toTokens: 50_000,
+      cacheImpact: {
+        before: { cacheReadTokens: 90, cacheWriteTokens: 10 },
+        after: { cacheReadTokens: 90, cacheWriteTokens: 10 },
       },
     });
 
     const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
     const session = report.sessions.find((entry) => entry.sessionId === sessionId);
+    const wasteful = session?.economicVerdicts.find((entry) => entry.kind === "wasteful");
 
-    expect(session?.economicVerdicts).toEqual([
-      {
-        kind: "wasteful",
-        reason: "cache creation tokens exceeded the economic waste threshold",
-        metrics: {
-          compactionCacheCreationRatio: null,
-          compactionGenerationInputTokens: 0,
-          nextTurnCacheCreationRatio: 1,
-          nextTurnInputTokens: 80,
-        },
-      },
-    ]);
+    expect(wasteful?.source).toEqual({ kind: "wasteful", compactId: "compact-loss" });
+    expect(wasteful?.netReuseValue).toBeCloseTo(-55_500, 6);
+    expect(report.aggregate.economicVerdictCounts.wasteful).toBe(1);
   });
 });
 

@@ -108,6 +108,52 @@ reference must prove it still resolves`.
   placeholders replaced wholesale by the snapshot, retiring the projector-level
   multi-turn-ordering patches.
 
+- [RFC: Quantified Compaction Economics And Graded Evidence Honesty](./rfc-quantified-compaction-economics-and-evidence-honesty.md):
+  active RFC taking a third pass at `headroom` — its current `#856` net-cost arc
+  and counterfactual-savings wave, none of which existed when the
+  reversible-references and peer-distilled RFCs were written. The disciplined read
+  finds the same pattern: most of the new surface is COVERED (CCR weaker than tape,
+  savings ledger weaker than cost-observability) or REJECTED (the proxy mutating
+  cached messages, the verbosity shaper, effort routing — all runtime seizing
+  attention or thought-path, axioms 1/4). The genuine residue is two evidence-side
+  closures Brewva has the category for but not the rigor: a typed quantified
+  `netReuseValue` (plus an auditable `netReuseInputs` bag) on the economic verdict
+  — a Brewva-native adaptation of the net-cost formula with the corrected
+  break-even `R = ((w−r)/r)·(S/ΔT)`, provider-priced `w`/`r` multipliers (not token
+  ratios), and an idle-decayed `pAlive`, making `wasteful` mean `netReuseValue<0` —
+  and a `measured`/`estimated`/`inconclusive` honesty grade joined per-verdict to a
+  specific cache observation (axiom 7 made literal), plus a break-even/idle-decay
+  sharpening of the peer-distilled `--recommend` posture. Both economics inputs
+  derive from already-recorded fields (`ΔT = fromTokens − toTokens`, `S = toTokens`),
+  so every commit path is covered with no new recorded quantity; a phased landing
+  bumps the report schema to v3 when the semantics migrate. All three phases are
+  implemented: 1 (pure net-reuse model + pricing multipliers + per-verdict
+  provenance), 2 (per-verdict honesty grade joined to a cache observation), and 3
+  (`wasteful` redefined as the per-cut `netReuseValue < 0` verdict, schema → v3,
+  replacing the aggregate generation-cost heuristic). Loop 3 (the `--recommend`
+  break-even/idle-decay sharpening) stays RFC-gated on retaining the cache-reset
+  distribution and is intentionally unimplemented; the real-trace calibration
+  against the old heuristic is the remaining promotion-to-decision gate. Runtime
+  decision points added: 0 — the gate is unchanged. Under the line `Compaction economics
+inform attention; they never seize it — and a verdict that cannot prove itself
+must grade itself.`
+
+- [Candidate Axiom: Accounting For Unmeasurable Benefit](./candidate-axiom-accounting-for-unmeasurable-benefit.md):
+  active candidate-axiom proposal distilling the _essence_ (not the mechanisms) of
+  `headroom` — a methodology for staying trustworthy about a benefit that can never
+  be directly observed (saved tokens are a counterfactual). Proposes the line
+  `Unmeasurable benefit must be accounted, not asserted.` for `design-axioms.md`
+  with a five-clause implementation reading (reversible action licenses aggression;
+  a decision unobserved in its consequence is a guess; one currency makes
+  trade-offs compose; uncertainty weakens the claim not the operation; calibration
+  beats upfront correctness), extending axiom 7. Repositions the just-landed
+  `netReuseValue`/`grade` work as the _first, partial_ instance (it exercises
+  currency, grading, loop, and calibration in one ring but leaves reversible action
+  untouched) and maps the negative space — attention selection, recovery, cost
+  governance, skill effectiveness — where the same account/grade/calibrate method
+  applies. Stays a candidate until proven across ≥2 distinct rings. Under the
+  grammar `Account the unmeasurable; grade the claim; calibrate, don't assert.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

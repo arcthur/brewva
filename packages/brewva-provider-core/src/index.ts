@@ -26,6 +26,7 @@ export {
   getModels,
   getProviders,
   modelsAreEqual,
+  resolveCacheCostMultipliers,
   supportsXhigh,
   supportsXhighModelId,
 } from "./catalog/index.js";
