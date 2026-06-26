@@ -68,6 +68,7 @@ export class ManagedSessionProviderAssistantObserver {
     observeHostedProviderCache({
       runtime: this.#runtime,
       sessionId: this.#sessionId,
+      toolSchemaEstimatedTokens: state.lastToolSchemaEstimatedTokens,
       observation: {
         source: state.lastProviderFingerprint.bucketKey,
         fingerprint: state.lastProviderFingerprint,

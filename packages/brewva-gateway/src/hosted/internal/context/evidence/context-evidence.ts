@@ -635,6 +635,7 @@ interface ProviderCacheEvidenceProjection {
   reason: string | null;
   unexpectedBreak: boolean;
   changedFields: string[];
+  toolSchemaEstimatedTokens: number | null;
 }
 
 function projectProviderCacheEvidenceSample(
@@ -647,11 +648,18 @@ function projectProviderCacheEvidenceSample(
     reason: sample.reason,
     unexpectedBreak: sample.status === "break" && !sample.expected,
     changedFields: [...sample.changedFields],
+    toolSchemaEstimatedTokens: sample.toolSchemaEstimatedTokens,
   };
 }
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function readNonNegativeInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.trunc(value))
+    : null;
 }
 
 function readStringArray(value: unknown): string[] {
@@ -684,6 +692,9 @@ function projectProviderCacheEvidencePayload(
     reason: readString(observation.payload.reason),
     unexpectedBreak: status === "break" && !expected,
     changedFields: readStringArray(observation.payload.changedFields),
+    toolSchemaEstimatedTokens: readNonNegativeInteger(
+      observation.payload.toolSchemaEstimatedTokens,
+    ),
   };
 }
 
@@ -1246,6 +1257,8 @@ export function buildContextEvidenceReport(
         latestProviderCacheBreakReason: latestProviderCacheEvidence?.reason ?? null,
         latestProviderCacheUnexpectedBreak: latestProviderCacheEvidence?.unexpectedBreak ?? false,
         latestProviderCacheChangedFields: latestProviderCacheEvidence?.changedFields ?? [],
+        latestToolSchemaEstimatedTokens:
+          latestProviderCacheEvidence?.toolSchemaEstimatedTokens ?? null,
         expectedCacheBreakReductionTurns: expectedCacheBreakCorrelation.expected,
         confirmedCacheBreaksAfterReduction: expectedCacheBreakCorrelation.confirmed,
         unconfirmedExpectedCacheBreaks: expectedCacheBreakCorrelation.unconfirmed,
@@ -1419,6 +1432,13 @@ export function buildContextEvidenceReport(
     ),
     providerCacheChangedFieldCounts: countByString(
       sessions.flatMap((session) => session.latestProviderCacheChangedFields),
+    ),
+    sessionsWithToolSchemaEstimate: sessions.filter(
+      (session) => session.latestToolSchemaEstimatedTokens !== null,
+    ).length,
+    totalLatestToolSchemaEstimatedTokens: sessions.reduce(
+      (sum, session) => sum + (session.latestToolSchemaEstimatedTokens ?? 0),
+      0,
     ),
     totalExpectedCacheBreakReductionTurns: sessions.reduce(
       (sum, session) => sum + session.expectedCacheBreakReductionTurns,

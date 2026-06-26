@@ -190,6 +190,7 @@ export function recordProviderCacheObservationEvidence(input: {
   workspaceRoot: string;
   sessionId: string;
   observed: ProviderCacheObservationState;
+  toolSchemaEstimatedTokens?: number;
 }): ContextEvidenceArtifactRef | null {
   return appendContextEvidenceSample(input.workspaceRoot, {
     schema: CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
@@ -206,6 +207,7 @@ export function recordProviderCacheObservationEvidence(input: {
     cacheWriteTokens: input.observed.breakObservation.cacheWriteTokens,
     cacheMissTokens: input.observed.breakObservation.cacheMissTokens,
     changedFields: [...input.observed.breakObservation.changedFields],
+    toolSchemaEstimatedTokens: Math.max(0, Math.trunc(input.toolSchemaEstimatedTokens ?? 0)),
   });
 }
 
@@ -312,6 +314,10 @@ function parseContextEvidenceSample(raw: unknown): ContextEvidenceSample | null 
       cacheWriteTokens: Math.max(0, toFiniteInteger(record.cacheWriteTokens) ?? 0),
       cacheMissTokens: Math.max(0, toFiniteInteger(record.cacheMissTokens) ?? 0),
       changedFields: toStringArray(record.changedFields),
+      toolSchemaEstimatedTokens: Math.max(
+        0,
+        toFiniteInteger(record.toolSchemaEstimatedTokens) ?? 0,
+      ),
     };
   }
 

@@ -6,6 +6,7 @@ import {
   buildContextEvidenceReport,
   CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/evidence/context-evidence.js";
+import { observeHostedProviderCache } from "../../../packages/brewva-gateway/src/hosted/internal/context/materialization.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 
 describe("context evidence report continuation anchor metrics", () => {
@@ -305,5 +306,144 @@ describe("context evidence report cache correlation metrics", () => {
       totalPostCompactionCacheWarmObservations: 1,
       totalPostCompactionCacheResetObservations: 0,
     });
+  });
+});
+
+describe("context evidence report tool-schema cost", () => {
+  test("surfaces the latest provider-visible tool-schema token estimate", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-context-evidence-tool-schema-")),
+    });
+    const sessionId = "tool-schema-estimate-session";
+    const evidenceDir = join(runtime.identity.workspaceRoot, ".orchestrator/context-evidence");
+    mkdirSync(evidenceDir, { recursive: true });
+    const base = Date.now() - 30_000;
+    const samples = [
+      {
+        schema: CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
+        kind: "provider_cache_observation",
+        sessionId,
+        turn: 1,
+        timestamp: base,
+        source: "provider_response",
+        status: "warm",
+        classification: "prefixPreserving",
+        expected: false,
+        reason: null,
+        cacheReadTokens: 8_000,
+        cacheWriteTokens: 100,
+        cacheMissTokens: 0,
+        changedFields: [],
+        toolSchemaEstimatedTokens: 400,
+      },
+      {
+        schema: CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
+        kind: "provider_cache_observation",
+        sessionId,
+        turn: 2,
+        timestamp: base + 1_000,
+        source: "provider_response",
+        status: "break",
+        classification: "prefixPreserving",
+        expected: false,
+        reason: "tool_schema_set_changed",
+        cacheReadTokens: 1_000,
+        cacheWriteTokens: 7_000,
+        cacheMissTokens: 7_000,
+        changedFields: ["toolSchemaSnapshotHash", "tool:browser_click"],
+        toolSchemaEstimatedTokens: 1_200,
+      },
+    ];
+    writeFileSync(
+      join(evidenceDir, `session-${encodeURIComponent(sessionId)}.jsonl`),
+      `${samples.map((sample) => JSON.stringify(sample)).join("\n")}\n`,
+      "utf8",
+    );
+
+    const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
+    const session = report.sessions.find((entry) => entry.sessionId === sessionId);
+
+    expect(session).toMatchObject({
+      latestToolSchemaEstimatedTokens: 1_200,
+      latestProviderCacheBreakReason: "tool_schema_set_changed",
+    });
+    expect(report.aggregate).toMatchObject({
+      sessionsWithToolSchemaEstimate: 1,
+      totalLatestToolSchemaEstimatedTokens: 1_200,
+      providerCacheBreakReasonCounts: { tool_schema_set_changed: 1 },
+    });
+  });
+
+  test("threads the assembly-time estimate through observeHostedProviderCache into the report", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-context-evidence-tool-schema-thread-")),
+    });
+    const sessionId = "tool-schema-threading-session";
+
+    observeHostedProviderCache({
+      runtime,
+      sessionId,
+      toolSchemaEstimatedTokens: 1_234,
+      observation: {
+        source: "provider_response",
+        turn: 1,
+        timestamp: Date.now(),
+        fingerprint: {
+          bucketKey: "bucket",
+          stablePrefixHash: "prefix",
+          dynamicTailHash: "tail",
+        },
+        breakObservation: {
+          status: "warm",
+          classification: "prefixPreserving",
+          expected: false,
+          reason: null,
+          cacheReadTokens: 8_000,
+          cacheWriteTokens: 0,
+          cacheMissTokens: 0,
+          changedFields: [],
+        },
+      },
+    });
+
+    const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
+    const session = report.sessions.find((entry) => entry.sessionId === sessionId);
+
+    expect(session?.latestToolSchemaEstimatedTokens).toBe(1_234);
+    expect(report.aggregate.totalLatestToolSchemaEstimatedTokens).toBe(1_234);
+  });
+
+  test("defaults the tool-schema estimate to zero for pre-feature samples", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-context-evidence-tool-schema-legacy-")),
+    });
+    const sessionId = "tool-schema-legacy-session";
+    const evidenceDir = join(runtime.identity.workspaceRoot, ".orchestrator/context-evidence");
+    mkdirSync(evidenceDir, { recursive: true });
+    writeFileSync(
+      join(evidenceDir, `session-${encodeURIComponent(sessionId)}.jsonl`),
+      `${JSON.stringify({
+        schema: CONTEXT_EVIDENCE_SAMPLE_SCHEMA,
+        kind: "provider_cache_observation",
+        sessionId,
+        turn: 1,
+        timestamp: Date.now() - 5_000,
+        source: "provider_response",
+        status: "warm",
+        classification: "prefixPreserving",
+        expected: false,
+        reason: null,
+        cacheReadTokens: 5_000,
+        cacheWriteTokens: 0,
+        cacheMissTokens: 0,
+        changedFields: [],
+      })}\n`,
+      "utf8",
+    );
+
+    const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
+    const session = report.sessions.find((entry) => entry.sessionId === sessionId);
+
+    expect(session?.latestToolSchemaEstimatedTokens).toBe(0);
   });
 });

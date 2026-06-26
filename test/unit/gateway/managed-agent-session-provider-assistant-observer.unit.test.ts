@@ -29,6 +29,7 @@ describe("managed-agent-session provider assistant observer", () => {
       state: () => ({
         lastProviderFingerprint: undefined,
         lastCacheRender: undefined,
+        lastToolSchemaEstimatedTokens: undefined,
       }),
     });
 

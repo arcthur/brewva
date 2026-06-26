@@ -302,8 +302,14 @@ export function appendProviderDriftSample(input: {
 export function observeHostedProviderCache(input: {
   runtime: HostedRuntimeAdapterPort;
   sessionId: string;
+  // Request-shape cost diagnostic captured at assembly; a gateway-internal
+  // evidence field, kept off the vocabulary observation contract.
+  toolSchemaEstimatedTokens?: number;
   observation: ProviderCacheObservationInput;
 }): void {
+  const toolSchemaEstimatedTokens = normalizeToolSchemaEstimatedTokens(
+    input.toolSchemaEstimatedTokens,
+  );
   const observed = {
     turn: input.observation.turn ?? 0,
     updatedAt: input.observation.timestamp ?? Date.now(),
@@ -336,6 +342,7 @@ export function observeHostedProviderCache(input: {
         cacheWriteTokens: observed.breakObservation.cacheWriteTokens,
         cacheMissTokens: observed.breakObservation.cacheMissTokens,
         changedFields: [...observed.breakObservation.changedFields],
+        toolSchemaEstimatedTokens,
       },
     }),
   );
@@ -343,7 +350,15 @@ export function observeHostedProviderCache(input: {
     workspaceRoot: input.runtime.identity.workspaceRoot,
     sessionId: input.sessionId,
     observed,
+    toolSchemaEstimatedTokens,
   });
+}
+
+function normalizeToolSchemaEstimatedTokens(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.trunc(value));
 }
 
 export function rememberHostedVisibleReadState(input: {

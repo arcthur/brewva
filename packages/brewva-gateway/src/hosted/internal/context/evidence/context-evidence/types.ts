@@ -56,6 +56,9 @@ export interface ProviderCacheObservationEvidenceSample {
   cacheWriteTokens: number;
   cacheMissTokens: number;
   changedFields: string[];
+  // Estimated provider-visible tool-schema tokens for the request that produced
+  // this observation (request-shape cost diagnostic). 0 when not recorded.
+  toolSchemaEstimatedTokens: number;
 }
 
 export type ContextEvidenceSample =
@@ -161,6 +164,7 @@ export interface ContextEvidenceSessionReport {
   latestProviderCacheBreakReason: string | null;
   latestProviderCacheUnexpectedBreak: boolean;
   latestProviderCacheChangedFields: string[];
+  latestToolSchemaEstimatedTokens: number | null;
   expectedCacheBreakReductionTurns: number;
   confirmedCacheBreaksAfterReduction: number;
   unconfirmedExpectedCacheBreaks: number;
@@ -226,6 +230,8 @@ export interface ContextEvidenceAggregateReport {
   providerCacheTtlExpiryBreakSessions: number;
   providerCacheBreakReasonCounts: Record<string, number>;
   providerCacheChangedFieldCounts: Record<string, number>;
+  sessionsWithToolSchemaEstimate: number;
+  totalLatestToolSchemaEstimatedTokens: number;
   totalExpectedCacheBreakReductionTurns: number;
   totalConfirmedCacheBreaksAfterReduction: number;
   totalUnconfirmedExpectedCacheBreaks: number;

@@ -220,11 +220,15 @@ export interface ProviderCacheRuntimeState {
   lastCacheRender: ProviderCacheRenderState | undefined;
   lastCacheRenderModelKey: string | undefined;
   lastExpectedProviderCacheBreak: ExpectedProviderCacheBreak | undefined;
+  // Provider-visible tool-schema token estimate captured at request assembly
+  // (request-shape cost diagnostics), emitted with the post-response cache
+  // observation just like the fingerprint. Undefined until the first assembly.
+  lastToolSchemaEstimatedTokens: number | undefined;
 }
 
 export type ProviderCacheObserverView = Pick<
   ProviderCacheRuntimeState,
-  "lastProviderFingerprint" | "lastCacheRender"
+  "lastProviderFingerprint" | "lastCacheRender" | "lastToolSchemaEstimatedTokens"
 >;
 
 export interface PreparedCustomMessage {

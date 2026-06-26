@@ -35,6 +35,7 @@ function cacheObservation(
     cacheWriteTokens: 0,
     cacheMissTokens: 0,
     changedFields: [],
+    toolSchemaEstimatedTokens: 0,
   };
 }
 

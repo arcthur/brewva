@@ -800,4 +800,110 @@ describe("provider cache fingerprinting", () => {
       }),
     ).toEqual(expect.objectContaining({ status: "cold" }));
   });
+
+  test("attributes an unexpected break to the tool schema when only the schema set changed", () => {
+    const detector = new ProviderCacheBreakDetector();
+    const sharedInput = {
+      provider: "anthropic" as const,
+      api: "anthropic-messages" as const,
+      model: "claude-4-sonnet",
+      transport: "sse" as const,
+      sessionId: "tool-schema-break",
+      cachePolicy: {
+        retention: "short" as const,
+        writeMode: "readWrite" as const,
+        scope: "session" as const,
+        reason: "default" as const,
+      },
+      stablePrefixParts: ["stable system prompt"],
+      dynamicTailParts: ["tail"],
+      channelContext: "",
+    };
+    const baseFingerprint = createProviderRequestFingerprint({
+      ...sharedInput,
+      toolSchemaSnapshot: createToolSchemaSnapshot([
+        { name: "read", description: "Read a file", parameters: { type: "object" } },
+      ]),
+      payload: { input: "first" },
+    });
+    const expandedFingerprint = createProviderRequestFingerprint({
+      ...sharedInput,
+      toolSchemaSnapshot: createToolSchemaSnapshot([
+        { name: "read", description: "Read a file", parameters: { type: "object" } },
+        { name: "browser_click", description: "Click an element", parameters: { type: "object" } },
+      ]),
+      payload: { input: "second" },
+    });
+
+    detector.observe({
+      source: baseFingerprint.bucketKey,
+      fingerprint: baseFingerprint,
+      usage: { cacheRead: 10_000, cacheWrite: 500 },
+    });
+    const observation = detector.observe({
+      source: baseFingerprint.bucketKey,
+      fingerprint: expandedFingerprint,
+      usage: { cacheRead: 1_000, cacheWrite: 9_500 },
+    });
+
+    expect(observation).toEqual(
+      expect.objectContaining({
+        status: "break",
+        expected: false,
+        reason: "tool_schema_set_changed",
+      }),
+    );
+    expect(observation.changedFields).toContain("toolSchemaSnapshotHash");
+    expect(observation.changedFields).toContain("tool:browser_click");
+  });
+
+  test("keeps the generic break reason when a non-schema prefix field also changed", () => {
+    const detector = new ProviderCacheBreakDetector();
+    const sharedInput = {
+      provider: "anthropic" as const,
+      api: "anthropic-messages" as const,
+      model: "claude-4-sonnet",
+      transport: "sse" as const,
+      sessionId: "tool-schema-ambiguous-break",
+      cachePolicy: {
+        retention: "short" as const,
+        writeMode: "readWrite" as const,
+        scope: "session" as const,
+        reason: "default" as const,
+      },
+      dynamicTailParts: ["tail"],
+      channelContext: "",
+    };
+    const baseFingerprint = createProviderRequestFingerprint({
+      ...sharedInput,
+      stablePrefixParts: ["stable system prompt"],
+      toolSchemaSnapshot: createToolSchemaSnapshot([
+        { name: "read", description: "Read a file", parameters: { type: "object" } },
+      ]),
+      payload: { input: "first" },
+    });
+    const changedFingerprint = createProviderRequestFingerprint({
+      ...sharedInput,
+      stablePrefixParts: ["different system prompt"],
+      toolSchemaSnapshot: createToolSchemaSnapshot([
+        { name: "read", description: "Read a file", parameters: { type: "object" } },
+        { name: "browser_click", description: "Click an element", parameters: { type: "object" } },
+      ]),
+      payload: { input: "second" },
+    });
+
+    detector.observe({
+      source: baseFingerprint.bucketKey,
+      fingerprint: baseFingerprint,
+      usage: { cacheRead: 10_000, cacheWrite: 500 },
+    });
+    const observation = detector.observe({
+      source: baseFingerprint.bucketKey,
+      fingerprint: changedFingerprint,
+      usage: { cacheRead: 1_000, cacheWrite: 9_500 },
+    });
+
+    expect(observation.reason).toBe("cache_read_drop_exceeded_threshold");
+    expect(observation.changedFields).toContain("stablePrefixHash");
+  });
 });

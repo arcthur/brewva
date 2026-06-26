@@ -311,7 +311,42 @@ function classifyUnexpectedBreakReason(input: {
       return `possible_cache_ttl_expiry_${formatTtlLabel(input.shortTtlMs)}`;
     }
   }
+  if (isToolSchemaOnlyChange(input.changedFields)) {
+    return "tool_schema_set_changed";
+  }
   return "cache_read_drop_exceeded_threshold";
+}
+
+// A prefix-cache break is attributable to the provider-visible tool schema only
+// when the schema fields actually changed and nothing else durable did. Per-turn
+// request growth (requestHash, dynamicTailHash) never reflects prefix locality,
+// so it is ignored; any other durable prefix field changing makes the cause
+// ambiguous and we keep the generic reason instead of mis-accounting it.
+function isToolSchemaOnlyChange(changedFields: readonly string[]): boolean {
+  let sawSchemaField = false;
+  for (const field of changedFields) {
+    if (isToolSchemaChangedField(field)) {
+      sawSchemaField = true;
+      continue;
+    }
+    if (isTurnVaryingChangedField(field)) {
+      continue;
+    }
+    return false;
+  }
+  return sawSchemaField;
+}
+
+function isToolSchemaChangedField(field: string): boolean {
+  return (
+    field === "toolSchemaSnapshotHash" ||
+    field === "toolSchemaOverlayHash" ||
+    field.startsWith("tool:")
+  );
+}
+
+function isTurnVaryingChangedField(field: string): boolean {
+  return field === "requestHash" || field === "dynamicTailHash";
 }
 
 function resolveRenderedCacheTtlMs(input: {

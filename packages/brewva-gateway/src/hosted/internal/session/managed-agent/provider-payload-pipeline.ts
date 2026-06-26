@@ -1,6 +1,7 @@
 import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaAgentProtocolController } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaHostContext, BrewvaHostPluginRunner } from "@brewva/brewva-substrate/host-api";
+import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
 import type { ExpectedProviderCacheBreak } from "@brewva/brewva-vocabulary/context";
 import { buildHarnessManifest, stableHarnessId } from "@brewva/brewva-vocabulary/harness";
 import {
@@ -97,6 +98,7 @@ export class ManagedSessionProviderPayloadPipeline {
     lastCacheRender: undefined,
     lastCacheRenderModelKey: undefined,
     lastExpectedProviderCacheBreak: undefined,
+    lastToolSchemaEstimatedTokens: undefined,
   };
   #harnessProviderAttemptTurnKey: string | undefined;
   #harnessProviderAttemptSequence = 0;
@@ -218,6 +220,13 @@ export class ManagedSessionProviderPayloadPipeline {
       transmittedSecrets,
     });
     this.#cacheRuntime.lastProviderFingerprint = providerFingerprint;
+    // Request-shape cost diagnostics: estimate the provider-visible tool-schema
+    // tokens from the same serialized tools the snapshot hashes. Stored here at
+    // assembly and emitted with the post-response cache observation.
+    this.#cacheRuntime.lastToolSchemaEstimatedTokens = estimateStructuredTokenCount(
+      toolSchemaSnapshot.tools,
+      { provider: model.provider, api: model.api, modelId: model.id },
+    );
     const harnessManifest = buildHarnessManifest({
       sessionId: this.#sessionId,
       ...(() => {
@@ -321,6 +330,7 @@ export class ManagedSessionProviderPayloadPipeline {
     return {
       lastProviderFingerprint: this.#cacheRuntime.lastProviderFingerprint,
       lastCacheRender: this.#cacheRuntime.lastCacheRender,
+      lastToolSchemaEstimatedTokens: this.#cacheRuntime.lastToolSchemaEstimatedTokens,
     };
   }
 
@@ -335,15 +345,16 @@ export class ManagedSessionProviderPayloadPipeline {
   }
 
   /**
-   * Reset the shared bag fields cleared on session clear. Mirrors the legacy
-   * `onClear` reset (fingerprint + render + render model key) exactly; the
-   * expected-break hint is intentionally NOT reset here, matching prior
-   * behavior.
+   * Reset the shared bag fields cleared on session clear: the assembly-time
+   * "last-*" request facts (fingerprint, render, render model key, and the
+   * paired tool-schema token estimate). The expected-break hint is intentionally
+   * NOT reset here, matching prior behavior.
    */
   resetForSessionClear(): void {
     this.#cacheRuntime.lastProviderFingerprint = undefined;
     this.#cacheRuntime.lastCacheRender = undefined;
     this.#cacheRuntime.lastCacheRenderModelKey = undefined;
+    this.#cacheRuntime.lastToolSchemaEstimatedTokens = undefined;
   }
 }
 
