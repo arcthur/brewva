@@ -180,6 +180,17 @@ it; if gated, the model operates it and the tape accounts for it`.
   persistence are confirmed config-only residue, deferred to a separate hardening
   note. Zero new surface — `Teach the scheduler the clock it already owns.`
 
+- [RFC: Recall Next-Turn Cache Warming (Latency, Not Delivery)](./rfc-recall-next-turn-cache-warming.md):
+  active RFC taking only the latency half of `hermes`'s memory prefetch and
+  axiom-rejecting the injection half: a background `RecallBroker.warm()` that runs
+  the existing dirty-flag `sync()` off the turn's critical path so the next
+  explicit `recall_search` finds a warm broker and a warm local read model.
+  Strictly index-local (no provider/embedding call, no network), single-flight with
+  a racing live search, and result-neutral — it changes latency only, never what
+  `recall_search` returns and never any model-visible byte. Lands below the
+  visibility line as performance-only state under `Warm the cache, never the
+context.`
+
 - [RFC: Structured Provider-Failure Classification And Optional Backoff Retry](./rfc-provider-fallback-chain.md):
   active RFC (scope corrected after a disciplined read). The draft's gateway-owned
   fallback port, tagged taxonomy, ordered chain, first-frame lock, and per-attempt

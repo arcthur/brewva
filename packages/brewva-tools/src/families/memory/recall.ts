@@ -144,6 +144,20 @@ function renderRecallEntry(entry: RecallSearchEntry): string {
 
 export function createRecallSearchTool(options: BrewvaToolOptions): ToolDefinition {
   const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "recall_search");
+  // Create + subscribe the broker eagerly at tool-construction time, not lazily on
+  // the first recall_search. The broker subscribes to turn.ended only in its
+  // constructor, so a lazily-created broker would miss every turn boundary before
+  // the first pull — the session's first recall_search would still pay the cold
+  // sync() with no prior turn able to warm it. getOrCreateRecallBroker is
+  // idempotent (per-runtime WeakMap); execute() below reuses this same instance.
+  if (runtime) {
+    try {
+      getOrCreateRecallBroker(resolveRecallBrokerRuntime(runtime));
+    } catch {
+      // Best-effort: a not-yet-ready/minimal runtime falls back to the lazy create
+      // on first recall_search — no worse than before this warm-wiring seam.
+    }
+  }
   return define({
     name: "recall_search",
     label: "Recall Search",
