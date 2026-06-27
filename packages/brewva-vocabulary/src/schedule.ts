@@ -1,4 +1,5 @@
 export {
+  deterministicJitterFraction,
   getNextCronRunAt,
   mergeScheduleSpec,
   nextScheduleRunAt,

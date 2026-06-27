@@ -309,6 +309,7 @@ describe("hosted provider stream", () => {
           return {
             fallbackChains: {},
             credentialRotation: { enabled: true, cooldownMs: 5_000 },
+            rateLimitBackoff: { maxRetries: 0, baseDelayMs: 1_000, maxDelayMs: 30_000 },
           };
         },
         recordProviderCredentialRotated(input) {
@@ -416,6 +417,7 @@ describe("hosted provider stream", () => {
           return {
             fallbackChains: { default: ["unit-provider/backup"] },
             credentialRotation: { enabled: false, cooldownMs: 5_000 },
+            rateLimitBackoff: { maxRetries: 0, baseDelayMs: 1_000, maxDelayMs: 30_000 },
           };
         },
       });
@@ -529,6 +531,7 @@ describe("hosted provider stream", () => {
               default: ["unit-provider/default-backup"],
             },
             credentialRotation: { enabled: false, cooldownMs: 5_000 },
+            rateLimitBackoff: { maxRetries: 0, baseDelayMs: 1_000, maxDelayMs: 30_000 },
           };
         },
       });
@@ -638,6 +641,7 @@ describe("hosted provider stream", () => {
           return {
             fallbackChains: { default: ["unit-provider/backup"] },
             credentialRotation: { enabled: false, cooldownMs: 5_000 },
+            rateLimitBackoff: { maxRetries: 0, baseDelayMs: 1_000, maxDelayMs: 30_000 },
           };
         },
       });

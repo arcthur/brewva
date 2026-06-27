@@ -77,7 +77,18 @@ interface HostedSettingsData {
       enabled?: unknown;
       cooldownMs?: unknown;
     };
+    rateLimitBackoff?: {
+      maxRetries?: unknown;
+      baseDelayMs?: unknown;
+      maxDelayMs?: unknown;
+    };
   };
+}
+
+export interface RateLimitBackoffSettings {
+  maxRetries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
 }
 
 export interface HostedModelRoutingSettings {
@@ -86,6 +97,10 @@ export interface HostedModelRoutingSettings {
     enabled: boolean;
     cooldownMs: number;
   };
+  // Same-model backoff retry for a transient `rate_limit`, tried before model fallback.
+  // `maxRetries: 0` (the default `normalize` produces) is off, so behavior is unchanged
+  // unless configured.
+  rateLimitBackoff: RateLimitBackoffSettings;
 }
 
 const MODEL_ROLE_ALIASES = new Set<BrewvaModelRoleAlias>([
@@ -171,6 +186,10 @@ function mergeSettings(base: HostedSettingsData, override: HostedSettingsData): 
       credentialRotation: {
         ...base.modelRouting?.credentialRotation,
         ...override.modelRouting?.credentialRotation,
+      },
+      rateLimitBackoff: {
+        ...base.modelRouting?.rateLimitBackoff,
+        ...override.modelRouting?.rateLimitBackoff,
       },
       fallbackChains: {
         ...base.modelRouting?.fallbackChains,
@@ -278,6 +297,12 @@ function normalizeFallbackChains(value: unknown): HostedModelRoutingSettings["fa
   return chains;
 }
 
+function normalizePositiveInt(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.trunc(value))
+    : fallback;
+}
+
 function normalizeModelRoutingSettings(settings: HostedSettingsData): HostedModelRoutingSettings {
   const input = settings.modelRouting ?? {};
   const credentialRotation = input.credentialRotation ?? {};
@@ -286,11 +311,17 @@ function normalizeModelRoutingSettings(settings: HostedSettingsData): HostedMode
     Number.isFinite(credentialRotation.cooldownMs)
       ? Math.max(0, Math.trunc(credentialRotation.cooldownMs))
       : 60_000;
+  const backoff = input.rateLimitBackoff ?? {};
   return {
     fallbackChains: normalizeFallbackChains(input.fallbackChains),
     credentialRotation: {
       enabled: credentialRotation.enabled === true,
       cooldownMs,
+    },
+    rateLimitBackoff: {
+      maxRetries: normalizePositiveInt(backoff.maxRetries, 0),
+      baseDelayMs: Math.max(1, normalizePositiveInt(backoff.baseDelayMs, 1_000)),
+      maxDelayMs: Math.max(1, normalizePositiveInt(backoff.maxDelayMs, 30_000)),
     },
   };
 }

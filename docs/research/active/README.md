@@ -180,6 +180,20 @@ it; if gated, the model operates it and the tape accounts for it`.
   persistence are confirmed config-only residue, deferred to a separate hardening
   note. Zero new surface — `Teach the scheduler the clock it already owns.`
 
+- [RFC: Structured Provider-Failure Classification And Optional Backoff Retry](./rfc-provider-fallback-chain.md):
+  active RFC (scope corrected after a disciplined read). The draft's gateway-owned
+  fallback port, tagged taxonomy, ordered chain, first-frame lock, and per-attempt
+  receipt all ALREADY EXIST — tested and backed by the accepted
+  `preset-based-agent-model-routing` decision (`createHostedRuntimeProviderPort` with
+  role-based `fallbackChains`, credential rotation, `classifyProviderFailure`, the
+  `FrameWitness` compile-time lock, and `providerFallback` drift sampling). The real
+  residue is two robustness edges of the existing classifier: read the HTTP status
+  (carried on `ProviderStreamError.cause`) FIRST so a 402/odd-worded 429 stops
+  misclassifying to `unknown` and missing credential rotation, with the message regex
+  as fallback; and an optional, default-off same-model backoff retry for a transient
+  `rate_limit` before downgrading. Zero new surface in phase 1. Under `The status code
+is the most reliable signal a provider gives; classify from it first.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

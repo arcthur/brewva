@@ -18,12 +18,14 @@ import type {
   BrewvaModelPresetState,
   BrewvaModelRoleAlias,
 } from "@brewva/brewva-substrate/session";
+import { deterministicJitterFraction } from "@brewva/brewva-vocabulary/schedule";
 import {
   resolveBrewvaModelSelection,
   selectBrewvaFallbackModel,
 } from "../../../policy/model-routing/api.js";
 import { streamProviderMessage } from "../provider/execution-port.js";
 import { isBrewvaModelRoleAlias as isHostedModelRoleAlias } from "../session/settings/model-presets.js";
+import type { RateLimitBackoffSettings } from "../session/settings/settings-store.js";
 import { summarizeProviderContext, toProviderContext } from "./runtime-provider-context.js";
 import {
   type RuntimeAdapterSession,
@@ -171,7 +173,56 @@ function modelKey(model: BrewvaRegisteredModel): string {
   return `${model.provider}/${model.id}`;
 }
 
-function classifyProviderFailure(error: unknown): ProviderFailureReason {
+/**
+ * Dig an error and its `cause` chain for a plausible HTTP status. A request failure
+ * crosses the Effect failure channel as a `ProviderStreamError` whose `cause` is the
+ * original SDK error (`toProviderStreamError` sets `cause: error`), and SDK `APIError`s
+ * carry a numeric `status`. The in-band error-event path reduces the error to a plain
+ * message (no status), so this returns undefined there and classification falls back
+ * to the message regex.
+ */
+export function readProviderErrorStatus(error: unknown, depth = 0): number | undefined {
+  if (depth > 4 || error === null || typeof error !== "object") {
+    return undefined;
+  }
+  const record = error as { status?: unknown; statusCode?: unknown; cause?: unknown };
+  for (const candidate of [record.status, record.statusCode]) {
+    if (
+      typeof candidate === "number" &&
+      Number.isInteger(candidate) &&
+      candidate >= 100 &&
+      candidate <= 599
+    ) {
+      return candidate;
+    }
+  }
+  return readProviderErrorStatus(record.cause, depth + 1);
+}
+
+/**
+ * Map an unambiguous HTTP status to a failure reason. Ambiguous 4xx (e.g. 400/413,
+ * which may be a context-length error) return undefined so the message regex decides.
+ */
+function classifyProviderStatus(status: number): ProviderFailureReason | undefined {
+  if (status === 429) return "rate_limit";
+  if (status === 402) return "quota";
+  if (status === 401 || status === 403) return "auth";
+  if (status === 408 || status >= 500) return "provider";
+  return undefined;
+}
+
+/**
+ * Classify a provider failure, preferring the structured HTTP status (the most
+ * reliable signal) and falling back to a message regex when no status is present.
+ */
+export function classifyProviderFailure(error: unknown): ProviderFailureReason {
+  const status = readProviderErrorStatus(error);
+  if (status !== undefined) {
+    const byStatus = classifyProviderStatus(status);
+    if (byStatus !== undefined) {
+      return byStatus;
+    }
+  }
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
   if (/\b(quota|insufficient_quota|billing)\b/u.test(message)) return "quota";
   if (/\b(rate.?limit|429|too many requests)\b/u.test(message)) return "rate_limit";
@@ -207,6 +258,50 @@ function credentialRotationReason(
     return reason;
   }
   return undefined;
+}
+
+/**
+ * The delay (ms) for the `used`-th same-model backoff retry of a `rate_limit`, or
+ * undefined when backoff is off (`maxRetries <= 0`) or exhausted. Exponential from
+ * `baseDelayMs`, capped at `maxDelayMs`, then full-jittered: the return is sampled in
+ * `[0, ceiling)` via the caller-supplied `jitterFraction` so a herd of turns that hit
+ * the same 429 at once retries on decorrelated schedules instead of locking step on one
+ * wake time — the thundering-herd guard the scheduler already applies to recurring
+ * slots, here keyed per `(session, attempt)`. Pure, so the policy is unit-testable; the
+ * deterministic FNV fraction lives in the caller.
+ */
+export function nextRateLimitBackoffMs(
+  used: number,
+  config: RateLimitBackoffSettings | undefined,
+  jitterFraction: number,
+): number | undefined {
+  if (!config || config.maxRetries <= 0 || used >= config.maxRetries) {
+    return undefined;
+  }
+  const ceiling = Math.min(config.maxDelayMs, config.baseDelayMs * 2 ** Math.max(0, used));
+  const fraction = Number.isFinite(jitterFraction) ? Math.min(Math.max(jitterFraction, 0), 1) : 0;
+  return Math.floor(fraction * ceiling);
+}
+
+/** Resolve after `ms`, or immediately to `false` if the turn aborts during the wait. */
+function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<boolean> {
+  if (signal?.aborted === true) {
+    return Promise.resolve(false);
+  }
+  return new Promise<boolean>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onAbort = (): void => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      resolve(false);
+    };
+    timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve(true);
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function activePresetFromFace(
@@ -478,6 +573,7 @@ export function createHostedRuntimeProviderPort(
       let fallbackMetadata: Record<string, JsonValue> | undefined;
       const attempted = new Set<string>();
       const rotatedSlotsByModel = new Map<string, Set<string>>();
+      const backoffByModel = new Map<string, number>();
       while (true) {
         attempted.add(modelKey(activeModel));
         try {
@@ -495,8 +591,11 @@ export function createHostedRuntimeProviderPort(
             throw attemptError.causeError;
           }
           const reason = classifyRecoverableFailure(attemptError, attemptError.frame);
+          // One read of the routing settings per recovery attempt, shared by credential
+          // rotation and the rate-limit backoff below.
+          const routingSettings = face.getModelRoutingSettings();
           const rotationReason = credentialRotationReason(reason);
-          const rotationSettings = face.getModelRoutingSettings()?.credentialRotation;
+          const rotationSettings = routingSettings?.credentialRotation;
           if (rotationReason && rotationSettings?.enabled === true) {
             const rotation = face
               .getModelCatalog()
@@ -525,6 +624,31 @@ export function createHostedRuntimeProviderPort(
                 });
                 continue;
               }
+            }
+          }
+          // A transient rate_limit that could not be rotated may, if the operator opted
+          // in, cool off and retry the SAME model before downgrading. The retry is
+          // transparent (same model + credential), so it leaves `fallbackMetadata`
+          // untouched — it is not a fallback selection and must not be drift-sampled as
+          // one. Pre-first-frame (the `NoFrame` proof above) and abort-aware. The delay
+          // is full-jittered per (session, attempt) so concurrent turns rate-limited at
+          // once do not retry in lock-step. A 429's `Retry-After` header is deliberately
+          // not consulted: this path is shared with the in-band error-event path, which
+          // is already reduced to a message string with no headers, so one computed
+          // schedule serves both rather than a header-or-formula split.
+          if (reason === "rate_limit") {
+            const used = backoffByModel.get(modelKey(activeModel)) ?? 0;
+            const backoffMs = nextRateLimitBackoffMs(
+              used,
+              routingSettings?.rateLimitBackoff,
+              deterministicJitterFraction(`${input.turn.sessionId}:${used}`),
+            );
+            if (backoffMs !== undefined) {
+              if (!(await sleepWithAbort(backoffMs, input.turn.signal))) {
+                throw attemptError.causeError;
+              }
+              backoffByModel.set(modelKey(activeModel), used + 1);
+              continue;
             }
           }
           const [nextModel] = fallbackCandidates({

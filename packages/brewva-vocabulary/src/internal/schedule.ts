@@ -381,11 +381,13 @@ const RECURRING_JITTER_INTERVAL_RATIO = 0.1;
 const MAX_RECURRING_JITTER_MS = 15 * 60 * 1000;
 
 /**
- * Deterministic, replay-stable jitter fraction in `[0, 1)` derived from a seed
- * (the intent id). FNV-1a over the seed keeps it dependency-free and stable across
- * processes and replays — never `Math.random`, which would break replay.
+ * Deterministic jitter fraction in `[0, 1)` derived from a seed via FNV-1a —
+ * dependency-free and stable across processes and replays, never `Math.random`. The
+ * scheduler seeds it with the intent id (replay-stable recurrence jitter); the gateway
+ * rate-limit backoff seeds it per `(session, attempt)` to decorrelate a herd of turns
+ * retrying the same 429. One shared primitive keeps both jitters the same mechanism.
  */
-function scheduleJitterFraction(seed: string): number {
+export function deterministicJitterFraction(seed: string): number {
   let hash = 0x811c9dc5;
   for (let index = 0; index < seed.length; index += 1) {
     hash ^= seed.charCodeAt(index);
@@ -442,7 +444,7 @@ export function nextScheduleRunAt(
       MAX_RECURRING_JITTER_MS,
       intervalMs *
         RECURRING_JITTER_INTERVAL_RATIO *
-        scheduleJitterFraction(input.intentId ?? parsed.expression),
+        deterministicJitterFraction(input.intentId ?? parsed.expression),
     ),
   );
   return exact + jitterMs;
