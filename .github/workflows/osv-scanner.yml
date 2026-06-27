@@ -1,0 +1,32 @@
+name: OSV Scanner
+
+# Detection-only dependency vulnerability scanning of the committed bun.lock against the
+# OSV.dev database. Findings land in Security > Code Scanning; the scan never blocks a
+# merge (fail-on-vuln: false), so patching stays a deliberate schedule rather than a
+# merge-time scramble. Runs per-PR when the lockfile changes and weekly against main.
+on:
+  pull_request:
+    branches: ["main"]
+    paths: ["bun.lock"]
+  schedule:
+    - cron: "30 6 * * 1" # weekly, Monday 06:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    # Pinned to the major tag the action documents for pinning; a scanner wants the
+    # patch-level vuln-DB/parser updates within v2. osv-scanner v2 recognizes `bun.lock`
+    # by name; if a parser gap ever appears, fall back to scanning a generated SBOM.
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    with:
+      scan-args: |-
+        --lockfile=bun.lock
+      fail-on-vuln: false
+      upload-sarif: true

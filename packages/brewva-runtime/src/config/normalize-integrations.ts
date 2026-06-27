@@ -108,11 +108,21 @@ function normalizeMcpServerConfig(value: unknown, index: number): BrewvaMcpServe
       `Invalid config value for ${fieldPath}.id: expected 1-48 characters matching ${MCP_SERVER_ID_PATTERN.source}.`,
     );
   }
+  const includeToolNames = normalizeStringArray(value.includeToolNames, []);
+  if (includeToolNames.includes("*")) {
+    // "*" reads as wildcard-allow but matches only a tool literally named "*" (exposing
+    // none) — a footgun, since toolPolicies uses "*" as its default-all key. Reject it so
+    // an MCP server's self-declared catalog can never auto-derive authority (axiom 18);
+    // list explicit tool names, or use [] to expose none.
+    throw new Error(
+      `Invalid config value for ${fieldPath}.includeToolNames: "*" is not a wildcard; list explicit tool names, or use [] to expose none.`,
+    );
+  }
   const base = {
     id,
     enabled: normalizeBoolean(value.enabled, true),
     timeoutMs: normalizePositiveInteger(value.timeoutMs, 30_000),
-    includeToolNames: normalizeStringArray(value.includeToolNames, []),
+    includeToolNames,
     toolPolicies: normalizeMcpToolPolicies(value.toolPolicies, `${fieldPath}.toolPolicies`),
   };
 

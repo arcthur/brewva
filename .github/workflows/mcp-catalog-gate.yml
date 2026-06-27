@@ -1,0 +1,35 @@
+name: MCP Catalog Review Gate
+
+# An MCP server is untrusted code the operator invited in; its self-declared tools must
+# never auto-derive authority (axiom 18). Any PR that touches the committed MCP-trust
+# surface must carry the `mcp-catalog-reviewed` label, applied after the reviewer walks
+# the catalog checklist. The `paths` filter below IS the "did the MCP surface change"
+# detector, so the job only has to check the label. `labeled`/`unlabeled` are included so
+# adding the label re-runs the gate without a new push.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - "packages/brewva-mcp-adapter/**"
+      - "packages/brewva-gateway/src/hosted/internal/session/init/mcp-tools.ts"
+      - "packages/brewva-runtime/src/config/normalize-integrations.ts"
+      - "packages/brewva-runtime/src/config/types.ts"
+      - "docs/reference/mcp-integration.md"
+
+permissions:
+  contents: read
+
+jobs:
+  require-review-label:
+    name: Require mcp-catalog-reviewed label
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Exact array-element match via `contains()` — not a substring/word grep, which would
+      # also accept `not-mcp-catalog-reviewed` or `mcp-catalog-reviewed-extra`. The step runs
+      # (and fails) only when the exact label is absent; when present it is skipped.
+      - name: Require the mcp-catalog-reviewed label
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'mcp-catalog-reviewed') }}
+        run: |
+          echo "::error::This PR changes the MCP catalog surface (adapter, includeToolNames enforcement, config normalizer/types, or the documented example). Walk the catalog review checklist — command/args expected, env allowlist minimal, no exfil URL, includeToolNames bounded and non-wildcard — then add the 'mcp-catalog-reviewed' label."
+          exit 1

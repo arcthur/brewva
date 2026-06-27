@@ -370,6 +370,36 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
+  test("fails fast on a wildcard MCP includeToolNames entry", () => {
+    const workspace = createTestWorkspace("mcp-wildcard-include-tool-names");
+    // A schema-valid server (the loader validates the schema before normalizing); the
+    // wildcard is a semantic footgun the schema cannot catch, so normalization rejects it.
+    const config = structuredClone(DEFAULT_BREWVA_CONFIG);
+    config.integrations.mcp.enabled = true;
+    config.integrations.mcp.servers = [
+      {
+        id: "repo",
+        enabled: true,
+        transport: "stdio",
+        command: "bunx",
+        args: [],
+        env: {},
+        envAllowlist: [],
+        inheritEnv: false,
+        timeoutMs: 30_000,
+        includeToolNames: ["*"],
+        toolPolicies: {},
+      },
+    ];
+    writeFileSync(join(workspace, ".brewva/brewva.json"), JSON.stringify(config, null, 2), "utf8");
+
+    // "*" looks like wildcard-allow but exposes none (it matches only a tool named "*");
+    // the loader rejects it rather than silently adopting that footgun.
+    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+      /includeToolNames/,
+    );
+  });
+
   test("fails fast on duplicate MCP server ids in direct runtime config", () => {
     const workspace = createTestWorkspace("mcp-duplicate-server-ids");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG);

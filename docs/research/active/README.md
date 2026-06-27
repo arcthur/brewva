@@ -205,6 +205,17 @@ context.`
   `rate_limit` before downgrading. Zero new surface in phase 1. Under `The status code
 is the most reliable signal a provider gives; classify from it first.`
 
+- [RFC: Supply-Chain Hardening And An MCP Catalog Review Gate](./rfc-supply-chain-hardening-and-mcp-catalog-gate.md):
+  active RFC adding the dependency/trust gates Brewva lacks: OSV scanning of
+  `bun.lock` (detection-only), a high-signal PR-diff scanner for true attack
+  indicators (lifecycle scripts, `eval(atob(...))`, install-hook edits) mirroring
+  the `check:security-patterns` idiom, an MCP catalog review gate (a fitness
+  requiring a non-wildcard `includeToolNames` allowlist + known transport on every
+  configured MCP server, plus an `mcp-catalog-reviewed` label gate), and
+  exact-pinning the ranged dev-deps. Repository-governance-adjacent (axiom 13),
+  changing zero runtime admission authority, under `An MCP server is untrusted code
+the operator invited in; its self-declared tools never auto-derive authority.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

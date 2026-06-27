@@ -38,6 +38,13 @@ jobs:
       - name: Install Dependencies
         run: bun install --frozen-lockfile
 
+      - name: Dependency Audit (advisory)
+        # Advisory only: bun audit reports known advisories in the dependency tree as
+        # evidence for a deliberate patch schedule; transitive findings must not block a
+        # merge, so the step never fails the job.
+        continue-on-error: true
+        run: bun audit
+
       - name: Static Checks (Format, Lint, Typecheck)
         run: bun run check
 
