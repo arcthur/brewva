@@ -1,5 +1,7 @@
 export {
   getNextCronRunAt,
+  mergeScheduleSpec,
+  nextScheduleRunAt,
   normalizeTimeZone,
   parseCronExpression,
   parseScheduleIntentEvent,
@@ -12,6 +14,8 @@ export {
 } from "./internal/schedule.js";
 
 export type {
+  NextScheduleRunInput,
+  NextScheduleRunOptions,
   ScheduleContinuityMode,
   ScheduleIntentCancelInput,
   ScheduleIntentCancelResult,

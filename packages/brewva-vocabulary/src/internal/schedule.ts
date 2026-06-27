@@ -113,28 +113,95 @@ export function normalizeTimeZone(value: string | undefined): string {
   return value?.trim() || "UTC";
 }
 
+/**
+ * Compiled 5-field cron matcher. A `null` day-of-month / month / day-of-week means
+ * "any" (a wildcard field); minute and hour always carry an explicit value list
+ * because the next-run search enumerates them. Each field supports a wildcard, a
+ * literal value, or an every-N step — the forms the product actually emits: minute
+ * steps (every 5 minutes), hour steps (every 2 hours), day-of-week (Monday), and
+ * day-of-month plus month (Jan 1). Ranges and lists are intentionally unsupported.
+ */
+interface CompiledCronFields {
+  readonly minutes: readonly number[];
+  readonly hours: readonly number[];
+  readonly daysOfMonth: readonly number[] | null;
+  readonly months: readonly number[] | null;
+  readonly daysOfWeek: readonly number[] | null;
+}
+
+type CronFieldResult =
+  | { readonly ok: true; readonly values: number[]; readonly wildcard: boolean }
+  | { readonly ok: false; readonly reason: string };
+
+function rangeInclusive(min: number, max: number): number[] {
+  const values: number[] = [];
+  for (let value = min; value <= max; value += 1) {
+    values.push(value);
+  }
+  return values;
+}
+
+function parseCronField(raw: string, min: number, max: number): CronFieldResult {
+  if (raw === "*") {
+    return { ok: true, values: rangeInclusive(min, max), wildcard: true };
+  }
+  const stepMatch = /^\*\/(\d{1,2})$/u.exec(raw);
+  if (stepMatch) {
+    const step = Number.parseInt(stepMatch[1] ?? "", 10);
+    if (!Number.isFinite(step) || step < 1 || step > max) {
+      return { ok: false, reason: "cron_range" };
+    }
+    const values: number[] = [];
+    for (let value = min; value <= max; value += step) {
+      values.push(value);
+    }
+    return { ok: true, values, wildcard: false };
+  }
+  if (/^\d{1,2}$/u.test(raw)) {
+    const value = Number.parseInt(raw, 10);
+    if (value < min || value > max) {
+      return { ok: false, reason: "cron_range" };
+    }
+    return { ok: true, values: [value], wildcard: false };
+  }
+  return { ok: false, reason: "unsupported_cron_expression" };
+}
+
+function compileCronFields(expression: string): CompiledCronFields | { readonly reason: string } {
+  const fields = expression.trim().split(/\s+/u);
+  if (fields.length !== 5) {
+    return { reason: "cron_field_count" };
+  }
+  const minute = parseCronField(fields[0] ?? "", 0, 59);
+  if (!minute.ok) return { reason: minute.reason };
+  const hour = parseCronField(fields[1] ?? "", 0, 23);
+  if (!hour.ok) return { reason: hour.reason };
+  const dayOfMonth = parseCronField(fields[2] ?? "", 1, 31);
+  if (!dayOfMonth.ok) return { reason: dayOfMonth.reason };
+  const month = parseCronField(fields[3] ?? "", 1, 12);
+  if (!month.ok) return { reason: month.reason };
+  // Day-of-week is 0-6 (0 = Sunday); 7 is also Sunday in cron, normalized to 0.
+  const dayOfWeek = parseCronField(fields[4] ?? "", 0, 7);
+  if (!dayOfWeek.ok) return { reason: dayOfWeek.reason };
+  const normalizedDow = dayOfWeek.wildcard
+    ? null
+    : [...new Set(dayOfWeek.values.map((value) => (value === 7 ? 0 : value)))].toSorted(
+        (left, right) => left - right,
+      );
+  return {
+    minutes: minute.values,
+    hours: hour.values,
+    daysOfMonth: dayOfMonth.wildcard ? null : dayOfMonth.values,
+    months: month.wildcard ? null : month.values,
+    daysOfWeek: normalizedDow,
+  };
+}
+
 export function parseCronExpression(expression: string): ParseCronExpressionResult {
   const normalized = expression.trim();
-  const fields = normalized.split(/\s+/u);
-  if (fields.length !== 5) {
-    return { ok: false, expression: normalized, reason: "cron_field_count" };
-  }
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = fields;
-  if (
-    minute === undefined ||
-    hour === undefined ||
-    !/^\d{1,2}$/u.test(minute) ||
-    !/^\d{1,2}$/u.test(hour) ||
-    dayOfMonth !== "*" ||
-    month !== "*" ||
-    dayOfWeek !== "*"
-  ) {
-    return { ok: false, expression: normalized, reason: "unsupported_cron_expression" };
-  }
-  const parsedMinute = Number.parseInt(minute, 10);
-  const parsedHour = Number.parseInt(hour, 10);
-  if (parsedMinute < 0 || parsedMinute > 59 || parsedHour < 0 || parsedHour > 23) {
-    return { ok: false, expression: normalized, reason: "cron_range" };
+  const compiled = compileCronFields(normalized);
+  if ("reason" in compiled) {
+    return { ok: false, expression: normalized, reason: compiled.reason };
   }
   return { ok: true, expression: normalized };
 }
@@ -232,6 +299,29 @@ function localMinuteInstants(formatter: Intl.DateTimeFormat, local: LocalMinuteP
   return instants.toSorted((left, right) => left - right);
 }
 
+/**
+ * Whether a local calendar date satisfies the day-of-month / month / day-of-week
+ * fields. Follows Vixie-cron semantics: when BOTH day-of-month and day-of-week are
+ * restricted, the date matches if EITHER matches; otherwise both must match. The
+ * weekday is taken from the calendar date (timezone-independent for a given Y/M/D).
+ */
+function cronDateMatches(
+  fields: CompiledCronFields,
+  date: Pick<LocalMinuteParts, "year" | "month" | "day">,
+): boolean {
+  if (fields.months !== null && !fields.months.includes(date.month)) {
+    return false;
+  }
+  const { daysOfMonth, daysOfWeek } = fields;
+  const weekday = new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
+  const domMatch = daysOfMonth === null || daysOfMonth.includes(date.day);
+  const dowMatch = daysOfWeek === null || daysOfWeek.includes(weekday);
+  if (daysOfMonth !== null && daysOfWeek !== null) {
+    return domMatch || dowMatch;
+  }
+  return domMatch && dowMatch;
+}
+
 export function getNextCronRunAt(
   expression: string,
   optionsOrAfterMs: NextCronRunOptions | number = {},
@@ -242,13 +332,10 @@ export function getNextCronRunAt(
       ? { ...maybeOptions, from: new Date(optionsOrAfterMs) }
       : optionsOrAfterMs;
   const from = options.from instanceof Date ? options.from : new Date();
-  const parsed = parseCronExpression(expression);
-  if (!parsed.ok) {
+  const compiled = compileCronFields(expression);
+  if ("reason" in compiled) {
     return new Date(from.getTime() + 60_000);
   }
-  const [minuteRaw, hourRaw] = parsed.expression.split(/\s+/u);
-  const targetMinute = Number.parseInt(minuteRaw ?? "0", 10);
-  const targetHour = Number.parseInt(hourRaw ?? "0", 10);
   const timeZone = normalizeTimeZone(options.timeZone);
   const formatter = getLocalMinuteFormatter(timeZone);
   const start = from.getTime() + MINUTE_MS - (from.getTime() % MINUTE_MS);
@@ -256,16 +343,143 @@ export function getNextCronRunAt(
 
   for (let dayOffset = 0; dayOffset <= 366; dayOffset += 1) {
     const localDate = addCalendarDays(startLocal, dayOffset);
-    const localTarget = {
-      ...localDate,
-      hour: targetHour,
-      minute: targetMinute,
-    };
-    for (const instant of localMinuteInstants(formatter, localTarget)) {
-      if (instant >= start) {
-        return new Date(instant);
+    if (!cronDateMatches(compiled, localDate)) {
+      continue;
+    }
+    for (const hour of compiled.hours) {
+      for (const minute of compiled.minutes) {
+        const localTarget = { ...localDate, hour, minute };
+        for (const instant of localMinuteInstants(formatter, localTarget)) {
+          if (instant >= start) {
+            return new Date(instant);
+          }
+        }
       }
     }
   }
   return new Date(start);
+}
+
+export interface NextScheduleRunInput {
+  readonly runAt?: number;
+  readonly cron?: string;
+  readonly timeZone?: string;
+  readonly intentId?: string;
+}
+
+export interface NextScheduleRunOptions {
+  /** Compute the next run strictly after this instant (ms epoch). Defaults to now. */
+  readonly from?: number;
+}
+
+/**
+ * Forward jitter is a fraction of the cron interval, capped, so a fast cadence
+ * (every minute) gets near-zero spread while a daily cadence is spread over
+ * minutes — avoiding a thundering herd of intents firing on the same boundary.
+ */
+const RECURRING_JITTER_INTERVAL_RATIO = 0.1;
+const MAX_RECURRING_JITTER_MS = 15 * 60 * 1000;
+
+/**
+ * Deterministic, replay-stable jitter fraction in `[0, 1)` derived from a seed
+ * (the intent id). FNV-1a over the seed keeps it dependency-free and stable across
+ * processes and replays — never `Math.random`, which would break replay.
+ */
+function scheduleJitterFraction(seed: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash / 0x1_0000_0000;
+}
+
+/**
+ * Compute an intent's next `nextRunAt` (ms epoch), or null when it has no future
+ * run. A one-shot `runAt` is returned verbatim. A `cron` intent is advanced to its
+ * next timezone-correct slot via `getNextCronRunAt`, plus a deterministic forward
+ * jitter that is a capped fraction of the cron interval and stable per intent (so
+ * the event-carried `nextRunAt` stays authoritative under replay). An unparseable
+ * or absent cron yields null so the caller declines to arm rather than silently
+ * firing at a wrong time.
+ *
+ * This is the single source of truth for cron recurrence: the schedule projection
+ * and the daemon timer driver both call it. They prefer a persisted `nextRunAt` and
+ * extract the spec the same way (`mergeScheduleSpec`), so they agree on every intent
+ * the system writes; only a legacy event lacking a persisted value derives
+ * independently, differing at most by the display-vs-arming clock reference.
+ */
+export function nextScheduleRunAt(
+  input: NextScheduleRunInput,
+  options: NextScheduleRunOptions = {},
+): number | null {
+  if (typeof input.runAt === "number" && Number.isFinite(input.runAt)) {
+    return Math.trunc(input.runAt);
+  }
+  if (typeof input.cron !== "string" || input.cron.trim().length === 0) {
+    return null;
+  }
+  const parsed = parseCronExpression(input.cron);
+  if (!parsed.ok) {
+    return null;
+  }
+  const from =
+    typeof options.from === "number" && Number.isFinite(options.from) ? options.from : Date.now();
+  const exact = getNextCronRunAt(parsed.expression, {
+    from: new Date(from),
+    timeZone: input.timeZone,
+  }).getTime();
+  const following = getNextCronRunAt(parsed.expression, {
+    from: new Date(exact),
+    timeZone: input.timeZone,
+  }).getTime();
+  if (!Number.isFinite(following) || following <= exact) {
+    return exact;
+  }
+  const intervalMs = following - exact;
+  const jitterMs = Math.floor(
+    Math.min(
+      MAX_RECURRING_JITTER_MS,
+      intervalMs *
+        RECURRING_JITTER_INTERVAL_RATIO *
+        scheduleJitterFraction(input.intentId ?? parsed.expression),
+    ),
+  );
+  return exact + jitterMs;
+}
+
+/**
+ * Build a `NextScheduleRunInput` from the MERGED spec of an event payload and the
+ * intent's prior state — the event overrides prior fields, so a partial update that
+ * omits `cron` / `runAt` / `timeZone` re-derives the next run from the retained spec
+ * rather than dropping it. Shared by the schedule projection and the daemon timer
+ * driver so both read models extract the spec identically.
+ */
+export function mergeScheduleSpec(
+  input: Record<string, unknown>,
+  previous: Record<string, unknown> | undefined,
+  intentId: string,
+): NextScheduleRunInput {
+  const mergedNumber = (key: string): number | undefined => {
+    const value = input[key];
+    if (typeof value === "number") {
+      return value;
+    }
+    const prior = previous?.[key];
+    return typeof prior === "number" ? prior : undefined;
+  };
+  const mergedString = (key: string): string | undefined => {
+    const value = input[key];
+    if (typeof value === "string") {
+      return value;
+    }
+    const prior = previous?.[key];
+    return typeof prior === "string" ? prior : undefined;
+  };
+  return {
+    runAt: mergedNumber("runAt"),
+    cron: mergedString("cron"),
+    timeZone: mergedString("timeZone"),
+    intentId,
+  };
 }

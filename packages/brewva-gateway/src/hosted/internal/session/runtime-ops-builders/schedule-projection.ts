@@ -1,5 +1,9 @@
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
-import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-vocabulary/schedule";
+import {
+  mergeScheduleSpec,
+  nextScheduleRunAt,
+  SCHEDULE_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/schedule";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { RuntimeEventRecord } from "../runtime-ops-port.js";
 
@@ -58,16 +62,18 @@ export function listScheduleIntentRows(
         : typeof previous?.maxRuns === "number" && Number.isFinite(previous.maxRuns)
           ? Math.max(1, Math.trunc(previous.maxRuns))
           : 1;
+    // Prefer the event-carried `nextRunAt` (authoritative under replay); else derive
+    // from the MERGED spec via the same shared helper the daemon driver uses, so a
+    // partial update that omits the schedule fields re-derives from the retained spec
+    // instead of disarming the intent, and the two read models extract the spec alike.
+    const derivedNextRunAt =
+      typeof payload.nextRunAt === "number" && Number.isFinite(payload.nextRunAt)
+        ? Math.trunc(payload.nextRunAt)
+        : nextScheduleRunAt(mergeScheduleSpec(payload, previous, intentId), {
+            from: event.timestamp,
+          });
     const nextRunAt =
-      status !== "active" || runCount >= maxRuns
-        ? undefined
-        : typeof payload.nextRunAt === "number" && Number.isFinite(payload.nextRunAt)
-          ? Math.trunc(payload.nextRunAt)
-          : typeof payload.runAt === "number" && Number.isFinite(payload.runAt)
-            ? Math.trunc(payload.runAt)
-            : typeof payload.cron === "string" && payload.cron.trim().length > 0
-              ? event.timestamp + 60_000
-              : undefined;
+      status !== "active" || runCount >= maxRuns ? undefined : (derivedNextRunAt ?? undefined);
     byIntentId.set(intentId, {
       ...previous,
       ...payload,

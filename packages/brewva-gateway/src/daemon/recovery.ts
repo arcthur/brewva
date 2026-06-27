@@ -12,6 +12,7 @@ import type {
   BrewvaEventRecord,
   ProtocolRecord,
 } from "@brewva/brewva-vocabulary/events";
+import { mergeScheduleSpec, nextScheduleRunAt } from "@brewva/brewva-vocabulary/schedule";
 import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-vocabulary/schedule";
 import type {
   RecoveryWalRecord,
@@ -22,6 +23,9 @@ import type {
 import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
 type WalRecord = Record<string, unknown>;
+
+/** Signed 32-bit millisecond ceiling for `setTimeout`; longer delays are chunked. */
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 interface QuarantinedWalLine {
   readonly lineNumber: number;
   readonly text: string;
@@ -805,16 +809,16 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
           ? Math.max(1, Math.trunc(previous.maxRuns))
           : 1;
     const status = statusFor(input.kind, input.status ?? previous?.status);
+    // Prefer the event-carried `nextRunAt` (authoritative under replay); otherwise
+    // derive it from the MERGED spec (input overrides previous) via the shared helper
+    // the projection also uses, so a partial update that omits `cron`/`runAt` re-derives
+    // from the retained spec instead of wiping `nextRunAt` and disarming the intent.
+    const derivedNextRunAt =
+      typeof input.nextRunAt === "number" && Number.isFinite(input.nextRunAt)
+        ? Math.trunc(input.nextRunAt)
+        : nextScheduleRunAt(mergeScheduleSpec(input, previous, id), { from: now() });
     const nextRunAt =
-      status !== "active" || runCount >= maxRuns
-        ? undefined
-        : typeof input.nextRunAt === "number" && Number.isFinite(input.nextRunAt)
-          ? Math.trunc(input.nextRunAt)
-          : typeof input.runAt === "number" && Number.isFinite(input.runAt)
-            ? Math.trunc(input.runAt)
-            : typeof input.cron === "string" && input.cron.trim().length > 0
-              ? now() + 60_000
-              : undefined;
+      status !== "active" || runCount >= maxRuns ? undefined : (derivedNextRunAt ?? undefined);
     const record: SchedulerIntentRecord = Object.freeze({
       ...previous,
       ...input,
@@ -883,21 +887,55 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
     }
     const fired = upsertIntent({ ...current, kind: "intent_fired" });
     recordScheduleEvent(fired, "intent_fired");
+
+    // Settle a run (success OR failure) by advancing recurrence: compute the next slot
+    // from the retained spec and re-arm via `intent_rescheduled` (which keeps the intent
+    // active; `intent_converged` is forced terminal by `statusFor`), or converge when
+    // none remains. A FAILED run must still advance -- circuit-breaking is deferred, so
+    // leaving the intent active at the just-fired past slot with no timer would silently
+    // end recurrence in-process and re-fire immediately on every restart. The error is
+    // recorded on the event so the failure stays inspectable; the attempt is already
+    // counted by `fired`, so no kind here re-increments `runCount`.
+    const settle = (error?: string): void => {
+      const nextRun =
+        fired.runCount < maxRuns
+          ? nextScheduleRunAt(
+              {
+                cron: typeof fired.cron === "string" ? fired.cron : undefined,
+                timeZone: typeof fired.timeZone === "string" ? fired.timeZone : undefined,
+                intentId: fired.intentId,
+              },
+              { from: now() },
+            )
+          : null;
+      const base = { ...fired, runAt: undefined, ...(error !== undefined ? { error } : {}) };
+      if (nextRun === null) {
+        recordScheduleEvent(
+          upsertIntent({
+            ...base,
+            kind: "intent_converged",
+            status: "converged",
+            nextRunAt: undefined,
+          }),
+          "intent_converged",
+        );
+        return;
+      }
+      const rescheduled = upsertIntent({
+        ...base,
+        kind: "intent_rescheduled",
+        status: "active",
+        nextRunAt: nextRun,
+      });
+      recordScheduleEvent(rescheduled, "intent_rescheduled");
+      armIntent(rescheduled);
+    };
+
     try {
       await options.executeIntent(fired);
-      const converged = upsertIntent({
-        ...fired,
-        kind: "intent_converged",
-        status: fired.runCount >= maxRuns ? "converged" : "active",
-      });
-      recordScheduleEvent(converged, "intent_converged");
+      settle();
     } catch (error) {
-      const failed = upsertIntent({
-        ...fired,
-        kind: "intent_fired",
-        error: error instanceof Error ? error.message : String(error),
-      });
-      recordScheduleEvent(failed, "intent_fired");
+      settle(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -923,14 +961,25 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
     if (runAt === null) {
       return;
     }
-    const delayMs = Math.max(0, runAt - now());
-    timers.set(
-      id,
-      setTimeout(() => {
-        timers.delete(id);
-        void fireIntent(record);
-      }, delayMs),
-    );
+    // `setTimeout` caps at a signed 32-bit millisecond range (~24.8 days); a longer
+    // delay overflows and fires immediately. A far-future cron slot (e.g. a yearly
+    // intent) can exceed that, so re-arm in capped chunks until the remaining delay
+    // fits rather than firing early.
+    const armChunk = (): void => {
+      const remaining = Math.max(0, runAt - now());
+      if (remaining > MAX_TIMER_DELAY_MS) {
+        timers.set(id, setTimeout(armChunk, MAX_TIMER_DELAY_MS));
+        return;
+      }
+      timers.set(
+        id,
+        setTimeout(() => {
+          timers.delete(id);
+          void fireIntent(record);
+        }, remaining),
+      );
+    };
+    armChunk();
   }
 
   function reschedule(): void {

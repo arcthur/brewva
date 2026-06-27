@@ -166,6 +166,20 @@ must grade itself.`
   orthogonal to permission. Under the line `Measure schema cost before gating
 it; if gated, the model operates it and the tape accounts for it`.
 
+- [RFC: Completing Cron Recurrence In The Event-Sourced Scheduler](./rfc-scheduled-turn-source-and-control-plane-scheduler.md):
+  active RFC (scope corrected after a disciplined read) completing — not replacing
+  — the existing event-sourced scheduler fixed by the accepted
+  `schedule-intent-hardening-and-control-plane-ergonomics` decision. The keystone
+  is a correctness bug: `getNextCronRunAt` is TZ/DST-correct but has no caller, so
+  both the projection and the daemon driver arm recurring cron intents at a
+  `timestamp + 60_000` placeholder and never re-arm after a fire — a `0 9 * * *`
+  intent does not recur. Wires one shared `nextRunAt` helper (cron + deterministic
+  replay-stable jitter) into both read models, re-arms after fire, and extends the
+  `MM HH * * *`-only parser to day-of-week so the shipped self-improve default
+  `0 9 * * 1` parses. Lease/circuit-breaker/catch-up/convergence/projection
+  persistence are confirmed config-only residue, deferred to a separate hardening
+  note. Zero new surface — `Teach the scheduler the clock it already owns.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

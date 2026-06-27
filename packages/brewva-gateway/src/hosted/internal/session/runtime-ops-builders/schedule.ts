@@ -1,4 +1,4 @@
-import { SCHEDULE_EVENT_TYPE } from "@brewva/brewva-vocabulary/schedule";
+import { nextScheduleRunAt, SCHEDULE_EVENT_TYPE } from "@brewva/brewva-vocabulary/schedule";
 import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-vocabulary/schedule";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
@@ -10,7 +10,7 @@ export function buildScheduleRuntimeOps(
   return {
     intents: {
       async create(sessionId, payload) {
-        const intent = toScheduleIntentProjection(
+        const base = toScheduleIntentProjection(
           {
             ...payload,
             intentId:
@@ -22,6 +22,10 @@ export function buildScheduleRuntimeOps(
           },
           sessionId,
         ) as ScheduleIntentProjectionRecord;
+        // Persist `nextRunAt` so the projection and the daemon share one authoritative value.
+        const nextRunAt = nextScheduleRunAt(base, { from: ctx.clock() });
+        const intent: ScheduleIntentProjectionRecord =
+          nextRunAt === null ? base : { ...base, nextRunAt };
         ctx.emit(sessionId, SCHEDULE_EVENT_TYPE, { kind: "intent_created", ...intent });
         return { ok: true, intent };
       },
