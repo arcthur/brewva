@@ -6,7 +6,6 @@
     "composite": false,
     "declaration": false,
     "declarationMap": false,
-    "baseUrl": ".",
     "paths": {
       "@brewva/brewva-std/*": ["../brewva-std/src/*.ts"],
       "@brewva/brewva-token-estimation": ["../brewva-token-estimation/src/index.ts"]

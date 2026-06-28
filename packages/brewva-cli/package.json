@@ -54,7 +54,7 @@
     }
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.14.1",
+    "@agentclientprotocol/sdk": "^1.0.0",
     "@brewva/brewva-effect": "workspace:*",
     "@brewva/brewva-gateway": "workspace:*",
     "@brewva/brewva-runtime": "workspace:*",
@@ -64,12 +64,12 @@
     "@brewva/brewva-token-estimation": "workspace:*",
     "@brewva/brewva-tools": "workspace:*",
     "@brewva/brewva-vocabulary": "workspace:*",
-    "@opentui/core": "0.4.1",
-    "@opentui/keymap": "0.4.1",
-    "@opentui/solid": "0.4.1",
+    "@opentui/core": "0.4.2",
+    "@opentui/keymap": "0.4.2",
+    "@opentui/solid": "0.4.2",
     "chalk": "^5.6.2",
     "cli-highlight": "^2.1.11",
-    "date-fns": "^4.3.0",
+    "date-fns": "^4.4.0",
     "get-east-asian-width": "^1.6.0",
     "solid-js": "1.9.13"
   },

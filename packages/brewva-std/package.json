@@ -87,7 +87,7 @@
   "dependencies": {
     "@noble/hashes": "2.2.0",
     "p-limit": "7.3.0",
-    "remeda": "2.37.0",
+    "remeda": "2.39.0",
     "yaml": "^2.9.0"
   },
   "engines": {

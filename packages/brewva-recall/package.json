@@ -37,7 +37,7 @@
     "@brewva/brewva-session-index": "workspace:*",
     "@brewva/brewva-std": "workspace:*",
     "@brewva/brewva-vocabulary": "workspace:*",
-    "fuse.js": "^7.3.0"
+    "fuse.js": "^7.4.2"
   },
   "engines": {
     "node": "^20.19.0 || >=22.13.0"
