@@ -7,6 +7,7 @@ import {
   readFileSync,
   readSync,
   renameSync,
+  rmSync,
   truncateSync,
   writeFileSync,
 } from "node:fs";
@@ -90,10 +91,14 @@ export function rewriteFileAtomic(
 ): void {
   const resolved = resolve(filePath);
   const tmpPath = `${resolved}.tmp`;
-  // A sensitive target (e.g. a credential/token file) passes mode 0o600 so the tmp file — and
-  // therefore the renamed target — is created owner-only, never widened to the umask default.
+  if (options?.mode !== undefined) {
+    // Sensitive targets must not inherit a wider stale tmp mode from a previous crash.
+    rmSync(tmpPath, { force: true });
+  }
+  // A sensitive target (e.g. a credential/token file) passes mode 0o600 so the tmp file,
+  // and therefore the renamed target, is created owner-only.
   const fileDescriptor =
-    options?.mode === undefined ? openSync(tmpPath, "w") : openSync(tmpPath, "w", options.mode);
+    options?.mode === undefined ? openSync(tmpPath, "w") : openSync(tmpPath, "wx", options.mode);
   try {
     writeFileSync(fileDescriptor, contents, "utf8");
     fsyncSync(fileDescriptor);
@@ -101,7 +106,15 @@ export function rewriteFileAtomic(
     closeSync(fileDescriptor);
   }
   renameSync(tmpPath, resolved);
-  const directoryDescriptor = openSync(dirname(resolved), "r");
+  flushDirectoryDurable(dirname(resolved));
+}
+
+/**
+ * fsync a directory entry boundary. Use after creating or renaming a file when the directory
+ * entry itself, not just file contents, must survive host power loss.
+ */
+export function flushDirectoryDurable(directoryPath: string): void {
+  const directoryDescriptor = openSync(resolve(directoryPath), "r");
   try {
     fsyncSync(directoryDescriptor);
   } finally {

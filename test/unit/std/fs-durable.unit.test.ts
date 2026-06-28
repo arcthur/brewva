@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   appendFileSync,
+  chmodSync,
   closeSync,
   existsSync,
   mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
@@ -54,6 +56,19 @@ describe("rewriteFileAtomic", () => {
     rewriteFileAtomic(path, "committed\n");
     writeFileSync(`${path}.tmp`, "half-written-uncommitted");
     expect(readFileSync(path, "utf8")).toBe("committed\n");
+  });
+
+  test("sensitive rewrites do not inherit a wider stale tmp mode", () => {
+    const path = join(tempDir(), "secret.json");
+    const tmpPath = `${path}.tmp`;
+    writeFileSync(tmpPath, "stale-secret\n", "utf8");
+    chmodSync(tmpPath, 0o644);
+
+    rewriteFileAtomic(path, "fresh-secret\n", { mode: 0o600 });
+
+    expect(readFileSync(path, "utf8")).toBe("fresh-secret\n");
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(existsSync(tmpPath)).toBe(false);
   });
 });
 

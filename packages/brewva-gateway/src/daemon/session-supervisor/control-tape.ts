@@ -10,7 +10,7 @@ import {
   writeSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { flushDurable, rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
+import { flushDirectoryDurable, flushDurable, rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 
@@ -159,6 +159,7 @@ interface ControlTapeIndex {
   readonly bindingsByGatewaySessionId: Map<string, GatewaySessionBinding[]>;
   readonly admissionsByKey: Map<string, GatewayPromptAdmission>;
   fd: number | undefined;
+  directoryEntryNeedsFlush: boolean;
   parsedSize: number;
 }
 
@@ -388,6 +389,7 @@ function hydrate(tapePath: string): ControlTapeIndex {
     bindingsByGatewaySessionId: new Map(),
     admissionsByKey: new Map(),
     fd: undefined,
+    directoryEntryNeedsFlush: false,
     parsedSize: 0,
   };
   indexByPath.set(tapePath, index);
@@ -400,8 +402,10 @@ function appendFd(index: ControlTapeIndex, tapePath: string): number {
     return index.fd;
   }
   mkdirSync(dirname(tapePath), { recursive: true });
+  const createdFile = !existsSync(tapePath);
   const fd = openSync(tapePath, "a");
   index.fd = fd;
+  index.directoryEntryNeedsFlush = index.directoryEntryNeedsFlush || createdFile;
   return fd;
 }
 
@@ -507,6 +511,10 @@ export function appendGatewayControlReceipt(
   // Power-loss durable: like the runtime tape's boundary fsync, every control receipt
   // (admission idempotency, replay binding) must survive host power loss, not just a kill.
   flushDurable(fd);
+  if (index.directoryEntryNeedsFlush) {
+    flushDirectoryDurable(dirname(tapePath));
+    index.directoryEntryNeedsFlush = false;
+  }
   // Account for our own write so the next reconcile does not re-read it.
   index.parsedSize += Buffer.byteLength(line, "utf8");
   if (

@@ -216,9 +216,25 @@ describe("RecallBroker.warm() — next-turn cache warming (Phase 1)", () => {
     expect(JSON.stringify(warmOutput)).toBe(JSON.stringify(coldOutput));
 
     // And the warmed state equals the state a cold search builds (modulo the
-    // updatedAt wall-clock stamp), so curation/digests are not perturbed.
-    const stable = (broker: RecallBroker): string =>
-      JSON.stringify({ ...broker.listCached(), updatedAt: 0 });
+    // updatedAt wall-clock stamp and sub-nanosecond decay drift), so curation/digests
+    // are not perturbed.
+    const stableWeight = (value: number): string => value.toExponential(12);
+    const stable = (broker: RecallBroker): string => {
+      const state = broker.listCached();
+      return JSON.stringify({
+        ...state,
+        updatedAt: 0,
+        curation: state.curation.map((entry) =>
+          Object.assign({}, entry, {
+            helpfulWeight: stableWeight(entry.helpfulWeight),
+            staleWeight: stableWeight(entry.staleWeight),
+            supersededWeight: stableWeight(entry.supersededWeight),
+            wrongScopeWeight: stableWeight(entry.wrongScopeWeight),
+            misleadingWeight: stableWeight(entry.misleadingWeight),
+          }),
+        ),
+      });
+    };
     expect(stable(warmBroker)).toBe(stable(coldBroker));
   });
 

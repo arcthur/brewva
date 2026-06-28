@@ -24,4 +24,14 @@ describe("durable-log write discipline", () => {
       expect(code).not.toMatch(/\bwriteFileSync\s*\(/u);
     });
   }
+
+  test("gateway control tape fsyncs the first-created file directory entry", () => {
+    const code = readFileSync(
+      resolve(repoRoot, "packages/brewva-gateway/src/daemon/session-supervisor/control-tape.ts"),
+      "utf8",
+    );
+
+    expect(code).toContain("flushDirectoryDurable");
+    expect(code).toContain("directoryEntryNeedsFlush");
+  });
 });
