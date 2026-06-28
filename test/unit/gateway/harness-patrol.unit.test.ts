@@ -102,12 +102,17 @@ describe("harness patrol", () => {
       "tool_surface_miss",
       "verification_hygiene",
     ]);
-    expect(candidates.find((candidate) => candidate.kind === "provider_failure")).toMatchObject({
+    const providerFailure = candidates.find((candidate) => candidate.kind === "provider_failure");
+    expect(providerFailure).toMatchObject({
       occurrenceCount: 2,
       severity: "high",
       confidence: "high",
       promotionPath: "governed_harness_candidate",
     });
+    // Evidence refs: a candidate must point back at the snapshots/events that justify it. The
+    // test name claims "with evidence refs", so pin them — silently emptying them now reds.
+    expect(providerFailure?.sourceSnapshotIds.toSorted()).toEqual(["a", "b"]);
+    expect(providerFailure?.sourceEventIds.toSorted()).toEqual(["event-a", "event-b"]);
   });
 
   test("compares manifests without executing provider or tool effects by default", () => {

@@ -1,7 +1,8 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { dirname, resolve } from "node:path";
+import { rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
 import type { BrewvaConfig } from "../config/types.js";
 import { registerRuntimeSecret } from "../security/redact.js";
 import { normalizeToolName } from "../utils/tool-name.js";
@@ -167,21 +168,9 @@ function readVaultFile(vaultPath: string): EncryptedVaultFile {
 function writeVaultFile(vaultPath: string, file: EncryptedVaultFile): void {
   const absolutePath = resolve(vaultPath);
   mkdirSync(dirname(absolutePath), { recursive: true });
-  const tempPath = `${absolutePath}.tmp`;
-  try {
-    writeFileSync(tempPath, `${JSON.stringify(file, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    renameSync(tempPath, absolutePath);
-  } catch (error) {
-    try {
-      rmSync(tempPath, { force: true });
-    } catch {
-      // best effort
-    }
-    throw error;
-  }
+  // tmp(0o600) + fsync + rename + dir-fsync: the encrypted vault must be both owner-only and
+  // power-loss durable, so a lost write can't orphan the gateway token pointer.
+  rewriteFileAtomic(absolutePath, `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 });
 }
 
 export function createCredentialVaultServiceFromSecurityConfig(

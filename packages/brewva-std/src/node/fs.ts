@@ -83,10 +83,17 @@ export function forEachUtf8LineSync(
  * leaves at most one orphan `.tmp`, overwritten by the next rewrite — where a
  * unique name would instead accumulate orphans.
  */
-export function rewriteFileAtomic(filePath: string, contents: string): void {
+export function rewriteFileAtomic(
+  filePath: string,
+  contents: string,
+  options?: { readonly mode?: number },
+): void {
   const resolved = resolve(filePath);
   const tmpPath = `${resolved}.tmp`;
-  const fileDescriptor = openSync(tmpPath, "w");
+  // A sensitive target (e.g. a credential/token file) passes mode 0o600 so the tmp file — and
+  // therefore the renamed target — is created owner-only, never widened to the umask default.
+  const fileDescriptor =
+    options?.mode === undefined ? openSync(tmpPath, "w") : openSync(tmpPath, "w", options.mode);
   try {
     writeFileSync(fileDescriptor, contents, "utf8");
     fsyncSync(fileDescriptor);

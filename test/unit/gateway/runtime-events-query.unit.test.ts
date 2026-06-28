@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { HostedDelegationStore } from "@brewva/brewva-gateway";
 import type { RuntimeProviderPort, RuntimeToolExecutorPort } from "@brewva/brewva-runtime";
 import { CURRENT_DELEGATION_CONTRACT_VERSION } from "@brewva/brewva-vocabulary/delegation";
+import { TASK_ITEM_ADDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -22,7 +23,7 @@ describe("hosted runtime event query", () => {
     expect(
       runtime.ops.events.records
         .query("query-window-session", {
-          type: "task.item.added",
+          type: TASK_ITEM_ADDED_EVENT_TYPE,
           last: 3,
           offset: 1,
           limit: 1,

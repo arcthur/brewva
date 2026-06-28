@@ -296,6 +296,12 @@ describe("Recovery WAL store", () => {
     const walIds = rows.map((row) => row.walId);
     expect(new Set(walIds).size).toBe(rows.length);
     expect(store.listPending()).toHaveLength(40);
+    // "rows remain ordered": the persisted/listed order must equal append order (turn-0..39).
+    // The rows array above only witnesses Promise.all input order, not the store's order —
+    // appendPending is synchronous and records is insertion-ordered, so this is deterministic.
+    expect(store.listPending().map((record) => record.envelope.turnId)).toEqual(
+      Array.from({ length: 40 }, (_, index) => `turn-${index}`),
+    );
   });
 
   test("given a dedupe key, when appendPending is called multiple times, then existing recoverable record is reused", () => {

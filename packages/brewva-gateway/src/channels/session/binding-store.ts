@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { normalizeChannelId } from "@brewva/brewva-vocabulary/wire";
 
@@ -166,8 +167,6 @@ export class ConversationBindingStore {
       updatedAt: Date.now(),
       bindings: Object.fromEntries(this.bindings.entries()),
     };
-    const tempPath = `${filePath}.tmp`;
-    writeFileSync(tempPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-    renameSync(tempPath, filePath);
+    rewriteFileAtomic(filePath, `${JSON.stringify(payload, null, 2)}\n`);
   }
 }

@@ -5,10 +5,21 @@ import type {
   RuntimeSessionIntegrity,
   RuntimeSessionIssue,
 } from "@brewva/brewva-tools/contracts";
-import type { WorkerResult } from "@brewva/brewva-vocabulary/delegation";
+import {
+  WORKER_RESULT_RECORDED_EVENT_TYPE,
+  type WorkerResult,
+} from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventQuery, ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type { ResourceLeaseRecord } from "@brewva/brewva-vocabulary/iteration";
-import type { TaskItem, TaskSpec } from "@brewva/brewva-vocabulary/task";
+import {
+  TASK_BLOCKER_RECORDED_EVENT_TYPE,
+  TASK_BLOCKER_RESOLVED_EVENT_TYPE,
+  TASK_ITEM_ADDED_EVENT_TYPE,
+  TASK_ITEM_UPDATED_EVENT_TYPE,
+  TASK_SPEC_SET_EVENT_TYPE,
+  type TaskItem,
+  type TaskSpec,
+} from "@brewva/brewva-vocabulary/task";
 import {
   type WorkbenchEntry,
   WORKBENCH_EVICTION_RECORDED_EVENT_TYPE,
@@ -66,7 +77,7 @@ function projectTaskItems(listEvents: ListEvents, sessionId: string): TaskItem[]
   const order: string[] = [];
   const byId = new Map<string, TaskItem>();
   for (const event of listEvents(sessionId)) {
-    if (event.type === "task.item.added") {
+    if (event.type === TASK_ITEM_ADDED_EVENT_TYPE) {
       if (isTaskItem(event.payload)) {
         const item = event.payload;
         if (!byId.has(item.id)) {
@@ -76,7 +87,7 @@ function projectTaskItems(listEvents: ListEvents, sessionId: string): TaskItem[]
       }
       continue;
     }
-    if (event.type === "task.item.updated") {
+    if (event.type === TASK_ITEM_UPDATED_EVENT_TYPE) {
       if (!isRecord(event.payload)) {
         continue;
       }
@@ -101,13 +112,13 @@ function projectTaskItems(listEvents: ListEvents, sessionId: string): TaskItem[]
 function projectTaskBlockers(listEvents: ListEvents, sessionId: string): ProtocolRecord[] {
   let blockers: ProtocolRecord[] = [];
   for (const event of listEvents(sessionId)) {
-    if (event.type === "task.blocker.recorded") {
+    if (event.type === TASK_BLOCKER_RECORDED_EVENT_TYPE) {
       if (isRecord(event.payload)) {
         blockers.push(event.payload);
       }
       continue;
     }
-    if (event.type === "task.blocker.resolved") {
+    if (event.type === TASK_BLOCKER_RESOLVED_EVENT_TYPE) {
       const blockerId = isRecord(event.payload) ? event.payload.blockerId : undefined;
       if (typeof blockerId === "string") {
         blockers = blockers.filter((entry) => entry.id !== blockerId);
@@ -118,7 +129,7 @@ function projectTaskBlockers(listEvents: ListEvents, sessionId: string): Protoco
 }
 
 function projectTaskSpec(listEvents: ListEvents, sessionId: string): TaskSpec | undefined {
-  const event = listEvents(sessionId, { type: "task.spec.set", last: 1 })[0];
+  const event = listEvents(sessionId, { type: TASK_SPEC_SET_EVENT_TYPE, last: 1 })[0];
   const spec = isRecord(event?.payload) ? event.payload.spec : undefined;
   return isRecord(spec) ? (spec as TaskSpec) : undefined;
 }
@@ -180,7 +191,7 @@ function projectWorkbench(listEvents: ListEvents, sessionId: string): WorkbenchE
 function projectWorkerResults(listEvents: ListEvents, sessionId: string): WorkerResult[] {
   let results: WorkerResult[] = [];
   for (const event of listEvents(sessionId)) {
-    if (event.type === "worker.result.recorded") {
+    if (event.type === WORKER_RESULT_RECORDED_EVENT_TYPE) {
       const value = isRecord(event.payload)
         ? (event.payload as { value?: unknown }).value
         : undefined;

@@ -778,13 +778,11 @@ function querySourcePatchEvents(input: {
   if (!input.runtime || !input.sessionId) {
     return [];
   }
-  try {
-    return input.runtime.capabilities.events.records.query(input.sessionId, {
-      type: input.type,
-    });
-  } catch {
-    return [];
-  }
+  // No catch: the legitimate "nothing recorded" case is the early-return above. The event
+  // query is an in-process projection read — a genuine read error is a real failure, not an
+  // empty result, so it surfaces (and lets the tool report a failure) rather than being
+  // swallowed into a misleading "plan_not_found" / "snapshot_not_found".
+  return input.runtime.capabilities.events.records.query(input.sessionId, { type: input.type });
 }
 
 function hydrateSnapshotsFromRuntimeEvents(input: {

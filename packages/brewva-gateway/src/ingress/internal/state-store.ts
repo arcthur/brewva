@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   createCredentialVaultService,
   type CredentialVaultService,
 } from "@brewva/brewva-runtime/security";
+import { rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
 import { isRecord } from "@brewva/brewva-std/unknown";
 
 export interface ChildRegistryEntry {
@@ -140,18 +141,7 @@ function readJsonFile(filePath: string): unknown {
 
 function writeJsonFileAtomically(filePath: string, value: unknown): void {
   mkdirSync(dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.tmp`;
-  try {
-    writeFileSync(tmpPath, JSON.stringify(value, null, 2), "utf8");
-    renameSync(tmpPath, filePath);
-  } catch (error) {
-    try {
-      rmSync(tmpPath, { force: true });
-    } catch {
-      // best effort
-    }
-    throw error;
-  }
+  rewriteFileAtomic(filePath, JSON.stringify(value, null, 2));
 }
 
 export class FileGatewayStateStore implements GatewayStateStore {
@@ -251,16 +241,10 @@ export class FileGatewayStateStore implements GatewayStateStore {
       if (!pointer) {
         throw new Error("Gateway token vault pointer is unavailable.");
       }
-      writeFileSync(filePath, `${JSON.stringify(pointer, null, 2)}\n`, {
-        encoding: "utf8",
-        mode: 0o600,
-      });
+      rewriteFileAtomic(filePath, `${JSON.stringify(pointer, null, 2)}\n`, { mode: 0o600 });
       return;
     }
-    writeFileSync(filePath, `${token}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
+    rewriteFileAtomic(filePath, `${token}\n`, { mode: 0o600 });
   }
 
   readChildrenRegistry(registryPath: string): ChildRegistryEntry[] {

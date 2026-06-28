@@ -72,5 +72,11 @@ export function recordDelegationRuntimeEvent(input: {
     case WORKER_RESULTS_REJECTED_EVENT_TYPE:
       input.runtime.ops.delegation.workerResults.rejected(event);
       return;
+    default: {
+      // Exhaustiveness guard: a new DelegationRuntimeEventType without a case here is a
+      // compile error, not a silently dropped tape event.
+      const exhaustiveCheck: never = input.type;
+      throw new Error(`unhandled delegation runtime event: ${String(exhaustiveCheck)}`);
+    }
   }
 }

@@ -1,4 +1,7 @@
-import type { WorkerMergeReport } from "@brewva/brewva-vocabulary/delegation";
+import {
+  WORKER_RESULT_RECORDED_EVENT_TYPE,
+  type WorkerMergeReport,
+} from "@brewva/brewva-vocabulary/delegation";
 import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
@@ -80,7 +83,7 @@ export function buildSessionRuntimeOps(
     workerResults: {
       list: (sessionId) => ctx.projections.workerResults(sessionId),
       record(sessionId, value) {
-        return ctx.emit(sessionId, "worker.result.recorded", { value });
+        return ctx.emit(sessionId, WORKER_RESULT_RECORDED_EVENT_TYPE, { value });
       },
       clear(sessionId, input) {
         // Emit-only: the cleared event carries the workerIds, and the projection's

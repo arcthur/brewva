@@ -1,5 +1,13 @@
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
-import type { TaskItem } from "@brewva/brewva-vocabulary/task";
+import {
+  TASK_ACCEPTANCE_RECORDED_EVENT_TYPE,
+  TASK_BLOCKER_RECORDED_EVENT_TYPE,
+  TASK_BLOCKER_RESOLVED_EVENT_TYPE,
+  TASK_ITEM_ADDED_EVENT_TYPE,
+  TASK_ITEM_UPDATED_EVENT_TYPE,
+  TASK_SPEC_SET_EVENT_TYPE,
+  type TaskItem,
+} from "@brewva/brewva-vocabulary/task";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 
@@ -18,7 +26,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
     spec: {
       set(sessionId, spec): void {
         ctx.recordProgress(sessionId);
-        ctx.emit(sessionId, "task.spec.set", { spec });
+        ctx.emit(sessionId, TASK_SPEC_SET_EVENT_TYPE, { spec });
       },
     },
     state: {
@@ -44,7 +52,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
           status: item.status,
         };
         ctx.recordProgress(sessionId);
-        ctx.emit(sessionId, "task.item.added", taskItem, {
+        ctx.emit(sessionId, TASK_ITEM_ADDED_EVENT_TYPE, taskItem, {
           timestamp: item.timestamp,
           turn: item.turn,
         });
@@ -64,7 +72,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
         ctx.recordProgress(sessionId);
         ctx.emit(
           sessionId,
-          "task.item.updated",
+          TASK_ITEM_UPDATED_EVENT_TYPE,
           { id: item.id, text: item.text, status: item.status },
           { timestamp: item.timestamp, turn: item.turn },
         );
@@ -75,7 +83,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
       record(sessionId, blocker) {
         const blockerId = blocker.id ?? `task-blocker:${sessionId}:${Date.now()}`;
         ctx.recordProgress(sessionId);
-        ctx.emit(sessionId, "task.blocker.recorded", { ...blocker, id: blockerId });
+        ctx.emit(sessionId, TASK_BLOCKER_RECORDED_EVENT_TYPE, { ...blocker, id: blockerId });
         return { ok: true, blockerId };
       },
       resolve(sessionId, blockerId) {
@@ -84,7 +92,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
         // real existence rather than "not found" from stale in-memory state.
         const removed = taskBlockers(sessionId).some((entry) => entry.id === blockerId);
         ctx.recordProgress(sessionId);
-        ctx.emit(sessionId, "task.blocker.resolved", { blockerId });
+        ctx.emit(sessionId, TASK_BLOCKER_RESOLVED_EVENT_TYPE, { blockerId });
         return removed ? { ok: true, blockerId } : { ok: false, reason: "Blocker not found" };
       },
     },
@@ -96,7 +104,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
     },
     acceptance: {
       record(sessionId, inputValue) {
-        ctx.emit(sessionId, "task.acceptance.recorded", inputValue);
+        ctx.emit(sessionId, TASK_ACCEPTANCE_RECORDED_EVENT_TYPE, inputValue);
         return { ok: true, status: inputValue.status };
       },
     },

@@ -5,13 +5,12 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  renameSync,
   statSync,
   truncateSync,
-  writeFileSync,
   writeSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { flushDurable, rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 
@@ -503,7 +502,11 @@ export function appendGatewayControlReceipt(
     return null;
   }
   const line = `${JSON.stringify(receipt)}\n`;
-  writeSync(appendFd(index, tapePath), line);
+  const fd = appendFd(index, tapePath);
+  writeSync(fd, line);
+  // Power-loss durable: like the runtime tape's boundary fsync, every control receipt
+  // (admission idempotency, replay binding) must survive host power loss, not just a kill.
+  flushDurable(fd);
   // Account for our own write so the next reconcile does not re-read it.
   index.parsedSize += Buffer.byteLength(line, "utf8");
   if (
@@ -525,10 +528,10 @@ function rewriteTape(index: ControlTapeIndex, tapePath: string, retained: Gatewa
     index.fd = undefined;
   }
   const body = retained.map((receipt) => `${JSON.stringify(receipt)}\n`).join("");
-  const tmpPath = `${tapePath}.compact`;
   mkdirSync(dirname(tapePath), { recursive: true });
-  writeFileSync(tmpPath, body, "utf8");
-  renameSync(tmpPath, tapePath);
+  // tmp + fsync + rename + dir-fsync: a compaction crossing power loss can't lose the rename
+  // or expose a zero-length tape (the bespoke writeFileSync + rename fsynced neither).
+  rewriteFileAtomic(tapePath, body);
   index.receipts.length = 0;
   index.ids.clear();
   index.bindingsByGatewaySessionId.clear();

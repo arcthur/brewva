@@ -31,6 +31,10 @@ export const WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE = "worker.results.apply_fail
 
 export const WORKER_RESULTS_REJECTED_EVENT_TYPE = "worker.results.rejected" as const;
 
+// Runtime-ops worker-result record event: emitted by the hosted session builder and folded
+// by the runtime-ops worker-results projection. Shared so emit and projection never drift.
+export const WORKER_RESULT_RECORDED_EVENT_TYPE = "worker.result.recorded" as const;
+
 export const REVIEW_CHANGE_CATEGORIES: readonly string[] = [
   "authn",
   "authz",

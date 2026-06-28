@@ -108,7 +108,10 @@ function providerConnectionSourceRank(source: ProviderConnectionSource): number 
     case "none":
       return 1;
   }
-  return 0;
+  // Exhaustiveness guard: a new ProviderConnectionSource without a rank here is a compile
+  // error rather than a silent rank-0 (which would sort it below "none").
+  const exhaustiveCheck: never = source;
+  return exhaustiveCheck;
 }
 
 function pickProviderConnectionSource(

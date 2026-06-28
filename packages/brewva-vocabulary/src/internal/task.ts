@@ -11,6 +11,16 @@ export const TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE = "task.stall.error" as co
 
 export const TASK_STUCK_DETECTED_EVENT_TYPE = "task.stuck.detected" as const;
 
+// Runtime-ops task lifecycle events: emitted by the hosted task builder and folded by the
+// runtime-ops task projections. Shared so the emit site and the projection never drift on
+// the event-type string (a typo or a missed projection branch would silently lose the fold).
+export const TASK_SPEC_SET_EVENT_TYPE = "task.spec.set" as const;
+export const TASK_ITEM_ADDED_EVENT_TYPE = "task.item.added" as const;
+export const TASK_ITEM_UPDATED_EVENT_TYPE = "task.item.updated" as const;
+export const TASK_BLOCKER_RECORDED_EVENT_TYPE = "task.blocker.recorded" as const;
+export const TASK_BLOCKER_RESOLVED_EVENT_TYPE = "task.blocker.resolved" as const;
+export const TASK_ACCEPTANCE_RECORDED_EVENT_TYPE = "task.acceptance.recorded" as const;
+
 export const TASK_AGENT_ITEM_STATUS_VALUES = [
   "pending",
   "in_progress",
