@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
+  buildUserFactEntry,
+  USER_FACT_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/user-model";
+import {
   type WorkbenchEntry,
   WORKBENCH_EVICTION_RECORDED_EVENT_TYPE,
   WORKBENCH_EVICTION_UNDONE_EVENT_TYPE,
@@ -28,6 +32,11 @@ export function buildWorkbenchRuntimeOps(
         updatedAt: Date.now(),
       };
       ctx.emit(sessionId, WORKBENCH_NOTE_RECORDED_EVENT_TYPE, entry);
+      return entry;
+    },
+    recordUserFact(sessionId, input) {
+      const entry = buildUserFactEntry(input, { id: randomUUID(), createdAt: Date.now() });
+      ctx.emit(sessionId, USER_FACT_RECORDED_EVENT_TYPE, entry);
       return entry;
     },
     evict(sessionId, input) {

@@ -8,7 +8,9 @@ import type { SESSION_INDEX_UNAVAILABLE } from "./unavailable.js";
 // Version 8 marks the SQLite + FTS5 schema generation (session_fts / event_fts),
 // distinct from the DuckDB-era token tables that also carried version 7; on any
 // stale lower-version index `hasSchemaMismatch` triggers a full rebuild.
-export const SESSION_INDEX_SCHEMA_VERSION = 8;
+// v9: index `user.fact.recorded` so the cross-session user-model projection can list every
+// user fact across prior sessions; the bump rebuilds existing indexes to backfill them.
+export const SESSION_INDEX_SCHEMA_VERSION = 9;
 
 export type SessionIndexScope = "session_local" | "user_repository_root" | "workspace_wide";
 
@@ -66,6 +68,17 @@ export interface QueryTapeEvidenceInput {
   sessionIds: readonly string[];
   query: string;
   limit: number;
+}
+
+export interface ListTapeEventsByTypeInput {
+  type: string;
+  /**
+   * When omitted, lists this type across every indexed session (the all-sessions scan).
+   * Intended for low-cardinality event types such as `user.fact.recorded`; pass an explicit
+   * `sessionIds` to bound the scan for common types. An explicit empty array means no
+   * sessions (returns nothing) — distinct from omitting it.
+   */
+  sessionIds?: readonly string[];
 }
 
 export interface QueryRecentSessionsInput {
@@ -198,6 +211,7 @@ export interface SessionIndex {
   getSessionDigest(input: { sessionId: string }): Promise<SessionIndexDigest | undefined>;
   filterSessionIdsByScope(input: FilterSessionIdsByScopeInput): Promise<string[]>;
   queryTapeEvidence(input: QueryTapeEvidenceInput): Promise<SessionIndexTapeEvidence[]>;
+  listTapeEventsByType(input: ListTapeEventsByTypeInput): Promise<SessionIndexTapeEvidence[]>;
   getTapeEvent(input: {
     sessionId: string;
     eventId: string;

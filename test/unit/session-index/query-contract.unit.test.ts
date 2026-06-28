@@ -10,6 +10,7 @@ import type {
 } from "@brewva/brewva-session-index";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { USER_FACT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/user-model";
 
 // These tests exercise the SessionIndex query contract through the public
 // createSessionIndex API only — they never import the engine layer (duckdb/),
@@ -146,5 +147,101 @@ describe("session index query contract (engine-agnostic)", () => {
     expect(evidence.length).toBeGreaterThan(0);
     expect(evidence.every((entry) => entry.sessionId === "s1")).toBe(true);
     expect(evidence[0]?.tokenScore ?? 0).toBeGreaterThan(0);
+  });
+});
+
+function userFactRecord(input: {
+  id: string;
+  sessionId: string;
+  factKey: string;
+  value: string;
+  timestamp: number;
+}): BrewvaEventRecord {
+  return record({
+    id: input.id,
+    sessionId: input.sessionId,
+    type: USER_FACT_RECORDED_EVENT_TYPE,
+    timestamp: input.timestamp,
+    payload: {
+      id: input.id,
+      scope: "user",
+      factKey: input.factKey,
+      value: input.value,
+      grade: "estimated",
+      sourceRefs: ["turn:1"],
+      reason: "authored from the conversation",
+      createdAt: input.timestamp,
+    },
+  });
+}
+
+describe("session index listTapeEventsByType", () => {
+  let workspaceRoot: string;
+  let index: SessionIndex;
+
+  beforeEach(async () => {
+    workspaceRoot = mkdtempSync(join(tmpdir(), "session-index-list-by-type-"));
+    index = await createSessionIndex({
+      workspaceRoot,
+      events: eventSource([
+        taskGoalEvent("s1", "unrelated task goal", 500),
+        userFactRecord({
+          id: "f1",
+          sessionId: "s1",
+          factKey: "style",
+          value: "terse",
+          timestamp: 1_000,
+        }),
+        userFactRecord({
+          id: "f2",
+          sessionId: "s2",
+          factKey: "style",
+          value: "terse",
+          timestamp: 2_000,
+        }),
+        userFactRecord({
+          id: "f3",
+          sessionId: "s3",
+          factKey: "lang",
+          value: "ts",
+          timestamp: 3_000,
+        }),
+      ]),
+      task,
+    });
+    const status = await index.catchUp();
+    expect(status.ok).toBe(true);
+  });
+
+  afterEach(async () => {
+    await index.close();
+    rmSync(workspaceRoot, { recursive: true, force: true });
+  });
+
+  test("omitting sessionIds lists every event of the type, chronologically", async () => {
+    const events = await index.listTapeEventsByType({ type: USER_FACT_RECORDED_EVENT_TYPE });
+    expect(events.map((event) => event.eventId)).toEqual(["f1", "f2", "f3"]);
+    expect(events.every((event) => event.type === USER_FACT_RECORDED_EVENT_TYPE)).toBe(true);
+  });
+
+  test("an explicit sessionIds list narrows to those sessions", async () => {
+    const events = await index.listTapeEventsByType({
+      type: USER_FACT_RECORDED_EVENT_TYPE,
+      sessionIds: ["s1", "s3"],
+    });
+    expect(events.map((event) => event.eventId)).toEqual(["f1", "f3"]);
+  });
+
+  test("an explicit empty sessionIds list returns nothing, not everything", async () => {
+    const events = await index.listTapeEventsByType({
+      type: USER_FACT_RECORDED_EVENT_TYPE,
+      sessionIds: [],
+    });
+    expect(events).toEqual([]);
+  });
+
+  test("the type filter excludes other event types", async () => {
+    const events = await index.listTapeEventsByType({ type: TASK_EVENT_TYPE });
+    expect(events.map((event) => event.sessionId)).toEqual(["s1"]);
   });
 });

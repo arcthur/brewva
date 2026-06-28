@@ -8,6 +8,7 @@ import {
   type ListSessionDigestsInput,
   type QueryRecentSessionsInput,
   type QuerySessionDigestsInput,
+  type ListTapeEventsByTypeInput,
   type QueryTapeEvidenceInput,
   type SessionIndex,
   type SessionIndexBox,
@@ -51,6 +52,7 @@ import type { JsonRow } from "./query/port.js";
 import {
   getTapeEventRow,
   listRecentSessionRows,
+  listTapeEventsByTypeRows,
   queryTapeEvidenceRows,
 } from "./query/tape-evidence.js";
 import { type SqlParams } from "./sql/params.js";
@@ -154,6 +156,10 @@ class UnavailableSessionIndex implements SessionIndex {
   }
 
   async queryTapeEvidence(): Promise<SessionIndexTapeEvidence[]> {
+    throw new SessionIndexUnavailableError(this.message);
+  }
+
+  async listTapeEventsByType(): Promise<SessionIndexTapeEvidence[]> {
     throw new SessionIndexUnavailableError(this.message);
   }
 
@@ -425,6 +431,16 @@ class SqliteSessionIndex implements SessionIndex {
   async queryTapeEvidence(input: QueryTapeEvidenceInput): Promise<SessionIndexTapeEvidence[]> {
     return await queryTapeEvidenceRows({
       query: input,
+      port: this.queryPort(),
+    });
+  }
+
+  async listTapeEventsByType(
+    input: ListTapeEventsByTypeInput,
+  ): Promise<SessionIndexTapeEvidence[]> {
+    return await listTapeEventsByTypeRows({
+      type: input.type,
+      sessionIds: input.sessionIds,
       port: this.queryPort(),
     });
   }

@@ -419,6 +419,8 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   workbench_compact: memoryWrite(),
   session_rewind: SESSION_REWIND_WORKSPACE_POLICY,
   cost_view: runtimeObserve(),
+  user_fact: memoryWrite(),
+  user_model: runtimeObserve(),
   workbench_note: memoryWrite(),
   workbench_evict: memoryWrite(),
   workbench_undo_evict: memoryWrite(),

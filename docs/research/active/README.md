@@ -216,6 +216,17 @@ is the most reliable signal a provider gives; classify from it first.`
   changing zero runtime admission authority, under `An MCP server is untrusted code
 the operator invited in; its self-declared tools never auto-derive authority.`
 
+- [RFC: A User Model As A Tape-Folded Advisory Projection](./rfc-user-model-as-a-tape-folded-advisory-projection.md):
+  active RFC building cross-session user modeling as the second proving ring for the
+  unmeasurable-benefit candidate axiom, against a literal Honcho port: a
+  model-authored advisory `user_fact` event, a deterministic rebuildable user-model
+  projection (latest-wins with retained supersession), an explicit-pull retrieval
+  surface reusing the recall idiom (inheriting the cache-warming latency win without
+  the injection), and a per-fact `measured`/`estimated`/`inconclusive` grade.
+  Rejects runtime dialectic inference and per-turn injection (axioms 1, 2, 4) and
+  the second-memory-store anti-pattern. Under `The user model is a projection the
+model authored and the tape preserved — graded, explicit-pull, authority-free.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

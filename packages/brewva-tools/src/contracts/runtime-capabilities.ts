@@ -173,6 +173,7 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "capabilities.workbench.evict",
   "capabilities.workbench.list",
   "capabilities.workbench.note",
+  "capabilities.workbench.recordUserFact",
   "capabilities.workbench.undoEviction",
   "extensions.tools.onClearState",
   "extensions.tools.resolveCredentialBindings",

@@ -24,6 +24,7 @@ const requiredVocabularySubpaths = [
   "./schedule",
   "./session",
   "./task",
+  "./user-model",
   "./wire",
   "./workbench",
 ] as const;

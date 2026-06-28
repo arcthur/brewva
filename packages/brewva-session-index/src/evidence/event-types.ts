@@ -19,6 +19,7 @@ import {
   TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
 import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { USER_FACT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/user-model";
 import {
   PATCH_RECORDED_EVENT_TYPE,
   REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE,
@@ -49,6 +50,7 @@ export const SESSION_INDEX_TEXT_INDEXED_EVENT_TYPES = [
   PATCH_RECORDED_EVENT_TYPE,
   DECISION_RECEIPT_RECORDED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  USER_FACT_RECORDED_EVENT_TYPE,
 ] as const;
 
 const SESSION_INDEX_TEXT_INDEXED_EVENT_TYPE_SET: ReadonlySet<string> = new Set(

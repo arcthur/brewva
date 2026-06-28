@@ -77,6 +77,12 @@
       "import": "./dist/task.js",
       "default": "./dist/task.js"
     },
+    "./user-model": {
+      "types": "./dist/user-model.d.ts",
+      "bun": "./src/user-model.ts",
+      "import": "./dist/user-model.js",
+      "default": "./dist/user-model.js"
+    },
     "./wire": {
       "types": "./dist/wire.d.ts",
       "bun": "./src/wire.ts",

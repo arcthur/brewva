@@ -28,6 +28,7 @@ export {
   createWorkbenchNoteTool,
   createWorkbenchUndoEvictTool,
 } from "./workbench.js";
+export { createUserFactTool, createUserModelTool } from "./user-model.js";
 export { createAttentionOptionTools } from "./attention-options.js";
 export {
   DERIVATIVE_RELATIONS,

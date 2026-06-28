@@ -226,6 +226,15 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.lifecycle.boxReleased",
     "capabilities.tools.outputs.observed",
   ]),
+  user_fact: metadata("base", "memory_write", ["capabilities.workbench.recordUserFact"]),
+  user_model: metadata("base", "runtime_observe", [
+    // The cross-session fold runs through the recall broker + session index: the broker
+    // subscribes to and catches up the event source, and scopes facts by target root.
+    "capabilities.events.records.list",
+    "capabilities.events.records.listSessionIds",
+    "capabilities.events.records.subscribe",
+    "capabilities.task.target.getDescriptor",
+  ]),
   workbench_note: metadata("base", "memory_write", ["capabilities.workbench.note"]),
   workbench_evict: metadata("base", "memory_write", [
     "capabilities.events.records.list",

@@ -1,4 +1,5 @@
 import type { RcrReference } from "@brewva/brewva-vocabulary/rcr";
+import type { UserFactEntry, UserFactScope } from "@brewva/brewva-vocabulary/user-model";
 import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 
@@ -13,6 +14,21 @@ export function noteWorkbench(
   },
 ): WorkbenchEntry | undefined {
   return runtime?.capabilities?.workbench.note(sessionId, input);
+}
+
+export function recordUserFact(
+  runtime: BrewvaToolRuntime | undefined,
+  sessionId: string,
+  input: {
+    scope: UserFactScope;
+    factKey: string;
+    value: string;
+    reason: string;
+    sourceRefs?: readonly string[];
+    supersedesId?: string;
+  },
+): UserFactEntry | undefined {
+  return runtime?.capabilities?.workbench.recordUserFact(sessionId, input);
 }
 
 export function evictWorkbench(

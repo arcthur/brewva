@@ -13,6 +13,7 @@ export type {
   CreateSessionIndexInput,
   FilterSessionIdsByScopeInput,
   ListSessionDigestsInput,
+  ListTapeEventsByTypeInput,
   QueryRecentSessionsInput,
   QuerySessionDigestsInput,
   QueryTapeEvidenceInput,

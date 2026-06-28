@@ -3,6 +3,12 @@ import { createSessionIndex, type SessionIndex } from "@brewva/brewva-session-in
 import { isSessionIndexTextIndexedEvent } from "@brewva/brewva-session-index/evidence";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { resolveRuntimeSourceIdentity } from "@brewva/brewva-std/runtime-identity";
+import {
+  buildUserModelProjection,
+  parseUserFactEvent,
+  USER_FACT_RECORDED_EVENT_TYPE,
+  type UserModelProjection,
+} from "@brewva/brewva-vocabulary/user-model";
 import { classifyRecallTapeEvent } from "../evidence/index.js";
 import { executeKnowledgeSearch, findKnowledgeDocByRelativePath } from "../knowledge/index.js";
 import {
@@ -333,6 +339,42 @@ export class RecallBroker {
         compareRecallSearchEntries,
       ),
     };
+  }
+
+  /**
+   * Fold the cross-session user model from the `user.fact.recorded` events the session index
+   * holds. It gathers every user fact (a rare, deliberate event type — cheap to scan), then
+   * scopes project facts to sessions sharing the current repository while keeping user facts
+   * global, so the honesty grade calibrates only from genuinely independent sessions. The
+   * fold is the calibration ({@link buildUserModelProjection}). Read-only and explicit-pull:
+   * it surfaces nothing on its own — the `user_model` tool call is the only reveal (axiom 1).
+   */
+  async userModel(input: { sessionId: string }): Promise<UserModelProjection> {
+    const sessionIndex = await this.indexPromise;
+    const currentTarget = this.runtime.task.target.getDescriptor(input.sessionId);
+    const targetRoots = resolveTargetRoots({
+      workspaceRoot: this.runtime.identity.workspaceRoot,
+      target: currentTarget,
+    });
+    const events = (
+      await sessionIndex.listTapeEventsByType({ type: USER_FACT_RECORDED_EVENT_TYPE })
+    ).map(mapSessionIndexEvidenceToEvent);
+    const factSessionIds = uniqueStrings(events.map((event) => event.sessionId));
+    // Project facts only corroborate within the current repository; user facts are global,
+    // so a project fact authored in another repo must not enter this fold.
+    const repoScopedSessionIds = await this.filterSessionIdsByScope(
+      sessionIndex,
+      input.sessionId,
+      "user_repository_root",
+      targetRoots,
+      factSessionIds,
+    );
+    const scopedEvents = events.filter((event) => {
+      const entry = parseUserFactEvent(event);
+      if (entry === null) return false;
+      return entry.scope === "user" || repoScopedSessionIds.has(event.sessionId);
+    });
+    return buildUserModelProjection(scopedEvents);
   }
 
   private async searchTapeEvidence(

@@ -313,8 +313,12 @@ describe("runtime ops capability inventory fitness", () => {
     // wiring; the transaction engine itself lives under `recovery/` (outside this
     // count) so the builders stay thin. This is necessary correctness growth, not
     // bloat — a later net-reduction of the ops facade is expected to tighten the
-    // budget again.
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_500);
+    // budget again. The user-model RFC then added the `recordUserFact` advisory-lane
+    // authoring path on the workbench builder; the entry construction and the
+    // cross-session latest-wins fold both live in `@brewva/brewva-vocabulary` (off this
+    // count), and the cross-session read is the recall broker's (not a hosted-ops
+    // projection), so only the thin emit lands here.
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_515);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

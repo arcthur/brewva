@@ -83,6 +83,35 @@ export async function getTapeEventRow(input: {
   return row ? mapEventRow(row, 0) : undefined;
 }
 
+export async function listTapeEventsByTypeRows(input: {
+  type: string;
+  sessionIds?: readonly string[];
+  port: SessionIndexQueryPort;
+}): Promise<SessionIndexTapeEvidence[]> {
+  // Omitting sessionIds scans the type across all sessions; an explicit (possibly empty after
+  // normalization) list narrows — and an explicit empty list means nothing, not everything.
+  const sessionIds = input.sessionIds ? uniqueNonEmptyStrings(input.sessionIds) : undefined;
+  if (sessionIds && sessionIds.length === 0) return [];
+
+  await input.port.ensureAvailable();
+
+  const params: SqlParams = { type: input.type };
+  const sessionFilter = sessionIds ? buildInList("session", sessionIds, params) : undefined;
+  // No FTS: list every event of this type (optionally narrowed to the requested sessions) in
+  // chronological order so a chronological fold (latest-wins per key, cross-session
+  // corroboration grading) is deterministic.
+  const rows = await input.port.selectRows<EventRow>(
+    `
+      select event_id, session_id, timestamp, turn, type, payload_json, search_text, source_uri, source_sequence
+      from events
+      where type = $type${sessionFilter ? ` and session_id in (${sessionFilter})` : ""}
+      order by timestamp asc, source_sequence asc
+    `,
+    params,
+  );
+  return rows.map((row) => mapEventRow(row, 0));
+}
+
 export async function listRecentSessionRows(input: {
   query: QueryRecentSessionsInput;
   port: SessionIndexQueryPort;

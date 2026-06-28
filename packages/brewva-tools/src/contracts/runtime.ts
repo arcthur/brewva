@@ -95,6 +95,7 @@ import type {
   TaskState,
   TaskTargetDescriptor,
 } from "@brewva/brewva-vocabulary/task";
+import type { UserFactEntry, UserFactScope } from "@brewva/brewva-vocabulary/user-model";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type {
   PatchRollbackCandidateView,
@@ -611,6 +612,17 @@ export interface BrewvaToolRuntimeCommandPort {
         retentionHint?: string;
       },
     ): WorkbenchEntry;
+    recordUserFact(
+      sessionId: string,
+      input: {
+        scope: UserFactScope;
+        factKey: string;
+        value: string;
+        reason: string;
+        sourceRefs?: readonly string[];
+        supersedesId?: string;
+      },
+    ): UserFactEntry;
     undoEviction(
       sessionId: string,
       entryId: string,
