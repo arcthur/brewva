@@ -77,6 +77,27 @@ MCP tools can also be capability-gated by hosted tool surface policy. A
 capability selection receipt explains why an external MCP authority was exposed;
 tool policy and effect governance still decide each action.
 
+## Catalog Trust Gate
+
+An MCP server is untrusted code the operator invited in, and its self-declared
+tool catalog is descriptive: it derives a bounded view, never an authority
+(axiom 18). Every configured server must therefore declare an explicit, bounded,
+non-wildcard `includeToolNames` allowlist and a transport from the known set
+(`stdio` or `streamable_http`). `includeToolNames` defaults to `[]` (expose
+none), and `[]` remains valid when the server is configured but no tools should
+be adopted. A `"*"` value is rejected at config load — it reads as wildcard-allow
+but matches only a tool literally named `"*"`, so it is a footgun, not a
+wildcard. A documented example is held to a non-empty, non-wildcard shape by a
+docs fitness so examples never teach an inert catalog.
+
+Any change to the MCP catalog surface (the adapter, the gateway
+`includeToolNames` enforcement point, the config normalizer or types, or this
+document's example) requires the `mcp-catalog-reviewed` CI label, applied after a
+reviewer walks the checklist: command and args expected, env allowlist minimal,
+no exfiltration URL, and the tool list bounded and non-wildcard. The gate is a
+config-admission check; a gated tool still passes the unchanged kernel admission
+at call time.
+
 ## Hosted Names
 
 MCP tools become hosted tools named:

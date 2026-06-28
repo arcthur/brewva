@@ -113,6 +113,22 @@ cooldownMs }`. The provider fallback metadata marks this as
 selected route so cache diagnostics can explain account-scope drift. Secret
 material never enters provider events, artifacts, or inspect output.
 
+The failure reason that gates rotation and fallback is classified from the
+structured HTTP status first, falling back to a message regex only when no status
+is present. A provider request failure crosses the `ProviderStreamError` channel
+carrying the originating SDK error on its `cause`; the classifier walks the error
+and its `cause` chain (bounded depth) for a numeric `status`/`statusCode` in the
+`100`–`599` range and maps an unambiguous status to a reason — `429` to
+`rate_limit`, `402` to `quota`, `401`/`403` to `auth`, and `408`/`5xx` to
+`provider`. An ambiguous 4xx (for example a `400`/`413` that may be a
+context-length error) and an in-band error event that has already lost its status
+defer to the message regex. Status-first classification only sharpens the reason's
+accuracy: the reason taxonomy, the rotation/fallback decision, and the
+`providerFallback` metadata shape are unchanged, so a status-only or
+unusually-worded failure (a `402` whose message lacks "quota"/"billing", a `429`
+worded without "rate limit") no longer falls through to `unknown` and skips a
+credential rotation it could have performed.
+
 ## Internal Seams
 
 Provider-core now uses two internal streaming seams:

@@ -268,6 +268,16 @@ widening the gateway-ingress WAL. A prompt is retired only after its turn return
 so a crash inside the window re-enqueues it rather than losing it (`at_least_once`).
 Next-turn custom messages are advisory transient context, held in memory only.
 
+## User Model Projection
+
+The model may author a `user.fact.recorded` advisory event carrying a fact's
+`(scope, factKey, value)` and an optional `supersedesId`. `buildUserModelProjection`
+folds these into a rebuildable user model — latest-wins per `(scope, factKey)`,
+superseded ids retained for audit, indexed by the session index at schema v9 — that
+is never replay truth. The model is authority-free: a per-fact
+`measured` / `estimated` / `inconclusive` grade derives the read view but gates no
+runtime decision, and the explicit-pull retrieval surface lives in the recall journey.
+
 ## Generated Surface
 
 <!-- generated:runtime-surface start -->

@@ -139,6 +139,17 @@ flowchart TD
   `.brewva/knowledge/rdp/**`), and warm model-authored (workbench, out of scope
   here). RDP candidates become recall-visible only after `knowledge_capture`
   promotes them — RDP is never authority on its own
+- the cross-session user model is an explicit-pull projection on the same idiom:
+  `RecallBroker.userModel()` and the `user_model` tool fold the model-authored
+  `user.fact.recorded` events into the current model and are the only reveal.
+  Pulling it injects nothing, surfaces nothing on its own, and adds zero prompt
+  bytes; it inherits the recall cache-warming latency win without any injection.
+  Each fact carries a per-fact honesty grade — `measured` (the current value
+  corroborated by >=2 distinct sessions), `estimated` (a single session's word,
+  the honest floor), `inconclusive` (a competing value exists, uncorroborated) —
+  computed by the cross-session fold. The grade is advisory evidence and gates
+  nothing: a `measured` fact grants no capability, routes no model, and bypasses
+  no approval
 
 ## Failure And Recovery
 

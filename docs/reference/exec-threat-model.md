@@ -127,6 +127,31 @@ There is no automatic host fallback. `security.execution.backend` is either
 - Box inventory may include native BoxLite state and metrics for operator
   inspection. Those fields are operational observability, not replay authority.
 
+## Supply-Chain CI Posture
+
+Dependency and install-time trust is governed at the repository boundary, not in
+the runtime (axiom 13). These gates add evidence and merge-time review; none of
+them changes runtime admission authority.
+
+- OSV scanning of `bun.lock` is detection-only: `.github/workflows/osv-scanner.yml`
+  runs per-PR when the lockfile changes, weekly, and on dispatch with
+  `fail-on-vuln: false`, uploading SARIF to the security tab. `bun audit` is a
+  `continue-on-error` advisory step in the quality job. Findings drive a
+  deliberate patch schedule; they never block a merge.
+- `script/check-supply-chain.ts` (run in `check`, mirroring
+  `check-security-patterns`) is a full-tree content scanner with three
+  deliberately few indicator rules: an unreviewed `package.json` lifecycle script
+  (`preinstall`/`install`/`postinstall`/`prepare`), a base64-decode feeding
+  `eval`/`new Function` in first-party `src`, and edits to install-hook code (the
+  git hooks plus the npm-distribution `postinstall`). An `ALLOWED_LIFECYCLE_SCRIPTS`
+  allowlist or an inline `supply-chain-allow` comment is the reviewed escape; a
+  rule that fires on normal PRs is removed, not tuned.
+- Direct dependencies in the root manifest are exact-pinned (no caret/tilde
+  ranges in either dependency section), asserted by
+  `test/fitness/tooling-dependency-hygiene.fitness.test.ts`. `bun.lock` blocks
+  transitive drift; exact pins make a direct version change a reviewed edit and
+  shrink the blast radius of a compromised release.
+
 ## Scenario Verdicts
 
 | Scenario                           | Verdict                     | Control                                                                 |

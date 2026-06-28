@@ -61,30 +61,6 @@ discipline.
   and the aesthetic (`Model-sovereign, tape-accountable context`) for
   `design-axioms.md`. Surface amplification is a non-blocking follow-up.
 
-- [Axiom Negative-Space Linkage And Decisions Demotion](./axiom-negative-space-and-decisions-demotion.md):
-  active note for connecting the existing normative gradient (`design-axioms` ->
-  `critical-rules` -> `anti-patterns`) instead of adding a new anti-patterns doc.
-  Delivered as per-rule `(axiom N)` source tags in the project rule docs plus a
-  generated `docs/reference/axiom-enforcement.md` view (derived from those tags
-  the way `skill-navigation.md` is derived from skill bodies) that surfaces
-  unenforced axioms as visible negative space, guarded by a regenerate-and-diff
-  fitness, with a one-line `decisions/` pointer. No hand-authored map and no new
-  anti-patterns doc; `decisions/` stays immutable and in place.
-
-- [RFC: Checked Invariants And Disciplined Peer Borrowing](./rfc-checked-invariants-and-disciplined-borrowing.md):
-  active RFC for upgrading load-bearing runtime invariants from documented
-  promises to checked artifacts — coarse-bucket phases for the hosted
-  turn-lifecycle-port array, a generated `capability x plugin` matrix plus an
-  allowlist fitness guarding the no-context-source invariant (context-write
-  capabilities `== {context_messages.write}`) and a `hosted_behavior`
-  capability-set drift guard, an explicit replay-contract boundary for the hosted
-  lane's parallel message assembly (which does not pass through `materialize()`),
-  a reachability-gated in-flight tool-identity guard, and removal of a dead
-  placeholder — and for disciplined peer borrowing (`opencode`'s snapshot diff
-  algebra into materialization cache stability, `pi-mono`'s call/result rendering
-  ergonomics into the advisory ring) under the line `Borrow the mechanism, never
-the authority shape`.
-
 - [RFC: Peer-Distilled Context Loops — Compaction Effectiveness, Reference Staleness, And The Context Ledger](./rfc-peer-distilled-context-loops.md):
   active RFC distilling the residue from two mature peers (`opencode`,
   `hermes`) after most of their compaction techniques prove already-covered or
@@ -98,15 +74,6 @@ the authority shape`.
   one unified explicit-pull context-ledger line in the shared inspect host's
   compaction surface. Under the grammar `Compaction must prove it shrank; a
 reference must prove it still resolves`.
-
-- [RFC: Transcript As A Single Ordered Truth Source](./rfc-transcript-single-ordered-truth-source.md):
-  RFC (landed) collapsing the CLI transcript onto a single ordered truth
-  source — wire-fold's `snapshot.transcriptMessages` — so `refreshFromWireFold`
-  degrades from per-message-type splicing to `replaceMessages(snapshot)` plus a
-  CLI-only rewind overlay. Custom messages become a gateway-origin
-  `custom.message` wire frame; free-floating messages stay optimistic
-  placeholders replaced wholesale by the snapshot, retiring the projector-level
-  multi-turn-ordering patches.
 
 - [RFC: Quantified Compaction Economics And Graded Evidence Honesty](./rfc-quantified-compaction-economics-and-evidence-honesty.md):
   active RFC taking a third pass at `headroom` — its current `#856` net-cost arc
@@ -166,20 +133,6 @@ must grade itself.`
   orthogonal to permission. Under the line `Measure schema cost before gating
 it; if gated, the model operates it and the tape accounts for it`.
 
-- [RFC: Completing Cron Recurrence In The Event-Sourced Scheduler](./rfc-scheduled-turn-source-and-control-plane-scheduler.md):
-  active RFC (scope corrected after a disciplined read) completing — not replacing
-  — the existing event-sourced scheduler fixed by the accepted
-  `schedule-intent-hardening-and-control-plane-ergonomics` decision. The keystone
-  is a correctness bug: `getNextCronRunAt` is TZ/DST-correct but has no caller, so
-  both the projection and the daemon driver arm recurring cron intents at a
-  `timestamp + 60_000` placeholder and never re-arm after a fire — a `0 9 * * *`
-  intent does not recur. Wires one shared `nextRunAt` helper (cron + deterministic
-  replay-stable jitter) into both read models, re-arms after fire, and extends the
-  `MM HH * * *`-only parser to day-of-week so the shipped self-improve default
-  `0 9 * * 1` parses. Lease/circuit-breaker/catch-up/convergence/projection
-  persistence are confirmed config-only residue, deferred to a separate hardening
-  note. Zero new surface — `Teach the scheduler the clock it already owns.`
-
 - [RFC: Recall Next-Turn Cache Warming (Latency, Not Delivery)](./rfc-recall-next-turn-cache-warming.md):
   active RFC taking only the latency half of `hermes`'s memory prefetch and
   axiom-rejecting the injection half: a background `RecallBroker.warm()` that runs
@@ -190,42 +143,6 @@ it; if gated, the model operates it and the tape accounts for it`.
   `recall_search` returns and never any model-visible byte. Lands below the
   visibility line as performance-only state under `Warm the cache, never the
 context.`
-
-- [RFC: Structured Provider-Failure Classification And Optional Backoff Retry](./rfc-provider-fallback-chain.md):
-  active RFC (scope corrected after a disciplined read). The draft's gateway-owned
-  fallback port, tagged taxonomy, ordered chain, first-frame lock, and per-attempt
-  receipt all ALREADY EXIST — tested and backed by the accepted
-  `preset-based-agent-model-routing` decision (`createHostedRuntimeProviderPort` with
-  role-based `fallbackChains`, credential rotation, `classifyProviderFailure`, the
-  `FrameWitness` compile-time lock, and `providerFallback` drift sampling). The real
-  residue is two robustness edges of the existing classifier: read the HTTP status
-  (carried on `ProviderStreamError.cause`) FIRST so a 402/odd-worded 429 stops
-  misclassifying to `unknown` and missing credential rotation, with the message regex
-  as fallback; and an optional, default-off same-model backoff retry for a transient
-  `rate_limit` before downgrading. Zero new surface in phase 1. Under `The status code
-is the most reliable signal a provider gives; classify from it first.`
-
-- [RFC: Supply-Chain Hardening And An MCP Catalog Review Gate](./rfc-supply-chain-hardening-and-mcp-catalog-gate.md):
-  active RFC adding the dependency/trust gates Brewva lacks: OSV scanning of
-  `bun.lock` (detection-only), a high-signal PR-diff scanner for true attack
-  indicators (lifecycle scripts, `eval(atob(...))`, install-hook edits) mirroring
-  the `check:security-patterns` idiom, an MCP catalog review gate (a fitness
-  requiring a non-wildcard `includeToolNames` allowlist + known transport on every
-  configured MCP server, plus an `mcp-catalog-reviewed` label gate), and
-  exact-pinning the ranged dev-deps. Repository-governance-adjacent (axiom 13),
-  changing zero runtime admission authority, under `An MCP server is untrusted code
-the operator invited in; its self-declared tools never auto-derive authority.`
-
-- [RFC: A User Model As A Tape-Folded Advisory Projection](./rfc-user-model-as-a-tape-folded-advisory-projection.md):
-  active RFC building cross-session user modeling as the second proving ring for the
-  unmeasurable-benefit candidate axiom, against a literal Honcho port: a
-  model-authored advisory `user_fact` event, a deterministic rebuildable user-model
-  projection (latest-wins with retained supersession), an explicit-pull retrieval
-  surface reusing the recall idiom (inheriting the cache-warming latency win without
-  the injection), and a per-fact `measured`/`estimated`/`inconclusive` grade.
-  Rejects runtime dialectic inference and per-turn injection (axioms 1, 2, 4) and
-  the second-memory-store anti-pattern. Under `The user model is a projection the
-model authored and the tape preserved — graded, explicit-pull, authority-free.`
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

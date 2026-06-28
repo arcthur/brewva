@@ -153,6 +153,16 @@ It does not declare `turn_input.handle`, `message_visibility.write`, or
 `user_message.enqueue`: those exist in the capability enum but stay outside the
 hosted authority surface.
 
+These are checked artifacts, not prose promises (axiom 19). The full
+`capability x plugin` authority inventory is generated into
+`docs/reference/host-plugin-capabilities.md` from the single
+`RUNTIME_PLUGIN_CAPABILITY_EFFECTS` and `HOSTED_BEHAVIOR_CAPABILITIES` sources and
+diffed against code, the way `axiom-enforcement.md` is generated. The
+no-context-source invariant is guarded positively — the capabilities whose effect
+class is context-write equal exactly `{context_messages.write}` — never by banning
+`*source*` / `register*` name substrings, which would false-positive on
+`tool_registration.write` and miss a hypothetical `context_provider.write`.
+
 ## Failure And Recovery
 
 - a capability violation fails closed: a mutating handler or operation without

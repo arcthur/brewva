@@ -106,3 +106,13 @@ plugins. Other advisory slots cannot attach verification gate manifests.
 Default hosted behavior belongs to `@brewva/brewva-gateway/hosted`. External
 callers should not import hosted internals or expect extension plugins to replace
 the hosted session, turn-adapter, provider, or compaction policies.
+
+A borrowed peer mechanism lands in the ring that already owns the decision, never
+with the authority shape that would break a Brewva invariant (axiom 11; axiom 19).
+`opencode`'s `baseline/update/removed` block algebra is reused internally as
+`diffKeyedBlocks` over dynamic-tail materialization blocks — a cache-stability
+view, not a context-source registry; there is still no context-source admission
+path, and the only context-write capability remains `context_messages.write`.
+`pi-mono`'s `renderCall` / `renderResult` display ergonomics already exist on
+`BrewvaToolDefinition` in the advisory ring, so nothing was ported. The rule is:
+borrow the mechanism, never the authority shape.

@@ -83,6 +83,11 @@ public contracts.
     views; descriptive metadata may not feed authoritative runtime decisions.
     Advisory, model-bypassable ranking is the only exception and must be
     registered where it lives.
+19. `A documented invariant that nothing checks is a promise, not a contract.`
+    A load-bearing structural invariant must be backed by a fitness or
+    regenerate-and-diff artifact; an invariant that survives only because a human
+    reads the code correctly each time is documented negative space, not an
+    enforced contract.
 
 Implementation note:
 

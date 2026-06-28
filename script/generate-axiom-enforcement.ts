@@ -114,10 +114,11 @@ function parsePrecedents(): Precedent[] {
     if (!body) continue;
     const cited = new Set<number>();
     // The decision `## Axioms` convention writes one citation per bullet:
-    // `- Obeys|Defers|Overrides axiom N (Name): ...`. Anchor on that verb so a
-    // stray "axiom" in surrounding prose cannot mint a spurious precedent link.
+    // `- Obeys|Defers|Overrides|Introduces axiom N (Name): ...`. Anchor on that
+    // verb so a stray "axiom" in surrounding prose cannot mint a spurious
+    // precedent link.
     for (const line of body.split("\n")) {
-      if (!/^\s*-\s+(?:Obeys|Defers|Overrides)\b/u.test(line)) continue;
+      if (!/^\s*-\s+(?:Obeys|Defers|Overrides|Introduces)\b/u.test(line)) continue;
       for (const match of line.matchAll(/\baxioms?\s+(\d+)/gi)) {
         cited.add(Number(match[1]));
       }

@@ -79,3 +79,7 @@ retirement_sensitivity: review_only
   of deriving baseline state from `session_compact` receipts. (axiom 6)
 - Editing generated distribution artifacts by hand. (axiom 18)
 - Skipping `test:dist` for export, CLI, or distribution changes.
+- Landing a load-bearing structural invariant as prose alone, without a fitness or
+  regenerate-and-diff artifact backing it (e.g. the hosted lifecycle-port order,
+  the `capability x plugin` matrix, the context-write allowlist, or the
+  tool-identity binding). (axiom 19)

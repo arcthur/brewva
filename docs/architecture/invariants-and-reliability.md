@@ -72,6 +72,23 @@ recovery, and bounded execution.
     `NoFrame` witness proving no provider frame has streamed. Once the first frame
     streams (`SawFrame`), recovery is unrepresentable — the turn cannot rewrite
     itself mid-stream.
+19. Checked structural invariants:
+    a load-bearing runtime invariant is backed by a fitness or
+    regenerate-and-diff artifact, not prose alone (axiom 19). The hosted
+    turn-lifecycle-port order is fixed by named phase buckets
+    (`HOSTED_LIFECYCLE_PHASES`); the `capability x plugin` authority inventory is a
+    generated matrix (`host-plugin-capabilities.md`) diffed against code.
+20. No second context-source authority:
+    the capabilities whose effect class is context-write equal exactly
+    `{context_messages.write}`, asserted as a positive allowlist over effect-tagged
+    capability members — never a `*source*` / `register*` name denylist. The
+    `hosted_behavior` capability set equals the set its journey doc documents, read
+    from one source (drift guard, not minimality proof).
+21. In-flight tool-identity binding:
+    each canonical `tool.proposed` carries the advertised tool's identity hash, and
+    the executor fails closed when the live tool surface drifts from that identity
+    or when a `tool_call` names a tool never advertised in that request. The
+    per-request `HarnessManifest` stays advisory audit correlation.
 
 ## Failure Semantics
 

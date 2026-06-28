@@ -33,6 +33,7 @@ describe("reference page size", () => {
       "docs/reference/extensions.md",
       "docs/reference/session-lifecycle.md",
       "docs/reference/token-cache.md",
+      "docs/reference/runtime.md",
     ]);
 
     const oversized = listMarkdownFiles(referenceRoot)

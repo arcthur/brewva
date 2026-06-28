@@ -68,6 +68,15 @@ these read paths and exposes bounded archive refs back to the operator. It does
 not write a cockpit event family, duplicate raw tape payloads, or create a
 second ordering authority.
 
+The CLI live transcript follows the same single-ordering rule. Custom
+display messages (skill SkillCards) are carried as a `custom.message`
+`SessionWireFrame` emitted at the gateway turn origin, joining the existing
+`turn.input` / `assistant.delta` / `tool.*` frames on one ordered stream. The
+frame is display-only — it carries no provider-context payload, keeps custom
+`excludeFromContext`, and does not replace the durable `custom_message` entry or
+its seed-rebuild authority. A frame whose turn id cannot be resolved fails closed
+and is omitted from the ordered view, never hoisted to an arbitrary position.
+
 ## Authority Classes
 
 Canonical event authority is expressed by the canonical type and, for `custom`,

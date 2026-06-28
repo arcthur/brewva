@@ -22,8 +22,10 @@ describe("generated axiom enforcement", () => {
     // branch, and precedent re-grounding (the derivation-direction-invariant
     // decision under its own axiom 18) each guard a distinct generator path.
     const view = readFileSync(resolve(repoRoot, "docs/reference/axiom-enforcement.md"), "utf-8");
+    const axiomCount = Number(view.match(/^Axioms: (\d+)\./m)?.[1]);
 
-    for (let axiom = 1; axiom <= 18; axiom++) {
+    expect(Number.isSafeInteger(axiomCount)).toBe(true);
+    for (let axiom = 1; axiom <= axiomCount; axiom++) {
       expect(view).toContain(`### Axiom ${axiom} — `);
     }
     expect(view).toMatch(/### Axiom 1 —[\s\S]*?`attention_options`[\s\S]*?### Axiom 2 —/u);
@@ -31,5 +33,6 @@ describe("generated axiom enforcement", () => {
     expect(view).toMatch(
       /### Axiom 18 —[\s\S]*?derivation-direction-invariant-and-skill-navigation/u,
     );
+    expect(view).toMatch(/### Axiom 19 —[\s\S]*?rfc-checked-invariants-and-disciplined-borrowing/u);
   });
 });

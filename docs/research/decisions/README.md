@@ -78,6 +78,9 @@ Every accepted decision inherits these rules:
 - [tools-family-slicing-and-capability-contracts](./tools-family-slicing-and-capability-contracts.md)
 - [workflow-artifacts-and-posture-control-plane](./workflow-artifacts-and-posture-control-plane.md)
 - [goal-control-plane](./goal-control-plane.md)
+- [axiom-negative-space-and-decisions-demotion](./axiom-negative-space-and-decisions-demotion.md)
+- [rfc-supply-chain-hardening-and-mcp-catalog-gate](./rfc-supply-chain-hardening-and-mcp-catalog-gate.md)
+- [rfc-checked-invariants-and-disciplined-borrowing](./rfc-checked-invariants-and-disciplined-borrowing.md)
 
 ### Delegation, Product, And Knowledge
 
@@ -104,6 +107,7 @@ Every accepted decision inherits these rules:
 - [session-index-evidence-projection-boundary](./session-index-evidence-projection-boundary.md)
 - [recall-source-typed-retrieval-spine](./recall-source-typed-retrieval-spine.md)
 - [recall-first-compounding-intelligence-and-experience-products](./recall-first-compounding-intelligence-and-experience-products.md)
+- [rfc-user-model-as-a-tape-folded-advisory-projection](./rfc-user-model-as-a-tape-folded-advisory-projection.md)
 - [duckdb-session-query-plane](./duckdb-session-query-plane.md)
 - [session-index-read-model-engine](./session-index-read-model-engine.md)
 - [repository-native-compound-knowledge-and-review-ensemble](./repository-native-compound-knowledge-and-review-ensemble.md)
@@ -120,6 +124,7 @@ Every accepted decision inherits these rules:
 - [subagent-interface-depth-and-review-ensemble-surface](./subagent-interface-depth-and-review-ensemble-surface.md)
 - [subagent-orchestration-v2-role-taxonomy-and-trigger-governance](./subagent-orchestration-v2-role-taxonomy-and-trigger-governance.md)
 - [tool-search-advisor-and-auto-broadened-discovery](./tool-search-advisor-and-auto-broadened-discovery.md)
+- [rfc-transcript-single-ordered-truth-source](./rfc-transcript-single-ordered-truth-source.md)
 
 ### Gateway, Session, And Scheduling
 
@@ -151,6 +156,8 @@ Every accepted decision inherits these rules:
 - [trace-driven-harness-improvement](./trace-driven-harness-improvement.md)
 - [typebox-derived-provider-streaming-parse-boundary](./typebox-derived-provider-streaming-parse-boundary.md)
 - [turn-lifecycle-spine](./turn-lifecycle-spine.md)
+- [rfc-scheduled-turn-source-and-control-plane-scheduler](./rfc-scheduled-turn-source-and-control-plane-scheduler.md)
+- [rfc-provider-fallback-chain](./rfc-provider-fallback-chain.md)
 
 ### Projection And Tool Proofs
 

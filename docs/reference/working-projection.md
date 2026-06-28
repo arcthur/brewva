@@ -27,6 +27,15 @@ footer is bounded UI state. Neither the committed scrollback nor the footer is a
 full-history projection with storage authority; structured transcript evidence
 stays in explicit archive, transcript, export, and pager surfaces.
 
+The live transcript itself has a single ordered truth source: wire-fold's
+`snapshot.transcriptMessages`. Every turn-scoped row — user, custom, assistant,
+tool — enters that snapshot through an ordered wire frame, so the shell projector
+degrades to a wholesale replace plus a CLI-only rewind overlay rather than
+merging two sources or splicing per message type. Free-floating rows are
+optimistic placeholders reconciled by wholesale replacement; they carry no
+second ordering authority. This is a display-only projection: it adds no storage
+authority and is not the durable transcript record.
+
 ## Session-Index Harness Projection
 
 `HarnessTraceSnapshot` is a session-index projection over canonical tape and

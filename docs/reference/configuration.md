@@ -158,6 +158,19 @@ rotation after quota, rate-limit, or auth failures. Rotation records only
 redacted `provider_credential_rotated` payloads:
 `{ providerId, credentialSlot, reason, cooldownMs }`.
 
+`modelRouting.rateLimitBackoff` is an optional, default-off same-model backoff
+retry for a transient `rate_limit`. When a rate-limit failure cannot be resolved
+by credential rotation, the loop retries the same model after a capped exponential
+delay before downgrading to a fallback model. It accepts `maxRetries`,
+`baseDelayMs`, and `maxDelayMs`; the default is `maxRetries: 0` (off), so the
+routing path is unchanged unless an operator opts in. The retry is attempted only
+before any provider frame has streamed, is abort-aware, and is per-model (each
+model in the chain gets its own bounded retries before being abandoned). The delay
+is full-jittered with the scheduler's deterministic, replay-free jitter keyed per
+session and attempt, so turns that hit the same limit at once retry on
+decorrelated schedules. A backoff retry is not a fallback selection and does not
+record `providerFallback` metadata.
+
 ## Integrations
 
 `integrations.mcp` describes external MCP servers for hosted sessions. It is
@@ -193,6 +206,26 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
 - `channels` controls external orchestration limits and access control.
 - `infrastructure` controls context-budget thresholds, request-shaping policy,
   and cost/recovery infrastructure.
+
+### Schedule Recurrence And Cron Expressivity
+
+A recurring `schedule_intent` expresses its cadence as a `cron` expression plus
+a `timeZone`. The cron grammar is a bounded per-field form — `*`, a single
+literal, or an every-`N` step (`*/N`) — covering minute steps (`*/5 * * * *`),
+hour steps (`0 */2 * * *`), day-of-week (`0 9 * * 1`, Monday, with `7` meaning
+Sunday), and day-of-month/month under Vixie-cron OR semantics. It is not a
+general cron grammar; ranges and lists are out of scope.
+
+A recurring intent's next run is computed once, timezone- and DST-correct, plus
+a deterministic forward jitter derived from the intent id (a capped fraction of
+the cron interval). After a fire, the intent re-arms at its next slot while
+`runCount < maxRuns` and converges when no slot remains. The computed
+`nextRunAt` is carried on the schedule event and is authoritative under replay:
+recovery prefers the persisted value and never recomputes the next slot from
+wall-clock. The schedule projection and the daemon timer driver compute
+`nextRunAt` from one shared helper, so the two read models cannot drift. An
+unparseable `cron` fails safe — the scheduler declines to arm rather than firing
+at a wrong time.
 
 ## Context Budget Compaction
 
