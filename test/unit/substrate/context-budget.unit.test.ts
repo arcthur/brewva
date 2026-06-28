@@ -333,6 +333,17 @@ describe("readAutoCompactionBreakerOpen", () => {
       ]),
     ).toBe(false);
   });
+
+  test("uses turn order before event id when breaker evidence shares a timestamp", () => {
+    expect(
+      readAutoCompactionBreakerOpen([
+        { type: "context.compaction.auto.failed", timestamp: 10, turn: 1, id: "z-failed-1" },
+        { type: "context.compaction.auto.failed", timestamp: 10, turn: 2, id: "z-failed-2" },
+        { type: "context.compaction.auto.failed", timestamp: 10, turn: 3, id: "z-failed-3" },
+        { type: "context.compaction.auto.completed", timestamp: 10, turn: 4, id: "a-completed" },
+      ]),
+    ).toBe(false);
+  });
 });
 
 describe("readAutoCompactionIneffective", () => {

@@ -83,6 +83,7 @@ export const AUTO_COMPACTION_BREAKER_THRESHOLD = 3;
 export interface AutoCompactionBreakerEvent {
   readonly type: string;
   readonly timestamp?: unknown;
+  readonly turn?: unknown;
   readonly id?: unknown;
 }
 
@@ -145,6 +146,10 @@ function readEventTimestamp(event: AutoCompactionBreakerEvent): number {
     : 0;
 }
 
+function readEventTurn(event: AutoCompactionBreakerEvent): number {
+  return typeof event.turn === "number" && Number.isFinite(event.turn) ? event.turn : 0;
+}
+
 function readEventId(event: AutoCompactionBreakerEvent): string {
   return typeof event.id === "string" ? event.id : "";
 }
@@ -160,6 +165,7 @@ export function readAutoCompactionBreakerOpen(
   const ordered = events.toSorted(
     (left, right) =>
       readEventTimestamp(right) - readEventTimestamp(left) ||
+      readEventTurn(right) - readEventTurn(left) ||
       readEventId(right).localeCompare(readEventId(left)),
   );
   let consecutiveFailures = 0;
