@@ -124,12 +124,6 @@
                   "type": "object",
                   "additionalProperties": false,
                   "properties": {
-                    "minCompactionShrinkAttempts": {
-                      "type": "number"
-                    },
-                    "minCompactionShrinkRatio": {
-                      "type": "number"
-                    },
                     "minTurnsBetween": {
                       "type": "number"
                     },

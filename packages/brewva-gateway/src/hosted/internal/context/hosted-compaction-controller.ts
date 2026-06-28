@@ -293,11 +293,8 @@ function isAutoCompactionIneffective(
   runtime: HostedRuntimeAdapterPort,
   sessionId: string,
 ): boolean {
-  const compaction = runtime.config.infrastructure.contextBudget.compaction;
   return deriveAutoCompactionIneffectiveFromReceipts(
     queryRuntimeEvents(runtime, sessionId, { type: "session.compaction.committed" }),
-    compaction.minCompactionShrinkRatio,
-    compaction.minCompactionShrinkAttempts,
   );
 }
 

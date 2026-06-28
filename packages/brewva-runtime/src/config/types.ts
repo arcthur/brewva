@@ -236,8 +236,6 @@ export interface BrewvaConfig {
         protectedTools: string[];
         tailProtectTokens: number | null;
         tailProtectRatio: number;
-        minCompactionShrinkRatio: number;
-        minCompactionShrinkAttempts: number;
       };
     };
     toolFailureInjection: {

@@ -131,17 +131,18 @@ helper:      readAutoCompactionIneffective(receipts, minShrinkRatio, minAttempts
              true iff the last `minAttempts` receipts that have a usable ratio all
              reduced below `minShrinkRatio` (receipts with null/<=0 fromTokens or
              null toTokens are ignored, so missing data never blocks)
-config:      minCompactionShrinkRatio    (reduction floor, e.g. 0.10 = remove >=10%)
-             minCompactionShrinkAttempts (default 1; raise to >=2 if noisy)
+constants:   MIN_COMPACTION_SHRINK_RATIO    (reduction floor, e.g. 0.10 = remove >=10%)
+             MIN_COMPACTION_SHRINK_ATTEMPTS (1; internal substrate constant, not runtime config)
 guard:       only applies to caller "auto"; "manual" and "model_downshift" bypass
 bypass:      hard_limit pressure bypasses it (correctness over thrash-avoidance)
 ```
 
-`minCompactionShrinkAttempts` defaults to 1 — the simplest rule for a per-call
+`MIN_COMPACTION_SHRINK_ATTEMPTS` defaults to 1 — the simplest rule for a per-call
 pure policy. This is _not_ "matches hermes": hermes blocks after N=2 consecutive
 no-ops (`_ineffective_compression_count >= 2`). Brewva starts at N=1 and promotes
-to N>=2 only if validation surfaces single-shot noise, reusing the breaker's
-consecutive-count shape so both guards stay structurally identical.
+to N>=2 (by changing the internal constant, not runtime config) only if
+validation surfaces single-shot noise, reusing the breaker's consecutive-count
+shape so both guards stay structurally identical.
 
 Input contract (resolved here, not deferred): the receipt authority is
 `commitRuntimeSessionCompaction`'s `fromTokens` / `toTokens` pair
@@ -404,8 +405,11 @@ Counts are for the context/compaction surface only; before → after.
   `compaction_ineffective` skip branch in `decideCompaction`). All other loops are
   config-time (Loop 4), render-time (Loops 2, 5), or a re-definition of an existing
   artifact (Loop 3), not new runtime decision points.
-- Config keys: +2 confirmed (`minCompactionShrinkRatio`,
-  `minCompactionShrinkAttempts`), +1 conditional (a Loop 4 evidence-fit opt-in
+- Config keys: +0 for Loop 1 — `minCompactionShrinkRatio` and
+  `minCompactionShrinkAttempts` landed as internal substrate constants
+  (`MIN_COMPACTION_SHRINK_RATIO` / `MIN_COMPACTION_SHRINK_ATTEMPTS`), withdrawn
+  from public `infrastructure.contextBudget.compaction` per the critical-rules
+  context-budget whitelist; +1 conditional remains (a Loop 4 evidence-fit opt-in
   flag). All window-independent ratios/ints/booleans.
 - Public CLI surfaces: +1 (`report:context-evidence --recommend`, Loop 4),
   emitting stable JSON only; no new command.

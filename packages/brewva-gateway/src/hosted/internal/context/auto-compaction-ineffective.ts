@@ -26,8 +26,6 @@ function readPayloadNumber(payload: unknown, key: string): number | null {
  */
 export function deriveAutoCompactionIneffectiveFromReceipts(
   events: readonly CompactionReceiptEventLike[],
-  minShrinkRatio: number,
-  minAttempts: number,
 ): boolean {
   const receipts = events
     .map((event) => ({
@@ -42,5 +40,5 @@ export function deriveAutoCompactionIneffectiveFromReceipts(
       toTokens: readPayloadNumber(event.payload, "toTokens"),
     }))
     .toSorted((left, right) => right.turn - left.turn || right.timestamp - left.timestamp);
-  return readAutoCompactionIneffective(receipts, minShrinkRatio, minAttempts);
+  return readAutoCompactionIneffective(receipts);
 }

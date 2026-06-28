@@ -79,6 +79,39 @@ describe("Brewva config loader normalization", () => {
     }
   });
 
+  test("fails fast on withdrawn compaction shrink-guard keys for direct runtime config", () => {
+    const withdrawnCases = [
+      { key: "minCompactionShrinkRatio", value: 0.1 },
+      { key: "minCompactionShrinkAttempts", value: 1 },
+    ] as const;
+
+    for (const withdrawnCase of withdrawnCases) {
+      const workspace = createTestWorkspace(`withdrawn-compaction-${withdrawnCase.key}`);
+      const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
+      config["infrastructure"] = {
+        ...DEFAULT_BREWVA_CONFIG.infrastructure,
+        contextBudget: {
+          ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget,
+          compaction: {
+            ...DEFAULT_BREWVA_CONFIG.infrastructure.contextBudget.compaction,
+            [withdrawnCase.key]: withdrawnCase.value,
+          },
+        },
+      };
+
+      expect(() =>
+        createRuntimeInstanceFixture({
+          cwd: workspace,
+          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+        }),
+      ).toThrow(
+        new RegExp(
+          `infrastructure\\.contextBudget\\.compaction\\.${withdrawnCase.key} has been removed`,
+        ),
+      );
+    }
+  });
+
   test("fails fast when removed tool-output distillation injection config is present", () => {
     const workspace = createTestWorkspace("removed-tool-output-distillation-injection");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;

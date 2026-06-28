@@ -109,8 +109,8 @@ export interface CompactionPolicyInputs {
   readonly autoCompactionBreakerOpen?: boolean;
   /**
    * Auto-path thrash guard: true when recent committed compaction receipts show
-   * the last `minCompactionShrinkAttempts` reductions all stayed below
-   * `minCompactionShrinkRatio`. Derived by {@link readAutoCompactionIneffective}
+   * the last `MIN_COMPACTION_SHRINK_ATTEMPTS` reductions all stayed below
+   * `MIN_COMPACTION_SHRINK_RATIO`. Derived by {@link readAutoCompactionIneffective}
    * from receipt evidence, mirroring how `autoCompactionBreakerOpen` is derived.
    */
   readonly autoCompactionIneffective?: boolean;
@@ -177,6 +177,15 @@ export function readAutoCompactionBreakerOpen(
   return false;
 }
 
+/**
+ * Internal auto-compaction thrash-guard policy. The reduction floor and attempt
+ * count are deliberately not runtime config: they are an internal tuning detail
+ * of {@link readAutoCompactionIneffective}, mirroring
+ * {@link AUTO_COMPACTION_BREAKER_THRESHOLD}.
+ */
+export const MIN_COMPACTION_SHRINK_RATIO = 0.1;
+export const MIN_COMPACTION_SHRINK_ATTEMPTS = 1;
+
 export interface CompactionShrinkSample {
   readonly fromTokens?: number | null;
   readonly toTokens?: number | null;
@@ -195,8 +204,8 @@ export interface CompactionShrinkSample {
  */
 export function readAutoCompactionIneffective(
   receipts: readonly CompactionShrinkSample[],
-  minShrinkRatio: number,
-  minAttempts: number,
+  minShrinkRatio: number = MIN_COMPACTION_SHRINK_RATIO,
+  minAttempts: number = MIN_COMPACTION_SHRINK_ATTEMPTS,
 ): boolean {
   const floor = clampUnitRatio(minShrinkRatio);
   if (floor <= 0) return false;

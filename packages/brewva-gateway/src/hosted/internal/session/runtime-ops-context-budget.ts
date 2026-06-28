@@ -100,11 +100,8 @@ export function createContextBudgetRuntimeController(ctx: HostedRuntimeOpsContex
   }
 
   function deriveAutoCompactionIneffective(sessionId: string): boolean {
-    const compaction = ctx.runtime.config.infrastructure.contextBudget.compaction;
     return deriveAutoCompactionIneffectiveFromReceipts(
       ctx.queryStructuredEvents(sessionId, { type: "session.compaction.committed" }),
-      compaction.minCompactionShrinkRatio,
-      compaction.minCompactionShrinkAttempts,
     );
   }
 

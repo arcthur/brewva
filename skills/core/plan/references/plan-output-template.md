@@ -1,8 +1,8 @@
 # Plan Output Example
 
-Use this shape when emitting the structured planning artifacts described by
-`skills/producers/plan.yaml`. The SkillCard remains advisory; this example is a
-producer output shape, not `SKILL.md` frontmatter.
+Use this shape when emitting the structured planning artifacts this skill
+produces. The SkillCard remains advisory; this example is a producer output
+shape, not `SKILL.md` frontmatter.
 
 ```json
 {

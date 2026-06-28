@@ -57,7 +57,7 @@ model explicitly consumes, cites, injects, or preserves it in workbench state.
   `interactive-session` (workbench is warm model-authored memory; this journey
   covers cold/durable memory and retrieval). `recall_expand` appears here only
   as the recall-side recovery of evicted spans.
-- session-index DuckDB projection internals and CJK tokenization →
+- session-index SQLite projection internals and CJK tokenization →
   `@brewva/brewva-session-index` and `@brewva/brewva-search`
 - worker patch merge and apply adoption → `background-and-parallelism` (distinct
   from knowledge adoption)

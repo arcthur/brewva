@@ -142,4 +142,34 @@ describe("docs code path refs", () => {
 
     expect(errors, errors.join("\n")).toEqual([]);
   });
+
+  it("inline repo-owned source path references exist in repo (skills + AGENTS)", () => {
+    const repoRoot = resolve(import.meta.dirname, "../../..");
+    const repoRootFiles = collectRepoRootFileEntries(repoRoot);
+    const sources = [
+      resolve(repoRoot, "AGENTS.md"),
+      ...listMarkdownFiles(resolve(repoRoot, "skills")),
+    ];
+
+    const errors: string[] = [];
+
+    for (const filePath of sources) {
+      const markdown = readFileSync(filePath, "utf-8");
+      const refs = extractInlineCodeRefs(markdown, filePath);
+
+      for (const ref of refs) {
+        const value = ref.raw.trim();
+        if (!isRepoPathCandidate(value, repoRootFiles)) continue;
+
+        const resolvedPath = resolve(repoRoot, value);
+        if (!existsSync(resolvedPath)) {
+          errors.push(
+            `${ref.sourceFile}:${ref.lineNumber} missing path \`${value}\` (resolved: ${resolvedPath})`,
+          );
+        }
+      }
+    }
+
+    expect(errors, errors.join("\n")).toEqual([]);
+  });
 });

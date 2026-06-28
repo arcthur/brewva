@@ -2,6 +2,8 @@ export {
   AUTO_COMPACTION_BREAKER_THRESHOLD,
   decideCompaction,
   deriveContextBudgetState,
+  MIN_COMPACTION_SHRINK_ATTEMPTS,
+  MIN_COMPACTION_SHRINK_RATIO,
   readAutoCompactionBreakerOpen,
   readAutoCompactionIneffective,
   resolveCompactionPressureReason,

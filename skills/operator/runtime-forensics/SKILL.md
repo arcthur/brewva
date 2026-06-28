@@ -60,9 +60,9 @@ The event tape (replay authority) is
 `.brewva/tape/<encodeURIComponent(sessionId)>.jsonl`; the ledger, projection
 cache, and recovery WAL live under `.orchestrator/`.
 
-The DuckDB session index under `.brewva/session-index/session-index.duckdb` is a
-rebuildable query plane. Non-writer processes may read the published snapshot
-referenced by `.brewva/session-index/read-snapshot.json`. Use either file only
+The SQLite session index under `.brewva/session-index/*.sqlite` (plus
+`-wal`/`-shm` siblings) is a rebuildable query plane; non-writer processes read
+the live WAL directly, so there is no separate read-snapshot copy. Use it only
 to narrow cross-session evidence and locate event tape offsets; do not treat
 indexed rows as replay authority. If the index is missing, stale, or corrupt,
 rebuild it from event tape instead of drawing conclusions from partial rows.

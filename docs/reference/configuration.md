@@ -241,25 +241,14 @@ provider-safe tool-name syntax before they enter the hosted tool surface.
   over `compaction.tailProtectRatio`. Set to `0` to fall back to the
   count-based recent-window protection only. Set to a large value to disable
   reduction in practice when the tail is small.
-- `compaction.minCompactionShrinkRatio` (`number`, default `0.1`): the
-  auto-compaction thrash-guard reduction floor. When the most recent
-  `minCompactionShrinkAttempts` committed compaction receipts each reduced context
-  by less than this fraction (`(fromTokens - toTokens) / fromTokens`), the auto path
-  skips with `compaction_ineffective` instead of recompacting. Set to `0` to disable
-  the guard. Only the `auto` caller is affected — manual `workbench_compact` and
-  model-downshift compaction always proceed — and hard-limit pressure bypasses it
-  (correctness over thrash-avoidance). Receipts without a usable
-  `fromTokens`/`toTokens` pair are ignored, so missing data never blocks.
-- `compaction.minCompactionShrinkAttempts` (`number`, default `1`): how many recent
-  committed receipts must all stay below `minCompactionShrinkRatio` before the guard
-  fires. Raise to `>= 2` if single-shot shrink measurements prove noisy.
 
 Removed context-budget keys fail fast during config load rather than being
 normalized through compatibility shims. This includes the old flat
 `hardLimitPercent`, `compactionThresholdPercent`, `maxInjectionTokens`,
 `dynamicTail`, `predictiveTurnGrowth`, `modelPhysics`,
-`compaction.minSecondsBetween`, `compaction.cooldownBypassPercent`, and
-`compaction.summaryMaxOutputRatio` surfaces.
+`compaction.minSecondsBetween`, `compaction.cooldownBypassPercent`,
+`compaction.summaryMaxOutputRatio`, `compaction.minCompactionShrinkRatio`, and
+`compaction.minCompactionShrinkAttempts` surfaces.
 
 ## Schema Maintenance
 

@@ -63,12 +63,17 @@ owner: runtime-maintainers
   canonical tape validation, but it must not import product vocabulary or derive
   authority from outcome fields.
 - runtime root exports stay narrow: `createBrewvaRuntime`, the four-port runtime
-  contract types, `DEFAULT_BREWVA_CONFIG`, and the minimal config/deep-readonly
-  types. Do not reintroduce the `BrewvaRuntime` class, root-reflective runtime
-  port factories, or operator-selection helpers. Domain contracts are imported
-  through explicit owner subpaths such as `@brewva/brewva-runtime/core`,
-  `/config`, and `/security`, or through `@brewva/brewva-vocabulary/*` for
-  product vocabulary.
+  contract types, `DEFAULT_BREWVA_CONFIG`, the minimal config/deep-readonly
+  types, canonical tape/recovery vocabulary (`CANONICAL_EVENT_TYPES`,
+  `RUNTIME_RECOVERY_CAUSES`), and read-only tape-forensic helpers
+  (`scanTapeFileForensics`, `resolveTapeFilePath`, `emptyTapeForensicScan`) that
+  orient over the tape replay authority without granting authority. This exact
+  root surface is locked by
+  `test/contract/runtime/runtime-entrypoint-surface.contract.test.ts`. Do not
+  reintroduce the `BrewvaRuntime` class, root-reflective runtime port factories,
+  or operator-selection helpers. Domain contracts are imported through explicit
+  owner subpaths such as `@brewva/brewva-runtime/core`, `/config`, and
+  `/security`, or through `@brewva/brewva-vocabulary/*` for product vocabulary.
 - runtime subpath ownership is registered in
   `skills/project/shared/runtime-subpaths.json`; new runtime package exports must
   add an owner, stability, decision, and allowed-consumer entry before they can
@@ -198,6 +203,13 @@ owner: runtime-maintainers
 - generic stable hashing, short SHA-256 IDs, redacted digests, and cache
   fingerprints use `@brewva/brewva-std/hash`; protocol-owned HMAC, PKCE,
   credential-vault byte digests, and byte-stream fingerprints stay local
+- test code may use white-box relative imports into a package's `src` (for
+  example `test/unit/runtime/*.ts` importing
+  `../../../packages/brewva-runtime/src/...`) for fixtures and internal-seam
+  coverage. This is an intentional exception to the production
+  no-cross-package-relative-import rule, deliberately not enforced by
+  `package-boundary-vnext` fitness; production `packages/**` source still imports
+  only through package entrypoints and subpaths
 
 ## Provider-Core Consumption Matrix
 

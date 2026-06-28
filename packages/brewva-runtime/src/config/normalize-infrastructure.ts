@@ -128,14 +128,6 @@ export function normalizeInfrastructureConfig(
           contextBudgetCompactionInput.tailProtectRatio,
           defaultContextCompaction.tailProtectRatio,
         ),
-        minCompactionShrinkRatio: normalizeUnitInterval(
-          contextBudgetCompactionInput.minCompactionShrinkRatio,
-          defaultContextCompaction.minCompactionShrinkRatio,
-        ),
-        minCompactionShrinkAttempts: normalizePositiveInteger(
-          contextBudgetCompactionInput.minCompactionShrinkAttempts,
-          defaultContextCompaction.minCompactionShrinkAttempts,
-        ),
       },
     },
     toolFailureInjection: {

@@ -7,7 +7,9 @@ retirement_sensitivity: review_only
 
 # Brewva Anti-Patterns
 
-- Cross-package relative imports such as `../../packages/...`.
+- Cross-package relative imports such as `../../packages/...` in production
+  `packages/**` source (test files may use white-box relative imports into a
+  package's `src` — see the test-import policy in package-boundaries.md).
 - Alias-based import models outside package entrypoints.
 - `as any`, `@ts-ignore`, or `@ts-expect-error` quick fixes.
 - A mixed top-level runtime implementation surface or bypasses around semantic root surfaces.

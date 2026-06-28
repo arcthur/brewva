@@ -204,8 +204,6 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
         ],
         tailProtectTokens: null,
         tailProtectRatio: 0.2,
-        minCompactionShrinkRatio: 0.1,
-        minCompactionShrinkAttempts: 1,
       },
     },
     toolFailureInjection: {

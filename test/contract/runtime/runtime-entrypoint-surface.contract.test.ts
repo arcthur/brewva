@@ -10,6 +10,11 @@ describe("four-port runtime entrypoint surface", () => {
     expect("createBrewvaRuntime" in runtimeModule).toBe(true);
     expect("CANONICAL_EVENT_TYPES" in runtimeModule).toBe(true);
     expect("RUNTIME_RECOVERY_CAUSES" in runtimeModule).toBe(true);
+    // Read-only tape-forensic helpers are the only non-four-port root exports;
+    // they orient over the tape replay authority without granting authority.
+    expect("scanTapeFileForensics" in runtimeModule).toBe(true);
+    expect("resolveTapeFilePath" in runtimeModule).toBe(true);
+    expect("emptyTapeForensicScan" in runtimeModule).toBe(true);
 
     for (const removedRuntimeSurface of [
       "BrewvaRuntimeRoot",

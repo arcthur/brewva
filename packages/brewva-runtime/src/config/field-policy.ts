@@ -116,6 +116,16 @@ const ACTIVE_CONFIG_FIELD_POLICY_RULES: readonly ActiveConfigFieldPolicyRule[] =
       "infrastructure.contextBudget.hardLimitPercent has been removed. Use infrastructure.contextBudget.thresholds.hardRatio.",
   },
   {
+    path: ["infrastructure", "contextBudget", "compaction", "minCompactionShrinkRatio"],
+    message:
+      "infrastructure.contextBudget.compaction.minCompactionShrinkRatio has been removed; the auto-compaction thrash-guard reduction floor is now an internal constant and is no longer runtime-managed.",
+  },
+  {
+    path: ["infrastructure", "contextBudget", "compaction", "minCompactionShrinkAttempts"],
+    message:
+      "infrastructure.contextBudget.compaction.minCompactionShrinkAttempts has been removed; the auto-compaction thrash-guard attempt count is now an internal constant and is no longer runtime-managed.",
+  },
+  {
     path: ["infrastructure", "contextBudget", "compactionThresholdPercent"],
     message:
       "infrastructure.contextBudget.compactionThresholdPercent has been removed. Use infrastructure.contextBudget.thresholds.advisoryRatio.",

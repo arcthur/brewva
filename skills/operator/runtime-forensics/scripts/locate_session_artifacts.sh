@@ -4,8 +4,7 @@ set -euo pipefail
 # Locate runtime artifacts for a session ID.
 # Usage: locate_session_artifacts.sh <SESSION_ID> [WORKSPACE_ROOT]
 # Output JSON: {"found": bool, "event_store": str|null, "ledger": str|null,
-#   "projections": str|null, "wal": str|null, "session_index": str|null,
-#   "session_index_snapshot": str|null}
+#   "projections": str|null, "wal": str|null, "session_index": str|null}
 
 if [ -z "${1:-}" ]; then
   printf '{"error":"SESSION_ID argument required"}\n'
@@ -39,7 +38,6 @@ ledger="null"
 projections="null"
 wal="null"
 session_index="null"
-session_index_snapshot="null"
 found=false
 
 orchestrator_root="${workspace}/.orchestrator"
@@ -69,13 +67,11 @@ if [ -d "${brewva_root}" ]; then
     found=true
   fi
 
-  index_path="${brewva_root}/session-index/session-index.duckdb"
-  if [ -f "${index_path}" ]; then
-    session_index="$(json_quote "${index_path}")"
-  fi
-  snapshot_manifest="${brewva_root}/session-index/read-snapshot.json"
-  if [ -f "${snapshot_manifest}" ]; then
-    session_index_snapshot="$(json_quote "${snapshot_manifest}")"
+  if [ -d "${brewva_root}/session-index" ]; then
+    index_path="$(find "${brewva_root}/session-index" -maxdepth 1 -name '*.sqlite' -type f 2>/dev/null | head -n 1 || true)"
+    if [ -n "${index_path}" ]; then
+      session_index="$(json_quote "${index_path}")"
+    fi
   fi
 fi
 
@@ -146,5 +142,5 @@ for root in "${search_dirs[@]}"; do
   done
 done
 
-printf '{"found":%s,"event_store":%s,"ledger":%s,"projections":%s,"wal":%s,"session_index":%s,"session_index_snapshot":%s}\n' \
-  "${found}" "${event_store}" "${ledger}" "${projections}" "${wal}" "${session_index}" "${session_index_snapshot}"
+printf '{"found":%s,"event_store":%s,"ledger":%s,"projections":%s,"wal":%s,"session_index":%s}\n' \
+  "${found}" "${event_store}" "${ledger}" "${projections}" "${wal}" "${session_index}"
