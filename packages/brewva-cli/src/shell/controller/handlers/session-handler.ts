@@ -552,17 +552,29 @@ export class ShellSessionHandler {
 
   async switchBundle(bundle: CliShellSessionBundle): Promise<void> {
     this.snapshotCurrentDraft();
+    const outgoingSessionId = this.context.getSessionPort().getSessionId();
     this.context.dismissPendingInteractiveQuestionRequests({
-      sessionId: this.context.getSessionPort().getSessionId(),
+      sessionId: outgoingSessionId,
     });
-    try {
-      recordSessionShutdownIfMissing(this.context.getBundle().runtime, {
-        sessionId: this.context.getSessionPort().getSessionId(),
-        reason: "cli_shell_session_switch",
-        source: "cli_shell_runtime",
-      });
-    } catch {
-      // best effort terminal receipt for session switching
+    // Only stamp a switch shutdown receipt when the outgoing session actually
+    // persisted something. A new session the user navigated away from before the
+    // first prompt defers persistence (deferPersistenceUntilPrompt) and has an
+    // empty tape; writing a receipt there would be its only event — a tape with no
+    // lineage root — which made the session impossible to reopen
+    // (session_lineage_root_missing). This mirrors the managed session's own
+    // sessionStartEmitted gate and the CLI exit-path persisted-activity guard.
+    const outgoingHasPersistedEvents =
+      this.context.getBundle().inspect.events.query(outgoingSessionId, { last: 1 }).length > 0;
+    if (outgoingHasPersistedEvents) {
+      try {
+        recordSessionShutdownIfMissing(this.context.getBundle().runtime, {
+          sessionId: outgoingSessionId,
+          reason: "cli_shell_session_switch",
+          source: "cli_shell_runtime",
+        });
+      } catch {
+        // best effort terminal receipt for session switching
+      }
     }
     this.context.getBundle().session.dispose();
     this.context.mountSession(bundle);

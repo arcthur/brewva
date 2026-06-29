@@ -4,9 +4,13 @@ import {
   HARNESS_MANIFEST_RECORDED_EVENT_TYPE,
   HARNESS_MANIFEST_SCHEMA,
 } from "@brewva/brewva-vocabulary/harness";
-import { createHostedSession } from "../../../packages/brewva-gateway/src/hosted/api.js";
+import {
+  createHostedSession,
+  createRuntimeLineageNode,
+} from "../../../packages/brewva-gateway/src/hosted/api.js";
 import { installHostedMcpBundleDisposal } from "../../../packages/brewva-gateway/src/hosted/internal/session/init/mcp-lifecycle.js";
 import { MANAGED_AGENT_SESSION_TEST_ONLY } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/session.js";
+import { recordSessionShutdownIfMissing } from "../../../packages/brewva-gateway/src/utils/runtime.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -55,6 +59,91 @@ describe("hosted session lazy persistence", () => {
     ]);
 
     result.session.dispose();
+  });
+
+  test("recovers a deferred session poisoned by a lone switch shutdown receipt", async () => {
+    const workspace = createTestWorkspace("hosted-session-lineage-recovery");
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const first = await createHostedSession({
+      cwd: workspace,
+      runtime,
+      deferPersistenceUntilPrompt: true,
+    });
+    const sessionId = first.session.sessionManager.getSessionId();
+    first.session.dispose();
+
+    // Reproduce the poison: the CLI session-switch terminal receipt lands on a
+    // never-prompted (deferred, unpersisted) session, so its only event becomes a
+    // session_shutdown with no lineage root.
+    recordSessionShutdownIfMissing(runtime, {
+      sessionId,
+      reason: "cli_shell_session_switch",
+      source: "cli_shell_runtime",
+    });
+    expect(runtime.ops.events.records.list(sessionId).map((event) => event.type)).toEqual([
+      "session_shutdown",
+    ]);
+
+    // Reopening must heal (seed the main lineage root) instead of throwing
+    // session_lineage_root_missing.
+    const reopened = await createHostedSession({
+      cwd: workspace,
+      runtime,
+      sessionId,
+      deferPersistenceUntilPrompt: true,
+    });
+    expect(runtime.ops.events.records.list(sessionId).map((event) => event.type)).toContain(
+      "session.lineage.node.created",
+    );
+    reopened.session.dispose();
+  });
+
+  test("still fails closed when a rootless tape carries real lineage history", async () => {
+    const workspace = createTestWorkspace("hosted-session-lineage-corruption");
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const sessionId = "session-rootless-with-history";
+
+    // Genuine corruption: a real lineage node with no reachable root (not main, and
+    // its parent is absent). Re-rooting would orphan history, so reopening must
+    // surface the error rather than silently heal.
+    createRuntimeLineageNode(runtime, sessionId, {
+      lineageNodeId: "lineage:orphan-branch",
+      parentLineageNodeId: "lineage:absent-parent",
+      kind: "branch",
+      forkPoint: { kind: "session_root" },
+      createdBy: "corruption-fixture",
+    });
+
+    expect(
+      createHostedSession({
+        cwd: workspace,
+        runtime,
+        sessionId,
+        deferPersistenceUntilPrompt: true,
+      }),
+    ).rejects.toThrow("session_lineage_root_missing");
+  });
+
+  test("still fails closed when a rootless tape carries lineage selection state", async () => {
+    const workspace = createTestWorkspace("hosted-session-lineage-selection-corruption");
+    const runtime = createRuntimeInstanceFixture({ cwd: workspace });
+    const sessionId = "session-rootless-with-selection";
+
+    runtime.ops.session.lineage.recordSelection(sessionId, {
+      selectionId: "selection-orphan",
+      channelId: "cli",
+      lineageNodeId: "lineage:missing",
+      reason: "corruption-fixture",
+    });
+
+    expect(
+      createHostedSession({
+        cwd: workspace,
+        runtime,
+        sessionId,
+        deferPersistenceUntilPrompt: true,
+      }),
+    ).rejects.toThrow("session_lineage_root_missing");
   });
 
   test("does not persist MCP disposal failures before initial persistence", async () => {

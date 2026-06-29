@@ -47,6 +47,7 @@ import {
   MESSAGE_END_EVENT_TYPE,
   readSessionRewindCompletedEventPayload,
   SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2,
+  SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
 import {
   SESSION_REWIND_DIVERGENCE_SCHEMA,
@@ -108,6 +109,50 @@ type DeferredInitialSessionEntries = {
 
 const SESSION_COMPACT_EVENT_TYPE = "session_compact";
 const HOSTED_MAIN_LINEAGE_NODE_ID = "lineage:main";
+const SESSION_LINEAGE_EVENT_TYPE_PREFIX = "session.lineage.";
+const LINEAGE_REFERENCE_PAYLOAD_FIELDS = [
+  "lineageNodeId",
+  "parentLineageNodeId",
+  "previousLineageNodeId",
+  "fromLineageNodeId",
+  "toLineageNodeId",
+  "targetLineageNodeId",
+] as const;
+
+function hasNonEmptyStringField(
+  record: Record<string, unknown>,
+  field: (typeof LINEAGE_REFERENCE_PAYLOAD_FIELDS)[number],
+): boolean {
+  const value = record[field];
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/**
+ * Whether an event constitutes lineage-referencing history that a freshly seeded
+ * main root would orphan. Context entries point at a lineage node, lineage nodes
+ * form the tree itself, and `session.lineage.*` receipts carry lineage read-model
+ * state (selection, summaries, outcomes, capability state). A rootless tape that
+ * still holds any of these is genuinely corrupt and must fail closed. A tape
+ * carrying only lifecycle receipts (e.g. a lone `session_shutdown`) never started
+ * a lineage and is safe to (re)root.
+ */
+function isLineageBearingHistory(event: BrewvaEventRecord): boolean {
+  if (
+    event.type === CONTEXT_ENTRY_RECORDED_EVENT_TYPE ||
+    event.type === SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE ||
+    event.type.startsWith(SESSION_LINEAGE_EVENT_TYPE_PREFIX)
+  ) {
+    return true;
+  }
+  const payload = event.payload;
+  if (!isRecord(payload)) {
+    return false;
+  }
+  if (LINEAGE_REFERENCE_PAYLOAD_FIELDS.some((field) => hasNonEmptyStringField(payload, field))) {
+    return true;
+  }
+  return isRecord(payload.forkPoint) && hasNonEmptyStringField(payload.forkPoint, "lineageNodeId");
+}
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
@@ -892,7 +937,6 @@ export class HostedRuntimeTapeSessionStore {
   }
 
   #ensureLineageRoot(): void {
-    const events = listRuntimeEvents(this.runtime, this.sessionId);
     try {
       const tree = getRuntimeSessionLineageTree(this.runtime, this.sessionId);
       if (tree.rootNodeId) {
@@ -904,7 +948,14 @@ export class HostedRuntimeTapeSessionStore {
       if (!message.includes("session_lineage_root_missing")) {
         throw error;
       }
-      if (events.length > 0) {
+      // The lineage tree has no root. Seed the canonical main node UNLESS the tape
+      // already carries lineage-referencing history, which re-rooting would orphan
+      // (genuine corruption we must surface, not paper over). A tape holding only
+      // lifecycle receipts — e.g. a lone session_shutdown left by a never-prompted
+      // session that was switched away — never started a lineage and is safe to
+      // (re)root, which also recovers such sessions instead of leaving them
+      // permanently unopenable.
+      if (listRuntimeEvents(this.runtime, this.sessionId).some(isLineageBearingHistory)) {
         throw error;
       }
     }
