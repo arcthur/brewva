@@ -81,7 +81,10 @@ export interface ShellSessionHandlerContext {
   modelSelection: ModelSelectionDelegate;
   providerAuth: ProviderAuthDelegate;
   commit(input: ShellCommitInput, options?: ShellCommitOptions): void;
-  runShellEffects(effects: readonly ShellEffect[]): Promise<void>;
+  runShellEffects(
+    effects: readonly ShellEffect[],
+    options?: { errorMode?: "notify" | "throw" },
+  ): Promise<void>;
   handleShellCommand(prompt: string): Promise<boolean>;
   getShortcutLabel(id: string): string | undefined;
   buildSessionStatusActions(): CliShellAction[];
@@ -315,21 +318,28 @@ export class ShellSessionHandler {
     const runPromptEffect = async (): Promise<void> => {
       try {
         await recordCheckpoint();
-        await this.context.runShellEffects([
-          {
-            type: "session.prompt",
-            sessionGeneration: this.context.getSessionGeneration(),
-            parts: buildCliShellPromptContentParts(
-              this.context.cwd,
-              promptText,
-              promptParts,
-            ) as readonly BrewvaPromptContentPart[],
-            options: {
-              source: "interactive",
-              ...(composerPolicy === "queue" ? { streamingBehavior: "queue" as const } : {}),
+        await this.context.runShellEffects(
+          [
+            {
+              type: "session.prompt",
+              sessionGeneration: this.context.getSessionGeneration(),
+              parts: buildCliShellPromptContentParts(
+                this.context.cwd,
+                promptText,
+                promptParts,
+              ) as readonly BrewvaPromptContentPart[],
+              options: {
+                source: "interactive",
+                ...(composerPolicy === "queue" ? { streamingBehavior: "queue" as const } : {}),
+              },
             },
-          },
-        ]);
+          ],
+          // Surface a failed turn to onPromptFailure instead of the effect
+          // runner's default notify-and-swallow. Otherwise the failure resolves,
+          // onPromptSuccess runs, and the just-failed model is wrongly CLEARED in
+          // availability memory (and a permanent access failure is never marked).
+          { errorMode: "throw" },
+        );
       } finally {
         clearPendingOptimisticSubmit();
       }
