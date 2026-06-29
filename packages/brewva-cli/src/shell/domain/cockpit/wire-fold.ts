@@ -145,6 +145,16 @@ function transcriptUserMessageId(input: {
   return `${transcriptMessagePrefix(input.sessionId)}${input.turnId}:user`;
 }
 
+function transcriptTurnFailureMessageId(input: {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly attemptId: string;
+}): string {
+  // Deterministic so replay/live re-folds upsert the same row instead of
+  // appending a duplicate failure notice.
+  return `${transcriptMessagePrefix(input.sessionId)}${input.turnId}:${input.attemptId}:turn-failure`;
+}
+
 function transcriptCustomMessageId(input: {
   readonly sessionId: string;
   readonly turnId: string;
@@ -911,6 +921,33 @@ class ShellCockpitSessionWireFold {
     this.upsertTranscriptMessage(frame.turnId, message);
   }
 
+  private projectTurnFailureNotice(
+    frame: Extract<SessionWireFrame, { type: "turn.committed" }>,
+  ): void {
+    // A failed turn that produced no assistant text would otherwise leave the
+    // transcript silent — the user sees nothing and cannot tell what happened
+    // (e.g. a provider "Connection error."). Surface a visible system row with
+    // the reason and how to recover. Deterministic id keeps replay idempotent.
+    if (frame.status !== "failed") {
+      return;
+    }
+    const reason = frame.failureReason?.trim();
+    const detail = reason && reason.length > 0 ? ` — ${reason}` : ".";
+    this.upsertTranscriptMessage(
+      frame.turnId,
+      buildTextTranscriptMessage({
+        id: transcriptTurnFailureMessageId({
+          sessionId: frame.sessionId,
+          turnId: frame.turnId,
+          attemptId: frame.attemptId,
+        }),
+        role: "system",
+        text: `⚠ Turn failed${detail}\n\nPress ↑ to bring back your message and resend, or run /model to switch models.`,
+        renderMode: "stable",
+      }),
+    );
+  }
+
   private applyFrame(
     frame: SessionWireFrame,
     options: { readonly projectTranscript: boolean },
@@ -1129,6 +1166,7 @@ class ShellCockpitSessionWireFold {
         this.commitAnswer(frame);
         if (options.projectTranscript) {
           this.commitTranscript(frame);
+          this.projectTurnFailureNotice(frame);
         }
         break;
       case "session.closed":

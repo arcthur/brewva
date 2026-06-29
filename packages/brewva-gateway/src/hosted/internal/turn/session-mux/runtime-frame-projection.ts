@@ -18,6 +18,7 @@ import {
   readRuntimeToolOutputDisplay,
   runtimeOutcomePayload,
   runtimeTurnCommittedStatusFromPayload,
+  runtimeTurnFailureReasonFromPayload,
   summarizeRuntimeToolContent,
   toolOutputFromRuntimeEvent,
 } from "../../../../utils/runtime-session-wire-projection.js";
@@ -340,6 +341,7 @@ export function emitRuntimeEventFrame(input: {
   }
   if (event.type === "turn.ended") {
     const committedStatus = runtimeTurnCommittedStatusFromPayload(event.payload);
+    const failureReason = runtimeTurnFailureReasonFromPayload(event.payload);
     if (committedStatus !== "completed") {
       closeOpenRuntimeWireTools({
         tracker: input.tracker,
@@ -371,6 +373,7 @@ export function emitRuntimeEventFrame(input: {
         turnId: input.turnId ?? "",
         attemptId: input.attemptId,
         status: committedStatus,
+        ...(failureReason !== undefined ? { failureReason } : {}),
         assistantText: input.assistantText,
         assistantSegments: [...input.assistantSegments],
         toolOutputs: [...input.toolOutputs],

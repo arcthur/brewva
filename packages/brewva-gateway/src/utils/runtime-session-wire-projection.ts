@@ -194,6 +194,20 @@ export function runtimeTurnCommittedStatusFromPayload(
     : "completed";
 }
 
+/**
+ * The human-readable failure reason a `turn.ended` payload carries (e.g. a
+ * provider "Connection error."), or undefined when none is present. Mirror of
+ * {@link runtimeTurnCommittedStatusFromPayload} so the live and replay
+ * projections surface WHY a turn failed, not just THAT it failed.
+ */
+export function runtimeTurnFailureReasonFromPayload(payload: unknown): string | undefined {
+  if (!isRuntimeProjectionRecord(payload)) {
+    return undefined;
+  }
+  const reason = payload.error;
+  return typeof reason === "string" && reason.trim().length > 0 ? reason : undefined;
+}
+
 export function promptTextFromRuntimeTurnStartedPayload(payload: unknown): string {
   if (!isRuntimeProjectionRecord(payload)) {
     return "";
@@ -279,6 +293,7 @@ export function buildRuntimeTurnSessionWireFrames(input: {
     }
 
     if (event.type === "turn.ended") {
+      const failureReason = runtimeTurnFailureReasonFromPayload(event.payload);
       frames.push({
         schema: SESSION_WIRE_SCHEMA,
         sessionId: input.sessionId,
@@ -292,6 +307,7 @@ export function buildRuntimeTurnSessionWireFrames(input: {
         turnId,
         attemptId: "runtime-turn",
         status: runtimeTurnCommittedStatusFromPayload(event.payload),
+        ...(failureReason !== undefined ? { failureReason } : {}),
         assistantText: assistantTextByTurnId.get(turnId) ?? "",
         assistantSegments: assistantSegmentsByTurnId.get(turnId) ?? [],
         toolOutputs: toolOutputsByTurnId.get(turnId) ?? [],

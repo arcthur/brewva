@@ -262,6 +262,82 @@ describe("shell cockpit wire fold", () => {
     ]);
   });
 
+  test("surfaces a visible failure notice carrying the provider reason when a turn fails with no assistant text", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "make a chess game",
+      }),
+    );
+    fold.remember(
+      frame({
+        type: "turn.committed",
+        frameId: "frame:commit",
+        ts: 1_040,
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "failed",
+        failureReason: "Connection error.",
+        assistantText: "",
+        toolOutputs: [],
+      }),
+    );
+
+    const transcript = fold.snapshot("session-1").transcriptMessages.map((message) => ({
+      role: message.role,
+      text: message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""),
+    }));
+
+    // Before: a failed turn with no assistant text projected nothing — the user
+    // saw a silent, empty transcript and could not tell what happened. Now the
+    // reason and the recovery path are visible.
+    expect(transcript).toHaveLength(2);
+    expect(transcript[0]).toEqual({ role: "user", text: "make a chess game" });
+    expect(transcript[1]?.role).toBe("system");
+    expect(transcript[1]?.text).toContain("Turn failed");
+    expect(transcript[1]?.text).toContain("Connection error.");
+    expect(transcript[1]?.text).toContain("/model");
+  });
+
+  test("failure notice is idempotent across re-folds via its deterministic id", () => {
+    const fold = createShellCockpitWireFoldStore();
+    fold.remember(
+      frame({
+        type: "turn.input",
+        frameId: "frame:input",
+        ts: 1_000,
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "q",
+      }),
+    );
+    const commit = frame({
+      type: "turn.committed",
+      frameId: "frame:commit",
+      ts: 1_040,
+      turnId: "turn-1",
+      attemptId: "attempt-1",
+      status: "failed",
+      failureReason: "Connection error.",
+      assistantText: "",
+      toolOutputs: [],
+    });
+    fold.remember(commit);
+    // A replay / re-fold of the same committed frame must not append a second
+    // failure row — the deterministic message id makes the upsert idempotent.
+    fold.remember(commit);
+
+    const systemRows = fold
+      .snapshot("session-1")
+      .transcriptMessages.filter((message) => message.role === "system");
+    expect(systemRows).toHaveLength(1);
+  });
+
   test("keeps high-volume thinking delta refs bounded to the latest progress", () => {
     const fold = createShellCockpitWireFoldStore();
     fold.remember(

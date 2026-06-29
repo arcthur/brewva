@@ -641,6 +641,11 @@ export type SessionWireFrame =
       readonly turnId: string;
       readonly attemptId: string;
       readonly status: SessionWireCommittedStatus;
+      // Human-readable reason a non-completed turn ended (e.g. a provider
+      // "Connection error."). Carried on the frame so the presentation layer can
+      // surface WHY a turn failed instead of a bare status, on both the live and
+      // replay projection paths. Absent for completed turns.
+      readonly failureReason?: string;
       readonly assistantText: string;
       readonly assistantSegments?: readonly AssistantTextSegmentView[];
       readonly toolOutputs: readonly ToolOutputView[];

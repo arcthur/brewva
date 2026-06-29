@@ -374,7 +374,8 @@ export function validateSessionWireFramePayload(
         typeof value.assistantText !== "string" ||
         !isAssistantTextSegmentList(value.assistantSegments) ||
         !Array.isArray(value.toolOutputs) ||
-        value.toolOutputs.some((entry) => !isToolOutputView(entry))
+        value.toolOutputs.some((entry) => !isToolOutputView(entry)) ||
+        !isOptionalString(value.failureReason)
       ) {
         return { ok: false, error: "turn.committed payload is invalid" };
       }
