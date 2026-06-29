@@ -7,7 +7,7 @@ import type {
   Model as ProviderModel,
   SimpleStreamOptions as ProviderStreamOptions,
 } from "@brewva/brewva-provider-core/contracts";
-import { providerRuntimeLayer } from "@brewva/brewva-provider-core/contracts";
+import { providerRuntimeLayer, readErrorStatus } from "@brewva/brewva-provider-core/contracts";
 import type { RuntimeProviderFrame, RuntimeProviderPort } from "@brewva/brewva-runtime";
 import { createAsyncBridge, linkAbortSignal } from "@brewva/brewva-std/async";
 import { asDurable } from "@brewva/brewva-std/honesty";
@@ -174,30 +174,12 @@ function modelKey(model: BrewvaRegisteredModel): string {
 }
 
 /**
- * Dig an error and its `cause` chain for a plausible HTTP status. A request failure
- * crosses the Effect failure channel as a `ProviderStreamError` whose `cause` is the
- * original SDK error (`toProviderStreamError` sets `cause: error`), and SDK `APIError`s
- * carry a numeric `status`. The in-band error-event path reduces the error to a plain
- * message (no status), so this returns undefined there and classification falls back
- * to the message regex.
+ * HTTP-status extraction is the shared `readErrorStatus` in provider-core
+ * (`contracts/error-status.ts`). Re-exported under the gateway's historical name for the
+ * provider-fallback RFC and the `provider-failure-classification` test; this seam layers
+ * the gateway-specific `classifyProviderStatus` taxonomy on top of the shared reader.
  */
-export function readProviderErrorStatus(error: unknown, depth = 0): number | undefined {
-  if (depth > 4 || error === null || typeof error !== "object") {
-    return undefined;
-  }
-  const record = error as { status?: unknown; statusCode?: unknown; cause?: unknown };
-  for (const candidate of [record.status, record.statusCode]) {
-    if (
-      typeof candidate === "number" &&
-      Number.isInteger(candidate) &&
-      candidate >= 100 &&
-      candidate <= 599
-    ) {
-      return candidate;
-    }
-  }
-  return readProviderErrorStatus(record.cause, depth + 1);
-}
+export { readErrorStatus as readProviderErrorStatus };
 
 /**
  * Map an unambiguous HTTP status to a failure reason. Ambiguous 4xx (e.g. 400/413,
@@ -216,7 +198,7 @@ function classifyProviderStatus(status: number): ProviderFailureReason | undefin
  * reliable signal) and falling back to a message regex when no status is present.
  */
 export function classifyProviderFailure(error: unknown): ProviderFailureReason {
-  const status = readProviderErrorStatus(error);
+  const status = readErrorStatus(error);
   if (status !== undefined) {
     const byStatus = classifyProviderStatus(status);
     if (byStatus !== undefined) {
@@ -502,12 +484,15 @@ async function* streamRuntimeProviderAttempt(
         BrewvaEffect.promise(async () => {
           if (event.type === "error") {
             face.observeAssistantMessage(toTurnLoopAssistantMessage(event.error));
+            const reconstructed = new Error(event.error.errorMessage ?? "provider_stream_failed");
+            if (event.retryable !== undefined) {
+              // Carry the provider's retry classification across the bridge so the
+              // runtime fails fast on a permanent error instead of retrying it.
+              (reconstructed as { retryable?: boolean }).retryable = event.retryable;
+            }
             await bridge.write({
               kind: "error",
-              error: new ProviderAttemptError(
-                new Error(event.error.errorMessage ?? "provider_stream_failed"),
-                frameWitness(sawIncrementalFrame),
-              ),
+              error: new ProviderAttemptError(reconstructed, frameWitness(sawIncrementalFrame)),
             });
             return;
           }

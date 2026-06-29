@@ -52,6 +52,13 @@ export class ProviderStreamError extends BrewvaSchema.TaggedErrorClass<ProviderS
   {
     message: BrewvaSchema.String,
     cause: BrewvaSchema.optional(BrewvaSchema.Unknown),
+    /**
+     * Transport-level retry classification carried up to the runtime. `false`
+     * marks a permanent failure (bad/expired credential, model not entitled to
+     * the account, invalid request) that must fail fast instead of being
+     * retried. Absent means "unclassified" — the runtime treats it as retryable.
+     */
+    retryable: BrewvaSchema.optional(BrewvaSchema.Boolean),
   },
 ) {}
 

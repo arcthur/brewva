@@ -6,6 +6,7 @@ import type { OverlayPriority } from "../../../internal/tui/index.js";
 import type { ShellCommitOptions } from "../../domain/actions.js";
 import type { CliShellInput } from "../../domain/input.js";
 import { normalizeShellInputKey } from "../../domain/keymap.js";
+import type { ModelAvailabilityMemory } from "../../domain/model-availability-memory.js";
 import type {
   CliShellOverlayPayload,
   ProviderConnectionDescriptor,
@@ -32,6 +33,7 @@ export interface ShellModelSelectionHandlerContext {
   getSessionPort(): SessionViewPort;
   getState(): CliShellViewState;
   getUi(): CliShellUiPort;
+  getModelAvailabilityMemory(): ModelAvailabilityMemory;
   commit(action: CliShellAction | readonly CliShellAction[], options?: ShellCommitOptions): void;
   requestCockpitSync(): void;
   buildSessionStatusActions(): CliShellAction[];
@@ -110,6 +112,10 @@ export class ShellModelSelectionHandler {
       const available = availableKeys.has(key);
       const favorite = favoriteKeys.has(key);
       const currentModel = current?.provider === model.provider && current.id === model.id;
+      const unavailableReason = this.context
+        .getModelAvailabilityMemory()
+        .getUnavailableReason(model.provider, model.id);
+      const baseDetail = modelPickerDetail({ section, model, favorite });
       added.add(`${section}:${key}`);
       items.push({
         id: `model:${key}:${section}`,
@@ -118,8 +124,8 @@ export class ShellModelSelectionHandler {
         provider: model.provider,
         modelId: model.id,
         label: modelDisplayName(model),
-        detail: modelPickerDetail({ section, model, favorite }),
-        footer: available ? undefined : "Connect",
+        detail: unavailableReason ? `${baseDetail} · ${unavailableReason}` : baseDetail,
+        footer: available ? (unavailableReason ? "Unavailable" : undefined) : "Connect",
         marker: currentModel ? "●" : undefined,
         available,
         favorite,

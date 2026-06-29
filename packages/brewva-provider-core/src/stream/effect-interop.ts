@@ -1,13 +1,38 @@
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
-import { ProviderStreamError } from "../contracts/index.js";
+import { ProviderStreamError, readErrorStatus } from "../contracts/index.js";
+
+function readRetryableFlag(error: unknown): boolean | undefined {
+  if (typeof error === "object" && error !== null) {
+    const flag = (error as { retryable?: unknown }).retryable;
+    if (typeof flag === "boolean") {
+      return flag;
+    }
+  }
+  // Provider-agnostic fallback for SDK-based providers (deepseek/openai/anthropic/google),
+  // whose errors carry a numeric HTTP `status` but no `retryable` flag. Only UNAMBIGUOUS
+  // permanent statuses fail fast: 401 unauthorized, 403 forbidden, 402 payment required.
+  // 400/404 are ambiguous (context-length / transient routing) and 429/5xx are transient,
+  // so they stay unset and keep the default retry behavior. `readErrorStatus` is the shared
+  // reader (`contracts/error-status.ts`), also re-exported by the gateway's
+  // `classifyProviderFailure` as `readProviderErrorStatus`. The runtime's
+  // `isRetryableProviderError` is a SEPARATE gate: it walks the host's wrapped `cause` chain
+  // for an explicit `retryable` flag and does no status parsing.
+  const status = readErrorStatus(error);
+  if (status === 401 || status === 402 || status === 403) {
+    return false;
+  }
+  return undefined;
+}
 
 export function toProviderStreamError(error: unknown): ProviderStreamError {
   if (error instanceof ProviderStreamError) {
     return error;
   }
+  const retryable = readRetryableFlag(error);
   return new ProviderStreamError({
     message: error instanceof Error ? error.message : String(error),
     cause: error,
+    ...(retryable === undefined ? {} : { retryable }),
   });
 }
 

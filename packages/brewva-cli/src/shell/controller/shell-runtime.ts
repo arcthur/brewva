@@ -55,6 +55,10 @@ import type { ContinuationAnchorDraft, ShellEffect } from "../domain/effects.js"
 import { routeShellInput } from "../domain/input-router.js";
 import { isShellKeyboardInput, type CliShellInput, type ShellInput } from "../domain/input.js";
 import type { ShellIntent } from "../domain/intent.js";
+import {
+  createModelAvailabilityMemory,
+  type ModelAvailabilityMemory,
+} from "../domain/model-availability-memory.js";
 import type { OperatorSurfaceSnapshot } from "../domain/operator-snapshot.js";
 import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
 import { renderTranscriptAsMarkdown } from "../domain/overlays/projectors/transcript-markdown.js";
@@ -316,6 +320,7 @@ export class CliShellRuntime {
   static readonly STREAMING_RENDER_INTERVAL_MS = 16;
   static readonly COMPLETION_REFRESH_DEBOUNCE_MS = 120;
   readonly #configPort = createShellConfigPort();
+  readonly #modelAvailabilityMemory: ModelAvailabilityMemory = createModelAvailabilityMemory();
   readonly #commandProvider = new ShellCommandProvider();
   readonly #completionProvider: ShellCompletionProvider;
   readonly #completionHandler: ShellCompletionHandler;
@@ -566,6 +571,7 @@ export class CliShellRuntime {
         getSessionPort: () => this.#sessionPort,
         getState: () => this.#state,
         getUi: () => this.ui,
+        getModelAvailabilityMemory: () => this.#modelAvailabilityMemory,
         commit: (actions, commitOptions) => this.commit(actions, commitOptions),
         requestCockpitSync: () => this.#cockpitSync.requestSync(),
         buildSessionStatusActions: () => this.buildSessionStatusActions(),
@@ -593,6 +599,7 @@ export class CliShellRuntime {
       getSessionPhase: () => this.#sessionPhase,
       getSessionGeneration: () => this.#sessionGeneration,
       getUi: () => this.ui,
+      getModelAvailabilityMemory: () => this.#modelAvailabilityMemory,
       promptMemory: this.#promptMemoryHandler,
       transcriptProjector: this.#transcriptProjector,
       modelSelection: this.#modelSelectionHandler,

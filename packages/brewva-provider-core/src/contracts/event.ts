@@ -41,6 +41,13 @@ export type AssistantMessageEventOf<TAssistantMessage, TToolCall, TStopReason ex
       type: "error";
       reason: Extract<TStopReason, "aborted" | "error">;
       error: TAssistantMessage;
+      /**
+       * Transport retry classification carried from the provider's HTTP/stream
+       * failure. `false` marks a permanent failure (bad/expired credential, a
+       * model the account is not entitled to, an invalid request) so the host
+       * fails fast instead of retrying. Absent means "unclassified".
+       */
+      retryable?: boolean;
     };
 
 export type AssistantMessageEvent = AssistantMessageEventOf<AssistantMessage, ToolCall, StopReason>;

@@ -193,6 +193,9 @@ export function runProviderStream<TApi extends Api>(
                     type: "error",
                     reason: output.stopReason,
                     error: output,
+                    ...(providerError.retryable === undefined
+                      ? {}
+                      : { retryable: providerError.retryable }),
                   },
                   providerError,
                   activeSignal,

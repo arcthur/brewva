@@ -1,6 +1,7 @@
 export * from "./api.js";
 export * from "./cache.js";
 export * from "./content.js";
+export * from "./error-status.js";
 export * from "./event.js";
 export * from "./message.js";
 export * from "./model.js";

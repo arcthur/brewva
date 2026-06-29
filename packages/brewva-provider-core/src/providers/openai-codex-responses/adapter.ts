@@ -43,6 +43,7 @@ const BASE_DELAY_MS = 1000;
 const DEFAULT_SSE_HEADER_TIMEOUT_MS = 10_000;
 
 class CodexRetryableRequestError extends Error {
+  readonly retryable = true;
   constructor(
     readonly original: Error,
     readonly retryAfterMs?: number,
@@ -53,6 +54,7 @@ class CodexRetryableRequestError extends Error {
 }
 
 class CodexNonRetryableRequestError extends Error {
+  readonly retryable = false;
   constructor(readonly original: Error) {
     super(original.message);
     this.name = "CodexNonRetryableRequestError";
@@ -167,6 +169,11 @@ function unwrapCodexRequestError(error: unknown): Error {
     error instanceof CodexRetryableRequestError ||
     error instanceof CodexNonRetryableRequestError
   ) {
+    // Preserve the retry classification on the surfaced error: the wrapper is
+    // unwrapped to expose the friendly provider message, but the runtime still
+    // needs to know whether the failure is permanent (e.g. a model the account
+    // is not entitled to) so it does not retry it.
+    (error.original as { retryable?: boolean }).retryable = error.retryable;
     return error.original;
   }
   return toError(error);

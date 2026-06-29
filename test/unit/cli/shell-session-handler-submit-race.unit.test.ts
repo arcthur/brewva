@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ShellSessionHandler } from "../../../packages/brewva-cli/src/shell/controller/handlers/session-handler.js";
 import type { ShellEffect } from "../../../packages/brewva-cli/src/shell/domain/effects.js";
+import { createModelAvailabilityMemory } from "../../../packages/brewva-cli/src/shell/domain/model-availability-memory.js";
 
 describe("ShellSessionHandler submitComposer", () => {
   test("concurrent submit calls only commit one user prompt", async () => {
@@ -35,6 +36,7 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
+      getModelAvailabilityMemory: () => createModelAvailabilityMemory(),
       getUi: () =>
         ({
           notify() {},
@@ -116,6 +118,7 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
+      getModelAvailabilityMemory: () => createModelAvailabilityMemory(),
       getUi: () =>
         ({
           notify() {},
@@ -223,6 +226,7 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
+      getModelAvailabilityMemory: () => createModelAvailabilityMemory(),
       getUi: () =>
         ({
           notify() {},
@@ -330,6 +334,7 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
+      getModelAvailabilityMemory: () => createModelAvailabilityMemory(),
       getUi: () =>
         ({
           notify() {},
@@ -429,6 +434,7 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
+      getModelAvailabilityMemory: () => createModelAvailabilityMemory(),
       getUi: () =>
         ({
           notify(message: string) {
@@ -507,6 +513,7 @@ describe("ShellSessionHandler submitComposer", () => {
         }) as never,
       getSessionPhase: () => ({ kind: "idle" }),
       getSessionGeneration: () => 1,
+      getModelAvailabilityMemory: () => createModelAvailabilityMemory(),
       getUi: () =>
         ({
           notify() {},
@@ -594,6 +601,7 @@ describe("ShellSessionHandler submitComposer", () => {
         turn: 1,
       }),
       getSessionGeneration: () => 1,
+      getModelAvailabilityMemory: () => createModelAvailabilityMemory(),
       getUi: () =>
         ({
           notify() {},

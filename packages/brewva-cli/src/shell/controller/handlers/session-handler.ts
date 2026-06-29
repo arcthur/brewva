@@ -13,12 +13,17 @@ import {
   shellCockpitComposerPolicyAllowsSubmit,
 } from "../../domain/cockpit/index.js";
 import type { ShellEffect } from "../../domain/effects.js";
+import type { ModelAvailabilityMemory } from "../../domain/model-availability-memory.js";
 import {
   buildCliShellPromptContentParts,
   cloneCliShellPromptParts,
   expandPromptTextParts,
 } from "../../domain/prompt-parts.js";
 import type { CliShellPromptPart, CliShellPromptSnapshot } from "../../domain/prompt.js";
+import {
+  describeProviderFailure,
+  isProviderAccessFailure,
+} from "../../domain/provider-failure-guidance.js";
 import type { CliShellAction, CliShellViewState } from "../../domain/state.js";
 import { buildTextTranscriptMessage } from "../../domain/transcript.js";
 import type { CliShellSessionBundle, SessionViewPort } from "../../ports/session-port.js";
@@ -70,6 +75,7 @@ export interface ShellSessionHandlerContext {
   getSessionPhase(): SessionPhase;
   getSessionGeneration(): number;
   getUi(): CliShellUiPort;
+  getModelAvailabilityMemory(): ModelAvailabilityMemory;
   promptMemory: PromptMemoryDelegate;
   transcriptProjector: TranscriptProjectorDelegate;
   modelSelection: ModelSelectionDelegate;
@@ -291,6 +297,9 @@ export class ShellSessionHandler {
 
     const submittedAt = Date.now();
     const turnId = `interactive:${submittedAt}:${++this.#interactiveTurnSequence}`;
+    // Capture the model that runs THIS turn so a mid-turn `/model` switch cannot
+    // misattribute the failure (or success) to the wrong model in availability memory.
+    const submittedModel = this.context.getBundle().session.model;
     type RewindPromptParts = NonNullable<
       Parameters<SessionViewPort["recordRewindCheckpoint"]>[0]["prompt"]
     >["parts"];
@@ -358,23 +367,41 @@ export class ShellSessionHandler {
       },
     );
 
+    const memory = this.context.getModelAvailabilityMemory();
+    const onPromptSuccess = (): void => {
+      // The model just produced a successful turn — it is usable again.
+      if (submittedModel) {
+        memory.clear(submittedModel.provider, submittedModel.id);
+      }
+      this.context.notifyInteractiveUserPromptCommitted();
+    };
+    const onPromptFailure = (error: unknown): void => {
+      if (submittedModel && isProviderAccessFailure(error)) {
+        memory.markUnavailable(
+          submittedModel.provider,
+          submittedModel.id,
+          "not available with your current credentials",
+        );
+      }
+      this.context.getUi().notify(describeProviderFailure(error), "error");
+    };
+
     if (options.waitForPromptEffect === false) {
       setTimeout(() => {
-        void runPromptEffect()
-          .then(() => {
-            this.context.notifyInteractiveUserPromptCommitted();
-          })
-          .catch((error) => {
-            this.context
-              .getUi()
-              .notify(error instanceof Error ? error.message : "Failed to run prompt.", "error");
-          });
+        void runPromptEffect().then(onPromptSuccess).catch(onPromptFailure);
       }, 0);
       return;
     }
 
-    await runPromptEffect();
-    this.context.notifyInteractiveUserPromptCommitted();
+    // Awaited path (e.g. `brewva "<prompt>"`): same outcome handling as the
+    // fire-and-forget path so a failure surfaces with guidance and availability is
+    // recorded consistently. The failure is surfaced here, so it is not re-thrown.
+    try {
+      await runPromptEffect();
+      onPromptSuccess();
+    } catch (error) {
+      onPromptFailure(error);
+    }
   }
 
   async undoLastTurn(): Promise<void> {

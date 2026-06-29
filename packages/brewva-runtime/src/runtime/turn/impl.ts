@@ -15,6 +15,7 @@ import type {
   TurnInput,
 } from "../runtime-api.js";
 import type { TapePort } from "../tape/port.js";
+import { isRetryableProviderError } from "./provider-error.js";
 
 // Backstop against a provider stuck in an infinite tool-call loop — NOT a
 // task-size limit. A single agentic turn legitimately makes many tool calls
@@ -440,7 +441,8 @@ export function createTurnRunner(input: {
             currentAttemptProducedFrame ||
             committedToolThisTurn ||
             passOutput.assistantText.length > 0 ||
-            passOutput.reasonText.length > 0
+            passOutput.reasonText.length > 0 ||
+            !isRetryableProviderError(error)
           ) {
             throw error;
           }
