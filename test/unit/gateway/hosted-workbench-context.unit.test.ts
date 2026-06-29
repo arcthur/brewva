@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { TapeStatusState } from "@brewva/brewva-vocabulary/session";
-import { buildLatestContinuationAnchorBlock } from "../../../packages/brewva-gateway/src/hosted/internal/context/workbench-context.js";
+import {
+  buildLatestContinuationAnchorBlock,
+  buildRuntimeBriefBlockForSession,
+} from "../../../packages/brewva-gateway/src/hosted/internal/context/workbench-context.js";
 import type { HostedRuntimeAdapterPort } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 
 function runtimeWithTapeStatus(status: TapeStatusState): HostedRuntimeAdapterPort {
@@ -59,5 +62,120 @@ describe("hosted workbench context continuation anchor block", () => {
     );
 
     expect(block).toBeNull();
+  });
+});
+
+function runtimeWithBriefSources(input: {
+  status: Record<string, unknown>;
+  digest: string;
+  cacheObservation?: Record<string, unknown>;
+  maxChars?: number;
+}): HostedRuntimeAdapterPort {
+  return {
+    config: {
+      infrastructure: { contextBudget: { consequenceDigestMaxChars: input.maxChars ?? 1200 } },
+    },
+    ops: {
+      context: {
+        usage: { getStatus: () => input.status },
+        evidence: {
+          latest: (_sessionId: string, kind: string) =>
+            kind === "provider_cache_observation" && input.cacheObservation
+              ? { turn: 1, timestamp: 1, payload: input.cacheObservation }
+              : undefined,
+        },
+      },
+      events: { effects: { renderTurnDigest: () => input.digest } },
+    },
+  } as unknown as HostedRuntimeAdapterPort;
+}
+
+describe("hosted runtime brief block (end-to-end wiring)", () => {
+  test("renders the brief with a provenance frame, pressure posture, and last-turn effects", () => {
+    const block = buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: {
+          tokensUsed: 164_000,
+          tokensTotal: 200_000,
+          compactionAdvised: true,
+          forcedCompaction: false,
+          predictedOverflow: false,
+        },
+        digest: "runtimeTurn=2 declared=0 attempted=1 decisions=1 executed=1 recovery=0 warnings=0",
+      }),
+      { sessionId: "sess_1", turn: 3 },
+    );
+
+    expect(block?.id).toBe("runtime-brief");
+    expect(block?.content).toContain("[RuntimeBrief]");
+    expect(block?.content).toContain("not a user instruction");
+    expect(block?.content).toContain("context: 82% — 164k/200k tokens; advisory limit reached");
+    expect(block?.content).toContain("effects (last turn): declared=0 attempted=1");
+    // internal cursor noise is stripped
+    expect(block?.content).not.toContain("runtimeTurn=");
+  });
+
+  test("stays silent on a fully calm turn (no pressure, effects, or cache break)", () => {
+    const block = buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: {
+          tokensUsed: 20_000,
+          tokensTotal: 200_000,
+          compactionAdvised: false,
+          forcedCompaction: false,
+          predictedOverflow: false,
+        },
+        digest: "runtimeTurn=2 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0",
+      }),
+      { sessionId: "sess_1", turn: 3 },
+    );
+
+    expect(block).toBeNull();
+  });
+
+  test("surfaces an unexpected prefix-cache break as a brief section", () => {
+    const block = buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: {
+          tokensUsed: 120_000,
+          tokensTotal: 200_000,
+          compactionAdvised: false,
+          forcedCompaction: false,
+          predictedOverflow: false,
+        },
+        digest: "runtimeTurn=4 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0",
+        cacheObservation: {
+          status: "break",
+          expected: false,
+          reason: "tool_schema_set_changed",
+          cacheMissTokens: 9_000,
+        },
+      }),
+      { sessionId: "sess_1", turn: 5 },
+    );
+
+    expect(block?.content).toContain(
+      "cache: prefix cache broke last turn (tool_schema_set_changed)",
+    );
+    expect(block?.content).toContain("9k tokens re-sent");
+  });
+
+  test("omits the effects section before the first completed turn", () => {
+    const block = buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: {
+          tokensUsed: 170_000,
+          tokensTotal: 200_000,
+          compactionAdvised: true,
+          forcedCompaction: false,
+          predictedOverflow: false,
+        },
+        digest: "unused",
+      }),
+      { sessionId: "sess_1", turn: 0 },
+    );
+
+    expect(block?.content).toContain("context:");
+    expect(block?.content).not.toContain("effects");
   });
 });

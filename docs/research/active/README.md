@@ -144,6 +144,20 @@ it; if gated, the model operates it and the tape accounts for it`.
   visibility line as performance-only state under `Warm the cache, never the
 context.`
 
+- [RFC: Model-Facing Runtime Intelligence Digests](./rfc-model-facing-runtime-intelligence-digests.md):
+  active RFC generalizing the proven `[TurnConsequenceDigest]` pattern into a small
+  bounded **runtime-brief** family that surfaces brewva's already-computed runtime
+  intelligence (context pressure, compaction `netReuseValue` posture, tool-schema
+  cost, open verifier findings) to the model — on the premise that a strong model
+  is the best consumer of runtime intelligence brewva currently routes only to the
+  operator. Strictly inform-only (read-only, authority-neutral, turn-tail so it
+  never moves `stablePrefixHash`), revisiting the `cost-observability` "no context
+  admission" boundary in form but honoring its intent. Core is a **legibility
+  contract**: stable tagged structure, salience order, explicit units, no
+  model-unusable hashes/ids, budgeted with structure-preserving drop, silent when
+  nothing is decision-relevant. Under `Inform the model, don't seize it — and make
+the telling legible.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

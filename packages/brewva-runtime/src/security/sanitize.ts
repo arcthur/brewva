@@ -62,7 +62,7 @@ export type SourceTrustTier = "system" | "internal" | "external";
 const SOURCE_TRUST_MAP: Record<string, SourceTrustTier> = {
   "brewva.identity": "system",
   "brewva.task-state": "system",
-  "brewva.context-status": "system",
+  "brewva.runtime-brief": "system",
   "brewva.workbench": "system",
   "brewva.agent-constitution": "internal",
   "brewva.agent-memory": "internal",

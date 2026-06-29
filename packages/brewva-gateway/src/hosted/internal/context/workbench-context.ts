@@ -15,6 +15,7 @@ import {
 import type { HostedDelegationStore } from "../../../delegation/api.js";
 import { applyWorkbenchEvictionsToMessages } from "../session/projection/workbench-visibility.js";
 import {
+  getRuntimeContextEvidenceLatest,
   getRuntimeContextStatus,
   getRuntimeTapeStatus,
   listRuntimeWorkbenchEntries,
@@ -38,6 +39,13 @@ import {
   buildContextMaterializationReceipt,
 } from "./materialization.js";
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
+import {
+  buildRuntimeBriefBlock,
+  renderCacheBreakSection,
+  renderConsequenceSection,
+  renderContextPressureSection,
+  RUNTIME_BRIEF_MAX_CHARS,
+} from "./runtime-brief.js";
 import { selectStaleAwareWorkbenchEntriesForSession } from "./workbench-staleness.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
@@ -329,34 +337,72 @@ function buildWorkbenchBlock(
   return makeHostedContextBlock("active-workbench", lines.join("\n"));
 }
 
-function buildContextStatusBlock(
+// Model-facing runtime intelligence brief: a legible `[RuntimeBrief]` block under
+// a provenance frame (see runtime-brief.ts), composing relevance-gated sections —
+// context-pressure posture, an unexpected cache-break, and last-turn effects.
+// Each section is silent when not decision-relevant, so the block is absent on a
+// fully calm turn. Replaces the former always-on 16-line `[Context Status]` ledger
+// dump and the bare consequence-digest block.
+export function buildRuntimeBriefBlockForSession(
   runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
+    turn: number;
     usage?: ContextBudgetUsage;
   },
-): HostedContextBlock {
+): HostedContextBlock | null {
   const status = getRuntimeContextStatus(runtime, input.sessionId, input.usage);
-  const lines = [
-    "[Context Status]",
-    `tokens_used: ${status.tokensUsed ?? "unknown"}`,
-    `tokens_total: ${status.tokensTotal}`,
-    `effective_tokens_total: ${status.effectiveTokensTotal ?? "unknown"}`,
-    `tokens_remaining: ${status.tokensRemaining ?? "unknown"}`,
-    `auto_compact_limit_tokens: ${status.autoCompactLimitTokens ?? "unknown"}`,
-    `controllable_tokens_remaining: ${status.controllableTokensRemaining ?? "unknown"}`,
-    `controllable_context_remaining_ratio: ${
-      status.controllableContextRemainingRatio ?? "unknown"
-    }`,
-    `tokens_until_forced_compact: ${status.tokensUntilForcedCompact ?? "unknown"}`,
-    `predicted_turn_growth_tokens: ${status.predictedTurnGrowthTokens}`,
-    `tokens_until_predicted_overflow: ${status.tokensUntilPredictedOverflow ?? "unknown"}`,
-    `predicted_overflow: ${status.predictedOverflow ? "yes" : "no"}`,
-    `usage_ratio: ${status.usageRatio ?? "unknown"}`,
-    `compaction_advised: ${status.compactionAdvised ? "yes" : "no"}`,
-    `forced_compaction: ${status.forcedCompaction ? "yes" : "no"}`,
-  ];
-  return makeHostedContextBlock("context-status", lines.join("\n"))!;
+  const pressure = renderContextPressureSection({
+    tokensUsed: status.tokensUsed ?? null,
+    tokensTotal: status.tokensTotal ?? 0,
+    compactionAdvised: status.compactionAdvised ?? false,
+    forcedCompaction: status.forcedCompaction ?? false,
+    predictedOverflow: status.predictedOverflow ?? false,
+  });
+  const effects =
+    input.turn > 0 ? buildConsequenceSection(runtime, input.sessionId, input.turn) : null;
+  const cache = buildCacheBreakSection(runtime, input.sessionId);
+  return buildRuntimeBriefBlock({
+    sections: [pressure, cache, effects],
+    maxChars: RUNTIME_BRIEF_MAX_CHARS,
+  });
+}
+
+function buildCacheBreakSection(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): ReturnType<typeof renderCacheBreakSection> {
+  const latest = getRuntimeContextEvidenceLatest(runtime, sessionId, "provider_cache_observation");
+  const payload = latest?.payload;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const cacheMissTokens =
+    typeof record.cacheMissTokens === "number" && Number.isFinite(record.cacheMissTokens)
+      ? record.cacheMissTokens
+      : 0;
+  return renderCacheBreakSection({
+    status: typeof record.status === "string" ? record.status : "",
+    expected: record.expected === true,
+    reason: typeof record.reason === "string" ? record.reason : null,
+    cacheMissTokens,
+  });
+}
+
+function buildConsequenceSection(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+  turn: number,
+): ReturnType<typeof renderConsequenceSection> {
+  const digest = renderRuntimeTurnDigest(runtime, sessionId, {
+    runtimeTurn: turn - 1,
+    turnId: `turn-${turn - 1}`,
+    maxChars: runtime.config.infrastructure.contextBudget.consequenceDigestMaxChars,
+  });
+  // Relevance gating lives in renderConsequenceSection (suppresses all-zero turns);
+  // the digest never emits an "effects=none_recorded" sentinel, so no string guard.
+  return renderConsequenceSection(digest);
 }
 
 export function buildLatestContinuationAnchorBlock(
@@ -392,25 +438,6 @@ function buildCapabilityBlocks(capabilityView: BuildCapabilityViewResult): Hoste
       const rendered = makeHostedContextBlock(block.id, block.content);
       return rendered ? [rendered] : [];
     });
-}
-
-function buildConsequenceDigestBlock(input: {
-  runtime: HostedRuntimeAdapterPort;
-  sessionId: string;
-  turn: number;
-}): HostedContextBlock | null {
-  if (input.turn <= 0) {
-    return null;
-  }
-  const digest = renderRuntimeTurnDigest(input.runtime, input.sessionId, {
-    runtimeTurn: input.turn - 1,
-    turnId: `turn-${input.turn - 1}`,
-    maxChars: input.runtime.config.infrastructure.contextBudget.consequenceDigestMaxChars,
-  });
-  if (digest.includes("effects=none_recorded")) {
-    return null;
-  }
-  return makeHostedContextBlock("turn-consequence-digest", digest);
 }
 
 function isRequiredHostedContextBlock(block: HostedContextBlock): boolean {
@@ -468,8 +495,9 @@ async function buildHostedDynamicTail(input: {
           mode: nudge.mode,
         })
       : null,
-    buildContextStatusBlock(input.runtime, {
+    buildRuntimeBriefBlockForSession(input.runtime, {
       sessionId: input.sessionId,
+      turn: input.turn,
       usage: input.usage,
     }),
     continuationAnchor.include
@@ -478,11 +506,6 @@ async function buildHostedDynamicTail(input: {
     buildWorkbenchBlock(input.runtime, input.sessionId),
     pendingDelegationsBlock,
     completed.block,
-    buildConsequenceDigestBlock({
-      runtime: input.runtime,
-      sessionId: input.sessionId,
-      turn: input.turn,
-    }),
     ...buildCapabilityBlocks(input.capabilityView),
     ...buildReadPathRecoveryBlocks(input.runtime, input.sessionId),
   ].filter((block): block is HostedContextBlock => Boolean(block));
