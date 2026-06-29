@@ -1,6 +1,7 @@
 export { createBrowserTools, type BrowserToolDeps } from "./browser/api.js";
 export { createGitDiffTool, createGitLogTool, createGitStatusTool } from "./git-observe.js";
 export { createGlobTool, createGrepTool, runRipgrep, type GrepRunResult } from "./grep.js";
+export { warmFinder } from "./grep/engine/index.js";
 export { createLookAtTool } from "./look-at.js";
 export { createLspTools, shutdownLspWorkspaceServerManager } from "./lsp.js";
 export { createOutputSearchTool } from "./output-search.js";

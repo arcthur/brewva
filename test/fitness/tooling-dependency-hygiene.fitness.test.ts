@@ -23,7 +23,10 @@ describe("tooling dependency hygiene", () => {
     expect(packageJson.scripts?.["lint:unused"]).toBe("knip --dependencies --no-progress");
     expect(packageJson.scripts?.check).toContain("bun run lint:unused");
     expect(knipConfig.ignoreBinaries).toEqual(expect.arrayContaining(["codesign", "file"]));
-    expect(knipConfig.ignoreDependencies).toEqual(["@vscode/tree-sitter-wasm"]);
+    // `@ff-labs/fff-bun` is loaded through a type-erased dynamic import (to keep
+    // tsc out of its raw .ts source), which knip's static analysis cannot trace,
+    // so it is ignored here like the other specially-loaded native dependency.
+    expect(knipConfig.ignoreDependencies).toEqual(["@ff-labs/fff-bun", "@vscode/tree-sitter-wasm"]);
   });
 
   test("pins every direct dependency to an exact version (no caret/tilde ranges)", () => {

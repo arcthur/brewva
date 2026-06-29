@@ -41,6 +41,9 @@ export interface GrepAdvisorDetails {
 
 export interface GrepGroupedLines {
   path?: string;
+  /** Un-normalized path exactly as it appears in the match line, used to look up
+   * engine-provided frecency scores (which are keyed by that same raw path). */
+  rawPath?: string;
   lines: string[];
   originalOrder: number;
 }

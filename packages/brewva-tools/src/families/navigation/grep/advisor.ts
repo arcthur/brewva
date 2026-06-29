@@ -39,6 +39,7 @@ function groupLocationLines(baseCwd: string, lines: string[]): GrepGroupedLines[
     }
     current = {
       path: normalizedPath,
+      rawPath: match?.[1],
       lines: [line],
       originalOrder: groups.length,
     };
@@ -57,6 +58,9 @@ export function rerankGroupedLines(input: {
   lines: string[];
   runtime?: BrewvaToolOptions["runtime"];
   sessionId?: string;
+  /** Engine-provided cross-session frecency, keyed by raw match-line path. Used
+   * only as a tiebreaker after the session-local combo/path signals. */
+  frecencyByPath?: ReadonlyMap<string, number>;
 }): {
   lines: string[];
   candidatePaths: string[];
@@ -88,6 +92,7 @@ export function rerankGroupedLines(input: {
     });
     return {
       path: group.path,
+      rawPath: group.rawPath,
       lines: group.lines,
       originalOrder: group.originalOrder,
       score,
@@ -103,6 +108,11 @@ export function rerankGroupedLines(input: {
     }
     if (left.score.pathScore !== right.score.pathScore) {
       return right.score.pathScore - left.score.pathScore;
+    }
+    const leftFrecency = input.frecencyByPath?.get(left.rawPath ?? "") ?? 0;
+    const rightFrecency = input.frecencyByPath?.get(right.rawPath ?? "") ?? 0;
+    if (leftFrecency !== rightFrecency) {
+      return rightFrecency - leftFrecency;
     }
     return left.originalOrder - right.originalOrder;
   });

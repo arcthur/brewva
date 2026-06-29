@@ -149,6 +149,15 @@ const OXC_PARSER_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target
 
 const BOXLITE_RUNTIME_PACKAGES = ["@boxlite-ai/boxlite"] as const;
 const OXC_PARSER_RUNTIME_PACKAGES = ["oxc-parser", "@oxc-project/types"] as const;
+const FFF_VERSION = readPinnedDependencyVersion(BREWVA_TOOLS_PACKAGE_JSON_PATH, "@ff-labs/fff-bun");
+const FFF_NATIVE_PACKAGE_BY_TARGET: Partial<Record<PlatformTarget["target"], string>> = {
+  "bun-darwin-arm64": "@ff-labs/fff-bin-darwin-arm64",
+  "bun-darwin-x64": "@ff-labs/fff-bin-darwin-x64",
+  "bun-linux-x64": "@ff-labs/fff-bin-linux-x64-gnu",
+  "bun-linux-arm64": "@ff-labs/fff-bin-linux-arm64-gnu",
+  "bun-windows-x64": "@ff-labs/fff-bin-win32-x64",
+};
+const FFF_RUNTIME_PACKAGES = ["@ff-labs/fff-bun"] as const;
 const WEB_TREE_SITTER_VERSION = readPinnedDependencyVersion(
   BREWVA_TOOLS_PACKAGE_JSON_PATH,
   "web-tree-sitter",
@@ -391,6 +400,21 @@ async function copyOxcParserRuntimeAssets(outDir: string, platform: PlatformTarg
   }
 }
 
+async function copyFffRuntimeAssets(outDir: string, platform: PlatformTarget): Promise<void> {
+  const nativePackage = FFF_NATIVE_PACKAGE_BY_TARGET[platform.target];
+  if (!nativePackage) {
+    // fff is optional at runtime (grep falls back to ripgrep), so an unsupported
+    // build target simply ships without it rather than failing the build.
+    return;
+  }
+
+  const targetNodeModules = join(outDir, "node_modules");
+  for (const packageName of [...FFF_RUNTIME_PACKAGES, nativePackage]) {
+    const source = await ensurePackagedDependency(packageName, FFF_VERSION);
+    copyDirectory(source, packagePath(targetNodeModules, packageName));
+  }
+}
+
 async function copyTreeSitterRuntimeAssets(outDir: string): Promise<void> {
   const targetNodeModules = join(outDir, "node_modules");
   for (const packageName of TREE_SITTER_RUNTIME_PACKAGES) {
@@ -515,6 +539,7 @@ async function copyRuntimeAssets(outDir: string, platform: PlatformTarget): Prom
   // no native-asset staging here (unlike BoxLite / oxc-parser / tree-sitter).
   await copyBoxLiteRuntimeAssets(outDir, platform);
   await copyOxcParserRuntimeAssets(outDir, platform);
+  await copyFffRuntimeAssets(outDir, platform);
   await copyTreeSitterRuntimeAssets(outDir);
   writeFileSync(join(outDir, ".gitkeep"), "");
 }

@@ -48,6 +48,7 @@ import {
   type ToolTargetScope,
 } from "../../runtime-port/target-scope.js";
 import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
+import { noteFileAccess } from "./grep/engine/index.js";
 import { readSourceTextCached } from "./source-intelligence/cache.js";
 import { createSourceIntelligenceEngine } from "./source-intelligence/engine.js";
 
@@ -969,6 +970,8 @@ export function createSourceReadTool(options?: {
         runtime,
         sessionId,
       });
+      // Record the read so fff frecency learns which files this session touches.
+      noteFileAccess(scope.baseCwd, absolutePath);
       const mode = normalizeSourceReadMode(params.mode);
       const spans =
         mode === "raw"

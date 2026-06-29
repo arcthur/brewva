@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
@@ -13,7 +13,10 @@ import type {
   BrewvaToolExecutionTraits,
   BrewvaToolOrchestration,
 } from "@brewva/brewva-tools/contracts";
-import { buildReadPathDiscoveryObservationPayload } from "@brewva/brewva-tools/navigation";
+import {
+  buildReadPathDiscoveryObservationPayload,
+  warmFinder,
+} from "@brewva/brewva-tools/navigation";
 import { attachBrewvaToolExecutionTraits } from "@brewva/brewva-tools/registry";
 import type { CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions } from "@brewva/brewva-vocabulary/session";
 import { type HostedDelegationBuiltinToolName } from "../../../../delegation/api.js";
@@ -623,6 +626,14 @@ export async function createHostedSession(
   const environment = resolveHostedEnvironment(options);
   const requestedModelRole = resolveHostedModelRole(options.modelRole);
   const runtime = createKernelRuntime(options, environment.cwd);
+
+  // Eagerly start indexing established workspaces so the model's first grep
+  // doesn't pay the fff scan cost. Gated on `.brewva` (the same "real workspace"
+  // signal as frecency persistence) so ephemeral/non-workspace dirs aren't
+  // scanned. Fire-and-forget; a no-op when fff is unavailable.
+  if (existsSync(resolve(environment.cwd, ".brewva"))) {
+    warmFinder(environment.cwd);
+  }
 
   const autoSubagentsEnabled = options.enableSubagents !== false;
   const delegationStore = createDelegationStore(runtime, autoSubagentsEnabled);

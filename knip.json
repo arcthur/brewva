@@ -31,7 +31,7 @@
     "distribution/brewva-linux-x64"
   ],
   "ignoreBinaries": ["codesign", "file", "python3", "tar", "taskkill"],
-  "ignoreDependencies": ["@vscode/tree-sitter-wasm"],
+  "ignoreDependencies": ["@ff-labs/fff-bun", "@vscode/tree-sitter-wasm"],
   "ignoreUnresolved": [
     "../../config.js",
     "../../modes/interactive/theme/theme.js",

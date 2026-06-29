@@ -27,7 +27,8 @@ import {
   rerankGroupedLines,
   resolveSuggestionMode,
 } from "./grep/advisor.js";
-import { buildRipgrepArgs, runRipgrep } from "./grep/ripgrep.js";
+import { frecencyForGrepResult, getSearchEngine } from "./grep/engine/index.js";
+import { runRipgrep } from "./grep/ripgrep.js";
 import type { GrepAdvisorDetails, GrepCase, GrepRunResult, GrepToolOptions } from "./grep/types.js";
 import {
   buildReadPathDiscoveryObservationPayload,
@@ -184,6 +185,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       });
 
       try {
+        const engine = getSearchEngine(options);
         const runAttempt = async (
           attemptQuery: string,
           attemptPaths: string[],
@@ -192,25 +194,18 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
             forceIgnoreCase?: boolean;
           },
         ): Promise<GrepRunResult> => {
-          return runRipgrep(
-            {
-              cwd,
-              args: buildRipgrepArgs({
-                query: attemptQuery,
-                paths: attemptPaths,
-                globs,
-                caseMode,
-                fixed: extra?.fixed ?? params.fixed,
-                forceIgnoreCase: extra?.forceIgnoreCase,
-              }),
-              maxLines,
-              timeoutMs,
-              signal,
-            },
-            {
-              command: options.ripgrepCommand,
-            },
-          );
+          return engine.grep({
+            cwd,
+            query: attemptQuery,
+            paths: attemptPaths,
+            globs,
+            caseMode,
+            fixed: extra?.fixed ?? params.fixed ?? false,
+            forceIgnoreCase: extra?.forceIgnoreCase ?? false,
+            maxLines,
+            timeoutMs,
+            signal,
+          });
         };
 
         const baseHeader = [
@@ -311,6 +306,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
             lines: result.lines,
             runtime,
             sessionId,
+            frecencyByPath: frecencyForGrepResult(result),
           });
           return finalizeMatchedResult({
             result,
@@ -550,18 +546,15 @@ export function createGlobTool(options: GrepToolOptions): ToolDefinition {
       }
 
       try {
-        const result = await runRipgrep(
-          {
-            cwd,
-            args: ["--files", "--hidden", "--glob", pattern, ...paths],
-            maxLines: maxResults,
-            timeoutMs,
-            signal,
-          },
-          {
-            command: options.ripgrepCommand,
-          },
-        );
+        const engine = getSearchEngine(options);
+        const result = await engine.glob({
+          cwd,
+          pattern,
+          paths,
+          maxResults,
+          timeoutMs,
+          signal,
+        });
         const sessionId = getToolSessionId(ctx);
         const discoveryPayload = buildReadPathDiscoveryObservationPayload({
           baseCwd: scope.baseCwd,
