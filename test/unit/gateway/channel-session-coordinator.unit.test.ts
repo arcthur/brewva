@@ -312,6 +312,56 @@ describe("channel session coordinator ownership", () => {
     }
   });
 
+  test("given a sub-agent session invalidated before it persists events, when it is disposed, then no shutdown receipt litters its empty tape", async () => {
+    const createStarted = createDeferred<void>();
+    const createDeferredResult = createDeferred<HostedSessionResult>();
+
+    const fixture = await createCoordinatorFixture({
+      cleanupGracefulTimeoutMs: 25,
+      createSession: async () => {
+        createStarted.resolve();
+        return await createDeferredResult.promise;
+      },
+    });
+
+    try {
+      const pendingSession = fixture.coordinator.getOrCreateSession(
+        "scope-empty",
+        "worker",
+        createUserTurn("scope-empty"),
+      );
+      await createStarted.promise;
+
+      await fixture.registry.softDeleteAgent("worker");
+      await fixture.coordinator.cleanupAgentSessions("worker");
+
+      const workerRuntime = await fixture.runtimeManager.getOrCreateRuntime("worker");
+      createDeferredResult.resolve(createHostedSessionResult(workerRuntime, "agent-session:empty"));
+
+      // The create resolves into an inactive agent, so the coordinator disposes the
+      // session before it ever binds or runs — its tape is empty. Await the rejection
+      // so the dispose has completed before we inspect the tape.
+      let rejection: unknown;
+      await pendingSession.catch((error) => {
+        rejection = error;
+      });
+      expect((rejection as Error | undefined)?.message).toContain("agent_not_found:worker");
+
+      // A lone shutdown receipt on an empty tape would be a rootless pseudo-session
+      // in the index; the coordinator must skip it.
+      expect(
+        workerRuntime.ops.events.records.query("agent-session:empty", {
+          type: "session_shutdown",
+        }),
+      ).toHaveLength(0);
+      expect(workerRuntime.ops.events.records.query("agent-session:empty")).toHaveLength(0);
+    } finally {
+      await fixture.coordinator.disposeAllSessions();
+      fixture.coordinator.disposeRuntime("worker");
+      cleanupTestWorkspace(fixture.workspace);
+    }
+  });
+
   test("given a new conversation turn, when resolveScopeKey runs repeatedly, then the coordinator owns binding persistence and emits a single binding event", async () => {
     const fixture = await createCoordinatorFixture({
       cleanupGracefulTimeoutMs: 25,

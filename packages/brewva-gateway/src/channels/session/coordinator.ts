@@ -11,6 +11,7 @@ import {
   getRuntimeCostSummary,
   listRuntimePendingProposalRequests,
   listRuntimeProposalRequests,
+  queryRuntimeEvents,
 } from "../../hosted/api.js";
 import { waitForAllSettledWithTimeout } from "../../utils/async.js";
 import { toErrorMessage } from "../../utils/errors.js";
@@ -300,11 +301,19 @@ export function createChannelSessionCoordinator(input: {
     try {
       await inputState.result.session.abort();
     } catch {}
-    recordSessionShutdownIfMissing(inputState.runtime, {
-      sessionId: inputState.agentSessionId,
-      reason: "coordinator_cleanup",
-      source: "channel_session_coordinator",
-    });
+    // Only stamp a terminal receipt when the sub-agent session actually persisted
+    // events. A session torn down before it ever ran (e.g. it errored before its
+    // first turn / lineage root) has an empty tape; a lone shutdown receipt would
+    // be its only event — a rootless tape that litters the session index. Mirrors
+    // the CLI switch/exit persisted-activity guards. Diagnostic empty-session
+    // shutdowns intentionally stay in ensureSessionShutdownRecorded.
+    if (queryRuntimeEvents(inputState.runtime, inputState.agentSessionId, { last: 1 }).length > 0) {
+      recordSessionShutdownIfMissing(inputState.runtime, {
+        sessionId: inputState.agentSessionId,
+        reason: "coordinator_cleanup",
+        source: "channel_session_coordinator",
+      });
+    }
     try {
       inputState.runtime.ops.session.state.clear(inputState.agentSessionId);
     } catch {}
