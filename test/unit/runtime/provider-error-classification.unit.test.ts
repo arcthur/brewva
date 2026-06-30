@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { isRetryableProviderError } from "../../../packages/brewva-runtime/src/runtime/turn/provider-error.js";
+import {
+  describeProviderError,
+  isRetryableProviderError,
+} from "../../../packages/brewva-runtime/src/runtime/turn/provider-error.js";
 
 describe("isRetryableProviderError", () => {
   test("non-retryable when the top-level error is flagged false", () => {
@@ -26,5 +29,32 @@ describe("isRetryableProviderError", () => {
 
   test("retryable for a non-object value", () => {
     expect(isRetryableProviderError("oops")).toBe(true);
+  });
+});
+
+describe("describeProviderError", () => {
+  test("joins the whole cause chain so an opaque top-level message keeps its real reason", () => {
+    // Shape of a real OpenAI SDK APIConnectionError over a bun fetch failure:
+    // "Connection error." <- TypeError: fetch failed <- the actual socket errno.
+    const root = Object.assign(new Error("connect ECONNRESET"), { code: "ECONNRESET" });
+    const fetchErr = Object.assign(new TypeError("fetch failed"), { cause: root });
+    const apiErr = Object.assign(new Error("Connection error."), { cause: fetchErr });
+    expect(describeProviderError(apiErr)).toBe(
+      "Connection error. <- TypeError: fetch failed <- connect ECONNRESET (ECONNRESET)",
+    );
+  });
+
+  test("returns a plain string error unchanged and falls back when there is no message", () => {
+    expect([
+      describeProviderError("boom"),
+      describeProviderError({}),
+      describeProviderError(undefined, "provider_stream_failed"),
+    ]).toEqual(["boom", "runtime_turn_failed", "provider_stream_failed"]);
+  });
+
+  test("is cycle-safe", () => {
+    const cyclic = new Error("loops") as Error & { cause?: unknown };
+    cyclic.cause = cyclic;
+    expect(describeProviderError(cyclic)).toBe("loops");
   });
 });

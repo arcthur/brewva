@@ -15,7 +15,7 @@ import type {
   TurnInput,
 } from "../runtime-api.js";
 import type { TapePort } from "../tape/port.js";
-import { isRetryableProviderError } from "./provider-error.js";
+import { describeProviderError, isRetryableProviderError } from "./provider-error.js";
 
 // Backstop against a provider stuck in an infinite tool-call loop — NOT a
 // task-size limit. A single agentic turn legitimately makes many tool calls
@@ -270,9 +270,9 @@ export function createTurnRunner(input: {
     let terminalCommitted = false;
 
     function failureMessage(error: unknown): string {
-      return error instanceof Error && error.message.length > 0
-        ? error.message
-        : "runtime_turn_failed";
+      // Record the whole cause chain, not just the top-level message, so an
+      // opaque provider "Connection error." carries its underlying reason.
+      return describeProviderError(error);
     }
 
     function decisionIncludesAbortedToolResult(decision: ToolCommitmentDecision): boolean {
@@ -453,7 +453,7 @@ export function createTurnRunner(input: {
             type: "runtime.suspended",
             payload: {
               cause: "provider_retry",
-              error: error instanceof Error ? error.message : "provider_stream_failed",
+              error: describeProviderError(error, "provider_stream_failed"),
             },
           });
           yield { type: "runtime.event", event: retry };

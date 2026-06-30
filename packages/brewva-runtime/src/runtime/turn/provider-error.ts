@@ -38,3 +38,47 @@ export function isRetryableProviderError(error: unknown): boolean {
   }
   return true;
 }
+
+/**
+ * A diagnostic string spanning the error's `cause` chain. Provider transport
+ * failures surface to the user as a generic top-level message (e.g. the SDK's
+ * "Connection error."), while the actionable detail — the underlying socket/TLS
+ * errno, an abort, a serialization fault — sits in `cause`. Recording the whole
+ * chain (each `Name: message (code)` joined by ` <- `) on the failed/suspended
+ * event turns an opaque "Connection error." into something diagnosable. Same
+ * bounded, cycle-safe walk as {@link isRetryableProviderError}.
+ */
+export function describeProviderError(error: unknown, fallback = "runtime_turn_failed"): string {
+  if (typeof error === "string" && error.length > 0) {
+    return error;
+  }
+  const segments: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (typeof current !== "object" || current === null) {
+      break;
+    }
+    const record = current as {
+      name?: unknown;
+      message?: unknown;
+      code?: unknown;
+      cause?: unknown;
+    };
+    const name = typeof record.name === "string" && record.name !== "Error" ? record.name : "";
+    const message = typeof record.message === "string" ? record.message : "";
+    const code =
+      typeof record.code === "string" || typeof record.code === "number"
+        ? ` (${String(record.code)})`
+        : "";
+    const head = [name, message].filter((part) => part.length > 0).join(": ");
+    const segment = `${head}${code}`.trim();
+    if (segment.length > 0 && !segments.includes(segment)) {
+      segments.push(segment);
+    }
+    if (record.cause === undefined || record.cause === current) {
+      break;
+    }
+    current = record.cause;
+  }
+  return segments.length > 0 ? segments.join(" <- ") : fallback;
+}
