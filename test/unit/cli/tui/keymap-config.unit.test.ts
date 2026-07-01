@@ -139,4 +139,32 @@ describe("brewva tui keymap bindings", () => {
       );
     expect(offenders).toEqual([]);
   });
+
+  test("no shortcut is bound twice across the layers active in the composer base mode", () => {
+    // global (always on), composer, and transcript are all active during normal
+    // typing (transcript/composer register at mode=composer in keymap.tsx). A
+    // shortcut bound twice across them means the higher-priority layer silently
+    // shadows the other — the leader-b regression where transcript.message.last
+    // (priority 15) shadowed subagentFooter.toggle (global, priority 0) into a
+    // dead internal binding. Guard so it cannot recur unnoticed.
+    const baseActiveLayers = new Set(["global", "composer", "transcript"]);
+    const seen = new Map<string, string>();
+    const collisions: string[] = [];
+    for (const definition of BREWVA_BUILT_IN_KEYMAP_BINDINGS) {
+      const layer = definition.layer ?? "global";
+      if (!baseActiveLayers.has(layer)) {
+        continue;
+      }
+      for (const shortcut of definition.shortcuts) {
+        const token = shortcutForOpenTuiKeymap(shortcut);
+        const existing = seen.get(token);
+        if (existing) {
+          collisions.push(`"${shortcut}" (${token}): ${existing} vs ${definition.id}`);
+        } else {
+          seen.set(token, definition.id);
+        }
+      }
+    }
+    expect(collisions).toEqual([]);
+  });
 });

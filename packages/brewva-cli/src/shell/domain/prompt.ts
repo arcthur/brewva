@@ -74,6 +74,9 @@ export interface CliShellUiViewPrefs {
   showThinking: boolean;
 }
 
+// Persisted as loose strings (not the BrewvaDiffPreferences unions) because the
+// sidecar is untrusted JSON; the values are re-validated by normalizeDiffPreferences
+// on read, so an out-of-range persisted style/wrapMode degrades to a safe default.
 export interface CliShellUiDiffPrefs {
   style: string;
   wrapMode: string;

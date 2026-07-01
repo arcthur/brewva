@@ -61,8 +61,15 @@ export function appendPromptHistoryEntry(
   limit: number,
 ): PromptHistoryState {
   const snapshot = cloneCliShellPromptSnapshot(entry);
+  // Suppress an adjacent duplicate so re-sending the same prompt does not stack
+  // repeats in up/down navigation. This mirrors the persisted store's dedup
+  // (prompt-store.appendHistory) so the in-session and post-restart history agree.
+  const entries =
+    history.entries.at(-1)?.text === snapshot.text
+      ? history.entries
+      : [...history.entries, snapshot].slice(-limit);
   return {
-    entries: [...history.entries, snapshot].slice(-limit),
+    entries,
     index: 0,
     draft: undefined,
   };

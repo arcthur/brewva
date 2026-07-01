@@ -100,4 +100,12 @@ describe("tui theme", () => {
     );
     expect(resolveBootTheme({ persistedName: undefined, bootName: undefined })).toBe(undefined);
   });
+
+  test("resolveBootTheme treats a persisted 'auto' as non-concrete and re-detects via boot", () => {
+    // A stale persisted "auto" must not freeze on DEFAULT; it falls through to the
+    // renderer's already-auto-detected concrete boot theme.
+    expect(resolveBootTheme({ persistedName: "auto", bootName: "paper" })).toEqual(
+      getTuiTheme("paper"),
+    );
+  });
 });

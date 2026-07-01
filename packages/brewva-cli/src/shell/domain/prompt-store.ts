@@ -9,6 +9,8 @@ import type {
   CliShellPromptSnapshot,
   CliShellPromptStashEntry,
   CliShellPromptStorePort,
+  CliShellUiDiffPrefs,
+  CliShellUiViewPrefs,
 } from "./prompt.js";
 
 const MAX_PROMPT_HISTORY_ENTRIES = 50;
@@ -109,16 +111,6 @@ async function appendJsonlAsync(filePath: string, entry: unknown): Promise<void>
 async function writeJsonFileAsync(filePath: string, entries: readonly unknown[]): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
-}
-
-interface CliShellUiViewPrefs {
-  toolDetails: boolean;
-  showThinking: boolean;
-}
-
-interface CliShellUiDiffPrefs {
-  style: string;
-  wrapMode: string;
 }
 
 interface CliShellUiPrefs {

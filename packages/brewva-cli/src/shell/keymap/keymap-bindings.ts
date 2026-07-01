@@ -237,7 +237,11 @@ export const BREWVA_EFFECT_KEYMAP_BINDINGS: readonly BrewvaKeymapBindingDefiniti
     title: "Last message",
     category: "Transcript",
     layer: "transcript",
-    shortcuts: ["leader b"],
+    // vim G (last). Must be the explicit shift form: @opentui/keymap lowercases
+    // token names, so a bare "leader G" would collapse onto "leader g" (first).
+    // "leader b" is intentionally left to subagentFooter.toggle (global layer),
+    // which the higher-priority transcript layer would otherwise shadow.
+    shortcuts: ["leader shift+g"],
   },
   {
     id: "subagentFooter.toggle",

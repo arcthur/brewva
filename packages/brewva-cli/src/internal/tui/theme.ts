@@ -139,7 +139,11 @@ export function resolveBootTheme(input: {
   persistedName: string | undefined;
   bootName: string | undefined;
 }): TuiTheme | undefined {
-  const effectiveName = input.persistedName ?? input.bootName;
+  // A persisted "auto" is not a concrete theme — fall through to the boot name
+  // (the renderer already auto-detected a concrete light/dark theme) so it keeps
+  // tracking the terminal rather than freezing on DEFAULT.
+  const effectiveName =
+    input.persistedName && input.persistedName !== "auto" ? input.persistedName : input.bootName;
   if (!effectiveName || effectiveName === "default") {
     return undefined;
   }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   acceptComposerCompletion,
+  appendPromptHistoryEntry,
   createPromptHistoryState,
   navigatePromptHistoryState,
 } from "../../../packages/brewva-cli/src/shell/domain/composer-actions.js";
@@ -145,5 +146,16 @@ describe("shell composer action helpers", () => {
         },
       ],
     });
+  });
+
+  test("suppresses an adjacent duplicate so re-sending the same prompt does not stack in history", () => {
+    const base = createPromptHistoryState([{ text: "build", parts: [] }]);
+    // Re-sending the same text must not add a second entry (mirrors the persisted
+    // store dedup); navigation state still resets to the live tail.
+    const afterDup = appendPromptHistoryEntry(base, { text: "build", parts: [] }, 50);
+    expect(afterDup.entries).toHaveLength(1);
+    expect(afterDup.index).toBe(0);
+    const afterNew = appendPromptHistoryEntry(afterDup, { text: "test", parts: [] }, 50);
+    expect(afterNew.entries.map((entry) => entry.text)).toEqual(["build", "test"]);
   });
 });
