@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { RecallBroker } from "@brewva/brewva-recall/broker";
 import type { RecallBrokerRuntime } from "@brewva/brewva-recall/broker";
 import type { SessionIndex, SessionIndexDigest } from "@brewva/brewva-session-index";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { RECALL_CURATION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
+import { patchDateNow } from "../../helpers/global-state.js";
 import { sleep } from "../../helpers/process.js";
 
 // Phase 1 of rfc-recall-next-turn-cache-warming: RecallBroker.warm() + the
@@ -155,6 +156,12 @@ function makeTurnEndedEvent(sessionId: string): BrewvaEventRecord {
 const flushMacrotask = (): Promise<void> => sleep(10);
 
 describe("RecallBroker.warm() — next-turn cache warming (Phase 1)", () => {
+  let restoreClock: (() => void) | undefined;
+  afterEach(() => {
+    restoreClock?.();
+    restoreClock = undefined;
+  });
+
   test("warm() then search() performs exactly one broker build", async () => {
     const { runtime } = createFakeRuntime();
     const fake = createFakeIndex({ digests: [makeDigest("prior")] });
@@ -200,6 +207,11 @@ describe("RecallBroker.warm() — next-turn cache warming (Phase 1)", () => {
   });
 
   test("warm() does not change search() output or broker state on a fixed index", async () => {
+    // Curation weights decay against Date.now(); freeze the clock so the cold and
+    // warm builds share one wall-clock point. Otherwise concurrent scheduling drift
+    // between the two builds exceeds the toExponential(12) tolerance below and this
+    // idempotence assertion flakes under the full suite.
+    restoreClock = patchDateNow(() => 1_700_000_100_000);
     const seed = [makeCurationEvent("prior", "tape:prior:e1", "helpful")];
     const digests = [makeDigest("prior")];
 
