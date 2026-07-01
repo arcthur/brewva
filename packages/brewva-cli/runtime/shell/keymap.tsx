@@ -3,6 +3,10 @@
 import type { JSX } from "solid-js";
 import type { ShellEffect } from "../../src/shell/domain/effects.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import {
+  TRANSCRIPT_NAV_DIRECTION_BY_COMMAND_ID,
+  type TranscriptNavDirection,
+} from "../../src/shell/domain/transcript-navigation.js";
 import type {
   BrewvaKeymapBindingDefinition,
   BrewvaKeymapLayer,
@@ -30,6 +34,7 @@ const LEADER_TOKEN = "leader";
 const LAYER_PRIORITY: Readonly<Record<BrewvaKeymapLayer, number>> = {
   global: 0,
   composer: 10,
+  transcript: 15,
   completion: 20,
   overlay: 30,
   pager: 40,
@@ -55,6 +60,7 @@ export interface RegisterBrewvaKeymapInput {
   copySelection(): Promise<boolean>;
   clearSelection(): void;
   syncComposerFromEditor(): Promise<void>;
+  navigateTranscriptMessage(direction: TranscriptNavDirection): void;
 }
 
 export function formatBrewvaKeySequence(parts: Parameters<typeof formatKeySequence>[0]): string {
@@ -313,6 +319,28 @@ export function registerBrewvaKeymap(input: RegisterBrewvaKeymapInput): BrewvaKe
                 return true;
               }
               return false;
+            },
+            desc: definition.title,
+          })),
+        ),
+    }),
+  );
+  disposers.push(
+    keymap.registerLayer({
+      priority: LAYER_PRIORITY.transcript,
+      mode: BREWVA_BASE_MODE,
+      bindings: bindings.definitions
+        .filter((definition) => (definition.layer ?? "global") === "transcript")
+        .flatMap((definition) =>
+          definition.shortcuts.map((shortcut) => ({
+            key: shortcutForOpenTuiKeymap(shortcut),
+            cmd: () => {
+              const direction = TRANSCRIPT_NAV_DIRECTION_BY_COMMAND_ID[definition.id];
+              if (!direction) {
+                return false;
+              }
+              input.navigateTranscriptMessage(direction);
+              return true;
             },
             desc: definition.title,
           })),

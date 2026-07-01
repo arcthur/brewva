@@ -9,11 +9,16 @@ import {
   untrack,
 } from "solid-js";
 import {
+  extmarkOffsetToStringOffset,
+  stringOffsetToExtmarkOffset,
+} from "../../src/internal/tui/index.js";
+import {
   buildPromptPartSignature,
   cloneCliShellPromptParts,
 } from "../../src/shell/domain/prompt-parts.js";
 import type { CliShellPromptPart } from "../../src/shell/domain/prompt.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
+import type { TranscriptNavDirection } from "../../src/shell/domain/transcript-navigation.js";
 import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
 import type {
   OpenTuiKeyEvent,
@@ -95,6 +100,8 @@ export interface ComposerInputWiringInput {
    * subagentFooter, completion, selection, or the bare composer).
    */
   keymapMode(state: ShellViewModel, renderer: OpenTuiRenderer): ComposerKeymapMode;
+  /** Navigate the transcript scrollbox by message boundary (renderer-local). */
+  navigateTranscriptMessage(direction: TranscriptNavDirection): void;
 }
 
 /**
@@ -166,8 +173,12 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
             ? agentPromptPartStyleId()
             : textPromptPartStyleId();
       const extmarkId = node.extmarks.create({
-        start: source.start,
-        end: source.end,
+        // Prompt-part source offsets are UTF-16 string indices; OpenTUI extmarks
+        // address text in display-column space (wide/CJK graphemes count as 2,
+        // each newline as 1). Convert, or the highlight drifts left whenever a
+        // wide grapheme precedes the token.
+        start: stringOffsetToExtmarkOffset(node.plainText, source.start),
+        end: stringOffsetToExtmarkOffset(node.plainText, source.end),
         virtual: true,
         styleId: styleId ?? undefined,
         typeId,
@@ -208,8 +219,10 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
       if (!nextPart) {
         continue;
       }
-      nextPart.source.text.start = extmark.start;
-      nextPart.source.text.end = extmark.end;
+      // Extmark offsets are in display-column space; map them back to UTF-16
+      // string offsets before they re-enter prompt-part source.text.
+      nextPart.source.text.start = extmarkOffsetToStringOffset(node.plainText, extmark.start);
+      nextPart.source.text.end = extmarkOffsetToStringOffset(node.plainText, extmark.end);
       nextParts.push(nextPart);
       nextMap.set(extmark.id, nextPart.id);
     }
@@ -223,13 +236,33 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
     return nextParts;
   };
 
+  // Debounce viewport-resize dispatch: a drag-resize fires many dimension ticks
+  // and each one routes an async reducer action. Report the first tick (correct
+  // initial viewport) immediately, then coalesce the drag.
+  const VIEWPORT_RESIZE_DEBOUNCE_MS = 100;
+  let viewportResizeTimer: ReturnType<typeof setTimeout> | undefined;
+  let viewportResizeDispatched = false;
+  const clearScheduledViewportResize = (): void => {
+    if (viewportResizeTimer) {
+      clearTimeout(viewportResizeTimer);
+      viewportResizeTimer = undefined;
+    }
+  };
   createEffect(() => {
-    void input.runtime.handleInput({
-      type: "viewport.resize",
-      columns: dimensions().width,
-      rows: dimensions().height,
-    });
+    const columns = dimensions().width;
+    const rows = dimensions().height;
+    const dispatchViewportResize = (): void => {
+      viewportResizeDispatched = true;
+      void input.runtime.handleInput({ type: "viewport.resize", columns, rows });
+    };
+    clearScheduledViewportResize();
+    if (!viewportResizeDispatched) {
+      dispatchViewportResize();
+      return;
+    }
+    viewportResizeTimer = setTimeout(dispatchViewportResize, VIEWPORT_RESIZE_DEBOUNCE_MS);
   });
+  onCleanup(clearScheduledViewportResize);
 
   const copySelection = async (): Promise<boolean> =>
     await copyOpenTuiSelection({
@@ -276,6 +309,7 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
         copySelection,
         clearSelection: () => renderer.clearSelection?.(),
         syncComposerFromEditor,
+        navigateTranscriptMessage: (direction) => input.navigateTranscriptMessage(direction),
       })
     : undefined;
 

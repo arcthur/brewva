@@ -3,7 +3,11 @@
 import { For, Show, createMemo, createSignal } from "solid-js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import { buildSubagentFooterView } from "../../src/shell/domain/subagent-footer.js";
-import type { OpenTuiRenderer } from "../internal-opentui-runtime.js";
+import {
+  navigateTranscriptMessage,
+  type TranscriptNavDirection,
+} from "../../src/shell/domain/transcript-navigation.js";
+import type { OpenTuiRenderer, OpenTuiScrollBoxHandle } from "../internal-opentui-runtime.js";
 import type { BoxRenderable } from "../opentui/index.js";
 import { CockpitDockSurface } from "./cockpit/surface.js";
 import { CompletionOverlay } from "./completion.js";
@@ -79,11 +83,21 @@ export function BrewvaFullScreenShell(input: {
   toolRenderCache?: ToolRenderCache;
   copyTextToClipboard?: ClipboardCopy;
 }) {
+  const [transcriptScrollBox, setTranscriptScrollBox] = createSignal<OpenTuiScrollBoxHandle | null>(
+    null,
+  );
+  const navigateTranscript = (direction: TranscriptNavDirection): void => {
+    const box = transcriptScrollBox();
+    if (box) {
+      navigateTranscriptMessage(box, input.runtime.getViewState().transcript.messages, direction);
+    }
+  };
   const wiring = useComposerInputWiring({
     runtime: input.runtime,
     renderer: input.renderer,
     copyTextToClipboard: input.copyTextToClipboard,
     keymapMode: resolveShellKeymapMode,
+    navigateTranscriptMessage: navigateTranscript,
   });
   const { state, dimensions, theme } = wiring;
 
@@ -163,6 +177,7 @@ export function BrewvaFullScreenShell(input: {
           gap={1}
         >
           <scrollbox
+            ref={(node: OpenTuiScrollBoxHandle) => setTranscriptScrollBox(node)}
             stickyScroll={true}
             stickyStart="bottom"
             flexGrow={1}

@@ -185,6 +185,35 @@ describe("ShellCompletionProvider", () => {
     expect(results.map((candidate) => candidate.value)).not.toContain("model");
   });
 
+  test("typed-query frecency is proportional and cannot lift a much weaker match over a stronger one", () => {
+    const commands = new ShellCommandProvider();
+    commands.register({ id: "x.strong", title: "Strong", category: "X", slash: { name: "abxc" } });
+    commands.register({ id: "x.weak", title: "Weak", category: "X", slash: { name: "axbxc" } });
+    const provider = new ShellCompletionProvider({
+      sources: [createCommandCompletionSource(commands)],
+      usageStore: createInMemoryCompletionUsageStore(),
+    });
+
+    // fuzzyScore("abc", "abxc") = 12 (a +1, b adjacent +10, c +1);
+    // fuzzyScore("abc", "axbxc") = 3 (no adjacency). "abxc" is clearly stronger.
+    const before = provider.resolve(completionRange("/", "abc"));
+    expect(before.map((candidate) => candidate.value)).toEqual(["abxc", "axbxc"]);
+
+    // Make the weaker match the most frequently used.
+    const weak = requireDefined(
+      before.find((candidate) => candidate.value === "axbxc"),
+      "expected the weaker completion candidate",
+    );
+    for (let round = 0; round < 3; round += 1) {
+      provider.recordAccepted(weak);
+    }
+
+    // Frecency should break near-ties, not lift a clearly weaker match over a
+    // stronger one — the strong match stays first.
+    const after = provider.resolve(completionRange("/", "abc"));
+    expect(after.map((candidate) => candidate.value)).toEqual(["abxc", "axbxc"]);
+  });
+
   test("/ completion omits palette-only commands that are not slash-visible", () => {
     const provider = new ShellCompletionProvider({
       sources: [createCommandCompletionSource(createCommandProvider())],

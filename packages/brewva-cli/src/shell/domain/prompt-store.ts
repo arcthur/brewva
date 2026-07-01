@@ -154,6 +154,11 @@ export function createCliShellPromptStore(
       return history.map((entry) => cloneCliShellPromptSnapshot(entry));
     },
     appendHistory(entry) {
+      // Suppress an adjacent duplicate so re-submitting the same prompt does not
+      // fill history with repeats.
+      if (history.at(-1)?.text === entry.text) {
+        return;
+      }
       const nextEntry = cloneCliShellPromptSnapshot(entry);
       history = [...history, nextEntry].slice(-MAX_PROMPT_HISTORY_ENTRIES);
       if (history.length < MAX_PROMPT_HISTORY_ENTRIES) {

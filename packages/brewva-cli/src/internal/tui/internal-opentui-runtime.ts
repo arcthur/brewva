@@ -64,12 +64,20 @@ export interface OpenTuiTextareaHandle {
   };
 }
 
+export interface OpenTuiScrollBoxChild {
+  readonly id?: string | number;
+  readonly y: number;
+}
+
 export interface OpenTuiScrollBoxHandle {
   isDestroyed?: boolean;
+  y: number;
+  height: number;
   scrollTop: number;
   scrollHeight: number;
   scrollBy(delta: number): void;
   scrollTo(offset: number): void;
+  getChildren(): readonly OpenTuiScrollBoxChild[];
   viewport: {
     height: number;
   };

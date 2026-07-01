@@ -23,6 +23,7 @@ import {
   type SessionPalette,
 } from "./palette.js";
 import { useShellRenderContext } from "./render-context.js";
+import { createSyntaxStyleMemo } from "./syntax-style.js";
 import {
   asRecord,
   inferFiletype,
@@ -288,6 +289,7 @@ function ReasoningPartView(input: {
   const content = createMemo(() => input.part.text.replace("[REDACTED]", "").trim());
   const streaming = createMemo(() => input.part.renderMode === "streaming");
   const codeStreaming = createPersistentStreamingCodePath(streaming);
+  const reasoningSyntax = createSyntaxStyleMemo(() => getReasoningSyntaxStyle(input.theme));
   return (
     <Show when={shellContext.showThinking() && content().length > 0}>
       <box
@@ -302,7 +304,7 @@ function ReasoningPartView(input: {
           filetype="markdown"
           drawUnstyledText={!codeStreaming()}
           streaming={codeStreaming()}
-          syntaxStyle={getReasoningSyntaxStyle(input.theme)}
+          syntaxStyle={reasoningSyntax()}
           content={`_Thinking:_ ${content()}`}
           fg={input.theme.textMuted}
         />
@@ -346,6 +348,7 @@ function ReadToolView(input: { part: CliShellTranscriptToolPart; theme: SessionP
 function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: SessionPalette }) {
   const path = createMemo(() => readToolPath(input.part) ?? "file");
   const content = createMemo(() => readToolTextInput(input.part) ?? "");
+  const writeSyntax = createSyntaxStyleMemo(() => getTranscriptSyntaxStyle(input.theme));
   return (
     <Switch>
       <Match when={content().length > 0 && input.part.status === "completed"}>
@@ -358,7 +361,7 @@ function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: Session
             <code
               fg={input.theme.text}
               filetype={inferFiletype(path())}
-              syntaxStyle={getTranscriptSyntaxStyle(input.theme)}
+              syntaxStyle={writeSyntax()}
               content={content()}
             />
           </box>
@@ -475,6 +478,16 @@ function DiffToolView(input: {
 
 const EXEC_COLLAPSED_LINE_LIMIT = 10;
 const GENERIC_COLLAPSED_LINE_LIMIT = 5;
+// Cap the width of a collapsed line so a single huge line (e.g. 200KB of
+// minified output on one line) can't blow up the render — line-count collapse
+// alone lets it through. Expanding restores the untruncated text.
+const COLLAPSED_LINE_CHAR_LIMIT = 2000;
+
+function capCollapsedLine(line: string): string {
+  return line.length > COLLAPSED_LINE_CHAR_LIMIT
+    ? `${line.slice(0, COLLAPSED_LINE_CHAR_LIMIT)}…`
+    : line;
+}
 
 function formatCollapseHint(input: {
   expanded: boolean;
@@ -551,10 +564,8 @@ function ExecToolView(input: {
     return summary && summary.trim() !== outputText().trim() ? summary.split(/\r?\n/u) : [];
   });
   const collapsedOutputLines = createMemo(() => {
-    if (summaryLines().length > 0) {
-      return summaryLines().slice(0, EXEC_COLLAPSED_LINE_LIMIT);
-    }
-    return outputLines().slice(0, EXEC_COLLAPSED_LINE_LIMIT);
+    const source = summaryLines().length > 0 ? summaryLines() : outputLines();
+    return source.slice(0, EXEC_COLLAPSED_LINE_LIMIT).map(capCollapsedLine);
   });
   const collapsible = createMemo(
     () => outputLines().length > EXEC_COLLAPSED_LINE_LIMIT || summaryLines().length > 0,

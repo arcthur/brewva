@@ -27,7 +27,9 @@ export {
 export { paintText, type TuiTextStyle } from "./ansi.js";
 export { createHeadlessTerminalHarness, type HeadlessTerminalHarness } from "./headless.js";
 export {
+  extmarkOffsetToStringOffset,
   padToWidth,
+  stringOffsetToExtmarkOffset,
   truncateToWidth,
   visibleWidth,
   visualColumnToTextOffset,
