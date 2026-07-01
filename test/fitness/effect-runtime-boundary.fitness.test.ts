@@ -40,7 +40,18 @@ function collectPackageJsonPaths(): string[] {
     .toSorted();
 }
 
+// Several tests in this file each walk + read the whole source tree. Caching the
+// walk and the file contents at module scope collapses those repeated whole-tree
+// scans into one — under concurrent full-suite load the repeated IO intermittently
+// pushed a single scan past bun's 5s default timeout (a flaky, not a real failure).
+const sourceFilesCache = new Map<string, string[]>();
+const sourceContentCache = new Map<string, string>();
+
 function collectSourceFiles(relativePath: string): string[] {
+  const cached = sourceFilesCache.get(relativePath);
+  if (cached !== undefined) {
+    return cached;
+  }
   const files: string[] = [];
   function walk(directory: string): void {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -58,7 +69,19 @@ function collectSourceFiles(relativePath: string): string[] {
     }
   }
   walk(resolve(repoRoot, relativePath));
-  return files.toSorted();
+  const sorted = files.toSorted();
+  sourceFilesCache.set(relativePath, sorted);
+  return sorted;
+}
+
+function readSourceCached(path: string): string {
+  const cached = sourceContentCache.get(path);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const content = readFileSync(path, "utf8");
+  sourceContentCache.set(path, content);
+  return content;
 }
 
 function repoPath(absolutePath: string): string {
@@ -162,7 +185,7 @@ describe("Effect runtime boundary fitness", () => {
       ...collectSourceFiles("test"),
       ...collectSourceFiles("script"),
     ]) {
-      const source = readFileSync(sourceFile, "utf8");
+      const source = readSourceCached(sourceFile);
       for (const match of source.matchAll(rootImportPattern)) {
         for (const specifier of splitImportSpecifiers(match[1] ?? "")) {
           const importedName = importedSpecifierName(specifier);
@@ -190,7 +213,7 @@ describe("Effect runtime boundary fitness", () => {
 
     for (const sourceFile of collectSourceFiles("packages")) {
       if (sourceFile.startsWith(`${effectPackageRoot}/`)) continue;
-      const source = readFileSync(sourceFile, "utf8");
+      const source = readSourceCached(sourceFile);
       if (/from\s+["'](?:effect|@effect\/[^"']+)["']/u.test(source)) {
         offenders.push(repoPath(sourceFile));
       }
@@ -211,7 +234,7 @@ describe("Effect runtime boundary fitness", () => {
     for (const sourceFile of collectSourceFiles("packages")) {
       const path = repoPath(sourceFile);
       if (dedicatedTimeModules.has(path)) continue;
-      const source = readFileSync(sourceFile, "utf8");
+      const source = readSourceCached(sourceFile);
       if (sleepClonePattern.test(source)) {
         offenders.push(path);
       }
@@ -243,7 +266,7 @@ describe("Effect runtime boundary fitness", () => {
 
     for (const sourceFile of collectSourceFiles("packages")) {
       const path = repoPath(sourceFile);
-      const source = readFileSync(sourceFile, "utf8");
+      const source = readSourceCached(sourceFile);
       if (!source.includes("runPromiseAtBoundary")) continue;
       if (!allowed.has(path)) {
         offenders.push(path);
@@ -271,7 +294,7 @@ describe("Effect runtime boundary fitness", () => {
 
     for (const sourceFile of collectSourceFiles("packages")) {
       const path = repoPath(sourceFile);
-      const source = readFileSync(sourceFile, "utf8");
+      const source = readSourceCached(sourceFile);
       if (!source.includes("runBoundaryOperation")) continue;
       if (!allowed.has(path)) {
         offenders.push(path);
