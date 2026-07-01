@@ -82,3 +82,31 @@ export function describeProviderError(error: unknown, fallback = "runtime_turn_f
   }
   return segments.length > 0 ? segments.join(" <- ") : fallback;
 }
+
+/**
+ * The runtime re-issues a retryable provider failure (see
+ * {@link isRetryableProviderError}) up to this many times before giving up.
+ * Sized to ride out a transient egress-gateway outage: a zero-trust proxy (e.g.
+ * ByteDance Feilian) intermittently REFUSES new connections to LLM endpoints for
+ * seconds to tens of seconds, identically across HTTP/1.1 and HTTP/2 — protocol
+ * is not the lever, persistence is. With {@link providerRetryDelayMs} the two
+ * attempts span ~1.5s of wall-clock backoff. Kept SHORT deliberately: dogfooding
+ * showed the gateway's bad windows routinely run tens of seconds (up to ~90s),
+ * far past any sane retry budget — so retry only rides out brief blips, while a
+ * genuinely-down window fails FAST with a clear notice instead of a long hang.
+ */
+export const PROVIDER_RETRY_MAX_ATTEMPTS = 2;
+
+const PROVIDER_RETRY_BASE_DELAY_MS = 500;
+const PROVIDER_RETRY_MAX_DELAY_MS = 2_000;
+
+/**
+ * Exponential backoff for the Nth provider retry (1-based): 500ms, 1s, then 2s
+ * (capped). No jitter — a single-user CLI has no thundering herd to spread — so
+ * the schedule stays deterministic for tape replay and tests.
+ */
+export function providerRetryDelayMs(attempt: number): number {
+  const exponent = Math.max(0, attempt - 1);
+  const delay = PROVIDER_RETRY_BASE_DELAY_MS * 2 ** exponent;
+  return Math.min(delay, PROVIDER_RETRY_MAX_DELAY_MS);
+}

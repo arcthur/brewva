@@ -61,6 +61,10 @@ function createClient(
     dangerouslyAllowBrowser: true,
     defaultHeaders: headers,
     fetch: getProviderFetch(),
+    // brewva's runtime owns provider retry (see provider-error.ts). Disable the
+    // SDK's own retry so a bad-window connection fails fast (one attempt each)
+    // instead of the SDK silently adding ~3.5s of internal retries per attempt.
+    maxRetries: 0,
   });
 }
 

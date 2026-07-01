@@ -15,7 +15,12 @@ import type {
   TurnInput,
 } from "../runtime-api.js";
 import type { TapePort } from "../tape/port.js";
-import { describeProviderError, isRetryableProviderError } from "./provider-error.js";
+import {
+  describeProviderError,
+  isRetryableProviderError,
+  PROVIDER_RETRY_MAX_ATTEMPTS,
+  providerRetryDelayMs,
+} from "./provider-error.js";
 
 // Backstop against a provider stuck in an infinite tool-call loop — NOT a
 // task-size limit. A single agentic turn legitimately makes many tool calls
@@ -23,6 +28,25 @@ import { describeProviderError, isRetryableProviderError } from "./provider-erro
 // real per-turn budget is enforced by context compaction and cost guards.
 // Override per runtime via BrewvaRuntimeOptions.maxProviderToolContinuationsPerTurn.
 export const DEFAULT_MAX_PROVIDER_TOOL_CONTINUATIONS_PER_TURN = 200;
+
+// Abort-aware delay for provider-retry backoff. Resolves early (never rejects)
+// on abort; the retry loop's next aborted check turns that into a clean suspend.
+function sleepAbortable(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
 
 function clonePromptContentPart(part: PromptContentPart): PromptContentPart {
   return Object.freeze({ ...part });
@@ -333,7 +357,7 @@ export function createTurnRunner(input: {
     }
 
     try {
-      let retryProviderOnce = true;
+      let providerRetryAttempt = 0;
       let committedToolThisTurn = false;
       let providerToolContinuations = 0;
       if (approvalDecision) {
@@ -437,7 +461,7 @@ export function createTurnRunner(input: {
             throw error;
           }
           if (
-            !retryProviderOnce ||
+            providerRetryAttempt >= PROVIDER_RETRY_MAX_ATTEMPTS ||
             currentAttemptProducedFrame ||
             committedToolThisTurn ||
             passOutput.assistantText.length > 0 ||
@@ -446,7 +470,7 @@ export function createTurnRunner(input: {
           ) {
             throw error;
           }
-          retryProviderOnce = false;
+          providerRetryAttempt += 1;
           const retry = input.tape.commit({
             sessionId: turn.sessionId,
             turnId,
@@ -457,6 +481,14 @@ export function createTurnRunner(input: {
             },
           });
           yield { type: "runtime.event", event: retry };
+          // Back off before re-issuing so a transient gateway outage window
+          // (connection refused/reset for a few seconds) has time to clear.
+          // Abort-aware so an interrupt during the wait is honored by the next
+          // loop iteration's aborted check.
+          const retryDelayMs = providerRetryDelayMs(providerRetryAttempt);
+          if (retryDelayMs > 0) {
+            await sleepAbortable(retryDelayMs, turn.signal);
+          }
         }
       }
 

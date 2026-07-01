@@ -2,19 +2,28 @@
  * Turns a failed-turn error into a user-facing notice. A permanent provider
  * access failure — a model the account is not entitled to, a missing/expired
  * credential, an unauthorized request — is enriched with the concrete in-app
- * recovery step (`/model`) so the user is never left with a raw provider string
- * and no idea what to do. Transient failures are passed through unchanged.
+ * recovery step (`/model`). A transient connection failure that survived the
+ * runtime's retry budget gets a wait-and-retry notice so an intermittent
+ * gateway outage doesn't read as an opaque "Connection error.". Other transient
+ * failures pass through unchanged.
  */
 export function describeProviderFailure(error: unknown): string {
   const message = providerFailureMessage(error);
-  if (!isProviderAccessFailure(error)) {
-    return message;
+  if (isProviderAccessFailure(error)) {
+    return [
+      message,
+      "",
+      "This model isn't usable with your current credentials. Run /model to switch to a model your account can use, or connect credentials for this provider.",
+    ].join("\n");
   }
-  return [
-    message,
-    "",
-    "This model isn't usable with your current credentials. Run /model to switch to a model your account can use, or connect credentials for this provider.",
-  ].join("\n");
+  if (isTransientConnectionFailure(error)) {
+    return [
+      message,
+      "",
+      "The connection to the provider kept getting refused or reset, even after automatic retries. This is almost always a transient network or egress-gateway hiccup — not your credentials or config. Wait a few seconds and send it again.",
+    ].join("\n");
+  }
+  return message;
 }
 
 /**
@@ -50,3 +59,20 @@ function providerFailureMessage(error: unknown): string {
 // because they collide with filesystem/tool failures that are not provider errors.
 const ACCESS_FAILURE_PATTERN =
   /not supported|not entitled|unauthorized|forbidden|invalid api key|no api key|api key|credential|unauthenticated|entitlement|\b401\b|\b403\b/i;
+
+/**
+ * True when a failure is a connection-level transport error (refused/reset/
+ * dropped) rather than a permanent access problem — the kind the runtime already
+ * exhausted its retry budget on. Deliberately narrow: keyed to connection/socket
+ * phrasing so ordinary tool/filesystem errors don't get a misleading network
+ * notice. A permanent access failure takes precedence (checked first).
+ */
+export function isTransientConnectionFailure(error: unknown): boolean {
+  if (isProviderAccessFailure(error)) {
+    return false;
+  }
+  return CONNECTION_FAILURE_PATTERN.test(providerFailureMessage(error));
+}
+
+const CONNECTION_FAILURE_PATTERN =
+  /connection error|connection refused|connection reset|econnrefused|econnreset|socket hang up|fetch failed|network error/i;

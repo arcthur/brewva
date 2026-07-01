@@ -64,6 +64,7 @@ import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
 import { renderTranscriptAsMarkdown } from "../domain/overlays/projectors/transcript-markdown.js";
 import { cloneCliShellPromptParts } from "../domain/prompt-parts.js";
 import type { CliShellPromptStorePort } from "../domain/prompt.js";
+import { describeProviderFailure } from "../domain/provider-failure-guidance.js";
 import { updateShellIntent } from "../domain/reducer.js";
 import {
   createShellRuntimeState,
@@ -1519,7 +1520,10 @@ export class CliShellRuntime {
       throw error;
     }
     if (!this.#disposed) {
-      this.ui.notify(error instanceof Error ? error.message : "Shell effect failed.", "error");
+      this.ui.notify(
+        error instanceof Error ? describeProviderFailure(error) : "Shell effect failed.",
+        "error",
+      );
     }
   }
 

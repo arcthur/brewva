@@ -40,6 +40,31 @@ describe("describeProviderFailure", () => {
     expect(text).not.toContain("/model");
   });
 
+  test("gives a wait-and-retry notice for a transient connection failure", () => {
+    const text = describeProviderFailure(new Error("Connection error."));
+    expect(text).toContain("Connection error.");
+    expect(text).toContain("Wait a few seconds and send it again.");
+    expect(text).not.toContain("/model");
+  });
+
+  test("recognizes connection refused / reset / socket errors as transient", () => {
+    expect(
+      describeProviderFailure(new Error("Connection error. <- Error (ECONNREFUSED)")),
+    ).toContain("transient network");
+    expect(
+      describeProviderFailure(Object.assign(new Error("socket hang up"), { retryable: true })),
+    ).toContain("transient network");
+  });
+
+  test("permanent access failure takes precedence over connection phrasing", () => {
+    const error = Object.assign(new Error("401 unauthorized: connection error"), {
+      retryable: false,
+    });
+    const text = describeProviderFailure(error);
+    expect(text).toContain("/model");
+    expect(text).not.toContain("Wait a few seconds");
+  });
+
   test("falls back to a generic message for a non-error value", () => {
     expect(describeProviderFailure(undefined)).toBe("Failed to run prompt.");
   });
