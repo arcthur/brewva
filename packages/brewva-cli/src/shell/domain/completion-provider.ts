@@ -311,6 +311,21 @@ function frecencyBoost(usage: ShellCompletionUsageEntry | undefined): number {
   return rawBoost * decay;
 }
 
+/**
+ * Proportional frecency lift for typed queries (1x..2x). Unlike the absolute
+ * additive boost (which scales with neither the match quality nor the score
+ * gap), multiplying keeps recency from lifting a clearly weaker fuzzy match over
+ * a stronger one — it only reorders near-ties.
+ */
+function frecencyMultiplier(usage: ShellCompletionUsageEntry | undefined): number {
+  if (!usage) {
+    return 1;
+  }
+  const ageMs = Math.max(0, Date.now() - usage.lastUsedAt);
+  const decay = 1 / (1 + ageMs / COMPLETION_FRECENCY_HALF_LIFE_MS);
+  return 1 + Math.min(1, usage.count / 3) * decay;
+}
+
 function compareCandidates(
   left: { candidate: ShellCompletionCandidate; score: number; sourceIndex: number; index: number },
   right: { candidate: ShellCompletionCandidate; score: number; sourceIndex: number; index: number },
@@ -398,9 +413,16 @@ export class ShellCompletionProvider {
         if (baseScore === null) {
           continue;
         }
+        const usage = this.#usageStore.get(candidate);
+        // Typed queries scale frecency (proportional, near-ties only); the
+        // empty/suggested list has no fuzzy signal, so it keeps the absolute
+        // additive boost to surface recently used entries.
+        const score = normalizeSearchQuery(range.query)
+          ? baseScore * frecencyMultiplier(usage)
+          : baseScore + frecencyBoost(usage);
         ranked.push({
           candidate,
-          score: baseScore + frecencyBoost(this.#usageStore.get(candidate)),
+          score,
           sourceIndex,
           index,
         });

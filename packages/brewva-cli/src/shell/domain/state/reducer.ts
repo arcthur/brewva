@@ -11,6 +11,13 @@ import type {
   CliShellViewState,
 } from "./types.js";
 
+/**
+ * Upper bound on retained notifications. The toast strip only renders the latest
+ * entry, but the inbox/notification-center reads the full history, so the array
+ * is capped to keep a long session from growing it without bound (oldest dropped).
+ */
+const MAX_RETAINED_NOTIFICATIONS = 200;
+
 function snapshotOverlayState(overlays: OverlayManager): CliShellOverlayState {
   const active = overlays.getActive();
   return {
@@ -192,11 +199,21 @@ export function reduceCliShellState(
           completion: action.completion,
         },
       };
-    case "notification.add":
+    case "notification.add": {
+      // Collapse an adjacent duplicate (same level + message) so a repeated
+      // notify (e.g. the same error firing in a loop) replaces the previous
+      // entry rather than stacking — the toast resets and the inbox stays clean.
+      const previous = state.notifications.at(-1);
+      const isAdjacentDuplicate =
+        previous !== undefined &&
+        previous.level === action.notification.level &&
+        previous.message === action.notification.message;
+      const base = isAdjacentDuplicate ? state.notifications.slice(0, -1) : state.notifications;
       return {
         ...state,
-        notifications: [...state.notifications, action.notification],
+        notifications: [...base, action.notification].slice(-MAX_RETAINED_NOTIFICATIONS),
       };
+    }
     case "notification.dismiss":
       return {
         ...state,

@@ -1,20 +1,19 @@
 /** @jsxImportSource @opentui/solid */
 
-import { createMemo } from "solid-js";
 import { getTranscriptSyntaxStyle, type SessionPalette } from "./palette.js";
+import { createSyntaxStyleMemo } from "./syntax-style.js";
 
 export function MarkdownTranscriptBlock(input: {
   content: string;
   theme: SessionPalette;
   streaming?: boolean;
 }) {
-  // Stable syntax style. getTranscriptSyntaxStyle() builds a fresh SyntaxStyle
-  // on every call, so binding it inline handed the <markdown> a new (!==) style
-  // each time props were applied while streaming; the CodeRenderable's
-  // `set syntaxStyle` then marks highlights dirty and re-highlights the whole
-  // block every token — the streaming flicker. Memoizing keeps the reference
-  // stable across content updates (matching opencode's memoized `syntax()`).
-  const syntaxStyle = createMemo(() => getTranscriptSyntaxStyle(input.theme));
+  // Stable, lifecycle-managed syntax style. A fresh SyntaxStyle per prop-apply
+  // re-highlights the whole block every streamed token (the flicker), and its
+  // native highlight buffers leak if never destroyed. createSyntaxStyleMemo keeps
+  // the reference stable across content updates and destroys retired/unmounted
+  // instances once the renderer is idle.
+  const syntaxStyle = createSyntaxStyleMemo(() => getTranscriptSyntaxStyle(input.theme));
   return (
     <markdown
       syntaxStyle={syntaxStyle()}

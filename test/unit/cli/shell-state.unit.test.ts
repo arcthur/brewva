@@ -184,6 +184,48 @@ describe("cli shell state", () => {
     expect(state.notifications).toEqual([]);
   });
 
+  test("caps retained notifications so a long session cannot grow the array without bound", () => {
+    let state = createCliShellState();
+    // Add more than the retention cap (200); only the most recent are retained,
+    // dropping the oldest. Keep the counts in sync with MAX_RETAINED_NOTIFICATIONS.
+    for (let index = 1; index <= 201; index += 1) {
+      state = reduceCliShellState(state, {
+        type: "notification.add",
+        notification: {
+          id: `notification-${index}`,
+          level: "info",
+          message: `message ${index}`,
+          createdAt: index,
+        },
+      });
+    }
+    expect(state.notifications.length).toBe(200);
+    expect(state.notifications.at(0)?.id).toBe("notification-2");
+    expect(state.notifications.at(-1)?.id).toBe("notification-201");
+  });
+
+  test("collapses an adjacent duplicate notification so repeats do not stack", () => {
+    let state = createCliShellState();
+    state = reduceCliShellState(state, {
+      type: "notification.add",
+      notification: { id: "n1", level: "error", message: "Connection lost", createdAt: 1 },
+    });
+    state = reduceCliShellState(state, {
+      type: "notification.add",
+      notification: { id: "n2", level: "error", message: "Connection lost", createdAt: 2 },
+    });
+    // Adjacent duplicate (same level + message) replaces the previous entry.
+    expect(state.notifications.length).toBe(1);
+    expect(state.notifications.at(-1)?.id).toBe("n2");
+
+    // A different message appends normally; a different level is not a duplicate.
+    state = reduceCliShellState(state, {
+      type: "notification.add",
+      notification: { id: "n3", level: "error", message: "Reconnected", createdAt: 3 },
+    });
+    expect(state.notifications.map((notification) => notification.id)).toEqual(["n2", "n3"]);
+  });
+
   test("leaves scrolled cockpit anchoring to the app layer instead of guessing from entry count", () => {
     let state = createCliShellState();
 

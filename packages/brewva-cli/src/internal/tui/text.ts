@@ -137,6 +137,51 @@ export function visualColumnToTextOffset(line: string, visualCol: number): numbe
   return offset;
 }
 
+/**
+ * Convert a JavaScript UTF-16 string offset into the display-width offset space
+ * that OpenTUI textarea extmarks use. OpenTUI measures extmark start/end in
+ * terminal display columns (wide/CJK graphemes count as 2) and counts each
+ * newline as width 1 (see its internal `offsetExcludingNewlines`). This differs
+ * from {@link visibleWidth}, which treats newlines as zero-width, so prompt-part
+ * offsets fed to `extmarks.create` must go through this rather than the raw
+ * UTF-16 index. Inverse of {@link extmarkOffsetToStringOffset}.
+ */
+export function stringOffsetToExtmarkOffset(text: string, stringOffset: number): number {
+  const bounded = Math.max(0, Math.min(text.length, stringOffset));
+  let consumed = 0;
+  let width = 0;
+  for (const { segment } of segmenter.segment(text)) {
+    if (consumed >= bounded) {
+      break;
+    }
+    width += segment === "\n" ? 1 : graphemeWidth(segment);
+    consumed += segment.length;
+  }
+  return width;
+}
+
+/**
+ * Convert an OpenTUI extmark display-width offset (wide graphemes = 2 columns,
+ * each newline = 1) back into a JavaScript UTF-16 string offset. Used when
+ * reading extmark ranges back into prompt-part `source.text` offsets. Inverse of
+ * {@link stringOffsetToExtmarkOffset}.
+ */
+export function extmarkOffsetToStringOffset(text: string, extmarkOffset: number): number {
+  if (extmarkOffset <= 0 || text.length === 0) {
+    return 0;
+  }
+  let width = 0;
+  let offset = 0;
+  for (const { segment } of segmenter.segment(text)) {
+    if (width >= extmarkOffset) {
+      break;
+    }
+    width += segment === "\n" ? 1 : graphemeWidth(segment);
+    offset += segment.length;
+  }
+  return offset;
+}
+
 export function truncateToWidth(text: string, maxWidth: number): string {
   if (maxWidth <= 0 || text.length === 0) {
     return "";
