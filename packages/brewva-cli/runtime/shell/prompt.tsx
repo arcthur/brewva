@@ -2,10 +2,7 @@
 
 import { For, Show, createEffect, createMemo } from "solid-js";
 import { truncateToWidth, visibleWidth } from "../../src/internal/tui/index.js";
-import {
-  cloneCliShellPromptParts,
-  rebasePromptPartsAfterTextReplace,
-} from "../../src/shell/domain/prompt-parts.js";
+import { buildPastedTextFold, shouldFoldPastedText } from "../../src/shell/domain/paste-fold.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import type { BrewvaTuiConfig } from "../../src/shell/domain/tui.js";
 import type { ShellViewModel } from "../../src/shell/domain/view-model.js";
@@ -55,11 +52,6 @@ export function createPromptPartStyle(theme: SessionPalette): SyntaxStyle {
       },
     },
   ]);
-}
-
-export function summarizePastedText(text: string): string {
-  const lineCount = (text.match(/\n/gu)?.length ?? 0) + 1;
-  return lineCount >= 2 ? `[Pasted ~${lineCount} lines]` : "[Pasted text]";
 }
 
 export function createPromptPartTokenId(prefix: "agent" | "file" | "text"): string {
@@ -275,44 +267,26 @@ export function PromptPanel(input: {
                 .replace(/\r\n/gu, "\n")
                 .replace(/\r/gu, "\n");
               const trimmed = pastedText.trim();
-              if (trimmed.length === 0) {
-                return;
-              }
-              const lineCount = (trimmed.match(/\n/gu)?.length ?? 0) + 1;
-              const threshold = input.tuiConfig.input.largePasteThreshold;
-              if (lineCount < threshold.minLines && trimmed.length <= threshold.minCharacters) {
+              if (
+                trimmed.length === 0 ||
+                !shouldFoldPastedText(trimmed, input.tuiConfig.input.largePasteThreshold)
+              ) {
                 return;
               }
               event.preventDefault();
-              const tokenText = summarizePastedText(trimmed);
-              const insertion = `${tokenText} `;
               const start = textOffsetFromLogicalCursor(node.plainText, node.logicalCursor);
-              node.insertText(insertion);
-              const nextParts = rebasePromptPartsAfterTextReplace(
-                cloneCliShellPromptParts(input.composer.parts),
-                {
-                  start,
-                  end: start,
-                  replacementText: insertion,
-                },
-                {
-                  id: createPromptPartTokenId("text"),
-                  type: "text",
-                  text: trimmed,
-                  source: {
-                    text: {
-                      start,
-                      end: start + tokenText.length,
-                      value: tokenText,
-                    },
-                  },
-                },
-              );
+              const fold = buildPastedTextFold({
+                trimmed,
+                insertAt: start,
+                parts: input.composer.parts,
+                makeId: () => createPromptPartTokenId("text"),
+              });
+              node.insertText(fold.insertion);
               void input.runtime.handleInput({
                 type: "composer.editorSync",
                 text: node.plainText,
                 cursor: textOffsetFromLogicalCursor(node.plainText, node.logicalCursor),
-                parts: nextParts,
+                parts: fold.parts,
               });
             }}
             placeholder="Ask Brewva or type / for commands"

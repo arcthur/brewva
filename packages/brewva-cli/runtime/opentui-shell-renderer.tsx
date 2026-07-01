@@ -43,13 +43,16 @@ class CliInteractiveOpenTuiShellRuntime {
   constructor(private readonly shellRuntime: CliShellRuntime) {}
 
   async run(): Promise<void> {
+    // Resolve the boot theme name (auto-detected when `theme: "auto"`) and hand it
+    // to the controller, which applies it at boot ONLY when no persisted user theme
+    // exists. Applying it here through ui.setTheme would persist it and clobber the
+    // user's saved theme on every launch.
     const configuredTheme = this.shellRuntime.getTuiConfig().theme;
-    if (configuredTheme === "auto") {
-      const automaticTheme = resolveAutomaticTuiTheme(await getOpenTuiTerminalBackgroundMode());
-      this.shellRuntime.ui.setTheme(automaticTheme.name);
-    } else {
-      this.shellRuntime.ui.setTheme(configuredTheme);
-    }
+    const bootThemeName =
+      configuredTheme === "auto"
+        ? resolveAutomaticTuiTheme(await getOpenTuiTerminalBackgroundMode()).name
+        : configuredTheme;
+    this.shellRuntime.setBootThemeName(bootThemeName);
     await this.mount();
     await this.shellRuntime.start();
     try {

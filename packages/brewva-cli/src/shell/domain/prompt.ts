@@ -61,4 +61,20 @@ export interface CliShellPromptStorePort {
   removeStash(index: number): void;
   loadCompletionUsage(): ShellCompletionUsageEntry[];
   recordCompletionUsage(entry: ShellCompletionUsageEntry): void;
+  loadUiTheme(): string | undefined;
+  saveUiTheme(name: string): void;
+  loadUiView(): CliShellUiViewPrefs | undefined;
+  saveUiView(view: CliShellUiViewPrefs): void;
+  loadUiDiff(): CliShellUiDiffPrefs | undefined;
+  saveUiDiff(diff: CliShellUiDiffPrefs): void;
+}
+
+export interface CliShellUiViewPrefs {
+  toolDetails: boolean;
+  showThinking: boolean;
+}
+
+export interface CliShellUiDiffPrefs {
+  style: string;
+  wrapMode: string;
 }

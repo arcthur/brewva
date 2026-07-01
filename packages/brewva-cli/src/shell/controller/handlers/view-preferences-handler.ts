@@ -7,9 +7,10 @@ import type { CliShellAction, CliShellViewState } from "../../domain/state.js";
 import type { SessionViewPort } from "../../ports/session-port.js";
 import type { CliShellUiPort } from "../../ports/ui-port.js";
 
-export function normalizeDiffPreferences(
-  preferences: Partial<BrewvaDiffPreferences>,
-): BrewvaDiffPreferences {
+export function normalizeDiffPreferences(preferences: {
+  style?: string;
+  wrapMode?: string;
+}): BrewvaDiffPreferences {
   return {
     style: preferences.style === "stacked" ? "stacked" : "auto",
     wrapMode: preferences.wrapMode === "none" ? "none" : "word",

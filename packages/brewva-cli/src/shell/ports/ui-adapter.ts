@@ -44,6 +44,7 @@ export function createCliShellUiPortController(input: {
   openExternalEditor(title: string, prefill?: string): Promise<string | undefined>;
   copyTextToClipboard?: (this: void, text: string) => Promise<void>;
   requestRender(): void;
+  persistTheme?: (name: string) => void;
 }): {
   ui: CliShellUiPort;
   emitTerminalInput(text: string): void;
@@ -184,6 +185,9 @@ export function createCliShellUiPortController(input: {
         type: "theme.set",
         theme: resolvedTheme,
       });
+      if (typeof nextTheme === "string") {
+        input.persistTheme?.(nextTheme);
+      }
       return { success: true };
     },
     getToolsExpanded() {

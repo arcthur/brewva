@@ -127,3 +127,21 @@ export function resolveTuiTheme(theme: string | TuiTheme): TuiTheme | undefined 
   }
   return { ...theme };
 }
+
+/**
+ * Resolve the theme to apply at boot. A persisted user selection wins over the
+ * config-driven / auto-resolved boot theme; `"default"` (or an unresolvable
+ * name) yields `undefined` so the caller falls back to {@link DEFAULT_TUI_THEME}.
+ * Kept pure so the precedence is unit-testable without a renderer, and so the
+ * boot application stays persist-free (unlike the user-initiated setter).
+ */
+export function resolveBootTheme(input: {
+  persistedName: string | undefined;
+  bootName: string | undefined;
+}): TuiTheme | undefined {
+  const effectiveName = input.persistedName ?? input.bootName;
+  if (!effectiveName || effectiveName === "default") {
+    return undefined;
+  }
+  return resolveTuiTheme(effectiveName);
+}

@@ -18,6 +18,7 @@ export {
   getTuiTheme,
   listTuiThemes,
   resolveAutomaticTuiTheme,
+  resolveBootTheme,
   resolveTuiTheme,
   type TuiThemeAppearance,
   type TuiTheme,

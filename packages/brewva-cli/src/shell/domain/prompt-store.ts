@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
 import { cloneCliShellPromptSnapshot, cloneCliShellPromptStashEntry } from "./prompt-parts.js";
 import type { ShellCompletionUsageEntry } from "./prompt.js";
 import type {
@@ -110,6 +111,56 @@ async function writeJsonFileAsync(filePath: string, entries: readonly unknown[])
   await writeFile(filePath, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
 }
 
+interface CliShellUiViewPrefs {
+  toolDetails: boolean;
+  showThinking: boolean;
+}
+
+interface CliShellUiDiffPrefs {
+  style: string;
+  wrapMode: string;
+}
+
+interface CliShellUiPrefs {
+  theme?: string;
+  view?: CliShellUiViewPrefs;
+  diff?: CliShellUiDiffPrefs;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readUiPrefsFile(filePath: string): CliShellUiPrefs {
+  if (!existsSync(filePath)) {
+    return {};
+  }
+  try {
+    const record = asRecord(JSON.parse(readFileSync(filePath, "utf8")));
+    if (!record) {
+      return {};
+    }
+    const prefs: CliShellUiPrefs = {};
+    if (typeof record.theme === "string") {
+      prefs.theme = record.theme;
+    }
+    const view = asRecord(record.view);
+    if (view && typeof view.toolDetails === "boolean" && typeof view.showThinking === "boolean") {
+      prefs.view = { toolDetails: view.toolDetails, showThinking: view.showThinking };
+    }
+    const diff = asRecord(record.diff);
+    if (diff && typeof diff.style === "string" && typeof diff.wrapMode === "string") {
+      prefs.diff = { style: diff.style, wrapMode: diff.wrapMode };
+    }
+    return prefs;
+  } catch {
+    // Corrupt prefs file — ignore and fall back to defaults.
+  }
+  return {};
+}
+
 function scheduleJsonlWrite(filePath: string, entries: readonly unknown[]): void {
   void writeJsonlFileAsync(filePath, entries).catch(() => {
     // Persistence is best-effort; in-memory state is the source of claim.
@@ -148,6 +199,24 @@ export function createCliShellPromptStore(
     completionUsagePath,
     MAX_COMPLETION_USAGE_ENTRIES,
   );
+  const uiPrefsPath = join(rootDir, "ui-prefs.json");
+  let uiPrefs = readUiPrefsFile(uiPrefsPath);
+  // Serialize ui-prefs writes through one chain: theme, view, and diff share a
+  // single file, so two rapid saves must not land out of order and lose an
+  // update. Each write emits the LATEST merged snapshot, and rewriteFileAtomic
+  // makes it crash-atomic (tmp + fsync + rename), matching the store's durability
+  // discipline. Best-effort — in-memory `uiPrefs` stays the source of truth.
+  let uiPrefsWriteChain: Promise<void> = Promise.resolve();
+  const scheduleUiPrefsWrite = (): void => {
+    uiPrefsWriteChain = uiPrefsWriteChain
+      .then(async () => {
+        await mkdir(dirname(uiPrefsPath), { recursive: true });
+        rewriteFileAtomic(uiPrefsPath, `${JSON.stringify(uiPrefs, null, 2)}\n`);
+      })
+      .catch(() => {
+        // Persistence is best-effort; in-memory state is the source of truth.
+      });
+  };
 
   return {
     loadHistory() {
@@ -205,6 +274,27 @@ export function createCliShellPromptStore(
         { ...entry },
       ].slice(-MAX_COMPLETION_USAGE_ENTRIES);
       scheduleJsonWrite(completionUsagePath, completionUsage);
+    },
+    loadUiTheme() {
+      return uiPrefs.theme;
+    },
+    saveUiTheme(name) {
+      uiPrefs = { ...uiPrefs, theme: name };
+      scheduleUiPrefsWrite();
+    },
+    loadUiView() {
+      return uiPrefs.view;
+    },
+    saveUiView(view) {
+      uiPrefs = { ...uiPrefs, view: { ...view } };
+      scheduleUiPrefsWrite();
+    },
+    loadUiDiff() {
+      return uiPrefs.diff;
+    },
+    saveUiDiff(diff) {
+      uiPrefs = { ...uiPrefs, diff: { ...diff } };
+      scheduleUiPrefsWrite();
     },
   };
 }

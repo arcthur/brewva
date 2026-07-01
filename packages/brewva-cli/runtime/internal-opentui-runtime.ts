@@ -125,6 +125,11 @@ function createCliRendererConfig(
 export async function createOpenTuiCliRenderer(): Promise<OpenTuiRenderer> {
   await initializeOpenTuiTextRendering();
   const renderer = await createCliRenderer(createCliRendererConfig());
+  // Prewarm the 16-color palette cache so the first frame doesn't pop from an
+  // approximate RGBA->ANSI downsample on a cold terminal. Best-effort.
+  void (renderer as unknown as { getPalette(options: { size: number }): Promise<unknown> })
+    .getPalette({ size: 16 })
+    .catch(() => undefined);
   if (isOpenTuiStatsEnabled()) {
     (
       renderer as unknown as { configureDebugOverlay(options: { enabled: boolean }): void }

@@ -4,6 +4,7 @@ import {
   getTuiTheme,
   listTuiThemes,
   resolveAutomaticTuiTheme,
+  resolveBootTheme,
   resolveTuiTheme,
 } from "../../../../packages/brewva-cli/src/internal/tui/theme.js";
 
@@ -74,5 +75,29 @@ describe("tui theme", () => {
     }
     expect(resolveAutomaticTuiTheme("dark")).toEqual(DEFAULT_TUI_THEME);
     expect(resolveAutomaticTuiTheme("light")).toEqual(paperTheme);
+  });
+
+  test("resolveBootTheme lets a persisted selection win over the config boot theme", () => {
+    // A persisted user choice must survive across restarts even when the config
+    // (or auto-detection) resolves a different boot theme.
+    expect(resolveBootTheme({ persistedName: "paper", bootName: "graphite" })).toEqual(
+      getTuiTheme("paper"),
+    );
+  });
+
+  test("resolveBootTheme applies the config boot theme on first run (no persisted)", () => {
+    expect(resolveBootTheme({ persistedName: undefined, bootName: "graphite" })).toEqual(
+      getTuiTheme("graphite"),
+    );
+  });
+
+  test("resolveBootTheme returns undefined for 'default' or unresolvable names (caller uses DEFAULT)", () => {
+    // Persisted "default" (user explicitly reset) must ignore the boot theme.
+    expect(resolveBootTheme({ persistedName: "default", bootName: "graphite" })).toBe(undefined);
+    expect(resolveBootTheme({ persistedName: undefined, bootName: "default" })).toBe(undefined);
+    expect(resolveBootTheme({ persistedName: "removed-theme", bootName: undefined })).toBe(
+      undefined,
+    );
+    expect(resolveBootTheme({ persistedName: undefined, bootName: undefined })).toBe(undefined);
   });
 });

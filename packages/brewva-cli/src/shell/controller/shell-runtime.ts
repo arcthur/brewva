@@ -24,7 +24,7 @@ import {
 } from "@brewva/brewva-vocabulary/workbench";
 import type { PersistedPatchSet } from "@brewva/brewva-vocabulary/workbench";
 import { recordDiagnosticError } from "../../internal/perf-trace.js";
-import { type OverlayPriority } from "../../internal/tui/index.js";
+import { resolveBootTheme, type OverlayPriority } from "../../internal/tui/index.js";
 import {
   buildSessionInspectReport,
   formatInspectText,
@@ -325,6 +325,9 @@ export class CliShellRuntime {
   readonly #completionProvider: ShellCompletionProvider;
   readonly #completionHandler: ShellCompletionHandler;
   readonly #tuiConfig: BrewvaTuiConfig;
+  readonly #promptStore: CliShellPromptStorePort;
+  /** Boot theme name resolved by the renderer (config value, or auto-detected). */
+  #bootThemeName: string | undefined;
   readonly #keymapBindings: BrewvaResolvedKeymapBindings;
   readonly #modelSelectionHandler: ShellModelSelectionHandler;
   readonly #operatorOverlayHandler: ShellOperatorOverlayHandler;
@@ -404,6 +407,7 @@ export class CliShellRuntime {
     });
     this.#sessionPort = createSessionViewPort(bundle);
     const promptStore = options.promptStore ?? createCliShellPromptStore();
+    this.#promptStore = promptStore;
     const operatorPort = createOperatorSurfacePort({
       getSessionBundle: () => this.#bundle,
       openSession: (sessionId) => options.openSession(sessionId),
@@ -498,6 +502,7 @@ export class CliShellRuntime {
           }
         : undefined,
       requestRender: () => this.emitChange(),
+      persistTheme: (name) => promptStore.saveUiTheme(name),
     });
     this.#transcriptProjector = new ShellTranscriptProjector({
       getMessages: () => this.#state.transcript.messages,
@@ -734,6 +739,16 @@ export class CliShellRuntime {
 
   getTuiConfig(): BrewvaTuiConfig {
     return this.#tuiConfig;
+  }
+
+  /**
+   * Record the renderer-resolved boot theme name (the config `theme`, or the
+   * auto-detected light/dark theme when `theme: "auto"`). Applied at boot only
+   * when no persisted user selection exists — persisted always wins — and never
+   * re-persisted, mirroring the view/diff boot-apply's persist-free contract.
+   */
+  setBootThemeName(name: string): void {
+    this.#bootThemeName = name;
   }
 
   getKeymapBindings(): BrewvaResolvedKeymapBindings {
@@ -1172,17 +1187,29 @@ export class CliShellRuntime {
     const restoredDraft = this.#sessionHandler.getDraftsBySessionId().get(sessionId);
     this.#promptMemoryHandler.resetNavigation();
     this.#completionHandler.clearDismissedForCurrentSession();
+    const persistedView = this.#promptStore.loadUiView();
     const shellViewPreferences = normalizeShellViewPreferences({
       ...this.#sessionPort.getShellViewPreferences(),
-      showThinking: this.#tuiConfig.view.showThinking,
-      toolDetails: this.#tuiConfig.view.toolDetails,
+      showThinking: persistedView?.showThinking ?? this.#tuiConfig.view.showThinking,
+      toolDetails: persistedView?.toolDetails ?? this.#tuiConfig.view.toolDetails,
     });
+    const persistedDiff = this.#promptStore.loadUiDiff();
     const diffPreferences = normalizeDiffPreferences({
       ...this.#sessionPort.getDiffPreferences(),
       ...this.#tuiConfig.view.diff,
+      ...persistedDiff,
     });
     const hydratedMessages = this.#transcriptProjector.composeSeedTranscript();
+    // Persisted user selection wins over the renderer's config/auto boot theme;
+    // applied here via commit (never through the persisting setter), so the boot
+    // application does not clobber the saved theme — the same persist-free
+    // contract the view/diff boot-apply gets from the reset-batch guard below.
+    const bootTheme = resolveBootTheme({
+      persistedName: this.#promptStore.loadUiTheme(),
+      bootName: this.#bootThemeName ?? this.#tuiConfig.theme,
+    });
     const actions: ShellAction[] = [
+      ...(bootTheme ? [{ type: "theme.set" as const, theme: bootTheme }] : []),
       {
         type: "diff.setPreferences",
         preferences: diffPreferences,
@@ -1403,6 +1430,19 @@ export class CliShellRuntime {
     }
     for (const action of immediate) {
       this.#store = reduceShellRuntimeAction(this.#store, action);
+    }
+    // Persist view/diff prefs when the operator changes them (persist the full
+    // reduced #state, since the action may be partial). Skip the boot reset
+    // commit, which would freeze brewva.json defaults into the sidecar and then
+    // shadow later brewva.json edits.
+    if (!reset) {
+      for (const action of immediate) {
+        if (action.type === "view.setPreferences") {
+          this.#promptStore.saveUiView(this.#state.view);
+        } else if (action.type === "diff.setPreferences") {
+          this.#promptStore.saveUiDiff(this.#state.diff);
+        }
+      }
     }
     if (
       immediate.some(
