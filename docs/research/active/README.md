@@ -36,6 +36,14 @@ discipline.
 
 ## Current Active Notes
 
+- [RFC: Provider HTTP Transport (Forced HTTP/1.1, Idle Timeout, Proxy)](./rfc-provider-http-transport.md):
+  active RFC borrowing pi-mono's `http-dispatcher` shape into brewva: a
+  provider-scoped transport policy (forced HTTP/1.1 via `undici`
+  `allowH2:false`, idle body/headers timeout, proxy) injected per OpenAI client
+  to dodge the Feilian gateway's intermittent h2 RST. Consolidates the two
+  scattered `new OpenAI({...})` sites; per client (not process-global) because
+  bun's SDK bypasses the global undici dispatcher.
+
 - [RFC: Inspect, Replay, And Recovery Optimization](./rfc-inspect-replay-and-recovery-optimization.md):
   active RFC for replacing optimistic recovery status with cursor-bound
   evidence, separating authoritative replay from forensic scanning, converging

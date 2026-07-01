@@ -19,6 +19,7 @@ import {
   buildCopilotDynamicHeaders,
   hasCopilotVisionInput,
 } from "../_shared/github-copilot-headers.js";
+import { getProviderFetch } from "../_shared/http-transport.js";
 import { buildProviderPayloadMetadata } from "../_shared/payload-metadata.js";
 import { buildBaseOptions, clampReasoning } from "../_shared/simple-options.js";
 import type { OpenAIResponsesOptions } from "./contract.js";
@@ -125,6 +126,7 @@ function createClient(
     baseURL: model.baseUrl,
     dangerouslyAllowBrowser: true,
     defaultHeaders: headers,
+    fetch: getProviderFetch(),
   });
 }
 
