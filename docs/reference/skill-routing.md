@@ -3,19 +3,25 @@
 Skill files are repository knowledge and model-readable instructions. They are
 not a hosted runtime authority gate.
 
-Hosted turns render a deterministic, turn-scoped SkillCard shortlist before the
-model call. The shortlist is advisory context only; the model still chooses
-which SkillCard to read and follow, and can use `discover_skills` for ranked
-catalog search when no shortlist item fits. This does not expose tools,
-accounts, budgets, side effects, or completion gates.
+Hosted turns render two advisory layers before the model call: a session-stable
+SkillCard CATALOG (every prompt-visible skill as one bounded name +
+when-to-use line, byte-identical across turns so the prompt cache holds) and a
+deterministic, turn-scoped SHORTLIST of the skills that matched this turn. Both
+are advisory context only; the model still chooses which SkillCard to read and
+follow, and can use `discover_skills` for ranked catalog search when neither
+layer fits. This does not expose tools, accounts, budgets, side effects, or
+completion gates. Visibility is decoupled from selection on purpose: a scorer
+miss must never mean the model cannot know a skill exists.
 
 ## Current Contract
 
 - skills live as markdown files under `skills/**`
 - skill metadata may help humans and repository tooling organize those files
-- hosted turns render shortlisted prompt-visible SkillCards before
-  tool-surface resolution and context composition
-- shortlisted skills are prompt context under `Available Brewva SkillCards`
+- hosted turns render the catalog layer and shortlisted prompt-visible
+  SkillCards before tool-surface resolution and context composition
+- the catalog renders under `Brewva SkillCard Catalog` (cap 40 entries, then a
+  `discover_skills` overflow pointer); shortlisted skills render under
+  `Shortlisted Brewva SkillCards (this turn)`
 - explicit `$skill-name` mentions, candidate counts, render counts, omission
   counts, selection reasons, and render metadata are recorded in
   `skill.selection.recorded`
@@ -48,20 +54,30 @@ consequences.
 Skill routing is model-native and bounded by prompt context:
 
 - prompt-visible SkillCards are pre-filtered by explicit `$skill` mention,
-  `selection.path_globs`, `name`, and shared-search-tokenized `description` /
+  `selection.path_globs` against paths named in the prompt, `selection.path_globs`
+  against recently touched tool paths (`recent_path`, from committed
+  `tool.invocation.started` receipts — the work's location counts even when the
+  prompt names no path), `name`, and shared-search-tokenized `description` /
   `selection.when_to_use` text match
+- text matching is two-tiered: common intent words (the stop-word list —
+  plan, review, test, code, ...) can corroborate a match but never establish
+  one; at least one discriminative token overlap is always required, and a
+  single discriminative token establishes the match on its own only when it
+  is long (>= 8 chars) or appears in the SkillCard's name
 - Chinese task wording gets a small runtime keyword bridge before text matching
   so prompts like "核心架构图" can match English SkillCard descriptions without
-  adding trigger metadata to `SKILL.md`
+  adding trigger metadata to `SKILL.md`; bridge keywords stay discriminative
+  even when they collide with stop words, and bridges fire only on non-ASCII
+  matches
 - shortlisted entries render with `name`, `category`, `filePath`,
   `selectionReasons`, `description`, and any available `whenToUse` or
   `pathGlobs`
 - default render cap is 8 SkillCards
 - explicit mentions over the cap are all retained and recorded with an
   over-budget reason
-- no shortlisted SkillCard means Brewva records receipt-only discovery guidance
-  and relies on the stable operating contract instead of injecting an empty
-  per-turn SkillCard block
+- no shortlisted SkillCard means Brewva records receipt-only discovery guidance;
+  the catalog layer still renders, so the full skill inventory stays legible on
+  every turn
 - the model reads the returned `filePath` before relying on the full skill body
 - SkillCard binding is current-turn only and must be selected again on later
   turns
@@ -73,7 +89,8 @@ Skill routing is model-native and bounded by prompt context:
 The event payload records `selectionId`, `trigger`, `explicitSkillMentions`,
 `availableSkillCount`, `candidateSkillCount`, `renderedSkillCount`,
 `omittedSkillCount`, `selectionMode`, `renderedSkillReasons`,
-`skillInvocationRecords`, `promptPaths`, and `renderedSkillContext`.
+`skillInvocationRecords`, `promptPaths`, `recentToolPaths`, and
+`renderedSkillContext`.
 `selectionMode` is one of
 `shortlist_prompt_context`, `explicit_over_budget_prompt_context`, or
 `discover_guidance_receipt_only` for prompt shortlisting, and
@@ -90,9 +107,19 @@ hints. Capability refs stay empty unless a separate capability receipt exists;
 a SkillCard never grants authority by being selected.
 
 The context-excluded custom message carries explicit mention names, selection
-id, selection mode, rendered reasons, counts, and render metadata. It is visible
-only when a shortlist is rendered or an explicit mention is present; no-candidate
-receipts stay hidden.
+id, selection mode, rendered reasons, counts, render metadata, and the previous
+selection's ADOPTION line (how many rendered SkillCards actually had their
+SKILL.md read afterwards, projected from committed `tool.invocation.started`
+receipts). Offered-versus-read is the measurable definition of hit quality;
+selection changes are judged against it. Window semantics: the latest VISIBLE
+selection is found among the last 8 selection receipts, and reads are counted
+from the invocations SINCE that receipt (bounded scan), so a long turn cannot
+push an early skill read out of the measurement; blocked invocations
+(`allowed: false`) and never-executed reads count for nothing. Recent-path
+targets are relativized against the invocation's own `cwd` so workspace-scoped
+`path_globs` match absolute tool targets. The message is visible only when a
+shortlist is rendered or an explicit mention is present; no-candidate receipts
+stay hidden.
 `tool_surface_resolved` mirrors these as
 `explicitSkillMentionNames`, `skillSelectionId`, and `skillSelectionMode`.
 These fields are trace evidence, not gates.

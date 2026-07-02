@@ -173,6 +173,7 @@ function recordDiscoverySelection(input: {
     omittedSkillCount: Math.max(0, input.searchedSkillCount - input.results.length),
     selectionMode: "discover_only_projection",
     promptPaths: [],
+    recentToolPaths: [],
     renderedSkillReasons: input.results.map((entry) => {
       const metadata = readSkillSearchMetadata(entry);
       const reasons = entry.matchedTokens.length > 0 ? ["text_match"] : [];

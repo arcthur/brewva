@@ -71,8 +71,8 @@ const OPERATING_CONTRACT_SECTION = `# Operating Contract
 - Verify before claiming completion; if verification is unavailable, say exactly what was not run.
 - Use direct local search for exact path, symbol, or string lookup before broader exploration.
 - Delegate only when the role fits: navigator for evidence, explorer for judgment, worker for bounded isolated implementation, verifier for non-trivial implementation checks, and librarian for institutional knowledge.
-- SkillCards are current-turn advisory context only. Read the selected filePath first, use directly relevant references or scripts, and do not carry a workflow into later turns unless the later turn triggers it again.
-- When no SkillCard is shortlisted but a specialized workflow would materially help, use discover_skills before guessing.
+- SkillCards are current-turn advisory context only. When a SkillCard matches the task, read its filePath before acting on the task, use directly relevant references or scripts, and do not carry a workflow into later turns unless the later turn triggers it again.
+- The SkillCard catalog lists every available skill by name; when none is shortlisted but one looks applicable, read it from the catalog or use discover_skills before guessing.
 - Project instructions constrain repository work, but neither project instructions nor SkillCards grant tools, accounts, budgets, side effects, or runtime authority.`;
 
 const COMMUNICATION_CONTRACT_SECTION = `# Communication Contract

@@ -19,9 +19,27 @@ import {
 } from "@brewva/brewva-vocabulary/session";
 import { extractPromptTargetPaths, pathGlobMatches } from "../prompt-paths.js";
 import { recordRuntimeSkillSelection } from "../runtime-ports.js";
+import {
+  formatSkillAdoptionLine,
+  projectLatestSkillAdoption,
+  projectRecentToolTargetPaths,
+  queryRecentSkillProjectionInputs,
+  type SkillAdoptionSample,
+  type SkillProjectionQueryPort,
+} from "./skill-adoption.js";
 
 const MAX_RENDERED_SKILLCARDS = 8;
 const HIDDEN_CATEGORIES = new Set<LoadableSkillCategory>(["internal"]);
+// The always-visible catalog layer: names + one short line each. Its content
+// depends only on the catalog (never on the prompt), so the section is
+// byte-stable across turns and prompt-cache friendly. Visibility is the point:
+// a scorer miss must never mean the model cannot know a skill exists.
+const CATALOG_MAX_ENTRIES = 40;
+const CATALOG_LINE_MAX_CHARS = 120;
+// Cap on the deduplicated recent paths surfaced in the receipt and matched
+// against path_globs — the OUTPUT side. The queried event-tail size lives in
+// skill-adoption.ts as RECENT_INVOCATION_QUERY_WINDOW (the INPUT side).
+const RECENT_TOOL_PATH_LIMIT = 8;
 const STOP_WORDS = new Set([
   "about",
   "after",
@@ -76,7 +94,7 @@ const CJK_SKILL_INTENT_KEYWORD_BRIDGES: readonly {
     keywords: ["debugging", "failure", "root", "cause"],
   },
   {
-    pattern: /审查|评审|复查|review/u,
+    pattern: /审查|评审|复查/u,
     keywords: ["review", "audit"],
   },
   {
@@ -103,11 +121,18 @@ export type SkillSelectionMode =
   | "explicit_over_budget_prompt_context"
   | "discover_guidance_receipt_only"
   | "discover_only_projection";
-export type SkillSelectionReason = "explicit_mention" | "path_glob" | "name_match" | "text_match";
+export type SkillSelectionReason =
+  | "explicit_mention"
+  | "path_glob"
+  | "recent_path"
+  | "name_match"
+  | "text_match";
 
 const REASON_PRIORITY: Record<SkillSelectionReason, number> = {
   explicit_mention: 500,
+  // A path the user named in the prompt outranks one the session merely touched.
   path_glob: 400,
+  recent_path: 300,
   name_match: 200,
   text_match: 100,
 };
@@ -123,6 +148,14 @@ export interface SkillSelectionRuntime {
         record(sessionId: string, receipt: object): unknown;
         latest(sessionId: string): object | undefined;
       };
+    };
+    /**
+     * Optional tape access: recently touched tool paths become a selection
+     * signal and the previous selection's adoption becomes trace evidence.
+     * Absent in narrow fixtures; both features degrade to silence.
+     */
+    events?: {
+      records: SkillProjectionQueryPort;
     };
   };
 }
@@ -183,6 +216,7 @@ export interface SkillSelectionReceipt {
   omittedSkillCount: number;
   selectionMode: SkillSelectionMode;
   promptPaths: string[];
+  recentToolPaths: string[];
   renderedSkillReasons: RenderedSkillReason[];
   skillInvocationRecords: SkillInvocationRecord[];
   renderedSkillContext: {
@@ -203,6 +237,8 @@ export interface SkillSelectionResult {
   receipt: SkillSelectionReceipt;
   availableSkills: AvailableSkillPromptContext[];
   renderedSection: string;
+  /** Session-stable catalog layer (byte-identical across turns). */
+  catalogSection: string;
 }
 
 export interface SkillSelectionLifecycle {
@@ -221,6 +257,7 @@ interface RenderedSkillShortlist {
   renderedCandidates: SkillCandidate[];
   candidateCount: number;
   promptPaths: string[];
+  recentToolPaths: string[];
   selectionMode: SkillSelectionMode;
   overBudgetReason?: string;
 }
@@ -309,54 +346,108 @@ function toPromptContext(skill: SkillDocument): AvailableSkillPromptContext {
   };
 }
 
-function expandPromptForSkillIntent(prompt: string): string {
+function collectCjkBridgeKeywords(prompt: string): Set<string> {
   const keywords = new Set<string>();
   for (const bridge of CJK_SKILL_INTENT_KEYWORD_BRIDGES) {
-    if (!bridge.pattern.test(prompt)) {
+    const match = bridge.pattern.exec(prompt);
+    // Bridges translate CJK intent, so patterns must hold ONLY non-ASCII
+    // trigger words: a Latin alternative would both be rejected here (it must
+    // not boost English prompts past the stop-word tiering) and, worse,
+    // shadow a CJK trigger later in the same prompt because exec() returns
+    // the leftmost match. The guard stays as the behavioral backstop.
+    if (!match || !/\P{ASCII}/u.test(match[0])) {
       continue;
     }
     for (const keyword of bridge.keywords) {
       keywords.add(keyword);
     }
   }
-  return keywords.size > 0 ? `${prompt} ${[...keywords].join(" ")}` : prompt;
+  return keywords;
 }
 
-function filterTextMatchTokens(tokens: readonly string[]): Set<string> {
-  const filtered = new Set<string>();
+interface TextMatchTokens {
+  /** Discriminative tokens: non-stop-word, length >= 4 (or non-ASCII). */
+  readonly strong: ReadonlySet<string>;
+  /** Common intent words (STOP_WORDS): count only alongside a strong overlap. */
+  readonly weak: ReadonlySet<string>;
+}
+
+function partitionTextMatchTokens(tokens: readonly string[]): {
+  strong: Set<string>;
+  weak: Set<string>;
+} {
+  const strong = new Set<string>();
+  const weak = new Set<string>();
   for (const token of tokens) {
-    if (/^[a-z0-9_-]+$/u.test(token) && (token.length < 4 || STOP_WORDS.has(token))) {
+    if (!/^[a-z0-9_-]+$/u.test(token)) {
+      strong.add(token);
       continue;
     }
-    filtered.add(token);
+    if (STOP_WORDS.has(token)) {
+      weak.add(token);
+      continue;
+    }
+    if (token.length >= 4) {
+      strong.add(token);
+    }
   }
-  return filtered;
+  return { strong, weak };
 }
 
-function tokenizePromptForTextMatch(prompt: string): Set<string> {
-  return filterTextMatchTokens(
-    tokenizeSearchQuery(expandPromptForSkillIntent(prompt), { minLength: 2 }),
-  );
+function tokenizePromptForTextMatch(prompt: string): TextMatchTokens {
+  const partitioned = partitionTextMatchTokens(tokenizeSearchQuery(prompt, { minLength: 2 }));
+  // Bridge keywords are deliberate intent signals, not lexical noise: they stay
+  // STRONG even when the same word sits in STOP_WORDS (计划 -> plan, 审查 ->
+  // review). Filtering them as stop words used to neutralize half the bridges.
+  for (const keyword of collectCjkBridgeKeywords(prompt)) {
+    partitioned.strong.add(keyword);
+    partitioned.weak.delete(keyword);
+  }
+  return partitioned;
 }
 
-function tokenizeSkillTextForTextMatch(text: string): Set<string> {
-  return filterTextMatchTokens(tokenizeSearchContent(text, { minLength: 2 }));
+function tokenizeSkillTextForTextMatch(text: string): { strong: Set<string>; weak: Set<string> } {
+  return partitionTextMatchTokens(tokenizeSearchContent(text, { minLength: 2 }));
 }
 
-function hasTextMatch(
-  promptTokens: ReadonlySet<string>,
-  skill: AvailableSkillPromptContext,
-): boolean {
+/**
+ * A text match needs at least one STRONG overlap. A single strong token is
+ * enough on its own when it is long (>= 8 chars) or appears in the skill's
+ * NAME (name tokens are curated, so "vault" alone may establish a match with
+ * credential-vault); otherwise a second overlap is required, and that second
+ * overlap may be a weak (stop-word) token — common intent words corroborate a
+ * match but can never establish one.
+ */
+function hasTextMatch(promptTokens: TextMatchTokens, skill: AvailableSkillPromptContext): boolean {
   const skillTokens = tokenizeSkillTextForTextMatch(
     [skill.description, skill.whenToUse ?? ""].join(" "),
   );
-  let overlap = 0;
-  for (const token of skillTokens) {
-    if (!promptTokens.has(token)) {
+  const skillNameTokens = tokenizeSkillTextForTextMatch(
+    skill.name.replaceAll(/[-_]/gu, " "),
+  ).strong;
+  // A prompt-strong token may sit in the skill's WEAK tier when it is a
+  // stop-word promoted by a CJK intent bridge (计划 -> plan): the deliberate
+  // signal still counts. Ordinary prompt-strong tokens are never stop-words,
+  // so for them this is exactly strong-vs-strong.
+  let strongOverlap = 0;
+  for (const token of promptTokens.strong) {
+    if (
+      !skillTokens.strong.has(token) &&
+      !skillTokens.weak.has(token) &&
+      !skillNameTokens.has(token)
+    ) {
       continue;
     }
-    overlap += 1;
-    if (overlap >= 2 || token.length >= 8) {
+    strongOverlap += 1;
+    if (strongOverlap >= 2 || token.length >= 8 || skillNameTokens.has(token)) {
+      return true;
+    }
+  }
+  if (strongOverlap === 0) {
+    return false;
+  }
+  for (const token of skillTokens.weak) {
+    if (promptTokens.weak.has(token)) {
       return true;
     }
   }
@@ -376,8 +467,9 @@ function scoreReasons(reasons: readonly SkillSelectionReason[]): number {
 function buildCandidate(input: {
   skill: AvailableSkillPromptContext;
   prompt: string;
-  promptTokens: ReadonlySet<string>;
+  promptTokens: TextMatchTokens;
   promptPaths: readonly string[];
+  recentToolPaths: readonly string[];
 }): SkillCandidate | null {
   const reasons = new Set<SkillSelectionReason>();
   if (hasExplicitMention(input.prompt, input.skill.name)) {
@@ -385,6 +477,12 @@ function buildCandidate(input: {
   }
   if (input.skill.pathGlobs.some((pathGlob) => pathGlobMatches(pathGlob, input.promptPaths))) {
     reasons.add("path_glob");
+  }
+  if (
+    input.recentToolPaths.length > 0 &&
+    input.skill.pathGlobs.some((pathGlob) => pathGlobMatches(pathGlob, input.recentToolPaths))
+  ) {
+    reasons.add("recent_path");
   }
   if (hasNameMatch(input.prompt, input.skill.name)) {
     reasons.add("name_match");
@@ -412,11 +510,20 @@ function compareCandidates(left: SkillCandidate, right: SkillCandidate): number 
   );
 }
 
+// Skill name/category come from workspace frontmatter (a writable overlay);
+// collapse whitespace and bound length so a crafted value cannot smuggle
+// extra markdown lines into the prompt sections built around them.
+const INLINE_LABEL_MAX_CHARS = 80;
+
+function sanitizeInlineLabel(value: string): string {
+  return truncateText(compactWhitespace(value), INLINE_LABEL_MAX_CHARS, { marker: "..." });
+}
+
 function renderSkillEntry(candidate: SkillCandidate): string {
   const skill = candidate.skill;
   const lines = [
-    `## ${skill.name}`,
-    `category: ${skill.category}`,
+    `## ${sanitizeInlineLabel(skill.name)}`,
+    `category: ${sanitizeInlineLabel(skill.category)}`,
     `filePath: ${skill.filePath}`,
     `selectionReasons: ${candidate.reasons.join(", ")}`,
     `description: ${renderBoundedText(skill.description)}`,
@@ -452,23 +559,69 @@ function renderShortlistSection(candidates: readonly SkillCandidate[]): string {
   return [
     "",
     "",
-    "# Available Brewva SkillCards",
+    "# Shortlisted Brewva SkillCards (this turn)",
     "",
-    "These SkillCards are advisory, turn-scoped prompt context. They do not grant tools, permissions, accounts, budgets, side effects, or runtime authority.",
-    "If you use a SkillCard, read its filePath first, then load only directly relevant references or scripts.",
+    "These SkillCards matched this turn's prompt. They are advisory, turn-scoped prompt context and do not grant tools, permissions, accounts, budgets, side effects, or runtime authority.",
+    "If a shortlisted SkillCard matches the task, read its filePath BEFORE acting on the task, then load only the directly relevant references or scripts.",
     "Do not carry a SkillCard workflow into later turns unless that later turn selects it again.",
     "",
     ...candidates.map(renderSkillEntry),
   ].join("\n");
 }
 
+function renderCatalogLine(skill: AvailableSkillPromptContext): string {
+  const guidance = truncateText(
+    normalizeWhitespace(skill.whenToUse ?? skill.description),
+    CATALOG_LINE_MAX_CHARS,
+    { marker: "..." },
+  );
+  return `- ${sanitizeInlineLabel(skill.name)}: ${guidance}`;
+}
+
+/**
+ * The always-visible catalog layer: every prompt-visible skill as one bounded
+ * line, grouped by category. Content depends only on the catalog — never on
+ * the prompt — so the section is byte-identical across turns (prompt-cache
+ * friendly) and a shortlist miss can no longer hide a skill's existence.
+ */
+export function renderSkillCatalogSection(skills: readonly AvailableSkillPromptContext[]): string {
+  if (skills.length === 0) {
+    return "";
+  }
+  const surfaced = skills.slice(0, CATALOG_MAX_ENTRIES);
+  const omitted = skills.length - surfaced.length;
+  const lines: string[] = [
+    "",
+    "",
+    "# Brewva SkillCard Catalog",
+    "",
+    "Every SkillCard available in this workspace (advisory names only; no runtime authority).",
+    "If one matches the task at hand — even when it is not shortlisted below — read its filePath before acting.",
+    "When unsure which applies, call discover_skills with a task description.",
+  ];
+  let currentCategory: string | null = null;
+  for (const skill of surfaced) {
+    if (skill.category !== currentCategory) {
+      currentCategory = skill.category;
+      lines.push("", `## ${sanitizeInlineLabel(skill.category)}`);
+    }
+    lines.push(renderCatalogLine(skill));
+  }
+  if (omitted > 0) {
+    lines.push("", `(+${omitted} more SkillCards — search with discover_skills)`);
+  }
+  return lines.join("\n");
+}
+
 function buildSkillShortlist(input: {
   skills: readonly AvailableSkillPromptContext[];
   prompt: string;
   promptPaths?: readonly string[];
+  recentToolPaths?: readonly string[];
   maxRenderedSkills: number;
 }): RenderedSkillShortlist {
   const promptPaths = input.promptPaths ?? extractPromptTargetPaths(input.prompt);
+  const recentToolPaths = input.recentToolPaths ?? [];
   const promptTokens = tokenizePromptForTextMatch(input.prompt);
   const candidates = input.skills
     .map((skill) =>
@@ -477,6 +630,7 @@ function buildSkillShortlist(input: {
         prompt: input.prompt,
         promptTokens,
         promptPaths,
+        recentToolPaths,
       }),
     )
     .filter((candidate): candidate is SkillCandidate => candidate !== null)
@@ -501,6 +655,7 @@ function buildSkillShortlist(input: {
     renderedCandidates,
     candidateCount: candidates.length,
     promptPaths: [...promptPaths],
+    recentToolPaths: [...recentToolPaths],
     selectionMode,
     ...(overExplicitBudget ? { overBudgetReason: "explicit_mentions_exceed_render_cap" } : {}),
   };
@@ -511,6 +666,7 @@ function makeSelectionId(input: {
   prompt: string;
   renderedSkillReasons: readonly RenderedSkillReason[];
   promptPaths: readonly string[];
+  recentToolPaths: readonly string[];
   availableSkillNames: readonly string[];
 }): string {
   const digest = sha256Hex(
@@ -518,6 +674,7 @@ function makeSelectionId(input: {
       input.trigger,
       input.prompt,
       input.promptPaths.join("\0"),
+      input.recentToolPaths.join("\0"),
       input.renderedSkillReasons
         .map((skill) => `${skill.name}:${skill.reasons.join(",")}`)
         .join("\0"),
@@ -561,6 +718,7 @@ function buildReceipt(input: {
     prompt: input.prompt,
     renderedSkillReasons,
     promptPaths: input.renderedShortlist.promptPaths,
+    recentToolPaths: input.renderedShortlist.recentToolPaths,
     availableSkillNames: input.availableSkillNames,
   });
   const explicitSkillMentions = input.renderedShortlist.renderedCandidates
@@ -583,6 +741,7 @@ function buildReceipt(input: {
       input.availableSkillNames.length - input.renderedShortlist.renderedCandidates.length,
     selectionMode: input.renderedShortlist.selectionMode,
     promptPaths: [...input.renderedShortlist.promptPaths],
+    recentToolPaths: [...input.renderedShortlist.recentToolPaths],
     renderedSkillReasons,
     skillInvocationRecords,
     renderedSkillContext: {
@@ -653,6 +812,7 @@ export function buildSkillShortlistContextForPrompt(input: {
   runtime: Pick<SkillSelectionRuntime, "ops">;
   prompt: string;
   promptPaths?: readonly string[];
+  recentToolPaths?: readonly string[];
   maxRenderedSkills?: number;
 }): SkillSelectionResult {
   const trigger: SkillSelectionTrigger = "user_message";
@@ -663,6 +823,7 @@ export function buildSkillShortlistContextForPrompt(input: {
     skills: availableSkills,
     prompt: input.prompt,
     promptPaths: input.promptPaths,
+    recentToolPaths: input.recentToolPaths,
     maxRenderedSkills,
   });
   const receipt = buildReceipt({
@@ -676,6 +837,7 @@ export function buildSkillShortlistContextForPrompt(input: {
     receipt,
     availableSkills,
     renderedSection: renderedShortlist.section,
+    catalogSection: renderSkillCatalogSection(availableSkills),
   };
 }
 
@@ -683,7 +845,10 @@ export function formatSkillSelectionSection(selection: SkillSelectionResult): st
   return selection.renderedSection;
 }
 
-function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): BrewvaHostCustomMessage {
+function formatSkillSelectionTraceMessage(
+  receipt: SkillSelectionReceipt,
+  previousAdoption: SkillAdoptionSample | null,
+): BrewvaHostCustomMessage {
   const explicitSkillMentionNames = explicitSkillMentionNamesFromReceipt(receipt);
   const visibleSelection = receipt.renderedSkillCount > 0 || explicitSkillMentionNames.length > 0;
   const selectedSkillsSummary =
@@ -701,9 +866,11 @@ function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): Brewv
       `Rendered Brewva SkillCards: ${receipt.renderedSkillCount}`,
       `Omitted Brewva SkillCards: ${receipt.omittedSkillCount}`,
       `Prompt Paths: ${receipt.promptPaths.length}`,
+      `Recent Tool Paths: ${receipt.recentToolPaths.length}`,
       `Explicit Brewva SkillCard Mentions: ${
         explicitSkillMentionNames.length > 0 ? explicitSkillMentionNames.join(", ") : "none"
       }`,
+      formatSkillAdoptionLine(previousAdoption),
       `Selection ID: ${receipt.selectionId}`,
       `Selection Mode: ${receipt.selectionMode}`,
     ].join("\n"),
@@ -718,11 +885,13 @@ function formatSkillSelectionTraceMessage(receipt: SkillSelectionReceipt): Brewv
       renderedSkillCount: receipt.renderedSkillCount,
       omittedSkillCount: receipt.omittedSkillCount,
       promptPaths: receipt.promptPaths,
+      recentToolPaths: receipt.recentToolPaths,
       renderedSkillReasons: receipt.renderedSkillReasons,
       skillInvocationRecords: receipt.skillInvocationRecords,
       renderedSkillContext: receipt.renderedSkillContext,
       selectionMode: receipt.selectionMode,
       trigger: receipt.trigger,
+      ...(previousAdoption ? { previousAdoption } : {}),
     },
   };
 }
@@ -745,12 +914,29 @@ export function createSkillSelectionLifecycle(
       const promptPaths = Array.isArray(rawEvent.promptPaths)
         ? rawEvent.promptPaths.filter((path): path is string => typeof path === "string")
         : undefined;
-      const selection = buildSkillShortlistContextForPrompt({ runtime, prompt, promptPaths });
+      const sessionEvents = queryRecentSkillProjectionInputs(
+        runtime.ops.events?.records,
+        sessionId,
+      );
+      const recentToolPaths = projectRecentToolTargetPaths(
+        sessionEvents.recentInvocations,
+        RECENT_TOOL_PATH_LIMIT,
+      );
+      const previousAdoption = projectLatestSkillAdoption(sessionEvents.adoptionEvents);
+      const selection = buildSkillShortlistContextForPrompt({
+        runtime,
+        prompt,
+        promptPaths,
+        recentToolPaths,
+      });
       recordRuntimeSkillSelection(runtime, sessionId, selection.receipt);
-      const section = formatSkillSelectionSection(selection);
+      const shortlistSection = formatSkillSelectionSection(selection);
+      // Catalog first (byte-stable across turns), turn-varying shortlist after,
+      // so shortlist churn breaks the prompt cache as late as possible.
+      const section = `${selection.catalogSection}${shortlistSection}`;
       const systemPrompt = typeof rawEvent.systemPrompt === "string" ? rawEvent.systemPrompt : "";
       const result: BrewvaHostBeforeAgentStartResult = {
-        message: formatSkillSelectionTraceMessage(selection.receipt),
+        message: formatSkillSelectionTraceMessage(selection.receipt, previousAdoption),
       };
       if (section) {
         result.systemPrompt = appendBrewvaSystemPromptTextSection({

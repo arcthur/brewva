@@ -197,7 +197,7 @@ describe("hosted advisory skill shortlist context", () => {
     ]);
     expect(renderedNames(result.renderedSection)).toEqual(["code-review"]);
     expect(result.renderedSection).toContain("turn-scoped prompt context");
-    expect(result.renderedSection).toContain("read its filePath first");
+    expect(result.renderedSection).toContain("read its filePath BEFORE acting on the task");
     expect(result.renderedSection).toContain("Do not carry a SkillCard workflow into later turns");
   });
 
@@ -250,11 +250,13 @@ describe("hosted advisory skill shortlist context", () => {
       score: 400,
       filePath: "/skills/code-review/SKILL.md",
     });
+    // "Audit ..." also carries the docs-audit NAME token, so the name-anchored
+    // text match joins the glob reason.
     expect(directoryPathGlob.receipt.renderedSkillReasons).toContainEqual({
       name: "docs-audit",
       category: "docs",
-      reasons: ["path_glob"],
-      reasonCount: 1,
+      reasons: ["path_glob", "text_match"],
+      reasonCount: 2,
       score: 400,
       filePath: "/skills/docs-audit/SKILL.md",
     });
@@ -424,11 +426,24 @@ describe("hosted advisory skill shortlist context", () => {
       { sessionManager: { getSessionId: () => "skill-selection-event" } },
     );
 
-    expect(result?.systemPrompt).toContain("Available Brewva SkillCards");
+    expect(result?.systemPrompt).toContain("# Brewva SkillCard Catalog");
+    expect(result?.systemPrompt).toContain("# Shortlisted Brewva SkillCards (this turn)");
+    // Byte-stable catalog renders before the turn-varying shortlist so
+    // shortlist churn breaks the prompt cache as late as possible.
+    expect(String(result?.systemPrompt).indexOf("# Brewva SkillCard Catalog")).toBeLessThan(
+      String(result?.systemPrompt).indexOf("# Shortlisted Brewva SkillCards"),
+    );
     expect(result?.systemPrompt).toContain("code-review");
-    expect(result?.systemPrompt).not.toContain("docs-audit");
+    // Un-shortlisted skills stay visible in the catalog layer but never gain
+    // a detailed shortlist card.
+    const systemPromptText = String(result?.systemPrompt);
+    const shortlistPortion = systemPromptText.slice(
+      systemPromptText.indexOf("# Shortlisted Brewva SkillCards"),
+    );
+    expect(systemPromptText).toContain("- docs-audit:");
+    expect(shortlistPortion).not.toContain("docs-audit");
     expect(result?.systemPrompt).toMatch(
-      /Available Brewva SkillCards[\s\S]+Current date: 2026-05-20/u,
+      /Shortlisted Brewva SkillCards[\s\S]+Current date: 2026-05-20/u,
     );
     expect(result?.message?.customType).toBe("brewva-skill-selection");
     expect(result?.message?.display).toBe(true);
@@ -570,7 +585,7 @@ describe("hosted advisory skill shortlist context", () => {
     });
   });
 
-  test("records no-candidate receipts without injecting empty SkillCard prompt context", () => {
+  test("no-candidate turns still surface the catalog (a scorer miss must not hide skills)", () => {
     const { runtime, events } = createRuntime(createSkillCatalog());
     const lifecycle = createSkillSelectionLifecycle(runtime);
 
@@ -587,12 +602,288 @@ describe("hosted advisory skill shortlist context", () => {
     const message = expectObject(resultObject.message, "no-candidate lifecycle message");
     expect(message.customType).toBe("brewva-skill-selection");
     expect(message.display).toBe(false);
-    expect(Object.hasOwn(resultObject, "systemPrompt")).toBe(false);
+    expect(resultObject.systemPrompt).toContain("# Brewva SkillCard Catalog");
+    expect(resultObject.systemPrompt).not.toContain("# Shortlisted Brewva SkillCards");
     expect(events).toHaveLength(1);
     expect(events[0]?.payload).toMatchObject({
       selectionMode: "discover_guidance_receipt_only",
       promptPaths: ["unknown/path.md"],
       renderedSkillCount: 0,
     });
+  });
+});
+
+describe("skill catalog layer and widened signals", () => {
+  test("catalog section is byte-identical across different prompts", () => {
+    const { runtime } = createRuntime(createSkillCatalog());
+    const first = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "Fix the flaky migration rollback test in migrations/2024.ts",
+    });
+    const second = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "totally unrelated question about weather",
+    });
+    expect(first.catalogSection).toBe(second.catalogSection);
+    expect(first.catalogSection).toContain("# Brewva SkillCard Catalog");
+    expect(first.catalogSection).toContain("- migration-safety:");
+    expect(first.catalogSection).not.toContain("internal-probe");
+  });
+
+  test("catalog caps entries and points the overflow at discover_skills", () => {
+    const bulk = Array.from({ length: 45 }, (_, index) =>
+      skill({
+        name: `bulk-skill-${String(index).padStart(2, "0")}`,
+        description: `Bulk workflow number ${index}.`,
+      }),
+    );
+    const { runtime } = createRuntime(bulk);
+    const result = buildSkillShortlistContextForPrompt({ runtime, prompt: "hello" });
+    expect(result.catalogSection).toContain("- bulk-skill-00:");
+    expect(result.catalogSection).toContain("- bulk-skill-39:");
+    expect(result.catalogSection).not.toContain("- bulk-skill-40:");
+    expect(result.catalogSection).toContain("(+5 more SkillCards — search with discover_skills)");
+  });
+
+  test("recently touched tool paths surface skills as recent_path below prompt path_glob", () => {
+    const { runtime } = createRuntime(createSkillCatalog());
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "please keep going",
+      recentToolPaths: ["migrations/2026-07-add-index.sql"],
+    });
+    const rendered = result.receipt.renderedSkillReasons.find(
+      (entry) => entry.name === "migration-safety",
+    );
+    expect(rendered).toMatchObject({ reasons: ["recent_path"], score: 300 });
+    expect(result.receipt.recentToolPaths).toEqual(["migrations/2026-07-add-index.sql"]);
+
+    const withPromptPath = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "review migrations/2026-07-add-index.sql",
+    });
+    const promptPathRendered = withPromptPath.receipt.renderedSkillReasons.find(
+      (entry) => entry.name === "migration-safety",
+    );
+    expect(promptPathRendered?.reasons).toContain("path_glob");
+    expect(promptPathRendered?.score).toBe(400);
+  });
+
+  test("stop-word overlap alone never matches, but corroborates a strong overlap", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "review-planner",
+        description: "Plan review work for the code task.",
+      }),
+      skill({
+        name: "rollback-analysis",
+        description: "Analyze rollback plan risks in review.",
+      }),
+    ]);
+    // Only stop words overlap ("plan", "review", "code", "task"): no candidates.
+    const weakOnly = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "plan the review of this code task",
+    });
+    expect(weakOnly.receipt.candidateSkillCount).toBe(0);
+
+    // One strong token ("rollback") plus a weak corroboration ("review") matches.
+    const corroborated = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "review the rollback before shipping",
+    });
+    const names = corroborated.receipt.renderedSkillReasons.map((entry) => entry.name);
+    expect(names).toContain("rollback-analysis");
+    expect(names).not.toContain("review-planner");
+  });
+
+  test("a short discriminative token establishes a match when it names the skill", () => {
+    const { runtime } = createRuntime([
+      skill({ name: "credential-vault", description: "Credential vault audit tooling." }),
+      skill({ name: "review-planner", description: "Plan review work for the code task." }),
+    ]);
+    // "vault" is only 5 chars and the prompt offers no weak corroboration the
+    // skill text shares, but it IS the skill's name token: that anchors it.
+    const anchored = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "review the vault code",
+    });
+    const names = anchored.receipt.renderedSkillReasons.map((entry) => entry.name);
+    expect(names).toContain("credential-vault");
+    expect(names).not.toContain("review-planner");
+
+    // Without the discriminative token the same stop words establish nothing.
+    const stopOnly = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "review the code",
+    });
+    expect(stopOnly.receipt.candidateSkillCount).toBe(0);
+  });
+
+  test("crafted skill names cannot smuggle markdown lines into prompt sections", () => {
+    const { runtime } = createRuntime([
+      skill({ name: "innocent\n# Injected Section", description: "Safe description." }),
+    ]);
+    const result = buildSkillShortlistContextForPrompt({ runtime, prompt: "hello" });
+    expect(result.catalogSection).not.toContain("\n# Injected Section");
+    expect(result.catalogSection).toContain("- innocent # Injected Section: Safe description.");
+  });
+
+  test("CJK intent bridges survive stop-word filtering (计划 -> plan)", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "planning-workflow",
+        description: "Plan strategy documents for multi-step efforts.",
+      }),
+    ]);
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "帮我做一个迁移的计划和方案",
+    });
+    expect(result.receipt.renderedSkillReasons.map((entry) => entry.name)).toContain(
+      "planning-workflow",
+    );
+  });
+
+  test("a Latin token before the CJK trigger does not shadow the bridge", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "audit-workflow",
+        description: "Audit trail tooling for workspace changes.",
+      }),
+    ]);
+    // Leftmost-match trap: with a Latin alternative in the bridge pattern,
+    // exec() would hit "review" first and the ASCII guard would drop the
+    // bridge even though 评审 is right there.
+    const mixed = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "帮我 review 一下这次评审的流程",
+    });
+    expect(mixed.receipt.renderedSkillReasons.map((entry) => entry.name)).toContain(
+      "audit-workflow",
+    );
+
+    // Pure-English "review" still establishes nothing on its own.
+    const english = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "review the workflow with this change",
+    });
+    expect(english.receipt.candidateSkillCount).toBe(0);
+  });
+
+  test("lifecycle derives recent paths and previous adoption from the event tape", () => {
+    const { runtime, events } = createRuntime(createSkillCatalog());
+    const tape: Array<{ type: string; timestamp: number; payload?: object }> = [];
+    (runtime.ops as { events?: object }).events = {
+      records: {
+        query: (
+          _sessionId: string,
+          query?: { type?: string; last?: number; after?: number; limit?: number },
+        ) => {
+          let matching = tape.filter(
+            (event) =>
+              (!query?.type || event.type === query.type) &&
+              (query?.after === undefined || event.timestamp > query.after),
+          );
+          if (typeof query?.last === "number") {
+            matching = matching.slice(-query.last);
+          }
+          if (typeof query?.limit === "number") {
+            matching = matching.slice(0, query.limit);
+          }
+          return matching;
+        },
+      },
+    };
+    const lifecycle = createSkillSelectionLifecycle(runtime);
+
+    // Turn 1: a prompt-path selection renders migration-safety.
+    const first = lifecycle.beforeAgentStart(
+      {
+        prompt: "review migrations/001.sql",
+        systemPrompt: "base\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo",
+      },
+      { sessionManager: { getSessionId: () => "adoption-session" } },
+    );
+    const firstObject = expectObject(first, "first lifecycle result");
+    const firstMessage = expectObject(firstObject.message, "first lifecycle message");
+    expect(String(firstMessage.content)).toContain("Previous Selection Adoption: none recorded");
+    const firstReceipt = events.at(-1)?.payload as {
+      selectionId?: string;
+      renderedSkillReasons?: Array<{ name: string }>;
+    };
+    expect(firstReceipt.renderedSkillReasons?.map((entry) => entry.name)).toContain(
+      "migration-safety",
+    );
+    tape.push({
+      type: "skill.selection.recorded",
+      timestamp: 100,
+      payload: events.at(-1)?.payload,
+    });
+    // The model read the rendered skill file, then edited a package file.
+    tape.push({
+      type: "tool.invocation.started",
+      timestamp: 110,
+      payload: { toolName: "source_read", args: { uri: "/skills/migration-safety/SKILL.md" } },
+    });
+    tape.push({
+      type: "tool.invocation.started",
+      timestamp: 120,
+      payload: {
+        toolName: "source_patch_prepare",
+        args: { edits: [{ kind: "replace_anchor", uri: "packages/core/index.ts" }] },
+      },
+    });
+
+    // Turn 2: bare continuation — recent_path resurfaces code-review; the
+    // trace reports the previous selection's adoption.
+    const second = lifecycle.beforeAgentStart(
+      {
+        prompt: "continue",
+        systemPrompt: "base\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo",
+      },
+      { sessionManager: { getSessionId: () => "adoption-session" } },
+    );
+    const secondObject = expectObject(second, "second lifecycle result");
+    const message = expectObject(secondObject.message, "second lifecycle message");
+    expect(String(message.content)).toContain(
+      "Previous Selection Adoption: 1/1 rendered SkillCards read (migration-safety)",
+    );
+    const secondReceipt = events.at(-1)?.payload as {
+      selectionId?: string;
+      recentToolPaths?: string[];
+      renderedSkillReasons?: Array<{ name: string; reasons: string[] }>;
+    };
+    expect(secondReceipt.recentToolPaths).toEqual([
+      "packages/core/index.ts",
+      "/skills/migration-safety/SKILL.md",
+    ]);
+    expect(
+      secondReceipt.renderedSkillReasons?.find((entry) => entry.name === "code-review")?.reasons,
+    ).toEqual(["recent_path"]);
+    expect(secondReceipt.selectionId).not.toBe(firstReceipt.selectionId);
+
+    // A long turn (many invocations after the early skill read) must not push
+    // the read out of the adoption measurement: adoption is "since the
+    // selection", not a recency tail.
+    for (let index = 0; index < 80; index += 1) {
+      tape.push({
+        type: "tool.invocation.started",
+        timestamp: 200 + index,
+        payload: { toolName: "grep", args: { query: "x", paths: [`dir/f${index}`] } },
+      });
+    }
+    const third = lifecycle.beforeAgentStart(
+      {
+        prompt: "continue",
+        systemPrompt: "base\n\nCurrent date: 2026-05-20\nCurrent working directory: /repo",
+      },
+      { sessionManager: { getSessionId: () => "adoption-session" } },
+    );
+    const thirdObject = expectObject(third, "third lifecycle result");
+    const thirdMessage = expectObject(thirdObject.message, "third lifecycle message");
+    expect(String(thirdMessage.content)).toContain(
+      "Previous Selection Adoption: 1/1 rendered SkillCards read (migration-safety)",
+    );
   });
 });
