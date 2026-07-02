@@ -1,5 +1,6 @@
 import { basename, resolve } from "node:path";
 import type { ToolActionClass } from "@brewva/brewva-runtime/security";
+import { compactWhitespace, truncateText } from "@brewva/brewva-std/text";
 import {
   buildBrewvaCapabilitySelectionPromptBlock,
   type BrewvaSystemPromptCapabilitySelection,
@@ -361,18 +362,118 @@ export function resolveCapabilityAuthorityAccess(input: {
     source,
     selectedCapabilityNames: selectedCapabilityNamesValue,
     reason: "missing_selected_capability",
-    advisory: `${target} requires an explicit selected capability receipt.`,
+    advisory: buildCapabilityDenialAdvisory({
+      target,
+      receipt: input.receipt,
+      manifests: input.manifests,
+      toolName: input.toolName,
+      commandName,
+    }),
   };
+}
+
+function buildCapabilityDenialAdvisory(input: {
+  target: string;
+  receipt: CapabilitySelectionReceipt | undefined;
+  manifests: readonly CapabilityManifest[];
+  toolName: string;
+  commandName?: string;
+}): string {
+  const namesToCheck = [input.toolName, input.commandName].map(normalizeName).filter(Boolean);
+  // Never point the model at a capability its own receipt marks policy-forbidden:
+  // that request path is a dead loop (`selectCapabilities` re-filters it by scope).
+  const forbidden = input.receipt ? policyForbiddenNames(input.receipt) : new Set<string>();
+  const covering = input.manifests
+    .filter((manifest) => {
+      if (forbidden.has(manifest.name)) return false;
+      const authorityNames = manifestAuthorityNames(manifest);
+      return namesToCheck.some((name) => authorityNames.has(name));
+    })
+    .map((manifest) => manifest.name)
+    .toSorted((left, right) => left.localeCompare(right));
+  if (covering.length === 0) {
+    return `${input.target} requires a selected capability, and no selectable capability manifest covers it; authoring a manifest (or lifting its policy restriction) is the only path to authorization.`;
+  }
+  const named = covering.slice(0, 3);
+  const suffix = covering.length > named.length ? ` (+${covering.length - named.length} more)` : "";
+  const requestPath = `'/capability:${named[0]}'`;
+  return `${input.target} requires a selected capability. Covered by: ${named.join(", ")}${suffix} — request selection with ${requestPath} in the turn prompt; the selection receipt remains the only authority.`;
+}
+
+const SELECTABLE_CAPABILITY_LIMIT = 8;
+const SELECTABLE_WHEN_TO_USE_MAX_CHARS = 140;
+
+/**
+ * Authored YAML content rendered into the system prompt: collapse whitespace
+ * first (a multi-line block scalar must not break the one-entry-per-line block
+ * format) then truncate — the same discipline SkillCard `whenToUse` uses.
+ */
+function renderWhenToUse(value: string | undefined): string | undefined {
+  const compact = compactWhitespace(value ?? "");
+  if (!compact) return undefined;
+  return truncateText(compact, SELECTABLE_WHEN_TO_USE_MAX_CHARS, { marker: "…" });
+}
+
+function policyForbiddenNames(receipt: CapabilitySelectionReceipt): Set<string> {
+  return new Set<string>([
+    ...receipt.filtered_out
+      .filter((entry) => entry.reason !== "not_ranked")
+      .map((entry) => entry.name),
+    ...receipt.conflicts.flatMap((entry) => entry.candidates),
+  ]);
+}
+
+/**
+ * Manifests neither selected nor policy-forbidden, in deterministic order:
+ * intent-ranked leftovers (`not_ranked`, receipt order) first, then the
+ * remaining registry manifests by name (enforced here, not assumed from the
+ * registry). `not_ranked` is requestable, not forbidden — only policy filters
+ * (scope/account/risk/conflict) forbid.
+ */
+function selectableCapabilities(input: {
+  receipt: CapabilitySelectionReceipt;
+  manifests: readonly CapabilityManifest[];
+}): Array<{ name: string; whenToUse?: string }> {
+  const excluded = new Set<string>([
+    ...input.receipt.selected_capabilities.map((candidate) => candidate.name),
+    ...policyForbiddenNames(input.receipt),
+  ]);
+  const manifestsByName = new Map(input.manifests.map((manifest) => [manifest.name, manifest]));
+  const ordered: CapabilityManifest[] = [];
+  const seen = new Set<string>();
+  for (const entry of input.receipt.filtered_out) {
+    if (entry.reason !== "not_ranked" || excluded.has(entry.name) || seen.has(entry.name)) {
+      continue;
+    }
+    const manifest = manifestsByName.get(entry.name);
+    if (!manifest) continue;
+    seen.add(entry.name);
+    ordered.push(manifest);
+  }
+  const remainder = input.manifests
+    .filter((manifest) => !excluded.has(manifest.name) && !seen.has(manifest.name))
+    .toSorted((left, right) => left.name.localeCompare(right.name));
+  ordered.push(...remainder);
+  return ordered.slice(0, SELECTABLE_CAPABILITY_LIMIT).map((manifest) => {
+    const whenToUse = renderWhenToUse(manifest.selection?.whenToUse);
+    const entry: { name: string; whenToUse?: string } = { name: manifest.name };
+    if (whenToUse) {
+      entry.whenToUse = whenToUse;
+    }
+    return entry;
+  });
 }
 
 export function formatCapabilitySelectionSection(input: {
   receipt: CapabilitySelectionReceipt;
   manifests: readonly CapabilityManifest[];
 }): string {
+  const selectable = selectableCapabilities(input);
   const shouldRender =
     input.receipt.selected_capabilities.length > 0 ||
     input.receipt.policy_decisions.length > 0 ||
-    input.receipt.conflicts.length > 0;
+    input.receipt.conflicts.length > 0 ||
+    selectable.length > 0;
   if (!shouldRender) {
     return "";
   }
@@ -387,11 +488,15 @@ export function formatCapabilitySelectionSection(input: {
         reason: candidate.reason,
       };
     }),
+    selectableCapabilities: selectable,
     forbiddenCandidates: [
-      ...input.receipt.filtered_out.slice(0, 8).map((entry) => ({
-        name: entry.name,
-        reason: entry.reason,
-      })),
+      ...input.receipt.filtered_out
+        .filter((entry) => entry.reason !== "not_ranked")
+        .slice(0, 8)
+        .map((entry) => ({
+          name: entry.name,
+          reason: entry.reason,
+        })),
       ...input.receipt.conflicts.slice(0, 4).map((entry) => ({
         name: entry.candidates.join(" | "),
         reason: entry.reason,

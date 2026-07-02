@@ -133,17 +133,6 @@ export function collectPersistedPatchPaths(
   );
 }
 
-export const FILE_SNAPSHOT_CAPTURED_EVENT_TYPE = "file.snapshot.captured" as const;
-
-export const PATCH_RECORDED_EVENT_TYPE = "patch.recorded" as const;
-
-export const REVERSIBLE_MUTATION_PREPARED_EVENT_TYPE = "reversible_mutation.prepared" as const;
-
-export const REVERSIBLE_MUTATION_RECORDED_EVENT_TYPE = "reversible_mutation.recorded" as const;
-
-export const REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE =
-  "reversible_mutation.rolled_back" as const;
-
 export const ROLLBACK_EVENT_TYPE = "rollback.recorded" as const;
 export const ROLLBACK_STARTED_EVENT_TYPE = "rollback.started" as const;
 
@@ -163,6 +152,21 @@ export const WORKBENCH_EVICTION_UNDONE_EVENT_TYPE = "workbench.eviction.undone" 
 
 export const WORKBENCH_NOTE_RECORDED_EVENT_TYPE = "workbench.note.recorded" as const;
 
+/**
+ * The one contractual `retentionHint` value: entries carrying it are excluded
+ * from every compaction/eviction candidate set and carried verbatim across
+ * compaction baselines. An explicit `workbench_evict` targeting `entry:<id>`
+ * is the only removal path. Any other hint string is advisory evidence, not a
+ * contract.
+ */
+export const ATTENTION_PIN_RETENTION_HINT = "attention_pin" as const;
+
+export function isAttentionPinnedWorkbenchEntry(
+  entry: Pick<WorkbenchEntry, "retentionHint">,
+): boolean {
+  return entry.retentionHint === ATTENTION_PIN_RETENTION_HINT;
+}
+
 export interface WorkbenchEntry extends ProtocolRecord {
   readonly id?: string;
   readonly kind?: string;
@@ -176,9 +180,10 @@ export interface WorkbenchEntry extends ProtocolRecord {
   readonly reversible?: boolean;
   readonly rcr?: readonly RcrReference[];
   /**
-   * Model-authored salience hint recorded when the note is written (for example
-   * `"attention_pin"`). Persisted as model-sovereign retention evidence that a
-   * future model- or operator-initiated promotion flow may consume.
+   * Model-authored salience hint recorded when the note is written. The value
+   * {@link ATTENTION_PIN_RETENTION_HINT} is contractual (survival across
+   * compaction/eviction, enforced by the gateway selection physics); any other
+   * string is advisory salience evidence only.
    */
   readonly retentionHint?: string;
   readonly createdAt?: number;

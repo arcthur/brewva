@@ -3,6 +3,10 @@ import { isRecord } from "@brewva/brewva-std/unknown";
 import { resolveWorkspaceRootDir } from "../config/paths.js";
 import { resolveRuntimeConfigState } from "./config/state.js";
 import { createKernelPort } from "./kernel/impl.js";
+import {
+  createObservationShapeShadowResolver,
+  OBSERVATION_SHAPE_SHADOW_INTERCEPTOR_ID,
+} from "./kernel/policy/observation-shape-shadow.js";
 import { createModelPort } from "./model/impl.js";
 import type {
   BrewvaRuntime,
@@ -161,6 +165,21 @@ function createFourPortRuntimeAssembly(input: {
     actionAdmissionOverrides: input.config.security.actionAdmissionOverrides,
     resolveToolAuthority: input.resolveToolAuthority,
   });
+  // RFC R4 Phase 0: observation-shape classifier mounted shadow-only. The real
+  // admission path is untouched; divergence receipts accumulate on the tape and
+  // feed the explicit-pull inspect view. Promotion into `resolveToolAuthority`
+  // stays gated on the numeric zero-unsafe-allow window.
+  const observationShapeShadow = kernel.intercept.shadowToolAuthority({
+    id: OBSERVATION_SHAPE_SHADOW_INTERCEPTOR_ID,
+    shadowPhysics: {
+      resolveToolAuthority: createObservationShapeShadowResolver({
+        ...(input.resolveToolAuthority ? { base: input.resolveToolAuthority } : {}),
+        ...(input.config.security.actionAdmissionOverrides
+          ? { admissionOverrides: input.config.security.actionAdmissionOverrides }
+          : {}),
+      }),
+    },
+  });
   const model = createModelPort(input.runtimeTape.tape);
   const turn = input.createTurn({ kernel, model });
   const runtime: BrewvaRuntime = {
@@ -174,6 +193,7 @@ function createFourPortRuntimeAssembly(input: {
     },
     turn,
     async close(): Promise<void> {
+      observationShapeShadow.unregister();
       await input.runtimeTape.close();
     },
   };

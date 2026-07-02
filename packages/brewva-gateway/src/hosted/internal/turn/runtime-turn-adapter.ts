@@ -25,6 +25,7 @@ import {
   closeOpenRuntimeWireTools,
   RuntimeWireToolLifecycleTracker,
 } from "./session-mux/runtime-wire-tool-lifecycle.js";
+import { drainShadowDivergenceEvidence } from "./shadow-divergence-drain.js";
 import {
   createMinimalHostedTurnAdapterDiagnostic,
   type HostedTurnAdapterProfile,
@@ -366,5 +367,8 @@ export async function runHostedRuntimeTurnAdapter(
       assistantText,
       toolOutputs,
     });
+  } finally {
+    // R4 Phase 0 divergence drain: best-effort evidence, never throws.
+    drainShadowDivergenceEvidence(input.runtime, sessionId);
   }
 }

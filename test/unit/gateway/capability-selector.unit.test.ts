@@ -98,6 +98,31 @@ describe("capability selector", () => {
     expect(carried.selected_capabilities).toEqual(first.selected_capabilities);
   });
 
+  test("carried receipts keep policy exclusions and drop intent-relative ranking leftovers", () => {
+    const first = selectCapabilities({
+      manifests: [manifest("gmail-search")],
+      intentText: "email",
+      trigger: "user_message",
+      policy: {
+        agentScope: ["ops-agent"],
+        workspaceScope: ["default"],
+        allowedAccounts: ["google-work"],
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(first.filtered_out).toEqual([{ name: "gmail-search", reason: "agent_scope" }]);
+
+    const carried = carryCapabilitySelection({
+      previous: {
+        ...first,
+        filtered_out: [...first.filtered_out, { name: "gmail-draft", reason: "not_ranked" }],
+      },
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(carried.filtered_out).toEqual([{ name: "gmail-search", reason: "agent_scope" }]);
+  });
+
   test("selection ids are stable across receipt creation times", () => {
     const base = {
       manifests: [manifest("gmail-search")],

@@ -33,6 +33,11 @@ export {
   analyzeVirtualReadonlyEligibility,
   summarizeVirtualReadonlyEligibility,
 } from "./security/virtual-readonly-policy.js";
+export {
+  classifyObservationShape,
+  createObservationShapeShadowResolver,
+  OBSERVATION_SHAPE_SHADOW_INTERCEPTOR_ID,
+} from "./runtime/kernel/policy/observation-shape-shadow.js";
 export type {
   VirtualReadonlyBlockedReason,
   VirtualReadonlyEligibility,

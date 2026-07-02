@@ -15,7 +15,7 @@ import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
 import type { DelegationInspectionProjection } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
-  CLAIM_EVENT_TYPE,
+  CLAIM_UPSERTED_EVENT_TYPE,
   foldClaimLedgerEvents,
   MODEL_PRESET_SELECT_EVENT_TYPE,
   readVerificationOutcomeRecordedEventPayload,
@@ -23,10 +23,10 @@ import {
 } from "@brewva/brewva-vocabulary/iteration";
 import {
   type ManagedToolMode,
-  TAPE_ANCHOR_EVENT_TYPE,
-  TAPE_CHECKPOINT_EVENT_TYPE,
+  TAPE_HANDOFF_EVENT_TYPE,
+  CHECKPOINT_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
-import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { TASK_SPEC_SET_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import { foldTaskLedgerEvents } from "@brewva/brewva-vocabulary/task";
 import { PATCH_HISTORY_FILE } from "@brewva/brewva-vocabulary/workbench";
 import { formatISO } from "date-fns";
@@ -40,6 +40,10 @@ import {
 import { buildContextCockpitReport, type ContextCockpitReport } from "./context-cockpit.js";
 import { buildProviderDriftProjection, type ProviderDriftProjection } from "./provider-drift.js";
 import { deriveRecoveryCapabilities, type RecoveryCapabilities } from "./recovery-capabilities.js";
+import {
+  buildShadowAdmissionProjection,
+  type ShadowAdmissionProjection,
+} from "./shadow-admission.js";
 
 interface SessionTransitionSnapshot {
   readonly sequence: number;
@@ -260,6 +264,7 @@ interface InspectReport {
   };
   contextCockpit: ContextCockpitReport;
   providerDrift: ProviderDriftProjection;
+  shadowAdmission: ShadowAdmissionProjection;
   ledger: {
     path: string;
     rows: number;
@@ -716,8 +721,8 @@ function buildInspectReport(
       eventsByType.set(event.type, [event]);
     }
   }
-  const taskEvents = eventsByType.get(TASK_EVENT_TYPE) ?? [];
-  const claimEvents = eventsByType.get(CLAIM_EVENT_TYPE) ?? [];
+  const taskEvents = eventsByType.get(TASK_SPEC_SET_EVENT_TYPE) ?? [];
+  const claimEvents = eventsByType.get(CLAIM_UPSERTED_EVENT_TYPE) ?? [];
   const taskState = foldTaskLedgerEvents(taskEvents);
   const goalControlState = inspect.goal.state(sessionId);
   const claimState = foldClaimLedgerEvents(claimEvents);
@@ -846,9 +851,9 @@ function buildInspectReport(
       eventCount: replaySession?.eventCount ?? events.length,
       firstEventAt: toIso(events[0]?.timestamp),
       lastEventAt: toIso(replaySession?.lastEventAt ?? events[events.length - 1]?.timestamp),
-      anchorCount: inspect.events.query(sessionId, { type: TAPE_ANCHOR_EVENT_TYPE }).length,
+      anchorCount: inspect.events.query(sessionId, { type: TAPE_HANDOFF_EVENT_TYPE }).length,
       checkpointCount: inspect.events.query(sessionId, {
-        type: TAPE_CHECKPOINT_EVENT_TYPE,
+        type: CHECKPOINT_COMMITTED_EVENT_TYPE,
       }).length,
       tapePressure: tapeStatus.tapePressure,
       entriesSinceAnchor: tapeStatus.entriesSinceAnchor,
@@ -1008,6 +1013,7 @@ function buildInspectReport(
     },
     contextCockpit: buildContextCockpitReport(runtime, sessionId),
     providerDrift: buildProviderDriftProjection(runtime, sessionId),
+    shadowAdmission: buildShadowAdmissionProjection(runtime, sessionId),
     ledger: {
       path: inspect.ledger.getPath(),
       rows: ledgerRows.length,
@@ -1076,7 +1082,14 @@ export {
   buildInspectReport,
   buildProviderDriftProjection,
   buildSessionInspectReport,
+  buildShadowAdmissionProjection,
   resolveInspectDirectory,
   resolveTargetSession,
 };
-export type { ContextCockpitReport, InspectReport, ProviderDriftProjection, SessionInspectReport };
+export type {
+  ContextCockpitReport,
+  InspectReport,
+  ProviderDriftProjection,
+  SessionInspectReport,
+  ShadowAdmissionProjection,
+};

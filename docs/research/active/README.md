@@ -166,6 +166,22 @@ context.`
   nothing is decision-relevant. Under `Inform the model, don't seize it — and make
 the telling legible.`
 
+- [RFC: Capability Legibility, Retention Contract, And Recovery Recurrence](./rfc-capability-legibility-retention-contract-and-recovery-recurrence.md):
+  active RFC distilling the residue from a four-quality experience audit of a
+  peer hosted harness (`ika`) after most of its mechanisms prove
+  already-covered or axiom-rejected: a bounded `selectable` capability
+  sub-list plus a denial advisory that names the missing capability and its
+  request path (visibility decoupled from authority; listing is never a
+  receipt), an enforced compaction-survival contract for `attention_pin`
+  workbench entries with accounted pinned mass and documented vocabulary, a
+  relevance-gated `[RuntimeBrief]` failure-recurrence section derived from
+  committed `err`/`aborted` receipts (evidence, not retry orchestration), a
+  shadow-first generalization of the one existing static admission downgrade
+  through the dormant `shadowToolAuthority` seam with numeric promotion
+  gates, and two eval-gated prompt lines (goal holding, terse-instruction
+  anchoring). Under the line `What the model cannot see it cannot choose;
+what it pinned, physics keeps; what failed twice, the brief says so.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

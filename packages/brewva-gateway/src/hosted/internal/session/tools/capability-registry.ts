@@ -582,10 +582,18 @@ export function carryCapabilitySelection(
   const event = {
     trigger: "carried" as const,
     input_intent_hash: input.previous.input_intent_hash,
-    selected_capabilities: input.previous.selected_capabilities.map((entry) => ({ ...entry })),
-    filtered_out: [],
+    selected_capabilities: input.previous.selected_capabilities.map((entry) =>
+      Object.assign({}, entry),
+    ),
+    // Policy exclusions are prompt-independent, so they carry; `not_ranked` is
+    // intent-relative and does not (a carried turn has no intent to rank against).
+    // Dropping them entirely would flip policy-forbidden manifests into the
+    // selectable catalog on every carried turn.
+    filtered_out: input.previous.filtered_out
+      .filter((entry) => entry.reason !== "not_ranked")
+      .map((entry) => Object.assign({}, entry)),
     policy_decisions: ["carried from previous capability selection receipt"],
-    conflicts: input.previous.conflicts.map((entry) => ({ ...entry })),
+    conflicts: input.previous.conflicts.map((entry) => Object.assign({}, entry)),
     carried_from: input.previous.selection_id,
     created_at: input.createdAt ?? new Date().toISOString(),
     registry_version: input.previous.registry_version,

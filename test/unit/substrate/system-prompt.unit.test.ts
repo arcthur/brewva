@@ -149,6 +149,37 @@ describe("Brewva system prompt document", () => {
     expect(block?.text).toContain("gmail: not configured");
   });
 
+  test("renders selectable capabilities as a descriptive catalog between selected and forbidden", () => {
+    const block = buildBrewvaCapabilitySelectionPromptBlock({
+      selectedCapabilities: [{ name: "github", reason: "user requested" }],
+      selectableCapabilities: [
+        { name: "gmail-search", whenToUse: "Use for email search tasks." },
+        { name: "linear" },
+      ],
+      forbiddenCandidates: [{ name: "aws", reason: "account_restriction" }],
+    });
+
+    const text = block?.text ?? "";
+    expect(text).toContain(
+      "selectable (descriptive catalog, not authorization; request one with '/capability:<name>' in the turn prompt):",
+    );
+    expect(text).toContain("- gmail-search: Use for email search tasks.");
+    expect(text).toContain("- linear");
+    expect(text.indexOf("selected:")).toBeLessThan(text.indexOf("selectable"));
+    expect(text.indexOf("selectable")).toBeLessThan(text.indexOf("forbidden:"));
+  });
+
+  test("renders a selectable-only capability block when nothing is selected", () => {
+    const block = buildBrewvaCapabilitySelectionPromptBlock({
+      selectableCapabilities: [{ name: "gmail-search", whenToUse: "Use for email search." }],
+    });
+
+    expect(block?.text).toContain("[CapabilitySelection]");
+    expect(block?.text).toContain("- gmail-search: Use for email search.");
+    expect(block?.text).not.toContain("selected:");
+    expect(block?.text).not.toContain("forbidden:");
+  });
+
   test("appends hosted turn sections before the canonical environment block", () => {
     const systemPrompt = renderBrewvaSystemPromptText(
       buildBrewvaSystemPromptDocument({ cwd: "/workspace" }),

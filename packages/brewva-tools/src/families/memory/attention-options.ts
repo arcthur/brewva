@@ -20,7 +20,10 @@ import {
   type AttentionOptionSourceFamily,
   type SkillDocument,
 } from "@brewva/brewva-vocabulary/session";
-import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
+import {
+  ATTENTION_PIN_RETENTION_HINT,
+  type WorkbenchEntry,
+} from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions, BrewvaToolRuntime } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
@@ -828,7 +831,8 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
   const attentionPin = attentionPinTool.define({
     name: "attention_pin",
     label: "Attention Pin",
-    description: "Pin one attention option into the existing workbench memory store.",
+    description:
+      "Pin one attention option into the workbench memory store with the attention_pin retention contract: the entry survives compaction and render eviction until you explicitly release it with workbench_evict (span ref entry:<id>).",
     parameters: Type.Object({
       option_id: Type.String({ minLength: 1, maxLength: 512 }),
       note: Type.Optional(Type.String({ minLength: 1, maxLength: 8_000 })),
@@ -836,14 +840,14 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const optionId = params.option_id.trim();
-      const reason = readNonEmptyString(params.reason) ?? "attention_pin";
+      const reason = readNonEmptyString(params.reason) ?? ATTENTION_PIN_RETENTION_HINT;
       const entry = noteWorkbench(attentionPinTool.runtime, getSessionId(ctx), {
         content:
           readNonEmptyString(params.note) ??
           `Pinned attention option for explicit follow-up: ${optionId}`,
         sourceRefs: [optionId],
         reason,
-        retentionHint: "attention_pin",
+        retentionHint: ATTENTION_PIN_RETENTION_HINT,
       });
       if (!entry) {
         return errTextResult("attention_pin unavailable (missing_runtime_workbench).", {

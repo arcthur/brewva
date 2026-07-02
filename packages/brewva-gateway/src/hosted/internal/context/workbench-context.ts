@@ -7,6 +7,7 @@ import type {
 } from "@brewva/brewva-vocabulary/context";
 import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import { decideContinuationAnchorRelevance } from "@brewva/brewva-vocabulary/session";
+import { isAttentionPinnedWorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import {
   buildContextBundle,
   renderContextBundle,
@@ -18,14 +19,15 @@ import {
   getRuntimeContextEvidenceLatest,
   getRuntimeContextStatus,
   getRuntimeTapeStatus,
-  listRuntimeWorkbenchEntries,
   renderRuntimeTurnDigest,
   type HostedRuntimeAdapterPort,
 } from "../session/runtime-ports.js";
+import { estimateTokens } from "../session/tools/tool-output-distiller.js";
 import { renderCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import { applyContextContract } from "./context-contract.js";
 import { decideContextNudge, decideContextPressure } from "./context-lifecycle.js";
 import { resolveContextScopeId } from "./context-shared.js";
+import { buildFailureRecurrenceSection } from "./failure-recurrence.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
 import {
   makeHostedContextBlock,
@@ -41,12 +43,16 @@ import {
 import { buildReadPathRecoveryBlocks } from "./read-path-recovery.js";
 import {
   buildRuntimeBriefBlock,
+  formatTokens,
   renderCacheBreakSection,
   renderConsequenceSection,
   renderContextPressureSection,
   RUNTIME_BRIEF_MAX_CHARS,
 } from "./runtime-brief.js";
-import { selectStaleAwareWorkbenchEntriesForSession } from "./workbench-staleness.js";
+import {
+  listActiveWorkbenchEntriesForSession,
+  selectStaleAwareWorkbenchEntriesForSession,
+} from "./workbench-staleness.js";
 
 export const HOSTED_WORKBENCH_CONTEXT_MESSAGE_TYPE = "brewva-workbench-context";
 
@@ -81,6 +87,8 @@ export interface HostedWorkbenchContextMessageDetails {
     entries: number;
     notes: number;
     evictions: number;
+    pinnedEntries: number;
+    pinnedEstimatedTokens: number;
     contentHash: string;
   };
 }
@@ -202,10 +210,11 @@ function buildMessageDetails(input: {
   gateRequired: boolean;
   rendered: HostedContextRenderResult;
   capabilityView: BuildCapabilityViewResult;
-  workbenchEntries: ReturnType<HostedRuntimeAdapterPort["ops"]["workbench"]["list"]>;
+  workbenchEntries: Readonly<ReturnType<HostedRuntimeAdapterPort["ops"]["workbench"]["list"]>>;
 }): HostedWorkbenchContextMessageDetails {
   const notes = input.workbenchEntries.filter((entry) => entry.kind === "note").length;
   const evictions = input.workbenchEntries.filter((entry) => entry.kind === "eviction").length;
+  const pinnedMass = measurePinnedWorkbenchMass(input.workbenchEntries);
   return {
     originalTokens: input.originalTokens,
     finalTokens: input.finalTokens,
@@ -225,6 +234,8 @@ function buildMessageDetails(input: {
       entries: input.workbenchEntries.length,
       notes,
       evictions,
+      pinnedEntries: pinnedMass.entries,
+      pinnedEstimatedTokens: pinnedMass.estimatedTokens,
       contentHash: redactedStableJsonSha256Hex(
         input.workbenchEntries.map((entry) => ({
           id: entry.id,
@@ -298,6 +309,43 @@ function buildCompactionAdvisoryBlock(input: {
   return makeHostedContextBlock("compaction-advisory", content.join("\n"))!;
 }
 
+interface PinnedWorkbenchMass {
+  entries: number;
+  estimatedTokens: number;
+}
+
+/**
+ * Token mass of `attention_pin` entries — the accounted cost of the retention
+ * contract (R2b): pins are excluded from every drop candidate set, so their
+ * size must stay a paid, visible choice instead of silent permanent weight.
+ */
+export function measurePinnedWorkbenchMass(
+  entries: readonly {
+    readonly content?: string;
+    readonly text?: string;
+    readonly sourceRefs: readonly string[];
+    readonly preservedQuotes?: readonly string[];
+    readonly retentionHint?: string;
+  }[],
+): PinnedWorkbenchMass {
+  const pinned = entries.filter((entry) => isAttentionPinnedWorkbenchEntry(entry));
+  const estimatedTokens = pinned.reduce(
+    (sum, entry) =>
+      sum +
+      estimateTokens(
+        [
+          entry.content ?? entry.text,
+          entry.sourceRefs.join(", "),
+          entry.preservedQuotes?.join(" | "),
+        ]
+          .filter((part): part is string => Boolean(part))
+          .join("\n"),
+      ),
+    0,
+  );
+  return { entries: pinned.length, estimatedTokens };
+}
+
 function buildWorkbenchBlock(
   runtime: HostedRuntimeAdapterPort,
   sessionId: string,
@@ -306,12 +354,19 @@ function buildWorkbenchBlock(
   // anchors no longer resolve is flagged and, when the rendered set is capped, dropped
   // before live notes (downgraded, never deleted). The same stale-aware selection
   // feeds the workbench-primary compaction fallback, so neither path diverges.
+  // `attention_pin` entries sit outside the drop candidate set (retention contract);
+  // their token mass is stated in the header so pinning stays a paid, visible choice.
   const rendered = selectStaleAwareWorkbenchEntriesForSession(runtime, sessionId, 12);
   if (rendered.length === 0) {
     return null;
   }
 
-  const lines = ["[Workbench]"];
+  const pinnedMass = measurePinnedWorkbenchMass(rendered.map((item) => item.entry));
+  const lines = [
+    pinnedMass.entries > 0
+      ? `[Workbench] pinned=${pinnedMass.entries} (~${formatTokens(pinnedMass.estimatedTokens)} tokens held by attention_pin)`
+      : "[Workbench]",
+  ];
   for (const { entry, stale } of rendered) {
     lines.push(
       [
@@ -320,6 +375,7 @@ function buildWorkbenchBlock(
         `turn=${entry.createdTurn}`,
         `digest=${entry.digest.slice(0, 12)}`,
         `reversible=${entry.reversible ? "true" : "false"}`,
+        ...(isAttentionPinnedWorkbenchEntry(entry) ? ["pinned=true"] : []),
         ...(stale ? ["stale=true"] : []),
         `reason=${entry.reason}`,
       ].join(" "),
@@ -339,7 +395,8 @@ function buildWorkbenchBlock(
 
 // Model-facing runtime intelligence brief: a legible `[RuntimeBrief]` block under
 // a provenance frame (see runtime-brief.ts), composing relevance-gated sections —
-// context-pressure posture, an unexpected cache-break, and last-turn effects.
+// context-pressure posture, an unexpected cache-break, last-turn effects, and
+// repeated identical tool failures (failure-recurrence.ts).
 // Each section is silent when not decision-relevant, so the block is absent on a
 // fully calm turn. Replaces the former always-on 16-line `[Context Status]` ledger
 // dump and the bare consequence-digest block.
@@ -352,18 +409,29 @@ export function buildRuntimeBriefBlockForSession(
   },
 ): HostedContextBlock | null {
   const status = getRuntimeContextStatus(runtime, input.sessionId, input.usage);
+  // Pinned mass is a paid-choice signal that only renders WITH pressure, so a
+  // calm turn never pays the workbench scan for it.
+  const pressureRelevant =
+    (status.forcedCompaction ?? false) ||
+    (status.compactionAdvised ?? false) ||
+    (status.predictedOverflow ?? false);
   const pressure = renderContextPressureSection({
     tokensUsed: status.tokensUsed ?? null,
     tokensTotal: status.tokensTotal ?? 0,
     compactionAdvised: status.compactionAdvised ?? false,
     forcedCompaction: status.forcedCompaction ?? false,
     predictedOverflow: status.predictedOverflow ?? false,
+    pinnedTokens: pressureRelevant
+      ? measurePinnedWorkbenchMass(listActiveWorkbenchEntriesForSession(runtime, input.sessionId))
+          .estimatedTokens
+      : 0,
   });
   const effects =
     input.turn > 0 ? buildConsequenceSection(runtime, input.sessionId, input.turn) : null;
   const cache = buildCacheBreakSection(runtime, input.sessionId);
+  const recurrence = buildFailureRecurrenceSection(runtime, input.sessionId);
   return buildRuntimeBriefBlock({
-    sections: [pressure, cache, effects],
+    sections: [pressure, cache, effects, recurrence],
     maxChars: RUNTIME_BRIEF_MAX_CHARS,
   });
 }
@@ -551,7 +619,7 @@ export function createHostedWorkbenchContextController(
     transformContext(input) {
       return applyWorkbenchEvictionsToMessages({
         messages: input.messages,
-        workbenchEntries: listRuntimeWorkbenchEntries(runtime, input.sessionId),
+        workbenchEntries: listActiveWorkbenchEntriesForSession(runtime, input.sessionId),
       }).messages;
     },
 
@@ -612,7 +680,7 @@ export function createHostedWorkbenchContextController(
           gateRequired: gateStatus.required === true,
           rendered,
           capabilityView,
-          workbenchEntries: listRuntimeWorkbenchEntries(runtime, input.sessionId),
+          workbenchEntries: listActiveWorkbenchEntriesForSession(runtime, input.sessionId),
         }),
       });
     },

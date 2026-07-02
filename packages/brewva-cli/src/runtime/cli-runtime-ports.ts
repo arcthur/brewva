@@ -13,6 +13,7 @@ type Ops = HostedRuntimeAdapterPort["ops"];
 export type CliScheduleEventsPort = Pick<
   Ops["schedule"]["events"],
   | "recordIntent"
+  | "recordRecoveryDeferred"
   | "recordWakeup"
   | "recordChildStarted"
   | "recordChildFinished"

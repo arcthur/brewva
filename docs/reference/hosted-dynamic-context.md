@@ -58,7 +58,9 @@ A hosted turn has one stable request shape:
   mention is present
 - an optional `[CapabilitySelection]` section appended by the hosted tool
   surface when deterministic capability selection produces selected,
-  forbidden, or policy evidence
+  forbidden, or policy evidence, or when unselected manifests exist to render
+  as the bounded `selectable` catalog (descriptive only — the selection
+  receipt remains the only authority)
 - stable managed tool definitions
 - one hidden dynamic tail rendered by `createHostedWorkbenchContextController`
 - ordinary conversation messages and tool results

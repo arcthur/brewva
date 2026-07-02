@@ -6,6 +6,7 @@ import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { RuntimeToolAuthorityResolver } from "@brewva/brewva-runtime";
 import {
   createActionPolicyRegistry,
+  OBSERVATION_SHAPE_SHADOW_INTERCEPTOR_ID,
   resolveToolAuthority,
   type ToolActionAdmissionOverrides,
 } from "@brewva/brewva-runtime/security";
@@ -45,10 +46,14 @@ describe("kernel observation seam", () => {
       "tool.proposed",
     ]);
 
-    const evidence = runtime.kernel.intercept.evidence.list({ sessionId: "shadow-session" });
+    // The observation-shape classifier (RFC R4 Phase 0) is mounted by default,
+    // so per-interceptor queries isolate this test's own shadow.
+    const evidence = runtime.kernel.intercept.evidence.list({
+      sessionId: "shadow-session",
+      interceptorId: "deny-workspace-read",
+    });
     expect(evidence).toHaveLength(1);
     expect(evidence[0]).toMatchObject({
-      sequence: 0,
       mode: "shadow",
       stage: "tool.authority",
       interceptorId: "deny-workspace-read",
@@ -62,6 +67,16 @@ describe("kernel observation seam", () => {
           effectiveAdmission: "deny",
         },
       },
+    });
+    // The default classifier agrees with real policy on a workspace read.
+    const defaultEvidence = runtime.kernel.intercept.evidence.list({
+      sessionId: "shadow-session",
+      interceptorId: OBSERVATION_SHAPE_SHADOW_INTERCEPTOR_ID,
+    });
+    expect(defaultEvidence).toHaveLength(1);
+    expect(defaultEvidence[0]).toMatchObject({
+      real: { kind: "allow" },
+      shadow: { kind: "allow" },
     });
   });
 
@@ -94,15 +109,16 @@ describe("kernel observation seam", () => {
     expect(decision.kind).toBe("allow");
     const evidence = runtime.kernel.intercept.evidence.list({ sessionId: "shadow-session" });
     expect(evidence.map((entry) => entry.interceptorId)).toEqual([
+      OBSERVATION_SHAPE_SHADOW_INTERCEPTOR_ID,
       "broken-shadow",
       "default-shadow",
     ]);
-    expect(evidence.map((entry) => entry.sequence)).toEqual([0, 1]);
-    expect(evidence[0]).toMatchObject({
+    expect(evidence.map((entry) => entry.sequence)).toEqual([0, 1, 2]);
+    expect(evidence[1]).toMatchObject({
       error: "shadow_resolver_failed",
       real: { kind: "allow" },
     });
-    expect(evidence[1]).toMatchObject({
+    expect(evidence[2]).toMatchObject({
       shadow: { kind: "allow" },
       real: { kind: "allow" },
     });
@@ -143,6 +159,11 @@ describe("kernel observation seam", () => {
       toolName: "read_file",
     });
 
-    expect(runtime.kernel.intercept.evidence.list({ sessionId: "shadow-session" })).toEqual([]);
+    expect(
+      runtime.kernel.intercept.evidence.list({
+        sessionId: "shadow-session",
+        interceptorId: "default-shadow",
+      }),
+    ).toEqual([]);
   });
 });

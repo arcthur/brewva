@@ -5,6 +5,11 @@ import {
   type RcrReference,
 } from "@brewva/brewva-vocabulary/rcr";
 import {
+  isAttentionPinnedWorkbenchEntry,
+  parseWorkbenchEvictionSpanRef,
+  WORKBENCH_EVICTION_UNDONE_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/workbench";
+import {
   listRuntimeWorkbenchEntries,
   queryRuntimeEvents,
   type HostedRuntimeAdapterPort,
@@ -64,9 +69,15 @@ export interface StaleAwareWorkbenchEntry<TEntry> {
  * set exceeds `max`, keep the most recent live notes and only backfill with the
  * most recent stale ones — stale notes are downgraded (dropped first), never
  * deleted, and the surviving set keeps its original chronological order.
+ *
+ * `attention_pin` entries sit outside the candidate set entirely: they are kept
+ * unconditionally (even stale — the marker stays honest), consume the render
+ * budget first, and only an explicit `workbench_evict` targeting `entry:<id>`
+ * removes them. That is the retention contract: what the model pinned, physics
+ * keeps.
  */
 export function selectStaleAwareWorkbenchEntries<
-  TEntry extends { readonly rcr?: readonly RcrReference[] },
+  TEntry extends { readonly rcr?: readonly RcrReference[]; readonly retentionHint?: string },
 >(
   entries: readonly TEntry[],
   findEventPayload: (eventRef: RcrEventRef) => unknown,
@@ -79,10 +90,14 @@ export function selectStaleAwareWorkbenchEntries<
   if (annotated.length <= max) {
     return annotated;
   }
-  const live = annotated.filter((item) => !item.stale).slice(-max);
-  const remaining = Math.max(0, max - live.length);
-  const fill = remaining > 0 ? annotated.filter((item) => item.stale).slice(-remaining) : [];
-  const keep = new Set([...live, ...fill]);
+  const pinned = annotated.filter((item) => isAttentionPinnedWorkbenchEntry(item.entry));
+  const candidates = annotated.filter((item) => !isAttentionPinnedWorkbenchEntry(item.entry));
+  // `slice(-0)` would return the whole array, so a zero budget must short-circuit.
+  const budget = Math.max(0, max - pinned.length);
+  const live = budget > 0 ? candidates.filter((item) => !item.stale).slice(-budget) : [];
+  const remaining = Math.max(0, budget - live.length);
+  const fill = remaining > 0 ? candidates.filter((item) => item.stale).slice(-remaining) : [];
+  const keep = new Set([...pinned, ...live, ...fill]);
   return annotated.filter((item) => keep.has(item));
 }
 
@@ -90,23 +105,92 @@ type RuntimeWorkbenchEntry = ReturnType<
   HostedRuntimeAdapterPort["ops"]["workbench"]["list"]
 >[number];
 
+function readUndoneEvictionIds(
+  events: readonly { type: string; payload?: unknown }[],
+): Set<string> {
+  const undone = new Set<string>();
+  for (const event of events) {
+    if (event.type !== WORKBENCH_EVICTION_UNDONE_EVENT_TYPE) continue;
+    const payload = event.payload as { entryId?: unknown; undone?: unknown } | undefined;
+    if (payload?.undone === true && typeof payload.entryId === "string") {
+      undone.add(payload.entryId);
+    }
+  }
+  return undone;
+}
+
 /**
- * Gateway-layer stale-aware workbench selection: lists the session's workbench
- * entries, builds the in-memory RCR event lookup (only when an entry carries an
- * anchor), and applies {@link selectStaleAwareWorkbenchEntries}. The single source
- * of stale-aware selection for both the live `[Workbench]` render and the
- * workbench-primary compaction fallback, so neither path promotes an unmarked
- * stale note.
+ * Note-level eviction physics: an active (not undone) eviction entry whose
+ * span refs target `entry:<noteId>` removes that NOTE from the selectable set.
+ * This is the retention contract's explicit release path — the ONLY way an
+ * `attention_pin` note leaves the render — and it applies to unpinned notes
+ * uniformly (an explicitly evicted note must not linger in the render either).
+ * Strictly note-scoped: eviction entries themselves are never dropped here, so
+ * their message-hiding span refs stay in force for `transformContext` and the
+ * session-store visibility path (dropping them would silently resurrect
+ * evicted history). Undoing an eviction restores the note; the pre-existing
+ * asymmetry that undone evictions never restore hidden MESSAGES lives in
+ * `createEvictionIndex`, not here.
+ */
+function dropExplicitlyEvictedNotes(
+  entries: readonly RuntimeWorkbenchEntry[],
+  undoneEvictionIds: ReadonlySet<string>,
+): readonly RuntimeWorkbenchEntry[] {
+  const evictedNoteIds = new Set<string>();
+  for (const entry of entries) {
+    if (entry.kind !== "eviction") continue;
+    if (entry.id && undoneEvictionIds.has(entry.id)) continue;
+    for (const sourceRef of entry.sourceRefs) {
+      const parsed = parseWorkbenchEvictionSpanRef(sourceRef);
+      if (parsed?.prefix === "entry") {
+        evictedNoteIds.add(parsed.id);
+      }
+    }
+  }
+  if (evictedNoteIds.size === 0) return entries;
+  return entries.filter(
+    (entry) => !(entry.kind === "note" && entry.id && evictedNoteIds.has(entry.id)),
+  );
+}
+
+/**
+ * Workbench entries still in force: the raw projection minus notes the model
+ * explicitly evicted via `entry:<id>` span refs (honoring undo). The one list
+ * every model-facing surface (render, compaction fallback, pinned-mass
+ * accounting) must read, so an evicted pin cannot linger anywhere. The undo
+ * lookup is a type-filtered event query and runs only when an eviction exists.
+ */
+export function listActiveWorkbenchEntriesForSession(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): readonly RuntimeWorkbenchEntry[] {
+  const listed = listRuntimeWorkbenchEntries(runtime, sessionId);
+  if (!listed.some((entry) => entry.kind === "eviction")) {
+    return listed;
+  }
+  const undone = readUndoneEvictionIds(
+    queryRuntimeEvents(runtime, sessionId, { type: WORKBENCH_EVICTION_UNDONE_EVENT_TYPE }),
+  );
+  return dropExplicitlyEvictedNotes(listed, undone);
+}
+
+/**
+ * Gateway-layer stale-aware workbench selection: takes the active entry list
+ * ({@link listActiveWorkbenchEntriesForSession}), builds the in-memory RCR event
+ * lookup (only when an entry carries an anchor), and applies
+ * {@link selectStaleAwareWorkbenchEntries}. The single source of stale-aware
+ * selection for both the live `[Workbench]` render and the workbench-primary
+ * compaction fallback, so neither path promotes an unmarked stale note or
+ * resurrects an evicted pin.
  */
 export function selectStaleAwareWorkbenchEntriesForSession(
   runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   max: number,
 ): readonly StaleAwareWorkbenchEntry<RuntimeWorkbenchEntry>[] {
-  const entries = listRuntimeWorkbenchEntries(runtime, sessionId);
-  const hasRcrAnchors = entries.some((entry) => (entry.rcr?.length ?? 0) > 0);
+  const entries = listActiveWorkbenchEntriesForSession(runtime, sessionId);
   const eventPayloadById = new Map<string, unknown>();
-  if (hasRcrAnchors) {
+  if (entries.some((entry) => (entry.rcr?.length ?? 0) > 0)) {
     for (const event of queryRuntimeEvents(runtime, sessionId)) {
       eventPayloadById.set(event.id, event.payload);
     }

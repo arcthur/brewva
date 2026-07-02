@@ -3,6 +3,7 @@ import { relative, resolve } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import { classifyToolFailure } from "@brewva/brewva-vocabulary/iteration";
 import {
   outcomeIsError,
   outcomeVerdict,
@@ -14,6 +15,7 @@ import {
   finishRuntimeToolInvocation,
   getRuntimeContextStatus,
   getRuntimeContextUsage,
+  recordRuntimeToolResult,
   type HostedRuntimeAdapterPort,
 } from "../../session/runtime-ports.js";
 import { distillToolOutput, estimateTokens } from "../../session/tools/tool-output-distiller.js";
@@ -332,6 +334,8 @@ function recordArtifactFailure(
   });
 }
 
+const TOOL_RESULT_FAILURE_CONTEXT_MAX_CHARS = 2_000;
+
 function recordToolOutcome(
   runtime: HostedRuntimeAdapterPort,
   input: {
@@ -444,6 +448,40 @@ function recordToolOutcome(
       },
     });
   }
+
+  // The committed per-result receipt (`tool.result.recorded`): the contract
+  // read-path recovery (including its read-gate ENFORCEMENT), stall
+  // adjudication, compaction provenance, session-index text ingestion, recall
+  // classification, and the failure-recurrence brief all project from. Its
+  // producer was dropped in the four-port cutover; this restores it at the
+  // single place that already owns verdict, args, and output. The failure
+  // output text is bounded (the full output lives in the persisted artifact);
+  // args are recorded as invoked, matching the invocation.finished precedent.
+  recordRuntimeToolResult(runtime, {
+    sessionId: input.sessionId,
+    toolCallId: input.toolCallId,
+    toolName: input.toolName,
+    verdict: input.verdict,
+    failureClass: input.isError
+      ? classifyToolFailure({
+          toolName: input.toolName,
+          args: input.args,
+          outputText: input.outputText,
+          details: input.details,
+          isError: input.isError,
+        })
+      : "none",
+    failureContext:
+      input.verdict === "pass"
+        ? null
+        : {
+            outputText:
+              input.outputText.length > TOOL_RESULT_FAILURE_CONTEXT_MAX_CHARS
+                ? input.outputText.slice(0, TOOL_RESULT_FAILURE_CONTEXT_MAX_CHARS)
+                : input.outputText,
+            args: input.args,
+          },
+  });
 
   finishRuntimeToolInvocation(runtime, {
     sessionId: input.sessionId,

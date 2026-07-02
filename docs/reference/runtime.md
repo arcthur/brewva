@@ -268,6 +268,19 @@ widening the gateway-ingress WAL. A prompt is retired only after its turn return
 so a crash inside the window re-enqueues it rather than losing it (`at_least_once`).
 Next-turn custom messages are advisory transient context, held in memory only.
 
+## Workbench Retention Contract
+
+Workbench entries with `retentionHint: "attention_pin"` are outside every
+drop candidate set: the gateway's stale-aware selection keeps them
+unconditionally (consuming the render budget first, even when their anchors
+went stale — the `stale=true` marker stays honest), and the same single
+selection source feeds both the live `[Workbench]` render and the
+workbench-primary compaction fallback, so no compaction path drops a pin. The
+only removal is an explicit note-scoped eviction (`workbench_evict` with an
+`entry:<id>` span ref, reversible via `workbench_undo_evict` until the next
+baseline). The survival property is pinned by
+`test/unit/gateway/workbench-retention-contract.property.test.ts`.
+
 ## User Model Projection
 
 The model may author a `user.fact.recorded` advisory event carrying a fact's

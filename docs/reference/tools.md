@@ -300,6 +300,20 @@ allowlist required for safe continuation. The gate is derived from
 `@brewva/brewva-substrate/context-budget`; managed tools cannot bypass it by
 declaring broader runtime capabilities.
 
+## Workbench Retention Contract
+
+`workbench_note` accepts an optional `retention_hint`. One value is
+contractual: `attention_pin` (also written by the `attention_pin` tool)
+excludes the entry from every compaction/eviction candidate set — pinned
+entries survive render caps and compaction baselines unconditionally, and an
+explicit `workbench_evict` whose span refs target `entry:<id>` is the only
+removal path (`workbench_undo_evict` restores the note until the next
+baseline). Any other hint string is advisory salience evidence, not a
+contract. Pinned mass is accounted: the `[Workbench]` header states the pinned
+entry count and estimated token weight, and the `[RuntimeBrief]` context
+pressure line restates it under pressure so pinning stays a paid, visible
+choice.
+
 ## Runtime Contract
 
 `buildBrewvaTools()` builds the repo-owned default managed-tool bundle. Managed

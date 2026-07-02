@@ -437,12 +437,19 @@ export function createQualityGateLifecycle(
           block: true,
           reason:
             started.reason === "missing_selected_capability"
-              ? renderMissingCapabilityRecoveryHint({
-                  toolName,
-                  args,
-                  runtimeCapabilityAccess,
-                  toolDefinitionsByName: options.toolDefinitionsByName,
-                })
+              ? // The capability advisory names the covering capability and its
+                // request path — it must reach the model, not only the tape.
+                [
+                  renderMissingCapabilityRecoveryHint({
+                    toolName,
+                    args,
+                    runtimeCapabilityAccess,
+                    toolDefinitionsByName: options.toolDefinitionsByName,
+                  }),
+                  started.advisory?.trim(),
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               : (started.reason ?? "Tool call blocked by runtime policy."),
         };
       }

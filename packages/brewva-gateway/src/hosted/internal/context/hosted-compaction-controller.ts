@@ -26,7 +26,6 @@ import {
   getRuntimeContextUsage,
   getRuntimeContextUsageRatio,
   getRuntimePendingCompactionReason,
-  listRuntimeWorkbenchEntries,
   queryRuntimeEvents,
   type HostedRuntimeAdapterPort,
 } from "../session/runtime-ports.js";
@@ -54,6 +53,7 @@ import {
   AUTO_COMPACTION_WATCHDOG_ERROR,
   type HostedContextTelemetry,
 } from "./hosted-context-telemetry.js";
+import { listActiveWorkbenchEntriesForSession } from "./workbench-staleness.js";
 
 export interface HostedManualCompactOptions {
   customInstructions?: string;
@@ -306,7 +306,9 @@ function buildRuntimeCompactionInputProvenance(input: {
   const compactBaseline =
     getRuntimeContextPromptHistoryViewBaseline(input.runtime, input.sessionId) ?? null;
   return buildCompactionInputProvenance({
-    workbenchEntries: listRuntimeWorkbenchEntries(input.runtime, input.sessionId),
+    // Active list: a pin released via explicit `entry:` eviction must not
+    // keep projecting into `pinnedRefs` provenance.
+    workbenchEntries: [...listActiveWorkbenchEntriesForSession(input.runtime, input.sessionId)],
     skillSelection: input.runtime.ops.skills.selection.latest(input.sessionId),
     capabilitySelection: input.runtime.ops.tools.capabilitySelection.latest(input.sessionId),
     recallEvents: queryRuntimeEvents(input.runtime, input.sessionId, {

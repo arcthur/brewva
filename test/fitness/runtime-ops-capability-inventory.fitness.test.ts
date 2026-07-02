@@ -301,7 +301,7 @@ describe("runtime ops capability inventory fitness", () => {
       runtimeOpsBuilders.reduce((sum, builder) => sum + builder.split("\n").length, 0);
     const hostedOpsMirrorLines = runtimeOps.split("\n").length + toolRuntime.split("\n").length;
     expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_050);
-    expect(hostedOpsLines).toBeLessThanOrEqual(2_605);
+    expect(hostedOpsLines).toBeLessThanOrEqual(2_710);
     // WS2 added tape-derived rebuild projections (workbench/task/resource-lease/
     // worker-results) that fix the invariant-9/12 restart-loses-state bug. A
     // follow-up review pass then completed the tape-authority migration on the
@@ -320,8 +320,14 @@ describe("runtime ops capability inventory fitness", () => {
     // projection), so only the thin emit lands here. A later desync-hardening pass then
     // promoted the runtime-ops task/worker event-type strings to shared
     // `@brewva/brewva-vocabulary` constants (emit and projection reference one constant, never
-    // a drifting literal), which adds only the import lines here.
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_540);
+    // a drifting literal), which adds only the import lines here. The
+    // contract-liveness audit (2026-07-02) then revived the dead write side of
+    // the event vocabulary: a real verification builder (verify records the
+    // canonical outcome receipt, evaluate projects it), the WAL observability
+    // verbs on the vocabulary types, the scheduler deferral verb, the turn
+    // receipt verbs, and the tape-authoritative session title read — producers
+    // that consumers had been silently awaiting, not facade growth.
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_645);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

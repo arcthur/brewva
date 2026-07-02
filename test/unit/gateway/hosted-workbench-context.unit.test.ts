@@ -70,6 +70,8 @@ function runtimeWithBriefSources(input: {
   digest: string;
   cacheObservation?: Record<string, unknown>;
   maxChars?: number;
+  workbenchEntries?: readonly Record<string, unknown>[];
+  toolResultEvents?: readonly Record<string, unknown>[];
 }): HostedRuntimeAdapterPort {
   return {
     config: {
@@ -85,7 +87,18 @@ function runtimeWithBriefSources(input: {
               : undefined,
         },
       },
-      events: { effects: { renderTurnDigest: () => input.digest } },
+      events: {
+        effects: { renderTurnDigest: () => input.digest },
+        records: {
+          query: (_sessionId: string, query?: { type?: string; last?: number }) => {
+            const matched = (input.toolResultEvents ?? []).filter(
+              (event) => !query?.type || event.type === query.type,
+            );
+            return typeof query?.last === "number" ? matched.slice(-query.last) : matched;
+          },
+        },
+      },
+      workbench: { list: () => input.workbenchEntries ?? [] },
     },
   } as unknown as HostedRuntimeAdapterPort;
 }
@@ -158,6 +171,68 @@ describe("hosted runtime brief block (end-to-end wiring)", () => {
       "cache: prefix cache broke last turn (tool_schema_set_changed)",
     );
     expect(block?.content).toContain("9k tokens re-sent");
+  });
+
+  test("pinned workbench mass rides the pressure posture end to end", () => {
+    const block = buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: {
+          tokensUsed: 164_000,
+          tokensTotal: 200_000,
+          compactionAdvised: true,
+          forcedCompaction: false,
+          predictedOverflow: false,
+        },
+        digest: "runtimeTurn=2 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0",
+        workbenchEntries: [
+          {
+            id: "pin-1",
+            digest: "digest-pin",
+            reason: "attention_pin",
+            retentionHint: "attention_pin",
+            sourceRefs: ["skill:runtime-orientation"],
+            content: "Pinned attention option for explicit follow-up: skill:runtime-orientation",
+          },
+        ],
+      }),
+      { sessionId: "sess_1", turn: 3 },
+    );
+
+    expect(block?.content).toContain("pinned ~");
+    expect(block?.content).toContain("tokens held by attention_pin");
+  });
+
+  test("surfaces repeated identical tool failures as recurrence evidence", () => {
+    const failure = (id: string, timestamp: number) => ({
+      id,
+      sessionId: "sess_1",
+      type: "tool.result.recorded",
+      timestamp,
+      payload: {
+        toolName: "read",
+        failureClass: "missing_path",
+        verdict: "fail",
+        failureContext: { outputText: "ENOENT: no such file", args: { path: "gone.ts" } },
+      },
+    });
+    const block = buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: {
+          tokensUsed: 20_000,
+          tokensTotal: 200_000,
+          compactionAdvised: false,
+          forcedCompaction: false,
+          predictedOverflow: false,
+        },
+        digest: "runtimeTurn=2 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0",
+        toolResultEvents: [failure("ev-1", 1), failure("ev-2", 2)],
+      }),
+      { sessionId: "sess_1", turn: 3 },
+    );
+
+    expect(block?.content).toContain(
+      'repeat-failures: read (missing_path) ×2 identical args; last: "ENOENT: no such file"',
+    );
   });
 
   test("omits the effects section before the first completed turn", () => {

@@ -234,6 +234,12 @@ export interface KernelInterceptPort {
   shadowToolAuthority(input: KernelShadowToolAuthorityInput): KernelInterceptorRegistration;
   readonly evidence: {
     list(query?: KernelShadowEvidenceQuery): readonly KernelShadowEvidenceEntry[];
+    /**
+     * Monotonic count of ring-buffer evictions since kernel creation. A drain
+     * that observes this advance must treat its window as gapped: entries
+     * (possibly divergent ones) were dropped before being read.
+     */
+    evictedCount(): number;
   };
 }
 

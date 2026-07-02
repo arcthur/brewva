@@ -30,6 +30,10 @@ export interface BrewvaSystemPromptCapabilitySelection {
     mode?: string;
     reason?: string;
   }>;
+  selectableCapabilities?: Array<{
+    name: string;
+    whenToUse?: string;
+  }>;
   forbiddenCandidates?: Array<{
     name: string;
     reason: string;
@@ -214,8 +218,14 @@ function renderCapabilitySelectionText(
   selection: BrewvaSystemPromptCapabilitySelection | undefined,
 ): string {
   const selected = selection?.selectedCapabilities ?? [];
+  const selectable = selection?.selectableCapabilities ?? [];
   const forbidden = selection?.forbiddenCandidates ?? [];
-  if (selected.length === 0 && forbidden.length === 0 && !selection?.selectionReason) {
+  if (
+    selected.length === 0 &&
+    selectable.length === 0 &&
+    forbidden.length === 0 &&
+    !selection?.selectionReason
+  ) {
     return "";
   }
 
@@ -234,6 +244,18 @@ function renderCapabilitySelectionText(
         .filter((part): part is string => typeof part === "string")
         .join(", ");
       lines.push(`- ${capability.name}${details ? ` (${details})` : ""}`);
+    }
+  }
+  if (selectable.length > 0) {
+    lines.push(
+      "selectable (descriptive catalog, not authorization; request one with '/capability:<name>' in the turn prompt):",
+    );
+    for (const capability of selectable) {
+      lines.push(
+        capability.whenToUse
+          ? `- ${capability.name}: ${capability.whenToUse}`
+          : `- ${capability.name}`,
+      );
     }
   }
   if (forbidden.length > 0) {

@@ -122,6 +122,44 @@ describe("context pressure posture", () => {
     expect(section?.line).not.toContain("%");
     expect(section?.line).toContain("200k tokens total");
   });
+
+  test("pinned mass rides the pressure line as an accounted retention cost", () => {
+    const section = renderContextPressureSection({
+      tokensUsed: 164_000,
+      tokensTotal: 200_000,
+      compactionAdvised: true,
+      forcedCompaction: false,
+      predictedOverflow: false,
+      pinnedTokens: 2_400,
+    });
+    expect(section?.line).toContain(
+      "pinned ~2k tokens held by attention_pin (explicit evict releases)",
+    );
+    expect(section?.stub).not.toContain("pinned");
+  });
+
+  test("zero pinned mass stays silent and calm turns stay null even with pins", () => {
+    const withoutPins = renderContextPressureSection({
+      tokensUsed: 164_000,
+      tokensTotal: 200_000,
+      compactionAdvised: true,
+      forcedCompaction: false,
+      predictedOverflow: false,
+      pinnedTokens: 0,
+    });
+    expect(withoutPins?.line).not.toContain("pinned");
+
+    expect(
+      renderContextPressureSection({
+        tokensUsed: 82_000,
+        tokensTotal: 200_000,
+        compactionAdvised: false,
+        forcedCompaction: false,
+        predictedOverflow: false,
+        pinnedTokens: 5_000,
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("cache break section", () => {

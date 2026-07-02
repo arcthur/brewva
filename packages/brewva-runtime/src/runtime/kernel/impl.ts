@@ -650,11 +650,14 @@ function filterShadowEvidence(
 function appendShadowEvidence(
   evidence: KernelShadowEvidenceEntry[],
   entry: KernelShadowEvidenceEntry,
-): void {
+): number {
   evidence.push(Object.freeze(entry));
   if (evidence.length > MAX_SHADOW_EVIDENCE_ENTRIES) {
-    evidence.splice(0, evidence.length - MAX_SHADOW_EVIDENCE_ENTRIES);
+    const evicted = evidence.length - MAX_SHADOW_EVIDENCE_ENTRIES;
+    evidence.splice(0, evicted);
+    return evicted;
   }
+  return 0;
 }
 
 function realDecisionEvidence(
@@ -741,6 +744,7 @@ export function createKernelPort(
   const shadowToolAuthorityInterceptors: ShadowToolAuthorityInterceptor[] = [];
   const shadowEvidence: KernelShadowEvidenceEntry[] = [];
   let nextShadowEvidenceSequence = 0;
+  let shadowEvidenceEvictedCount = 0;
 
   function recordShadowToolAuthorityEvidence(
     call: ToolCallProposal,
@@ -754,7 +758,7 @@ export function createKernelPort(
       nextShadowEvidenceSequence += 1;
       try {
         const shadow = shadowDecisionEvidence(call, interceptor.resolveToolAuthority);
-        appendShadowEvidence(shadowEvidence, {
+        shadowEvidenceEvictedCount += appendShadowEvidence(shadowEvidence, {
           id: `kernel-shadow:${sequence}`,
           sequence,
           timestamp: Date.now(),
@@ -769,7 +773,7 @@ export function createKernelPort(
           shadow,
         });
       } catch (error) {
-        appendShadowEvidence(shadowEvidence, {
+        shadowEvidenceEvictedCount += appendShadowEvidence(shadowEvidence, {
           id: `kernel-shadow:${sequence}`,
           sequence,
           timestamp: Date.now(),
@@ -820,6 +824,9 @@ export function createKernelPort(
       evidence: Object.freeze({
         list(query?: KernelShadowEvidenceQuery): readonly KernelShadowEvidenceEntry[] {
           return filterShadowEvidence(shadowEvidence, query);
+        },
+        evictedCount(): number {
+          return shadowEvidenceEvictedCount;
         },
       }),
     }),

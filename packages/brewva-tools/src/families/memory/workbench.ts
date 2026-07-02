@@ -3,6 +3,7 @@ import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { RcrReference } from "@brewva/brewva-vocabulary/rcr";
 import {
+  ATTENTION_PIN_RETENTION_HINT,
   listInvalidWorkbenchEvictionSpanRefs,
   parseWorkbenchEvictionSpanRef,
   type WorkbenchEntry,
@@ -51,6 +52,7 @@ export function createWorkbenchNoteTool(options: BrewvaToolOptions): ToolDefinit
       "Use source_refs for quoted turns, file spans, tool-call ids, or event ids that support the note; do not write source-less memory.",
       "Keep notes dense and operational. Avoid restating visible history unless the note is about to replace an evicted span.",
       "When a large tool result has one durable lesson, write the lesson here and then evict the raw result with workbench_evict.",
+      `retention_hint '${ATTENTION_PIN_RETENTION_HINT}' is a contract: the entry survives compaction and eviction until you explicitly release it with workbench_evict (span ref entry:<id>). Its token cost is counted against you — pin only what must outlive compaction. Any other hint is advisory salience only.`,
     ],
     parameters: Type.Object({
       content: Type.String({ minLength: 1, maxLength: 8_000 }),
@@ -59,7 +61,13 @@ export function createWorkbenchNoteTool(options: BrewvaToolOptions): ToolDefinit
         maxItems: 32,
       }),
       reason: Type.String({ minLength: 1, maxLength: 1_000 }),
-      retention_hint: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
+      retention_hint: Type.Optional(
+        Type.String({
+          minLength: 1,
+          maxLength: 128,
+          description: `Optional retention hint. '${ATTENTION_PIN_RETENTION_HINT}' contracts the entry out of compaction/eviction candidate sets (an explicit workbench_evict targeting entry:<id> is the only removal); other values are advisory salience evidence.`,
+        }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const content = readNonEmptyString(params.content);

@@ -92,4 +92,42 @@ describe("quality gate diff preview", () => {
     expect(result?.reason).toContain("Select a capability");
     expect(result?.reason).not.toContain("SECRET_TOKEN");
   });
+
+  test("missing capability block reason carries the denial advisory to the model", () => {
+    const runtime = {
+      ops: {
+        tools: {
+          invocation: {
+            start() {
+              return {
+                allowed: false,
+                reason: "missing_selected_capability",
+                advisory:
+                  "tool 'agent_send' requires a selected capability. Covered by: slack-notify — request selection with '/capability:slack-notify' in the turn prompt; the selection receipt remains the only authority.",
+              };
+            },
+          },
+        },
+      },
+    } as unknown as HostedRuntimeAdapterPort;
+
+    const lifecycle = createQualityGateLifecycle(runtime);
+    const result = lifecycle.toolCall(
+      {
+        toolCallId: "tool-call-1",
+        toolName: "custom_tool",
+        input: { message: "hi" },
+      },
+      {
+        sessionManager: {
+          getSessionId: () => "session-1",
+        },
+        getContextUsage: () => undefined,
+      },
+    );
+
+    expect(result).toMatchObject({ block: true });
+    expect(result?.reason).toContain("Select a capability");
+    expect(result?.reason).toContain("'/capability:slack-notify'");
+  });
 });

@@ -110,6 +110,13 @@ export interface ContextPressureInput {
   readonly compactionAdvised: boolean;
   readonly forcedCompaction: boolean;
   readonly predictedOverflow: boolean;
+  /**
+   * Estimated token mass of `attention_pin` workbench entries (the retention
+   * contract's accounted cost). Rendered only when > 0 and pressure is already
+   * being surfaced: under pressure the model should see how much of the window
+   * is contract-held and only releasable by an explicit `workbench_evict`.
+   */
+  readonly pinnedTokens?: number;
 }
 
 /**
@@ -140,10 +147,14 @@ export function renderContextPressureSection(
     : input.compactionAdvised
       ? "advisory limit reached"
       : "growth may overflow soon";
+  const pinned =
+    (input.pinnedTokens ?? 0) > 0
+      ? `; pinned ~${formatTokens(input.pinnedTokens ?? 0)} tokens held by attention_pin (explicit evict releases)`
+      : "";
   return {
     key: "context",
     salience: "high",
-    line: `context: ${head}; ${hint}`,
+    line: `context: ${head}; ${hint}${pinned}`,
     stub: pct !== null ? `context: ${pct}% (${hint})` : `context: ${hint}`,
   };
 }
@@ -207,7 +218,7 @@ export function renderCacheBreakSection(input: CacheBreakInput): RuntimeBriefSec
   };
 }
 
-function formatTokens(count: number): string {
+export function formatTokens(count: number): string {
   if (!Number.isFinite(count) || count < 0) {
     return "0";
   }

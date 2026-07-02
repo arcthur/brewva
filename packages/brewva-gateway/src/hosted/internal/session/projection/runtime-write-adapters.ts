@@ -1,5 +1,56 @@
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import type {
+  TurnInputRecordedPayload,
+  TurnRenderCommittedPayload,
+} from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
+
+// The turn envelope drives every production turn (managed session, worker,
+// delegation, channels) but may also run against a bare runtime with no ops
+// facade — or a partial test facade without the session namespace — so every
+// step is optional and receipts are then intentionally skipped.
+type OptionalOpsRuntime = {
+  readonly ops?: {
+    readonly session?: {
+      readonly lifecycle?: Partial<
+        Pick<
+          HostedRuntimeAdapterPort["ops"]["session"]["lifecycle"],
+          "turnInputRecorded" | "turnRenderCommitted"
+        >
+      >;
+    };
+  };
+};
+
+export function recordRuntimeTurnInputReceipt(
+  runtime: OptionalOpsRuntime,
+  input: {
+    readonly sessionId: string;
+    readonly runtimeTurn: number;
+    readonly payload: TurnInputRecordedPayload;
+  },
+): void {
+  runtime.ops?.session?.lifecycle?.turnInputRecorded?.({
+    sessionId: input.sessionId,
+    turn: input.runtimeTurn,
+    payload: input.payload,
+  });
+}
+
+export function recordRuntimeTurnRenderReceipt(
+  runtime: OptionalOpsRuntime,
+  input: {
+    readonly sessionId: string;
+    readonly runtimeTurn: number;
+    readonly payload: TurnRenderCommittedPayload;
+  },
+): void {
+  runtime.ops?.session?.lifecycle?.turnRenderCommitted?.({
+    sessionId: input.sessionId,
+    turn: input.runtimeTurn,
+    payload: input.payload,
+  });
+}
 
 export function recordRuntimeContinuationAnchor(
   runtime: Pick<HostedRuntimeAdapterPort, "ops">,
@@ -76,6 +127,13 @@ export function finishRuntimeToolInvocation(
   input: Parameters<HostedRuntimeAdapterPort["ops"]["tools"]["invocation"]["finish"]>[0],
 ): ReturnType<HostedRuntimeAdapterPort["ops"]["tools"]["invocation"]["finish"]> {
   return runtime.ops.tools.invocation.finish(input);
+}
+
+export function recordRuntimeToolResult(
+  runtime: Pick<HostedRuntimeAdapterPort, "ops">,
+  input: Parameters<HostedRuntimeAdapterPort["ops"]["tools"]["invocation"]["recordResult"]>[0],
+): ReturnType<HostedRuntimeAdapterPort["ops"]["tools"]["invocation"]["recordResult"]> {
+  return runtime.ops.tools.invocation.recordResult(input);
 }
 
 export function recordRuntimeReasoningCheckpoint(

@@ -16,7 +16,10 @@ import {
   type SessionCompactionRecallResultRef,
   type SessionCompactionResourceRef,
 } from "@brewva/brewva-vocabulary/session";
-import type { WorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
+import {
+  isAttentionPinnedWorkbenchEntry,
+  type WorkbenchEntry,
+} from "@brewva/brewva-vocabulary/workbench";
 
 interface CompactionProvenanceEvent {
   readonly type: string;
@@ -418,8 +421,7 @@ function readAttentionPinnedRefsFromWorkbench(
 ): string[] {
   const pinnedRefs = new Set<string>();
   for (const entry of workbenchEntries) {
-    const retentionHint = stringOrNull(entry.retentionHint);
-    if (entry.reason !== "attention_pin" && retentionHint !== "attention_pin") {
+    if (!isAttentionPinnedWorkbenchEntry(entry)) {
       continue;
     }
     for (const sourceRef of entry.sourceRefs) {
