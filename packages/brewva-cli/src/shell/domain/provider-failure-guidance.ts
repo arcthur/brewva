@@ -53,6 +53,67 @@ function providerFailureMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "Failed to run prompt.";
 }
 
+/** One provider-route attempt carried by a fallback-exhausted turn failure. */
+export interface ProviderFailureAttempt {
+  readonly provider: string;
+  readonly model: string;
+  readonly message: string;
+  readonly retryable?: boolean;
+}
+
+/**
+ * The per-route attempt trail a fallback-exhausted failure carries (the
+ * runtime's `ProviderFallbackExhaustedError.attempts`). Duck-typed on purpose:
+ * the CLI must not import gateway internals, and a failure that crossed a
+ * string-reducing boundary simply yields an empty trail — the message text
+ * already carries the same facts for the human.
+ */
+export function readProviderFailureAttempts(error: unknown): readonly ProviderFailureAttempt[] {
+  if (typeof error !== "object" || error === null) {
+    return [];
+  }
+  const attempts = (error as { attempts?: unknown }).attempts;
+  if (!Array.isArray(attempts)) {
+    return [];
+  }
+  const trail: ProviderFailureAttempt[] = [];
+  for (const entry of attempts) {
+    if (typeof entry !== "object" || entry === null) {
+      return [];
+    }
+    const { provider, model, message, retryable } = entry as {
+      provider?: unknown;
+      model?: unknown;
+      message?: unknown;
+      retryable?: unknown;
+    };
+    if (typeof provider !== "string" || typeof model !== "string" || typeof message !== "string") {
+      return [];
+    }
+    trail.push({
+      provider,
+      model,
+      message,
+      ...(typeof retryable === "boolean" ? { retryable } : {}),
+    });
+  }
+  return trail;
+}
+
+/**
+ * Same classification as {@link isProviderAccessFailure}, applied to one attempt
+ * of the trail: the structured flag is authoritative when present, else the
+ * attempt's own message decides. Drives per-model availability marking, so every
+ * model the fallback chain burned through gets its badge — not just the one the
+ * user selected.
+ */
+export function isProviderAccessFailureAttempt(attempt: ProviderFailureAttempt): boolean {
+  if (typeof attempt.retryable === "boolean") {
+    return !attempt.retryable;
+  }
+  return ACCESS_FAILURE_PATTERN.test(attempt.message);
+}
+
 // Fallback for when the structured `retryable` flag is absent (e.g. an in-band
 // mid-stream error that lost its HTTP status). Kept to provider-credential/entitlement
 // phrasing; generic "permission denied"/"access denied" are deliberately excluded

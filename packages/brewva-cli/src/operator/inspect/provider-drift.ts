@@ -16,6 +16,7 @@ export interface ProviderDriftLatest {
   readonly attemptedProvider: string | null;
   readonly attemptedModel: string | null;
   readonly credentialSlot: string | null;
+  readonly errorSummary: string | null;
   readonly requestedTransport: string | null;
   readonly actualTransport: string | null;
 }
@@ -54,6 +55,7 @@ export function buildProviderDriftProjection(
       attemptedProvider: readString(payload.attemptedProvider),
       attemptedModel: readString(payload.attemptedModel),
       credentialSlot: readString(payload.credentialSlot),
+      errorSummary: readString(payload.errorSummary),
       requestedTransport: readString(payload.requestedTransport),
       actualTransport: readString(payload.actualTransport),
     },

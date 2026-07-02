@@ -110,6 +110,54 @@ describe("ShellSessionHandler model availability wiring", () => {
     expect(memory.getUnavailableReason(MODEL.provider, MODEL.id)).toBe(undefined);
   });
 
+  test("marks every access-rejected route of a fallback-exhausted failure, not just the submitted model", async () => {
+    const memory = createModelAvailabilityMemory();
+    const handler = makeHandler({
+      memory,
+      outcome: {
+        kind: "failure",
+        error: Object.assign(
+          new Error("The 'gpt-5.5-pro' model is not supported when using Codex."),
+          {
+            retryable: false,
+            attempts: [
+              {
+                provider: "openai-codex",
+                model: "gpt-5.5-pro",
+                message: "The 'gpt-5.5-pro' model is not supported when using Codex.",
+                retryable: false,
+              },
+              {
+                provider: "openai-codex",
+                model: "gpt-5.1-codex-mini",
+                message: "The 'gpt-5.1-codex-mini' model is not supported when using Codex.",
+                retryable: false,
+              },
+              {
+                provider: "openai-codex",
+                model: "gpt-5.2",
+                message: "service unavailable",
+                retryable: true,
+              },
+            ],
+          },
+        ),
+      },
+    });
+
+    await handler.submitComposer();
+
+    // Per-attempt reasons carry the provider's own rejection text.
+    expect(memory.getUnavailableReason("openai-codex", "gpt-5.5-pro")).toBe(
+      "The 'gpt-5.5-pro' model is not supported when using Codex.",
+    );
+    expect(memory.getUnavailableReason("openai-codex", "gpt-5.1-codex-mini")).toBe(
+      "The 'gpt-5.1-codex-mini' model is not supported when using Codex.",
+    );
+    // A transient failure on the trail must not brand its model unavailable.
+    expect(memory.getUnavailableReason("openai-codex", "gpt-5.2")).toBe(undefined);
+  });
+
   test("a failed turn must not clear the submitted model's existing mark (failure is not success)", async () => {
     // Before the fix, a swallowed failure resolved and ran onPromptSuccess, which
     // CLEARED the mark of the model that had just failed — the worst outcome.

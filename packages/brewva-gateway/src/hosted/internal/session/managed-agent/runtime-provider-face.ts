@@ -44,6 +44,10 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
   readonly #onProviderAssistantMessage:
     | ((message: Extract<BrewvaAgentProtocolMessage, { role: "assistant" }>) => void)
     | undefined;
+  // Session-scoped, deliberately NOT persisted: an entitlement can change with a
+  // plan upgrade, so a fresh session re-verifies against the provider instead of
+  // trusting a stale local verdict. Keyed by `provider/modelId`.
+  readonly #unavailableProviderModels = new Map<string, string>();
 
   constructor(input: {
     settings: BrewvaManagedAgentSessionSettingsPort;
@@ -119,6 +123,18 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
       sessionId: this.#getSessionId(),
       payload: input,
     });
+  }
+
+  markProviderModelUnavailable(input: {
+    readonly provider: string;
+    readonly modelId: string;
+    readonly reason: string;
+  }): void {
+    this.#unavailableProviderModels.set(`${input.provider}/${input.modelId}`, input.reason);
+  }
+
+  getUnavailableProviderModels(): ReadonlyMap<string, string> {
+    return this.#unavailableProviderModels;
   }
 
   recordProviderFallbackSelection(input: {

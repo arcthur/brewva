@@ -292,6 +292,7 @@ export function appendProviderDriftSample(input: {
         ...(sample.selected?.credentialSlot
           ? { credentialSlot: sample.selected.credentialSlot }
           : {}),
+        ...(sample.errorSummary ? { errorSummary: sample.errorSummary } : {}),
         ...(sample.requestedTransport ? { requestedTransport: sample.requestedTransport } : {}),
         ...(sample.actualTransport ? { actualTransport: sample.actualTransport } : {}),
       },

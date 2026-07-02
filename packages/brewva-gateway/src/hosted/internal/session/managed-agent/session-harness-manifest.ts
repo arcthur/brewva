@@ -68,6 +68,7 @@ export function readProviderFallbackSelection(value: unknown): ProviderDriftSamp
     (attemptedProvider !== selectedProvider || attemptedModel !== selectedModel)
       ? { provider: attemptedProvider, model: attemptedModel }
       : undefined;
+  const errorSummary = readStringValue(record.errorSummary);
   return {
     source: "fallback_selection",
     provider: selectedProvider,
@@ -78,6 +79,7 @@ export function readProviderFallbackSelection(value: unknown): ProviderDriftSamp
       model: selectedModel,
       ...(credentialSlot ? { credentialSlot } : {}),
     },
+    ...(errorSummary ? { errorSummary } : {}),
   };
 }
 

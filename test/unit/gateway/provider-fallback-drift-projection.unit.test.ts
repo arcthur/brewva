@@ -50,6 +50,24 @@ describe("readProviderFallbackSelection", () => {
     });
   });
 
+  test("carries the failed attempt's error summary when the metadata has one", () => {
+    const sample = readProviderFallbackSelection({
+      active: true,
+      reason: "unknown",
+      errorSummary: "The 'gpt-5.5-pro' model is not supported when using Codex.",
+      attemptedRoute: { provider: "openai-codex", model: "gpt-5.5-pro" },
+      selectedRoute: { provider: "openai-codex", model: "gpt-5.5" },
+    });
+    expect(sample?.errorSummary).toBe("The 'gpt-5.5-pro' model is not supported when using Codex.");
+    const without = readProviderFallbackSelection({
+      active: true,
+      reason: "unknown",
+      attemptedRoute: { provider: "openai-codex", model: "gpt-5.5-pro" },
+      selectedRoute: { provider: "openai-codex", model: "gpt-5.5" },
+    });
+    expect(without?.errorSummary).toBe(undefined);
+  });
+
   test("a same-model credential rotation omits `attempted` and keeps the credential slot", () => {
     const sample = readProviderFallbackSelection({
       active: true,

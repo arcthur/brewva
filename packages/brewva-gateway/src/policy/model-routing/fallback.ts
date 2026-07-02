@@ -53,6 +53,11 @@ function compareCandidates(
 export function selectBrewvaFallbackModel(input: {
   currentModel: RegisteredModel;
   availableModels: readonly RegisteredModel[];
+  // `provider/id` keys the caller has already attempted or knows to be
+  // unavailable. Excluding them HERE (not after ranking) matters: taking the
+  // top-ranked candidate and then dropping it post-hoc reads as exhaustion even
+  // while viable lower-ranked candidates remain.
+  excludeModelKeys?: ReadonlySet<string>;
 }): RegisteredModel | undefined {
   const currentTokens = tokenizeModelId(input.currentModel.id);
   const currentStem = findAffinityStem(currentTokens);
@@ -62,7 +67,8 @@ export function selectBrewvaFallbackModel(input: {
     .filter(
       (candidate) =>
         candidate.provider === input.currentModel.provider &&
-        candidate.id !== input.currentModel.id,
+        candidate.id !== input.currentModel.id &&
+        input.excludeModelKeys?.has(`${candidate.provider}/${candidate.id}`) !== true,
     )
     .map((candidate) => {
       const candidateTokens = tokenizeModelId(candidate.id);

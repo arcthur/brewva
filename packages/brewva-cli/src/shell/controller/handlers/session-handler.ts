@@ -23,6 +23,8 @@ import type { CliShellPromptPart, CliShellPromptSnapshot } from "../../domain/pr
 import {
   describeProviderFailure,
   isProviderAccessFailure,
+  isProviderAccessFailureAttempt,
+  readProviderFailureAttempts,
 } from "../../domain/provider-failure-guidance.js";
 import type { CliShellAction, CliShellViewState } from "../../domain/state.js";
 import { buildTextTranscriptMessage } from "../../domain/transcript.js";
@@ -65,6 +67,17 @@ function parseLeadingSlashCommand(prompt: string): { name?: string } | undefined
   const match = /^\/(?<name>[^\s]*)/u.exec(trimmed);
   const name = match?.groups?.name;
   return name ? { name } : {};
+}
+
+// Availability badges render inline in the model picker; keep the provider's
+// rejection text but cap it so a verbose error body doesn't wreck the layout.
+const AVAILABILITY_REASON_MAX_CHARS = 120;
+
+function truncateAvailabilityReason(message: string): string {
+  const flattened = message.split("\n", 1)[0] ?? message;
+  return flattened.length > AVAILABILITY_REASON_MAX_CHARS
+    ? `${flattened.slice(0, AVAILABILITY_REASON_MAX_CHARS - 1)}…`
+    : flattened;
 }
 
 export interface ShellSessionHandlerContext {
@@ -392,6 +405,19 @@ export class ShellSessionHandler {
           submittedModel.id,
           "not available with your current credentials",
         );
+      }
+      // A fallback-exhausted failure carries the whole per-route trail. Every
+      // model the chain burned through on an access rejection gets its badge —
+      // otherwise only the surfaced model is remembered and the picker keeps
+      // offering routes the account already refused.
+      for (const attempt of readProviderFailureAttempts(error)) {
+        if (isProviderAccessFailureAttempt(attempt)) {
+          memory.markUnavailable(
+            attempt.provider,
+            attempt.model,
+            truncateAvailabilityReason(attempt.message),
+          );
+        }
       }
       this.context.getUi().notify(describeProviderFailure(error), "error");
     };

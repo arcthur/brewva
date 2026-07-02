@@ -102,6 +102,7 @@ export interface ContextEvidenceSample {
     readonly attemptedProvider?: string;
     readonly attemptedModel?: string;
     readonly credentialSlot?: string;
+    readonly errorSummary?: string;
     readonly requestedTransport?: string;
     readonly actualTransport?: string;
   };
@@ -126,6 +127,10 @@ export interface ProviderDriftSample {
     readonly model: string;
     readonly credentialSlot?: string;
   };
+  // Truncated message of the failure that triggered the drift. `reason` is the
+  // coarse classification; without the text, a sample reading `unknown` leaves
+  // the tape unable to answer WHY the route was abandoned.
+  readonly errorSummary?: string;
   readonly requestedTransport?: string;
   readonly actualTransport?: string;
 }

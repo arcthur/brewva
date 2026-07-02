@@ -67,6 +67,21 @@ export interface RuntimeProviderFace {
     readonly providerFallback: Record<string, JsonValue>;
     readonly turnId?: string;
   }): void;
+  /**
+   * Session-scoped memory of provider-classified PERMANENT model rejections
+   * (`retryable: false` — entitlement, revoked credential). The recovery loop
+   * marks a route once its failure is final for the turn and consults the set
+   * when picking fallback candidates, so one session stops re-dialing models
+   * the account cannot use. Optional: hosts without the memory keep the
+   * dial-every-time behavior.
+   */
+  markProviderModelUnavailable?(input: {
+    readonly provider: string;
+    readonly modelId: string;
+    readonly reason: string;
+  }): void;
+  /** Keyed by `provider/modelId`; value is the recorded rejection reason. */
+  getUnavailableProviderModels?(): ReadonlyMap<string, string>;
   getVerificationGateManifests(): readonly VerificationGateManifest[];
   getVerificationGateEvidence(sessionId: string): readonly VerificationGateEvidence[];
   getVerificationGateNow?(): number;

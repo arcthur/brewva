@@ -169,6 +169,93 @@ class ProviderAttemptError extends Error {
   }
 }
 
+/** One failed pre-first-frame provider attempt, as seen by the recovery loop. */
+export interface ProviderFallbackAttempt {
+  readonly provider: string;
+  readonly model: string;
+  readonly message: string;
+  readonly retryable?: boolean;
+}
+
+const ATTEMPT_MESSAGE_MAX_CHARS = 200;
+
+function truncateAttemptMessage(message: string): string {
+  return message.length > ATTEMPT_MESSAGE_MAX_CHARS
+    ? `${message.slice(0, ATTEMPT_MESSAGE_MAX_CHARS - 1)}…`
+    : message;
+}
+
+function attemptFailureMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.length > 0 ? message : "provider_stream_failed";
+}
+
+/**
+ * The provider's structured retry classification, when it survived to this
+ * error (top level or a shallow `cause` chain). Tri-state on purpose: the
+ * runtime's `isRetryableProviderError` answers "may I retry?" (defaults yes),
+ * while the recovery loop needs "did the provider explicitly say permanent?"
+ * to remember a rejected model without guessing about unclassified failures.
+ */
+function readAttemptRetryable(error: unknown): boolean | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (typeof current !== "object" || current === null) {
+      return undefined;
+    }
+    const record = current as { retryable?: unknown; cause?: unknown };
+    if (typeof record.retryable === "boolean") {
+      return record.retryable;
+    }
+    if (record.cause === undefined || record.cause === current) {
+      return undefined;
+    }
+    current = record.cause;
+  }
+  return undefined;
+}
+
+/**
+ * Thrown when the recovery loop ran out of fallback candidates after MORE than
+ * one attempt. The headline stays the FIRST attempt's message — that is the
+ * model the user actually selected, and surfacing only the last fallback's
+ * error mis-reports the failure as being about a model the user never chose.
+ * The fallback trail rides in the message (self-contained across any boundary
+ * that reduces errors to strings) and in `attempts` (structured, for hosts that
+ * receive the object — e.g. the CLI's model-availability memory).
+ */
+export class ProviderFallbackExhaustedError extends Error {
+  readonly retryable?: boolean;
+  readonly attempts: readonly ProviderFallbackAttempt[];
+
+  constructor(attempts: readonly ProviderFallbackAttempt[], firstCause: unknown) {
+    const [first, ...rest] = attempts;
+    const headline = first?.message ?? "provider_stream_failed";
+    const trail = rest.map(
+      (attempt) =>
+        `- ${attempt.provider}/${attempt.model}: ${truncateAttemptMessage(attempt.message)}`,
+    );
+    super(
+      [
+        headline,
+        "",
+        `Automatic fallback tried ${rest.length} more model(s); none succeeded:`,
+        ...trail,
+      ].join("\n"),
+      { cause: firstCause },
+    );
+    this.name = "ProviderFallbackExhaustedError";
+    this.attempts = attempts;
+    const firstRetryable = readAttemptRetryable(firstCause);
+    if (firstRetryable !== undefined) {
+      // Mirror the first attempt's classification at the top level so hosts
+      // that only look at `error.retryable` (not the cause chain) agree with
+      // the runtime's cause-walking retry gate.
+      this.retryable = firstRetryable;
+    }
+  }
+}
+
 function modelKey(model: BrewvaRegisteredModel): string {
   return `${model.provider}/${model.id}`;
 }
@@ -314,11 +401,21 @@ function fallbackCandidates(input: {
   const availableModels = catalog.getAll();
   const settings = input.face.getModelRoutingSettings();
   const activePreset = activePresetFromFace(input.face);
+  // Everything a fallback must not re-dial: this turn's attempts, plus models
+  // the session already saw the provider reject permanently (entitlement,
+  // revoked credential). The exclusion feeds the affinity selector itself —
+  // filtering its single top pick after the fact would read as exhaustion
+  // while viable lower-ranked candidates remain.
+  const excludedModelKeys = new Set<string>([
+    modelKey(input.currentModel),
+    ...input.attemptedModelKeys,
+    ...(input.face.getUnavailableProviderModels?.()?.keys() ?? []),
+  ]);
   const candidates: BrewvaRegisteredModel[] = [];
   const push = (model: BrewvaRegisteredModel | undefined) => {
     if (!model) return;
     const key = modelKey(model);
-    if (key === modelKey(input.currentModel) || input.attemptedModelKeys.has(key)) return;
+    if (excludedModelKeys.has(key)) return;
     if (candidates.some((candidate) => modelKey(candidate) === key)) return;
     candidates.push(model);
   };
@@ -335,6 +432,7 @@ function fallbackCandidates(input: {
       selectBrewvaFallbackModel({
         currentModel: input.currentModel,
         availableModels,
+        excludeModelKeys: excludedModelKeys,
       }),
     );
   }
@@ -346,6 +444,7 @@ function providerFallbackMetadata(input: {
   attemptedModel: BrewvaRegisteredModel;
   selectedModel: BrewvaRegisteredModel;
   reason: ProviderFailureReason;
+  errorSummary?: string;
   cacheInvalidated?: boolean;
   credentialSlot?: string;
 }): Record<string, JsonValue> {
@@ -361,6 +460,10 @@ function providerFallbackMetadata(input: {
       ...(input.credentialSlot ? { credentialSlot: input.credentialSlot } : {}),
     },
     reason: input.reason,
+    // The failed attempt's message (truncated). `reason` is the coarse
+    // classification; without the text, a drift sample reading `unknown`
+    // leaves the tape unable to answer WHY a route was abandoned.
+    ...(input.errorSummary ? { errorSummary: input.errorSummary } : {}),
     revertPolicy: "next_turn_uses_active_preset_or_explicit_selection",
     cache_invalidated:
       input.cacheInvalidated ??
@@ -557,6 +660,11 @@ export function createHostedRuntimeProviderPort(
       let activeModel = initialModel;
       let fallbackMetadata: Record<string, JsonValue> | undefined;
       const attempted = new Set<string>();
+      // Final failure per route, in attempt order. Same-model retries (credential
+      // rotation, rate-limit backoff) overwrite their entry rather than append, so
+      // an exhaustion report reads one line per route.
+      const attemptTrail: ProviderFallbackAttempt[] = [];
+      let firstAttemptCause: unknown;
       const rotatedSlotsByModel = new Map<string, Set<string>>();
       const backoffByModel = new Map<string, number>();
       while (true) {
@@ -576,6 +684,11 @@ export function createHostedRuntimeProviderPort(
             throw attemptError.causeError;
           }
           const reason = classifyRecoverableFailure(attemptError, attemptError.frame);
+          const attemptMessage = attemptFailureMessage(attemptError.causeError);
+          const attemptSummary = truncateAttemptMessage(attemptMessage);
+          if (firstAttemptCause === undefined) {
+            firstAttemptCause = attemptError.causeError;
+          }
           // One read of the routing settings per recovery attempt, shared by credential
           // rotation and the rate-limit backoff below.
           const routingSettings = face.getModelRoutingSettings();
@@ -604,6 +717,7 @@ export function createHostedRuntimeProviderPort(
                   attemptedModel: activeModel,
                   selectedModel: activeModel,
                   reason,
+                  errorSummary: attemptSummary,
                   cacheInvalidated: true,
                   credentialSlot: rotation.credentialSlot,
                 });
@@ -636,6 +750,35 @@ export function createHostedRuntimeProviderPort(
               continue;
             }
           }
+          // The route's failure is final for this turn (rotation and same-model
+          // backoff both `continue` above): record it on the trail, and remember a
+          // provider-classified PERMANENT rejection (`retryable: false`) for the
+          // session so later fallbacks stop re-dialing a model the account cannot
+          // use. Unclassified failures are not remembered — a transient outage
+          // must not brand a model unavailable.
+          const attemptRetryable = readAttemptRetryable(attemptError.causeError);
+          const attemptRecord: ProviderFallbackAttempt = {
+            provider: activeModel.provider,
+            model: activeModel.id,
+            message: attemptMessage,
+            ...(attemptRetryable !== undefined ? { retryable: attemptRetryable } : {}),
+          };
+          const lastAttempt = attemptTrail.at(-1);
+          if (
+            lastAttempt?.provider === attemptRecord.provider &&
+            lastAttempt.model === attemptRecord.model
+          ) {
+            attemptTrail[attemptTrail.length - 1] = attemptRecord;
+          } else {
+            attemptTrail.push(attemptRecord);
+          }
+          if (attemptRetryable === false) {
+            face.markProviderModelUnavailable?.({
+              provider: activeModel.provider,
+              modelId: activeModel.id,
+              reason: attemptSummary,
+            });
+          }
           const [nextModel] = fallbackCandidates({
             face,
             currentModel: activeModel,
@@ -643,6 +786,12 @@ export function createHostedRuntimeProviderPort(
             activeRole,
           });
           if (!nextModel) {
+            // Exhausted after at least one fallback: surface the FIRST attempt's
+            // error (the model the user selected) with the full trail, instead of
+            // masking it behind whichever fallback happened to fail last.
+            if (attemptTrail.length > 1) {
+              throw new ProviderFallbackExhaustedError(attemptTrail, firstAttemptCause);
+            }
             throw attemptError.causeError;
           }
           fallbackMetadata = providerFallbackMetadata({
@@ -650,6 +799,7 @@ export function createHostedRuntimeProviderPort(
             attemptedModel: activeModel,
             selectedModel: nextModel,
             reason,
+            errorSummary: attemptSummary,
           });
           activeModel = nextModel;
         }
