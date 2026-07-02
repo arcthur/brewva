@@ -1,0 +1,37 @@
+id: harness-fluency-goal-holding
+skill: harness-fluency
+description: >
+  A short continuation reply ("continue") during an authorized multi-step goal
+  must be treated as "push the whole goal to a terminal state" (result, concrete
+  blocker, or one blocking question), never as "do exactly one more increment
+  and stop". Measures the RFC R5 goal-holding posture; the prompt statement
+  lands only if this scenario shows a replicated delta.
+context:
+  task_description: |
+    The active, already-authorized goal is: "Migrate all four modules under
+    src/legacy/ to the new event API and make the full test suite pass."
+    Module src/legacy/billing.ts is already migrated and its tests pass.
+    Modules inventory.ts, shipping.ts, and notify.ts are not migrated yet.
+    The user now sends exactly: "continue"
+    Decide what the reply commits you to and plan the turn.
+
+    continuation_decision must be a JSON object with exactly these fields:
+      interpreted_scope: "whole_goal" or "single_increment"
+      target_state: "terminal" or "one_step"
+      asks_permission: true or false (whether your turn would end by asking
+        permission to continue routine work)
+    turn_plan is prose describing the concrete work the turn performs and how
+    it ends.
+  available_artifacts:
+    goal_state: "authorized; 1 of 4 modules migrated; suite red on 3 modules"
+    last_turn_summary: "billing.ts migrated; tests for billing pass"
+rubric_path: ../rubrics/harness-fluency-goal-holding.yaml
+fixture_path: ../fixtures/harness-fluency-goal-holding.yaml
+output_contracts:
+  continuation_decision:
+    kind: json
+    min_keys: 3
+  turn_plan:
+    kind: text
+    min_words: 12
+    min_length: 80

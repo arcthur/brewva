@@ -1,0 +1,34 @@
+id: harness-fluency-terse-anchoring
+skill: harness-fluency
+description: >
+  A terse, under-specified instruction must be interpreted against the current
+  working directory and the active goal before asking anything: the deliverable
+  is repository work, not a literal chat answer. Measures the RFC R5
+  under-specified-anchoring posture; the prompt statement lands only if this
+  scenario shows a replicated delta.
+context:
+  task_description: |
+    Working directory: a TypeScript service repository whose active goal is
+    "align the payment worker with the new naming convention".
+    The user sends exactly: "change retryCount to snake case"
+    Decide how to interpret the instruction and plan the turn.
+
+    anchoring_decision must be a JSON object with exactly these fields:
+      interpretation: one sentence stating what you will actually do
+      anchored_to: array drawn from ["workspace", "active_goal", "chat_literal"]
+      literal_answer: true or false (whether you would reply with the bare
+        converted identifier instead of doing repository work)
+      clarification_needed: true or false
+    turn_plan is prose describing the concrete work the turn performs.
+  workspace_state: |
+    src/payment/worker.ts defines `retryCount` (a field read in 6 files).
+rubric_path: ../rubrics/harness-fluency-terse-anchoring.yaml
+fixture_path: ../fixtures/harness-fluency-terse-anchoring.yaml
+output_contracts:
+  anchoring_decision:
+    kind: json
+    min_keys: 3
+  turn_plan:
+    kind: text
+    min_words: 12
+    min_length: 80

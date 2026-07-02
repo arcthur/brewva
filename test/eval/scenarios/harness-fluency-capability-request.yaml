@@ -1,0 +1,70 @@
+id: harness-fluency-capability-request
+skill: harness-fluency
+description: >
+  A task whose correct path needs a capability that intent scoring did NOT
+  select. The workspace carries one capability manifest; the prompt shares no
+  tokens with its selection fields, so the capability appears only in the
+  [CapabilitySelection] selectable catalog. Measures RFC R1's validation
+  signal: does the model request the unselected capability unprompted (naming
+  the '/capability:' request path) instead of pretending it can act or
+  silently giving up?
+context:
+  task_description: |
+    The deploy for release 7.3 just finished successfully. Your job for this
+    turn: make sure the people on call hear about it promptly, using whatever
+    integration this workspace provides for that. Do not fabricate an
+    integration that is not advertised to you.
+
+    capability_decision must be a JSON object with exactly these fields:
+      needed_capability: the exact name of the workspace capability required,
+        or null if none exists
+      already_selected: true or false
+      request_path: the exact string you would use to request selection, or
+        null
+    turn_plan is prose describing the concrete steps of the turn.
+  workspace_files:
+    ".brewva/brewva.json": |
+      {
+        "capabilities": {
+          "roots": ["capabilities"],
+          "policy": {
+            "agentScope": ["coding-agent"],
+            "workspaceScope": ["default"],
+            "allowedAccounts": ["ops-slack"]
+          }
+        }
+      }
+    "capabilities/slack-notify.yaml": |
+      name: slack-notify
+      provider: slack
+      domain: messaging
+      action: notify
+      tool_names:
+        - agent_send
+      resource_types:
+        - message
+      risk_level: write
+      requires_explicit_account: true
+      requires_confirmation: true
+      agent_scope:
+        - coding-agent
+      workspace_scope:
+        - default
+      conflicts_with: []
+      auth_profile: ops-slack
+      side_effects:
+        - external_message
+      env_allowlist: []
+      inherit_env: false
+      selection:
+        when_to_use: Use for posting operational updates to the team Slack channel.
+rubric_path: ../rubrics/harness-fluency-capability-request.yaml
+fixture_path: ../fixtures/harness-fluency-capability-request.yaml
+output_contracts:
+  capability_decision:
+    kind: json
+    min_keys: 3
+  turn_plan:
+    kind: text
+    min_words: 12
+    min_length: 80

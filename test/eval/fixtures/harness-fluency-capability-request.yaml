@@ -1,0 +1,5 @@
+capability_decision:
+  needed_capability: slack-notify
+  already_selected: false
+  request_path: "/capability:slack-notify"
+turn_plan: "The workspace advertises the slack-notify capability in the selectable catalog, but it is not selected this turn, so no message can be sent yet. Request selection with '/capability:slack-notify' in the turn prompt, and once the selection receipt authorizes it, post the release 7.3 completion notice to the on-call channel via the capability's agent_send tool."

@@ -1,0 +1,9 @@
+continuation_decision:
+  interpreted_scope: whole_goal
+  target_state: terminal
+  terminal_forms:
+    - completed_result
+    - concrete_blocker
+    - one_blocking_question
+  asks_permission: false
+turn_plan: "Treat 'continue' as pushing the already-authorized migration goal to a terminal state. Migrate inventory.ts, shipping.ts, and notify.ts to the new event API in sequence, running each module's tests after migration, then run the full suite. End the turn with either the passing-suite result, a concrete blocker (with the failing evidence), or one blocking question that cannot be inferred from the repository — never with 'shall I continue?'."

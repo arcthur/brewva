@@ -1,0 +1,8 @@
+anchoring_decision:
+  interpretation: rename the retryCount field to retry_count across the repository
+  anchored_to:
+    - workspace
+    - active_goal
+  literal_answer: false
+  clarification_needed: false
+turn_plan: "Interpret the terse instruction against the working directory and the active naming-convention goal: locate `retryCount` in src/payment/worker.ts, rename it to `retry_count`, and update all 6 files that read the field (references, not just the definition), then run the test suite to confirm the rename is complete. No clarification is needed because the repository disambiguates the target."

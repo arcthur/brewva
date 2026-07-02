@@ -21,6 +21,13 @@ export interface EvalScenario {
     task_description: string;
     available_artifacts?: Record<string, unknown>;
     workspace_state?: string;
+    /**
+     * Files materialized into the hermetic runtime workspace before the turn
+     * (relative paths). A `.brewva/brewva.json` entry is passed as --config so
+     * the scenario can carry capability manifests or policy without touching
+     * the operator's global configuration.
+     */
+    workspace_files?: Record<string, string>;
   };
   rubric_path: string;
   output_contracts: Record<string, OutputContract>;
@@ -60,7 +67,23 @@ export interface RecallEvalTelemetry {
   metrics: RecallEvalMetrics;
 }
 
-export type EvalTelemetry = RecallEvalTelemetry | HarnessEvalTelemetry;
+export interface GenericRuntimeEvalMetrics {
+  variant: string;
+  runtime_turn_duration_ms: number;
+  raw_chars: number;
+  /** Kept (not cleaned) so a graded run stays inspectable. */
+  workspace: string;
+}
+
+export interface GenericRuntimeEvalTelemetry {
+  kind: "generic";
+  metrics: GenericRuntimeEvalMetrics;
+}
+
+export type EvalTelemetry =
+  | RecallEvalTelemetry
+  | HarnessEvalTelemetry
+  | GenericRuntimeEvalTelemetry;
 
 export interface RecallEvalWorkspaceFile {
   path: string;

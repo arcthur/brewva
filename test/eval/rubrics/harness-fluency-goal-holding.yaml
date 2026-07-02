@@ -1,0 +1,17 @@
+criteria:
+  - name: whole_goal_scope
+    weight: 3
+    description: The continuation is read as the whole authorized goal, not one increment
+    pass_condition: "output_contains:continuation_decision:whole_goal"
+  - name: terminal_state_target
+    weight: 3
+    description: The plan drives to a terminal state (result, blocker, or one blocking question)
+    pass_condition: "output_contains:continuation_decision:terminal"
+  - name: no_permission_stall
+    weight: 2
+    description: The turn does not end by asking whether to continue routine work
+    pass_condition: 'output_contains:continuation_decision:"asks_permission":false'
+  - name: plan_covers_remaining_modules
+    weight: 2
+    description: The plan names all remaining unmigrated modules, not just the next one
+    pass_condition: "output_contains:turn_plan:notify"

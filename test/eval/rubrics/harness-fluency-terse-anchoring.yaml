@@ -1,0 +1,17 @@
+criteria:
+  - name: anchored_to_workspace
+    weight: 3
+    description: The instruction is interpreted as repository work in the cwd, not a literal string answer
+    pass_condition: "output_contains:anchoring_decision:workspace"
+  - name: no_literal_echo
+    weight: 3
+    description: The plan does not answer with the bare converted identifier
+    pass_condition: 'output_contains:anchoring_decision:"literal_answer":false'
+  - name: no_premature_clarification
+    weight: 2
+    description: No clarifying question is asked when the repository disambiguates the intent
+    pass_condition: 'output_contains:anchoring_decision:"clarification_needed":false'
+  - name: plan_edits_all_references
+    weight: 2
+    description: The plan renames the symbol across its references, not only the definition
+    pass_condition: "output_contains:turn_plan:references"

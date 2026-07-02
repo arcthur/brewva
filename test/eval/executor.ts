@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { compareHarnessCandidate } from "@brewva/brewva-gateway/harness";
 import { parse } from "yaml";
+import { executeGenericRuntimeScenario } from "./generic-runtime.js";
 import { gradeRubric } from "./graders/rubric-grader.js";
 import { gradeShape } from "./graders/shape-grader.js";
 import { executeRecallRuntimeScenario } from "./recall-runtime.js";
@@ -22,7 +23,8 @@ import type {
  *
  * Implementations:
  * - FixtureExecutor: validates graders against curated fixture outputs
- * - RuntimeExecutor: reserved for real skill execution and fails closed until wired
+ * - RuntimeExecutor: real execution — recall datasets, harness comparisons, and
+ *   generic scenarios (one real `brewva --print` turn each, see generic-runtime.ts)
  */
 export interface SkillExecutor {
   execute(scenario: EvalScenario): Promise<SkillExecutionResult>;
@@ -74,17 +76,23 @@ export class FixtureExecutor implements SkillExecutor {
 }
 
 /**
- * RuntimeExecutor is intentionally fail-closed until real runtime execution is wired.
- *
- * Historical note: the prior implementation silently fell back to curated fixture
- * outputs even in runtime mode, which invalidated executor/grader separation.
- * This executor now throws until a real runtime session can be created and the
- * skill outputs can be collected without exposing expected answers.
+ * RuntimeExecutor never touches fixtures (historical note: a prior
+ * implementation silently fell back to curated fixture outputs in runtime
+ * mode, which invalidated executor/grader separation). Generic scenarios run
+ * one real `brewva --print` turn per execution; outputs are parsed from the
+ * model's named fenced blocks only.
  */
+export interface RuntimeExecutorOptions {
+  /** Prompt-variant text for generic scenarios (temp-workspace AGENTS.md); null = baseline. */
+  readonly variantText?: string | null;
+  readonly variantName?: string;
+}
+
 export class RuntimeExecutor implements SkillExecutor {
   constructor(
     private readonly model: string,
     private readonly workspaceRoot: string,
+    private readonly options: RuntimeExecutorOptions = {},
   ) {}
 
   async execute(scenario: EvalScenario): Promise<SkillExecutionResult> {
@@ -121,11 +129,15 @@ export class RuntimeExecutor implements SkillExecutor {
         },
       };
     }
-    throw new Error(
-      `Runtime evaluation is not wired for scenario ${scenario.id} (model=${this.model}). ` +
-        `Refusing to fall back to fixture outputs because that would contaminate grading. ` +
-        `Use --mode fixture only for grader or contract development.`,
-    );
+    // Generic scenarios run one real `brewva --print` turn per execution in a
+    // hermetic temp workspace; outputs are parsed from named fenced blocks and
+    // never sourced from fixtures (which stay grader-side only).
+    return executeGenericRuntimeScenario({
+      scenario,
+      model: this.model,
+      variantText: this.options.variantText ?? null,
+      variantName: this.options.variantName ?? "baseline",
+    });
   }
 }
 
