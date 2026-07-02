@@ -1,6 +1,11 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+
+// Cases here do real end-to-end work (subprocess spawns, source-tree scans, embedded
+// runtimes) that can exceed bun's 5s default test timeout under machine load (bare
+// `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 // DuckDB was the session-index engine before SQLite + FTS5 (see
 // docs/research/decisions/session-index-read-model-engine.md). It may remain as

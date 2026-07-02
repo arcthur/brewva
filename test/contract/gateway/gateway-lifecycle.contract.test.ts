@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { connectGatewayClient, readGatewayToken } from "@brewva/brewva-gateway";
 import { requireNonEmptyString } from "../../helpers/assertions.js";
 import {
@@ -9,6 +9,10 @@ import {
   waitForSocketClose,
   withTimeout,
 } from "./gateway-raw.helpers.js";
+
+// Cases here run real subprocesses, which can exceed bun's 5s default test timeout
+// under machine load (bare `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 describe("gateway daemon lifecycle", () => {
   test("handles concurrent requests on a single websocket client", async () => {

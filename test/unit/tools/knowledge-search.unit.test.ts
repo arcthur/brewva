@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { findKnowledgeDocByRelativePath } from "@brewva/brewva-recall/knowledge";
@@ -6,6 +6,11 @@ import { createKnowledgeSearchTool } from "@brewva/brewva-tools/memory";
 import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+// Cases here do real end-to-end work (subprocess spawns, source-tree scans, embedded
+// runtimes) that can exceed bun's 5s default test timeout under machine load (bare
+// `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 function extractText(result: { content: Array<{ type: string; text?: string }> }): string {
   return (

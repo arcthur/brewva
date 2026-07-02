@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
@@ -19,6 +19,10 @@ import {
   waitForNoRawFrame,
   waitForRawFrame,
 } from "./gateway-raw.helpers.js";
+
+// Cases here run real subprocesses, which can exceed bun's 5s default test timeout
+// under machine load (bare `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 function makeContextStatus(overrides: Partial<ContextStatusView> = {}): ContextStatusView {
   return {

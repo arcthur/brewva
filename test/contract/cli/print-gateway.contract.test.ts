@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { assertCliSuccess, runCli } from "../../helpers/cli.js";
 import { writeMinimalConfig } from "../../helpers/config.js";
 import { parseEventFile, requireLatestCanonicalTapeFile } from "../../helpers/events.js";
@@ -7,6 +7,11 @@ import {
   startGatewayDaemonHarness,
 } from "../../helpers/gateway.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
+
+// Cases here do real end-to-end work (subprocess spawns, source-tree scans, embedded
+// runtimes) that can exceed bun's 5s default test timeout under machine load (bare
+// `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 describe("cli contract: gateway-backed print mode", () => {
   test(

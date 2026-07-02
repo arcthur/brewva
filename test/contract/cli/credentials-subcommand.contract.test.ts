@@ -1,8 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCliSync } from "../../helpers/cli.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
+
+// Cases here do real end-to-end work (subprocess spawns, source-tree scans, embedded
+// runtimes) that can exceed bun's 5s default test timeout under machine load (bare
+// `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 function parseJsonLine(stdout: string): Record<string, unknown> {
   return JSON.parse(
@@ -64,7 +69,7 @@ describe("credentials subcommand", () => {
       ok: true,
       removed: true,
     });
-  }, 15_000);
+  });
 
   test("discovers ambient credentials without importing them", () => {
     const workspace = createTestWorkspace("cli-credentials-discover");
@@ -89,7 +94,7 @@ describe("credentials subcommand", () => {
       ]),
     );
     expect(existsSync(join(workspace, ".brewva/credentials.vault"))).toBe(false);
-  }, 15_000);
+  });
 
   test("accepts root-level flags before the credentials subcommand", () => {
     const workspace = createTestWorkspace("cli-credentials-root-flags");
@@ -119,5 +124,5 @@ describe("credentials subcommand", () => {
       ok: true,
       ref: "vault://github/token",
     });
-  }, 15_000);
+  });
 });

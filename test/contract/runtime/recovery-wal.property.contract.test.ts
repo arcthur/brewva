@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test";
+import { describe, expect, setDefaultTimeout } from "bun:test";
 import { appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createRecoveryWalRecovery, createRecoveryWalStore } from "@brewva/brewva-gateway/daemon";
@@ -8,6 +8,11 @@ import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 import fc from "fast-check";
 import { propertyTest } from "../../helpers/property.js";
 import { cleanupWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
+
+// Cases here do real end-to-end work (subprocess spawns, source-tree scans, embedded
+// runtimes) that can exceed bun's 5s default test timeout under machine load (bare
+// `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 type WalTransition = "none" | "inflight" | "done" | "failed" | "expired";
 

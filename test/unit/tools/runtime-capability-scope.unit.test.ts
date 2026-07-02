@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
@@ -14,6 +14,11 @@ import {
   collectCapabilityPaths,
   collectWorkspaceSourcePathMappings,
 } from "../../../script/generate-tool-runtime-capability-inventory.js";
+
+// Cases here do real end-to-end work (subprocess spawns, source-tree scans, embedded
+// runtimes) that can exceed bun's 5s default test timeout under machine load (bare
+// `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 const repoRoot = resolve(import.meta.dir, "../../..");
 
@@ -278,26 +283,22 @@ describe("tool runtime capability scope", () => {
     );
   });
 
-  test(
-    "generator resolves workspace package imports through source exports instead of dist declarations",
-    () => {
-      const sourceMappings = collectWorkspaceSourcePathMappings();
-      const mappedTargets = Object.values(sourceMappings).flat();
+  test("generator resolves workspace package imports through source exports instead of dist declarations", () => {
+    const sourceMappings = collectWorkspaceSourcePathMappings();
+    const mappedTargets = Object.values(sourceMappings).flat();
 
-      expect(sourceMappings["@brewva/brewva-runtime"]).toEqual([
-        "packages/brewva-runtime/src/index.ts",
-      ]);
-      expect(
-        Object.keys(sourceMappings).includes("@brewva/brewva-runtime/runtime-extensions"),
-      ).toBe(false);
-      expect(sourceMappings["@brewva/brewva-substrate/tools"]).toEqual([
-        "packages/brewva-substrate/src/tools/index.ts",
-      ]);
-      expect(mappedTargets.filter((target) => target.includes("/dist/"))).toEqual([]);
-      expect(collectCapabilityPaths()).toEqual([...BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS]);
-    },
-    { timeout: 15_000 },
-  );
+    expect(sourceMappings["@brewva/brewva-runtime"]).toEqual([
+      "packages/brewva-runtime/src/index.ts",
+    ]);
+    expect(Object.keys(sourceMappings).includes("@brewva/brewva-runtime/runtime-extensions")).toBe(
+      false,
+    );
+    expect(sourceMappings["@brewva/brewva-substrate/tools"]).toEqual([
+      "packages/brewva-substrate/src/tools/index.ts",
+    ]);
+    expect(mappedTargets.filter((target) => target.includes("/dist/"))).toEqual([]);
+    expect(collectCapabilityPaths()).toEqual([...BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS]);
+  });
 
   test("static inventory covers every registry-declared capability and excludes operator paths", () => {
     const inventory = new Set(BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS);

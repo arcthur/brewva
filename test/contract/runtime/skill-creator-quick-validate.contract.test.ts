@@ -1,8 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
+// Cases here run real subprocesses, which can exceed bun's 5s default test timeout
+// under machine load (bare `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 function runQuickValidate(input: {
   scriptPath: string;

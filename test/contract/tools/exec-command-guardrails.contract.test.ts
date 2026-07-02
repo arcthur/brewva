@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createExecTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireNonEmptyString, requireRecord } from "../../helpers/assertions.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
@@ -7,6 +7,10 @@ import {
   extractTextContent,
   fakeContext,
 } from "./tools-exec-process.helpers.js";
+
+// Cases here run real subprocesses, which can exceed bun's 5s default test timeout
+// under machine load (bare `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 describe("exec command guardrails", () => {
   test("command deny list blocks before execution", async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -15,6 +15,11 @@ import { buildGatewayWorkerHarnessEnv, startGatewayDaemonHarness } from "../../h
 import { sleep, withTimeout } from "../../helpers/process.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { cleanupWorkspace, createWorkspace, repoRoot } from "../../helpers/workspace.js";
+
+// Cases here do real end-to-end work (subprocess spawns, source-tree scans, embedded
+// runtimes) that can exceed bun's 5s default test timeout under machine load (bare
+// `bun test`; package scripts pass --timeout 600000).
+setDefaultTimeout(60_000);
 
 interface DaemonProcess {
   child: ChildProcess;
