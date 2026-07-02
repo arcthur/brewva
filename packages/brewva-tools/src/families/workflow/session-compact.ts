@@ -1,4 +1,8 @@
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
+import {
+  SESSION_COMPACT_FAILED_EVENT_TYPE,
+  SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/session";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
@@ -55,7 +59,7 @@ export function createWorkbenchCompactTool(options: BrewvaBundledToolOptions): T
             compactError = normalizeErrorMessage(error);
             recordToolRuntimeEvent(workbenchCompactTool.runtime, {
               sessionId,
-              type: "session_compact_failed",
+              type: SESSION_COMPACT_FAILED_EVENT_TYPE,
               payload: {
                 reason: reason ?? null,
                 error: compactError,
@@ -82,7 +86,7 @@ export function createWorkbenchCompactTool(options: BrewvaBundledToolOptions): T
         const errorMessage = normalizeErrorMessage(error);
         recordToolRuntimeEvent(workbenchCompactTool.runtime, {
           sessionId,
-          type: "session_compact_request_failed",
+          type: SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE,
           payload: {
             reason: reason ?? null,
             error: errorMessage,

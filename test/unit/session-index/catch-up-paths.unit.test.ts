@@ -10,7 +10,7 @@ import type {
   SessionIndexTaskSource,
 } from "@brewva/brewva-session-index";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
-import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { TASK_SPEC_SET_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 
 // These tests cover the three catch-up / indexSession branches that the
 // query-contract guard does not exercise, all engine-transparently through the
@@ -48,7 +48,7 @@ function taskGoalEvent(
   return record({
     id: eventId,
     sessionId,
-    type: TASK_EVENT_TYPE,
+    type: TASK_SPEC_SET_EVENT_TYPE,
     timestamp,
     payload: { spec: { goal, targets: { files: [] } } },
   });

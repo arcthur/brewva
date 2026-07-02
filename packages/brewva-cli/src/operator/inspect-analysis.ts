@@ -8,7 +8,7 @@ import {
 } from "@brewva/brewva-runtime/config";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { isRecord } from "@brewva/brewva-std/unknown";
-import { CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
+import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   BOX_BOOTSTRAP_FAILED_EVENT_TYPE,
@@ -21,7 +21,7 @@ import {
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
 import type { TapeLedgerRow } from "@brewva/brewva-vocabulary/session";
-import { FILE_SNAPSHOT_CAPTURED_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
+import { SOURCE_PATCH_APPLIED_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
 import {
   collectPersistedPatchPaths,
   listPersistedPatchSets,
@@ -37,10 +37,22 @@ const OPS_INSIGHT_EVENT_TYPES = new Set<string>([
   BOX_EXEC_FAILED_EVENT_TYPE,
   EXEC_FAILED_EVENT_TYPE,
 ]);
-const RUNTIME_PRESSURE_EVENT_TYPES = new Set<string>([
-  CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE,
-  PARALLEL_SLOT_REJECTED_EVENT_TYPE,
-]);
+const RUNTIME_PRESSURE_EVENT_TYPES = new Set<string>([PARALLEL_SLOT_REJECTED_EVENT_TYPE]);
+
+// Compaction-gate blocks land as tool.invocation.started with allowed:false
+// (there is no dedicated blocked_tool event; the contract-liveness audit
+// retired that dead type).
+function isCompactionGateBlockedInvocation(event: BrewvaEventRecord): boolean {
+  if (event.type !== RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND) {
+    return false;
+  }
+  const payload = event.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return false;
+  }
+  const record = payload as Record<string, unknown>;
+  return record.allowed === false && record.reason === "context_compaction_gate_required";
+}
 
 type InspectAnalysisMode = "audit" | "ops_if_available";
 type InspectVerdict = "reasonable" | "mixed" | "questionable" | "insufficient_evidence";
@@ -249,12 +261,17 @@ function collectHeuristicReadPaths(input: {
 function collectStrongTouchedPaths(events: BrewvaEventRecord[]): Set<string> {
   const collected = new Set<string>();
   for (const event of events) {
-    if (event.type !== FILE_SNAPSHOT_CAPTURED_EVENT_TYPE) {
+    // Applied source patches are the strong (receipt-backed) touched-path
+    // signal; the file.snapshot.captured type this read before was retired as
+    // producerless by the contract-liveness audit.
+    if (event.type !== SOURCE_PATCH_APPLIED_EVENT_TYPE) {
       continue;
     }
     const rawFiles =
-      event.payload && typeof event.payload === "object" && Array.isArray(event.payload.files)
-        ? (event.payload.files as readonly unknown[])
+      event.payload &&
+      typeof event.payload === "object" &&
+      Array.isArray(event.payload.appliedPaths)
+        ? (event.payload.appliedPaths as readonly unknown[])
         : [];
     const files = rawFiles.filter((value): value is string => typeof value === "string");
     for (const path of files) {
@@ -634,7 +651,10 @@ function buildOpsEnvironmentFinding(events: BrewvaEventRecord[]): InspectFinding
 }
 
 function buildRuntimePressureFinding(events: BrewvaEventRecord[]): InspectFinding | null {
-  const pressureEvents = events.filter((event) => RUNTIME_PRESSURE_EVENT_TYPES.has(event.type));
+  const pressureEvents = events.filter(
+    (event) =>
+      RUNTIME_PRESSURE_EVENT_TYPES.has(event.type) || isCompactionGateBlockedInvocation(event),
+  );
   if (pressureEvents.length === 0) {
     return null;
   }
@@ -653,8 +673,7 @@ function buildRuntimePressureFinding(events: BrewvaEventRecord[]): InspectFindin
 
   const severity = pressureEvents.some(
     (event) =>
-      event.type === CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE ||
-      event.type === PARALLEL_SLOT_REJECTED_EVENT_TYPE,
+      isCompactionGateBlockedInvocation(event) || event.type === PARALLEL_SLOT_REJECTED_EVENT_TYPE,
   )
     ? "error"
     : "warn";

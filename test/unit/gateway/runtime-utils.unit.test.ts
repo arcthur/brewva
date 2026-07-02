@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { SESSION_SHUTDOWN_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import {
   ensureSessionShutdownRecorded,
   recordAbnormalSessionShutdown,
@@ -60,5 +61,24 @@ describe("gateway runtime utils", () => {
       workerSessionId: "worker-session-1",
       recoveredFromRegistry: true,
     });
+  });
+
+  test("shutdown receipts round-trip through SESSION_SHUTDOWN_EVENT_TYPE (producer seam)", () => {
+    // The lifecycle builder writes and every reader (idempotence probe,
+    // session-wire closed frame, event-stream attempt-binding cleanup) queries
+    // this one constant; the dot-form constant vs underscore tape spelling
+    // split kept the constant-side consumers silently inert before the
+    // contract-liveness audit.
+    const runtime = createRuntimeFixture();
+    const sessionId = "runtime-utils-constant-roundtrip";
+
+    ensureSessionShutdownRecorded(runtime, sessionId, { reason: "test" });
+    ensureSessionShutdownRecorded(runtime, sessionId, { reason: "duplicate" });
+
+    const shutdownEvents = runtime.ops.events.records.query(sessionId, {
+      type: SESSION_SHUTDOWN_EVENT_TYPE,
+    });
+    expect(shutdownEvents).toHaveLength(1);
+    expect(SESSION_SHUTDOWN_EVENT_TYPE).toBe("session_shutdown");
   });
 });

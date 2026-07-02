@@ -1,4 +1,5 @@
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
+import { CLAIM_UPSERTED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type { ClaimState } from "@brewva/brewva-vocabulary/iteration";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
@@ -8,7 +9,11 @@ export function buildClaimRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
     facts: {
       resolve: () => ({ ok: true }),
       upsert(sessionId, claim) {
-        ctx.emit(sessionId, "claim.upserted", typeof claim === "object" && claim ? claim : {});
+        ctx.emit(
+          sessionId,
+          CLAIM_UPSERTED_EVENT_TYPE,
+          typeof claim === "object" && claim ? claim : {},
+        );
         return { ok: true };
       },
     },
@@ -19,7 +24,7 @@ export function buildClaimRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
 }
 
 function claimStateFor(ctx: HostedRuntimeOpsContext, sessionId: string): ClaimState {
-  const events = ctx.listEvents(sessionId, { type: "claim.upserted" });
+  const events = ctx.listEvents(sessionId, { type: CLAIM_UPSERTED_EVENT_TYPE });
   const claimsById = new Map<string, ProtocolRecord>();
   let updatedAt: number | null = null;
   for (const event of events) {

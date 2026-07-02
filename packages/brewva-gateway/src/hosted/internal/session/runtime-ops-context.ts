@@ -24,7 +24,11 @@ import type {
   ContextStatus,
 } from "@brewva/brewva-vocabulary/context";
 import type { BrewvaEventQuery, ProtocolRecord } from "@brewva/brewva-vocabulary/events";
-import type { BrewvaReplaySession, SessionCostSummary } from "@brewva/brewva-vocabulary/session";
+import {
+  SESSION_TITLE_GENERATED_EVENT_TYPE,
+  type BrewvaReplaySession,
+  type SessionCostSummary,
+} from "@brewva/brewva-vocabulary/session";
 import {
   createHostedProjections,
   type HostedProjections,
@@ -367,7 +371,7 @@ export function createHostedRuntimeOpsContext(options: {
         const lastEvent = events.at(-1);
         let titleEvent: RuntimeEventRecord | undefined;
         for (const event of events) {
-          if (event.type === "session_title_recorded") {
+          if (event.type === SESSION_TITLE_GENERATED_EVENT_TYPE) {
             titleEvent = event;
           }
         }

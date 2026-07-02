@@ -1,7 +1,4 @@
-import {
-  RECALL_CURATION_RECORDED_EVENT_TYPE,
-  RECALL_UTILITY_OBSERVED_EVENT_TYPE,
-} from "@brewva/brewva-vocabulary/iteration";
+import { RECALL_CURATION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   RECALL_CURATION_HALFLIFE_DAYS,
   type RecallCurationAggregate,
@@ -14,7 +11,6 @@ const RECALL_CURATION_HALFLIFE_MS = RECALL_CURATION_HALFLIFE_DAYS * 24 * 60 * 60
 
 export const RECALL_STATE_INVALIDATING_EVENT_TYPES = new Set<string>([
   RECALL_CURATION_RECORDED_EVENT_TYPE,
-  RECALL_UTILITY_OBSERVED_EVENT_TYPE,
 ]);
 
 function createEmptyCurationAggregate(stableId: string): RecallCurationAggregate {

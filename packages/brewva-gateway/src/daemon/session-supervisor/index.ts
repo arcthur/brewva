@@ -28,6 +28,7 @@ import type { BrewvaSteerOutcome } from "@brewva/brewva-substrate/session";
 import { FOUR_PORT_RUNTIME_OPS_EVENT_NAMESPACES } from "@brewva/brewva-tools/runtime-port";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
 import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
+import { SESSION_SHUTDOWN_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import type { RecoveryWalRecord } from "@brewva/brewva-vocabulary/session";
 import type { ManagedToolMode, SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame, SessionWireTurnTrigger } from "@brewva/brewva-vocabulary/wire";
@@ -222,7 +223,7 @@ function querySessionWireFramesFromCanonicalTape(input: {
   const readModelFrames = compileSessionWireFrames(operationalEvents, "replay");
   frames.push(...readModelFrames);
   for (const event of operationalEvents) {
-    if (event.type !== "session_shutdown") {
+    if (event.type !== SESSION_SHUTDOWN_EVENT_TYPE) {
       continue;
     }
     const payload =
@@ -242,13 +243,26 @@ function querySessionWireFramesFromCanonicalTape(input: {
       reason: typeof payload.reason === "string" ? payload.reason : undefined,
     });
   }
-  frames.push(
-    ...buildRuntimeTurnSessionWireFrames({
-      sessionId: input.sessionId,
-      events,
-      triggerFromTurnStartedPayload: canonicalTriggerFromMode,
-    }),
+  // turn.input.recorded receipts (compiled above) carry the true prompt text
+  // and trigger; the turn.started-derived frame is only a fallback for tapes
+  // recorded before the receipt producer was restored. Without this filter
+  // every turn would replay two user frames.
+  const receiptTurnIds = new Set(
+    frames
+      .filter((frame) => frame.type === "turn.input")
+      .map((frame) => (frame as { turnId?: string }).turnId)
+      .filter((turnId): turnId is string => typeof turnId === "string"),
   );
+  for (const frame of buildRuntimeTurnSessionWireFrames({
+    sessionId: input.sessionId,
+    events,
+    triggerFromTurnStartedPayload: canonicalTriggerFromMode,
+  })) {
+    if (frame.type === "turn.input" && receiptTurnIds.has(frame.turnId)) {
+      continue;
+    }
+    frames.push(frame);
+  }
   return frames;
 }
 

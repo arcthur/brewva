@@ -17,6 +17,12 @@ import {
 } from "@brewva/brewva-runtime/security";
 import type { BrewvaToolRuntimeCapabilitiesPort } from "@brewva/brewva-tools/contracts";
 import type { ContextEvidenceKind } from "@brewva/brewva-vocabulary/context";
+import {
+  RECOVERY_WAL_APPENDED_EVENT_TYPE,
+  RECOVERY_WAL_COMPACTED_EVENT_TYPE,
+  RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
+  RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/session";
 import { createRecoveryWalStore } from "../../../daemon/api.js";
 import type { CollectSessionPromptOutputSession } from "../turn/collect-output.js";
 import {
@@ -279,6 +285,21 @@ export function createHostedRuntimeAdapter(
     workspaceRoot: runtime.identity.workspaceRoot,
     config: runtime.config.infrastructure.recoveryWal,
     scope: "runtime",
+    // Local route into the channel recovery verbs (the channels-layer bridge is
+    // not importable from hosted); keeps the runtime-scope WAL on the same
+    // observable vocabulary types as the channel-host stores.
+    recordEvent: (event) => {
+      const payload = event.payload ?? {};
+      if (event.type === RECOVERY_WAL_APPENDED_EVENT_TYPE) {
+        ops.channel.recovery.walAppended({ sessionId: event.sessionId, payload });
+      } else if (event.type === RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE) {
+        ops.channel.recovery.walStatusChanged({ sessionId: event.sessionId, payload });
+      } else if (event.type === RECOVERY_WAL_COMPACTED_EVENT_TYPE) {
+        ops.channel.recovery.walCompacted({ sessionId: event.sessionId, payload });
+      } else if (event.type === RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE) {
+        ops.channel.recovery.walRecoveryCompleted({ sessionId: event.sessionId, payload });
+      }
+    },
   });
   const extensions: HostedRuntimeExtensionsPort = Object.freeze({
     recovery: Object.freeze({
@@ -733,7 +754,10 @@ export {
   recordRuntimeLineageContextEntry,
   recordRuntimeLineageSummary,
   recordRuntimeReasoningCheckpoint,
+  recordRuntimeToolResult,
   recordRuntimeContinuationAnchor,
+  recordRuntimeTurnInputReceipt,
+  recordRuntimeTurnRenderReceipt,
   recordRuntimeTurnRewindCheckpoint,
   startRuntimeToolInvocation,
 } from "./projection/runtime-write-adapters.js";

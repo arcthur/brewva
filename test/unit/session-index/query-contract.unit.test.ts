@@ -9,7 +9,7 @@ import type {
   SessionIndexTaskSource,
 } from "@brewva/brewva-session-index";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
-import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { TASK_SPEC_SET_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import { USER_FACT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/user-model";
 
 // These tests exercise the SessionIndex query contract through the public
@@ -38,7 +38,7 @@ function taskGoalEvent(sessionId: string, goal: string, timestamp: number): Brew
   return record({
     id: `${sessionId}-task`,
     sessionId,
-    type: TASK_EVENT_TYPE,
+    type: TASK_SPEC_SET_EVENT_TYPE,
     timestamp,
     payload: { spec: { goal, targets: { files: [] } } },
   });
@@ -241,7 +241,7 @@ describe("session index listTapeEventsByType", () => {
   });
 
   test("the type filter excludes other event types", async () => {
-    const events = await index.listTapeEventsByType({ type: TASK_EVENT_TYPE });
+    const events = await index.listTapeEventsByType({ type: TASK_SPEC_SET_EVENT_TYPE });
     expect(events.map((event) => event.sessionId)).toEqual(["s1"]);
   });
 });

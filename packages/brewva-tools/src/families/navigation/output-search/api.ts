@@ -1,6 +1,10 @@
 import { resolve } from "node:path";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import {
+  TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
+  TOOL_OUTPUT_SEARCH_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions } from "../../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../../registry/runtime-bound-tool.js";
@@ -98,7 +102,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
       const recordSearchEvent = (payload: Record<string, unknown>) => {
         recordToolRuntimeEvent(runtime, {
           sessionId,
-          type: "tool_output_search",
+          type: TOOL_OUTPUT_SEARCH_EVENT_TYPE,
           payload,
         });
       };
@@ -110,7 +114,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
       const recentSearchEvents =
         queryList.length > 0
           ? (eventPort.records.list(sessionId, {
-              type: "tool_output_search",
+              type: TOOL_OUTPUT_SEARCH_EVENT_TYPE,
               last: SEARCH_THROTTLE_EVENT_LOOKBACK,
             }) as BrewvaEventRecord[])
           : [];
@@ -129,7 +133,7 @@ export function createOutputSearchTool(options: BrewvaBundledToolOptions): ToolD
       const effectiveLimit = Math.max(1, throttleState.effectiveLimit);
 
       const events = eventPort.records.list(sessionId, {
-        type: "tool_output_artifact_persisted",
+        type: TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
         last: Math.min(MAX_ARTIFACT_EVENTS * 4, Math.max(artifactsLast * 4, 60)),
       }) as BrewvaEventRecord[];
       const candidates = extractArtifactCandidates({

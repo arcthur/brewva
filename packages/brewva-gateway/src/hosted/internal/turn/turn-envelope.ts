@@ -1,6 +1,15 @@
 import type { BrewvaRuntime, TurnInput } from "@brewva/brewva-runtime";
+import { buildBrewvaPromptText } from "@brewva/brewva-substrate/prompt";
+import type {
+  TurnInputRecordedPayload,
+  TurnRenderCommittedPayload,
+} from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
+import {
+  recordRuntimeTurnInputReceipt,
+  recordRuntimeTurnRenderReceipt,
+} from "../session/runtime-ports.js";
 import {
   canResolveHostedRuntimeTurnRuntime,
   resolveHostedRuntimeTurnRuntime,
@@ -110,6 +119,30 @@ function resolveTriggerKind(trigger: unknown): "schedule" | "heartbeat" | undefi
   return trigger.kind === "schedule" || trigger.kind === "heartbeat" ? trigger.kind : undefined;
 }
 
+function normalizePromptText(prompt: SessionPromptInput): string {
+  return typeof prompt === "string" ? prompt : buildBrewvaPromptText(prompt);
+}
+
+// The receipt trigger the title coordinator and replay consumers key on;
+// restores the pre-cutover mapping (interactive/print/gateway count as user).
+function resolveTurnTrigger(input: {
+  source: HostedTurnEnvelopeSource;
+  walReplayId?: string;
+}): NonNullable<TurnInputRecordedPayload["trigger"]> {
+  if (typeof input.walReplayId === "string" && input.walReplayId.trim().length > 0) {
+    return "recovery";
+  }
+  if (
+    input.source === "channel" ||
+    input.source === "schedule" ||
+    input.source === "heartbeat" ||
+    input.source === "subagent"
+  ) {
+    return input.source;
+  }
+  return "user";
+}
+
 function applyEnvelopeScheduleTrigger(input: {
   readonly runtime: HostedTurnEnvelopeRuntime;
   readonly sessionId: string;
@@ -217,6 +250,19 @@ export async function runHostedTurnEnvelope(
 
   try {
     await ensureSessionInitialPersistence(input.session);
+    // Committed AFTER initial persistence (a receipt must never be the first
+    // write that materializes a lazily-persisted session) and once per
+    // envelope: the compaction-resume loop below re-enters the adapter, not
+    // the envelope.
+    recordRuntimeTurnInputReceipt(input.runtime, {
+      sessionId,
+      runtimeTurn,
+      payload: {
+        turnId,
+        trigger: resolveTurnTrigger({ source: input.source, walReplayId: input.walReplayId }),
+        promptText: normalizePromptText(input.prompt),
+      } satisfies TurnInputRecordedPayload,
+    });
     const adapter = input.runAdapter ?? runHostedRuntimeTurnAdapter;
     const compactionBoundary = resolveHostedCompactionBoundary(input.session);
     const softCut = compactionBoundary
@@ -283,6 +329,20 @@ export async function runHostedTurnEnvelope(
       await compactionBoundary.settleTurnEndCompaction();
     }
 
+    if (result.status === "completed" || result.status === "failed") {
+      recordRuntimeTurnRenderReceipt(input.runtime, {
+        sessionId,
+        runtimeTurn,
+        payload: {
+          turnId,
+          attemptId: result.attemptId ?? "runtime-turn",
+          status: result.status,
+          assistantText: result.assistantText ?? "",
+          toolOutputs: [...(result.toolOutputs ?? [])],
+        } satisfies TurnRenderCommittedPayload,
+      });
+    }
+
     return {
       ...result,
       profile,
@@ -292,14 +352,28 @@ export async function runHostedTurnEnvelope(
     } as HostedTurnEnvelopeResult;
   } catch (error) {
     const status = input.classifyThrownError?.(error) ?? "failed";
-    return {
-      ...createThrownLoopResult({
-        error,
-        status,
+    const terminal = createThrownLoopResult({
+      error,
+      status,
+      sessionId,
+      turnId,
+      profile,
+    });
+    if (terminal.status === "failed") {
+      recordRuntimeTurnRenderReceipt(input.runtime, {
         sessionId,
-        turnId,
-        profile,
-      }),
+        runtimeTurn,
+        payload: {
+          turnId,
+          attemptId: terminal.attemptId ?? "runtime-turn",
+          status: "failed",
+          assistantText: terminal.assistantText ?? "",
+          toolOutputs: [...(terminal.toolOutputs ?? [])],
+        } satisfies TurnRenderCommittedPayload,
+      });
+    }
+    return {
+      ...terminal,
       profile,
       turnId,
       runtimeTurn,

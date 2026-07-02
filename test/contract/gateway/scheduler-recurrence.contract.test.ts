@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createSchedulerService } from "@brewva/brewva-gateway/daemon";
+import { SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE } from "@brewva/brewva-vocabulary/schedule";
 import { sleep, waitUntil } from "../../helpers/process.js";
+import { createRuntimeFixture } from "../../helpers/runtime.js";
 
 interface IntentSnapshot {
   readonly intentId: string;
@@ -18,6 +20,54 @@ function findIntent(
 }
 
 describe("scheduler cron recurrence wiring", () => {
+  test("a due intent that cannot execute commits schedule.recovery.deferred (producer seam)", async () => {
+    // The daemon ops summary subscribes for this type and counted forever-zero
+    // deferrals: recover() hardcoded deferredIntents: 0 and nothing emitted
+    // (contract-liveness audit, 2026-07-02).
+    const runtime = createRuntimeFixture();
+    const observedDeferred: string[] = [];
+    const unsubscribe = runtime.ops.events.records.subscribe((event) => {
+      if (event.type === SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE) {
+        observedDeferred.push(event.sessionId);
+      }
+    });
+    const scheduler = createSchedulerService({
+      runtime: {
+        scheduleEvents: runtime.ops.schedule.events,
+      },
+      shouldExecute: () => false,
+      executeIntent: () => {
+        throw new Error("must not execute while paused");
+      },
+    });
+    try {
+      scheduler.createIntent({
+        intentId: "deferred-1",
+        parentSessionId: "sched-deferred",
+        reason: "paused window",
+        runAt: Date.now() - 1_000,
+        maxRuns: 1,
+      });
+      const recovered = await scheduler.recover();
+      expect(recovered.catchUp.dueIntents).toBe(1);
+      expect(recovered.catchUp.deferredIntents).toBe(1);
+      expect(recovered.catchUp.sessions).toEqual(["sched-deferred"]);
+
+      await waitUntil(() => observedDeferred.length >= 1, 2_000);
+      const events = runtime.ops.events.records.query("sched-deferred", {
+        type: SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
+      });
+      expect(events.length).toBeGreaterThanOrEqual(1);
+      expect(events[0]?.payload).toMatchObject({
+        intentId: "deferred-1",
+        reason: "execution_paused",
+      });
+    } finally {
+      scheduler.stop();
+      unsubscribe();
+    }
+  });
+
   test("arms a daily cron intent at a real cron slot, not a +60s placeholder", () => {
     const scheduler = createSchedulerService({});
     try {

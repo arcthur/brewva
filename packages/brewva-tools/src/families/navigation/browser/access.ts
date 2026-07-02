@@ -1,3 +1,4 @@
+import { TOOL_CALL_BLOCKED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type { BrewvaBundledToolOptions } from "../../../contracts/index.js";
 import { recordToolRuntimeEvent } from "../../../runtime-port/extensions.js";
 import { explainToolAccess } from "../../../runtime-port/tool-access.js";
@@ -18,7 +19,7 @@ export function enforceRuntimeToolAccess(input: {
 
   recordToolRuntimeEvent(input.options.runtime, {
     sessionId: input.sessionId,
-    type: "tool_call_blocked",
+    type: TOOL_CALL_BLOCKED_EVENT_TYPE,
     payload: {
       schema: "brewva.tool_call_blocked.v1",
       toolName: input.toolName,

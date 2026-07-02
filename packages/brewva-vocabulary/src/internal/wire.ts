@@ -695,6 +695,18 @@ export function compileSessionWireFrames(
     if (entry.type !== TURN_INPUT_RECORDED_EVENT_TYPE) {
       return [];
     }
+    // The receipt payload is { promptText, turnId, trigger } (see
+    // TurnInputRecordedPayload); this read-model used to parse the payload as
+    // a bare string and never saw a frame anyway while the receipt had no
+    // producer (contract-liveness audit, 2026-07-02).
+    const payload =
+      entry.payload && typeof entry.payload === "object" && !Array.isArray(entry.payload)
+        ? (entry.payload as Record<string, unknown>)
+        : {};
+    const turnId =
+      typeof payload.turnId === "string" && payload.turnId.trim().length > 0
+        ? payload.turnId
+        : (entry.turnId ?? entry.id);
     return [
       Object.freeze({
         schema: SESSION_WIRE_SCHEMA,
@@ -706,9 +718,9 @@ export function compileSessionWireFrames(
         sourceEventId: entry.id,
         sourceEventType: entry.type,
         type: "turn.input" as const,
-        turnId: entry.turnId ?? entry.id,
-        promptText: typeof entry.payload === "string" ? entry.payload : "",
-        trigger: "recovery" as const,
+        turnId,
+        promptText: typeof payload.promptText === "string" ? payload.promptText : "",
+        trigger: typeof payload.trigger === "string" ? payload.trigger : "recovery",
       }),
     ];
   });

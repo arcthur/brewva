@@ -45,18 +45,18 @@ export const BOX_RELEASED_EVENT_TYPE = "box.released" as const;
 
 export const BOX_SNAPSHOT_CREATED_EVENT_TYPE = "box.snapshot.created" as const;
 
-export const CLAIM_EVENT_TYPE = "claim.event" as const;
+// The durable spelling every claim producer and projection has always
+// used; the dead "claim.event" alias was retired by the contract-liveness
+// audit (2026-07-02).
+export const CLAIM_UPSERTED_EVENT_TYPE = "claim.upserted" as const;
 
-export const DECISION_RECEIPT_RECORDED_EVENT_TYPE = "decision.receipt.recorded" as const;
+// Kernel canonical approval receipts (the kernel emits these literals
+// directly); the dead "effect.commitment.approval.*" aliases were retired by
+// the contract-liveness audit (2026-07-02) — consumed-state is derived from
+// canonical tool.committed and has no event of its own.
+export const APPROVAL_DECIDED_EVENT_TYPE = "approval.decided" as const;
 
-export const EFFECT_COMMITMENT_APPROVAL_CONSUMED_EVENT_TYPE =
-  "effect.commitment.approval.consumed" as const;
-
-export const EFFECT_COMMITMENT_APPROVAL_DECIDED_EVENT_TYPE =
-  "effect.commitment.approval.decided" as const;
-
-export const EFFECT_COMMITMENT_APPROVAL_REQUESTED_EVENT_TYPE =
-  "effect.commitment.approval.requested" as const;
+export const APPROVAL_REQUESTED_EVENT_TYPE = "approval.requested" as const;
 
 export const EXEC_FAILED_EVENT_TYPE = "exec.failed" as const;
 
@@ -81,13 +81,14 @@ export const RECALL_CURATION_RECORDED_EVENT_TYPE = "recall.curation.recorded" as
 
 export const RECALL_RESULTS_SURFACED_EVENT_TYPE = "recall.results.surfaced" as const;
 
-export const RECALL_UTILITY_OBSERVED_EVENT_TYPE = "recall.utility.observed" as const;
-
 export const TOOL_CALL_BLOCKED_EVENT_TYPE = "tool.call.blocked" as const;
 
 export const TOOL_CONTRACT_WARNING_EVENT_TYPE = "tool.contract.warning" as const;
 
-export const TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE = "tool.output.artifact.persisted" as const;
+// Underscore on purpose: the ledger-writer artifact chain has always
+// written "tool_output_artifact_persisted" and output-search reads it back;
+// the durable spelling wins (contract-liveness audit, 2026-07-02).
+export const TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE = "tool_output_artifact_persisted" as const;
 
 export const TOOL_OUTPUT_SEARCH_EVENT_TYPE = "tool.output.search" as const;
 

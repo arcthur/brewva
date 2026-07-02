@@ -9,7 +9,7 @@ import type {
   SessionIndexTaskSource,
 } from "@brewva/brewva-session-index";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
-import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { TASK_SPEC_SET_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 
 // WS4 proof: the SQLite + FTS5 index is rebuildable read-model state, not truth.
 // Deleting the on-disk .sqlite (and its -wal/-shm siblings) and re-deriving from
@@ -38,7 +38,7 @@ function taskGoalEvent(sessionId: string, goal: string, timestamp: number): Brew
   return record({
     id: `${sessionId}-task`,
     sessionId,
-    type: TASK_EVENT_TYPE,
+    type: TASK_SPEC_SET_EVENT_TYPE,
     timestamp,
     payload: { spec: { goal, targets: { files: [] } } },
   });

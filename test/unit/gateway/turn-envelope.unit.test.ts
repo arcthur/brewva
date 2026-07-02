@@ -5,6 +5,11 @@ import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { BrewvaRuntime, BrewvaRuntimeOptions } from "@brewva/brewva-runtime";
 import type { BrewvaToolUpdateHandler } from "@brewva/brewva-substrate/tools";
+import {
+  readTurnInputRecordedEventPayload,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+  TURN_RENDER_COMMITTED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { Type } from "@sinclair/typebox";
 import { NOOP_UI } from "../../../packages/brewva-gateway/src/hosted/internal/session/managed-agent/noop-ui.js";
@@ -77,6 +82,91 @@ describe("hosted turn envelope", () => {
       },
     });
     expect(runtime.tape.list("session-envelope-custom")).toEqual([]);
+  });
+
+  test("commits turn.input.recorded and turn.render.committed receipts through the ops seam", async () => {
+    // Producer seam for the receipts the title coordinator (trigger === "user",
+    // first prompt), replay user frames, and attempt bindings consume — all
+    // silently dead after the four-port cutover deleted the thread-loop
+    // writers (contract-liveness audit, 2026-07-02).
+    const runtime = createHostedRuntimeAdapter({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-turn-envelope-receipts-")),
+    });
+    const sessionId = "session-envelope-receipts";
+
+    await runHostedTurnEnvelope({
+      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId,
+      prompt: "find the flaky test",
+      source: "interactive",
+      turnId: "turn-receipt-1",
+      runAdapter: async () => createAdapterResult({ assistantText: "found it" }),
+    });
+
+    const inputEvents = runtime.ops.events.records.query(sessionId, {
+      type: TURN_INPUT_RECORDED_EVENT_TYPE,
+    });
+    expect(inputEvents).toHaveLength(1);
+    const inputPayload = readTurnInputRecordedEventPayload(
+      inputEvents[0] as { payload?: Record<string, unknown> },
+    );
+    expect(inputPayload).toMatchObject({
+      turnId: "turn-receipt-1",
+      trigger: "user",
+      promptText: "find the flaky test",
+    });
+
+    const renderEvents = runtime.ops.events.records.query(sessionId, {
+      type: TURN_RENDER_COMMITTED_EVENT_TYPE,
+    });
+    expect(renderEvents).toHaveLength(1);
+    expect(renderEvents[0]?.payload).toMatchObject({
+      turnId: "turn-receipt-1",
+      status: "completed",
+      assistantText: "found it",
+    });
+  });
+
+  test("maps envelope source and WAL replay onto the receipt trigger; failures still commit a render receipt", async () => {
+    const runtime = createHostedRuntimeAdapter({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-turn-envelope-triggers-")),
+    });
+    const sessionId = "session-envelope-triggers";
+
+    await runHostedTurnEnvelope({
+      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId,
+      prompt: "scheduled work",
+      source: "schedule",
+      runAdapter: async () => createAdapterResult(),
+    });
+    await runHostedTurnEnvelope({
+      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId,
+      prompt: "replayed work",
+      source: "gateway",
+      walReplayId: "wal-7",
+      runAdapter: async () => {
+        throw new Error("adapter exploded");
+      },
+    });
+
+    const triggers = runtime.ops.events.records
+      .query(sessionId, { type: TURN_INPUT_RECORDED_EVENT_TYPE })
+      .map(
+        (event) =>
+          readTurnInputRecordedEventPayload(event as { payload?: Record<string, unknown> })
+            ?.trigger,
+      );
+    expect(triggers).toEqual(["schedule", "recovery"]);
+
+    const renderStatuses = runtime.ops.events.records
+      .query(sessionId, { type: TURN_RENDER_COMMITTED_EVENT_TYPE })
+      .map((event) => (event.payload as { status?: string }).status);
+    expect(renderStatuses).toEqual(["completed", "failed"]);
   });
 
   test("creates a runtime turn adapter from the hosted session when no custom adapter is supplied", async () => {

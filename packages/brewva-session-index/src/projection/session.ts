@@ -1,6 +1,6 @@
 import { chunkArray, uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
-import { TASK_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import { TASK_SPEC_SET_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import { SESSION_INDEX_SCHEMA_VERSION, type SessionIndexTaskSource } from "../api.js";
 import { buildEventSearchTokenRows, buildSessionFieldTokenRows } from "../evidence/tokens.js";
 import { isRecord, readString } from "../json.js";
@@ -222,7 +222,7 @@ async function insertSessionTargetRoots(
 function extractTaskGoal(events: readonly BrewvaEventRecord[]): string | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (!event || event.type !== TASK_EVENT_TYPE || !isRecord(event.payload)) {
+    if (!event || event.type !== TASK_SPEC_SET_EVENT_TYPE || !isRecord(event.payload)) {
       continue;
     }
     const spec = isRecord(event.payload.spec) ? event.payload.spec : undefined;

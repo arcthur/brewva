@@ -15,6 +15,12 @@ import {
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
+  TOOL_CALL_BLOCKED_EVENT_TYPE,
+  TOOL_CONTRACT_WARNING_EVENT_TYPE,
+  TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
+  TOOL_OUTPUT_SEARCH_EVENT_TYPE,
+  TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
+  TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
 import type { ResourceLeaseRecord } from "@brewva/brewva-vocabulary/iteration";
 import { OPERATOR_QUESTION_ANSWERED_EVENT_TYPE } from "@brewva/brewva-vocabulary/wire";
@@ -30,6 +36,7 @@ import { createContextBudgetRuntimeController } from "../runtime-ops-context-bud
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 import { buildHostedPatchRollbackOps } from "./patches/rollback.js";
+import { recordAppliedPatchWriteMarker } from "./patches/write-marker.js";
 
 export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["tools"] {
   const budget = createContextBudgetRuntimeController(ctx);
@@ -90,7 +97,7 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
     },
     lifecycle: {
       callObserved: ctx.recordInputPayload(RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND),
-      callBlocked: ctx.recordInputPayload("tool_call_blocked"),
+      callBlocked: ctx.recordInputPayload(TOOL_CALL_BLOCKED_EVENT_TYPE),
       boxReleased: ctx.recordInputPayload("tool_box_released"),
       executionStarted: ctx.recordInputPayload("tool_execution_started"),
       executionEnded: ctx.recordInputPayload("tool_execution_ended"),
@@ -171,7 +178,11 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
         prepare(sessionId, inputValue) {
           return ctx.emit(sessionId, SOURCE_PATCH_PREPARED_EVENT_TYPE, inputValue);
         },
-        apply: ctx.recordSessionPayload(SOURCE_PATCH_APPLIED_EVENT_TYPE),
+        apply(sessionId, payload) {
+          const receipt = ctx.emit(sessionId, SOURCE_PATCH_APPLIED_EVENT_TYPE, payload ?? {});
+          recordAppliedPatchWriteMarker(ctx, sessionId, payload);
+          return receipt;
+        },
       },
       staleRecovery: {
         record(sessionId, inputValue) {
@@ -183,9 +194,9 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
       },
     },
     readPath: {
-      discoveryObserved: ctx.recordInputPayload("tool_read_path_discovery_observed"),
-      gateArmed: ctx.recordInputPayload("tool_read_path_gate_armed"),
-      contractWarning: ctx.recordInputPayload("tool_read_path_contract_warning"),
+      discoveryObserved: ctx.recordInputPayload(TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE),
+      gateArmed: ctx.recordInputPayload(TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE),
+      contractWarning: ctx.recordInputPayload(TOOL_CONTRACT_WARNING_EVENT_TYPE),
     },
     steering: {
       queued: ctx.recordSemanticEvent("tool_steering_queued"),
@@ -202,9 +213,9 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
     outputs: {
       observed: ctx.recordInputPayload("tool_output_observed"),
       distilled: ctx.recordInputPayload("tool_output_distilled"),
-      artifactPersisted: ctx.recordInputPayload("tool_output_artifact_persisted"),
+      artifactPersisted: ctx.recordInputPayload(TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE),
       artifactPersistFailed: ctx.recordInputPayload("tool_output_artifact_persist_failed"),
-      search: ctx.recordInputPayload("tool_output_search"),
+      search: ctx.recordInputPayload(TOOL_OUTPUT_SEARCH_EVENT_TYPE),
       sourceIntelligenceQuery: ctx.recordInputPayload("tool_source_intelligence"),
     },
     recall: {

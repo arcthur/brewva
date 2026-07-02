@@ -1,4 +1,8 @@
-import { nextScheduleRunAt, SCHEDULE_EVENT_TYPE } from "@brewva/brewva-vocabulary/schedule";
+import {
+  nextScheduleRunAt,
+  SCHEDULE_EVENT_TYPE,
+  SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/schedule";
 import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-vocabulary/schedule";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
@@ -89,6 +93,12 @@ export function buildScheduleRuntimeOps(
             ? eventPayload.parentSessionId
             : "schedule";
         return ctx.emit(sessionId, SCHEDULE_EVENT_TYPE, payload);
+      },
+      recordRecoveryDeferred(sessionId, payload) {
+        // A due intent the scheduler could not execute (paused or no
+        // executor); the daemon ops summary counts these
+        // (contract-liveness audit, 2026-07-02).
+        return ctx.emit(sessionId, SCHEDULE_RECOVERY_DEFERRED_EVENT_TYPE, payload);
       },
       recordWakeup(sessionId, payload) {
         return ctx.emit(sessionId, "schedule.wakeup", payload);

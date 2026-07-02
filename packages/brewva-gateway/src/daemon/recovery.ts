@@ -14,11 +14,15 @@ import type {
 } from "@brewva/brewva-vocabulary/events";
 import { mergeScheduleSpec, nextScheduleRunAt } from "@brewva/brewva-vocabulary/schedule";
 import type { ScheduleIntentProjectionRecord } from "@brewva/brewva-vocabulary/schedule";
-import type {
-  RecoveryWalRecord,
-  RecoveryWalRecoveryResult,
-  RecoveryWalSource,
-  RecoveryWalStatus,
+import {
+  RECOVERY_WAL_APPENDED_EVENT_TYPE,
+  RECOVERY_WAL_COMPACTED_EVENT_TYPE,
+  RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
+  RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
+  type RecoveryWalRecord,
+  type RecoveryWalRecoveryResult,
+  type RecoveryWalSource,
+  type RecoveryWalStatus,
 } from "@brewva/brewva-vocabulary/session";
 import type { TurnEnvelope } from "@brewva/brewva-vocabulary/wire";
 
@@ -139,6 +143,7 @@ export interface SchedulerRuntimePort {
   readonly scheduleConfig?: unknown;
   readonly scheduleEvents?: {
     readonly recordIntent?: (input: WalRecord) => unknown;
+    readonly recordRecoveryDeferred?: (sessionId: string, input: object) => unknown;
     readonly recordWakeup?: (sessionId: string, input: object) => unknown;
     readonly recordChildStarted?: (sessionId: string, input: object) => unknown;
     readonly recordChildFinished?: (sessionId: string, input: object) => unknown;
@@ -378,6 +383,13 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
   const walFilePath = resolve(walDir, `${scope}.jsonl`);
   const nowProvider = options.now;
   const now = nowProvider ? () => nowProvider() : () => Date.now();
+  // The WAL observability bridge: callers wire `recordEvent` into the channel
+  // runtime ops (recordChannelRecoveryWalEvent), and the store reports every
+  // durable transition through it. Declared-but-never-called was the
+  // contract-liveness audit's recovery.wal.* dead-consumer family.
+  function recordWalEvent(event: RecoveryWalLifecycleEvent): void {
+    options.recordEvent?.(event);
+  }
   const records = new Map<string, RecoveryWalStoredRecord>();
   const quarantine: QuarantinedWalLine[] = [];
   let idCounter = 0;
@@ -546,6 +558,17 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
     // so a failed append leaves the prior record intact and the caller sees the error.
     appendWalLine(next);
     records.set(id, next);
+    recordWalEvent({
+      sessionId: next.sessionId,
+      type: RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
+      payload: {
+        walId: next.walId,
+        scope,
+        source: next.source,
+        status: next.status,
+        attempts: next.attempts,
+      },
+    });
     return next;
   }
 
@@ -608,6 +631,18 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
       records.set(walId, stored);
       idCounter += 1;
       observeIngressWatermark(envelope);
+      recordWalEvent({
+        sessionId: stored.sessionId,
+        type: RECOVERY_WAL_APPENDED_EVENT_TYPE,
+        payload: {
+          walId: stored.walId,
+          scope,
+          source: stored.source,
+          status: stored.status,
+          ttlMs: stored.ttlMs,
+          ...(dedupeKey ? { dedupeKey } : {}),
+        },
+      });
       return stored;
     },
     markInflight(id: string): RecoveryWalStoredRecord | undefined {
@@ -651,6 +686,11 @@ export function createRecoveryWalStore(options: RecoveryWalStoreOptions = {}): R
         }
       }
       rewriteWalFile();
+      recordWalEvent({
+        sessionId: "default",
+        type: RECOVERY_WAL_COMPACTED_EVENT_TYPE,
+        payload: { scope, removed, scanned, retained: records.size, dropped: removed },
+      });
       return { removed, scanned, retained: records.size, dropped: removed };
     },
   });
@@ -705,6 +745,10 @@ export function createRecoveryWalRecovery(
     return error instanceof Error ? error.message : String(error);
   }
 
+  function recordRecoveryEvent(event: RecoveryWalLifecycleEvent): void {
+    input.recordEvent?.(event);
+  }
+
   return Object.freeze({
     name: "recovery.wal-recovery" as const,
     async recover(options: RecoveryWalRecoveryOptions = {}): Promise<RecoveryWalRecoveryResult> {
@@ -748,6 +792,11 @@ export function createRecoveryWalRecovery(
           }
         }
       }
+      recordRecoveryEvent({
+        sessionId: "default",
+        type: RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
+        payload: { scanned, retried, failed, expired, skipped },
+      });
       return { scanned, retried, failed, expired, skipped, errors };
     },
   });
@@ -781,6 +830,39 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
       return;
     }
     recordIntent({ ...record, kind });
+  }
+
+  function recordDeferredIntent(record: SchedulerIntentRecord, reason: string): void {
+    const scheduleEvents = readSchedulerRecord(options.runtime).scheduleEvents;
+    if (!scheduleEvents || typeof scheduleEvents !== "object" || Array.isArray(scheduleEvents)) {
+      return;
+    }
+    const recordRecoveryDeferred = (scheduleEvents as { recordRecoveryDeferred?: unknown })
+      .recordRecoveryDeferred;
+    if (typeof recordRecoveryDeferred !== "function") {
+      return;
+    }
+    recordRecoveryDeferred(
+      typeof record.parentSessionId === "string" && record.parentSessionId.trim().length > 0
+        ? record.parentSessionId
+        : "schedule",
+      {
+        intentId: record.intentId,
+        reason,
+        runCount: typeof record.runCount === "number" ? record.runCount : 0,
+        nextRunAt: typeof record.nextRunAt === "number" ? record.nextRunAt : null,
+      },
+    );
+  }
+
+  function executionDisabledReason(): string | null {
+    if (options.shouldExecute?.() === false) {
+      return "execution_paused";
+    }
+    if (typeof options.executeIntent !== "function") {
+      return "executor_unavailable";
+    }
+    return null;
   }
 
   function statusFor(kind: unknown, previousStatus: unknown): string {
@@ -863,11 +945,18 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
   }
 
   async function fireIntent(record: SchedulerIntentRecord): Promise<void> {
-    if (
-      stopped ||
-      options.shouldExecute?.() === false ||
-      typeof options.executeIntent !== "function"
-    ) {
+    if (stopped) {
+      return;
+    }
+    const executeIntent = options.executeIntent;
+    const disabledReason = executionDisabledReason();
+    if (disabledReason !== null || typeof executeIntent !== "function") {
+      // A due intent the scheduler is not allowed to run right now: report the
+      // deferral instead of silently swallowing it (the daemon ops summary
+      // counts schedule.recovery.deferred; contract-liveness audit,
+      // 2026-07-02). The intent stays active and re-arms on
+      // syncExecutionState.
+      recordDeferredIntent(record, disabledReason ?? "executor_unavailable");
       return;
     }
     const current = intents.get(record.intentId) ?? record;
@@ -932,7 +1021,7 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
     };
 
     try {
-      await options.executeIntent(fired);
+      await executeIntent(fired);
       settle();
     } catch (error) {
       settle(error instanceof Error ? error.message : String(error));
@@ -1019,6 +1108,16 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
     },
     async recover(): Promise<SchedulerRecoverResult> {
       loadRuntimeEvents();
+      // Real catch-up accounting (this summary used to hardcode zeros): an
+      // intent is due when its next slot is already in the past; when
+      // execution is disabled those due intents are deferred — each timer
+      // fires immediately after reschedule() and reports its own
+      // schedule.recovery.deferred receipt from fireIntent.
+      const nowMs = now();
+      const dueIntents = activeIntents().filter((intent) => {
+        const rawRunAt = intent.runAt ?? intent.nextRunAt;
+        return typeof rawRunAt === "number" && Number.isFinite(rawRunAt) && rawRunAt <= nowMs;
+      });
       reschedule();
       return {
         recovered: true,
@@ -1026,10 +1125,19 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
         rebuiltFromEvents: true,
         projectionMatched: true,
         catchUp: {
-          dueIntents: activeIntents().length,
+          dueIntents: dueIntents.length,
           firedIntents: 0,
-          deferredIntents: 0,
-          sessions: [],
+          deferredIntents: executionDisabledReason() === null ? 0 : dueIntents.length,
+          sessions: [
+            ...new Set(
+              dueIntents.map((intent) =>
+                typeof intent.parentSessionId === "string" &&
+                intent.parentSessionId.trim().length > 0
+                  ? intent.parentSessionId
+                  : "schedule",
+              ),
+            ),
+          ].toSorted((left, right) => left.localeCompare(right)),
         },
       };
     },

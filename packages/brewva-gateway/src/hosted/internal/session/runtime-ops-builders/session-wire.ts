@@ -1,3 +1,4 @@
+import { SESSION_SHUTDOWN_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import { buildRuntimeTurnSessionWireFrames } from "../../../../utils/runtime-session-wire-projection.js";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
@@ -46,7 +47,7 @@ function sessionWireFramesFor(ctx: HostedRuntimeOpsContext, sessionId: string): 
     events,
   });
   for (const event of events) {
-    if (event.type !== "session_shutdown") {
+    if (event.type !== SESSION_SHUTDOWN_EVENT_TYPE) {
       continue;
     }
     const payload =

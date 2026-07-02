@@ -3,7 +3,7 @@ import {
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
-import { PATCH_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
+import { SOURCE_PATCH_APPLIED_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
 import type { BrewvaToolRuntime } from "../../../contracts/index.js";
 import {
   registerToolRuntimeClearStateListener,
@@ -12,7 +12,6 @@ import {
 import {
   buildAncestorDirectories,
   normalizeEventRecord,
-  normalizePayloadRecord,
   normalizeSessionId,
   normalizeSignalPath,
   normalizeStringArray,
@@ -48,7 +47,7 @@ function queryRelevantEvents(
       ...(typeof after === "number" ? { after } : {}),
     }) ?? []),
     ...(eventPort.records?.query?.(sessionId, {
-      type: PATCH_RECORDED_EVENT_TYPE,
+      type: SOURCE_PATCH_APPLIED_EVENT_TYPE,
       ...(typeof after === "number" ? { after } : {}),
     }) ?? []),
     ...(eventPort.records?.query?.(sessionId, {
@@ -125,12 +124,14 @@ function foldPatchRecordedEvent(
   payload: Record<string, unknown>,
   timestamp: number,
 ): void {
-  const failedPaths = new Set(normalizeStringArray(payload.failedPaths));
-  const changes = Array.isArray(payload.changes) ? payload.changes : [];
-  for (const change of changes) {
-    const record = normalizePayloadRecord(change);
-    const path = typeof record?.path === "string" ? normalizeSignalPath(record.path) : undefined;
-    if (!path || failedPaths.has(path)) continue;
+  // source_patch_applied payload: appliedPaths already excludes failures (the
+  // dead patch.recorded shape this fold used to parse carried changes[] plus
+  // failedPaths; the contract-liveness audit rewired the fold onto the live
+  // receipt).
+  if (payload.ok !== true) return;
+  for (const rawPath of normalizeStringArray(payload.appliedPaths)) {
+    const path = normalizeSignalPath(rawPath);
+    if (!path) continue;
     applyPathSignal(state, "patched_file", path, PATCHED_FILE_WEIGHT, timestamp);
     attributeFollowthrough(state, path, timestamp);
   }
@@ -188,7 +189,7 @@ export function syncDurableState(
       foldDiscoveryObservedEvent(state, event.payload, event.timestamp);
       continue;
     }
-    if (event.type === PATCH_RECORDED_EVENT_TYPE) {
+    if (event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE) {
       foldPatchRecordedEvent(state, event.payload, event.timestamp);
       continue;
     }

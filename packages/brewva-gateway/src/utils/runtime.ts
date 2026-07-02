@@ -1,3 +1,4 @@
+import { SESSION_SHUTDOWN_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
 import { queryRuntimeEvents } from "../hosted/api.js";
 
@@ -29,7 +30,10 @@ export function ensureSessionShutdownRecorded(
   sessionId: string,
   payload?: Record<string, unknown>,
 ): void {
-  if (queryRuntimeEvents(runtime, sessionId, { type: "session_shutdown", last: 1 }).length > 0)
+  if (
+    queryRuntimeEvents(runtime, sessionId, { type: SESSION_SHUTDOWN_EVENT_TYPE, last: 1 }).length >
+    0
+  )
     return;
   runtime.ops.session.lifecycle.shutdown({
     sessionId,

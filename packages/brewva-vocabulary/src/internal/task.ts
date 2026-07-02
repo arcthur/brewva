@@ -3,8 +3,6 @@ import type { ProtocolRecord } from "./types/foundation.js";
 
 export type { ProtocolRecord } from "./types/foundation.js";
 
-export const TASK_EVENT_TYPE = "task.event" as const;
-
 export const TASK_STALL_ADJUDICATED_EVENT_TYPE = "task.stall.adjudicated" as const;
 
 export const TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE = "task.stall.error" as const;

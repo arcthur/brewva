@@ -29,8 +29,9 @@ describe("session rewind target projection (RFC WS3)", () => {
         timestamp: 2,
         payload: { prompt: { text: "fix the bug" } },
       },
-      { id: "p1", sessionId, type: "patch.recorded", timestamp: 3 },
-      { id: "p2", sessionId, type: "patch.recorded", timestamp: 4 },
+      { id: "p1", sessionId, type: "source_patch_applied", timestamp: 3, payload: { ok: true } },
+      { id: "p2", sessionId, type: "source_patch_applied", timestamp: 4, payload: { ok: true } },
+      { id: "p3", sessionId, type: "source_patch_applied", timestamp: 5, payload: { ok: false } },
     ]);
 
     expect(result).toHaveLength(1);

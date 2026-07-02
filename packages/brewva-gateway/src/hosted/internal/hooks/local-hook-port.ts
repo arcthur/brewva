@@ -2,10 +2,7 @@ import type { BrewvaHostContext, InternalHostPluginApi } from "@brewva/brewva-su
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
 import { SESSION_REWIND_COMPLETED_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
-import {
-  REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
-  ROLLBACK_EVENT_TYPE,
-} from "@brewva/brewva-vocabulary/workbench";
+import { ROLLBACK_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
 import { subscribeRuntimeEvents, type HostedRuntimeAdapterPort } from "../session/runtime-ports.js";
 import type { TurnLifecyclePort } from "./turn-lifecycle-port.js";
 
@@ -102,7 +99,6 @@ export interface LocalHookManager {
 
 const POST_ROLLBACK_EVENT_TYPES = new Set<string>([
   ROLLBACK_EVENT_TYPE,
-  REVERSIBLE_MUTATION_ROLLED_BACK_EVENT_TYPE,
   SESSION_REWIND_COMPLETED_EVENT_TYPE,
 ]);
 

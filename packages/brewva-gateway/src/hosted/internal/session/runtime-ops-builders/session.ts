@@ -7,6 +7,10 @@ import { PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE } from "@brewva/brewva-vocabular
 import {
   buildSessionRewindProjection,
   listSessionRewindTargets,
+  SESSION_SHUTDOWN_EVENT_TYPE,
+  SESSION_TITLE_GENERATED_EVENT_TYPE,
+  TURN_INPUT_RECORDED_EVENT_TYPE,
+  TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
 import {
   TASK_STALL_ADJUDICATED_EVENT_TYPE,
@@ -74,11 +78,13 @@ export function buildSessionRuntimeOps(
       modelPresetSelected: ctx.recordSemanticEvent("model_preset_select"),
       modelSelected: ctx.recordSemanticEvent("model_select"),
       providerCredentialRotated: ctx.recordSemanticEvent(PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE),
-      shutdown: ctx.recordSemanticEvent("session_shutdown"),
+      shutdown: ctx.recordSemanticEvent(SESSION_SHUTDOWN_EVENT_TYPE),
       started: ctx.recordSemanticEvent("session_started"),
       thinkingLevelSelected: ctx.recordSemanticEvent("thinking_level_select"),
       turnStarted: ctx.recordSemanticEvent("turn_started"),
       turnEnded: ctx.recordSemanticEvent("turn_ended"),
+      turnInputRecorded: ctx.recordSemanticEvent(TURN_INPUT_RECORDED_EVENT_TYPE),
+      turnRenderCommitted: ctx.recordSemanticEvent(TURN_RENDER_COMMITTED_EVENT_TYPE),
     },
     workerResults: {
       list: (sessionId) => ctx.projections.workerResults(sessionId),
@@ -109,9 +115,14 @@ export function buildSessionRuntimeOps(
       },
     },
     title: {
-      get: () => undefined,
+      // Tape-authoritative: guard and replay listing read the generator's receipt.
+      get(sessionId) {
+        const payload = ctx.latestRecordedPayload(sessionId, SESSION_TITLE_GENERATED_EVENT_TYPE);
+        const title = payload && "title" in payload ? payload.title : undefined;
+        return typeof title === "string" && title.trim().length > 0 ? title : undefined;
+      },
       recordGenerated(sessionId, payload) {
-        return ctx.emit(sessionId, "session.title.generated", payload);
+        return ctx.emit(sessionId, SESSION_TITLE_GENERATED_EVENT_TYPE, payload);
       },
     },
     lineage: {

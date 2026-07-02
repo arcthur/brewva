@@ -140,6 +140,8 @@ export type HostedRuntimeOpsExtensions = {
       thinkingLevelSelected: RuntimeSemanticRecorder;
       turnStarted: RuntimeSemanticRecorder;
       turnEnded: RuntimeSemanticRecorder;
+      turnInputRecorded: RuntimeSemanticRecorder;
+      turnRenderCommitted: RuntimeSemanticRecorder;
     };
     readonly workerResults: {
       list(sessionId: string): WorkerResult[];
@@ -174,6 +176,7 @@ export type HostedRuntimeOpsExtensions = {
   readonly schedule: {
     readonly events: {
       recordIntent(input: object): unknown;
+      recordRecoveryDeferred(sessionId: string, input: object): unknown;
       recordWakeup(sessionId: string, input: object): unknown;
       recordChildStarted(sessionId: string, input: object): unknown;
       recordChildFinished(sessionId: string, input: object): unknown;

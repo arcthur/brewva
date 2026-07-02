@@ -3,7 +3,7 @@ import { SESSION_REWIND_COMPLETED_EVENT_TYPE } from "./session.js";
 import { isProtocolRecord, optionalStringField, readStringArray } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
 import type { SessionRewindTargetView } from "./types/session-rewind.js";
-import { PATCH_RECORDED_EVENT_TYPE } from "./workbench.js";
+import { SOURCE_PATCH_APPLIED_EVENT_TYPE } from "./workbench.js";
 
 // Session rewind target projection, kept in its own internal slice so the session
 // body stays domain-sliced. A no-cache fold over the durable tape: every read
@@ -45,9 +45,14 @@ export function buildSessionRewindProjection(input: ProtocolRecord): ProtocolRec
       prompt && typeof prompt.text === "string" ? prompt.text.slice(0, 120) : "";
     // Patch sets recorded after this checkpoint: a well-defined display metric over
     // the durable tape. (Rollback windows for the executor are a separate concern.)
+    // Counts the live applied-patch receipt; the dead patch.recorded type it
+    // used to count never had a producer after the four-port cutover.
     const patchSetCountAfter = events.filter(
       (candidate) =>
-        candidate.type === PATCH_RECORDED_EVENT_TYPE && candidate.timestamp > event.timestamp,
+        candidate.type === SOURCE_PATCH_APPLIED_EVENT_TYPE &&
+        candidate.timestamp > event.timestamp &&
+        isProtocolRecord(candidate.payload) &&
+        candidate.payload.ok === true,
     ).length;
     const abandoned = abandonedBy.get(checkpointId);
 

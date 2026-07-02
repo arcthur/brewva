@@ -2,7 +2,7 @@ import { CONTEXT_ENTRY_RECORDED_EVENT_TYPE, type ContextEntryRecord } from "./co
 import { type BrewvaEventRecord } from "./events.js";
 import { isProtocolRecord, optionalStringField, readStringArray, stringField } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
-import { type SessionWireFrame, type TurnEnvelope } from "./wire.js";
+import { type SessionWireFrame, type ToolOutputView, type TurnEnvelope } from "./wire.js";
 
 export type { ProtocolRecord } from "./types/foundation.js";
 
@@ -65,13 +65,20 @@ export const SESSION_LINEAGE_SUMMARY_RECORDED_EVENT_TYPE =
 
 export const SESSION_REWIND_COMPLETED_EVENT_TYPE = "session.rewind.completed" as const;
 
-export const SESSION_SHUTDOWN_EVENT_TYPE = "session.shutdown" as const;
+// Underscore on purpose: every producer (lifecycle builder, lineage
+// self-heal, out-of-band shutdown receipts) has always written
+// "session_shutdown", so the durable spelling wins and readers unify on
+// this constant (contract-liveness audit, 2026-07-02).
+export const SESSION_SHUTDOWN_EVENT_TYPE = "session_shutdown" as const;
 
-export const SESSION_TITLE_RECORDED_EVENT_TYPE = "session.title.recorded" as const;
+// The spelling the title generator has always emitted (audit 2026-07-02).
+export const SESSION_TITLE_GENERATED_EVENT_TYPE = "session.title.generated" as const;
 
-export const TAPE_ANCHOR_EVENT_TYPE = "tape.anchor" as const;
+// Continuation anchors land as tape.handoff (audit 2026-07-02).
+export const TAPE_HANDOFF_EVENT_TYPE = "tape.handoff" as const;
 
-export const TAPE_CHECKPOINT_EVENT_TYPE = "tape.checkpoint" as const;
+// The runtime kernel commits canonical checkpoint.committed events (audit 2026-07-02).
+export const CHECKPOINT_COMMITTED_EVENT_TYPE = "checkpoint.committed" as const;
 
 export const TURN_INPUT_RECORDED_EVENT_TYPE = "turn.input.recorded" as const;
 
@@ -507,6 +514,14 @@ export interface TurnInputRecordedPayload extends ProtocolRecord {
   readonly promptText: string;
   readonly turnId: string;
   readonly trigger?: string;
+}
+
+export interface TurnRenderCommittedPayload extends ProtocolRecord {
+  readonly turnId: string;
+  readonly attemptId: string;
+  readonly status: "completed" | "failed";
+  readonly assistantText: string;
+  readonly toolOutputs: readonly ToolOutputView[];
 }
 
 export interface TapeLedgerRow extends ProtocolRecord {

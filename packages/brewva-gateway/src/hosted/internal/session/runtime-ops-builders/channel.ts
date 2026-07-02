@@ -1,4 +1,10 @@
 import {
+  RECOVERY_WAL_APPENDED_EVENT_TYPE,
+  RECOVERY_WAL_COMPACTED_EVENT_TYPE,
+  RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
+  RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/session";
+import {
   CHANNEL_SESSION_CONVERSATION_BOUND_EVENT_TYPE,
   OPERATOR_QUESTION_ANSWERED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/wire";
@@ -37,10 +43,14 @@ export function buildChannelRuntimeOps(
       stopped: ctx.recordInputPayload("channel_ingress_stopped"),
     },
     recovery: {
-      walAppended: ctx.recordInputPayload("channel_recovery_wal_appended"),
-      walCompacted: ctx.recordInputPayload("channel_recovery_wal_compacted"),
-      walRecoveryCompleted: ctx.recordInputPayload("channel_recovery_wal_recovery_completed"),
-      walStatusChanged: ctx.recordInputPayload("channel_recovery_wal_status_changed"),
+      // Vocabulary constants, not channel-prefixed underscore kinds: the WAL
+      // observability chain (store recordEvent -> recordChannelRecoveryWalEvent
+      // -> these verbs) must land on the tape as the types session-index and
+      // recall classification query (contract-liveness audit, 2026-07-02).
+      walAppended: ctx.recordInputPayload(RECOVERY_WAL_APPENDED_EVENT_TYPE),
+      walCompacted: ctx.recordInputPayload(RECOVERY_WAL_COMPACTED_EVENT_TYPE),
+      walRecoveryCompleted: ctx.recordInputPayload(RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE),
+      walStatusChanged: ctx.recordInputPayload(RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE),
     },
     runtime: {
       evicted: ctx.recordInputPayload("channel_runtime_evicted"),

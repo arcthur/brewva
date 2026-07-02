@@ -15,9 +15,6 @@ export const CONTEXT_COMPACTION_AUTO_REQUESTED_EVENT_TYPE =
 
 export const CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE = "context.compaction.gate.armed" as const;
 
-export const CONTEXT_COMPACTION_GATE_BLOCKED_TOOL_EVENT_TYPE =
-  "context.compaction.gate.blocked_tool" as const;
-
 export const CONTEXT_COMPACTION_GATE_CLEARED_EVENT_TYPE =
   "context.compaction.gate.cleared" as const;
 

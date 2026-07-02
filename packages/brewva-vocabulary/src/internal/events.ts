@@ -47,6 +47,14 @@ export const RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND = "tool_call_observed" as const
 export const RUNTIME_OPS_TOOL_CALL_STARTED_KIND = "tool_call_started" as const;
 export const RUNTIME_OPS_TOOL_CALL_ENDED_KIND = "tool_call_ended" as const;
 
+/**
+ * Durable receipt of a real-vs-shadow tool-authority divergence, drained from
+ * the kernel's in-memory shadow evidence after each turn (RFC R4 Phase 0).
+ * Evidence only: the real admission outcome is never changed by a shadow.
+ */
+export const RUNTIME_OPS_SHADOW_DIVERGENCE_RECORDED_KIND =
+  "kernel.shadow.divergence.recorded" as const;
+
 export const RUNTIME_OPS_TO_TAPE_EVENT_TYPE = {
   [RUNTIME_OPS_REASONING_CHECKPOINT_RECORDED_KIND]: "reasoning.checkpoint",
   [RUNTIME_OPS_REASONING_REVERT_RECORDED_KIND]: "reasoning.revert",
@@ -58,6 +66,7 @@ export type RuntimeOpsEventKind =
   | typeof RUNTIME_OPS_REASONING_CHECKPOINT_RECORDED_KIND
   | typeof RUNTIME_OPS_REASONING_REVERT_RECORDED_KIND
   | typeof RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND
+  | typeof RUNTIME_OPS_SHADOW_DIVERGENCE_RECORDED_KIND
   | typeof RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND
   | typeof RUNTIME_OPS_TOOL_INVOCATION_FINISHED_KIND
   | typeof RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND
