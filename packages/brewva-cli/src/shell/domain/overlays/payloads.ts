@@ -157,6 +157,8 @@ export type CliInboxOverlayItem =
 export interface CliInboxOverlayPayload {
   kind: "inbox";
   selectedIndex: number;
+  /** Scroll offset (in lines) into the selected item's detail pane. */
+  detailScrollOffset: number;
   snapshot: OperatorSurfaceSnapshot;
   notifications: CliOverlayNotification[];
   items: CliInboxOverlayItem[];

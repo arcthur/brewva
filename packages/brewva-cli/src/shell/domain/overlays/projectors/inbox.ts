@@ -15,6 +15,7 @@ export function buildInboxOverlayPayload(
   selection: {
     id?: string;
     index?: number;
+    detailScrollOffset?: number;
   } = {},
 ): CliInboxOverlayPayload {
   const notifications = [...notificationsSource].toReversed();
@@ -45,5 +46,6 @@ export function buildInboxOverlayPayload(
       selectedIndexById >= 0
         ? selectedIndexById
         : Math.max(0, Math.min(selection.index ?? 0, Math.max(0, items.length - 1))),
+    detailScrollOffset: Math.max(0, selection.detailScrollOffset ?? 0),
   };
 }

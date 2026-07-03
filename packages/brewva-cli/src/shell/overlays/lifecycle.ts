@@ -415,9 +415,12 @@ export class ShellOverlayLifecycleHandler {
     if (!("selectedIndex" in active)) {
       return;
     }
+    const nextSelectedIndex = (active.selectedIndex + delta + itemCount) % itemCount;
     this.replaceActiveOverlay({
       ...active,
-      selectedIndex: (active.selectedIndex + delta + itemCount) % itemCount,
+      selectedIndex: nextSelectedIndex,
+      // A new item shows its own detail from the top, not the previous scroll.
+      ...(active.kind === "inbox" ? { detailScrollOffset: 0 } : {}),
     });
   }
 
@@ -450,6 +453,13 @@ export class ShellOverlayLifecycleHandler {
       this.replaceActiveOverlay({
         ...active,
         scrollOffsets: nextOffsets,
+      });
+      return;
+    }
+    if (active.kind === "inbox") {
+      this.replaceActiveOverlay({
+        ...active,
+        detailScrollOffset: Math.max(0, active.detailScrollOffset + delta),
       });
       return;
     }
@@ -1005,6 +1015,7 @@ export class ShellOverlayLifecycleHandler {
         this.buildInboxOverlayPayload(this.context.getOperatorSnapshot(), {
           id: active.items[active.selectedIndex]?.id,
           index: active.selectedIndex,
+          detailScrollOffset: active.detailScrollOffset,
         }),
       );
       return;
@@ -1088,6 +1099,7 @@ export class ShellOverlayLifecycleHandler {
         this.buildInboxOverlayPayload(snapshot, {
           id: active.items[active.selectedIndex]?.id,
           index: active.selectedIndex,
+          detailScrollOffset: active.detailScrollOffset,
         }),
       );
       return;
@@ -1633,6 +1645,7 @@ export class ShellOverlayLifecycleHandler {
     selection: {
       id?: string;
       index?: number;
+      detailScrollOffset?: number;
     } = {},
   ) {
     return buildInboxOverlayPayload(snapshot, this.context.getState().notifications, selection);

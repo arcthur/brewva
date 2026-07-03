@@ -2267,7 +2267,7 @@ describe("opentui solid shell runtime: interaction events", () => {
       // The inbox is a modal overlay in the split-footer shell; assert its own
       // chrome (title + dismiss hint) instead of the legacy status-bar shortcut.
       expect(frame).toContain("Inbox");
-      expect(frame).toContain("dismiss notification");
+      expect(frame).toContain("dismiss");
 
       await openTuiSolidAct(async () => {
         await runtime.handleInput({

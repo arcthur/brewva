@@ -372,6 +372,7 @@ export function InboxOverlay(input: {
   width: number;
   height: number;
 }) {
+  const surface = createMemo(() => resolveDialogSurfaceDimensions(input.width, input.height));
   const sidebarRows = createMemo(() =>
     resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.items.length),
   );
@@ -379,6 +380,11 @@ export function InboxOverlay(input: {
   const questionCount = createMemo(
     () => input.payload.items.filter((entry) => entry.kind === "question").length,
   );
+  const headerLines = createMemo(() => [
+    `Pending questions: ${questionCount()}`,
+    `Notifications: ${input.payload.notifications.length}`,
+    "",
+  ]);
   const detailLines = createMemo(() => {
     const entry = item();
     if (!entry) {
@@ -395,13 +401,31 @@ export function InboxOverlay(input: {
     }
     return buildNotificationDetailLines(notification);
   });
+  // The detail pane must stay inside the overlay: clip to the height left after
+  // the header lines (reserving a row for the scroll hint) and scroll it with
+  // PgUp/PgDn (Enter opens the full, always-scrollable pager).
+  const detailWindow = createMemo(() =>
+    visibleLineWindow(
+      detailLines(),
+      input.payload.detailScrollOffset,
+      Math.max(3, surface().contentHeight - headerLines().length - 2),
+    ),
+  );
+  const scrollHint = createMemo(() => {
+    const total = detailLines().length;
+    const window = detailWindow();
+    if (window.visibleLines.length >= total) {
+      return undefined;
+    }
+    return `lines ${window.start}-${window.end} of ${total} · PgUp/PgDn`;
+  });
   return (
     <OverlaySurface
       title="Inbox"
       width={input.width}
       height={input.height}
       theme={input.theme}
-      footer="Enter inspect · d dismiss notification · x clear notifications · Esc close"
+      footer="Enter inspect · PgUp/PgDn scroll · d dismiss · x clear · Esc close"
       splitContent
     >
       <box flexDirection="row" gap={1} flexGrow={1}>
@@ -423,15 +447,17 @@ export function InboxOverlay(input: {
           </Show>
         </box>
         <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
-          <TextLineBlock
-            lines={[
-              `Pending questions: ${questionCount()}`,
-              `Notifications: ${input.payload.notifications.length}`,
-              "",
-              ...detailLines(),
-            ]}
-            color={input.theme.text}
-          />
+          <TextLineBlock lines={headerLines()} color={input.theme.text} />
+          <box flexGrow={1}>
+            <TextLineBlock lines={detailWindow().visibleLines} color={input.theme.text} />
+          </box>
+          <Show when={scrollHint()}>
+            {(hint) => (
+              <text fg={input.theme.textMuted} wrapMode="none">
+                {hint()}
+              </text>
+            )}
+          </Show>
         </box>
       </box>
     </OverlaySurface>
