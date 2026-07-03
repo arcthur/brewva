@@ -96,4 +96,129 @@ describe("shell operator snapshot sync", () => {
 
     expect(await sync.refresh()).toBe(true);
   });
+
+  test("re-opens the approval overlay after it was dismissed while still pending", async () => {
+    const approval = {
+      requestId: "approval-1",
+      subject: "swift build -c release",
+      toolName: "exec",
+      boundary: "effectful",
+    } as OperatorSurfaceSnapshot["approvals"][number];
+    // Two snapshots with different signatures (a task run comes and goes) but the
+    // SAME pending approval throughout — the approval is never decided.
+    const withTask: OperatorSurfaceSnapshot = {
+      approvals: [approval],
+      questions: [],
+      taskRuns: [{ runId: "run-1" }] as OperatorSurfaceSnapshot["taskRuns"],
+      sessions: [],
+    };
+    const withoutTask: OperatorSurfaceSnapshot = {
+      approvals: [approval],
+      questions: [],
+      taskRuns: [],
+      sessions: [],
+    };
+    let snapshot: OperatorSurfaceSnapshot = withoutTask;
+    const openedApprovalOverlays: unknown[] = [];
+    // The operator dismissed the overlay: nothing is presenting it anymore.
+    let overlayShowsApproval = false;
+
+    const sync = new ShellOperatorSnapshotSync({
+      isDisposed: () => false,
+      getSessionGeneration: () => 1,
+      getState: () =>
+        ({
+          status: { safety: undefined },
+          overlay: {
+            active: overlayShowsApproval ? { payload: { kind: "approval" } } : undefined,
+            queue: [],
+          },
+        }) as unknown as CliShellViewState,
+      getSnapshot: async () => snapshot,
+      setSnapshot() {},
+      commit() {},
+      overlayHandler: {
+        syncSnapshotOverlay() {},
+        openOverlay(payload: { kind?: string }) {
+          if (payload.kind === "approval") {
+            openedApprovalOverlays.push(payload);
+            overlayShowsApproval = true;
+          }
+        },
+      } as unknown as ShellOverlayLifecycleHandler,
+    });
+
+    // First sync: approval surfaces, overlay opens.
+    await sync.refresh();
+    expect(openedApprovalOverlays).toHaveLength(1);
+
+    // The operator presses escape — the overlay closes but the approval is still
+    // pending (never decided).
+    overlayShowsApproval = false;
+
+    // A later snapshot change (unrelated task run) re-runs the sync. The still-
+    // pending approval, now unpresented, must surface again — not stay buried
+    // behind a one-shot "already seen" guard.
+    snapshot = withTask;
+    await sync.refresh();
+    expect(openedApprovalOverlays).toHaveLength(2);
+  });
+
+  test("does not re-open the approval overlay while it is still being presented", async () => {
+    const approval = {
+      requestId: "approval-1",
+      subject: "swift build",
+      toolName: "exec",
+      boundary: "effectful",
+    } as OperatorSurfaceSnapshot["approvals"][number];
+    const withTask: OperatorSurfaceSnapshot = {
+      approvals: [approval],
+      questions: [],
+      taskRuns: [{ runId: "run-1" }] as OperatorSurfaceSnapshot["taskRuns"],
+      sessions: [],
+    };
+    const withoutTask: OperatorSurfaceSnapshot = {
+      approvals: [approval],
+      questions: [],
+      taskRuns: [],
+      sessions: [],
+    };
+    let snapshot: OperatorSurfaceSnapshot = withoutTask;
+    const openedApprovalOverlays: unknown[] = [];
+    let overlayShowsApproval = false;
+
+    const sync = new ShellOperatorSnapshotSync({
+      isDisposed: () => false,
+      getSessionGeneration: () => 1,
+      getState: () =>
+        ({
+          status: { safety: undefined },
+          overlay: {
+            active: overlayShowsApproval ? { payload: { kind: "approval" } } : undefined,
+            queue: [],
+          },
+        }) as unknown as CliShellViewState,
+      getSnapshot: async () => snapshot,
+      setSnapshot() {},
+      commit() {},
+      overlayHandler: {
+        syncSnapshotOverlay() {},
+        openOverlay(payload: { kind?: string }) {
+          if (payload.kind === "approval") {
+            openedApprovalOverlays.push(payload);
+            overlayShowsApproval = true;
+          }
+        },
+      } as unknown as ShellOverlayLifecycleHandler,
+    });
+
+    await sync.refresh();
+    expect(openedApprovalOverlays).toHaveLength(1);
+
+    // The overlay is still up; an unrelated snapshot change must not stack a
+    // second approval overlay on top of the one already presented.
+    snapshot = withTask;
+    await sync.refresh();
+    expect(openedApprovalOverlays).toHaveLength(1);
+  });
 });

@@ -6,7 +6,29 @@ import {
   buildOperatorSafetyShellAskView,
   buildOperatorSafetyShellSessionView,
   buildOperatorSafetyShellToolView,
+  buildPendingApprovalAffordance,
 } from "../../../packages/brewva-cli/src/shell/domain/operator-safety/shell-view.js";
+
+describe("pending approval affordance", () => {
+  test("is absent with no pending approvals", () => {
+    expect(buildPendingApprovalAffordance({ count: 0, reviewShortcut: "leader a" })).toBe(
+      undefined,
+    );
+  });
+
+  test("names a single approval and points at the review shortcut", () => {
+    expect(buildPendingApprovalAffordance({ count: 1, reviewShortcut: "leader a" })).toBe(
+      "△ 1 approval · leader a review",
+    );
+  });
+
+  test("pluralizes and still surfaces without a resolved shortcut", () => {
+    expect(buildPendingApprovalAffordance({ count: 3, reviewShortcut: "leader a" })).toBe(
+      "△ 3 approvals · leader a review",
+    );
+    expect(buildPendingApprovalAffordance({ count: 2 })).toBe("△ 2 approvals");
+  });
+});
 
 describe("operator safety shell view", () => {
   test("maps read-only execution to inspect", () => {

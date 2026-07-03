@@ -481,6 +481,29 @@ export function buildOperatorSafetyShellIdleView(): OperatorSafetyShellSessionVi
   };
 }
 
+/**
+ * A persistent, glanceable footer affordance for pending operator approvals.
+ * Effect-boundary tools (exec, etc.) suspend the turn on a `waiting_approval`
+ * phase; the approval overlay may auto-open, but if it is dismissed — or opens
+ * behind another overlay — the operator otherwise has no on-screen signal that
+ * a decision is owed or how to reach it. Rendering this while any approval is
+ * pending keeps the count and the review shortcut visible regardless of overlay
+ * state (the pattern opencode uses for its footer permission counter). The
+ * shortcut label is resolved by the UI layer and passed in, so this stays free
+ * of keymap coupling. Returns undefined when nothing is pending.
+ */
+export function buildPendingApprovalAffordance(input: {
+  count: number;
+  reviewShortcut?: string;
+}): string | undefined {
+  if (input.count <= 0) {
+    return undefined;
+  }
+  const noun = input.count === 1 ? "approval" : "approvals";
+  const base = `△ ${input.count} ${noun}`;
+  return input.reviewShortcut ? `${base} · ${input.reviewShortcut} review` : base;
+}
+
 export function buildOperatorSafetyShellSessionView(
   input: OperatorSafetyShellSessionViewInput,
 ): OperatorSafetyShellSessionView | undefined {

@@ -2,6 +2,7 @@
 
 import { For, Show, createEffect, createMemo } from "solid-js";
 import { truncateToWidth, visibleWidth } from "../../src/internal/tui/index.js";
+import { buildPendingApprovalAffordance } from "../../src/shell/domain/operator-safety/shell-view.js";
 import { buildPastedTextFold, shouldFoldPastedText } from "../../src/shell/domain/paste-fold.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
 import type { BrewvaTuiConfig } from "../../src/shell/domain/tui.js";
@@ -175,6 +176,12 @@ export function PromptPanel(input: {
       : input.composer.completion
         ? input.theme.accent
         : input.theme.borderActive,
+  );
+  const approvalAffordance = createMemo(() =>
+    buildPendingApprovalAffordance({
+      count: Number.parseInt(input.status.entries.approvals ?? "", 10) || 0,
+      reviewShortcut: shortcut("operator.approvals"),
+    }),
   );
   const promptHints = createMemo(() =>
     [
@@ -356,9 +363,18 @@ export function PromptPanel(input: {
         alignItems={stackedFooter() ? "flex-start" : "center"}
         gap={1}
       >
-        <Show when={showFooterStatus()}>
-          <text fg={input.theme.textMuted} wrapMode="none">
-            {footerStatus()}
+        <Show
+          when={approvalAffordance()}
+          fallback={
+            <Show when={showFooterStatus()}>
+              <text fg={input.theme.textMuted} wrapMode="none">
+                {footerStatus()}
+              </text>
+            </Show>
+          }
+        >
+          <text fg={input.theme.warning} wrapMode="none">
+            {approvalAffordance()}
           </text>
         </Show>
         <text fg={input.theme.textMuted} wrapMode="none">

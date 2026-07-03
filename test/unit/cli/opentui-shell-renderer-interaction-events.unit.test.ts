@@ -945,6 +945,51 @@ describe("opentui solid shell runtime: interaction events", () => {
     }
   });
 
+  test("footer surfaces a persistent pending-approval affordance with the review shortcut", async () => {
+    // Effect-boundary tools suspend on waiting_approval; the operator must be
+    // able to SEE that a decision is owed and how to reach it, independent of
+    // whether the approval overlay is currently open. Wide viewport so the
+    // full-screen footer keeps the affordance on one line.
+    const { bundle } = createFakeBundle({ approvals: 2 });
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
+      { width: 160, height: 30 },
+    );
+
+    try {
+      // The approval overlay auto-opens over the two pending approvals; dismiss
+      // it so the affordance is proven to survive WITHOUT the overlay on screen.
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("ESCAPE");
+        await Bun.sleep(80);
+      });
+      await testSetup.renderOnce();
+      expect(runtime.getViewState().overlay.active).toBe(undefined);
+
+      const reviewShortcut = runtime.getShortcutLabel("operator.approvals");
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (rendered) => rendered.includes("2 approvals"),
+      });
+      expect(frame).toContain("2 approvals");
+      if (reviewShortcut) {
+        expect(frame).toContain(`${reviewShortcut} review`);
+      }
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
   test("completion mode routes ctrl+p to completion navigation, not the command palette", async () => {
     const { bundle } = createFakeBundle();
     const runtime = new CliShellRuntime(bundle, {

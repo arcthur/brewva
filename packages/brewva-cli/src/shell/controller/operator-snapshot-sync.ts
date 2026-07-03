@@ -72,14 +72,12 @@ function snapshotSignature(snapshot: OperatorSurfaceSnapshot): string {
 }
 
 export class ShellOperatorSnapshotSync {
-  readonly #seenApprovals = new Set<string>();
   readonly #seenQuestions = new Set<string>();
   #lastSnapshotSignature: string | undefined;
 
   constructor(private readonly context: ShellOperatorSnapshotSyncContext) {}
 
   resetSeen(): void {
-    this.#seenApprovals.clear();
     this.#seenQuestions.clear();
     this.#lastSnapshotSignature = undefined;
   }
@@ -151,23 +149,36 @@ export class ShellOperatorSnapshotSync {
   }
 
   private openNewApproval(snapshot: OperatorSurfaceSnapshot): void {
-    const newApproval = snapshot.approvals.find((item) => !this.#seenApprovals.has(item.requestId));
-    if (!newApproval) {
+    if (snapshot.approvals.length === 0) {
       return;
     }
-    for (const item of snapshot.approvals) {
-      this.#seenApprovals.add(item.requestId);
+    // Surface the overlay whenever an approval is pending and none is currently
+    // being presented. Gating on "is one already on screen?" (not a one-shot
+    // "have I ever seen this requestId?") is what makes the overlay RECOVERABLE:
+    // if the operator dismisses it with the approval still pending, the next
+    // snapshot change re-surfaces it instead of leaving the request reachable
+    // only through the (easily missed) leader-a review command. The snapshot
+    // signature guard upstream means a plain dismiss does not immediately
+    // re-open it, so escape still works.
+    if (this.isApprovalOverlayPresented()) {
+      return;
     }
     this.context.overlayHandler.openOverlay(
       {
         kind: "approval",
-        selectedIndex: snapshot.approvals.findIndex(
-          (item) => item.requestId === newApproval.requestId,
-        ),
+        selectedIndex: 0,
         snapshot,
       },
       "queued",
     );
+  }
+
+  private isApprovalOverlayPresented(): boolean {
+    const overlay = this.context.getState().overlay;
+    if (overlay.active?.payload?.kind === "approval") {
+      return true;
+    }
+    return overlay.queue.some((entry) => entry.payload?.kind === "approval");
   }
 
   private openNewQuestion(snapshot: OperatorSurfaceSnapshot): void {
