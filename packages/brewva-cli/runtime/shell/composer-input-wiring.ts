@@ -264,12 +264,45 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
   });
   onCleanup(clearScheduledViewportResize);
 
-  const copySelection = async (): Promise<boolean> =>
-    await copyOpenTuiSelection({
-      renderer,
-      copyText: input.copyTextToClipboard,
-      notifier: input.runtime.ui,
-    });
+  // Mouse text selection lives on the renderer, OUTSIDE the reactive graph, so
+  // the keymap-mode memo cannot observe it directly: entering selection mode
+  // only ever coincided with an unrelated state commit, and — the dangerous
+  // half — clearing the selection (escape, or the post-copy clear) recomputed
+  // NOTHING, leaving the keymap stranded in selection mode with every other
+  // key dead. Mirror the selection into a signal driven by the renderer's
+  // `selection` event, and re-sync at every local clear in case a clear does
+  // not re-emit.
+  const [hasRendererSelection, setHasRendererSelection] = createSignal(
+    Boolean(renderer.getSelection?.()),
+  );
+  const syncRendererSelection = (): void => {
+    setHasRendererSelection(Boolean(renderer.getSelection?.()));
+  };
+  const selectionEvents = renderer as {
+    on?(event: "selection", listener: () => void): unknown;
+    off?(event: "selection", listener: () => void): unknown;
+  };
+  if (typeof selectionEvents.on === "function") {
+    selectionEvents.on("selection", syncRendererSelection);
+    onCleanup(() => selectionEvents.off?.("selection", syncRendererSelection));
+  }
+  const clearRendererSelection = (): void => {
+    renderer.clearSelection?.();
+    syncRendererSelection();
+  };
+
+  const copySelection = async (): Promise<boolean> => {
+    try {
+      return await copyOpenTuiSelection({
+        renderer,
+        copyText: input.copyTextToClipboard,
+        notifier: input.runtime.ui,
+      });
+    } finally {
+      // copyOpenTuiSelection clears the renderer selection on its way out.
+      syncRendererSelection();
+    }
+  };
 
   let composerEditorSyncTimer: ReturnType<typeof setTimeout> | undefined;
   const clearScheduledComposerEditorSync = (): void => {
@@ -307,7 +340,7 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
         renderer: keymapRenderer,
         runtime: input.runtime,
         copySelection,
-        clearSelection: () => renderer.clearSelection?.(),
+        clearSelection: clearRendererSelection,
         syncComposerFromEditor,
         navigateTranscriptMessage: (direction) => input.navigateTranscriptMessage(direction),
       })
@@ -316,7 +349,12 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
   onCleanup(() => keymapController?.dispose());
   onCleanup(() => clearScheduledComposerEditorSync());
 
-  const keymapMode = createMemo(() => input.keymapMode(state, renderer));
+  const keymapMode = createMemo(() => {
+    // Reactive witness for the renderer-owned selection; the resolver still
+    // reads the live renderer state.
+    hasRendererSelection();
+    return input.keymapMode(state, renderer);
+  });
   createEffect(() => {
     keymapController?.setMode(keymapMode());
   });
@@ -433,10 +471,10 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
     if (key.name === "escape") {
       event.preventDefault();
       event.stopPropagation();
-      renderer.clearSelection?.();
+      clearRendererSelection();
       return;
     }
-    renderer.clearSelection?.();
+    clearRendererSelection();
   }, {});
 
   useKeyboard((event) => {

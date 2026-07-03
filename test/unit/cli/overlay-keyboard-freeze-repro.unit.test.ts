@@ -175,6 +175,121 @@ describe("overlay keyboard navigation (real renderer)", () => {
     }
   });
 
+  test("a mouse text selection must not capture the keyboard away from an overlay", async () => {
+    // Regression for the "overlay frozen after connecting a provider" report:
+    // switching back from the browser OAuth approval, a stray mouse drag left a
+    // renderer text selection. Selection mode then captured the keymap — every
+    // overlay key (arrows, ctrl+n, escape) fell into the selection layer's two
+    // bindings — and because the renderer selection lives outside the reactive
+    // graph, even clearing it never recomputed the mode. Keyboard dead, "TUI
+    // frozen".
+    const fixture = createShellFixture({
+      transcriptSeed: [
+        { role: "assistant", content: "some transcript text to select with the mouse" },
+      ],
+      models: [
+        {
+          provider: "openai-codex",
+          id: "gpt-5.5",
+          name: "GPT-5.5",
+          contextWindow: 400_000,
+          maxTokens: 128_000,
+          reasoning: true,
+        },
+        {
+          provider: "openai-codex",
+          id: "gpt-5.5-pro",
+          name: "GPT-5.5 Pro",
+          contextWindow: 400_000,
+          maxTokens: 128_000,
+          reasoning: true,
+        },
+      ],
+    });
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+      operatorPollIntervalMs: 600_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime }),
+      { width: 100, height: 30 },
+    );
+
+    const selectedIndex = () => {
+      const payload = runtime.getViewState().overlay.active?.payload;
+      return payload && "selectedIndex" in payload ? payload.selectedIndex : -1;
+    };
+
+    // The harness cannot produce a real mouse drag-selection (no selectable
+    // text renderable), so inject the selection OBJECT while keeping the whole
+    // fixed chain real: renderer `selection` event -> wiring signal -> keymap
+    // mode memo -> layer activation, and the selection layer's escape ->
+    // clearSelection -> mode recovery.
+    const rendererWithSelection = testSetup.renderer as unknown as {
+      getSelection(): object | null;
+      clearSelection(): void;
+      emit(event: string, payload: unknown): boolean;
+    };
+    let fakeSelection: object | null = null;
+    rendererWithSelection.getSelection = () => fakeSelection;
+    rendererWithSelection.clearSelection = () => {
+      fakeSelection = null;
+    };
+
+    try {
+      await testSetup.renderOnce();
+
+      // The stray drag the operator makes when refocusing the terminal window.
+      await openTuiSolidAct(async () => {
+        fakeSelection = { anchor: { x: 2, y: 2 }, focus: { x: 40, y: 2 } };
+        rendererWithSelection.emit("selection", fakeSelection);
+        await Bun.sleep(0);
+      });
+
+      // The models dialog opened over that selection still owns the keyboard.
+      await invokePaletteCommand(runtime, "agent.model");
+      await testSetup.renderOnce();
+      expect(runtime.getViewState().overlay.active?.payload?.kind).toBe("modelPicker");
+
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("ARROW_DOWN");
+        await Bun.sleep(0);
+      });
+      expect(selectedIndex()).toBe(1);
+
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("ESCAPE");
+        await Bun.sleep(80);
+      });
+      expect(runtime.getViewState().overlay.active).toBe(undefined);
+
+      // Without an overlay the selection layer owns escape: the FIRST escape
+      // clears the selection AND the keymap must leave selection mode with it
+      // (the reactivity half of the bug), so the next overlay navigates again.
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("ESCAPE");
+        await Bun.sleep(80);
+      });
+      expect(fakeSelection).toBe(null);
+
+      await invokePaletteCommand(runtime, "agent.model");
+      await testSetup.renderOnce();
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("ARROW_DOWN");
+        await Bun.sleep(0);
+      });
+      expect(selectedIndex()).toBe(1);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
   test("inbox overlay responds to down / ctrl+n / ctrl+p / escape", async () => {
     const fixture = createShellFixture({});
     const runtime = new CliShellRuntime(fixture.bundle, {

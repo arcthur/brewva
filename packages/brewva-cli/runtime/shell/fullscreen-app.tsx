@@ -25,24 +25,30 @@ import { TranscriptMessageView } from "./transcript.js";
 import { cloneOverlayPayload } from "./utils.js";
 
 /**
- * Keymap-mode resolver for the full-screen shell: selection wins, then an active
- * modal overlay (pager payloads use the "pager" layer, everything else
- * "overlay"), then subagent-footer focus, then the completion popup, then the
- * bare composer.
+ * Keymap-mode resolver for the full-screen shell: an active modal overlay wins
+ * (pager payloads use the "pager" layer, everything else "overlay"), then the
+ * mouse text selection, then subagent-footer focus, then the completion popup,
+ * then the bare composer. Exported for tests: the precedence IS the fix below.
  */
-function resolveShellKeymapMode(
+export function resolveShellKeymapMode(
   state: ReturnType<ShellRendererController["getViewState"]>,
   renderer: OpenTuiRenderer,
 ): ComposerKeymapMode {
-  if (renderer.getSelection?.()) {
-    return "selection";
-  }
+  // Modal overlays win over a mouse text selection: the selection lives in the
+  // surface UNDER the overlay, so letting it capture the keymap would strand
+  // the operator on a dialog whose navigation keys (and escape) all fall into
+  // the selection layer's two bindings. A drag-selection made while switching
+  // windows (e.g. returning from a browser OAuth approval) froze every overlay
+  // exactly this way.
   const payload = state.overlay.active?.payload;
   if (payload?.kind === "pager") {
     return "pager";
   }
   if (payload) {
     return "overlay";
+  }
+  if (renderer.getSelection?.()) {
+    return "selection";
   }
   if (state.focus.active === "subagentFooter") {
     return "subagentFooter";
