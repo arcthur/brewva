@@ -4,7 +4,7 @@
 
 - This file is the short repository map for agents working in `brewva/`.
 - Keep it current and action-oriented. Long-form project rules live in `skills/project/shared/*.md`; design detail lives in `docs/**`; code and tests remain authoritative.
-- Priority order: hard invariants, workflow gates, verification, then lookup.
+- Priority order: hard invariants, working doctrine, workflow gates, verification, then lookup.
 
 ## Repo At A Glance
 
@@ -30,6 +30,16 @@
 - Keep search tokenization centralized in `@brewva/brewva-search`; do not add package-local tokenizers or silent Chinese-tokenizer fallbacks.
 - Use Bun for build and test. Baseline: Bun `1.3.12`, Node `^20.19.0 || >=22.13.0`, ESM, strict TypeScript.
 - Detailed invariant context is in `skills/project/shared/critical-rules.md`, `skills/project/shared/package-boundaries.md`, and `skills/project/shared/anti-patterns.md`.
+
+## Working Doctrine
+
+Operating principles distilled from repeated incidents in this repository. They apply equally to feature work and bug fixes.
+
+- **Evidence over inference; durable layers over presentation layers.** Start every investigation from persisted evidence — tape events, WAL contents, execution audits, debug traces — never from UI output alone. Presentation layers and fallback paths systematically misclassify failures (stale config surfacing as connection errors, transient provider failures presenting as deadlocks, entitlement rejections masked by silent model fallback). Treat the apparent category of a symptom as unverified until durable evidence confirms it.
+- **When layer-by-layer static review says "correct" everywhere, write a full-chain reproduction.** Multiple defects here passed static audit at every individual layer and surfaced immediately under one end-to-end integration test. For new features, stand up end-to-end verification first, then argue unit-level correctness. Re-reading code to convince yourself it should work is the signal to stop and write the reproduction.
+- **One symptom rarely means one defect.** Several incidents were stacked, independent defects behind a single report; fixing the first plausible root cause and stopping is the most common way to leave a bug alive. Acceptance is the original symptom disappearing on the real path, not a reasonable-sounding cause being fixed.
+- **Before touching any shared surface, enumerate every producer and consumer.** Render/interaction projection drift, boot-time setters silently overriding user configuration, and bindings shadowed by higher-priority layers are one disease: the cost of changing shared state, wire contracts, setters, or key bindings lives in the readers and writers you did not look at. Pull the full consumer list first; prefer a single shared projection over parallel views of the same state.
+- **Distrust intermediaries; done means every gate empirically green.** Subagent findings are leads, not conclusions — verify against primary evidence before acting on them. Tool signals can be environment artifacts (shell wrappers mutating commands, default test timeouts, stale incremental-build state, stale worktree dependencies) — rule those out before trusting a failure. Completion requires `bun run check` and the full `bun test` suite both actually run and green; their coverage does not overlap.
 
 ## Workflow Trigger Index
 
