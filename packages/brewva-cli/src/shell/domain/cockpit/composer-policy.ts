@@ -87,7 +87,11 @@ export function describeShellCockpitComposerPolicyBlock(
     case "muted":
       return "Composer is muted while the current turn is active. Keep drafting, then submit when the turn settles.";
     case "stash":
-      return "Decision lane owns the next action. Your draft is preserved; resolve the active decision before submitting.";
+      return (
+        "Decision lane owns the next action. Your draft is preserved — nothing was queued or " +
+        "interrupted. Review the pending decision (leader a approvals · ctrl+o questions), then " +
+        "press enter again to submit."
+      );
     case "block":
       return "Composer is blocked for this session phase. Resolve recovery or open a new session before editing.";
   }
