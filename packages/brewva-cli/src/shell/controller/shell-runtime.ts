@@ -357,6 +357,7 @@ export class CliShellRuntime {
     sessions: [],
   };
   #sessionPhase: SessionPhase = { kind: "idle" };
+  readonly #notifiedServingModelDrift = new Set<string>();
   #unsubscribeSession: (() => void) | undefined;
   #pollTimer: BoundaryIntervalHandle | undefined;
   #statusTimer: ShellScheduledTimeout | undefined;
@@ -1157,6 +1158,9 @@ export class CliShellRuntime {
       if (event.type === "session_phase_change" && isSessionPhase(event.phase)) {
         this.#sessionPhase = event.phase;
       }
+      if (event.type === "message_end") {
+        this.notifyServingModelDrift(event.message);
+      }
       transcriptChanged =
         this.#sessionPort.getProjectionMode() === "wireFold" &&
         isWireFoldTranscriptCandidateEvent(event)
@@ -1196,6 +1200,7 @@ export class CliShellRuntime {
   private initializeState(): void {
     const sessionId = this.#sessionPort.getSessionId();
     this.#sessionPhase = { kind: "idle" };
+    this.#notifiedServingModelDrift.clear();
     this.#transcriptProjector.resetAssistantDraft();
     this.#operatorSnapshotSync.resetSeen();
     const restoredDraft = this.#sessionHandler.getDraftsBySessionId().get(sessionId);
@@ -1272,6 +1277,37 @@ export class CliShellRuntime {
       });
     }
     this.emitChange();
+  }
+
+  /**
+   * When a provider fallback served the turn with a DIFFERENT model than the
+   * operator selected, say so — once per (selected -> actual) pair per
+   * session. Without this the status bar keeps showing the selected model
+   * while the answers quietly come from the fallback (e.g. gpt-5.5-pro is not
+   * entitled on the account and gpt-5.4-mini answered), and the operator has
+   * no idea a downgrade happened.
+   */
+  private notifyServingModelDrift(message: unknown): void {
+    if (!message || typeof message !== "object") {
+      return;
+    }
+    const record = message as { role?: unknown; model?: unknown };
+    if (record.role !== "assistant" || typeof record.model !== "string" || !record.model) {
+      return;
+    }
+    const selected = this.#bundle.session.model;
+    if (!selected?.id || selected.id === record.model) {
+      return;
+    }
+    const driftKey = `${selected.id}->${record.model}`;
+    if (this.#notifiedServingModelDrift.has(driftKey)) {
+      return;
+    }
+    this.#notifiedServingModelDrift.add(driftKey);
+    this.ui.notify(
+      `This turn was answered by ${record.model} — ${selected.id} was unavailable and automatic fallback stepped in. Run /model to pick a model your account supports.`,
+      "warning",
+    );
   }
 
   private buildSessionStatusActions(): CliShellAction[] {
