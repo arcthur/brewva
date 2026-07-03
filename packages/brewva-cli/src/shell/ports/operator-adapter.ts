@@ -35,8 +35,26 @@ async function resolveApprovalRequest(input: {
   sessionId: string;
   requestId: string;
   turnId?: string;
+  resolveApprovalViaSessionPort?: OperatorSurfaceApprovalResolver;
 }): Promise<void> {
   if (!input.turnId) {
+    return;
+  }
+  // Prefer the session port's projected pipeline: the resumed turn's frames
+  // (tool finishes, assistant text, the terminal idle phase) must reach the
+  // live wire store / cockpit fold / session events, or the UI is left
+  // stranded on waiting_approval with a frozen transcript. The direct
+  // runHostedPromptTurn below is the frame-less fallback for approvals that
+  // belong to a session the shell has no projected port for.
+  const status = await input.resolveApprovalViaSessionPort?.({
+    sessionId: input.sessionId,
+    requestId: input.requestId,
+    turnId: input.turnId,
+  });
+  if (status !== undefined) {
+    if (status === "suspended") {
+      throw new Error(`approval_resolution_suspended:${input.requestId}`);
+    }
     return;
   }
   const output = await runHostedPromptTurn({
@@ -56,10 +74,22 @@ async function resolveApprovalRequest(input: {
   }
 }
 
+export type OperatorSurfaceApprovalResolver = (input: {
+  sessionId: string;
+  requestId: string;
+  turnId: string;
+}) => Promise<"completed" | "suspended" | "cancelled" | undefined>;
+
 export function createOperatorSurfacePort(input: {
   getSessionBundle(): CliShellSessionBundle;
   openSession(sessionId: string): Promise<CliShellSessionBundle>;
   createSession(): Promise<CliShellSessionBundle>;
+  /**
+   * Resume an approval through the shell's projected session port when the
+   * approval belongs to the session that port projects. Returns undefined to
+   * decline (wrong session), which falls back to the frame-less direct resume.
+   */
+  resolveApprovalViaSessionPort?: OperatorSurfaceApprovalResolver;
 }): OperatorSurfacePort {
   const approvalResolutionAttempts = new Map<string, number>();
   const activeApprovalResolutions = new Map<string, Promise<void>>();
@@ -102,7 +132,10 @@ export function createOperatorSurfacePort(input: {
       return;
     }
     approvalResolutionAttempts.set(inputValue.requestId, attempts + 1);
-    const task = resolveApprovalRequest(inputValue).finally(() => {
+    const task = resolveApprovalRequest({
+      ...inputValue,
+      resolveApprovalViaSessionPort: input.resolveApprovalViaSessionPort,
+    }).finally(() => {
       activeApprovalResolutions.delete(inputValue.requestId);
     });
     activeApprovalResolutions.set(inputValue.requestId, task);

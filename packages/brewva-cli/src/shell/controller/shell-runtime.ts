@@ -413,6 +413,19 @@ export class CliShellRuntime {
       getSessionBundle: () => this.#bundle,
       openSession: (sessionId) => options.openSession(sessionId),
       createSession: () => options.createSession(),
+      // Approvals for the session this shell projects resume through the
+      // session port's projected pipeline, so the resumed turn's frames reach
+      // the transcript/phase/cockpit instead of vanishing (which stranded the
+      // composer on waiting_approval). Other sessions decline to the fallback.
+      resolveApprovalViaSessionPort: async (approvalInput) => {
+        if (approvalInput.sessionId !== this.#sessionPort.getSessionId()) {
+          return undefined;
+        }
+        return await this.#sessionPort.resolveApproval({
+          requestId: approvalInput.requestId,
+          turnId: approvalInput.turnId,
+        });
+      },
     });
     this.#operatorPort = {
       ...operatorPort,

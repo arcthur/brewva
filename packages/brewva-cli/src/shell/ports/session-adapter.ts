@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
+import type { HostedPromptTurnResult } from "@brewva/brewva-gateway/hosted";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaPromptAssistantMessageEvent,
   BrewvaPromptSessionEvent,
@@ -1344,6 +1346,59 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
       listener(event);
     }
   };
+  // ONE projected-turn pipeline for every host-driven turn entry (fresh prompt
+  // AND approval resume): frames feed the live wire store, the cockpit fold,
+  // and the session-event projection, and a non-suspended exit always lands the
+  // idle phase. Splitting these paths is exactly what stranded resumed turns
+  // in a frame blackhole before.
+  const runProjectedHostedTurn = async (input: {
+    readonly parts: readonly BrewvaPromptContentPart[];
+    readonly turnId?: string;
+    readonly resolveApproval?: { requestId: string };
+  }): Promise<HostedPromptTurnResult> => {
+    projectionMode = "wireFold";
+    const projectionState = createRuntimeTurnSessionProjectionState();
+    const output = await runHostedPromptTurn({
+      session: bundle.session,
+      parts: input.parts,
+      source: "interactive",
+      runtime: bundle.runtime,
+      sessionId: bundle.session.sessionManager.getSessionId(),
+      turnId: input.turnId,
+      resolveApproval: input.resolveApproval,
+      onFrame(frame) {
+        liveSessionWireFrames.remember(frame);
+        cockpitWireFold.remember(frame);
+        emitRuntimeTurnSessionFrame({
+          frame,
+          state: projectionState,
+          emit: emitLocalSessionEvent,
+        });
+      },
+    });
+    finishRuntimeTurnAssistantSegment({
+      state: projectionState,
+      emit: emitLocalSessionEvent,
+    });
+    if (
+      output.status === "completed" &&
+      !projectionState.emittedAssistantMessage &&
+      output.assistantText.trim().length > 0
+    ) {
+      emitLocalSessionEvent({
+        type: "message_end",
+        message: buildAssistantTextMessage(output.assistantText),
+      });
+    }
+    if (output.status !== "suspended") {
+      emitRuntimeSessionPhase({
+        state: projectionState,
+        phase: { kind: "idle" },
+        emit: emitLocalSessionEvent,
+      });
+    }
+    return output;
+  };
   const fallbackPresetState = (): BrewvaModelPresetState => ({
     activeName: "Default",
     defaultName: "Default",
@@ -1507,48 +1562,29 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
         await bundle.session.prompt(parts, options);
         return;
       }
-      projectionMode = "wireFold";
-      const projectionState = createRuntimeTurnSessionProjectionState();
-      const output = await runHostedPromptTurn({
-        session: bundle.session,
-        parts,
-        source: "interactive",
-        runtime: bundle.runtime,
-        sessionId: bundle.session.sessionManager.getSessionId(),
-        onFrame(frame) {
-          liveSessionWireFrames.remember(frame);
-          cockpitWireFold.remember(frame);
-          emitRuntimeTurnSessionFrame({
-            frame,
-            state: projectionState,
-            emit: emitLocalSessionEvent,
-          });
-        },
-      });
-      finishRuntimeTurnAssistantSegment({
-        state: projectionState,
-        emit: emitLocalSessionEvent,
-      });
-      if (
-        output.status === "completed" &&
-        !projectionState.emittedAssistantMessage &&
-        output.assistantText.trim().length > 0
-      ) {
-        emitLocalSessionEvent({
-          type: "message_end",
-          message: buildAssistantTextMessage(output.assistantText),
-        });
-      }
-      if (output.status !== "suspended") {
-        emitRuntimeSessionPhase({
-          state: projectionState,
-          phase: { kind: "idle" },
-          emit: emitLocalSessionEvent,
-        });
-      }
+      const output = await runProjectedHostedTurn({ parts });
       if (output.status === "failed") {
         throw output.error instanceof Error ? output.error : new Error(String(output.error));
       }
+    },
+    async resolveApproval(input) {
+      // The resumed turn MUST run through the same projection pipeline as the
+      // original prompt: resolving an approval resumes the suspended turn, and
+      // every frame it produces from here (tool finishes, assistant text, the
+      // terminal turn.committed and its idle phase) is presentation truth. The
+      // operator port used to re-enter the turn without any frame sink, which
+      // left the session phase stranded on waiting_approval — the composer
+      // stayed stashed forever — and froze tool rows and transcript after the
+      // approval was granted.
+      const output = await runProjectedHostedTurn({
+        parts: [],
+        turnId: input.turnId,
+        resolveApproval: { requestId: input.requestId },
+      });
+      if (output.status === "failed") {
+        throw output.error instanceof Error ? output.error : new Error(String(output.error));
+      }
+      return output.status;
     },
     getQueuedPrompts() {
       return bundle.session.getQueuedPrompts();

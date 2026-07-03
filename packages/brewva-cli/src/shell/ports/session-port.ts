@@ -160,6 +160,19 @@ export interface SessionViewPort {
   getShellViewPreferences(): BrewvaShellViewPreferences;
   setShellViewPreferences(preferences: BrewvaShellViewPreferences): void;
   prompt(parts: readonly BrewvaPromptContentPart[], options?: BrewvaPromptOptions): Promise<void>;
+  /**
+   * Resume the turn suspended on the given approval, through the SAME
+   * projection pipeline as {@link SessionViewPort.prompt} — the resumed turn's
+   * frames (tool finishes, assistant text, the terminal idle phase) are
+   * presentation truth, so re-entering the turn without the frame sink strands
+   * the session phase on waiting_approval and freezes the transcript. Returns
+   * the resumed turn's terminal status ("suspended" means another decision is
+   * now pending).
+   */
+  resolveApproval(input: {
+    requestId: string;
+    turnId: string;
+  }): Promise<"completed" | "suspended" | "cancelled">;
   getQueuedPrompts(): readonly BrewvaQueuedPromptView[];
   removeQueuedPrompt(promptId: string): boolean;
   steer(text: string, options?: BrewvaSteerOptions): Promise<BrewvaSteerOutcome>;
