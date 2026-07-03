@@ -9,7 +9,7 @@ import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
   describeTargetScopeRejection,
-  resolveScopedPath,
+  resolveReadableScopedPath,
   resolveToolTargetScope,
 } from "../../runtime-port/target-scope.js";
 import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
@@ -131,13 +131,13 @@ export function createLookAtTool(options?: { runtime?: BrewvaToolRuntime }): Too
     }),
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const scope = resolveToolTargetScope(lookAtTool.runtime, ctx);
-      const absolute = resolveScopedPath(params.file_path, scope);
+      const absolute = resolveReadableScopedPath(params.file_path, scope);
       if (!absolute) {
         return errTextResult(
           describeTargetScopeRejection({
             tool: "look_at",
             subject: "path",
-            allowedRoots: scope.allowedRoots,
+            allowedRoots: scope.readableRoots,
             offending: params.file_path,
           }),
         );

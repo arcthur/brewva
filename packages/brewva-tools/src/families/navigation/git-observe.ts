@@ -141,12 +141,12 @@ function resolveWorkdir(
     typeof value === "string" && value.trim().length > 0
       ? resolve(scope.baseCwd, value.trim())
       : scope.baseCwd;
-  if (!isPathInsideRoots(workdir, scope.allowedRoots)) {
+  if (!isPathInsideRoots(workdir, scope.readableRoots)) {
     throw new Error(
       describeTargetScopeRejection({
         tool: toolName,
         subject: "workdir",
-        allowedRoots: scope.allowedRoots,
+        allowedRoots: scope.readableRoots,
         offending: workdir,
       }),
     );

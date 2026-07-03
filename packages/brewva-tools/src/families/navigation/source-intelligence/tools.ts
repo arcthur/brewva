@@ -10,7 +10,7 @@ import { registerToolRuntimeClearStateListener } from "../../../runtime-port/ext
 import { getToolSessionId } from "../../../runtime-port/parallel-read.js";
 import {
   describeTargetScopeRejection,
-  resolveScopedPath,
+  resolveReadableScopedPath,
   resolveToolTargetScope,
 } from "../../../runtime-port/target-scope.js";
 import { errTextResult, okTextResult } from "../../../utils/result.js";
@@ -98,7 +98,7 @@ function resolveToolPaths(input: {
   const requested = input.entries && input.entries.length > 0 ? input.entries : ["."];
   const out: string[] = [];
   for (const entry of requested) {
-    const resolved = resolveScopedPath(entry, input.scope, { relativeTo: input.baseCwd });
+    const resolved = resolveReadableScopedPath(entry, input.scope, { relativeTo: input.baseCwd });
     if (!resolved) {
       return { kind: "err", offending: entry };
     }
@@ -303,13 +303,13 @@ export function createSourceIntelligenceTools(options?: {
       }),
       async execute(_id, params, signal, _onUpdate, ctx) {
         const scope = resolveToolTargetScope(codeOutlineFactory.runtime, ctx);
-        const absolutePath = resolveScopedPath(params.file_path, scope);
+        const absolutePath = resolveReadableScopedPath(params.file_path, scope);
         if (!absolutePath) {
           return errTextResult(
             describeTargetScopeRejection({
               tool: "code_outline",
               subject: "path",
-              allowedRoots: scope.allowedRoots,
+              allowedRoots: scope.readableRoots,
               offending: params.file_path,
             }),
           );
@@ -398,7 +398,7 @@ export function createSourceIntelligenceTools(options?: {
             describeTargetScopeRejection({
               tool: "code_digest",
               subject: "path",
-              allowedRoots: scope.allowedRoots,
+              allowedRoots: scope.readableRoots,
               offending: rootsResult.offending,
             }),
           );
@@ -566,13 +566,13 @@ export function createSourceIntelligenceTools(options?: {
       }),
       async execute(_id, params, signal, _onUpdate, ctx) {
         const scope = resolveToolTargetScope(codeSurfaceFactory.runtime, ctx);
-        const absolutePath = resolveScopedPath(params.path, scope);
+        const absolutePath = resolveReadableScopedPath(params.path, scope);
         if (!absolutePath) {
           return errTextResult(
             describeTargetScopeRejection({
               tool: "code_surface",
               subject: "path",
-              allowedRoots: scope.allowedRoots,
+              allowedRoots: scope.readableRoots,
               offending: params.path,
             }),
           );
@@ -641,7 +641,7 @@ export function createSourceIntelligenceTools(options?: {
               describeTargetScopeRejection({
                 tool: name,
                 subject: "path",
-                allowedRoots: scope.allowedRoots,
+                allowedRoots: scope.readableRoots,
                 offending: rootsResult.offending,
               }),
             );
@@ -723,7 +723,7 @@ export function createSourceIntelligenceTools(options?: {
             describeTargetScopeRejection({
               tool: "code_cycles",
               subject: "path",
-              allowedRoots: scope.allowedRoots,
+              allowedRoots: scope.readableRoots,
               offending: rootsResult.offending,
             }),
           );
@@ -785,14 +785,14 @@ export function createSourceIntelligenceTools(options?: {
         async execute(_id, params, signal, _onUpdate, ctx) {
           const scope = resolveToolTargetScope(factory.runtime, ctx);
           const absolutePath = params.file_path
-            ? resolveScopedPath(params.file_path, scope)
+            ? resolveReadableScopedPath(params.file_path, scope)
             : undefined;
           if (params.file_path && !absolutePath) {
             return errTextResult(
               describeTargetScopeRejection({
                 tool: name,
                 subject: "file_path",
-                allowedRoots: scope.allowedRoots,
+                allowedRoots: scope.readableRoots,
                 offending: params.file_path,
               }),
             );

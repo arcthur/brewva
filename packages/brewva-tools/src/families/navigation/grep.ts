@@ -15,7 +15,7 @@ import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
   describeTargetScopeRejection,
   isPathInsideRoots,
-  resolveScopedPath,
+  resolveReadableScopedPath,
   resolveToolTargetScope,
 } from "../../runtime-port/target-scope.js";
 import { errTextResult, okTextResult, textResultForOutcome } from "../../utils/result.js";
@@ -126,19 +126,19 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const scope = resolveToolTargetScope(runtime, ctx);
       const cwd = params.workdir ? resolve(scope.baseCwd, params.workdir) : scope.baseCwd;
-      if (!isPathInsideRoots(cwd, scope.allowedRoots)) {
+      if (!isPathInsideRoots(cwd, scope.readableRoots)) {
         return errTextResult(
           describeTargetScopeRejection({
             tool: "grep",
             subject: "workdir",
-            allowedRoots: scope.allowedRoots,
+            allowedRoots: scope.readableRoots,
             offending: cwd,
           }),
           {
             ok: false,
             reason: "workdir_outside_target",
             workdir: cwd,
-            targetRoots: scope.allowedRoots,
+            targetRoots: scope.readableRoots,
           },
         );
       }
@@ -149,20 +149,20 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       const requestedPaths = normalizeStringList(params.paths, ["."]);
       const paths: string[] = [];
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
-        const absolutePath = resolveScopedPath(entry, scope, { relativeTo: cwd });
+        const absolutePath = resolveReadableScopedPath(entry, scope, { relativeTo: cwd });
         if (!absolutePath) {
           return errTextResult(
             describeTargetScopeRejection({
               tool: "grep",
               subject: "path",
-              allowedRoots: scope.allowedRoots,
+              allowedRoots: scope.readableRoots,
               offending: entry,
             }),
             {
               ok: false,
               reason: "path_outside_target",
               path: entry,
-              targetRoots: scope.allowedRoots,
+              targetRoots: scope.readableRoots,
             },
           );
         }
@@ -223,7 +223,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
             if (!parsed) {
               return line;
             }
-            const absolutePath = resolveScopedPath(parsed.path, scope, { relativeTo: cwd });
+            const absolutePath = resolveReadableScopedPath(parsed.path, scope, { relativeTo: cwd });
             if (!absolutePath || !existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
               return line;
             }
@@ -499,19 +499,19 @@ export function createGlobTool(options: GrepToolOptions): ToolDefinition {
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const scope = resolveToolTargetScope(runtime, ctx);
       const cwd = params.workdir ? resolve(scope.baseCwd, params.workdir) : scope.baseCwd;
-      if (!isPathInsideRoots(cwd, scope.allowedRoots)) {
+      if (!isPathInsideRoots(cwd, scope.readableRoots)) {
         return errTextResult(
           describeTargetScopeRejection({
             tool: "glob",
             subject: "workdir",
-            allowedRoots: scope.allowedRoots,
+            allowedRoots: scope.readableRoots,
             offending: cwd,
           }),
           {
             ok: false,
             reason: "workdir_outside_target",
             workdir: cwd,
-            targetRoots: scope.allowedRoots,
+            targetRoots: scope.readableRoots,
           },
         );
       }
@@ -522,20 +522,20 @@ export function createGlobTool(options: GrepToolOptions): ToolDefinition {
       const requestedPaths = normalizeStringList(params.paths, ["."]);
       const paths: string[] = [];
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
-        const absolutePath = resolveScopedPath(entry, scope, { relativeTo: cwd });
+        const absolutePath = resolveReadableScopedPath(entry, scope, { relativeTo: cwd });
         if (!absolutePath) {
           return errTextResult(
             describeTargetScopeRejection({
               tool: "glob",
               subject: "path",
-              allowedRoots: scope.allowedRoots,
+              allowedRoots: scope.readableRoots,
               offending: entry,
             }),
             {
               ok: false,
               reason: "path_outside_target",
               path: entry,
-              targetRoots: scope.allowedRoots,
+              targetRoots: scope.readableRoots,
             },
           );
         }

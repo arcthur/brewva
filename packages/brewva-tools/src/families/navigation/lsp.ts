@@ -14,7 +14,7 @@ import {
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
-  resolveScopedPath,
+  resolveReadableScopedPath,
   resolveToolTargetScope,
   type ToolTargetScope,
 } from "../../runtime-port/target-scope.js";
@@ -218,13 +218,13 @@ function languageIdForPath(path: string): string {
 function uriToPath(uri: string, scope: ToolTargetScope): string | undefined {
   if (uri.startsWith("file://")) {
     const path = fileURLToPath(uri);
-    return resolveScopedPath(path, scope) ?? undefined;
+    return resolveReadableScopedPath(path, scope) ?? undefined;
   }
   if (uri.startsWith("brewva-resource:///file/")) {
     const path = decodeURIComponent(uri.slice("brewva-resource:///file/".length));
-    return resolveScopedPath(path, scope) ?? undefined;
+    return resolveReadableScopedPath(path, scope) ?? undefined;
   }
-  return resolveScopedPath(uri, scope) ?? undefined;
+  return resolveReadableScopedPath(uri, scope) ?? undefined;
 }
 
 function pathToLspUri(path: string): string {

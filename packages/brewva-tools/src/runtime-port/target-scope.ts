@@ -242,6 +242,15 @@ export interface ToolTargetScope {
   baseCwd: string;
   primaryRoot: string;
   allowedRoots: string[];
+  /**
+   * Roots read-only tools may additionally reach: the skill catalog roots.
+   * SkillCards injected into the prompt cite absolute SKILL.md paths and invite
+   * the model to read them (adoption is even measured by those reads), so the
+   * navigation boundary must not reject the very paths the harness advertised.
+   * Write/exec tools keep using {@link ToolTargetScope.allowedRoots} — skills
+   * stay readable, never writable.
+   */
+  readableRoots: string[];
 }
 
 interface ToolTargetDescriptor {
@@ -284,7 +293,28 @@ export function resolveToolTargetScope(
     baseCwd,
     primaryRoot,
     allowedRoots,
+    readableRoots: uniqueResolvedRoots([...allowedRoots, ...resolveSkillCatalogRoots(runtime)]),
   };
+}
+
+/**
+ * The skill catalog roots the runtime loaded SkillCards from — the load
+ * report is the single source (the gateway populates `roots` when it builds
+ * the catalog), so this cannot drift from wherever skills actually live.
+ * Fails soft to none: a runtime without the skills capability simply grants
+ * no extra read scope.
+ */
+function resolveSkillCatalogRoots(runtime: BrewvaToolRuntime | undefined): string[] {
+  try {
+    const report = runtime?.capabilities?.skills?.catalog?.getLoadReport?.();
+    const roots = report && typeof report === "object" ? (report as { roots?: unknown }).roots : [];
+    if (!Array.isArray(roots)) {
+      return [];
+    }
+    return roots.filter((root): root is string => typeof root === "string" && root.length > 0);
+  } catch {
+    return [];
+  }
 }
 
 export function isPathInsideRoots(path: string, roots: readonly string[]): boolean {
@@ -300,6 +330,23 @@ export function resolveScopedPath(
 ): string | null {
   const absolute = resolve(options.relativeTo ?? scope.baseCwd, candidate);
   return isPathInsideRoots(absolute, scope.allowedRoots) ? absolute : null;
+}
+
+/**
+ * Read-only variant of {@link resolveScopedPath}: also admits the skill
+ * catalog roots ({@link ToolTargetScope.readableRoots}). Navigation/read tools
+ * resolve through this; anything that mutates or executes stays on
+ * {@link resolveScopedPath}.
+ */
+export function resolveReadableScopedPath(
+  candidate: string,
+  scope: ToolTargetScope,
+  options: {
+    relativeTo?: string;
+  } = {},
+): string | null {
+  const absolute = resolve(options.relativeTo ?? scope.baseCwd, candidate);
+  return isPathInsideRoots(absolute, scope.readableRoots) ? absolute : null;
 }
 
 export const TARGET_SCOPE_REJECTION_GUIDANCE =

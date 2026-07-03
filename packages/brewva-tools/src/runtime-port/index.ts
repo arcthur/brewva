@@ -46,6 +46,7 @@ export {
 export {
   describeTargetScopeRejection,
   isPathInsideRoots,
+  resolveReadableScopedPath,
   resolveScopedPath,
   resolveToolTargetScope,
   TARGET_SCOPE_REJECTION_GUIDANCE,
