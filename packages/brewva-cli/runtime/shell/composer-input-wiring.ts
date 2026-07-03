@@ -39,6 +39,7 @@ import { createPromptPartStyle } from "./prompt.js";
 import {
   copyOpenTuiSelection,
   copyTextWithShellFeedback,
+  hasOpenTuiSelectedText,
   type ClipboardCopy,
 } from "./selection.js";
 import {
@@ -273,10 +274,10 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
   // `selection` event, and re-sync at every local clear in case a clear does
   // not re-emit.
   const [hasRendererSelection, setHasRendererSelection] = createSignal(
-    Boolean(renderer.getSelection?.()),
+    hasOpenTuiSelectedText(renderer),
   );
   const syncRendererSelection = (): void => {
-    setHasRendererSelection(Boolean(renderer.getSelection?.()));
+    setHasRendererSelection(hasOpenTuiSelectedText(renderer));
   };
   const selectionEvents = renderer as {
     on?(event: "selection", listener: () => void): unknown;
@@ -459,7 +460,7 @@ export function useComposerInputWiring(input: ComposerInputWiringInput): Compose
       return;
     }
     const key = event as OpenTuiKeyEvent;
-    if (!renderer.getSelection?.()) {
+    if (!hasOpenTuiSelectedText(renderer)) {
       return;
     }
     if (key.ctrl && key.name.toLowerCase() === "c") {

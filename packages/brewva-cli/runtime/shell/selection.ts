@@ -12,6 +12,22 @@ export interface OpenTuiSelectionRenderer extends ClipboardOsc52Writer {
   clearSelection?(): void;
 }
 
+/**
+ * True only when the renderer selection covers actual TEXT. A bare left-click
+ * on selectable content already creates a Selection object (anchor == focus,
+ * empty text) that lingers until cleared — gating keymap behavior on the
+ * OBJECT would flip the shell into selection mode, silently disabling the
+ * composer's editing keys, every time the operator clicks the terminal (e.g.
+ * refocusing it after a browser OAuth approval). Matches opencode's
+ * `getSelection()?.getSelectedText()` guard.
+ */
+export function hasOpenTuiSelectedText(renderer: {
+  getSelection?(): OpenTuiSelection | null;
+}): boolean {
+  const selection = renderer.getSelection?.();
+  return Boolean(selection && selection.getSelectedText().length > 0);
+}
+
 export interface CopySelectionNotifier {
   notify(message: string, level?: NotificationLevel): void;
 }

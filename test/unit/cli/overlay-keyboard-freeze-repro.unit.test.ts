@@ -235,7 +235,7 @@ describe("overlay keyboard navigation (real renderer)", () => {
       clearSelection(): void;
       emit(event: string, payload: unknown): boolean;
     };
-    let fakeSelection: object | null = null;
+    let fakeSelection: { getSelectedText(): string } | null = null;
     rendererWithSelection.getSelection = () => fakeSelection;
     rendererWithSelection.clearSelection = () => {
       fakeSelection = null;
@@ -244,9 +244,10 @@ describe("overlay keyboard navigation (real renderer)", () => {
     try {
       await testSetup.renderOnce();
 
-      // The stray drag the operator makes when refocusing the terminal window.
+      // The stray drag the operator makes when refocusing the terminal window —
+      // a REAL drag, so the selection carries text.
       await openTuiSolidAct(async () => {
-        fakeSelection = { anchor: { x: 2, y: 2 }, focus: { x: 40, y: 2 } };
+        fakeSelection = { getSelectedText: () => "some transcript text" };
         rendererWithSelection.emit("selection", fakeSelection);
         await Bun.sleep(0);
       });
@@ -284,6 +285,70 @@ describe("overlay keyboard navigation (real renderer)", () => {
         await Bun.sleep(0);
       });
       expect(selectedIndex()).toBe(1);
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
+  test("an empty click-selection must not disable the composer's editing keys", async () => {
+    // A bare left-click on selectable content creates a Selection object with
+    // NO text (anchor == focus) that lingers until cleared. Treating that
+    // object as "selection mode" silently deactivates the composer textarea
+    // binding layer: printable keys still insert (native path) but backspace /
+    // arrows do nothing — "I can type but I can't delete", reported right
+    // after a provider connect because approving OAuth in the browser means
+    // clicking back into the terminal.
+    const fixture = createShellFixture({});
+    const runtime = new CliShellRuntime(fixture.bundle, {
+      cwd: process.cwd(),
+      openSession: async () => fixture.bundle,
+      createSession: async () => fixture.bundle,
+      operatorPollIntervalMs: 600_000,
+    });
+
+    await runtime.start();
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime }),
+      { width: 100, height: 30 },
+    );
+
+    const rendererWithSelection = testSetup.renderer as unknown as {
+      getSelection(): object | null;
+      emit(event: string, payload: unknown): boolean;
+    };
+    // The empty selection a bare click leaves behind.
+    const emptySelection = { getSelectedText: () => "" };
+    rendererWithSelection.getSelection = () => emptySelection;
+
+    try {
+      await testSetup.renderOnce();
+
+      await openTuiSolidAct(async () => {
+        rendererWithSelection.emit("selection", emptySelection);
+        await Bun.sleep(0);
+      });
+      // An unrelated state commit — the trigger that used to flip the mode.
+      runtime.ui.notify("unrelated state change", "info");
+      await testSetup.renderOnce();
+
+      await openTuiSolidAct(async () => {
+        await testSetup.mockInput.typeText("ab");
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+      expect(testSetup.captureCharFrame()).toContain("ab");
+
+      // Backspace must still be wired to the composer textarea.
+      await openTuiSolidAct(async () => {
+        testSetup.mockInput.pressKey("BACKSPACE");
+        await Bun.sleep(0);
+      });
+      await testSetup.renderOnce();
+      const frame = testSetup.captureCharFrame();
+      expect(frame).not.toContain("ab");
+      expect(frame).toContain("a");
     } finally {
       runtime.dispose();
       testSetup.renderer.destroy();

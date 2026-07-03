@@ -17,7 +17,7 @@ import { ModalOverlay } from "./overlays/modal-overlay.js";
 import { createScrollAcceleration } from "./palette.js";
 import { PromptPanel } from "./prompt.js";
 import { ShellRenderProvider } from "./render-context.js";
-import { type ClipboardCopy } from "./selection.js";
+import { type ClipboardCopy, hasOpenTuiSelectedText } from "./selection.js";
 import { SubagentFooterPanel } from "./subagent-footer.js";
 import { ToastStrip } from "./toast.js";
 import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";
@@ -47,7 +47,9 @@ export function resolveShellKeymapMode(
   if (payload) {
     return "overlay";
   }
-  if (renderer.getSelection?.()) {
+  // Text-bearing selections only: a bare click already leaves an empty
+  // Selection object behind (see hasOpenTuiSelectedText).
+  if (hasOpenTuiSelectedText(renderer)) {
     return "selection";
   }
   if (state.focus.active === "subagentFooter") {
