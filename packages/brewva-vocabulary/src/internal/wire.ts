@@ -623,6 +623,11 @@ export type SessionWireFrame =
       readonly attemptId: string;
       readonly toolCallId: string;
       readonly toolName: string;
+      // The proposed call's arguments. Presentation needs them (file paths,
+      // commands, content previews) — a tool row without args can say only
+      // WHICH tool ran, never WHAT it did. Optional so older producers and
+      // cached frames stay valid.
+      readonly args?: JsonValue;
     })
   | (SessionWireFrameBase & {
       readonly type: "tool.progress" | "tool.finished";

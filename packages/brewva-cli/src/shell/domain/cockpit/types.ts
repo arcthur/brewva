@@ -263,6 +263,8 @@ export interface ShellCockpitFoldedAnswer {
 export interface ShellCockpitFoldedToolCall {
   readonly toolCallId: string;
   readonly toolName: string;
+  /** The proposed call's arguments, carried by the tool.started frame. */
+  readonly args?: unknown;
   readonly status: "running" | "completed" | "failed";
   readonly startedAt?: number;
   readonly startedRef?: string;

@@ -4,6 +4,7 @@ import {
   asBrewvaToolCallId,
   asBrewvaToolName,
 } from "@brewva/brewva-runtime/core";
+import type { JsonValue } from "@brewva/brewva-std/json";
 import { outcomeIsError, outcomeVerdict } from "@brewva/brewva-vocabulary/outcome";
 import { SESSION_WIRE_SCHEMA } from "@brewva/brewva-vocabulary/wire";
 import type {
@@ -70,7 +71,7 @@ export function flushAssistantSegment(input: {
 
 function runtimeToolCallFromEventPayload(
   event: Extract<TurnFrame, { type: "runtime.event" }>["event"],
-): { toolCallId: string; toolName: string } | null {
+): { toolCallId: string; toolName: string; args?: JsonValue } | null {
   const payload = isRuntimeProjectionRecord(event.payload) ? event.payload : null;
   const call = isRuntimeProjectionRecord(payload?.call) ? payload.call : null;
   if (!call || typeof call.toolCallId !== "string" || typeof call.toolName !== "string") {
@@ -79,6 +80,9 @@ function runtimeToolCallFromEventPayload(
   return {
     toolCallId: call.toolCallId,
     toolName: call.toolName,
+    // The proposed arguments ride the tool.started frame so presentation can
+    // say WHAT the tool is doing (path, command, content), not just its name.
+    ...(call.args !== undefined ? { args: call.args as JsonValue } : {}),
   };
 }
 
@@ -404,6 +408,7 @@ export function emitRuntimeEventFrame(input: {
         attemptId: input.attemptId,
         toolCallId: asBrewvaToolCallId(toolCall.toolCallId),
         toolName: asBrewvaToolName(toolCall.toolName),
+        ...(toolCall.args !== undefined ? { args: toolCall.args } : {}),
       }),
     });
     return;

@@ -1165,6 +1165,7 @@ function emitRuntimeTurnSessionFrame(input: {
       type: "tool_execution_start",
       toolCallId: frame.toolCallId,
       toolName: frame.toolName,
+      ...(frame.args !== undefined ? { args: frame.args } : {}),
     });
     return;
   }

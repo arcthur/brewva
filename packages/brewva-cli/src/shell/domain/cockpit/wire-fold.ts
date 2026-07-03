@@ -246,6 +246,7 @@ function materializeToolCall(toolCall: MutableToolCall): ShellCockpitFoldedToolC
   return {
     toolCallId: toolCall.toolCallId,
     toolName: toolCall.toolName,
+    ...(toolCall.args !== undefined ? { args: toolCall.args } : {}),
     status: toolCall.status,
     ...(toolCall.startedAt !== undefined ? { startedAt: toolCall.startedAt } : {}),
     ...(toolCall.startedRef !== undefined ? { startedRef: toolCall.startedRef } : {}),
@@ -506,6 +507,7 @@ class ShellCockpitSessionWireFold {
     const next: MutableToolCall = {
       toolCallId: frame.toolCallId,
       toolName: frame.toolName,
+      args: frame.args ?? current?.args,
       status: current?.status ?? "running",
       turnId: current?.turnId ?? frame.turnId,
       attemptId: current?.attemptId ?? frame.attemptId,
@@ -533,6 +535,7 @@ class ShellCockpitSessionWireFold {
     const next: MutableToolCall = {
       toolCallId: frame.toolCallId,
       toolName: frame.toolName,
+      args: current?.args,
       status,
       turnId: current?.turnId ?? frame.turnId,
       attemptId: current?.attemptId ?? frame.attemptId,
@@ -755,7 +758,11 @@ class ShellCockpitSessionWireFold {
     });
     const payload =
       frame.type === "tool.started"
-        ? {}
+        ? // The started frame is the only carrier of the call's args; later
+          // progress/finish upserts leave args untouched (`update.args ?? old`).
+          frame.args !== undefined
+          ? { args: frame.args }
+          : {}
         : input.resultMode === "progress"
           ? { partialResult: buildRuntimeToolResultPayload(frame) }
           : { result: buildRuntimeToolResultPayload(frame) };
@@ -791,6 +798,8 @@ class ShellCockpitSessionWireFold {
     readonly sessionId: string;
     readonly turnId: string;
     readonly toolOutput: ToolOutputView;
+    /** Call args recovered from the live row a committed rebuild replaces. */
+    readonly args?: unknown;
   }): void {
     const fallbackMessageId = transcriptToolMessageId({
       sessionId: input.sessionId,
@@ -802,6 +811,7 @@ class ShellCockpitSessionWireFold {
       {
         toolCallId: input.toolOutput.toolCallId,
         toolName: input.toolOutput.toolName,
+        ...(input.args !== undefined ? { args: input.args } : {}),
         result: {
           content:
             input.toolOutput.text.length > 0 ? [{ type: "text", text: input.toolOutput.text }] : [],
@@ -867,6 +877,23 @@ class ShellCockpitSessionWireFold {
             message.role !== "tool",
         )
       : [];
+    // Committed toolOutputs carry no call args (they are receipts, not
+    // proposals), so a wholesale rebuild would strip the args the live
+    // tool.started frames delivered — and with them the row's subject ("what
+    // file did this write?"). Capture them per call before removing the rows.
+    const preservedToolArgsByCallId = new Map<string, unknown>();
+    if (turnMessageIds) {
+      for (const message of this.transcriptMessagesView()) {
+        if (!turnMessageIds.has(message.id) || message.role !== "tool") {
+          continue;
+        }
+        for (const part of message.parts) {
+          if (part.type === "tool" && part.args !== undefined) {
+            preservedToolArgsByCallId.set(part.toolCallId, part.args);
+          }
+        }
+      }
+    }
     this.removeTranscriptMessagesForTurn(frame.turnId);
     for (const message of preservedInputMessages) {
       this.upsertTranscriptMessage(frame.turnId, message);
@@ -886,6 +913,7 @@ class ShellCockpitSessionWireFold {
         sessionId: frame.sessionId,
         turnId: frame.turnId,
         toolOutput: item.toolOutput,
+        args: preservedToolArgsByCallId.get(item.toolOutput.toolCallId),
       });
     }
   }
