@@ -3,8 +3,11 @@
 ## Scope
 
 This document covers Brewva-managed shell execution through `exec` and
-`process` (classified as `local_exec_readonly` or `local_exec_effectful`),
-BoxLite-backed box routing, explicit host execution, and related audit events.
+`process` (`exec` classifies as `local_exec_readonly` or
+`local_exec_effectful`; `process` observation actions — list/poll/log —
+classify as `runtime_observe`, while its mutating actions stay
+`local_exec_effectful`), BoxLite-backed box routing, explicit host execution,
+and related audit events.
 It does not cover arbitrary shell use outside Brewva or external operators that
 run commands directly on the host.
 

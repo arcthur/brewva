@@ -377,6 +377,7 @@ export function createShellFixture(options: ShellFixtureOptions = {}): ShellFixt
               loadedSkills: skills.map((skill) => skill.name),
               selectableSkills: skills.map((skill) => skill.name),
               overlaySkills: [],
+              outOfScopeSkills: [],
               categories: {},
             };
           },

@@ -253,16 +253,21 @@ export async function runHostedTurnEnvelope(
     // Committed AFTER initial persistence (a receipt must never be the first
     // write that materializes a lazily-persisted session) and once per
     // envelope: the compaction-resume loop below re-enters the adapter, not
-    // the envelope.
-    recordRuntimeTurnInputReceipt(input.runtime, {
-      sessionId,
-      runtimeTurn,
-      payload: {
-        turnId,
-        trigger: resolveTurnTrigger({ source: input.source, walReplayId: input.walReplayId }),
-        promptText: normalizePromptText(input.prompt),
-      } satisfies TurnInputRecordedPayload,
-    });
+    // the envelope. Approval resumes re-enter the envelope without operator
+    // input — the approval.decided receipt already explains the re-entry, so
+    // recording a phantom empty "user" input would only pollute replay,
+    // prompt-path scoping, and attempt bindings.
+    if (!input.resolveApproval) {
+      recordRuntimeTurnInputReceipt(input.runtime, {
+        sessionId,
+        runtimeTurn,
+        payload: {
+          turnId,
+          trigger: resolveTurnTrigger({ source: input.source, walReplayId: input.walReplayId }),
+          promptText: normalizePromptText(input.prompt),
+        } satisfies TurnInputRecordedPayload,
+      });
+    }
     const adapter = input.runAdapter ?? runHostedRuntimeTurnAdapter;
     const compactionBoundary = resolveHostedCompactionBoundary(input.session);
     const softCut = compactionBoundary

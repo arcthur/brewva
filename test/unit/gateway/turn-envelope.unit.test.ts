@@ -128,6 +128,44 @@ describe("hosted turn envelope", () => {
     });
   });
 
+  test("approval resumes do not record a phantom input receipt", async () => {
+    const runtime = createHostedRuntimeAdapter({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-turn-envelope-approval-resume-")),
+    });
+    const sessionId = "session-envelope-approval-resume";
+
+    await runHostedTurnEnvelope({
+      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId,
+      prompt: "run the risky command",
+      source: "interactive",
+      turnId: "turn-approval-1",
+      runAdapter: async () => createAdapterResult({ assistantText: "waiting" }),
+    });
+    // An approval resume re-enters the envelope with an empty prompt; the
+    // approval.decided receipt is the record of that re-entry, not an input.
+    await runHostedTurnEnvelope({
+      session: emptySession as Parameters<typeof runHostedTurnEnvelope>[0]["session"],
+      runtime,
+      sessionId,
+      prompt: [],
+      source: "interactive",
+      turnId: "turn-approval-1",
+      resolveApproval: { requestId: "approval-req-1" },
+      runAdapter: async () => createAdapterResult({ assistantText: "resumed" }),
+    });
+
+    const inputEvents = runtime.ops.events.records.query(sessionId, {
+      type: TURN_INPUT_RECORDED_EVENT_TYPE,
+    });
+    expect(inputEvents).toHaveLength(1);
+    const inputPayload = readTurnInputRecordedEventPayload(
+      inputEvents[0] as { payload?: Record<string, unknown> },
+    );
+    expect(inputPayload).toMatchObject({ promptText: "run the risky command" });
+  });
+
   test("maps envelope source and WAL replay onto the receipt trigger; failures still commit a render receipt", async () => {
     const runtime = createHostedRuntimeAdapter({
       cwd: mkdtempSync(join(tmpdir(), "brewva-turn-envelope-triggers-")),

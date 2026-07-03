@@ -62,7 +62,7 @@ export type HostedRuntimeOpsExtensions = {
       append(sessionId: string, payload: Lossy<object>): RuntimeEventRecord;
     };
     readonly usage: {
-      observe(sessionId: string, payload?: ContextBudgetUsage): RuntimeEventRecord;
+      observe(sessionId: string, payload?: ContextBudgetUsage): RuntimeEventRecord | undefined;
     };
     readonly compaction: {
       rememberDeferredReason: RuntimeDeferredReasonRecorder;

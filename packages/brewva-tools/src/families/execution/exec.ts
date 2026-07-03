@@ -38,7 +38,6 @@ import {
   preflightDetails,
 } from "./exec/preflight.js";
 import {
-  ExecCommandFailedError,
   isExecAbortedError,
   normalizeCommand,
   normalizeOptionalString,
@@ -328,10 +327,9 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               },
             }),
           );
-          // Host non-zero exits throw ExecCommandFailedError and host start
-          // failures return an err result; neither emitted an exec.failed event,
-          // so host command failures were invisible to recent-failure
-          // projections. Emit symmetrically with the box lane's box.exec.failed.
+          // Host command failures commit as err results (the effect ran; the
+          // exit code is evidence). Emit exec.failed symmetrically with the
+          // box lane's box.exec.failed so recent-failure projections see them.
           const recordHostExecFailure = (code: string, exitCode: number | null) => {
             recordExecEvent(
               runtime,
@@ -351,17 +349,20 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
               }),
             );
           };
-          let hostResult: Awaited<ReturnType<typeof runHost>>;
-          try {
-            hostResult = await runHost();
-          } catch (error) {
-            if (error instanceof ExecCommandFailedError) {
-              recordHostExecFailure("host_process_nonzero", error.exitCode);
-            }
-            throw error;
-          }
+          const hostResult = await runHost();
           if (hostResult.outcome.kind === "err") {
-            recordHostExecFailure("host_start_failure", null);
+            const details = hostResult.outcome.error as {
+              reason?: unknown;
+              exitCode?: unknown;
+            };
+            if (details.reason === "host_process_nonzero") {
+              recordHostExecFailure(
+                "host_process_nonzero",
+                typeof details.exitCode === "number" ? details.exitCode : null,
+              );
+            } else {
+              recordHostExecFailure("host_start_failure", null);
+            }
           }
           return attachExecPreflightDetails(hostResult, executionPreflight);
         }

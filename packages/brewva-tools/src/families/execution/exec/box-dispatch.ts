@@ -28,11 +28,7 @@ import {
   recordExecEvent,
   redactTextForAudit,
 } from "./audit.js";
-import {
-  BoxCommandFailedError,
-  BoxWorkdirOutsideWorkspaceError,
-  executeBoxCommandEffect,
-} from "./box-lane.js";
+import { BoxWorkdirOutsideWorkspaceError, executeBoxCommandEffect } from "./box-lane.js";
 import { serializeBoxRootMappings, type BoxRootMapping } from "./box-root-map.js";
 import { type ResolvedExecutionPolicy, shouldSnapshotBeforeBoxExec } from "./policy.js";
 import { execDisplayResult, isExecAbortedError, type RequestedEnvResolution } from "./shared.js";
@@ -327,6 +323,35 @@ export async function executeBoxCommandWithAudit(input: {
       );
     }
 
+    if (result.status === "failed") {
+      // The command ran to completion inside the box; the non-zero exit is
+      // evidence, so it commits as an err result (box.exec.failed was already
+      // recorded by the lane's onFailed hook).
+      return execDisplayResult(
+        `${result.output}\n\nProcess exited with code ${result.exitCode}.`,
+        {
+          status: "failed",
+          reason: "box_process_nonzero",
+          exitCode: result.exitCode,
+          durationMs: Date.now() - startedAt,
+          cwd: result.effectiveCwd,
+          command,
+          backend: "box",
+          requestedCwd: result.requestedCwd,
+          rootMappings: serializeBoxRootMappings(boxRootMappings),
+          requestedEnvKeys: result.requestedEnvKeys,
+          appliedEnvKeys: result.appliedEnvKeys,
+          droppedEnvKeys: result.droppedEnvKeys,
+          timeoutSec: result.timeoutSec,
+          commandPolicy: commandPolicy ? summarizeShellCommandAnalysis(commandPolicy) : undefined,
+          virtualReadonly: virtualReadonly
+            ? summarizeVirtualReadonlyEligibility(virtualReadonly)
+            : undefined,
+        },
+        "err",
+      );
+    }
+
     recordExecEvent(
       runtime,
       ownerSessionId,
@@ -364,9 +389,6 @@ export async function executeBoxCommandWithAudit(input: {
         : undefined,
     });
   } catch (error) {
-    if (error instanceof BoxCommandFailedError) {
-      throw new Error(error.message, { cause: error });
-    }
     if (error instanceof BoxWorkdirOutsideWorkspaceError) {
       return execDisplayResult(
         "Exec rejected (box_workdir_outside_workspace).",

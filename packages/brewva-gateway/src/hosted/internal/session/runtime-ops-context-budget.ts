@@ -137,11 +137,14 @@ export function createContextBudgetRuntimeController(ctx: HostedRuntimeOpsContex
         ? usage.tokens / usage.contextWindow
         : null,
     observe(sessionId: string, payload?: ContextBudgetUsage) {
-      if (payload) {
-        updateUsagePrediction(sessionId, payload);
-        recordDerivedState(sessionId, payload);
+      // No measurement means nothing to observe; an empty receipt would only
+      // fake liveness for consumers of context_usage_observed.
+      if (!payload) {
+        return undefined;
       }
-      return ctx.emit(sessionId, "context_usage_observed", payload ?? {});
+      updateUsagePrediction(sessionId, payload);
+      recordDerivedState(sessionId, payload);
+      return ctx.emit(sessionId, "context_usage_observed", payload);
     },
     getGateStatus: (sessionId: string, usage?: ContextBudgetUsage) =>
       recordDerivedState(sessionId, usage).gateStatus,

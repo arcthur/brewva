@@ -6,6 +6,7 @@ import type {
   ProviderCacheRenderState,
 } from "@brewva/brewva-vocabulary/context";
 import { observeHostedProviderCache } from "../../context/materialization.js";
+import { recordRuntimeAssistantCost } from "../projection/runtime-write-adapters.js";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import { providerCacheCountersAvailable } from "./provider-cache-state.js";
 import type { ProviderCacheObserverView } from "./session-contracts.js";
@@ -26,6 +27,8 @@ export interface ManagedSessionProviderAssistantObserverOptions {
   };
   resolveExpectedBreak: () => ExpectedProviderCacheBreak | undefined;
   state: () => ProviderCacheObserverView;
+  /** Context window of the active model, for context-budget observations. */
+  resolveContextWindow?: () => number | null | undefined;
 }
 
 export class ManagedSessionProviderAssistantObserver {
@@ -34,6 +37,7 @@ export class ManagedSessionProviderAssistantObserver {
   readonly #cacheBreakDetector: ManagedSessionProviderAssistantObserverOptions["cacheBreakDetector"];
   readonly #resolveExpectedBreak: ManagedSessionProviderAssistantObserverOptions["resolveExpectedBreak"];
   readonly #state: ManagedSessionProviderAssistantObserverOptions["state"];
+  readonly #resolveContextWindow: ManagedSessionProviderAssistantObserverOptions["resolveContextWindow"];
 
   constructor(options: ManagedSessionProviderAssistantObserverOptions) {
     this.#runtime = options.runtime;
@@ -41,11 +45,18 @@ export class ManagedSessionProviderAssistantObserver {
     this.#cacheBreakDetector = options.cacheBreakDetector;
     this.#resolveExpectedBreak = options.resolveExpectedBreak;
     this.#state = options.state;
+    this.#resolveContextWindow = options.resolveContextWindow;
   }
 
   onCommittedAssistantMessage(message: BrewvaAgentProtocolAssistantMessage): void {
     const state = this.#state();
-    if (!this.#runtime || !state.lastProviderFingerprint || !state.lastCacheRender) {
+    // A live provider fingerprint distinguishes attempt-committed messages
+    // from bootstrap/history replays, which must not re-record usage.
+    if (!this.#runtime || !state.lastProviderFingerprint) {
+      return;
+    }
+    this.#recordCommittedUsage(this.#runtime, message);
+    if (!state.lastCacheRender) {
       return;
     }
     const breakObservation = this.#cacheBreakDetector.observe({
@@ -76,5 +87,42 @@ export class ManagedSessionProviderAssistantObserver {
         breakObservation,
       },
     });
+  }
+
+  #recordCommittedUsage(
+    runtime: HostedRuntimeAdapterPort,
+    message: BrewvaAgentProtocolAssistantMessage,
+  ): void {
+    const usage = message.usage;
+    const input = usage?.input ?? 0;
+    const output = usage?.output ?? 0;
+    const cacheRead = usage?.cacheRead ?? 0;
+    const cacheWrite = usage?.cacheWrite ?? 0;
+    const totalTokens = usage?.totalTokens ?? 0;
+    const tokens = totalTokens > 0 ? totalTokens : input + output + cacheRead + cacheWrite;
+    if (tokens <= 0) {
+      // Providers that report no usage stay silent instead of committing
+      // empty cost receipts.
+      return;
+    }
+    recordRuntimeAssistantCost(runtime, {
+      sessionId: this.#sessionId,
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+      totalTokens,
+      ...(usage?.cost ? { cost: { ...usage.cost } } : {}),
+      model: `${message.provider}/${message.model}`,
+    });
+    const contextWindow = this.#resolveContextWindow?.();
+    if (typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0) {
+      runtime.ops.context.usage.observe(this.#sessionId, {
+        tokens,
+        contextWindow,
+        percent: null,
+        maxOutputTokens: null,
+      });
+    }
   }
 }

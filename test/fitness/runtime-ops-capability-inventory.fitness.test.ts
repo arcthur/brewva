@@ -301,7 +301,7 @@ describe("runtime ops capability inventory fitness", () => {
       runtimeOpsBuilders.reduce((sum, builder) => sum + builder.split("\n").length, 0);
     const hostedOpsMirrorLines = runtimeOps.split("\n").length + toolRuntime.split("\n").length;
     expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_050);
-    expect(hostedOpsLines).toBeLessThanOrEqual(2_710);
+    expect(hostedOpsLines).toBeLessThanOrEqual(2_760);
     // WS2 added tape-derived rebuild projections (workbench/task/resource-lease/
     // worker-results) that fix the invariant-9/12 restart-loses-state bug. A
     // follow-up review pass then completed the tape-authority migration on the
@@ -326,8 +326,12 @@ describe("runtime ops capability inventory fitness", () => {
     // canonical outcome receipt, evaluate projects it), the WAL observability
     // verbs on the vocabulary types, the scheduler deferral verb, the turn
     // receipt verbs, and the tape-authoritative session title read — producers
-    // that consumers had been silently awaiting, not facade growth.
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_645);
+    // that consumers had been silently awaiting, not facade growth. The
+    // skill workspace-scoping fix then grew the skills builder: project-category
+    // skills are composed per-root project scope (cross-project overlay
+    // contamination fix) and the exclusions land in the load report as
+    // outOfScopeSkills — catalog composition correctness, not facade growth.
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_695);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

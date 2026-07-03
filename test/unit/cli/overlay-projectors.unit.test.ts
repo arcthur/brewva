@@ -387,6 +387,7 @@ describe("interactive command overlays", () => {
         loadedSkills: ["review", "loaded-only"],
         selectableSkills: ["review"],
         overlaySkills: [],
+        outOfScopeSkills: [],
         categories: {},
       },
       skills: [
@@ -484,6 +485,7 @@ describe("interactive command overlays", () => {
         loadedSkills: ["review"],
         selectableSkills: ["review"],
         overlaySkills: [],
+        outOfScopeSkills: [],
         categories: {},
       },
       skills: [
@@ -526,6 +528,7 @@ describe("interactive command overlays", () => {
         loadedSkills: ["review", "security-review"],
         selectableSkills: ["review", "security-review"],
         overlaySkills: [],
+        outOfScopeSkills: [],
         categories: {},
       },
       skills: [

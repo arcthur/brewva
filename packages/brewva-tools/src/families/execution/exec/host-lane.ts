@@ -13,7 +13,6 @@ import {
 } from "../exec-process-registry/api.js";
 import { ManagedExecProcessRegistryService } from "../exec-process-registry/service.js";
 import { execDisplayResult, isSafeEnvKey } from "./shared.js";
-import { ExecCommandFailedError } from "./shared.js";
 
 type HostCommandResult = ReturnType<typeof okTextResult>;
 
@@ -89,7 +88,7 @@ export const executeHostCommandEffect: (
   input: ExecuteHostCommandInput,
 ) => BrewvaEffect.Effect<
   HostCommandResult,
-  BrewvaBoundaryFailure | ExecCommandFailedError,
+  BrewvaBoundaryFailure,
   ManagedExecProcessRegistryService
 > = BrewvaEffect.fn("tools.exec.host")(function* (input: ExecuteHostCommandInput) {
   const observability = {
@@ -174,11 +173,22 @@ export const executeHostCommandEffect: (
         });
       }
 
-      return yield* BrewvaEffect.fail(
-        new ExecCommandFailedError(
-          `${output}\n\nProcess exited with ${formatExit(finished)}.`,
-          finished.exitCode ?? 1,
-        ),
+      // The command ran to completion; the non-zero exit is evidence, so it
+      // commits as an err result instead of failing the effect (which would
+      // abort the tool commitment upstream).
+      return execDisplayResult(
+        `${output}\n\nProcess exited with ${formatExit(finished)}.`,
+        {
+          status: "failed",
+          reason: "host_process_nonzero",
+          exitCode: finished.exitCode ?? 1,
+          ...(finished.exitSignal ? { exitSignal: finished.exitSignal } : {}),
+          durationMs: finished.endedAt - finished.startedAt,
+          cwd: finished.cwd,
+          command: finished.command,
+          backend: "host",
+        },
+        "err",
       );
     }),
   ).pipe(

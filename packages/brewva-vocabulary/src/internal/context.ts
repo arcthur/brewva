@@ -333,7 +333,11 @@ export function recordAssistantUsageFromMessage(
     !Array.isArray(messageRecord.usage)
       ? (messageRecord.usage as ProtocolRecord)
       : {};
-  recorder.recordAssistantUsage?.(usage);
+  // Messages without usage (bootstrap replays, providers that omit counters)
+  // record nothing; an empty cost receipt would only fake liveness.
+  if (Object.keys(usage).length > 0) {
+    recorder.recordAssistantUsage?.(usage);
+  }
   return usage;
 }
 

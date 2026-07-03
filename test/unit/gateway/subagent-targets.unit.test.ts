@@ -136,7 +136,10 @@ describe("delegation prompt and catalog composition", () => {
 
     expect(prompt).toContain("## Semantic Context");
     expect(prompt).toContain("### Skill Body");
-    expect(prompt).toContain("Brewva Review Overlay");
+    // The fixture workspace is outside this repo, so the catalog serves the
+    // core review skill; the project overlay stays scoped to its own project.
+    expect(prompt).toContain("NO MERGE DECISION WITHOUT EVIDENCE FROM EVERY ACTIVATED LANE");
+    expect(prompt).not.toContain("Brewva Review Overlay");
     expect(prompt).not.toContain("skillOutputs");
     expect(prompt).toContain('"kind": "consult"');
     expect(prompt).toContain('"consultKind": "review"');

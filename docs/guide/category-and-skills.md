@@ -19,6 +19,17 @@ and contract details, use
 Category is directory-derived. The catalog does not use a separate lifecycle
 tier naming scheme.
 
+## Workspace Scoping
+
+Project-category skills (`skills/project/...`) are project-specific tightening;
+they belong to the project that owns their catalog root. Catalog composition
+excludes project-category skills whenever the session workspace lies outside
+that root's project, so a session running in a foreign workspace never sees
+another project's overlays. Core, domain, operator, and meta skills are
+cross-project and load everywhere. Excluded names are recorded in the load
+report's `outOfScopeSkills` field so selection receipts and the skills overlay
+can explain the exclusion.
+
 ## Semantic Roles
 
 The important distinction is semantic:

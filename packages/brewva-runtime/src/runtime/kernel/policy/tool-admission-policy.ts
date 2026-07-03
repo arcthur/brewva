@@ -342,8 +342,24 @@ function resolveSessionRewindPolicy(
     : SESSION_REWIND_WORKSPACE_POLICY;
 }
 
+/**
+ * list/poll/log only read back output of an already-admitted execution from
+ * the process registry; stdin writes, signals, and registry mutations keep the
+ * effectful admission. Unknown or missing actions stay fail-closed effectful.
+ */
+const PROCESS_OBSERVE_ACTIONS: ReadonlySet<string> = new Set(["list", "poll", "log"]);
+
+function resolveProcessPolicy(input: ToolActionPolicyResolverInput): ToolActionPolicy | undefined {
+  if (normalizeToolName(input.toolName) !== "process") return undefined;
+  const action = typeof input.args?.action === "string" ? input.args.action : undefined;
+  return action !== undefined && PROCESS_OBSERVE_ACTIONS.has(action)
+    ? TOOL_ACTION_POLICY_BY_CLASS.runtime_observe
+    : TOOL_ACTION_POLICY_BY_NAME.process;
+}
+
 const EXACT_TOOL_ACTION_POLICY_RESOLVERS_BY_NAME: Record<string, ToolActionPolicyResolver> = {
   exec: resolveExecPolicy,
+  process: resolveProcessPolicy,
   session_rewind: resolveSessionRewindPolicy,
 };
 

@@ -549,6 +549,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       cacheBreakDetector,
       resolveExpectedBreak: () => providerPayloadPipeline.consumeExpectedBreak(),
       state: () => providerPayloadPipeline.readState(),
+      resolveContextWindow: () => session?.model?.contextWindow ?? null,
     });
 
     session = new BrewvaManagedAgentSession({
@@ -1091,7 +1092,10 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       compact: (request) => {
         this.requestCompaction(request);
       },
-      getContextUsage: () => undefined,
+      getContextUsage: () =>
+        this.#runtime
+          ? getRuntimeContextUsage(this.#runtime, this.sessionManager.getSessionId())
+          : undefined,
       getSystemPrompt: () => this.#agent.state.systemPrompt,
     };
   }

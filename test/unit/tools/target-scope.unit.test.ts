@@ -22,6 +22,7 @@ describe("resolveToolTargetScope readable skill roots", () => {
             selectableSkills: [],
             overlaySkills: [],
             roots: [skillRoot],
+            outOfScopeSkills: [],
             failed: [],
           }),
         },

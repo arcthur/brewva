@@ -67,6 +67,12 @@ export interface SkillRegistryLoadReport extends ProtocolRecord {
   readonly selectableSkills: readonly string[];
   readonly overlaySkills: readonly string[];
   readonly roots: readonly string[];
+  /**
+   * Project-category skills seen on disk but excluded from the catalog because
+   * the session workspace lies outside the catalog root's project. Kept in the
+   * report so selection receipts can explain the exclusion.
+   */
+  readonly outOfScopeSkills: readonly string[];
 }
 
 export interface SkillResourceSet extends ProtocolRecord {

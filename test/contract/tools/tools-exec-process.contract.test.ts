@@ -447,7 +447,7 @@ describe("exec/process tool flow", () => {
     expect(rejected.outcome.kind).toBe("err");
   });
 
-  test("exec throws on non-zero exit code and records a host exec.failed event", async () => {
+  test("exec commits an err result on non-zero exit and records a host exec.failed event", async () => {
     const { runtime, events } = createRuntimeForExecTests({
       mode: "permissive",
       backend: "host",
@@ -455,21 +455,27 @@ describe("exec/process tool flow", () => {
     const execTool = createExecTool({ runtime });
     const sessionId = "s13-exec-fail";
 
-    let thrownMessage = "";
-    try {
-      await execTool.execute(
-        "tc-exec-fail",
-        {
-          command: 'node -e "process.exit(2)"',
-        },
-        undefined,
-        undefined,
-        fakeContext(sessionId),
-      );
-    } catch (error) {
-      thrownMessage = error instanceof Error ? error.message : String(error);
-    }
-    expect(thrownMessage).toContain("Process exited");
+    // The command ran to completion; the failure must commit as an err
+    // result (evidence), never abort the tool commitment by throwing.
+    const result = await execTool.execute(
+      "tc-exec-fail",
+      {
+        command: 'node -e "process.exit(2)"',
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+    expect(result.outcome.kind).toBe("err");
+    expect(extractTextContent(result)).toContain("Process exited");
+    const details = toolOutcomePayload(result) as {
+      status?: string;
+      reason?: string;
+      exitCode?: number;
+    };
+    expect(details.status).toBe("failed");
+    expect(details.reason).toBe("host_process_nonzero");
+    expect(details.exitCode).toBe(2);
 
     // A host non-zero exit must surface as an exec.failed receipt, symmetric
     // with the box lane, so recent-failure projections can see it.

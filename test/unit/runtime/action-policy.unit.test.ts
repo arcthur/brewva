@@ -254,6 +254,24 @@ describe("tool action policy", () => {
     ).toBe("local_exec_effectful");
   });
 
+  test("process observation actions admit without approval; mutations stay effectful", () => {
+    for (const action of ["list", "poll", "log"]) {
+      const policy = getToolActionPolicy("process", undefined, { action });
+      expect(policy?.actionClass).toBe("runtime_observe");
+      expect(policy?.defaultAdmission).toBe("allow");
+    }
+    for (const action of ["write", "kill", "clear", "remove"]) {
+      const policy = getToolActionPolicy("process", undefined, { action });
+      expect(policy?.actionClass).toBe("local_exec_effectful");
+      expect(policy?.defaultAdmission).toBe("ask");
+    }
+    // Missing or unknown actions stay fail-closed effectful.
+    expect(getToolActionPolicy("process", undefined, {})?.actionClass).toBe("local_exec_effectful");
+    expect(getToolActionPolicy("process", undefined, { action: "explode" })?.actionClass).toBe(
+      "local_exec_effectful",
+    );
+  });
+
   test("tool action policy equality is order-stable and covers execution metadata", () => {
     const left: ToolActionPolicy = {
       actionClass: "local_exec_effectful",

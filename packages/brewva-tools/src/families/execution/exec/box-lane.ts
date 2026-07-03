@@ -38,7 +38,12 @@ export interface BoxCommandBuildResult {
 }
 
 export interface BoxExecutionResult {
-  status: "completed";
+  /**
+   * "failed" means the command ran to completion with a non-zero exit; the
+   * effect was performed and the output is evidence, so callers commit an err
+   * result instead of aborting the commitment.
+   */
+  status: "completed" | "failed";
   output: string;
   exitCode: number;
   boxId?: string;
@@ -68,16 +73,6 @@ export interface BoxBackgroundExecutionResult {
   timeoutSec: number;
 }
 
-export class BoxCommandFailedError extends Error {
-  readonly exitCode: number;
-
-  constructor(message: string, exitCode: number) {
-    super(message);
-    this.name = "BoxCommandFailedError";
-    this.exitCode = exitCode;
-  }
-}
-
 export class BoxWorkdirOutsideWorkspaceError extends Error {
   constructor(readonly requestedCwd: string) {
     super(`box workdir is outside workspaceRoot: ${requestedCwd}`);
@@ -87,7 +82,6 @@ export class BoxWorkdirOutsideWorkspaceError extends Error {
 
 export type BoxCommandExecutionError =
   | BrewvaBoundaryError
-  | BoxCommandFailedError
   | BoxWorkdirOutsideWorkspaceError
   | ExecAbortedError;
 
@@ -445,12 +439,19 @@ export const executeBoxCommandEffect: (
       if (result.exitCode !== 0) {
         input.onFailed?.(box, { exitCode: result.exitCode });
         const errorText = combined.length > 0 ? combined : "(no output)";
-        return yield* BrewvaEffect.fail(
-          new BoxCommandFailedError(
-            `${errorText}\n\nProcess exited with code ${result.exitCode}.`,
-            result.exitCode,
-          ),
-        );
+        return {
+          status: "failed",
+          output: errorText,
+          exitCode: result.exitCode,
+          boxId: box.id,
+          fingerprint: box.fingerprint,
+          requestedCwd: boxCommand.requestedCwd,
+          effectiveCwd,
+          requestedEnvKeys: boxCommand.requestedEnvKeys,
+          appliedEnvKeys: boxCommand.appliedEnvKeys,
+          droppedEnvKeys: boxCommand.droppedEnvKeys,
+          timeoutSec,
+        } satisfies BoxExecutionResult;
       }
       return {
         status: "completed",

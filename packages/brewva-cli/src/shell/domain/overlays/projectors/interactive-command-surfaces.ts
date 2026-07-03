@@ -317,13 +317,18 @@ function skillSearchScore(query: string, skill: SkillDocument): number | null {
 }
 
 function buildSkillsSummary(loadReport: SkillRegistryLoadReport): string {
+  const outOfScopeCount = loadReport.outOfScopeSkills?.length ?? 0;
+  const outOfScopeSuffix =
+    outOfScopeCount > 0
+      ? `; ${formatPlural(outOfScopeCount, "project skill")} out of workspace scope`
+      : "";
   return `${formatPlural(loadReport.loadedSkills.length, "skill")} available; ${formatPlural(
     loadReport.selectableSkills.length,
     "selectable skill",
   )}; ${formatPlural(loadReport.overlaySkills.length, "project overlay", "project overlays")}; ${formatPlural(
     loadReport.roots.length,
     "source root",
-  )}.`;
+  )}${outOfScopeSuffix}.`;
 }
 
 function skillTokenEstimate(skill: SkillDocument): number {

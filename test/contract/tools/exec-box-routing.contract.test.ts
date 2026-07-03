@@ -725,22 +725,20 @@ describe("exec box routing", () => {
     });
     const execTool = createExecTool({ runtime });
 
-    let thrown: unknown;
-    try {
-      await execTool.execute(
-        "tc-exec-box-nonzero",
-        {
-          command: "false",
-        },
-        undefined,
-        undefined,
-        fakeContext("s13-exec-box-nonzero"),
-      );
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown).toBeInstanceOf(Error);
-    expect((thrown as Error).message).toContain("Process exited with code 42");
+    // The command ran to completion; the failure must commit as an err
+    // result (evidence), never abort the tool commitment by throwing.
+    const result = await execTool.execute(
+      "tc-exec-box-nonzero",
+      {
+        command: "false",
+      },
+      undefined,
+      undefined,
+      fakeContext("s13-exec-box-nonzero"),
+    );
+    expect(result.outcome.kind).toBe("err");
+    expect(extractTextContent(result)).toContain("Process exited with code 42");
+    expect(extractTextContent(result)).toContain("boom");
 
     const failed = events.find((event) => event.type === "box.exec.failed");
     expect(failed?.payload?.boxId).toBe("box-captured");
