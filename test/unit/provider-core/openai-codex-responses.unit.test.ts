@@ -7,7 +7,10 @@ import {
   shouldAttemptCodexWebSocketTransport,
   streamOpenAICodexResponses,
 } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/adapter.js";
-import { rememberCodexContinuationState } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/continuation-state.js";
+import {
+  readCodexContinuationState,
+  rememberCodexContinuationState,
+} from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/continuation-state.js";
 import type { RequestBody } from "../../../packages/brewva-provider-core/src/providers/openai-codex-responses/contract.js";
 import {
   buildCodexContinuationRequest,
@@ -568,6 +571,33 @@ describe("openai codex responses continuation", () => {
     }
   });
 
+  test("a continuation is only valid on the connection that minted it", () => {
+    // previous_response_id is connection-scoped server state (store: false):
+    // sent over any other connection the Codex backend silently starts a fresh
+    // conversation and the session history evaporates — the model then sees
+    // only the newest user message ("继续做1" with no idea what 1 refers to).
+    const model = {
+      id: "gpt-5.4-codex",
+      api: "openai-codex-responses",
+    } as never;
+    rememberCodexContinuationState("session-conn-bound", {
+      model: "gpt-5.4-codex",
+      connectionId: 7,
+      previousRequest: { model: "gpt-5.4-codex" },
+      lastResponse: { responseId: "resp_conn_7", outputItems: [] as never },
+    });
+
+    // Same connection: the continuation is served.
+    expect(
+      readCodexContinuationState("session-conn-bound", model, 7)?.lastResponse.responseId,
+    ).toBe("resp_conn_7");
+    // A different (recycled/expired) connection: the continuation is dead —
+    // dropped, so the request builder sends the FULL input instead.
+    expect(readCodexContinuationState("session-conn-bound", model, 8)).toBe(undefined);
+    // And it stays dropped even for the original connection id afterwards.
+    expect(readCodexContinuationState("session-conn-bound", model, 7)).toBe(undefined);
+  });
+
   test("clears continuation state and cached websocket on explicit session clear", () => {
     const socket = {
       closeCalls: [] as Array<{ code?: number; reason?: string }>,
@@ -578,6 +608,7 @@ describe("openai codex responses continuation", () => {
 
     rememberCodexContinuationState("session-clear", {
       model: "gpt-5.4-codex",
+      connectionId: 1,
       previousRequest: {
         model: "gpt-5.4-codex",
       },
@@ -800,6 +831,7 @@ describe("openai codex responses continuation", () => {
       },
       {
         model: "gpt-5.4-codex",
+        connectionId: 1,
         previousRequest: {
           model: "gpt-5.4-codex",
           stream: true,
@@ -860,6 +892,7 @@ describe("openai codex responses continuation", () => {
       },
       {
         model: "gpt-5.3-codex",
+        connectionId: 1,
         previousRequest: {
           model: "gpt-5.3-codex",
           stream: true,
@@ -920,6 +953,7 @@ describe("openai codex responses continuation", () => {
       },
       {
         model: "gpt-5.3-codex",
+        connectionId: 1,
         previousRequest: {
           model: "gpt-5.3-codex",
           stream: true,
@@ -966,6 +1000,7 @@ describe("openai codex responses continuation", () => {
       },
       {
         model: "gpt-5.4-codex",
+        connectionId: 1,
         previousRequest: {
           model: "gpt-5.4-codex",
           stream: true,
@@ -1168,6 +1203,7 @@ describe("openai codex responses continuation", () => {
       },
       {
         model: "gpt-5.4-mini",
+        connectionId: 1,
         previousRequest: {
           model: "gpt-5.4",
           stream: true,

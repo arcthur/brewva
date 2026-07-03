@@ -43,6 +43,15 @@ export interface CodexLastResponseState {
 
 export interface CodexContinuationState {
   model: string;
+  /**
+   * The websocket connection that produced `lastResponse`. `previous_response_id`
+   * is CONNECTION-scoped server state on the Codex backend (requests are
+   * `store: false`, nothing is persisted): a response id sent over a different
+   * connection is silently treated as a brand-new conversation, which drops the
+   * whole session history on the floor. Continuations are therefore only valid
+   * on the exact connection that created them.
+   */
+  connectionId: number;
   previousRequest: RequestBody;
   lastResponse: CodexLastResponseState;
 }

@@ -37,8 +37,18 @@ interface WebSocketLike {
 
 interface CachedWebSocketConnection {
   socket: WebSocketLike;
+  /** Identity of this live connection; continuations are only valid on it. */
+  connectionId: number;
   busy: boolean;
   idleTimer?: ReturnType<typeof setTimeout>;
+}
+
+let nextCodexWebSocketConnectionId = 1;
+
+function allocateCodexWebSocketConnectionId(): number {
+  const id = nextCodexWebSocketConnectionId;
+  nextCodexWebSocketConnectionId += 1;
+  return id;
 }
 
 const websocketSessionCache = new Map<string, CachedWebSocketConnection>();
@@ -121,6 +131,10 @@ function scheduleSessionWebSocketExpiry(sessionId: string, entry: CachedWebSocke
     if (entry.busy) return;
     closeWebSocketSilently(entry.socket, 1000, "idle_timeout");
     websocketSessionCache.delete(sessionId);
+    // The connection carrying the session's continuation is gone; the
+    // connection-id check in readCodexContinuationState would reject it
+    // anyway, but clearing here keeps the store from holding dead state.
+    clearCodexContinuationState(sessionId);
   }, SESSION_WEBSOCKET_CACHE_TTL_MS);
   entry.idleTimer.unref?.();
 }
@@ -220,11 +234,16 @@ async function acquireWebSocket(
   sessionId: string | undefined,
   signal?: AbortSignal,
   timeoutMs?: number,
-): Promise<{ socket: WebSocketLike; release: (options?: { keep?: boolean }) => void }> {
+): Promise<{
+  socket: WebSocketLike;
+  connectionId: number;
+  release: (options?: { keep?: boolean }) => void;
+}> {
   if (!sessionId) {
     const socket = await connectWebSocket(url, headers, signal, timeoutMs);
     return {
       socket,
+      connectionId: allocateCodexWebSocketConnectionId(),
       release: () => {
         closeWebSocketSilently(socket);
       },
@@ -241,6 +260,7 @@ async function acquireWebSocket(
       cached.busy = true;
       return {
         socket: cached.socket,
+        connectionId: cached.connectionId,
         release: ({ keep } = {}) => {
           if (!keep || !isWebSocketReusable(cached.socket)) {
             closeWebSocketSilently(cached.socket);
@@ -256,6 +276,7 @@ async function acquireWebSocket(
       const socket = await connectWebSocket(url, headers, signal, timeoutMs);
       return {
         socket,
+        connectionId: allocateCodexWebSocketConnectionId(),
         release: () => {
           closeWebSocketSilently(socket);
         },
@@ -268,10 +289,15 @@ async function acquireWebSocket(
   }
 
   const socket = await connectWebSocket(url, headers, signal, timeoutMs);
-  const entry: CachedWebSocketConnection = { socket, busy: true };
+  const entry: CachedWebSocketConnection = {
+    socket,
+    connectionId: allocateCodexWebSocketConnectionId(),
+    busy: true,
+  };
   websocketSessionCache.set(sessionId, entry);
   return {
     socket,
+    connectionId: entry.connectionId,
     release: ({ keep } = {}) => {
       if (!keep || !isWebSocketReusable(entry.socket)) {
         closeWebSocketSilently(entry.socket);
@@ -439,7 +465,7 @@ export function processWebSocketStream(
   options?: OpenAICodexResponsesOptions,
 ): BrewvaEffect.Effect<void, ProviderStreamError> {
   return BrewvaEffect.gen(function* () {
-    const { socket, release } = yield* providerTryPromise(() =>
+    const { socket, connectionId, release } = yield* providerTryPromise(() =>
       acquireWebSocket(
         url,
         headers,
@@ -453,7 +479,7 @@ export function processWebSocketStream(
       ? readCodexSessionGeneration(options.sessionId)
       : undefined;
     const continuation = options?.sessionId
-      ? readCodexContinuationState(options.sessionId, model)
+      ? readCodexContinuationState(options.sessionId, model, connectionId)
       : undefined;
     const outboundBody = buildCodexContinuationRequest(
       body,
@@ -481,6 +507,7 @@ export function processWebSocketStream(
       ) {
         rememberCodexContinuationState(options.sessionId, {
           model: model.id,
+          connectionId,
           previousRequest: cloneProtocolPayload(body),
           lastResponse: {
             responseId,
@@ -512,7 +539,11 @@ export const sessionResources: ProviderSessionResources = {
 };
 
 export function rememberCachedWebSocketConnection(sessionId: string, socket: WebSocketLike): void {
-  websocketSessionCache.set(sessionId, { socket, busy: false });
+  websocketSessionCache.set(sessionId, {
+    socket,
+    connectionId: allocateCodexWebSocketConnectionId(),
+    busy: false,
+  });
 }
 
 export function getCodexSessionCacheState(): {

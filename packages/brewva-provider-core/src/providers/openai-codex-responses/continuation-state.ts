@@ -43,12 +43,23 @@ export function rememberCodexContinuationState(
 export function readCodexContinuationState(
   sessionId: string,
   model: Model<"openai-codex-responses">,
+  connectionId: number,
 ): CodexContinuationState | undefined {
   const state = codexContinuationStates.get(sessionId);
   if (!state) {
     return undefined;
   }
   if (state.model !== model.id) {
+    codexContinuationStates.delete(sessionId);
+    return undefined;
+  }
+  // `previous_response_id` is connection-scoped server state (requests are
+  // `store: false`): on any other connection the Codex backend silently treats
+  // it as a fresh conversation and the whole session history vanishes — the
+  // model then reads only the newest user message. A continuation minted on a
+  // different (expired/recycled) connection is dead weight; drop it so the
+  // request builder sends the full input instead.
+  if (state.connectionId !== connectionId) {
     codexContinuationStates.delete(sessionId);
     return undefined;
   }
