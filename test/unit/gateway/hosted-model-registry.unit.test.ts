@@ -132,8 +132,10 @@ describe("hosted model registry", () => {
       .map((model) => model.id);
 
     expect(availableModelIds).toContain("gpt-5.5");
-    expect(availableModelIds).toContain("gpt-5.5-pro");
     expect(availableModelIds).toContain("gpt-5.4");
+    // The Codex channel rejects -pro/-codex variants for ChatGPT accounts
+    // (probed 2026-07-03); the registry must not offer them.
+    expect(availableModelIds).not.toContain("gpt-5.5-pro");
 
     const model = requireDefined(
       registry.find("openai-codex", "gpt-5.5"),

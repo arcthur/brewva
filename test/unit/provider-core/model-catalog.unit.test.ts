@@ -82,9 +82,13 @@ describe("provider core model catalog", () => {
     const codexModelIds = codexModels.map((model) => model.id);
 
     expect(codexModelIds).toContain("gpt-5.5");
-    expect(codexModelIds).toContain("gpt-5.5-pro");
     expect(codexModelIds).toContain("gpt-5.4");
     expect(codexModelIds).toContain("gpt-5.4-mini");
+    // Probed against the ChatGPT backend (2026-07-03): -pro/-codex variants and
+    // sub-mainline ids are rejected on the Codex channel and must not be offered.
+    expect(codexModelIds).not.toContain("gpt-5.5-pro");
+    expect(codexModelIds).not.toContain("gpt-5.5-codex");
+    expect(codexModelIds).not.toContain("gpt-5.1-codex-max");
     expect(codexModelIds).not.toContain("gpt-5.4-nano");
 
     const flagship = getModel("openai-codex", "gpt-5.5");

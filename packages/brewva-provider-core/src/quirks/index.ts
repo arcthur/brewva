@@ -24,34 +24,28 @@ const OPENAI_CODEX_ZERO_COST = {
 
 // ── Model-era quirks (derived from a model id) ───────────────────────────────
 
-const CODEX_LEGACY_MODEL_IDS = new Set([
-  "gpt-5.1",
-  "gpt-5.1-codex-max",
-  "gpt-5.1-codex-mini",
-  "gpt-5.2",
-  "gpt-5.2-codex",
-  "gpt-5.3-codex",
-  "gpt-5.3-codex-spark",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-]);
-
 const CODEX_EXTENDED_CONTEXT_WINDOW_MODEL = "gpt-5.5";
 const CODEX_EXTENDED_CONTEXT_WINDOW = 400_000;
 
-function isGptModelAfter54(modelId: string): boolean {
-  const match = /^gpt-(\d+)\.(\d+)(?:$|[-_])/u.exec(modelId);
+// Codex-channel entitlement, probed live against the ChatGPT backend
+// (2026-07-03, `POST /backend-api/codex/responses`): mainline gpt-5.4+ ids —
+// including their `-mini` variants — stream normally, while EVERY `-codex` and
+// `-pro` variant and every pre-5.4 id is rejected with "The '<id>' model is
+// not supported when using Codex with a ChatGPT account" (the message is
+// account-kind-scoped, not plan-scoped). Synthesizing rejected ids into the
+// openai-codex catalog burned real turns: the picker offered eleven models of
+// which eight could only ever 400, and fallback chains walked through them.
+const CODEX_MAINLINE_MODEL_ID_PATTERN = /^gpt-(\d+)\.(\d+)(?:-mini)?$/u;
+
+/** Whether an OpenAI model id should be synthesized into an openai-codex model. */
+export function isCodexEligibleModelId(modelId: string): boolean {
+  const match = CODEX_MAINLINE_MODEL_ID_PATTERN.exec(modelId);
   if (!match) {
     return false;
   }
   const major = Number.parseInt(match[1] ?? "", 10);
   const minor = Number.parseInt(match[2] ?? "", 10);
-  return major > 5 || (major === 5 && minor > 4);
-}
-
-/** Whether an OpenAI model id should be synthesized into an openai-codex model. */
-export function isCodexEligibleModelId(modelId: string): boolean {
-  return CODEX_LEGACY_MODEL_IDS.has(modelId) || isGptModelAfter54(modelId);
+  return major > 5 || (major === 5 && minor >= 4);
 }
 
 /** Context-window override for codex ids the source table under-reports. */
