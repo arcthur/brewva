@@ -100,6 +100,23 @@ export function BrewvaFullScreenShell(input: {
       navigateTranscriptMessage(box, input.runtime.getViewState().transcript.messages, direction);
     }
   };
+  // Clicking question option N routes through the SAME path as pressing its
+  // number key — the question handler's canonical 1-9 selection — so a click
+  // selects (and, for an immediate single-choice question, submits) exactly as
+  // the keyboard would. Options past 9 stay keyboard-navigable (arrows / j-k).
+  const selectQuestionOption = (optionIndex: number): void => {
+    const digit = optionIndex + 1;
+    if (digit < 1 || digit > 9) {
+      return;
+    }
+    void input.runtime.handleInput({
+      key: String(digit),
+      text: String(digit),
+      ctrl: false,
+      meta: false,
+      shift: false,
+    });
+  };
   const wiring = useComposerInputWiring({
     runtime: input.runtime,
     renderer: input.renderer,
@@ -284,6 +301,7 @@ export function BrewvaFullScreenShell(input: {
               width={dimensions().width}
               height={dimensions().height}
               theme={theme()}
+              onSelectQuestionOption={selectQuestionOption}
             />
           </Show>
         </box>

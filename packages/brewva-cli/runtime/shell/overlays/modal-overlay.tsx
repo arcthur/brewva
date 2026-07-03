@@ -55,6 +55,7 @@ export function ModalOverlay(input: {
   width: number;
   height: number;
   theme: SessionPalette;
+  onSelectQuestionOption?: (optionIndex: number) => void;
 }) {
   const payload = createMemo(() => input.overlay.payload);
 
@@ -87,6 +88,7 @@ export function ModalOverlay(input: {
             theme={input.theme}
             width={input.width}
             height={input.height}
+            onSelectOption={input.onSelectQuestionOption}
           />
         )}
       </Show>

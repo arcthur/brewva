@@ -1331,6 +1331,64 @@ describe("opentui solid shell runtime: interaction events", () => {
     }
   });
 
+  test("question overlay highlights the option Enter will act on and offers click selection", async () => {
+    const { bundle } = createFakeBundle();
+    const runtime = new CliShellRuntime(bundle, {
+      cwd: process.cwd(),
+      openSession: async () => bundle,
+      createSession: async () => bundle,
+      operatorPollIntervalMs: 60_000,
+    });
+
+    await runtime.start();
+    runtime.openOverlay({
+      kind: "question",
+      mode: "interactive",
+      selectedIndex: 0,
+      requestTitle: "项目实现范围确认",
+      snapshot: {
+        approvals: [],
+        questions: [
+          {
+            questionId: "q-scope",
+            sessionId: "session-1",
+            createdAt: 1,
+            sourceKind: "tool",
+            sourceEventId: "evt-scope",
+            questionText: "Which scope?",
+            sourceLabel: "tool:question",
+            requestId: "req-scope",
+            header: "Scope",
+            options: [{ label: "From scratch" }, { label: "Skeleton first" }],
+            custom: false,
+          },
+        ],
+        taskRuns: [],
+        sessions: [],
+      },
+    } as never);
+
+    const testSetup = await openTuiSolidTestRender(
+      createOpenTuiSolidElement(BrewvaFullScreenShell, { runtime: runtime }),
+      { width: 100, height: 30 },
+    );
+
+    try {
+      const frame = await waitForRenderedFrame(testSetup, {
+        predicate: (rendered) => rendered.includes("From scratch"),
+      });
+      expect(frame).toContain("Skeleton first");
+      // The highlight caret marks the default option — the one Enter resolves to
+      // — so the operator is never left guessing "did it pick 1 or 2?".
+      expect(frame).toContain("▸ 1. From scratch");
+      // Footer advertises that options are clickable / arrow-navigable.
+      expect(frame.toLowerCase()).toContain("click select");
+    } finally {
+      runtime.dispose();
+      testSetup.renderer.destroy();
+    }
+  });
+
   test("routes bracketed paste into masked input dialogs without rendering the secret", async () => {
     const { bundle } = createFakeBundle();
     const runtime = new CliShellRuntime(bundle, {
