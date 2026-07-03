@@ -150,6 +150,12 @@ export interface OpenTuiTestRenderOptions {
   height: number;
   /** Enable native renderer statistics gathering (benchmark harness only). */
   gatherStats?: boolean;
+  /**
+   * Drive the mock keyboard through the kitty keyboard protocol (CSI-u
+   * encodings) instead of classic ANSI, matching what a kitty-capable terminal
+   * sends once the interactive shell enables its kitty keyboard config.
+   */
+  kittyKeyboard?: boolean;
   onDestroy?(): void;
 }
 

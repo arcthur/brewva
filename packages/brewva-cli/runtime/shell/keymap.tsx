@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
+import { appendFileSync } from "node:fs";
 import type { JSX } from "solid-js";
 import type { ShellEffect } from "../../src/shell/domain/effects.js";
 import type { ShellRendererController } from "../../src/shell/domain/renderer-contract.js";
@@ -30,6 +31,32 @@ import {
 const BREWVA_MODE_KEY = "brewva.mode";
 const BREWVA_BASE_MODE = "composer";
 const LEADER_TOKEN = "leader";
+
+/**
+ * Keyboard-path diagnostics for "keys do nothing on this machine" reports the
+ * test harness cannot reproduce: `BREWVA_KEYMAP_DEBUG=1` logs every resolved
+ * key event, dispatched effect, and mode switch to stderr (test harness), and
+ * `BREWVA_KEYMAP_DEBUG=/path/to/file` appends to that file instead — the
+ * interactive shell owns the alternate screen, so stderr would corrupt it.
+ */
+function isKeymapDebugEnabled(): boolean {
+  const value = process.env.BREWVA_KEYMAP_DEBUG;
+  return typeof value === "string" && value.length > 0;
+}
+
+function keymapDebugLog(message: string): void {
+  const target = process.env.BREWVA_KEYMAP_DEBUG;
+  const line = `[keymap-debug] ${message}`;
+  if (!target || target === "1") {
+    console.error(line);
+    return;
+  }
+  try {
+    appendFileSync(target, `${new Date().toISOString()} ${line}\n`);
+  } catch {
+    // Diagnostics must never break input handling.
+  }
+}
 
 const LAYER_PRIORITY: Readonly<Record<BrewvaKeymapLayer, number>> = {
   global: 0,
@@ -103,6 +130,9 @@ function effectCommand(
   beforeDispatch?: (effect: ShellEffect) => Promise<void>,
 ) {
   return () => {
+    if (isKeymapDebugEnabled()) {
+      keymapDebugLog(`dispatch effect=${effect.type}`);
+    }
     void (async () => {
       await beforeDispatch?.(effect);
       if (effect.type === "composer.submit") {
@@ -208,6 +238,11 @@ function replaceDefaultEventResolverWithImeSafeResolver(keymap: BrewvaOpenTuiKey
   keymap.clearEventMatchResolvers();
   return keymap.appendEventMatchResolver((event, ctx) => {
     const keyName = event.name.trim();
+    if (isKeymapDebugEnabled()) {
+      keymapDebugLog(
+        `event name=${JSON.stringify(event.name)} ctrl=${event.ctrl} shift=${event.shift} meta=${event.meta}`,
+      );
+    }
     if (!keyName) {
       return [];
     }
@@ -380,6 +415,9 @@ export function registerBrewvaKeymap(input: RegisterBrewvaKeymapInput): BrewvaKe
   return {
     keymap,
     setMode(mode) {
+      if (isKeymapDebugEnabled()) {
+        keymapDebugLog(`setMode(${mode})`);
+      }
       keymap.setData(BREWVA_MODE_KEY, mode);
     },
     dispose() {
