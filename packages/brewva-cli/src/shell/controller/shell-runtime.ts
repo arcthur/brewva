@@ -1603,7 +1603,16 @@ export class CliShellRuntime {
       requestContextCompaction: () => this.requestContextCompaction(),
       projectSessionEvent: (projectEffect) => this.projectSessionEvent(projectEffect.event),
       abortSession: async (notification) => {
-        await this.#sessionPort.abort();
+        // Abort must NOT hold the serialized `#semanticInputQueue` on the turn.
+        // `#sessionPort.abort()` sends the interrupt synchronously and then
+        // `await waitForIdle()`. When the turn is parked in an interactive
+        // `question`/dialog (interrupt behavior "block"), it only goes idle once
+        // the operator answers — which needs this very input queue. Awaiting idle
+        // here holds the queue head, so every following keystroke blocks behind
+        // it: the operator can never answer the question and the TUI freezes
+        // until killed. Fire the interrupt and let the idle-wait settle detached;
+        // the turn reports its own completion through the session event stream.
+        void this.#sessionPort.abort().catch(() => {});
         if (notification) {
           this.ui.notify(notification, "warning");
         }
