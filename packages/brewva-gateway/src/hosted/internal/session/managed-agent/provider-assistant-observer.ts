@@ -1,5 +1,6 @@
 import type { ProviderRequestFingerprint } from "@brewva/brewva-provider-core/contracts";
 import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
+import { estimateStructuredModelTokens } from "@brewva/brewva-token-estimation";
 import type {
   ExpectedProviderCacheBreak,
   ProviderCacheBreakObservation,
@@ -29,6 +30,13 @@ export interface ManagedSessionProviderAssistantObserverOptions {
   state: () => ProviderCacheObserverView;
   /** Context window of the active model, for context-budget observations. */
   resolveContextWindow?: () => number | null | undefined;
+  /**
+   * Whether to record a marked token estimate when a live attempt-committed
+   * message carries no provider usage. Injected like resolveContextWindow so
+   * the observer's config dependency stays explicit and fixture-friendly;
+   * absent means disabled (fail closed).
+   */
+  usageEstimationEnabled?: () => boolean;
 }
 
 export class ManagedSessionProviderAssistantObserver {
@@ -38,6 +46,7 @@ export class ManagedSessionProviderAssistantObserver {
   readonly #resolveExpectedBreak: ManagedSessionProviderAssistantObserverOptions["resolveExpectedBreak"];
   readonly #state: ManagedSessionProviderAssistantObserverOptions["state"];
   readonly #resolveContextWindow: ManagedSessionProviderAssistantObserverOptions["resolveContextWindow"];
+  readonly #usageEstimationEnabled: ManagedSessionProviderAssistantObserverOptions["usageEstimationEnabled"];
 
   constructor(options: ManagedSessionProviderAssistantObserverOptions) {
     this.#runtime = options.runtime;
@@ -46,6 +55,7 @@ export class ManagedSessionProviderAssistantObserver {
     this.#resolveExpectedBreak = options.resolveExpectedBreak;
     this.#state = options.state;
     this.#resolveContextWindow = options.resolveContextWindow;
+    this.#usageEstimationEnabled = options.usageEstimationEnabled;
   }
 
   onCommittedAssistantMessage(message: BrewvaAgentProtocolAssistantMessage): void {
@@ -101,8 +111,12 @@ export class ManagedSessionProviderAssistantObserver {
     const totalTokens = usage?.totalTokens ?? 0;
     const tokens = totalTokens > 0 ? totalTokens : input + output + cacheRead + cacheWrite;
     if (tokens <= 0) {
-      // Providers that report no usage stay silent instead of committing
-      // empty cost receipts.
+      // The fingerprint guard already established this as a live
+      // attempt-committed message, so missing counters mean the provider
+      // omitted usage — not a replay. Record an output estimate marked as
+      // such instead of leaving cost and the compaction budget blind. An
+      // empty receipt would fake liveness; a marked estimate is physics.
+      this.#recordEstimatedUsage(runtime, message);
       return;
     }
     recordRuntimeAssistantCost(runtime, {
@@ -124,5 +138,34 @@ export class ManagedSessionProviderAssistantObserver {
         maxOutputTokens: null,
       });
     }
+  }
+
+  #recordEstimatedUsage(
+    runtime: HostedRuntimeAdapterPort,
+    message: BrewvaAgentProtocolAssistantMessage,
+  ): void {
+    if (this.#usageEstimationEnabled?.() !== true) {
+      return;
+    }
+    // Failed or aborted attempts carry partial content with zeroed counters;
+    // estimating those would commit a phantom receipt per retry. Only
+    // completed attempts (stop/length/toolUse) are honest estimation targets.
+    if (message.stopReason === "error" || message.stopReason === "aborted") {
+      return;
+    }
+    const output = estimateStructuredModelTokens(message.content, {
+      provider: message.provider,
+      modelId: message.model,
+    }).tokens;
+    if (output <= 0) {
+      return;
+    }
+    recordRuntimeAssistantCost(runtime, {
+      sessionId: this.#sessionId,
+      output,
+      totalTokens: output,
+      estimated: true,
+      model: `${message.provider}/${message.model}`,
+    });
   }
 }

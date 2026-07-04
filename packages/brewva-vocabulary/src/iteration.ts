@@ -48,6 +48,7 @@ export {
   TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  VERIFICATION_RUNGS,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "./internal/iteration.js";
 
@@ -88,6 +89,7 @@ export type {
   ToolLifecycleEventPayload,
   TurnEffectCommitmentProjection,
   VerificationOutcomeRecordedEventPayload,
+  VerificationRung,
   VerifierCheck,
   WorkflowArtifact,
   WorkflowFinishView,

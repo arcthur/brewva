@@ -28,6 +28,7 @@ import {
   markSessionBackgrounded,
   streamManagedSessionOutput,
   waitForManagedSessionActivityEffect,
+  waitForManagedSessionExitEffect,
 } from "./sessions.js";
 import type {
   ManagedBoxExecFinishedSession,
@@ -110,6 +111,11 @@ export interface ManagedExecProcessRegistry {
     sessionId: string,
     timeoutMs: number,
   ) => BrewvaEffect.Effect<void>;
+  readonly waitExit: (
+    ownerSessionId: string,
+    sessionId: string,
+    timeoutMs: number,
+  ) => BrewvaEffect.Effect<void>;
   readonly cleanupExpired: (now?: number) => BrewvaEffect.Effect<void>;
   readonly dispose: () => BrewvaEffect.Effect<void>;
 }
@@ -150,6 +156,8 @@ function makeManagedExecProcessRegistryFromState(
       consumeManagedSessionOutputEffect(state, ownerSessionId, sessionId, sink),
     waitActivity: (ownerSessionId, sessionId, timeoutMs) =>
       waitForManagedSessionActivityEffect(state, ownerSessionId, sessionId, timeoutMs),
+    waitExit: (ownerSessionId, sessionId, timeoutMs) =>
+      waitForManagedSessionExitEffect(state, ownerSessionId, sessionId, timeoutMs),
     cleanupExpired: (now) =>
       BrewvaEffect.sync(() => cleanupExpiredFinishedSessions(state, now ?? Date.now())),
     dispose: () => BrewvaEffect.promise(() => disposeManagedExecProcessRegistry(state)),

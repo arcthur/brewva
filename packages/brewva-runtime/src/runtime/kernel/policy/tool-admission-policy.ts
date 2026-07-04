@@ -424,6 +424,7 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   attention_pin: memoryWrite(),
   attention_ignore: memoryWrite(),
   attention_verify_plan: memoryWrite(),
+  verification_record: memoryWrite(),
   iteration_fact: memoryWrite(),
   ledger_query: runtimeObserve(),
   tape_handoff: controlStateMutation(),

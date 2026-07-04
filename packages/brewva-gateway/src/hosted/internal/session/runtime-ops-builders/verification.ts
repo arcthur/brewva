@@ -1,3 +1,4 @@
+import { readStringList } from "@brewva/brewva-std/text";
 import {
   readVerificationOutcomeRecordedEventPayload,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -5,13 +6,6 @@ import {
 } from "@brewva/brewva-vocabulary/iteration";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
-
-function readStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((entry): entry is string => typeof entry === "string");
-}
 
 function normalizeOutcome(value: unknown): VerificationOutcomeRecordedEventPayload["outcome"] {
   return value === "pass" || value === "fail" || value === "skipped" ? value : null;
@@ -49,6 +43,7 @@ export function buildVerificationRuntimeOps(
           evidenceFreshness:
             typeof record.evidenceFreshness === "string" ? record.evidenceFreshness : null,
           level: typeof record.level === "string" ? record.level : null,
+          checks: readStringList(record.checks),
           missingChecks: readStringList(record.missingChecks),
           missingEvidence: readStringList(record.missingEvidence),
           failedChecks: readStringList(record.failedChecks),

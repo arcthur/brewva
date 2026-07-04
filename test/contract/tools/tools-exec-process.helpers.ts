@@ -101,6 +101,7 @@ export function createRuntimeForExecTests(input?: {
       backend: input?.backend ?? "box",
       autoBackground: {
         foregroundWaitMs: input?.autoBackgroundForegroundWaitMs ?? 10_000,
+        verificationForegroundWaitMs: input?.autoBackgroundForegroundWaitMs ?? 120_000,
       },
       box: {
         home: "~/.brewva/boxes-test",

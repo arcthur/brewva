@@ -1,6 +1,7 @@
 import { parseArgs as parseNodeArgs } from "node:util";
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config";
+import { createCliInspectPort } from "../../runtime/cli-runtime-ports.js";
 import { resolveInspectDirectory, type InspectDirectory } from "../inspect-analysis.js";
 import {
   buildInspectCompactionProjection,
@@ -18,6 +19,7 @@ import {
   type InspectReport,
   type SessionInspectReport,
 } from "./report.js";
+import { buildRunReportProjection, formatRunReportText } from "./run-report.js";
 import { buildTaskWorkCardProjection, formatTaskWorkCardText } from "./work-card.js";
 
 const INSPECT_PARSE_OPTIONS = {
@@ -30,6 +32,7 @@ const INSPECT_PARSE_OPTIONS = {
   compaction: { type: "boolean" },
   diagnostic: { type: "boolean" },
   raw: { type: "boolean" },
+  "run-report": { type: "boolean" },
   "verify-replay": { type: "boolean" },
 } as const;
 
@@ -48,6 +51,7 @@ Options:
   --compaction       Emit focused compaction timeline and economics
   --diagnostic       Emit diagnostic drill-down text instead of the work card
   --raw              Emit the full diagnostic report JSON with --json, or diagnostic text otherwise
+  --run-report       Emit the tape-derived run story: waits, approvals, error->fix cycles, verification depth
   --verify-replay    Verify recovery posture rebuilds identically from canonical tape (zero-cache)
   -h, --help         Show help
 
@@ -170,6 +174,20 @@ export async function runInspectCli(argv: string[]): Promise<number> {
       fields: [...(warning.fields ?? [])],
     })),
   };
+  if (parsed.values["run-report"] === true) {
+    const inspectPort = createCliInspectPort(operatorRuntime);
+    const runReport = buildRunReportProjection(
+      targetSessionId,
+      inspectPort.events.list(targetSessionId) ?? [],
+    );
+    console.log(
+      parsed.values.json === true
+        ? JSON.stringify(runReport, null, 2)
+        : formatRunReportText(runReport),
+    );
+    return 0;
+  }
+
   const report = buildInspectReport(operatorRuntime, targetSessionId, {
     directory,
     configLoad: configLoadReport,

@@ -57,6 +57,12 @@ changed file must trace to `implementation_targets`, required verification, or
 cleanup made necessary by this change. Mention pre-existing dead code instead
 of deleting it unless this change made it orphaned.
 
+Land new code in compilable milestones. When a change grows beyond roughly 150
+new lines, write the smallest unit that can compile, run the cheapest compile
+or syntax probe, then continue. A single giant write defers the first compiler
+contact until everything is already written — the most expensive moment to
+learn the entry-point assumption was wrong.
+
 Run `scripts/check_scope_drift.py` with current `implementation_targets` and `files_changed`.
 
 **If `within_scope: false`**: Stop. Drifted files listed in output. Return to plan instead of silently widening scope.
@@ -65,6 +71,12 @@ Run `scripts/check_scope_drift.py` with current `implementation_targets` and `fi
 ### Phase 3: Verify before claiming completion
 
 Run the verification path defined by `success_criteria` when present, otherwise derive it from the change. Capture commands, diagnostics, and runtime evidence while context is fresh. Treat verification as part of implementation, not follow-up.
+
+Derive task-shaped checks from the verification ladder
+(`verifier/references/verification-ladder.md`): a passing build is the
+`exit_code` rung only. New applications, packages, or greenfield workspaces
+require the `artifact` and `requirements` rungs before completion. Record the
+reached rung with `verification_record`; state it in the completion claim.
 
 **If verification fails**: Preserve attempted evidence in `verification_evidence`. Hand control to debug loop. Do not retry blindly.
 **If verification passes**: Proceed to Phase 4.
@@ -102,6 +114,8 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 - "I'll skip the scope check, it's obviously fine"
 - "I'll add this helper — it might be useful later"
 - "This deserves a proper abstraction layer"
+- "One giant write will be faster than checkpoints"
+- "The build passed, so it works"
 - Claiming completion before running verification commands
 
 ## Common Rationalizations

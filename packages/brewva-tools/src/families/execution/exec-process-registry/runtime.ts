@@ -63,6 +63,11 @@ export interface ManagedExecProcessRegistryRuntime {
     sessionId: string,
     timeoutMs: number,
   ) => Promise<void>;
+  readonly waitExit: (
+    ownerSessionId: string,
+    sessionId: string,
+    timeoutMs: number,
+  ) => Promise<void>;
   readonly cleanupExpired: (now?: number) => Promise<void>;
   readonly closeSession: (ownerSessionId: string) => Promise<void>;
   readonly close: () => Promise<void>;
@@ -148,6 +153,8 @@ export function createManagedExecProcessRegistryRuntime(): ManagedExecProcessReg
       runRegistry((registry) => registry.terminateBox(session, force)),
     waitActivity: (ownerSessionId, sessionId, timeoutMs) =>
       runRegistry((registry) => registry.waitActivity(ownerSessionId, sessionId, timeoutMs)),
+    waitExit: (ownerSessionId, sessionId, timeoutMs) =>
+      runRegistry((registry) => registry.waitExit(ownerSessionId, sessionId, timeoutMs)),
     cleanupExpired: (now) => runRegistry((registry) => registry.cleanupExpired(now)),
     closeSession,
     async close(): Promise<void> {

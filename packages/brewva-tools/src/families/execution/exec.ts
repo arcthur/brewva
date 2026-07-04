@@ -4,6 +4,7 @@ import {
   classifyToolBoundaryRequest,
   evaluateBoundaryClassification,
 } from "@brewva/brewva-runtime/security";
+import { classifyCommandClass } from "@brewva/brewva-std/command-class";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   EXEC_FAILED_EVENT_TYPE,
@@ -44,6 +45,7 @@ import {
   resolveForegroundWaitMs,
   resolveRequestedEnv,
   resolveTimeoutSec,
+  resolveVerificationForegroundWaitMs,
   resolveWorkdir,
   resolveWorkspaceRootForCwd,
   resolveYieldMs,
@@ -71,7 +73,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
       name: "exec",
       label: "Exec",
       description:
-        "Execute shell commands with optional background continuation. Pair with process tool for list/poll/log/kill. yieldMs overrides the session default foreground wait.",
+        "Execute shell commands with optional background continuation. Pair with process tool for list/poll/log/kill. yieldMs overrides the session default foreground wait. Verification-class commands (build/test/lint/typecheck) default to the maximum foreground wait so they usually complete in one call; if one still backgrounds, poll with until=exit.",
       promptSnippet:
         "Run a bounded shell command when real workspace execution or verification is required.",
       promptGuidelines: [
@@ -114,7 +116,14 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
         const foregroundWaitMs = resolveForegroundWaitMs(
           runtime?.config.security.execution.autoBackground,
         );
-        const yieldMs = background ? 0 : resolveYieldMs(params, foregroundWaitMs);
+        // Verification-class commands get their own operator-configured
+        // foreground wait: a typical build or test run then completes in one
+        // call instead of a background + poll loop. An explicit yieldMs wins.
+        const defaultYieldMs =
+          classifyCommandClass(command) === "verification"
+            ? resolveVerificationForegroundWaitMs(runtime?.config.security.execution.autoBackground)
+            : foregroundWaitMs;
+        const yieldMs = background ? 0 : resolveYieldMs(params, defaultYieldMs);
 
         const actionPolicy = getToolActionPolicy(
           "exec",

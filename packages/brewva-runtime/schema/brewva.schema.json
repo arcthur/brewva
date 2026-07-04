@@ -176,6 +176,15 @@
                       "type": "number"
                     }
                   }
+                },
+                "usageEstimation": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             },
@@ -568,9 +577,13 @@
                   "properties": {
                     "foregroundWaitMs": {
                       "type": "number"
+                    },
+                    "verificationForegroundWaitMs": {
+                      "description": "Foreground wait for verification-class commands (builds, tests, linters), which are usually worth blocking on so a typical run completes in one exec call instead of a background + poll loop. Explicit per-call yieldMs still wins.",
+                      "type": "number"
                     }
                   },
-                  "required": ["foregroundWaitMs"]
+                  "required": ["foregroundWaitMs", "verificationForegroundWaitMs"]
                 },
                 "backend": {
                   "type": "string",

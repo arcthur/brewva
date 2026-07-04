@@ -19,6 +19,14 @@ export const ProcessActionSchema = buildStringEnumSchema(PROCESS_ACTION_VALUES, 
     "Use list to inspect sessions, poll for incremental output, log for stored logs, write for stdin, kill to stop a running session, clear to prune completed sessions, and remove to delete a stored session record.",
 });
 
+export const PROCESS_POLL_UNTIL_VALUES = ["activity", "exit"] as const;
+export type ProcessPollUntil = (typeof PROCESS_POLL_UNTIL_VALUES)[number];
+
+export const ProcessPollUntilSchema = buildStringEnumSchema(PROCESS_POLL_UNTIL_VALUES, {
+  guidance:
+    "poll wake condition: activity returns on the next output burst; exit drains output server-side and returns only when the process exits or the poll timeout expires. Prefer exit for build/test verification commands.",
+});
+
 export const ProcessSchema = Type.Object({
   action: ProcessActionSchema,
   sessionId: Type.Optional(Type.String()),
@@ -29,6 +37,7 @@ export const ProcessSchema = Type.Object({
   offset: Type.Optional(Type.Integer({ minimum: 0 })),
   limit: Type.Optional(Type.Integer({ minimum: 0 })),
   timeout: Type.Optional(Type.Number({ minimum: 0, maximum: MAX_POLL_WAIT_MS })),
+  until: Type.Optional(ProcessPollUntilSchema),
 });
 
 export interface ProcessToolOptions {
@@ -57,4 +66,8 @@ export function resolvePollTimeoutMs(params: { timeout?: unknown }): number {
   const raw = params.timeout;
   if (typeof raw !== "number" || !Number.isFinite(raw)) return 0;
   return Math.max(0, Math.min(MAX_POLL_WAIT_MS, Math.trunc(raw)));
+}
+
+export function resolvePollUntil(params: { until?: unknown }): ProcessPollUntil {
+  return params.until === "exit" ? "exit" : "activity";
 }

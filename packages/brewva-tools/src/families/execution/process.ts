@@ -8,7 +8,11 @@ import {
   textResultForOutcome,
 } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
-import { drainSessionOutput, readSessionLog } from "./exec-process-registry/api.js";
+import {
+  drainSessionOutput,
+  MAX_POLL_WAIT_MS,
+  readSessionLog,
+} from "./exec-process-registry/api.js";
 import { resolveManagedExecProcessRegistryRuntime } from "./exec-process-registry/runtime.js";
 import { executeDetachedBoxIdentityAction } from "./process/detached-box.js";
 import {
@@ -24,6 +28,7 @@ import {
   pickSessionId,
   ProcessSchema,
   resolvePollTimeoutMs,
+  resolvePollUntil,
   type ProcessAction,
   type ProcessToolOptions,
 } from "./process/schema.js";
@@ -39,6 +44,7 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
     promptGuidelines: [
       "Action values are list, poll, log, write, kill, clear, and remove.",
       "Use poll for incremental output while a background session is running; use log for retained output snapshots.",
+      "For build/test verification commands, poll with until=exit and a generous timeout: output is drained server-side and one call returns the final result.",
     ],
     parameters: ProcessSchema,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -145,8 +151,29 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
       }
 
       if (action === "poll") {
-        const timeoutMs = resolvePollTimeoutMs(params);
-        await registry.waitActivity(ownerSessionId, sessionId, timeoutMs);
+        const until = resolvePollUntil(params);
+        // An exit wait without an explicit timeout still has to actually
+        // wait — the schema promises exit polls return only on exit or
+        // deadline, so the default is the maximum bounded wait, never 0.
+        const timeoutMs =
+          until === "exit"
+            ? resolvePollTimeoutMs(params) || MAX_POLL_WAIT_MS
+            : resolvePollTimeoutMs(params);
+        if (until === "exit") {
+          // Fail fast before waiting: polling a foreground session is a
+          // caller error, and a long exit wait must not consume its output.
+          const preflight = await registry.getRunning(ownerSessionId, sessionId);
+          if (preflight && !preflight.backgrounded) {
+            return errTextResult(`Session ${sessionId} is not backgrounded.`, {
+              status: "failed",
+            });
+          }
+          // Single blocking wait; output stays in the session's server-clamped
+          // buffer and is drained once below after exit (or deadline).
+          await registry.waitExit(ownerSessionId, sessionId, timeoutMs);
+        } else {
+          await registry.waitActivity(ownerSessionId, sessionId, timeoutMs);
+        }
 
         const running = await registry.getRunning(ownerSessionId, sessionId);
         if (running) {

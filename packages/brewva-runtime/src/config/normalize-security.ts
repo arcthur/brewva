@@ -323,6 +323,15 @@ export function normalizeSecurityConfig(
             defaults.execution.autoBackground.foregroundWaitMs,
           ),
         ),
+        verificationForegroundWaitMs: Math.min(
+          120_000,
+          normalizePositiveInteger(
+            isRecord(securityExecutionInput.autoBackground)
+              ? securityExecutionInput.autoBackground.verificationForegroundWaitMs
+              : undefined,
+            defaults.execution.autoBackground.verificationForegroundWaitMs,
+          ),
+        ),
       },
       box: {
         home: normalizeBoxHomePath(securityExecutionBoxInput.home, defaults.execution.box.home),

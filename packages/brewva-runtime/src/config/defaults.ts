@@ -89,6 +89,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       backend: "box",
       autoBackground: {
         foregroundWaitMs: 10_000,
+        verificationForegroundWaitMs: 120_000,
       },
       box: {
         home: "~/.brewva/boxes",
@@ -204,6 +205,9 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
         ],
         tailProtectTokens: null,
         tailProtectRatio: 0.2,
+      },
+      usageEstimation: {
+        enabled: true,
       },
     },
     toolFailureInjection: {

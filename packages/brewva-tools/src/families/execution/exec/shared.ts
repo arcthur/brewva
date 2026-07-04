@@ -4,6 +4,13 @@ import { sha256Hex } from "@brewva/brewva-std/hash";
 import { textResultForOutcome, type ToolTextOutcomeKind } from "../../../utils/result.js";
 
 export const DEFAULT_YIELD_MS = 10_000;
+/**
+ * Default foreground wait for verification-class commands (builds, tests,
+ * linters) when the config carries no value. Matches the yieldMs clamp so a
+ * typical verification run finishes in one exec call rather than a
+ * background + poll loop.
+ */
+export const DEFAULT_VERIFICATION_FOREGROUND_WAIT_MS = 120_000;
 export const MAX_TIMEOUT_SEC = 7_200;
 export const MAX_TIMEOUT_MS = MAX_TIMEOUT_SEC * 1_000;
 export const SHELL_COMMAND = "sh";
@@ -76,6 +83,21 @@ export function resolveYieldMs(
 export function resolveForegroundWaitMs(config: ExecutionAutoBackgroundConfig | undefined): number {
   const raw = config?.foregroundWaitMs;
   if (typeof raw !== "number" || !Number.isFinite(raw)) return DEFAULT_YIELD_MS;
+  return Math.max(1, Math.min(120_000, Math.trunc(raw)));
+}
+
+/**
+ * Operator policy for how long verification-class commands may block the
+ * turn. A distinct knob from foregroundWaitMs so tuning general snappiness
+ * down does not silently truncate builds — and vice versa.
+ */
+export function resolveVerificationForegroundWaitMs(
+  config: ExecutionAutoBackgroundConfig | undefined,
+): number {
+  const raw = config?.verificationForegroundWaitMs;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return DEFAULT_VERIFICATION_FOREGROUND_WAIT_MS;
+  }
   return Math.max(1, Math.min(120_000, Math.trunc(raw)));
 }
 

@@ -7,6 +7,7 @@ selection:
 references:
   - references/exploratory-regression-checklist.md
   - references/verifier-taxonomy.md
+  - references/verification-ladder.md
   - references/example.md
   - references/rationalizations.md
 scripts:
@@ -71,6 +72,11 @@ Do not emit it as a passed check.
 Run `scripts/classify_verifier_verdict.py` with execution summary. The script
 returns the deterministic verdict from executed checks, failed checks,
 adversarial coverage, and required-evidence coverage.
+
+Name the verification rung the executed checks actually reached per
+`references/verification-ladder.md`, and record it with `verification_record`.
+A verdict without a recorded rung leaves Work Card Evidence and stall
+adjudication blind.
 
 **If verdict is `fail`**: Do not silently repair. Escalate to implementation.
 **If verdict is `inconclusive`**: Name exactly what is missing and why.

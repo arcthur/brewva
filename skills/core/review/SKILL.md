@@ -4,7 +4,8 @@ description: Findings-first risk review for diffs and change plans, including me
   conformance checks.
 selection:
   when_to_use: Use when a diff or change plan needs findings-first risk review, merge readiness
-    assessment, or conformance checking.
+    assessment, or conformance checking — including freshly generated code that just passed
+    verification and has never been read adversarially.
 references:
   - references/boundary-failure.md
   - references/contract-drift.md
@@ -32,6 +33,9 @@ merge safety explicit.
 - Reviewing a diff or change plan
 - Checking merge readiness
 - Assessing regression, compatibility, or operational risk
+- Fresh code just passed verification and nobody has tried to break it yet —
+  a green build proves the toolchain accepted it, not that the guard
+  conditions, lifecycles, and failure paths are right
 
 **Do NOT use when:**
 

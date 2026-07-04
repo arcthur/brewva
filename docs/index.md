@@ -35,6 +35,7 @@ Operator and deployment entrypoints:
 - Overview: `docs/guide/overview.md`
 - Installation: `docs/guide/installation.md`
 - CLI: `docs/guide/cli.md`
+- Operator conventions: `docs/guide/operator-conventions.md`
 - Gateway daemon: `docs/guide/gateway-control-plane-daemon.md`
 - Telegram webhook edge ingress: `docs/guide/telegram-webhook-edge-ingress.md`
 - Channel agent workspace: `docs/guide/channel-agent-workspace.md`

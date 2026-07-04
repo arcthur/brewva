@@ -550,6 +550,8 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       resolveExpectedBreak: () => providerPayloadPipeline.consumeExpectedBreak(),
       state: () => providerPayloadPipeline.readState(),
       resolveContextWindow: () => session?.model?.contextWindow ?? null,
+      usageEstimationEnabled: () =>
+        options.runtime.config.infrastructure.contextBudget.usageEstimation.enabled,
     });
 
     session = new BrewvaManagedAgentSession({

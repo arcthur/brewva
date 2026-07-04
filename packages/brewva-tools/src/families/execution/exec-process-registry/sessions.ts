@@ -236,6 +236,55 @@ export function waitForManagedSessionActivityEffect(
   );
 }
 
+/**
+ * Blocks until the session leaves the running state or the deadline expires.
+ *
+ * Unlike the activity wait this does NOT wake on output and does NOT return
+ * early on pending output — output accumulates in the session's aggregated
+ * buffer (server-clamped) and is drained once by the caller after the exit.
+ * Both host and box finalize paths publish a `type: "exit"` output event
+ * (internal/lifecycle.ts), so one subscription covers both backends.
+ */
+export function waitForManagedSessionExitEffect(
+  registry: ManagedExecProcessRegistryState,
+  ownerSessionId: string,
+  sessionId: string,
+  timeoutMs: number,
+): BrewvaEffect.Effect<void> {
+  if (timeoutMs <= 0) {
+    return BrewvaEffect.void;
+  }
+  return BrewvaEffect.scoped(
+    BrewvaEffect.gen(function* () {
+      const current = getManagedSession(registry, ownerSessionId, sessionId);
+      if (!isManagedSessionRunning(current)) {
+        return;
+      }
+
+      const exited = yield* BrewvaDeferred.make<void>();
+      const unsubscribe = subscribeManagedSessionOutput(registry, sessionId, (event) => {
+        if (event.ownerSessionId !== ownerSessionId) {
+          return;
+        }
+        if (event.type === "exit") {
+          BrewvaDeferred.doneUnsafe(exited, BrewvaEffect.succeed(undefined));
+        }
+      });
+      yield* addScopedFinalizer(unsubscribe);
+
+      const afterSubscribe = getManagedSession(registry, ownerSessionId, sessionId);
+      if (!isManagedSessionRunning(afterSubscribe)) {
+        return;
+      }
+
+      yield* BrewvaEffect.race(
+        BrewvaDeferred.await(exited),
+        BrewvaEffect.sleep(BrewvaDuration.millis(timeoutMs)),
+      );
+    }),
+  );
+}
+
 export function hasPendingOutput(session: ManagedSession): boolean {
   return session.aggregated.length > session.drainCursor;
 }

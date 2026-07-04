@@ -155,6 +155,13 @@ export interface BrewvaConfig {
       backend: "host" | "box";
       autoBackground: {
         foregroundWaitMs: number;
+        /**
+         * Foreground wait for verification-class commands (builds, tests,
+         * linters), which are usually worth blocking on so a typical run
+         * completes in one exec call instead of a background + poll loop.
+         * Explicit per-call yieldMs still wins.
+         */
+        verificationForegroundWaitMs: number;
       };
       box: {
         home: string;
@@ -236,6 +243,14 @@ export interface BrewvaConfig {
         protectedTools: string[];
         tailProtectTokens: number | null;
         tailProtectRatio: number;
+      };
+      usageEstimation: {
+        /**
+         * When a live attempt-committed assistant message carries no provider
+         * usage counters, record a token estimate marked `estimated: true`
+         * instead of leaving cost and the compaction budget blind.
+         */
+        enabled: boolean;
       };
     };
     toolFailureInjection: {

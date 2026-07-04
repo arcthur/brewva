@@ -1,12 +1,12 @@
 import { writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { getModels, resolveCacheCostMultipliers } from "@brewva/brewva-provider-core/catalog";
-import type { KnownProvider } from "@brewva/brewva-provider-core/contracts";
+import { resolveCacheCostMultipliers } from "@brewva/brewva-provider-core/catalog";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { computeNetReuseValue, type NetReuseInputs } from "@brewva/brewva-substrate/context-budget";
 import { RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { MODEL_SELECT_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import { MESSAGE_END_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
+import { findCatalogModel } from "../../provider/model-catalog-lookup.js";
 import {
   getRuntimeContextEvidenceLatest,
   getRuntimeCostSummary,
@@ -558,7 +558,7 @@ function buildSessionCacheCostTimeline(
     if (typeof provider !== "string" || typeof model !== "string") {
       continue;
     }
-    const resolved = getModels(provider as KnownProvider).find((entry) => entry.id === model);
+    const resolved = findCatalogModel(provider, model);
     const multipliers = resolved ? resolveCacheCostMultipliers(resolved.cost) : null;
     if (multipliers) {
       timeline.push({ atTimestamp: event.timestamp, multipliers });

@@ -42,6 +42,9 @@ export function normalizeInfrastructureConfig(
   const contextBudgetCompactionInput = isRecord(contextBudgetInput.compaction)
     ? contextBudgetInput.compaction
     : {};
+  const contextBudgetUsageEstimationInput = isRecord(contextBudgetInput.usageEstimation)
+    ? contextBudgetInput.usageEstimation
+    : {};
   const toolFailureInjectionInput = isRecord(infrastructureInput.toolFailureInjection)
     ? infrastructureInput.toolFailureInjection
     : {};
@@ -127,6 +130,12 @@ export function normalizeInfrastructureConfig(
         tailProtectRatio: normalizeUnitInterval(
           contextBudgetCompactionInput.tailProtectRatio,
           defaultContextCompaction.tailProtectRatio,
+        ),
+      },
+      usageEstimation: {
+        enabled: normalizeBoolean(
+          contextBudgetUsageEstimationInput.enabled,
+          defaultContextBudget.usageEstimation.enabled,
         ),
       },
     },

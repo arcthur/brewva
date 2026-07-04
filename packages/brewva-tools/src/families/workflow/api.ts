@@ -14,6 +14,7 @@ export { createScheduleIntentTool } from "./schedule-intent.js";
 export { createWorkbenchCompactTool } from "./session-compact.js";
 export { createTapeTools } from "./tape.js";
 export { createTaskLedgerTools } from "./task-ledger.js";
+export { createVerificationRecordTool } from "./verification-record.js";
 export {
   createWorkerResultsApplyTool,
   createWorkerResultsMergeTool,

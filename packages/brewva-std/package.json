@@ -17,6 +17,12 @@
       "import": "./dist/collections.js",
       "default": "./dist/collections.js"
     },
+    "./command-class": {
+      "types": "./dist/command-class.d.ts",
+      "bun": "./src/command-class.ts",
+      "import": "./dist/command-class.js",
+      "default": "./dist/command-class.js"
+    },
     "./content-shape": {
       "types": "./dist/content-shape.d.ts",
       "bun": "./src/content-shape.ts",

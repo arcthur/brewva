@@ -423,10 +423,26 @@ export const readToolResultRecordedEventPayload = (event: {
   readonly payload?: ProtocolRecord;
 }): ToolResultRecordedEventPayload => payloadOf(event) as ToolResultRecordedEventPayload;
 
+/**
+ * Verification depth rungs, weakest to strongest. Each rung subsumes the ones
+ * below it; `level` on the outcome receipt carries the reached rung so read
+ * models can score verification depth instead of treating it as a boolean.
+ */
+export const VERIFICATION_RUNGS = [
+  "exit_code",
+  "diagnostics",
+  "artifact",
+  "requirements",
+  "runtime_smoke",
+] as const;
+
+export type VerificationRung = (typeof VERIFICATION_RUNGS)[number];
+
 export interface VerificationOutcomeRecordedEventPayload extends ProtocolRecord {
   readonly outcome: "pass" | "fail" | "skipped" | null;
   readonly evidenceFreshness: string | null;
   readonly level: string | null;
+  readonly checks: string[];
   readonly missingChecks: string[];
   readonly missingEvidence: string[];
   readonly failedChecks: string[];
@@ -449,6 +465,9 @@ export const readVerificationOutcomeRecordedEventPayload = (event: {
     outcome,
     evidenceFreshness,
     level,
+    checks: Array.isArray(payload.checks)
+      ? payload.checks.filter((entry): entry is string => typeof entry === "string")
+      : [],
     missingChecks: Array.isArray(payload.missingChecks)
       ? payload.missingChecks.filter((entry): entry is string => typeof entry === "string")
       : [],

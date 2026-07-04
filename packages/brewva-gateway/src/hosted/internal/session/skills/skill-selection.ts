@@ -22,6 +22,8 @@ import { recordRuntimeSkillSelection } from "../runtime-ports.js";
 import {
   formatSkillAdoptionLine,
   projectLatestSkillAdoption,
+  projectNeglectedTextMatchOffers,
+  projectPostGreenReviewSignal,
   projectRecentToolTargetPaths,
   queryRecentSkillProjectionInputs,
   type SkillAdoptionSample,
@@ -30,6 +32,8 @@ import {
 
 const MAX_RENDERED_SKILLCARDS = 8;
 const HIDDEN_CATEGORIES = new Set<LoadableSkillCategory>(["internal"]);
+// The product-loop review skill the post-green nudge force-shortlists.
+const REVIEW_SKILL_NAME = "review";
 // The always-visible catalog layer: names + one short line each. Its content
 // depends only on the catalog (never on the prompt), so the section is
 // byte-stable across turns and prompt-cache friendly. Visibility is the point:
@@ -124,6 +128,7 @@ export type SkillSelectionMode =
 export type SkillSelectionReason =
   | "explicit_mention"
   | "path_glob"
+  | "post_green_review"
   | "recent_path"
   | "name_match"
   | "text_match";
@@ -132,6 +137,9 @@ const REASON_PRIORITY: Record<SkillSelectionReason, number> = {
   explicit_mention: 500,
   // A path the user named in the prompt outranks one the session merely touched.
   path_glob: 400,
+  // Fresh code verified green with review never adopted: the review skill
+  // outranks incidental signals but never an operator-named path or mention.
+  post_green_review: 350,
   recent_path: 300,
   name_match: 200,
   text_match: 100,
@@ -206,6 +214,12 @@ export interface RenderedSkillReason {
   filePath: string;
 }
 
+/** A product-loop nudge: force-include this skill with this reason. */
+export interface ForcedSkillCandidate {
+  skillName: string;
+  reason: SkillSelectionReason;
+}
+
 export interface SkillSelectionReceipt {
   selectionId: string;
   trigger: SkillSelectionTrigger;
@@ -217,6 +231,10 @@ export interface SkillSelectionReceipt {
   selectionMode: SkillSelectionMode;
   promptPaths: string[];
   recentToolPaths: string[];
+  /** Skills dropped from pure-text_match candidacy after repeated ignored offers. */
+  demotedSkillNames: string[];
+  /** Product-loop nudges that force-included skills this turn, with reasons. */
+  forcedCandidates: ForcedSkillCandidate[];
   renderedSkillReasons: RenderedSkillReason[];
   skillInvocationRecords: SkillInvocationRecord[];
   renderedSkillContext: {
@@ -259,6 +277,8 @@ interface RenderedSkillShortlist {
   promptPaths: string[];
   recentToolPaths: string[];
   selectionMode: SkillSelectionMode;
+  demotedSkillNames: string[];
+  forcedCandidates: ForcedSkillCandidate[];
   overBudgetReason?: string;
 }
 
@@ -470,6 +490,7 @@ function buildCandidate(input: {
   promptTokens: TextMatchTokens;
   promptPaths: readonly string[];
   recentToolPaths: readonly string[];
+  forcedCandidates: ReadonlyMap<string, SkillSelectionReason>;
 }): SkillCandidate | null {
   const reasons = new Set<SkillSelectionReason>();
   if (hasExplicitMention(input.prompt, input.skill.name)) {
@@ -477,6 +498,12 @@ function buildCandidate(input: {
   }
   if (input.skill.pathGlobs.some((pathGlob) => pathGlobMatches(pathGlob, input.promptPaths))) {
     reasons.add("path_glob");
+  }
+  // A product-loop nudge (e.g. post-green review) force-includes a skill with
+  // its own reason; the scorer stays generic — nudges are data, not branches.
+  const forcedReason = input.forcedCandidates.get(input.skill.name);
+  if (forcedReason) {
+    reasons.add(forcedReason);
   }
   if (
     input.recentToolPaths.length > 0 &&
@@ -619,20 +646,39 @@ function buildSkillShortlist(input: {
   promptPaths?: readonly string[];
   recentToolPaths?: readonly string[];
   maxRenderedSkills: number;
+  forcedCandidates?: ReadonlyMap<string, SkillSelectionReason>;
+  neglectedSkillNames?: ReadonlySet<string>;
 }): RenderedSkillShortlist {
   const promptPaths = input.promptPaths ?? extractPromptTargetPaths(input.prompt);
   const recentToolPaths = input.recentToolPaths ?? [];
   const promptTokens = tokenizePromptForTextMatch(input.prompt);
+  const forcedCandidates = input.forcedCandidates ?? new Map<string, SkillSelectionReason>();
+  const neglectedSkillNames = input.neglectedSkillNames ?? new Set<string>();
+  const demotedSkillNames: string[] = [];
   const candidates = input.skills
-    .map((skill) =>
-      buildCandidate({
+    .map((skill) => {
+      const candidate = buildCandidate({
         skill,
         prompt: input.prompt,
         promptTokens,
         promptPaths,
         recentToolPaths,
-      }),
-    )
+        forcedCandidates,
+      });
+      // Session-scoped feedback: an offer repeatedly ignored on text_match
+      // alone stops competing on text_match alone. Any stronger reason
+      // (including a forced nudge) bypasses the demotion.
+      if (
+        candidate &&
+        candidate.reasons.length === 1 &&
+        candidate.reasons[0] === "text_match" &&
+        neglectedSkillNames.has(skill.name)
+      ) {
+        demotedSkillNames.push(skill.name);
+        return null;
+      }
+      return candidate;
+    })
     .filter((candidate): candidate is SkillCandidate => candidate !== null)
     .toSorted(compareCandidates);
   const explicitCandidates = candidates.filter((candidate) =>
@@ -657,6 +703,10 @@ function buildSkillShortlist(input: {
     promptPaths: [...promptPaths],
     recentToolPaths: [...recentToolPaths],
     selectionMode,
+    demotedSkillNames: demotedSkillNames.toSorted((left, right) => left.localeCompare(right)),
+    forcedCandidates: [...forcedCandidates.entries()]
+      .map(([skillName, reason]) => ({ skillName, reason }))
+      .toSorted((left, right) => left.skillName.localeCompare(right.skillName)),
     ...(overExplicitBudget ? { overBudgetReason: "explicit_mentions_exceed_render_cap" } : {}),
   };
 }
@@ -742,6 +792,8 @@ function buildReceipt(input: {
     selectionMode: input.renderedShortlist.selectionMode,
     promptPaths: [...input.renderedShortlist.promptPaths],
     recentToolPaths: [...input.renderedShortlist.recentToolPaths],
+    demotedSkillNames: [...input.renderedShortlist.demotedSkillNames],
+    forcedCandidates: [...input.renderedShortlist.forcedCandidates],
     renderedSkillReasons,
     skillInvocationRecords,
     renderedSkillContext: {
@@ -814,6 +866,8 @@ export function buildSkillShortlistContextForPrompt(input: {
   promptPaths?: readonly string[];
   recentToolPaths?: readonly string[];
   maxRenderedSkills?: number;
+  forcedCandidates?: ReadonlyMap<string, SkillSelectionReason>;
+  neglectedSkillNames?: ReadonlySet<string>;
 }): SkillSelectionResult {
   const trigger: SkillSelectionTrigger = "user_message";
   const skills = listPromptVisibleSkills(listSkillCatalog(input.runtime));
@@ -825,6 +879,8 @@ export function buildSkillShortlistContextForPrompt(input: {
     promptPaths: input.promptPaths,
     recentToolPaths: input.recentToolPaths,
     maxRenderedSkills,
+    forcedCandidates: input.forcedCandidates,
+    neglectedSkillNames: input.neglectedSkillNames,
   });
   const receipt = buildReceipt({
     trigger,
@@ -871,6 +927,16 @@ function formatSkillSelectionTraceMessage(
         explicitSkillMentionNames.length > 0 ? explicitSkillMentionNames.join(", ") : "none"
       }`,
       formatSkillAdoptionLine(previousAdoption),
+      `Forced SkillCards: ${
+        receipt.forcedCandidates.length > 0
+          ? receipt.forcedCandidates
+              .map((entry) => `${entry.skillName} (${entry.reason})`)
+              .join(", ")
+          : "none"
+      }`,
+      `Demoted SkillCards (ignored text_match offers): ${
+        receipt.demotedSkillNames.length > 0 ? receipt.demotedSkillNames.join(", ") : "none"
+      }`,
       `Selection ID: ${receipt.selectionId}`,
       `Selection Mode: ${receipt.selectionMode}`,
     ].join("\n"),
@@ -891,6 +957,8 @@ function formatSkillSelectionTraceMessage(
       renderedSkillContext: receipt.renderedSkillContext,
       selectionMode: receipt.selectionMode,
       trigger: receipt.trigger,
+      demotedSkillNames: receipt.demotedSkillNames,
+      forcedCandidates: receipt.forcedCandidates,
       ...(previousAdoption ? { previousAdoption } : {}),
     },
   };
@@ -923,11 +991,25 @@ export function createSkillSelectionLifecycle(
         RECENT_TOOL_PATH_LIMIT,
       );
       const previousAdoption = projectLatestSkillAdoption(sessionEvents.adoptionEvents);
+      const reviewSkillFilePath = runtime.ops.skills.catalog.get(REVIEW_SKILL_NAME)?.filePath;
+      const postGreenSignal = projectPostGreenReviewSignal({
+        invocationEvents: sessionEvents.adoptionEvents,
+        verificationEvents: sessionEvents.verificationEvents,
+        reviewSkillFilePath: typeof reviewSkillFilePath === "string" ? reviewSkillFilePath : null,
+      });
+      const forcedCandidates = new Map<string, SkillSelectionReason>(
+        postGreenSignal.active ? [[REVIEW_SKILL_NAME, "post_green_review"]] : [],
+      );
+      const neglectedSkillNames = projectNeglectedTextMatchOffers(sessionEvents.neglectEvents, {
+        windowTruncated: sessionEvents.neglectWindowTruncated,
+      });
       const selection = buildSkillShortlistContextForPrompt({
         runtime,
         prompt,
         promptPaths,
         recentToolPaths,
+        forcedCandidates,
+        neglectedSkillNames,
       });
       recordRuntimeSkillSelection(runtime, sessionId, selection.receipt);
       const shortlistSection = formatSkillSelectionSection(selection);

@@ -184,6 +184,9 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   reasoning_revert: metadata("control_plane", "control_state_mutation", [
     "capabilities.reasoning.reverts.revert",
   ]),
+  verification_record: metadata("base", "memory_write", [
+    "capabilities.verification.checks.verify",
+  ]),
   get_goal: metadata("control_plane", "runtime_observe", ["capabilities.goal.state.get"]),
   update_goal: metadata("control_plane", "control_state_mutation", [
     "capabilities.goal.state.get",

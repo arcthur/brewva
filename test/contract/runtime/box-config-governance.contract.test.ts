@@ -33,6 +33,7 @@ describe("box runtime contract", () => {
       backend: "box",
       autoBackground: {
         foregroundWaitMs: 10_000,
+        verificationForegroundWaitMs: 120_000,
       },
       box: {
         home: "~/.brewva/boxes",

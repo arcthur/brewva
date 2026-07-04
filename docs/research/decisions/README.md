@@ -165,6 +165,7 @@ Every accepted decision inherits these rules:
 - [managed-tool-capability-proof](./managed-tool-capability-proof.md)
 - [multi-language-source-intelligence](./multi-language-source-intelligence.md)
 - [projection-admission](./projection-admission.md)
+- [verification-receipt-plane-selection-feedback-and-execution-pacing](./verification-receipt-plane-selection-feedback-and-execution-pacing.md)
 
 ## Maintenance Rule
 

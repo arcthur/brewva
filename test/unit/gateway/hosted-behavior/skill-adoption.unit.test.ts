@@ -186,6 +186,9 @@ describe("queryRecentSkillProjectionInputs", () => {
     expect(queryRecentSkillProjectionInputs(undefined, "s")).toEqual({
       recentInvocations: [],
       adoptionEvents: [],
+      neglectEvents: [],
+      neglectWindowTruncated: false,
+      verificationEvents: [],
     });
     expect(
       queryRecentSkillProjectionInputs(
@@ -196,7 +199,13 @@ describe("queryRecentSkillProjectionInputs", () => {
         },
         "s",
       ),
-    ).toEqual({ recentInvocations: [], adoptionEvents: [] });
+    ).toEqual({
+      recentInvocations: [],
+      adoptionEvents: [],
+      neglectEvents: [],
+      neglectWindowTruncated: false,
+      verificationEvents: [],
+    });
   });
 
   test("fetches adoption reads since the visible selection, past any tail window", () => {

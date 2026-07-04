@@ -162,6 +162,73 @@ describe("managed-agent-session provider assistant observer", () => {
     expect(usageRecords).toHaveLength(0);
   });
 
+  test("records a marked output estimate for live messages when the provider omits usage", () => {
+    const { runtime, costRecords, usageRecords } = buildRuntimeSpy();
+    const observer = new ManagedSessionProviderAssistantObserver({
+      runtime,
+      sessionId: "sess-estimate",
+      cacheBreakDetector: buildCacheBreakDetector(),
+      resolveExpectedBreak: () => undefined,
+      state: () =>
+        ({
+          lastProviderFingerprint: { bucketKey: "bucket" },
+          lastCacheRender: undefined,
+          lastToolSchemaEstimatedTokens: undefined,
+        }) as never,
+      resolveContextWindow: () => 200_000,
+      usageEstimationEnabled: () => true,
+    });
+
+    const message = assistantMessage({}) as { content: unknown };
+    message.content = [{ type: "text", text: "A committed answer long enough to count tokens." }];
+    observer.onCommittedAssistantMessage(message as never);
+
+    expect(costRecords).toHaveLength(1);
+    expect(costRecords[0]).toMatchObject({
+      sessionId: "sess-estimate",
+      estimated: true,
+      model: "openai-codex/gpt-5.5",
+    });
+    const record = costRecords[0] as { output: number; totalTokens: number };
+    expect(record.output).toBeGreaterThan(0);
+    expect(record.totalTokens).toBe(record.output);
+    // Estimation never fabricates a context-usage observation.
+    expect(usageRecords).toHaveLength(0);
+  });
+
+  test("never estimates failed or aborted attempts, and stays off when not enabled", () => {
+    const { runtime, costRecords } = buildRuntimeSpy();
+    const makeObserver = (enabled: boolean) =>
+      new ManagedSessionProviderAssistantObserver({
+        runtime,
+        sessionId: "sess-estimate-gates",
+        cacheBreakDetector: buildCacheBreakDetector(),
+        resolveExpectedBreak: () => undefined,
+        state: () =>
+          ({
+            lastProviderFingerprint: { bucketKey: "bucket" },
+            lastCacheRender: undefined,
+            lastToolSchemaEstimatedTokens: undefined,
+          }) as never,
+        resolveContextWindow: () => 200_000,
+        ...(enabled ? { usageEstimationEnabled: () => true } : {}),
+      });
+
+    // A failed attempt carries partial content with zeroed counters: N
+    // retries must not commit N phantom estimated receipts.
+    const failed = assistantMessage({}) as { content: unknown; stopReason: string };
+    failed.content = [{ type: "text", text: "partial content before the stream error" }];
+    failed.stopReason = "error";
+    makeObserver(true).onCommittedAssistantMessage(failed as never);
+    expect(costRecords).toHaveLength(0);
+
+    // Without the injected enable signal the estimation path stays closed.
+    const complete = assistantMessage({}) as { content: unknown };
+    complete.content = [{ type: "text", text: "a completed answer" }];
+    makeObserver(false).onCommittedAssistantMessage(complete as never);
+    expect(costRecords).toHaveLength(0);
+  });
+
   test("skips context usage when no context window is known", () => {
     const { runtime, costRecords, usageRecords } = buildRuntimeSpy();
     const observer = new ManagedSessionProviderAssistantObserver({

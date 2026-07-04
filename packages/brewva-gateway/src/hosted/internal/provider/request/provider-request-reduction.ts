@@ -27,6 +27,7 @@ import {
   resolveRuntimeContextCompactionEligibility,
   type HostedRuntimeAdapterPort,
 } from "../../session/runtime-ports.js";
+import { findCatalogModel } from "../model-catalog-lookup.js";
 import { isOutputBudgetEscalatedPayload } from "./provider-request-recovery.js";
 import { applyTransientOutboundReductionToPayload } from "./provider-request-reduction-walker.js";
 
@@ -74,6 +75,25 @@ function resolveUsageContextWindow(usage: ContextBudgetUsage | undefined): numbe
     : null;
 }
 
+/**
+ * Sessions that never observed provider usage (providers that omit counters)
+ * have no runtime context window, which used to leave transient reduction
+ * blind. The active model's catalog context window is static metadata and an
+ * honest fallback for the estimation path.
+ */
+function resolveCatalogContextWindow(metadata?: {
+  provider?: string;
+  modelId?: string;
+}): number | null {
+  if (!metadata?.provider || !metadata.modelId) {
+    return null;
+  }
+  const model = findCatalogModel(metadata.provider, metadata.modelId);
+  return typeof model?.contextWindow === "number" && model.contextWindow > 0
+    ? model.contextWindow
+    : null;
+}
+
 function buildEstimatedPayloadUsage(
   payload: unknown,
   runtimeUsage: ContextBudgetUsage | undefined,
@@ -83,7 +103,8 @@ function buildEstimatedPayloadUsage(
     modelId?: string;
   },
 ): ContextBudgetUsage | undefined {
-  const contextWindow = resolveUsageContextWindow(runtimeUsage);
+  const contextWindow =
+    resolveUsageContextWindow(runtimeUsage) ?? resolveCatalogContextWindow(metadata);
   if (!contextWindow) {
     return undefined;
   }
