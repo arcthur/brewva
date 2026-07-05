@@ -916,3 +916,105 @@ describe("assembleRequirementFitnessInput — independent outcome → satisfied 
     expect(projection.unverifiedMustAtoms).toEqual([EVENT_TAP_ATOM.id]);
   });
 });
+
+describe("verification_record tool — unverified-requirements marker (below-requirements resistance)", () => {
+  const MUST_ATOM: RequirementAtom = {
+    id: "req-1",
+    statement: "Fn suppression must be keycode-scoped, not all .flagsChanged",
+    modality: "must",
+    provenance: "prompt",
+  };
+
+  function seedMustAtom(runtime: ReturnType<typeof createRuntimeFixture>, sessionId: string): void {
+    runtime.ops.task.requirements.record(sessionId, [MUST_ATOM]);
+  }
+
+  test("an artifact-level green with fresh code + an unverified must atom appends the marker naming the atom", async () => {
+    const runtime = createRuntimeFixture();
+    const verificationRecord = createVerificationRecordTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const sessionId = "verification-record-reqdebt-artifact-1";
+    seedMustAtom(runtime, sessionId);
+    seedCommittedWrite(runtime, sessionId, "Sources/FnKeyMonitor.swift");
+
+    const result = await verificationRecord.execute(
+      "tool-1",
+      { outcome: "pass", level: "artifact", checks: ["swift build -c release"] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+    expect(result.outcome.kind).toBe("ok");
+    const text = resultText(result);
+    // The resistance the up3 run never saw: an artifact green is told it has an
+    // ungraded must requirement, by id, and to climb the ladder.
+    expect(text).toContain("unverified_requirements:");
+    expect(text).toContain("[req-1]");
+    expect(text).toContain("rung=artifact");
+    // Mutually exclusive with the review-debt marker (that one is requirements+).
+    expect(text).not.toContain("review_debt:");
+  });
+
+  test("no marker at the requirements rung — the fitness line owns disclosure there, not this below-requirements marker", async () => {
+    const runtime = createRuntimeFixture();
+    const verificationRecord = createVerificationRecordTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const sessionId = "verification-record-reqdebt-requirements-1";
+    seedMustAtom(runtime, sessionId);
+    seedCommittedWrite(runtime, sessionId, "Sources/FnKeyMonitor.swift");
+
+    const result = await verificationRecord.execute(
+      "tool-1",
+      { outcome: "pass", level: "requirements", checks: ["requirement re-derivation"] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+    expect(result.outcome.kind).toBe("ok");
+    const text = resultText(result);
+    expect(text).not.toContain("unverified_requirements:");
+    // At requirements+ the committed fitness line carries the unverified count.
+    expect(text).toContain("1 must");
+  });
+
+  test("no marker when no fresh code was written, even with an unverified must atom", async () => {
+    const runtime = createRuntimeFixture();
+    const verificationRecord = createVerificationRecordTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const sessionId = "verification-record-reqdebt-nocode-1";
+    seedMustAtom(runtime, sessionId);
+    // No write/edit commitment seeded -> no fresh code.
+
+    const result = await verificationRecord.execute(
+      "tool-1",
+      { outcome: "pass", level: "artifact", checks: ["swift build -c release"] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+    expect(result.outcome.kind).toBe("ok");
+    expect(resultText(result)).not.toContain("unverified_requirements:");
+  });
+
+  test("no marker when there are no requirement atoms, even with fresh code below requirements", async () => {
+    const runtime = createRuntimeFixture();
+    const verificationRecord = createVerificationRecordTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const sessionId = "verification-record-reqdebt-noatoms-1";
+    seedCommittedWrite(runtime, sessionId, "Sources/FnKeyMonitor.swift");
+
+    const result = await verificationRecord.execute(
+      "tool-1",
+      { outcome: "pass", level: "artifact", checks: ["swift build -c release"] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+    expect(result.outcome.kind).toBe("ok");
+    expect(resultText(result)).not.toContain("unverified_requirements:");
+  });
+});

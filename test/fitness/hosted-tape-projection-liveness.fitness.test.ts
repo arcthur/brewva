@@ -9,7 +9,10 @@ import {
   projectToolInvocations,
   TOOL_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/tool-invocations";
-import { buildTapeRequirementFitness } from "../../packages/brewva-cli/src/operator/inspect/requirement-fitness.js";
+import {
+  buildTapeRequirementFitness,
+  buildTapeUnverifiedRequirementDebt,
+} from "../../packages/brewva-cli/src/operator/inspect/requirement-fitness.js";
 import { buildTapeReviewDebt } from "../../packages/brewva-cli/src/operator/inspect/review-debt.js";
 import { buildCompactionInputProvenance } from "../../packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.js";
 import { projectRecentToolTargetPaths } from "../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.js";
@@ -186,6 +189,25 @@ describe("hosted-tape projection liveness (real gpt-5.5 session)", () => {
     // bug this fix closes). No live finding exists, so nothing is violated.
     expect(projection.unverifiedMustAtoms.length).toBe(7);
     expect(projection.counts.violated).toBe(0);
+  });
+
+  test("requirement-verification debt fires on the real tape: fresh code + 7 unverified must atoms after a requirements pass (unverified_after_requirements)", () => {
+    // The operator-surface debt (`buildTapeUnverifiedRequirementDebt`, surfaced on
+    // `inspect run-report`) on real data. This session wrote fresh code and its
+    // authored verify DID reach the `requirements` rung, yet all 7 `must` atoms
+    // stayed ungraded (no findings, no independent atoms-review) — the
+    // `unverified_after_requirements` coverage gap, distinct from the artifact-only
+    // `ladder_below_requirements` shape. A build-level green that never actually
+    // grades the atoms would light this up on every real run; watching it here
+    // guards the debt end-to-end on hosted data.
+    const debt = buildTapeUnverifiedRequirementDebt(
+      unwrapOpsEnvelopes(events) as unknown as readonly BrewvaEventRecord[],
+    );
+    expect(debt).toEqual({
+      debt: true,
+      unverifiedMustCount: 7,
+      reason: "unverified_after_requirements",
+    });
   });
 
   test("compaction input provenance records the modified files from the commitment boundary", () => {

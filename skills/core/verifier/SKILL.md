@@ -81,24 +81,23 @@ adjudication blind.
 **If verdict is `fail`**: Do not silently repair. Escalate to implementation.
 **If verdict is `inconclusive`**: Name exactly what is missing and why.
 
-**Final-answer disclosure**: when the final answer reports a `pass` at
-`requirements` rung or above, `verification_record`'s result text is the
-disclosure, not a paraphrase target — read it back, don't summarize it away.
-Never state a bare "requirements pass." State instead:
+**Final-answer disclosure**: when the final answer reports a `pass`,
+`verification_record`'s result text is the disclosure, not a paraphrase target —
+read it back verbatim, never a bare "pass." State instead:
 
-- The `fitness:` line verbatim (`N satisfied / M unverified (K must) / J
-violated; D discrepancies (G deterministic)`) whenever the result carries
-  one. Name every unverified `must`-modality or `runtime_smoke`-relevant atom
-  by id — "M unverified" is a count, not a disclosure, until the atoms behind
-  it are named.
-- The `review_debt:` marker verbatim when the result carries one, reporting
-  the verdict as `pass (authored-only, review debt)` rather than a bare pass —
-  the recorded rung was reached, but no independent receipt has reviewed this
-  tree.
+- The `fitness:` line (`N satisfied / M unverified (K must) / J violated; D
+discrepancies`) when present, naming every unverified `must`/`runtime_smoke`
+  atom by id — "M unverified" is a count, not a disclosure.
+- The `review_debt:` marker when present, as `pass (authored-only, review debt)`
+  — the rung was reached, but no independent receipt reviewed this tree.
+- The `unverified_requirements:` marker when a pass BELOW the `requirements` rung
+  carries one — fresh code has ungraded `must` atoms. Do NOT treat a build-level
+  green as done: climb to a `requirements` verify (re-derive each named atom) or
+  record the atom `notApplicable`. Report as `pass (rung=<rung>, requirement debt)`.
 
-A `pass` with either marker present and neither surfaced in the final answer is
-a disclosure failure, not a formatting choice: the operator reading only the
-final answer must see the same debt the receipt already carries.
+A `pass` with any marker present and none surfaced in the final answer is a
+disclosure failure: the operator reading only the final answer must see the same
+debt the receipt carries.
 
 ### Phase 5: Emit verification artifacts
 

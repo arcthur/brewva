@@ -420,3 +420,64 @@ function buildDiscrepancy(accumulator: AtomAccumulator): FitnessDiscrepancy {
     evidenceRef: accumulator.findingFailRef,
   };
 }
+
+/**
+ * The reason a requirement-verification debt carries, or null when there is no
+ * debt.
+ *
+ * - `ladder_below_requirements`: fresh code was written and >= 1 `must` atom is
+ *   `unverified`, and NO verification pass ever reached the `requirements` rung
+ *   — the ladder stopped lower (e.g. `artifact`: does it build/sign?) without
+ *   grading the atoms against evidence. This is the "green-but-unverified"
+ *   termination shape: a build-level pass looks done while the requirements were
+ *   never actually checked.
+ * - `unverified_after_requirements`: a pass DID reach `requirements`, yet >= 1
+ *   `must` atom is STILL `unverified` — a coverage gap, not a skipped rung.
+ */
+export type UnverifiedRequirementDebtReason =
+  | "ladder_below_requirements"
+  | "unverified_after_requirements";
+
+/** Descriptive requirement-verification debt (advisory, never a gate — axiom 18). */
+export interface UnverifiedRequirementDebt {
+  readonly debt: boolean;
+  /** Count of `must`-modality atoms whose fitness state is `unverified`. */
+  readonly unverifiedMustCount: number;
+  readonly reason: UnverifiedRequirementDebtReason | null;
+}
+
+/** Inputs {@link projectUnverifiedRequirementDebt} needs — all tape-derived, no I/O. */
+export interface UnverifiedRequirementDebtInput {
+  /** A tool actually wrote/edited code this session (the debt is meaningless with no fresh code). */
+  readonly freshCodeWritten: boolean;
+  /** `projectRequirementFitness(...).unverifiedMustAtoms.length`. */
+  readonly unverifiedMustCount: number;
+  /** Did ANY verification pass reach the `requirements` rung or above? */
+  readonly reachedRequirementsVerify: boolean;
+}
+
+/**
+ * Pure projection, sibling to `projectReviewDebt`: does the current tape state
+ * carry requirement-verification debt — fresh code written AND at least one
+ * `must`-modality atom still `unverified`? This is the "green below the
+ * requirements rung" pressure the review-debt marker cannot express: review debt
+ * fires only AFTER a `requirements`+ pass (it asks "was that pass independently
+ * reviewed?"), so a session that terminates on an `artifact`-level green —
+ * never climbing to a requirements verify — leaves review debt at `false` while
+ * its `must` requirements were never graded. This projection names that gap.
+ * Advisory only: it changes no receipt and gates nothing (axiom 18).
+ */
+export function projectUnverifiedRequirementDebt(
+  input: UnverifiedRequirementDebtInput,
+): UnverifiedRequirementDebt {
+  if (!input.freshCodeWritten || input.unverifiedMustCount <= 0) {
+    return { debt: false, unverifiedMustCount: input.unverifiedMustCount, reason: null };
+  }
+  return {
+    debt: true,
+    unverifiedMustCount: input.unverifiedMustCount,
+    reason: input.reachedRequirementsVerify
+      ? "unverified_after_requirements"
+      : "ladder_below_requirements",
+  };
+}

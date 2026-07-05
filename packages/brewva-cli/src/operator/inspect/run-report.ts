@@ -6,12 +6,16 @@ import { FITNESS_DISCREPANCY_GRADES } from "@brewva/brewva-vocabulary/fitness";
 import type {
   FitnessDiscrepancy,
   FitnessDiscrepancyGrade,
+  UnverifiedRequirementDebt,
 } from "@brewva/brewva-vocabulary/fitness";
 import { readVerificationOutcomeRecordedEventPayload } from "@brewva/brewva-vocabulary/iteration";
 import { REVIEW_FINDING_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/review";
 import { foldTaskLedgerEvents } from "@brewva/brewva-vocabulary/task";
 import { summarizeRequirementFitness } from "./fitness-summary.js";
-import { buildTapeRequirementFitness } from "./requirement-fitness.js";
+import {
+  buildTapeRequirementFitness,
+  buildTapeUnverifiedRequirementDebt,
+} from "./requirement-fitness.js";
 import { buildTapeReviewDebt } from "./review-debt.js";
 
 /**
@@ -104,6 +108,12 @@ export interface RunReportFitness {
   readonly violatedAtoms: number;
   readonly unverifiedMustAtoms: number;
   readonly discrepanciesByGrade: Readonly<Record<FitnessDiscrepancyGrade, number>>;
+  /**
+   * The "green below the requirements rung with unverified `must` atoms" debt
+   * (`buildTapeUnverifiedRequirementDebt`) — the pressure the review-debt marker
+   * cannot express, surfaced right under the Fitness line. Advisory only.
+   */
+  readonly unverifiedRequirementDebt: UnverifiedRequirementDebt;
 }
 
 export interface RunReportProjection {
@@ -457,6 +467,11 @@ export function buildRunReportProjection(
     violatedAtoms: fitnessSummary.violated,
     unverifiedMustAtoms: fitnessSummary.unverifiedMust,
     discrepanciesByGrade: fitnessSummary.discrepanciesByGrade,
+    // Sibling to reviewDebt but for the BELOW-requirements case: fresh code +
+    // unverified `must` atoms, judged once over the whole tape. Surfaces the
+    // "artifact-green that never graded the atoms" termination shape run-report
+    // exists to catch.
+    unverifiedRequirementDebt: buildTapeUnverifiedRequirementDebt(events),
   };
 
   return {
@@ -600,6 +615,17 @@ export function formatRunReportText(report: RunReportProjection): string {
       `Fitness: atoms=${report.fitness.atomsTotal} satisfied=${report.fitness.satisfiedAtoms} ` +
         `violated=${report.fitness.violatedAtoms} unverifiedMust=${report.fitness.unverifiedMustAtoms} ${byGrade}`,
     );
+    // The below-requirements requirement-verification debt: only when it fires
+    // (fresh code + >=1 unverified `must` atom). Names the reason so the operator
+    // sees WHY — the ladder stopped short vs a requirements pass left atoms
+    // ungraded — the exact "artifact-green looks done" gap.
+    const requirementDebt = report.fitness.unverifiedRequirementDebt;
+    if (requirementDebt.debt && requirementDebt.reason) {
+      lines.push(
+        `Requirement debt: unverifiedMust=${requirementDebt.unverifiedMustCount} ` +
+          `reason=${requirementDebt.reason} (climb to a requirements-level verify or record notApplicable)`,
+      );
+    }
   }
   lines.push(
     `Skills: selections=${report.skills.selections} rendered=${

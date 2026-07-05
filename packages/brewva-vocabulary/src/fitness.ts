@@ -2,6 +2,7 @@ export {
   ATOM_FITNESS_STATES,
   FITNESS_DISCREPANCY_GRADES,
   projectRequirementFitness,
+  projectUnverifiedRequirementDebt,
 } from "./internal/fitness.js";
 
 export type {
@@ -16,4 +17,7 @@ export type {
   FitnessProjection,
   FitnessReviewFinding,
   RequirementFitnessInput,
+  UnverifiedRequirementDebt,
+  UnverifiedRequirementDebtInput,
+  UnverifiedRequirementDebtReason,
 } from "./internal/fitness.js";

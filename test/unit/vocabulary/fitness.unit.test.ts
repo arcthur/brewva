@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   ATOM_FITNESS_STATES,
   projectRequirementFitness,
+  projectUnverifiedRequirementDebt,
   type FitnessReviewFinding,
   type RequirementFitnessInput,
 } from "@brewva/brewva-vocabulary/fitness";
@@ -433,5 +434,54 @@ describe("projectRequirementFitness: deterministic ordering", () => {
 
     expect(projection.atoms.map((entry) => entry.atomId)).toEqual(["a"]);
     expect(projection.discrepancies).toEqual([]);
+  });
+});
+
+describe("projectUnverifiedRequirementDebt", () => {
+  test("no fresh code -> no debt, even with unverified must atoms (the debt is meaningless without written code)", () => {
+    const debt = projectUnverifiedRequirementDebt({
+      freshCodeWritten: false,
+      unverifiedMustCount: 5,
+      reachedRequirementsVerify: false,
+    });
+    // The count is still reported honestly; only `debt` is gated on fresh code.
+    expect(debt).toEqual({ debt: false, unverifiedMustCount: 5, reason: null });
+  });
+
+  test("fresh code but zero unverified must atoms -> no debt", () => {
+    const debt = projectUnverifiedRequirementDebt({
+      freshCodeWritten: true,
+      unverifiedMustCount: 0,
+      reachedRequirementsVerify: false,
+    });
+    expect(debt).toEqual({ debt: false, unverifiedMustCount: 0, reason: null });
+  });
+
+  test("fresh code + unverified must + NEVER reached requirements -> debt, ladder_below_requirements", () => {
+    // The up3 shape: an artifact-level green that never graded the atoms.
+    const debt = projectUnverifiedRequirementDebt({
+      freshCodeWritten: true,
+      unverifiedMustCount: 1,
+      reachedRequirementsVerify: false,
+    });
+    expect(debt).toEqual({
+      debt: true,
+      unverifiedMustCount: 1,
+      reason: "ladder_below_requirements",
+    });
+  });
+
+  test("fresh code + unverified must + a requirements pass DID happen -> debt, unverified_after_requirements", () => {
+    // The up2 shape: a requirements pass that still left must atoms ungraded.
+    const debt = projectUnverifiedRequirementDebt({
+      freshCodeWritten: true,
+      unverifiedMustCount: 7,
+      reachedRequirementsVerify: true,
+    });
+    expect(debt).toEqual({
+      debt: true,
+      unverifiedMustCount: 7,
+      reason: "unverified_after_requirements",
+    });
   });
 });

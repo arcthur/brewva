@@ -553,4 +553,53 @@ describe("buildRunReportProjection — fitness section", () => {
     expect(text).toContain("satisfied=1");
     expect(text).toContain("unverifiedMust=1");
   });
+
+  test("requirement debt: an artifact-level green with fresh code + an unverified must atom surfaces the debt line (ladder_below_requirements)", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 10, {
+        atom: requirementAtom("req-1", "must be keycode-scoped"),
+      }),
+      // Fresh code written, then a pass recorded only at the `artifact` rung — the
+      // ladder never climbed to `requirements`, so req-1 was never graded.
+      ...toolCall("w1", "write", 20, 30, "ok", { file: "Sources/FnKeyMonitor.swift" }),
+      record("verification.outcome.recorded", 100, {
+        outcome: "pass",
+        level: "artifact",
+        perspective: "authored",
+      }),
+      record("turn.ended", 200, { cause: "terminal_commit" }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.fitness.unverifiedRequirementDebt).toEqual({
+      debt: true,
+      unverifiedMustCount: 1,
+      reason: "ladder_below_requirements",
+    });
+
+    const text = formatRunReportText(report);
+    expect(text).toContain("Requirement debt:");
+    expect(text).toContain("unverifiedMust=1");
+    expect(text).toContain("reason=ladder_below_requirements");
+  });
+
+  test("requirement debt: no fresh code -> no debt and no debt line, even with an unverified must atom", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 10, {
+        atom: requirementAtom("req-1", "must hold"),
+      }),
+      // No write/edit commitment -> no fresh code -> the debt is inert.
+      record("verification.outcome.recorded", 100, {
+        outcome: "pass",
+        level: "artifact",
+        perspective: "authored",
+      }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.fitness.unverifiedRequirementDebt.debt).toBe(false);
+    expect(formatRunReportText(report)).not.toContain("Requirement debt:");
+  });
 });

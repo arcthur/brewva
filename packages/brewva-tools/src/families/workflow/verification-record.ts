@@ -9,6 +9,7 @@ import type {
 import {
   FITNESS_DISCREPANCY_GRADES,
   projectRequirementFitness,
+  projectUnverifiedRequirementDebt,
 } from "@brewva/brewva-vocabulary/fitness";
 import type { FitnessDiscrepancy, FitnessProjection } from "@brewva/brewva-vocabulary/fitness";
 import { VERIFICATION_RUNGS } from "@brewva/brewva-vocabulary/iteration";
@@ -36,6 +37,25 @@ const REVIEW_DEBT_MARKER_TEMPLATE =
 
 /** Rank at/above which a `pass` claim earns the claim-time fitness cross-check. */
 const REQUIREMENTS_RUNG_INDEX = VERIFICATION_RUNGS.indexOf("requirements");
+
+/**
+ * The below-requirements counterpart to the review-debt marker: a `pass` was
+ * recorded at a rung BELOW `requirements` while fresh code carries `must`-modality
+ * atoms that were never graded against evidence. The review-debt marker cannot
+ * express this (it fires only at `requirements`+), so this is the resistance that
+ * keeps a build-level green from reading as "done". Advisory only.
+ */
+function formatUnverifiedRequirementDebtMarker(
+  rung: string,
+  unverifiedMustAtomIds: readonly string[],
+): string {
+  return (
+    `unverified_requirements: ${unverifiedMustAtomIds.length} must-modality atom(s) ` +
+    `[${unverifiedMustAtomIds.join(", ")}] not yet verified — this pass reached rung=${rung} ` +
+    `(below requirements). Climb to a requirements-level verify (re-derive each must atom from ` +
+    `the code) or record why they are notApplicable before treating this as done.`
+  );
+}
 
 /** The `deterministic_conflict` grade, named off the exported tuple rather than a bare literal (grade-vocabulary consolidation). */
 const DETERMINISTIC_CONFLICT_GRADE = FITNESS_DISCREPANCY_GRADES[0];
@@ -192,10 +212,10 @@ export function createVerificationRecordTool(options: BrewvaBundledToolOptions):
           fitness && fitness.atoms.length > 0
             ? `${baseText}\n${formatFitnessSummary(fitness)}`
             : baseText;
-        // Debt only fires for a pass (projectReviewDebt's own gate), so a
-        // fail/skipped outcome never runs the event scan or touches the
-        // filesystem — this claim-moment check is advisory-only: it changes
-        // neither the outcome nor the recorded receipt, only the result text.
+        // Advisory pressure markers for a `pass` (axiom 18: they change the
+        // RESULT TEXT only — never the outcome and never the recorded receipt). A
+        // fail/skipped outcome runs neither scan and touches no filesystem.
+        const markers: string[] = [];
         if (outcome === "pass") {
           const workspaceRoot = resolveWorkspaceRoot(runtime, ctx);
           const debtInput = assembleReviewDebtInput(
@@ -205,21 +225,40 @@ export function createVerificationRecordTool(options: BrewvaBundledToolOptions):
             workspaceRoot,
             (path) => readWorkspaceFileDigest(workspaceRoot, path),
           );
-          const debt = projectReviewDebt(debtInput);
-          if (debt.debt && debt.reason) {
-            return okTextResult(
-              `${resultText}\n${REVIEW_DEBT_MARKER_TEMPLATE.replace("%REASON%", debt.reason)}`,
-              {
-                ok: true,
-                outcome,
-                level,
-                checks_recorded: checks.length,
-                failed_checks: failedChecks.length,
-              },
+          // Review debt fires only at `requirements`+: was that pass independently
+          // reviewed? It cannot speak to a lower rung.
+          const reviewDebt = projectReviewDebt(debtInput);
+          if (reviewDebt.debt && reviewDebt.reason) {
+            markers.push(REVIEW_DEBT_MARKER_TEMPLATE.replace("%REASON%", reviewDebt.reason));
+          }
+          // Requirement-verification debt fires only BELOW `requirements`: a green
+          // at a lower rung (e.g. `artifact`: does it build/sign?) that never
+          // graded the `must` atoms. Mutually exclusive with review debt by rung,
+          // so at most one marker appends. The fitness view is disclosure-only —
+          // the receipt annotation stays gated to `requirements`+ (above) and is
+          // untouched here.
+          const belowRequirements = VERIFICATION_RUNGS.indexOf(level) < REQUIREMENTS_RUNG_INDEX;
+          if (belowRequirements && debtInput.freshCodeWritten) {
+            const belowFitness = projectRequirementFitness(
+              assembleRequirementFitnessInput(runtime, sessionId),
             );
+            const reqDebt = projectUnverifiedRequirementDebt({
+              freshCodeWritten: debtInput.freshCodeWritten,
+              unverifiedMustCount: belowFitness.unverifiedMustAtoms.length,
+              // The reason arm is not printed on this claim-time surface (the
+              // below-requirements gate above IS the rung signal); the run-report
+              // operator surface computes the accurate reason over the whole tape.
+              reachedRequirementsVerify: false,
+            });
+            if (reqDebt.debt) {
+              markers.push(
+                formatUnverifiedRequirementDebtMarker(level, belowFitness.unverifiedMustAtoms),
+              );
+            }
           }
         }
-        return okTextResult(resultText, {
+        const finalText = markers.length > 0 ? `${resultText}\n${markers.join("\n")}` : resultText;
+        return okTextResult(finalText, {
           ok: true,
           outcome,
           level,
