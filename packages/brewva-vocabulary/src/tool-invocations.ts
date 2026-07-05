@@ -1,5 +1,6 @@
 export {
   BARE_WRITE_TOOL_NAMES,
+  deriveFirstWriteInvocationAt,
   deriveLatestTreeMutationAt,
   extractWriteInvocationPaths,
   projectFreshCodeWritten,

@@ -69,6 +69,7 @@ function getSessionId(ctx: unknown): string | null {
 interface TrapAtomCandidate {
   readonly statement: string;
   readonly modality: RequirementAtom["modality"];
+  readonly riskClass?: RequirementAtom["riskClass"];
 }
 
 function collectOrientAtomCores(input: {
@@ -124,11 +125,28 @@ export function createOrientRequirementInjectionLifecycle(
       }
       const resolved = resolveRequirementAtoms(
         state.requirements,
-        candidates.map((candidate) => ({
-          statement: candidate.statement,
-          modality: candidate.modality,
-          provenance: "trap" as const,
-        })),
+        candidates.map((candidate) => {
+          // Thread the trap's risk class through the SAME resolution seam
+          // `task_set_spec` uses, so a trap-minted atom is graded exactly like a
+          // model-classified one — this is what makes the min-grade cap engage on
+          // the automatic (trap) atom production path, not only when a model
+          // self-classifies. Built in-place (not a map-spread, per no-map-spread)
+          // so a bare atom keeps NO riskClass key at all.
+          const entry: {
+            statement: string;
+            modality: RequirementAtom["modality"];
+            provenance: "trap";
+            riskClass?: RequirementAtom["riskClass"];
+          } = {
+            statement: candidate.statement,
+            modality: candidate.modality,
+            provenance: "trap",
+          };
+          if (candidate.riskClass) {
+            entry.riskClass = candidate.riskClass;
+          }
+          return entry;
+        }),
       );
       // Only atoms that are genuinely NEW land as events: an amended atom
       // (statement already on the ledger under any provenance) is, by

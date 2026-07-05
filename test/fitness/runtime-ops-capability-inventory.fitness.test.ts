@@ -323,7 +323,11 @@ describe("runtime ops capability inventory fitness", () => {
     // producer, not facade growth. The clear-only producer semantics, the
     // reviewedAtomIds dispatch threading, and the assembly feed all live in
     // `@brewva/brewva-vocabulary` and the tools runtime-port (off this count).
-    expect(hostedOpsLines).toBeLessThanOrEqual(2_843);
+    // This RFC's receipt producers round-trip real receipt facts through the same
+    // whole-payload readers — the R3 graded `evidenceItems` on the verify() write
+    // side plus the R3.2 trap `riskClass` threading — +2 lines, real producer
+    // wiring, not facade growth.
+    expect(hostedOpsLines).toBeLessThanOrEqual(2_845);
     // WS2 added tape-derived rebuild projections (workbench/task/resource-lease/
     // worker-results) that fix the invariant-9/12 restart-loses-state bug. A
     // follow-up review pass then completed the tape-authority migration on the
@@ -384,7 +388,9 @@ describe("runtime ops capability inventory fitness", () => {
     // (+2 builder lines, see above) likewise carries through here; the tool-runtime
     // contract is again unchanged (the clear-only producer, reviewedAtomIds
     // threading, and assembly feed all live off this count).
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_832);
+    // This RFC's receipt producers (R3 graded evidenceItems, R3.2 riskClass
+    // threading) carry the same +2 into the combined budget.
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_834);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

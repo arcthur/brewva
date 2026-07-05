@@ -1,3 +1,4 @@
+import type { UnverifiedRequirementDebtReason } from "@brewva/brewva-vocabulary/fitness";
 import { makeHostedContextBlock, type HostedContextBlock } from "./hosted-context-blocks.js";
 
 // Model-facing runtime intelligence brief: a bounded, legible posture digest the
@@ -215,6 +216,47 @@ export function renderCacheBreakSection(input: CacheBreakInput): RuntimeBriefSec
     salience: "normal",
     line: `cache: prefix cache broke last turn (${reason})${cost}`,
     stub: `cache: broke last turn (${reason})`,
+  };
+}
+
+export interface RequirementDebtInput {
+  /** `must`-modality atoms still unverified (the below-requirements ladder/coverage debt). */
+  readonly unverifiedMustCount: number;
+  /** Why the ladder/coverage debt fires, or null when there is none. */
+  readonly debtReason: UnverifiedRequirementDebtReason | null;
+  /** High-risk atoms whose only positive coverage is presence-grade (R3 grade debt). */
+  readonly insufficientGradeCount: number;
+}
+
+/**
+ * Requirement-debt posture (R4): surfaces to the PRODUCING model, at turn tail,
+ * the debt run-report already computes for the operator — so "done" is not
+ * declared blind (the up4 failure: the model never saw its own seven unverified
+ * must atoms). Relevance-gated: silent when there is neither ladder/coverage debt
+ * NOR a presence-only high-risk atom (nothing to act on). Inform-only; the sole
+ * gate stays the operator-promoted verification-gate manifest (axiom 18).
+ */
+export function renderRequirementDebtSection(
+  input: RequirementDebtInput,
+): RuntimeBriefSection | null {
+  const hasLadderDebt = input.debtReason !== null && input.unverifiedMustCount > 0;
+  const hasGradeDebt = input.insufficientGradeCount > 0;
+  if (!hasLadderDebt && !hasGradeDebt) {
+    return null;
+  }
+  const parts: string[] = [];
+  if (hasLadderDebt) {
+    parts.push(`${input.unverifiedMustCount} must atom(s) unverified (${input.debtReason})`);
+  }
+  if (hasGradeDebt) {
+    parts.push(`${input.insufficientGradeCount} high-risk atom(s) on presence-only evidence`);
+  }
+  const body = parts.join("; ");
+  return {
+    key: "requirements",
+    salience: "normal",
+    line: `requirements: ${body} — dispatch an independent review or climb to a behavioral check before finalizing`,
+    stub: `requirements: ${body}`,
   };
 }
 

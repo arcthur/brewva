@@ -1,5 +1,9 @@
 import { basename } from "node:path";
-import { tokenizeSearchContent, tokenizeSearchQuery } from "@brewva/brewva-search";
+import {
+  scoreDocumentsByTfIdf,
+  tokenizeSearchContent,
+  tokenizeSearchQuery,
+} from "@brewva/brewva-search";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { compactWhitespace, truncateText } from "@brewva/brewva-std/text";
 import type {
@@ -133,6 +137,7 @@ export type SkillSelectionReason =
   | "explicit_mention"
   | "path_glob"
   | "post_green_review"
+  | "greenfield_implement"
   | "recent_path"
   | "name_match"
   | "text_match";
@@ -144,10 +149,81 @@ const REASON_PRIORITY: Record<SkillSelectionReason, number> = {
   // Fresh code verified green with review never adopted: the review skill
   // outranks incidental signals but never an operator-named path or mention.
   post_green_review: 350,
+  // A greenfield-implement turn force-includes its build+verify+review bundle: a
+  // task-shape nudge that outranks incidental name/text matches so the loop's own
+  // skills render, but yields to operator-named paths/mentions and the post-green
+  // review nudge.
+  greenfield_implement: 330,
   recent_path: 300,
   name_match: 200,
   text_match: 100,
 };
+
+/**
+ * The skills a greenfield-implement turn should always see: build the new thing
+ * (`greenfield`), execute with scope discipline (`implementation`), and — since a
+ * fresh workspace has had no independent review yet — the `verifier`/`review`
+ * pair that grades and closes requirement atoms. These are ADVISORY forced
+ * candidates (axiom 18): they enter shortlist ranking so the loop's own skills
+ * render instead of losing an alphabetical tie to incidental text matches; the
+ * model may still ignore any rendered card.
+ */
+const GREENFIELD_IMPLEMENT_SKILL_BUNDLE = [
+  "greenfield",
+  "implementation",
+  "verifier",
+  REVIEW_SKILL_NAME,
+] as const;
+
+// Proxy for "implement a new application/package in an empty workspace" from the
+// two facts the selector has WITHOUT a disk read: an implement-a-new-artifact
+// intent in the prompt, and no tool paths touched yet this session. This is the
+// RFC's stated interim proxy; a true workspace-emptiness input (a turn-entry
+// readdir) is the flagged follow-up. Advisory only, so proxy imprecision at most
+// makes a few extra cards visible for the model to ignore.
+const GREENFIELD_IMPLEMENT_VERB =
+  /实现|开发|搭建|构建|create|build|implement|scaffold|bootstrap|stand\s+up/iu;
+const GREENFIELD_IMPLEMENT_ARTIFACT =
+  /从零|从头|新项目|脚手架|初始化|新建|应用|程序|\bnew\b|\b(?:app|application|service|package|library|cli|tool|project|program|extension)\b/iu;
+
+/**
+ * Whether this turn is a greenfield-implement shape (see the two proxy regexes).
+ * When active, the selector force-includes {@link GREENFIELD_IMPLEMENT_SKILL_BUNDLE}.
+ */
+export function projectGreenfieldImplementSignal(input: {
+  readonly prompt: string;
+  readonly recentToolPaths: readonly string[];
+}): { readonly active: boolean } {
+  const active =
+    input.recentToolPaths.length === 0 &&
+    GREENFIELD_IMPLEMENT_VERB.test(input.prompt) &&
+    GREENFIELD_IMPLEMENT_ARTIFACT.test(input.prompt);
+  return { active };
+}
+
+/**
+ * Merge the turn's product-loop nudges into the forced-candidate map, precedence
+ * fixed by insertion order: `post_green_review` seeds `review` FIRST, so when a
+ * greenfield-implement turn's bundle also names `review` the `has` guard keeps the
+ * more specific, higher-priority `post_green_review` reason. Single-homed so the
+ * precedence rule lives in one tested place, not inline in the lifecycle.
+ */
+export function buildForcedSkillCandidates(input: {
+  readonly postGreenReviewActive: boolean;
+  readonly greenfieldImplementActive: boolean;
+}): Map<string, SkillSelectionReason> {
+  const forced = new Map<string, SkillSelectionReason>(
+    input.postGreenReviewActive ? [[REVIEW_SKILL_NAME, "post_green_review"]] : [],
+  );
+  if (input.greenfieldImplementActive) {
+    for (const name of GREENFIELD_IMPLEMENT_SKILL_BUNDLE) {
+      if (!forced.has(name)) {
+        forced.set(name, "greenfield_implement");
+      }
+    }
+  }
+  return forced;
+}
 
 export interface SkillSelectionRuntime {
   ops: {
@@ -278,6 +354,12 @@ interface SkillCandidate {
   skill: AvailableSkillPromptContext;
   reasons: SkillSelectionReason[];
   score: number;
+  /**
+   * TF-IDF relevance of the skill's text to the prompt, over the candidate
+   * corpus — the tie-break among equal-priority (score + reason-count) candidates,
+   * so the 8-card cap keeps the MOST RELEVANT eight, not the alphabetically-first.
+   */
+  relevance: number;
 }
 
 interface RenderedSkillShortlist {
@@ -536,6 +618,9 @@ function buildCandidate(input: {
     skill: input.skill,
     reasons: rankedReasons,
     score: scoreReasons(rankedReasons),
+    // Relevance is filled once the candidate corpus is known (TF-IDF needs the
+    // corpus for IDF); the shortlist pipeline overwrites this before sorting.
+    relevance: 0,
   };
 }
 
@@ -543,8 +628,32 @@ function compareCandidates(left: SkillCandidate, right: SkillCandidate): number 
   return (
     right.score - left.score ||
     right.reasons.length - left.reasons.length ||
+    // Among equal-priority candidates (e.g. an all-`text_match` collision at
+    // score 100), the more prompt-relevant skill wins — this replaces the old
+    // alphabetical cull so the 8-card cap keeps the relevant eight (R1b).
+    right.relevance - left.relevance ||
     left.skill.category.localeCompare(right.skill.category) ||
     left.skill.name.localeCompare(right.skill.name)
+  );
+}
+
+/**
+ * TF-IDF relevance of each candidate skill's text against the prompt, over the
+ * candidate corpus, reusing the single shared ranker (`@brewva/brewva-search`,
+ * the same one `discover_skills` uses). Advisory ranking only (axiom 18): a
+ * tie-break among already-selected candidates, never a gate. Skills the ranker
+ * does not score (no token overlap) are absent from the map and read `0`.
+ */
+function computeSkillRelevance(
+  prompt: string,
+  skills: readonly AvailableSkillPromptContext[],
+): Map<string, number> {
+  const documents = skills.map((skill) => ({
+    id: skill.name,
+    text: `${skill.name} ${skill.description} ${skill.whenToUse ?? ""}`,
+  }));
+  return new Map(
+    scoreDocumentsByTfIdf(prompt, documents).map((result) => [result.document.id, result.score]),
   );
 }
 
@@ -666,7 +775,7 @@ function buildSkillShortlist(input: {
   const forcedCandidates = input.forcedCandidates ?? new Map<string, SkillSelectionReason>();
   const neglectedSkillNames = input.neglectedSkillNames ?? new Set<string>();
   const demotedSkillNames: string[] = [];
-  const candidates = input.skills
+  const rawCandidates = input.skills
     .map((skill) => {
       const candidate = buildCandidate({
         skill,
@@ -690,8 +799,20 @@ function buildSkillShortlist(input: {
       }
       return candidate;
     })
-    .filter((candidate): candidate is SkillCandidate => candidate !== null)
-    .toSorted(compareCandidates);
+    .filter((candidate): candidate is SkillCandidate => candidate !== null);
+  // TF-IDF relevance is computed over the CANDIDATE corpus (post-demotion) and
+  // attached before sorting, so the tie-break in `compareCandidates` keeps the
+  // most prompt-relevant of an equal-priority collision within the 8-card cap.
+  const relevanceByName = computeSkillRelevance(
+    input.prompt,
+    rawCandidates.map((candidate) => candidate.skill),
+  );
+  // Each raw candidate is a fresh object from buildCandidate; set relevance in
+  // place (the `relevance: 0` placeholder is always overwritten before the sort).
+  for (const candidate of rawCandidates) {
+    candidate.relevance = relevanceByName.get(candidate.skill.name) ?? 0;
+  }
+  const candidates = rawCandidates.toSorted(compareCandidates);
   const explicitCandidates = candidates.filter((candidate) =>
     candidate.reasons.includes("explicit_mention"),
   );
@@ -1009,9 +1130,14 @@ export function createSkillSelectionLifecycle(
         verificationEvents: sessionEvents.verificationEvents,
         reviewSkillFilePath: typeof reviewSkillFilePath === "string" ? reviewSkillFilePath : null,
       });
-      const forcedCandidates = new Map<string, SkillSelectionReason>(
-        postGreenSignal.active ? [[REVIEW_SKILL_NAME, "post_green_review"]] : [],
-      );
+      const greenfieldImplementSignal = projectGreenfieldImplementSignal({
+        prompt,
+        recentToolPaths,
+      });
+      const forcedCandidates = buildForcedSkillCandidates({
+        postGreenReviewActive: postGreenSignal.active,
+        greenfieldImplementActive: greenfieldImplementSignal.active,
+      });
       const neglectedSkillNames = projectNeglectedTextMatchOffers(sessionEvents.neglectEvents, {
         windowTruncated: sessionEvents.neglectWindowTruncated,
       });

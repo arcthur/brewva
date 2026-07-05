@@ -546,55 +546,90 @@ describe("verification_record tool — claim-time fitness discrepancy annotation
     );
   });
 
-  test("overbroad-tap.swift + a deterministic fail evidence entry keyed to the atom → deterministic_conflict, outcome still pass", () => {
-    // Deterministic evidence has no wired tape source yet (a gate manifest would
-    // supply it), so the tool always assembles it as []. This scenario therefore
-    // drives the SAME assemble+project+commit path the tool uses, with the
-    // deterministic entry supplied explicitly — proving the receipt round-trips a
-    // deterministic_conflict and that `outcome` is still recorded as `pass`.
+  // A runtime-risk event-tap atom, exactly as the orient-phase trap injects it
+  // (provenance "trap", riskClass "runtime"): the class that makes the min-grade
+  // cap engage, so a presence-only clear cannot satisfy it.
+  const EVENT_TAP_RUNTIME_ATOM: RequirementAtom = {
+    ...EVENT_TAP_ATOM,
+    provenance: "trap",
+    riskClass: "runtime",
+  };
+
+  test("overbroad-tap.swift in the workspace → the runtime RUNS the static-guard adapter and commits a deterministic_conflict, outcome still pass", async () => {
+    // The REAL producer path (no caller-supplied evidence): the runtime runs the
+    // static-guard adapter over the fresh-touched Swift source and records its
+    // deterministic result on the receipt. overbroad-tap.swift is flag-only (the
+    // up3 defect), so event_tap_keycode_scoped FAILs → deterministic_conflict,
+    // while `outcome` stays exactly pass (axiom 18).
+    const runtime = createRuntimeFixture();
+    const verificationRecord = createVerificationRecordTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const sessionId = "fitness-deterministic-1";
+    seedAtom(runtime, sessionId, EVENT_TAP_RUNTIME_ATOM);
+    // Land the flag-only fixture in the workspace + record the write commitment, so
+    // the producer sees a fresh-touched source path with real content to scan.
+    writeFileSync(
+      join(runtime.identity.cwd, "FnKeyMonitor.swift"),
+      readFileSync(join(FIXTURE_DIR, "overbroad-tap.swift")),
+    );
+    seedCommittedWrite(runtime, sessionId, "FnKeyMonitor.swift");
+
+    const result = await verificationRecord.execute(
+      "tool-1",
+      { outcome: "pass", level: "requirements", checks: ["requirement re-derivation"] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+
+    expect(result.outcome.kind).toBe("ok");
+    const receipt = committedReceipt(runtime, sessionId);
+    // The runtime PRODUCED the graded item — the model never emitted it.
+    const guardItem = receipt.evidenceItems.find((item) => item.evidenceKind === "static_guard");
+    expect(guardItem?.verdict).toBe("fail");
+    expect(guardItem?.atomRefs).toEqual(["req-1"]);
+    // It round-trips as a deterministic_conflict; outcome stays exactly pass.
+    expect(receipt.outcome).toBe("pass");
+    expect(receipt.discrepancies.some((entry) => entry.grade === "deterministic_conflict")).toBe(
+      true,
+    );
+    expect(receipt.unverifiedMustAtoms).toEqual([]);
+  });
+
+  test("correct-tap.swift in the workspace → the static-guard PASS SATISFIES the runtime-risk atom a presence re-grep could not (producer liveness)", async () => {
+    // A-F1 producer liveness, positive half: the runtime runs the adapter over the
+    // keycode-scoped fixture, earns a static_guard PASS, and that GRADE clears a
+    // runtime-risk atom — the exact thing a presence-only clear cannot do (it caps
+    // at likelySatisfied). If the producer regressed to [], this goes red, unlike
+    // the hand-built join-level tests.
     const runtime = createRuntimeFixture();
     const bundled = createBundledToolRuntime(runtime);
-    const sessionId = "fitness-deterministic-1";
-    seedAtom(runtime, sessionId);
-    seedFindingAgainst(runtime, sessionId, "overbroad-tap.swift");
+    const verificationRecord = createVerificationRecordTool({ runtime: bundled });
+    const sessionId = "fitness-producer-pass-1";
+    seedAtom(runtime, sessionId, EVENT_TAP_RUNTIME_ATOM);
+    writeFileSync(
+      join(runtime.identity.cwd, "FnKeyMonitor.swift"),
+      readFileSync(join(FIXTURE_DIR, "correct-tap.swift")),
+    );
+    seedCommittedWrite(runtime, sessionId, "FnKeyMonitor.swift");
 
-    const fitnessInput = assembleRequirementFitnessInput(bundled, sessionId, {
-      deterministicEvidence: [{ atomId: "req-1", verdict: "fail", ref: "gate-eventtap-1" }],
-    });
-    const projection = projectRequirementFitness(fitnessInput);
-
-    void recordVerificationOutcome(bundled, sessionId, {
-      outcome: "pass",
-      level: "requirements",
-      checks: ["requirement re-derivation"],
-      failedChecks: [],
-      missingChecks: [],
-      missingEvidence: [],
-      evidenceFreshness: "fresh",
-      reason: null,
-      perspective: "authored",
-      independenceBasis: [],
-      reviewerContext: null,
-      targetRef: null,
-      discrepancies: projection.discrepancies,
-      unverifiedMustAtoms: projection.unverifiedMustAtoms,
-      atomRefs: [],
-    });
+    await verificationRecord.execute(
+      "tool-1",
+      { outcome: "pass", level: "requirements", checks: ["requirement re-derivation"] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
 
     const receipt = committedReceipt(runtime, sessionId);
-    expect(receipt.outcome).toBe("pass");
-    // A deterministic fail is PREFERRED over the coexisting advisory finding:
-    // exactly one discrepancy, graded deterministic_conflict, pointing at the
-    // deterministic entry's ref.
-    expect(receipt.discrepancies).toEqual([
-      {
-        atomId: "req-1",
-        grade: "deterministic_conflict",
-        statement: EVENT_TAP_ATOM.statement,
-        evidenceRef: "gate-eventtap-1",
-      },
-    ]);
-    expect(receipt.unverifiedMustAtoms).toEqual([]);
+    const guardItem = receipt.evidenceItems.find((item) => item.evidenceKind === "static_guard");
+    expect(guardItem?.verdict).toBe("pass");
+    // The graded PASS satisfies the atom and raises no grade debt — re-derive the
+    // same whole-tape fitness the operator surfaces read.
+    const fitness = projectRequirementFitness(assembleRequirementFitnessInput(bundled, sessionId));
+    expect(fitness.atoms[0]?.state).toBe("satisfied");
+    expect(fitness.insufficientGradeAtoms).toEqual([]);
   });
 
   test("correct-tap.swift: no violating finding → ZERO discrepancies (the precision guard), outcome pass", async () => {

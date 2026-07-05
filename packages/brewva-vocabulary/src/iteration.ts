@@ -67,6 +67,7 @@ export type {
   EffectCommitmentRequestListQuery,
   EffectCommitmentRequestRecord,
   EffectCommitmentRequestState,
+  EvidenceItem,
   EvidenceRef,
   GuardResultInput,
   GuardResultQuery,

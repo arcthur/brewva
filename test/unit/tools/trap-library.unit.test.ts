@@ -163,7 +163,7 @@ describe("trap library schema and engine", () => {
     expect(matches[0]?.entry.atomCore?.modality).toBe("must");
   });
 
-  test("orient seed entry injects the exact atomCore statement and modality from the RFC", () => {
+  test("orient seed entry injects the exact atomCore statement, modality, and riskClass from the RFC", () => {
     const matches = matchTraps(
       { phase: "orient", kind: "prompt", text: "please add a global hotkey for Fn" },
       TRAP_ENTRIES,
@@ -172,6 +172,9 @@ describe("trap library schema and engine", () => {
     expect(matches[0]?.entry.atomCore).toEqual({
       statement: "Fn suppression must be keycode-scoped, not all .flagsChanged",
       modality: "must",
+      // The trap carries the risk class (runtime) so the min-grade cap engages on
+      // the auto-injected atom — presence-only evidence cannot satisfy it.
+      riskClass: "runtime",
     });
   });
 

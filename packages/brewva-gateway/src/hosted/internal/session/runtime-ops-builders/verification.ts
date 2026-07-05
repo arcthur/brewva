@@ -58,6 +58,7 @@ export function buildVerificationRuntimeOps(
           discrepancies,
           unverifiedMustAtoms,
           atomRefs,
+          evidenceItems,
         } = readVerificationOutcomeRecordedEventPayload({ payload: record });
         const payload: VerificationOutcomeRecordedEventPayload = {
           outcome,
@@ -76,6 +77,7 @@ export function buildVerificationRuntimeOps(
           discrepancies,
           unverifiedMustAtoms,
           atomRefs,
+          evidenceItems,
         };
         ctx.emit(sessionId, VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE, payload);
         return outcome === "fail" ? { ok: false, reason: "verification_failed" } : { ok: true };

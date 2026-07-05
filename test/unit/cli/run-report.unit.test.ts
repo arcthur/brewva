@@ -603,3 +603,214 @@ describe("buildRunReportProjection — fitness section", () => {
     expect(formatRunReportText(report)).not.toContain("Requirement debt:");
   });
 });
+
+// R5a baseline requirement lifecycle: the tape-only timeline the routing/atomize
+// adoption liveness reads — atoms-vs-first-write ordering, review-dispatched, and
+// each atom's re-derived state — with NO dependency on R3's structured evidence.
+describe("buildRunReportProjection — requirement lifecycle (R5a)", () => {
+  test("atomized-after-the-write (the up4 shape): atomizedBeforeFirstWrite=false and the lifecycle line renders", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      // Generation writes first...
+      ...toolCall("w1", "write", 20, 30, "ok", { path: "Sources/FnKeyMonitor.swift" }),
+      // ...and only atomizes the spec afterwards (171s-late in the real trace).
+      record("task.requirement.recorded", 50, {
+        atom: requirementAtom("req-1", "must be keycode-scoped"),
+      }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.requirementLifecycle.firstSourceMutationAt).toBe(30);
+    expect(report.requirementLifecycle.firstAtomizedAt).toBe(50);
+    expect(report.requirementLifecycle.atomizedBeforeFirstWrite).toBe(false);
+    expect(report.requirementLifecycle.reviewDispatched).toBe(false);
+    expect(report.requirementLifecycle.atoms).toEqual([
+      {
+        atomId: "req-1",
+        modality: "must",
+        provenance: "prompt",
+        riskClass: null,
+        createdAt: 50,
+        state: "unverified",
+        evidence: [],
+      },
+    ]);
+
+    const text = formatRunReportText(report);
+    expect(text).toContain("Requirement lifecycle: atomizedBeforeFirstWrite=no");
+    expect(text).toContain("reviewDispatched=no");
+    expect(text).toContain("req-1(must/prompt/unclassified)");
+    expect(text).toContain("state=unverified");
+  });
+
+  test("healthy shape: atoms precede the first write and a review is dispatched", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 10, {
+        atom: requirementAtom("req-1", "must be fast"),
+      }),
+      ...toolCall("w1", "write", 50, 60, "ok", { path: "src/a.ts" }),
+      record("review.finding.recorded", 90, {
+        findingId: "f-1",
+        severity: "low",
+        category: "correctness",
+        statement: "n/a",
+        anchors: [],
+        lens: null,
+        targetRef: { kind: "patch_sets", patchSetRefs: ["ps-1"] },
+        atomRefs: [],
+      }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.requirementLifecycle.firstAtomizedAt).toBe(10);
+    expect(report.requirementLifecycle.firstSourceMutationAt).toBe(60);
+    expect(report.requirementLifecycle.atomizedBeforeFirstWrite).toBe(true);
+    expect(report.requirementLifecycle.reviewDispatched).toBe(true);
+    expect(formatRunReportText(report)).toContain("atomizedBeforeFirstWrite=yes");
+  });
+
+  test("createdAt is the FIRST recording (amendments do not move it) and riskClass carries through", () => {
+    const trapAtom = {
+      id: "req-1",
+      statement: "must re-enable the tap",
+      modality: "must",
+      provenance: "trap",
+      riskClass: "runtime",
+    };
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 10, { atom: trapAtom }),
+      // Amendment (same id) later must not move createdAt.
+      record("task.requirement.recorded", 40, { atom: trapAtom }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.requirementLifecycle.atoms).toEqual([
+      {
+        atomId: "req-1",
+        modality: "must",
+        provenance: "trap",
+        riskClass: "runtime",
+        createdAt: 10,
+        state: "unverified",
+        evidence: [],
+      },
+    ]);
+  });
+
+  test("an independent atoms-review's satisfied state joins into the per-atom lifecycle", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 10, {
+        atom: requirementAtom("req-1", "must be atomic"),
+      }),
+      record("verification.outcome.recorded", 100, {
+        outcome: "pass",
+        level: "requirements",
+        perspective: "independent",
+        atomRefs: ["req-1"],
+      }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.requirementLifecycle.atoms[0]?.state).toBe("satisfied");
+    expect(report.requirementLifecycle.reviewDispatched).toBe(true);
+  });
+
+  test("no requirement atoms: lifecycle is empty, the predicate is null, and no lifecycle line renders", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      ...toolCall("w1", "write", 20, 30, "ok", { path: "src/a.ts" }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.requirementLifecycle.atoms).toEqual([]);
+    expect(report.requirementLifecycle.atomizedBeforeFirstWrite).toBe(null);
+    expect(report.requirementLifecycle.firstAtomizedAt).toBe(null);
+    expect(report.requirementLifecycle.firstSourceMutationAt).toBe(30);
+    expect(formatRunReportText(report)).not.toContain("Requirement lifecycle:");
+  });
+
+  test("equal timestamps: atomization at the same instant as the first write reads as adopted (<= boundary)", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 100, {
+        atom: requirementAtom("req-1", "must hold"),
+      }),
+      ...toolCall("w1", "write", 90, 100, "ok", { path: "src/a.ts" }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.requirementLifecycle.firstAtomizedAt).toBe(100);
+    expect(report.requirementLifecycle.firstSourceMutationAt).toBe(100);
+    expect(report.requirementLifecycle.atomizedBeforeFirstWrite).toBe(true);
+  });
+
+  test("atoms present but no write yet: the predicate is null (undefined, not false)", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 100, {
+        atom: requirementAtom("req-1", "must hold"),
+      }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.requirementLifecycle.firstAtomizedAt).toBe(100);
+    expect(report.requirementLifecycle.firstSourceMutationAt).toBe(null);
+    expect(report.requirementLifecycle.atomizedBeforeFirstWrite).toBe(null);
+  });
+});
+
+// R5b: the evidence-anchored layer — per-atom graded evidence items (claimed-by
+// anchors / closed-by kind+source+verdict), read from receipts once R3's
+// structured evidence flows.
+describe("buildRunReportProjection — requirement lifecycle evidence (R5b)", () => {
+  test("a receipt's graded evidenceItems surface per-atom with anchors + a closedBy render", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 10, {
+        atom: requirementAtom("req-1", "must be keycode-scoped"),
+      }),
+      record("verification.outcome.recorded", 100, {
+        outcome: "pass",
+        level: "requirements",
+        perspective: "authored",
+        evidenceItems: [
+          {
+            id: "static-guard:event_tap_keycode_scoped:req-1",
+            atomRefs: ["req-1"],
+            evidenceKind: "static_guard",
+            verdict: "pass",
+            anchors: ["FnKeyMonitor.swift: keyCode gate"],
+            statement: "keycode-scoped",
+          },
+        ],
+      }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+
+    expect(report.requirementLifecycle.atoms[0]?.evidence).toEqual([
+      {
+        evidenceKind: "static_guard",
+        verdict: "pass",
+        anchors: ["FnKeyMonitor.swift: keyCode gate"],
+      },
+    ]);
+    expect(formatRunReportText(report)).toContain(
+      "closedBy=[static_guard:pass@FnKeyMonitor.swift: keyCode gate]",
+    );
+  });
+
+  test("an atom with no evidence items has empty evidence and no closedBy suffix", () => {
+    const events: BrewvaEventRecord[] = [
+      record("turn.started", 0, {}),
+      record("task.requirement.recorded", 10, {
+        atom: requirementAtom("req-1", "must hold"),
+      }),
+    ];
+    const report = buildRunReportProjection(SESSION, events);
+    expect(report.requirementLifecycle.atoms[0]?.evidence).toEqual([]);
+    expect(formatRunReportText(report)).not.toContain("closedBy=");
+  });
+});

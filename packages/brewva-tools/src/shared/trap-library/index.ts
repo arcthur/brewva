@@ -1,4 +1,4 @@
-import type { RequirementModality } from "@brewva/brewva-vocabulary/task";
+import type { RequirementModality, RequirementRiskClass } from "@brewva/brewva-vocabulary/task";
 import { TRAP_ENTRIES } from "./entries.js";
 
 /**
@@ -57,8 +57,19 @@ export interface TrapEntry {
   readonly trigger: TrapTrigger;
   /** Review stance text surfaced on match (write/verify phases). Advisory — see module doc comment: lens != verdict. */
   readonly lens?: string;
-  /** Requirement atom seed injected onto the task ledger on match (orient phase only). */
-  readonly atomCore?: { readonly statement: string; readonly modality: RequirementModality };
+  /**
+   * Requirement atom seed injected onto the task ledger on match (orient phase
+   * only). `riskClass` is the trap's compiled hindsight about the atom's risk
+   * domain: a domain trap fires precisely because it encodes a failure mode
+   * worth grading, so the seed carries the class that drives the fitness join's
+   * min-grade cap (a `runtime`/`security` atom cannot be satisfied by
+   * presence-only evidence). Omitted when the trap makes no risk claim.
+   */
+  readonly atomCore?: {
+    readonly statement: string;
+    readonly modality: RequirementModality;
+    readonly riskClass?: RequirementRiskClass;
+  };
   /** Tape/run reference this entry was distilled from. */
   readonly provenance: string;
   /** Condition under which this entry should be retired. */

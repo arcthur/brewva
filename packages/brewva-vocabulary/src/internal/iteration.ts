@@ -6,7 +6,12 @@ import { payloadOf, type BrewvaEventRecord } from "./events.js";
 // Single-homed in fitness.ts (where the projection mints it); the receipt only
 // carries a copy as claim-time debt. No cycle: fitness -> {review, task}, and
 // neither review nor task imports iteration, so `iteration -> fitness` is a DAG.
-import { FITNESS_DISCREPANCY_GRADES, type FitnessDiscrepancy } from "./fitness.js";
+import {
+  EVIDENCE_KINDS,
+  FITNESS_DISCREPANCY_GRADES,
+  type EvidenceKind,
+  type FitnessDiscrepancy,
+} from "./fitness.js";
 import {
   INDEPENDENCE_BASES,
   readReviewTargetRef,
@@ -470,6 +475,31 @@ function readReviewerContext(value: unknown): ReviewerContext | null {
   };
 }
 
+/**
+ * One structured, graded evidence item on a verification receipt (R3): the
+ * machine-joinable companion to the free-text `checks` string. A reader can JOIN
+ * it (`atomRefs`), GRADE it (`evidenceKind`), and TRACE it (`anchors`). Every
+ * evidence item is a DETERMINISTIC signal — the runtime ran a static-guard
+ * predicate over real source, so it is trustworthy by construction rather than an
+ * authored claim. Authorship is carried by the receipt's `perspective` axis, not
+ * a per-item source field: an independent review's positive signal rides the
+ * top-level `atomRefs`, so evidence items never need to re-encode source. `checks`
+ * stays the human summary; `evidenceItems` carries the evidence the fitness join
+ * actually consumes. A `static_guard`/`behavioral` PASS on a high-risk atom is
+ * what lets it reach `satisfied` (a presence-grade item cannot); a FAIL is a real
+ * `deterministic_conflict`.
+ */
+export interface EvidenceItem {
+  readonly id: string;
+  readonly atomRefs: readonly string[];
+  readonly evidenceKind: EvidenceKind;
+  readonly verdict: "pass" | "fail";
+  /** Traceable pointers (e.g. "file:line" or a guard descriptor); may be empty. */
+  readonly anchors: readonly string[];
+  /** Human-readable statement of what this item checked (forensic trace). */
+  readonly statement: string;
+}
+
 export interface VerificationOutcomeRecordedEventPayload extends ProtocolRecord {
   readonly outcome: "pass" | "fail" | "skipped" | null;
   readonly evidenceFreshness: string | null;
@@ -502,6 +532,11 @@ export interface VerificationOutcomeRecordedEventPayload extends ProtocolRecord 
    * outcome (a fail NEVER lists atoms — findings own violations).
    */
   readonly atomRefs: readonly string[];
+  /**
+   * Structured graded evidence items (R3) — the machine-joinable companion to the
+   * free-text `checks`. Empty on receipts that carry none.
+   */
+  readonly evidenceItems: readonly EvidenceItem[];
 }
 
 /**
@@ -525,6 +560,42 @@ function isFitnessDiscrepancy(value: unknown): value is FitnessDiscrepancy {
 
 function readFitnessDiscrepancies(value: unknown): FitnessDiscrepancy[] {
   return Array.isArray(value) ? value.filter(isFitnessDiscrepancy) : [];
+}
+
+/**
+ * Defensive reader for a graded evidence item: any entry missing a core field
+ * (id/atomRefs/evidenceKind/verdict/statement) or carrying an unknown kind is
+ * DROPPED rather than crashing the read, matching the discrepancy-coercion style.
+ * `anchors` coerces to a string list; a pre-existing receipt reads back [].
+ */
+function isEvidenceItem(value: unknown): value is EvidenceItem {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as ProtocolRecord;
+  return (
+    typeof record.id === "string" &&
+    Array.isArray(record.atomRefs) &&
+    (EVIDENCE_KINDS as readonly unknown[]).includes(record.evidenceKind) &&
+    (record.verdict === "pass" || record.verdict === "fail") &&
+    typeof record.statement === "string"
+  );
+}
+
+function readEvidenceItems(value: unknown): EvidenceItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(isEvidenceItem).map((item) => ({
+    id: item.id,
+    atomRefs: item.atomRefs.filter((ref): ref is string => typeof ref === "string"),
+    evidenceKind: item.evidenceKind,
+    verdict: item.verdict,
+    anchors: Array.isArray(item.anchors)
+      ? item.anchors.filter((entry): entry is string => typeof entry === "string")
+      : [],
+    statement: item.statement,
+  }));
 }
 
 export const readVerificationOutcomeRecordedEventPayload = (event: {
@@ -565,6 +636,7 @@ export const readVerificationOutcomeRecordedEventPayload = (event: {
     atomRefs: Array.isArray(payload.atomRefs)
       ? payload.atomRefs.filter((entry): entry is string => typeof entry === "string")
       : [],
+    evidenceItems: readEvidenceItems(payload.evidenceItems),
   };
 };
 

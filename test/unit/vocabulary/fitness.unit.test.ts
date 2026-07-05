@@ -93,7 +93,7 @@ describe("projectRequirementFitness: satisfied", () => {
 
     expect(projection.atoms[0]?.state).toBe("satisfied");
     expect(projection.atoms[0]?.evidence).toEqual([
-      { kind: "deterministic", ref: "gate-1", verdict: "pass" },
+      { kind: "deterministic", evidenceKind: "presence", ref: "gate-1", verdict: "pass" },
     ]);
     expect(projection.unverifiedMustAtoms).toEqual([]);
     expect(projection.discrepancies).toEqual([]);
@@ -107,7 +107,7 @@ describe("projectRequirementFitness: satisfied", () => {
 
     expect(projection.atoms[0]?.state).toBe("satisfied");
     expect(projection.atoms[0]?.evidence).toEqual([
-      { kind: "independent_outcome", ref: "indep-1", verdict: "pass" },
+      { kind: "independent_outcome", evidenceKind: "presence", ref: "indep-1", verdict: "pass" },
     ]);
   });
 
@@ -129,7 +129,9 @@ describe("projectRequirementFitness: likelySatisfied", () => {
     });
 
     expect(projection.atoms[0]?.state).toBe("likelySatisfied");
-    expect(projection.atoms[0]?.evidence).toEqual([{ kind: "authored", ref: "authored-1" }]);
+    expect(projection.atoms[0]?.evidence).toEqual([
+      { kind: "authored", evidenceKind: "presence", ref: "authored-1" },
+    ]);
     expect(projection.unverifiedMustAtoms).toEqual([]);
   });
 
@@ -483,5 +485,141 @@ describe("projectUnverifiedRequirementDebt", () => {
       unverifiedMustCount: 7,
       reason: "unverified_after_requirements",
     });
+  });
+});
+
+// R3-core: the evidence GRADE axis (presence < static_guard < behavioral),
+// orthogonal to the authored/independent source axis. A high-risk atom's risk
+// class sets the minimum grade a satisfying pass needs to reach `satisfied`;
+// presence-only coverage caps at `likelySatisfied` and raises a DISTINCT grade
+// debt (never a discrepancy — insufficiency is not a fail).
+describe("projectRequirementFitness: evidence grade + risk-class floor (R3)", () => {
+  test("evidence records its grade; unset satisfying evidence defaults to presence", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("a")]),
+      deterministicEvidence: [
+        { atomId: "a", verdict: "pass", ref: "g-1", evidenceKind: "behavioral" },
+      ],
+    });
+    expect(projection.atoms[0]?.evidence).toEqual([
+      { kind: "deterministic", evidenceKind: "behavioral", ref: "g-1", verdict: "pass" },
+    ]);
+  });
+
+  test("an unclassified atom is satisfied by presence-grade evidence — no cap, no debt", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("a")]),
+      independentOutcomes: [{ atomRefs: ["a"], verdict: "pass", ref: "indep-1" }],
+    });
+    expect(projection.atoms[0]?.state).toBe("satisfied");
+    expect(projection.insufficientGradeAtoms).toEqual([]);
+  });
+
+  test("a high-risk (runtime) atom closed only by presence caps at likelySatisfied + grade debt — NOT a discrepancy", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("tap", { riskClass: "runtime", statement: "must re-enable the tap" })]),
+      // An independent PASS, but presence-grade (a re-grep): cannot clear a failure-mode atom.
+      independentOutcomes: [
+        { atomRefs: ["tap"], verdict: "pass", ref: "indep-1", evidenceKind: "presence" },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("likelySatisfied");
+    expect(projection.discrepancies).toEqual([]);
+    expect(projection.insufficientGradeAtoms).toEqual([
+      { atomId: "tap", requiredKind: "static_guard", actualKind: "presence" },
+    ]);
+    // likelySatisfied is not unverified, so it is not a `must` debt of that kind.
+    expect(projection.unverifiedMustAtoms).toEqual([]);
+  });
+
+  test("a high-risk atom with a static_guard-grade pass reaches satisfied (grade meets the floor)", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("tap", { riskClass: "runtime" })]),
+      deterministicEvidence: [
+        { atomId: "tap", verdict: "pass", ref: "guard-1", evidenceKind: "static_guard" },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("satisfied");
+    expect(projection.insufficientGradeAtoms).toEqual([]);
+  });
+
+  test("security shares the static_guard floor; ux accepts presence", () => {
+    const secured = projectRequirementFitness({
+      ...baseInput([atom("cred", { riskClass: "security" })]),
+      independentOutcomes: [
+        { atomRefs: ["cred"], verdict: "pass", ref: "i-1", evidenceKind: "presence" },
+      ],
+    });
+    expect(secured.atoms[0]?.state).toBe("likelySatisfied");
+    expect(secured.insufficientGradeAtoms[0]).toMatchObject({
+      atomId: "cred",
+      requiredKind: "static_guard",
+    });
+
+    const ux = projectRequirementFitness({
+      ...baseInput([atom("ui", { riskClass: "ux" })]),
+      independentOutcomes: [
+        { atomRefs: ["ui"], verdict: "pass", ref: "i-2", evidenceKind: "presence" },
+      ],
+    });
+    expect(ux.atoms[0]?.state).toBe("satisfied");
+    expect(ux.insufficientGradeAtoms).toEqual([]);
+  });
+
+  test("a sufficient pass alongside an insufficient one still satisfies (best grade wins, no debt)", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("tap", { riskClass: "runtime" })]),
+      deterministicEvidence: [
+        { atomId: "tap", verdict: "pass", ref: "g-presence", evidenceKind: "presence" },
+        { atomId: "tap", verdict: "pass", ref: "g-guard", evidenceKind: "static_guard" },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("satisfied");
+    expect(projection.insufficientGradeAtoms).toEqual([]);
+  });
+
+  test("a real deterministic FAIL on a high-risk atom stays a deterministic_conflict — grade debt never masquerades as a conflict", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("tap", { riskClass: "runtime", statement: "must re-enable the tap" })]),
+      deterministicEvidence: [
+        { atomId: "tap", verdict: "fail", ref: "guard-1", evidenceKind: "static_guard" },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("violated");
+    expect(projection.discrepancies).toEqual([
+      {
+        atomId: "tap",
+        grade: "deterministic_conflict",
+        statement: "must re-enable the tap",
+        evidenceRef: "guard-1",
+      },
+    ]);
+    expect(projection.insufficientGradeAtoms).toEqual([]);
+  });
+
+  test("an authored-only high-risk atom is likelySatisfied with NO grade debt (authored never sets bestSatisfyingKind)", () => {
+    // The grade axis governs deterministic/independent PASSES; an author self-claim
+    // is the perspective axis and must not emit grade debt.
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("tap", { riskClass: "runtime" })]),
+      authoredOutcomes: [{ atomRefs: ["tap"], ref: "authored-1" }],
+    });
+    expect(projection.atoms[0]?.state).toBe("likelySatisfied");
+    expect(projection.insufficientGradeAtoms).toEqual([]);
+  });
+
+  test("insufficientGradeAtoms is order-independent and in first-appearance atom order", () => {
+    const build = (order: readonly [string, string]) =>
+      projectRequirementFitness({
+        ...baseInput([atom("a", { riskClass: "runtime" }), atom("b", { riskClass: "security" })]),
+        independentOutcomes: [
+          { atomRefs: [order[0]], verdict: "pass", ref: `i-${order[0]}`, evidenceKind: "presence" },
+          { atomRefs: [order[1]], verdict: "pass", ref: `i-${order[1]}`, evidenceKind: "presence" },
+        ],
+      });
+    const forward = build(["a", "b"]);
+    const reversed = build(["b", "a"]);
+    expect(forward.insufficientGradeAtoms).toEqual(reversed.insufficientGradeAtoms);
+    expect(forward.insufficientGradeAtoms.map((entry) => entry.atomId)).toEqual(["a", "b"]);
   });
 });

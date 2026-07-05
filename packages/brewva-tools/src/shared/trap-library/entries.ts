@@ -24,6 +24,13 @@ const EVENT_TAP_ORIENT_NEEDLES = [
 const EVENT_TAP_ATOM_CORE = {
   statement: "Fn suppression must be keycode-scoped, not all .flagsChanged",
   modality: "must",
+  // Over-broad Fn suppression is a RUNTIME failure mode (swallowed keystrokes,
+  // dropped dictation on cancel-before-final — the up4 regression), so the atom
+  // requires `static_guard`-grade evidence: a presence re-grep cannot see a
+  // missing keyCode gate, and this is the class that makes the fitness join say
+  // so (MIN_EVIDENCE_KIND_BY_RISK.runtime). The matching static-guard lens
+  // (event_tap_keycode_scoped) is exactly the producer that earns that grade.
+  riskClass: "runtime",
 } as const;
 
 // Coordinated pair 2 of 2: write/verify-phase, changed-content input. Surfaces

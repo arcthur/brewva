@@ -72,6 +72,7 @@ function runtimeWithBriefSources(input: {
   maxChars?: number;
   workbenchEntries?: readonly Record<string, unknown>[];
   toolResultEvents?: readonly Record<string, unknown>[];
+  tapeEvents?: readonly Record<string, unknown>[];
 }): HostedRuntimeAdapterPort {
   return {
     config: {
@@ -90,6 +91,8 @@ function runtimeWithBriefSources(input: {
       events: {
         effects: { renderTurnDigest: () => input.digest },
         records: {
+          // The requirement-debt section (R4) reads the whole tape via `list`.
+          list: (_sessionId: string) => input.tapeEvents ?? input.toolResultEvents ?? [],
           query: (_sessionId: string, query?: { type?: string; last?: number }) => {
             const matched = (input.toolResultEvents ?? []).filter(
               (event) => !query?.type || event.type === query.type,
@@ -126,6 +129,107 @@ describe("hosted runtime brief block (end-to-end wiring)", () => {
     expect(block?.content).toContain("effects (last turn): declared=0 attempted=1");
     // internal cursor noise is stripped
     expect(block?.content).not.toContain("runtimeTurn=");
+  });
+
+  test("composes the requirement-debt section when the tape has an unverified must atom on fresh code (R4)", () => {
+    const block = buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: {
+          tokensUsed: 20_000,
+          tokensTotal: 200_000,
+          compactionAdvised: false,
+          forcedCompaction: false,
+          predictedOverflow: false,
+        },
+        digest: "runtimeTurn=2 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0",
+        tapeEvents: [
+          {
+            type: "task.requirement.recorded",
+            timestamp: 1,
+            payload: {
+              atom: { id: "req-1", statement: "must hold", modality: "must", provenance: "prompt" },
+            },
+          },
+          {
+            type: "tool.committed",
+            timestamp: 2,
+            payload: {
+              call: { toolName: "write", args: { path: "src/a.ts" } },
+              result: { outcome: { kind: "ok" } },
+            },
+          },
+          {
+            type: "verification.outcome.recorded",
+            timestamp: 3,
+            payload: { outcome: "pass", level: "artifact", perspective: "authored" },
+          },
+        ],
+      }),
+      { sessionId: "sess_debt", turn: 3 },
+    );
+
+    // Artifact-green with fresh code and an ungraded must atom -> the model sees
+    // its own requirement debt at turn tail (the up4 shape it never saw).
+    expect(block?.content).toContain(
+      "requirements: 1 must atom(s) unverified (ladder_below_requirements)",
+    );
+    expect(block?.content).toContain("dispatch an independent review");
+  });
+
+  test("surfaces grade debt when a high-risk atom is 'verified' only by presence-grade independent evidence (R3-core + R4 e2e)", () => {
+    const block = buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: {
+          tokensUsed: 20_000,
+          tokensTotal: 200_000,
+          compactionAdvised: false,
+          forcedCompaction: false,
+          predictedOverflow: false,
+        },
+        digest: "runtimeTurn=2 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0",
+        tapeEvents: [
+          {
+            type: "task.requirement.recorded",
+            timestamp: 1,
+            payload: {
+              atom: {
+                id: "req-1",
+                statement: "tap must re-enable on timeout",
+                modality: "must",
+                provenance: "trap",
+                riskClass: "runtime",
+              },
+            },
+          },
+          {
+            type: "tool.committed",
+            timestamp: 2,
+            payload: {
+              call: { toolName: "write", args: { path: "Sources/FnKeyMonitor.swift" } },
+              result: { outcome: { kind: "ok" } },
+            },
+          },
+          // An INDEPENDENT atoms-review PASS naming req-1 — but presence-grade (a
+          // re-grep). R3-core caps the high-risk (runtime) atom at likelySatisfied
+          // and raises grade debt; R4 surfaces it. Satisfied-ish, so no ladder part.
+          {
+            type: "verification.outcome.recorded",
+            timestamp: 3,
+            payload: {
+              outcome: "pass",
+              level: "requirements",
+              perspective: "independent",
+              atomRefs: ["req-1"],
+            },
+          },
+        ],
+      }),
+      { sessionId: "sess_grade", turn: 3 },
+    );
+
+    expect(block?.content).toContain("1 high-risk atom(s) on presence-only evidence");
+    // req-1 is likelySatisfied (not unverified), so no ladder/unverified part appears.
+    expect(block?.content).not.toContain("unverified");
   });
 
   test("stays silent on a fully calm turn (no pressure, effects, or cache break)", () => {

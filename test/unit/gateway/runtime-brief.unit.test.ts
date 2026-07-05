@@ -5,6 +5,7 @@ import {
   renderCacheBreakSection,
   renderConsequenceSection,
   renderContextPressureSection,
+  renderRequirementDebtSection,
   type RuntimeBriefSection,
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/runtime-brief.js";
 
@@ -228,5 +229,65 @@ describe("consequence section", () => {
         "runtimeTurn=5 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0",
       ),
     ).toBeNull();
+  });
+});
+
+// R4: the requirement-debt section surfaces the debt run-report already computes
+// for the operator to the PRODUCING model at turn tail — inform-only, gated silent
+// when there is nothing to act on.
+describe("renderRequirementDebtSection (R4)", () => {
+  test("silent when there is neither ladder debt nor grade debt", () => {
+    expect(
+      renderRequirementDebtSection({
+        unverifiedMustCount: 0,
+        debtReason: null,
+        insufficientGradeCount: 0,
+      }),
+    ).toBeNull();
+    // An unverified count with no firing reason is still silent (the debt gate is off).
+    expect(
+      renderRequirementDebtSection({
+        unverifiedMustCount: 3,
+        debtReason: null,
+        insufficientGradeCount: 0,
+      }),
+    ).toBeNull();
+  });
+
+  test("ladder debt names the unverified must count, the reason, and the action", () => {
+    const section = renderRequirementDebtSection({
+      unverifiedMustCount: 7,
+      debtReason: "ladder_below_requirements",
+      insufficientGradeCount: 0,
+    });
+    expect(section?.key).toBe("requirements");
+    expect(section?.salience).toBe("normal");
+    expect(section?.line).toContain("7 must atom(s) unverified (ladder_below_requirements)");
+    expect(section?.line).toContain("dispatch an independent review");
+    expect(section?.line).not.toContain("presence-only");
+  });
+
+  test("grade debt alone (no ladder debt) still fires", () => {
+    const section = renderRequirementDebtSection({
+      unverifiedMustCount: 0,
+      debtReason: null,
+      insufficientGradeCount: 2,
+    });
+    expect(section?.line).toContain("2 high-risk atom(s) on presence-only evidence");
+    expect(section?.line).not.toContain("unverified");
+  });
+
+  test("both debts compose into one line and stub", () => {
+    const section = renderRequirementDebtSection({
+      unverifiedMustCount: 1,
+      debtReason: "unverified_after_requirements",
+      insufficientGradeCount: 3,
+    });
+    expect(section?.line).toContain("1 must atom(s) unverified (unverified_after_requirements)");
+    expect(section?.line).toContain("3 high-risk atom(s) on presence-only evidence");
+    expect(section?.stub).toBe(
+      "requirements: 1 must atom(s) unverified (unverified_after_requirements); " +
+        "3 high-risk atom(s) on presence-only evidence",
+    );
   });
 });

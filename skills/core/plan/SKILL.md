@@ -107,7 +107,10 @@ not paper over it with optimistic assumptions.
 
 Produce `design_spec`, `execution_plan`, `execution_mode_hint`, `risk_register`, and
 `implementation_targets`. Every artifact must reference concrete paths, not vague
-areas.
+areas. When the plan feeds a construction task, also emit the requirement atoms:
+decompose the spec into `task_set_spec` atoms with a `riskClass` per known trap,
+so implementation inherits the working set the ladder verifies against instead of
+re-deriving it after the writes.
 
 If the plan is a precursor to code, require an explicit approval or handoff
 signal before implementation begins. Do not smuggle code edits into plan output.

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillDocument } from "@brewva/brewva-vocabulary/session";
 import {
+  buildForcedSkillCandidates,
   buildSkillShortlistContextForPrompt,
   createSkillSelectionLifecycle,
+  projectGreenfieldImplementSignal,
   type SkillSelectionRuntime,
 } from "../../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
 
@@ -967,5 +969,163 @@ describe("skill catalog layer and widened signals", () => {
     expect(String(thirdMessage.content)).toContain(
       "Previous Selection Adoption: 1/1 rendered SkillCards read (migration-safety)",
     );
+  });
+});
+
+// R1a: the routing activation. A greenfield-implement turn force-includes the
+// loop's own skills (build + verify + review) so they render instead of losing an
+// alphabetical tie to incidental text matches — advisory, model-bypassable.
+describe("projectGreenfieldImplementSignal — greenfield-implement task-shape proxy", () => {
+  const active = (prompt: string, recentToolPaths: readonly string[] = []): boolean =>
+    projectGreenfieldImplementSignal({ prompt, recentToolPaths }).active;
+
+  test("active: a CJK 'implement a new app' prompt on an untouched session (the up4 shape)", () => {
+    expect(active("请实现一个 macOS menu-bar 语音输入法应用")).toBe(true);
+  });
+
+  test("active: an English 'build a new CLI tool' prompt on an untouched session", () => {
+    expect(active("Please build a new CLI tool that formats logs")).toBe(true);
+  });
+
+  test("inactive once the session has touched a path (the empty-workspace proxy is gone)", () => {
+    expect(active("请实现一个新应用", ["src/main.ts"])).toBe(false);
+  });
+
+  test("inactive without a new-artifact cue (an in-place edit intent)", () => {
+    expect(active("实现这个函数的排序逻辑")).toBe(false);
+  });
+
+  test("inactive without an implement verb (a pure analysis prompt naming an app)", () => {
+    expect(active("分析这个应用的调用链路")).toBe(false);
+  });
+});
+
+describe("greenfield-implement forced-candidate bundle renders the loop's skills", () => {
+  test("all four bundle skills shortlist with the greenfield_implement reason though the prompt has no token", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "greenfield",
+        description: "Standing up a new project in an empty workspace.",
+      }),
+      skill({
+        name: "implementation",
+        description: "Code-change execution with scope discipline.",
+      }),
+      skill({ name: "verifier", description: "Behavior validation through adversarial probes." }),
+      skill({ name: "review", description: "Findings-first risk review for diffs." }),
+      skill({ name: "changelog-format", description: "Formatting of changelog entries." }),
+    ]);
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "please keep going",
+      forcedCandidates: new Map([
+        ["greenfield", "greenfield_implement"],
+        ["implementation", "greenfield_implement"],
+        ["verifier", "greenfield_implement"],
+        ["review", "greenfield_implement"],
+      ]),
+    });
+
+    for (const name of ["greenfield", "implementation", "verifier", "review"]) {
+      const rendered = result.receipt.renderedSkillReasons.find((entry) => entry.name === name);
+      expect(rendered?.reasons).toContain("greenfield_implement");
+    }
+    // The un-forced skill stays OUT — the nudge shortlists only what it names.
+    expect(renderedNames(result.renderedSection)).not.toContain("changelog-format");
+  });
+});
+
+describe("buildForcedSkillCandidates — nudge precedence", () => {
+  test("both signals active: review keeps the more-specific post_green_review; the rest are greenfield_implement", () => {
+    const forced = buildForcedSkillCandidates({
+      postGreenReviewActive: true,
+      greenfieldImplementActive: true,
+    });
+    expect(forced.get("review")).toBe("post_green_review");
+    expect(forced.get("greenfield")).toBe("greenfield_implement");
+    expect(forced.get("implementation")).toBe("greenfield_implement");
+    expect(forced.get("verifier")).toBe("greenfield_implement");
+  });
+
+  test("only greenfield active: review is forced with greenfield_implement", () => {
+    const forced = buildForcedSkillCandidates({
+      postGreenReviewActive: false,
+      greenfieldImplementActive: true,
+    });
+    expect(forced.get("review")).toBe("greenfield_implement");
+    expect([...forced.keys()].toSorted()).toEqual([
+      "greenfield",
+      "implementation",
+      "review",
+      "verifier",
+    ]);
+  });
+
+  test("only post_green active: just review, no bundle", () => {
+    const forced = buildForcedSkillCandidates({
+      postGreenReviewActive: true,
+      greenfieldImplementActive: false,
+    });
+    expect([...forced.entries()]).toEqual([["review", "post_green_review"]]);
+  });
+
+  test("neither active: empty", () => {
+    const forced = buildForcedSkillCandidates({
+      postGreenReviewActive: false,
+      greenfieldImplementActive: false,
+    });
+    expect(forced.size).toBe(0);
+  });
+});
+
+// R1b: the TF-IDF relevance tie-break replaces the alphabetical cull among
+// equal-priority (score + reason-count) candidates, so the card cap keeps the
+// most prompt-relevant skills, not the alphabetically-first ones.
+describe("R1b: TF-IDF relevance tie-break among equal-priority candidates", () => {
+  const twoTiedSkills = () => [
+    skill({ name: "alpha-helper", description: "general project helper for indexing tasks" }),
+    skill({
+      name: "zeta-indexing",
+      description: "database index tuning and query index optimization for indexing",
+    }),
+  ];
+  const prompt = "optimize the database index and query indexing";
+
+  test("both tie at text_match, but the more prompt-relevant skill sorts first (not alphabetical)", () => {
+    const { runtime } = createRuntime(twoTiedSkills());
+    const result = buildSkillShortlistContextForPrompt({ runtime, prompt });
+    // Both are text_match candidates (score 100, one reason); an alphabetical tie
+    // would put alpha-helper first, but TF-IDF relevance ranks zeta-indexing above it.
+    const reasons = result.receipt.renderedSkillReasons;
+    expect(reasons.find((entry) => entry.name === "zeta-indexing")?.reasons).toEqual([
+      "text_match",
+    ]);
+    expect(reasons.find((entry) => entry.name === "alpha-helper")?.reasons).toEqual(["text_match"]);
+    expect(renderedNames(result.renderedSection)).toEqual(["zeta-indexing", "alpha-helper"]);
+  });
+
+  test("under a 1-card cap the relevant skill survives over the alphabetically-earlier one", () => {
+    const { runtime } = createRuntime(twoTiedSkills());
+    const result = buildSkillShortlistContextForPrompt({ runtime, prompt, maxRenderedSkills: 1 });
+    expect(renderedNames(result.renderedSection)).toEqual(["zeta-indexing"]);
+  });
+
+  test("a relevance tie (no prompt-token overlap) falls back to deterministic alphabetical order", () => {
+    const { runtime } = createRuntime([
+      skill({ name: "zebra", description: "zzz striping" }),
+      skill({ name: "apple", description: "aaa orchard" }),
+    ]);
+    // Both forced (score 330, one reason), and the prompt shares no token with
+    // either skill's text -> both relevance 0 -> the tie-break falls through to the
+    // deterministic alphabetical fallback (apple before zebra), never destabilized.
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "qqq unrelated directive",
+      forcedCandidates: new Map([
+        ["zebra", "greenfield_implement"],
+        ["apple", "greenfield_implement"],
+      ]),
+    });
+    expect(renderedNames(result.renderedSection)).toEqual(["apple", "zebra"]);
   });
 });

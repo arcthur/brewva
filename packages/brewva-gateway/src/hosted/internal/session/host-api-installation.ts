@@ -155,11 +155,13 @@ export {
   type OrientRequirementInjectionRuntime,
 } from "./skills/orient-requirement-injection.js";
 export {
+  buildForcedSkillCandidates,
   buildSkillShortlistContextForPrompt,
   createSkillSelectionLifecycle,
   describeAvailableSkillForDisplay,
   explicitSkillMentionNamesFromReceipt,
   formatSkillSelectionSection,
+  projectGreenfieldImplementSignal,
   readLatestSkillSelectionReceipt,
   skillSelectionSummaryForTrace,
   type AvailableSkillPromptContext,

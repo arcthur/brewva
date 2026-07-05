@@ -1,14 +1,21 @@
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
-import type {
-  DeterministicFitnessEvidence,
-  FitnessDiscrepancy,
-  FitnessIndependentOutcome,
-  FitnessReviewFinding,
-  RequirementFitnessInput,
+import {
+  projectRequirementFitness,
+  projectUnverifiedRequirementDebt,
+  type DeterministicFitnessEvidence,
+  type FitnessDiscrepancy,
+  type FitnessIndependentOutcome,
+  type FitnessProjection,
+  type FitnessReviewFinding,
+  type RequirementFitnessInput,
+  type UnverifiedRequirementDebt,
 } from "@brewva/brewva-vocabulary/fitness";
 import {
   readVerificationOutcomeRecordedEventPayload,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+  VERIFICATION_RUNGS,
+  type EvidenceItem,
+  type VerificationRung,
 } from "@brewva/brewva-vocabulary/iteration";
 import {
   attestedFilesForRef,
@@ -69,6 +76,12 @@ export interface RecordVerificationOutcomeInput {
    * NEVER lists atoms — findings own violations.
    */
   readonly atomRefs: readonly string[];
+  /**
+   * Structured graded evidence items (R3). Supplied by a graded producer (the
+   * static-guard guard-check tool); the authored `verification_record` path omits
+   * it, so a model cannot fabricate a `deterministic` static-guard result here.
+   */
+  readonly evidenceItems?: readonly EvidenceItem[];
 }
 
 /**
@@ -170,13 +183,36 @@ export function assembleReviewDebtInput(
   };
 }
 
-/** Optional caller-supplied inputs the tape does not yet source (a gate manifest would). */
+/**
+ * Fold graded {@link EvidenceItem}s into {@link DeterministicFitnessEvidence} — one
+ * per (item, atomRef) pair. SINGLE-HOMED: both the tape assembler (reading
+ * committed receipts) and the claim-time producer (`verification_record`, whose
+ * items are not on the tape yet) map items through this, so the two never drift.
+ */
+export function evidenceItemsToDeterministicEvidence(
+  items: readonly EvidenceItem[],
+): DeterministicFitnessEvidence[] {
+  return items.flatMap((item) =>
+    item.atomRefs.map((atomId) => ({
+      atomId,
+      verdict: item.verdict,
+      ref: item.id,
+      evidenceKind: item.evidenceKind,
+    })),
+  );
+}
+
+/**
+ * Claim-time-only injected evidence the tape does not yet carry. When
+ * `verification_record` runs the static-guard producer, the resulting items are
+ * NOT yet on the tape (this very receipt will carry them), so the claim-time
+ * fitness cross-check must be handed them directly — otherwise the receipt's own
+ * `discrepancies` annotation (and the summary shown to the model) would miss a
+ * `deterministic_conflict` the static-guard run just found. A pure tape
+ * re-derivation (`buildTapeRequirementFitness`) reads the same evidence back from
+ * committed `evidenceItems`, so it passes no options.
+ */
 export interface RequirementFitnessAssemblyOptions {
-  /**
-   * Deterministic gate/scripted-check evidence keyed to atoms. No real tape
-   * source is wired yet, so this defaults to `[]`; a gate manifest (or a test)
-   * supplies it explicitly to drive `deterministic_conflict` grading.
-   */
   readonly deterministicEvidence?: readonly DeterministicFitnessEvidence[];
 }
 
@@ -191,16 +227,15 @@ export interface RequirementFitnessAssemblyOptions {
  * `review.finding.recorded`, each paired with ITS OWN receipt timestamp so the
  * projection's per-finding staleness check matches the review-debt discipline.
  *
- * Independent outcomes ARE now fed: each `independent`-perspective
- * `verification.outcome.recorded` receipt contributes an entry keyed by its
- * `atomRefs`. A clear atoms-review commits a `pass` naming the reviewed atoms,
- * so `satisfied` is reachable in production. A fail (or an outcome with no
- * atomRefs) is inert — findings own violations.
+ * Independent outcomes are fed from each `independent`-perspective
+ * `verification.outcome.recorded` receipt's `atomRefs` (a clear atoms-review's
+ * `pass` names the reviewed atoms, so `satisfied` is reachable in production; a
+ * fail is inert — findings own violations). Deterministic evidence is fed from
+ * every receipt's graded `evidenceItems` — the static-guard producer's results,
+ * which the runtime ran over real source (not a caller-supplied claim).
  *
- * Still gaps (honest, not aspirational): authored coverage (`likelySatisfied`)
- * has no producer — a future author-attestation channel would feed
- * `authoredOutcomes`; deterministic evidence (`deterministic_conflict`) is
- * caller-supplied only, awaiting an operator-supplied gate manifest.
+ * Remaining honest gap: authored coverage (`likelySatisfied`) has no producer —
+ * a future author-attestation channel would feed `authoredOutcomes`.
  */
 export function assembleRequirementFitnessInput(
   runtime: VerificationRecordingRuntime,
@@ -230,6 +265,12 @@ export function assembleRequirementFitnessInputFromEvents(
 
   const findings: FitnessReviewFinding[] = [];
   const independentOutcomes: FitnessIndependentOutcome[] = [];
+  // Graded deterministic evidence (R3): each static-guard result arrives as an
+  // evidence item and joins at its recorded grade. Tape-committed items come from
+  // the receipts below; claim-time items (not on the tape yet) arrive via options.
+  const deterministicEvidence: DeterministicFitnessEvidence[] = options.deterministicEvidence
+    ? [...options.deterministicEvidence]
+    : [];
   for (const [index, event] of allEvents.entries()) {
     if (event.type === REVIEW_FINDING_RECORDED_EVENT_TYPE) {
       const finding = readReviewFindingRecordedEventPayload(event);
@@ -261,6 +302,14 @@ export function assembleRequirementFitnessInputFromEvents(
           ref: payload.reviewerContext?.contextId ?? `independent-outcome-${index}`,
         });
       }
+      // R3: structured graded evidence items are DETERMINISTIC by construction (the
+      // runtime ran a static-guard predicate over real source), so each feeds the
+      // deterministic side of the join at its recorded grade, regardless of the
+      // receipt's perspective. A pass at `static_guard`+ can clear a high-risk atom
+      // a presence re-grep cannot; a fail is a real `deterministic_conflict`.
+      // Independent evidence rides the top-level `atomRefs` above, not items — one
+      // home per source, so there is nothing to double-count.
+      deterministicEvidence.push(...evidenceItemsToDeterministicEvidence(payload.evidenceItems));
     }
   }
 
@@ -289,11 +338,72 @@ export function assembleRequirementFitnessInputFromEvents(
     atoms,
     findings,
     independentOutcomes,
-    // Authored coverage (`likelySatisfied`) and deterministic evidence
-    // (`deterministic_conflict`) remain unwired gaps — see the doc comment.
+    // Authored coverage (`likelySatisfied`) remains an unwired gap — see the doc
+    // comment; deterministic evidence is now fed from receipt `evidenceItems`.
     authoredOutcomes: [],
-    deterministicEvidence: options.deterministicEvidence ?? [],
+    deterministicEvidence,
     appliedPatchSetRefs,
     latestTreeMutationAt,
   };
+}
+
+const REQUIREMENTS_RUNG_INDEX = VERIFICATION_RUNGS.indexOf("requirements");
+
+/**
+ * Re-derive the CURRENT requirement fitness over the whole tape — THE single
+ * tape-derived fitness read shared by the CLI operator surfaces and the hosted
+ * runtime brief (both import it from here, so they can never diverge). Re-derives
+ * (axiom 6) rather than reading the latest receipt's frozen annotation, so a later
+ * independent atoms-review's `satisfied` surfaces.
+ */
+export function buildTapeRequirementFitness(
+  events: readonly BrewvaEventRecord[],
+): FitnessProjection {
+  return projectRequirementFitness(assembleRequirementFitnessInputFromEvents(events));
+}
+
+/**
+ * The requirement fitness AND its below-requirements debt from ONE fitness
+ * derivation — the shape both the operator surfaces and the model-facing brief
+ * need. Deriving fitness once here removes the double-derivation the earlier
+ * per-surface helper incurred (fitness computed for the count, then again inside
+ * the debt fold).
+ */
+export interface TapeRequirementDebtSummary {
+  readonly fitness: FitnessProjection;
+  readonly debt: UnverifiedRequirementDebt;
+}
+
+export function buildTapeRequirementDebtSummary(
+  events: readonly BrewvaEventRecord[],
+): TapeRequirementDebtSummary {
+  const fitness = buildTapeRequirementFitness(events);
+  const reachedRequirementsVerify = events.some((event) => {
+    if (event.type !== VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE) {
+      return false;
+    }
+    const parsed = readVerificationOutcomeRecordedEventPayload(event);
+    return (
+      parsed.outcome === "pass" &&
+      parsed.level !== null &&
+      VERIFICATION_RUNGS.indexOf(parsed.level as VerificationRung) >= REQUIREMENTS_RUNG_INDEX
+    );
+  });
+  const debt = projectUnverifiedRequirementDebt({
+    freshCodeWritten: projectFreshCodeWritten(projectToolInvocations(events)),
+    unverifiedMustCount: fitness.unverifiedMustAtoms.length,
+    reachedRequirementsVerify,
+  });
+  return { fitness, debt };
+}
+
+/**
+ * Tape-derived below-requirements requirement-verification debt — the operator
+ * surface read (`inspect run-report`). Thin over {@link
+ * buildTapeRequirementDebtSummary}, single-homing the reachedRequirements fold.
+ */
+export function buildTapeUnverifiedRequirementDebt(
+  events: readonly BrewvaEventRecord[],
+): UnverifiedRequirementDebt {
+  return buildTapeRequirementDebtSummary(events).debt;
 }

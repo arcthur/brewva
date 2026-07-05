@@ -200,6 +200,32 @@ export function relativizeToWorkspace(target: string, workspaceRoot: string | nu
 }
 
 /**
+ * The FIRST timestamp at which a bare-write (write/edit) tool mutated the tree
+ * this session, or null when none did — "when generation first wrote a source
+ * file." The requirement-loop adoption liveness reads it against
+ * `firstAtomizedAt` to prove atoms preceded the first write.
+ *
+ * Reads {@link BARE_WRITE_TOOL_NAMES}, NOT the full {@link WRITE_TOOL_NAMES}: a
+ * `source_patch_apply` call can commit without its patch actually applying (its
+ * truth is the `source_patch_applied` receipt, not the call), and patch/rollback
+ * are post-generation review ops anyway. So on the INVOCATION channel this is a
+ * deliberate mirror of {@link deriveLatestTreeMutationAt} — earliest here, latest
+ * there, both counting only bare writes — differing only in that the
+ * latest-mutation sibling ALSO folds successful patch/rollback receipts for
+ * review-freshness, which the generation-start predicate does not need.
+ */
+export function deriveFirstWriteInvocationAt(
+  invocations: readonly ToolInvocation[],
+): number | null {
+  let earliest: number | null = null;
+  for (const invocation of invocations) {
+    if (!BARE_WRITE_TOOL_NAMES.has(invocation.toolName) || !ranSuccessfully(invocation)) continue;
+    earliest = earliest === null ? invocation.timestamp : Math.min(earliest, invocation.timestamp);
+  }
+  return earliest;
+}
+
+/**
  * The latest timestamp at which the working tree was mutated, or null. A tree
  * mutation is a successful `source_patch_applied`/`rollback.recorded` receipt,
  * OR a bare-write (write/edit) commitment — both rewrite files, so both advance

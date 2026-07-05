@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  deriveFirstWriteInvocationAt,
   deriveLatestTreeMutationAt,
   extractWriteInvocationPaths,
   projectFreshCodeWritten,
@@ -221,6 +222,42 @@ describe("deriveLatestTreeMutationAt (Finding P1 — bare write/edit ages the tr
         patchRollbackEvents: [],
         writeInvocations: [bareWrite(950, { toolName: "source_patch_apply" })],
       }),
+    ).toBeNull();
+  });
+});
+
+describe("deriveFirstWriteInvocationAt — earliest source mutation for adoption liveness", () => {
+  test("returns the EARLIEST successful write-class timestamp (not the latest)", () => {
+    expect(
+      deriveFirstWriteInvocationAt([
+        invocation({ toolName: "write", timestamp: 300 }),
+        invocation({ toolName: "edit", timestamp: 100 }),
+        invocation({ toolName: "write", timestamp: 500 }),
+      ]),
+    ).toBe(100);
+  });
+  test("source_patch_apply does NOT count on the invocation channel (receipt-driven, like the latest-mutation sibling)", () => {
+    expect(
+      deriveFirstWriteInvocationAt([
+        invocation({ toolName: "source_patch_apply", timestamp: 200 }),
+        invocation({ toolName: "write", timestamp: 500 }),
+      ]),
+    ).toBe(500);
+  });
+  test("an errored write did not mutate the tree, so it does not count", () => {
+    expect(
+      deriveFirstWriteInvocationAt([
+        invocation({ toolName: "write", timestamp: 50, outcome: "err" }),
+        invocation({ toolName: "write", timestamp: 400 }),
+      ]),
+    ).toBe(400);
+  });
+  test("non-write tools never count; null when no write-class tool ran", () => {
+    expect(
+      deriveFirstWriteInvocationAt([
+        invocation({ toolName: "read", timestamp: 10 }),
+        invocation({ toolName: "exec", timestamp: 20 }),
+      ]),
     ).toBeNull();
   });
 });

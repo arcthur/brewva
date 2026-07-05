@@ -4,13 +4,27 @@ import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { FITNESS_DISCREPANCY_GRADES } from "@brewva/brewva-vocabulary/fitness";
 import type {
+  AtomFitnessState,
+  EvidenceKind,
   FitnessDiscrepancy,
   FitnessDiscrepancyGrade,
   UnverifiedRequirementDebt,
 } from "@brewva/brewva-vocabulary/fitness";
 import { readVerificationOutcomeRecordedEventPayload } from "@brewva/brewva-vocabulary/iteration";
 import { REVIEW_FINDING_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/review";
-import { foldTaskLedgerEvents } from "@brewva/brewva-vocabulary/task";
+import {
+  foldTaskLedgerEvents,
+  TASK_REQUIREMENT_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/task";
+import type {
+  RequirementModality,
+  RequirementProvenance,
+  RequirementRiskClass,
+} from "@brewva/brewva-vocabulary/task";
+import {
+  deriveFirstWriteInvocationAt,
+  projectToolInvocations,
+} from "@brewva/brewva-vocabulary/tool-invocations";
 import { summarizeRequirementFitness } from "./fitness-summary.js";
 import {
   buildTapeRequirementFitness,
@@ -116,6 +130,55 @@ export interface RunReportFitness {
   readonly unverifiedRequirementDebt: UnverifiedRequirementDebt;
 }
 
+/**
+ * R5b: one graded evidence item bearing on an atom, read from a receipt's
+ * `evidenceItems` — the claimed-by(`anchors`) / closed-by(`evidenceKind`) detail
+ * R5a's baseline lacked, available once R3's structured evidence flows. Empty on
+ * atoms with no evidence items yet.
+ */
+export interface RunReportAtomEvidence {
+  readonly evidenceKind: EvidenceKind;
+  readonly verdict: "pass" | "fail";
+  readonly anchors: readonly string[];
+}
+
+export interface RunReportRequirementAtomLifecycle {
+  readonly atomId: string;
+  readonly modality: RequirementModality;
+  readonly provenance: RequirementProvenance;
+  readonly riskClass: RequirementRiskClass | null;
+  /** First `task.requirement.recorded` timestamp for this atom id. */
+  readonly createdAt: number;
+  /** Current fitness state, re-derived over the whole tape (not a frozen receipt). */
+  readonly state: AtomFitnessState;
+  /** R5b: graded evidence items bearing on this atom, in tape order. */
+  readonly evidence: readonly RunReportAtomEvidence[];
+}
+
+/**
+ * R5a baseline requirement lifecycle: the tape-only timeline the routing/atomize
+ * adoption liveness reads. `atomizedBeforeFirstWrite` is the R1/R2 acceptance
+ * predicate (atoms must precede generation's first source mutation);
+ * `reviewDispatched` is the close-path-was-attempted signal. Anchors
+ * (`claimed-by(file:line)`) and evidence grade are the R5b layer that depends on
+ * R3's structured `evidenceItems`; this baseline needs nothing R3 adds.
+ */
+export interface RunReportRequirementLifecycle {
+  /** Earliest requirement-atom mint time — when the spec first became atoms. */
+  readonly firstAtomizedAt: number | null;
+  /** First successful write-class commitment — when generation first mutated the tree. */
+  readonly firstSourceMutationAt: number | null;
+  /**
+   * Did atomization precede the first source mutation
+   * (`firstAtomizedAt <= firstSourceMutationAt`)? `null` when either half is
+   * absent — the predicate is undefined, not false.
+   */
+  readonly atomizedBeforeFirstWrite: boolean | null;
+  /** Was an independent review dispatched (a finding or independent receipt exists)? */
+  readonly reviewDispatched: boolean;
+  readonly atoms: readonly RunReportRequirementAtomLifecycle[];
+}
+
 export interface RunReportProjection {
   readonly schema: "brewva.run-report.v1";
   readonly sessionId: string;
@@ -140,6 +203,7 @@ export interface RunReportProjection {
   readonly errorFixCycles: readonly RunReportErrorFixCycle[];
   readonly verification: RunReportVerification;
   readonly fitness: RunReportFitness;
+  readonly requirementLifecycle: RunReportRequirementLifecycle;
   readonly skills: {
     readonly selections: number;
     readonly renderedSkillNames: readonly string[];
@@ -243,6 +307,14 @@ export function buildRunReportProjection(
   let totalTokens = 0;
   let sawTokens = false;
   let includesEstimates = false;
+
+  // R5a: per-atom first-mint time and the earliest atomization, read straight
+  // off `task.requirement.recorded` in tape order — the baseline the adoption
+  // liveness compares against the first source mutation.
+  let firstAtomizedAt: number | null = null;
+  const atomCreatedAt = new Map<string, number>();
+  // R5b: graded evidence items bearing on each atom, gathered from receipts.
+  const atomEvidence = new Map<string, RunReportAtomEvidence[]>();
 
   for (const event of ordered) {
     if (startedAt === null) {
@@ -379,6 +451,18 @@ export function buildRunReportProjection(
         } else {
           authoredReceipts += 1;
         }
+        // R5b: gather each receipt's graded evidence items by the atom(s) they name.
+        for (const item of parsed.evidenceItems) {
+          for (const atomId of item.atomRefs) {
+            const list = atomEvidence.get(atomId) ?? [];
+            list.push({
+              evidenceKind: item.evidenceKind,
+              verdict: item.verdict,
+              anchors: item.anchors,
+            });
+            atomEvidence.set(atomId, list);
+          }
+        }
         // Replaced wholesale (not merged) on every receipt, in tape order: the
         // LATEST claim's own committed discrepancies, surfaced verbatim on the
         // verification line as "what the last verify asserted". This is NOT the
@@ -388,6 +472,17 @@ export function buildRunReportProjection(
       }
       case REVIEW_FINDING_RECORDED_EVENT_TYPE: {
         findingsRecorded += 1;
+        continue;
+      }
+      case TASK_REQUIREMENT_RECORDED_EVENT_TYPE: {
+        const atom = toRecord(toRecord(event.payload).atom);
+        const atomId = readString(atom, "id");
+        if (atomId && !atomCreatedAt.has(atomId)) {
+          atomCreatedAt.set(atomId, event.timestamp);
+          if (firstAtomizedAt === null) {
+            firstAtomizedAt = event.timestamp;
+          }
+        }
         continue;
       }
       case "skill.selection.recorded": {
@@ -449,18 +544,23 @@ export function buildRunReportProjection(
   const reviewDebt = buildTapeReviewDebt(events).debt;
 
   // Requirement atoms fold from the tape directly (the same shared vocabulary
-  // fold every task-ledger reader uses), independent of the switch above —
-  // this is a plain atom-identity count, never the fitness evidence join.
-  const atomsTotal = foldTaskLedgerEvents(events).requirements.length;
+  // fold every task-ledger reader uses), independent of the switch above. The
+  // folded state is reused for the per-atom lifecycle below (one fold).
+  const taskState = foldTaskLedgerEvents(events);
+  const atomsTotal = taskState.requirements.length;
   // Re-derive the CURRENT fitness over the WHOLE tape (buildTapeRequirementFitness,
   // shared with the Work Card fitness line) rather than reading the latest
   // receipt's frozen annotation: a clear independent atoms-review's `satisfied`
   // lands AFTER the authored verify in the natural order, and the latest receipt
   // after any review is the independent one whose claim-time annotation is empty
-  // by design — reading it would report a false "nothing unverified". The by-grade
-  // tally stays single-homed in `readReceiptFitnessSummary`, now fed the
-  // re-derived annotation instead of a stale receipt snapshot.
-  const fitnessSummary = summarizeRequirementFitness(buildTapeRequirementFitness(events));
+  // by design — reading it would report a false "nothing unverified". This one
+  // projection is reused for both the by-grade summary and the per-atom lifecycle
+  // state below (one join serves the two R5a reads). `buildTapeUnverified-
+  // RequirementDebt` below still derives its own fitness independently — a
+  // pre-existing read-model redundancy left single-homed rather than threaded,
+  // since correctness (not CPU) governs a projection.
+  const fitnessProjection = buildTapeRequirementFitness(events);
+  const fitnessSummary = summarizeRequirementFitness(fitnessProjection);
   const fitness: RunReportFitness = {
     atomsTotal,
     satisfiedAtoms: fitnessSummary.satisfied,
@@ -472,6 +572,35 @@ export function buildRunReportProjection(
     // "artifact-green that never graded the atoms" termination shape run-report
     // exists to catch.
     unverifiedRequirementDebt: buildTapeUnverifiedRequirementDebt(events),
+  };
+
+  // R5a: the tape-only baseline lifecycle. `firstSourceMutationAt` reuses the
+  // shared bare-write classifier; per-atom `state` reuses the fitness projection
+  // built above (this adds no new join). `atomizedBeforeFirstWrite` is the
+  // adoption-liveness predicate — `null` when either half is absent, and `<=` so
+  // a tie reads as "atoms did not lag the write".
+  const atomState = new Map(fitnessProjection.atoms.map((atom) => [atom.atomId, atom.state]));
+  const firstSourceMutationAt = deriveFirstWriteInvocationAt(projectToolInvocations(events));
+  const requirementLifecycle: RunReportRequirementLifecycle = {
+    firstAtomizedAt,
+    firstSourceMutationAt,
+    atomizedBeforeFirstWrite:
+      firstAtomizedAt === null || firstSourceMutationAt === null
+        ? null
+        : firstAtomizedAt <= firstSourceMutationAt,
+    reviewDispatched: findingsRecorded > 0 || independentReceipts > 0,
+    // `taskState.requirements`, `fitnessProjection.atoms`, and `atomCreatedAt`
+    // all derive from the SAME task-ledger fold, so every atom id is present in
+    // both maps — the `??` fallbacks are unreachable, kept only for `Map.get`.
+    atoms: taskState.requirements.map((atom) => ({
+      atomId: atom.id,
+      modality: atom.modality,
+      provenance: atom.provenance,
+      riskClass: atom.riskClass ?? null,
+      createdAt: atomCreatedAt.get(atom.id) ?? 0,
+      state: atomState.get(atom.id) ?? "unverified",
+      evidence: atomEvidence.get(atom.id) ?? [],
+    })),
   };
 
   return {
@@ -515,6 +644,7 @@ export function buildRunReportProjection(
       latestDiscrepancies,
     },
     fitness,
+    requirementLifecycle,
     skills: {
       selections: skillSelections,
       renderedSkillNames: [...renderedSkillNames].toSorted((left, right) =>
@@ -624,6 +754,42 @@ export function formatRunReportText(report: RunReportProjection): string {
       lines.push(
         `Requirement debt: unverifiedMust=${requirementDebt.unverifiedMustCount} ` +
           `reason=${requirementDebt.reason} (climb to a requirements-level verify or record notApplicable)`,
+      );
+    }
+  }
+  // R5a: the requirement lifecycle baseline — when the spec became atoms vs when
+  // generation first wrote, whether a review was dispatched, and each atom's
+  // current state. `atomizedBeforeFirstWrite=no` is the "atomized-after-the-write"
+  // shape; `reviewDispatched=no` with unverified atoms is the never-reviewed shape.
+  const lifecycle = report.requirementLifecycle;
+  if (lifecycle.atoms.length > 0) {
+    const yesNo = (value: boolean | null): string =>
+      value === null ? "n/a" : value ? "yes" : "no";
+    const offset = (at: number | null): string =>
+      at !== null && report.startedAt !== null
+        ? `+${formatDuration(at - report.startedAt)}`
+        : "n/a";
+    lines.push(
+      `Requirement lifecycle: atomizedBeforeFirstWrite=${yesNo(lifecycle.atomizedBeforeFirstWrite)} ` +
+        `firstAtomized=${offset(lifecycle.firstAtomizedAt)} firstWrite=${offset(lifecycle.firstSourceMutationAt)} ` +
+        `reviewDispatched=${yesNo(lifecycle.reviewDispatched)}`,
+    );
+    for (const atom of lifecycle.atoms) {
+      // R5b: closed-by(evidenceKind:verdict@anchor) — the graded, anchored
+      // evidence that decided the atom, when R3's structured items exist.
+      const closedBy =
+        atom.evidence.length > 0
+          ? ` closedBy=[${atom.evidence
+              .map(
+                (entry) =>
+                  `${entry.evidenceKind}:${entry.verdict}` +
+                  (entry.anchors.length > 0 ? `@${entry.anchors[0]}` : ""),
+              )
+              .join(", ")}]`
+          : "";
+      lines.push(
+        `  ${atom.atomId}(${atom.modality}/${atom.provenance}/${atom.riskClass ?? "unclassified"}) ` +
+          `created=${offset(atom.createdAt)} state=${atom.state}${closedBy}`,
       );
     }
   }

@@ -26,7 +26,7 @@ function beforeAgentStartEvent(input: { prompt: string; systemPrompt?: string })
 }
 
 describe("orient-phase trap atom injection", () => {
-  test("a matching prompt records the seed atom exactly once, with provenance trap", () => {
+  test("a matching prompt records the seed atom once, with provenance trap AND riskClass runtime (the min-grade cap source)", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "orient-injection-matching-prompt-1";
     const lifecycle = createOrientRequirementInjectionLifecycle(runtime);
@@ -43,6 +43,7 @@ describe("orient-phase trap atom injection", () => {
         statement: EVENT_TAP_ATOM_STATEMENT,
         modality: "must",
         provenance: "trap",
+        riskClass: "runtime",
       },
     ]);
 
@@ -57,6 +58,9 @@ describe("orient-phase trap atom injection", () => {
       statement: EVENT_TAP_ATOM_STATEMENT,
       modality: "must",
       provenance: "trap",
+      // A-F2: the trap seeds the risk class, so the min-grade cap engages on the
+      // automatic atom — a presence re-grep cannot satisfy this runtime-risk atom.
+      riskClass: "runtime",
     });
 
     // No spec.set event was emitted: injection is atom-only, never spec-planed.
@@ -80,6 +84,7 @@ describe("orient-phase trap atom injection", () => {
         statement: EVENT_TAP_ATOM_STATEMENT,
         modality: "must",
         provenance: "trap",
+        riskClass: "runtime",
       },
     ]);
 
@@ -124,6 +129,7 @@ describe("orient-phase trap atom injection", () => {
         statement: EVENT_TAP_ATOM_STATEMENT,
         modality: "must",
         provenance: "trap",
+        riskClass: "runtime",
       },
     ]);
   });
@@ -148,6 +154,7 @@ describe("orient-phase trap atom injection", () => {
         statement: EVENT_TAP_ATOM_STATEMENT,
         modality: "must",
         provenance: "trap",
+        riskClass: "runtime",
       },
     ]);
   });

@@ -1,6 +1,6 @@
 import { reviewTargetRefMatchesTapeOnly } from "./review.js";
 import type { ReviewFindingRecordedEventPayload } from "./review.js";
-import type { RequirementAtom } from "./task.js";
+import type { RequirementAtom, RequirementRiskClass } from "./task.js";
 
 /**
  * How well one requirement atom is met, given the evidence joined against it.
@@ -29,18 +29,41 @@ export const ATOM_FITNESS_STATES = [
 export type AtomFitnessState = (typeof ATOM_FITNESS_STATES)[number];
 
 /**
+ * How WELL an evidence item knows its atom — ORTHOGONAL to `kind` (which names
+ * WHERE it came from). `presence` is a token/AST-presence match (a `grep` for
+ * `keyCode 63`); `static_guard` is a deterministic predicate over the code's
+ * guards (does the tap re-enable on timeout?); `behavioral` is an executed
+ * runtime probe. A negative/failure-mode property is invisible to `presence` and
+ * only knowable at `static_guard` or above — which is why a high-risk atom's
+ * required minimum grade caps what `presence`-only evidence can prove (see
+ * {@link projectRequirementFitness}). This is the grade axis; the
+ * `authored`/`independent` perspective axis is separate and complementary.
+ */
+export const EVIDENCE_KINDS = ["presence", "static_guard", "behavioral"] as const;
+
+export type EvidenceKind = (typeof EVIDENCE_KINDS)[number];
+
+const EVIDENCE_KIND_RANK: Readonly<Record<EvidenceKind, number>> = {
+  presence: 0,
+  static_guard: 1,
+  behavioral: 2,
+};
+
+/**
  * One piece of evidence that contributed to an atom's fitness state. `kind`
- * names where it came from; `ref` is the evidence's stable id (finding id,
- * outcome ref, or deterministic entry ref); `verdict` is present for the kinds
- * that carry pass/fail (`authored` coverage carries no verdict — it only
- * claims the atom was addressed, not that a check passed).
+ * names WHERE it came from (source); `evidenceKind` names HOW WELL it knows the
+ * atom (grade) — the two axes are orthogonal. `ref` is the evidence's stable id
+ * (finding id, outcome ref, or deterministic entry ref); `verdict` is present for
+ * the kinds that carry pass/fail (`authored` coverage carries no verdict — it
+ * only claims the atom was addressed, not that a check passed).
  *
  * This is intentionally the minimum the states and discrepancies need: the
- * projection has no authority (axiom 18), so it records only enough for a
- * reader to see WHAT decided the state, not to re-adjudicate it.
+ * projection has no authority (axiom 18), so it records only enough for a reader
+ * to see WHAT decided the state, not to re-adjudicate it.
  */
 export interface AtomFitnessEvidence {
   readonly kind: "finding" | "independent_outcome" | "deterministic" | "authored";
+  readonly evidenceKind: EvidenceKind;
   readonly ref: string;
   readonly verdict?: "pass" | "fail";
 }
@@ -83,11 +106,35 @@ export interface FitnessDiscrepancy {
   readonly evidenceRef: string;
 }
 
+/**
+ * A high-risk atom whose only satisfying evidence is BELOW the grade its risk
+ * class requires — positive coverage exists, but at a grade too weak to prove the
+ * atom's failure-mode property (a presence grep cannot see a missing guard). This
+ * is DISTINCT from a {@link FitnessDiscrepancy}: it is neither a violation nor a
+ * fail, so it is NOT a discrepancy grade — it is honest "not checked well enough"
+ * debt (axiom 7). The atom reads `likelySatisfied`, never `satisfied`; only a
+ * real `deterministic` FAIL (a static-guard adapter that ran and failed) produces
+ * the fail-bearing `deterministic_conflict` the operator gate bridges on.
+ */
+export interface InsufficientEvidenceGradeDebt {
+  readonly atomId: string;
+  /** The minimum grade this atom's risk class requires to reach `satisfied`. */
+  readonly requiredKind: EvidenceKind;
+  /** The best grade among the satisfying passes actually present (below required). */
+  readonly actualKind: EvidenceKind;
+}
+
 export interface FitnessProjection {
   readonly atoms: readonly AtomFitness[];
   readonly counts: Readonly<Record<AtomFitnessState, number>>;
   readonly discrepancies: readonly FitnessDiscrepancy[];
   readonly unverifiedMustAtoms: readonly string[];
+  /**
+   * Atoms capped below `satisfied` because their positive coverage is
+   * presence-grade on a high-risk class — advisory grade debt, in first-appearance
+   * order. Empty when no atom's grade fell short of its risk floor.
+   */
+  readonly insufficientGradeAtoms: readonly InsufficientEvidenceGradeDebt[];
 }
 
 /**
@@ -113,6 +160,12 @@ export interface FitnessIndependentOutcome {
   readonly atomRefs: readonly string[];
   readonly verdict: "pass" | "fail";
   readonly ref: string;
+  /**
+   * Grade of the check behind this outcome; defaults to `presence` when unset. An
+   * independent PASS reaches `satisfied` only if this meets the atom's risk floor
+   * — an independent reviewer that merely re-grepped cannot clear a high-risk atom.
+   */
+  readonly evidenceKind?: EvidenceKind;
 }
 
 /**
@@ -134,6 +187,8 @@ export interface DeterministicFitnessEvidence {
   readonly atomId: string;
   readonly verdict: "pass" | "fail";
   readonly ref: string;
+  /** Grade of the deterministic check; defaults to `presence` when unset. */
+  readonly evidenceKind?: EvidenceKind;
 }
 
 /**
@@ -185,13 +240,50 @@ function compareEvidence(left: AtomFitnessEvidence, right: AtomFitnessEvidence):
   return leftVerdict < rightVerdict ? -1 : leftVerdict > rightVerdict ? 1 : 0;
 }
 
+/**
+ * The minimum evidence grade at which a satisfying pass may move a high-risk atom
+ * to `satisfied`. A failure-mode class — `runtime` (event-tap re-enable, input
+ * source, pasteboard, speech lifecycle) and `security` (credential/privacy) —
+ * needs at least a `static_guard` predicate; presence-only coverage caps at
+ * `likelySatisfied` and raises {@link InsufficientEvidenceGradeDebt}. Classes
+ * absent here (`ux`/`packaging`/`architecture`) and unclassified atoms accept
+ * `presence`.
+ */
+const MIN_EVIDENCE_KIND_BY_RISK: Partial<Record<RequirementRiskClass, EvidenceKind>> = {
+  runtime: "static_guard",
+  security: "static_guard",
+};
+
+function requiredEvidenceKind(atom: RequirementAtom): EvidenceKind {
+  return (atom.riskClass ? MIN_EVIDENCE_KIND_BY_RISK[atom.riskClass] : undefined) ?? "presence";
+}
+
+function meetsRequiredGrade(atom: RequirementAtom, kind: EvidenceKind): boolean {
+  return EVIDENCE_KIND_RANK[kind] >= EVIDENCE_KIND_RANK[requiredEvidenceKind(atom)];
+}
+
+function higherGrade(current: EvidenceKind | null, next: EvidenceKind): EvidenceKind {
+  if (current === null) {
+    return next;
+  }
+  return EVIDENCE_KIND_RANK[next] > EVIDENCE_KIND_RANK[current] ? next : current;
+}
+
 /** Mutable accumulator for one atom while the join folds evidence into it. */
 interface AtomAccumulator {
   readonly atom: RequirementAtom;
   readonly evidence: AtomFitnessEvidence[];
+  /** A deterministic pass AT OR ABOVE the atom's required grade — reaches `satisfied`. */
   hasDeterministicPass: boolean;
+  /** An independent pass AT OR ABOVE the atom's required grade — reaches `satisfied`. */
   hasIndependentPass: boolean;
   hasAuthored: boolean;
+  /**
+   * The highest grade among deterministic/independent PASSES seen. When no
+   * sufficient pass exists but this is non-null, the atom has sub-floor positive
+   * coverage -> `likelySatisfied` + {@link InsufficientEvidenceGradeDebt}.
+   */
+  bestSatisfyingKind: EvidenceKind | null;
   /** A live deterministic fail, if any — drives `deterministic_conflict`. */
   deterministicFailRef: string | null;
   /** A live finding on this atom, if any — drives `advisory_conflict`. */
@@ -246,6 +338,7 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
       hasDeterministicPass: false,
       hasIndependentPass: false,
       hasAuthored: false,
+      bestSatisfyingKind: null,
       deterministicFailRef: null,
       findingFailRef: null,
     });
@@ -257,9 +350,18 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     if (!accumulator) {
       continue;
     }
-    accumulator.evidence.push({ kind: "deterministic", ref: entry.ref, verdict: entry.verdict });
+    const evidenceKind = entry.evidenceKind ?? "presence";
+    accumulator.evidence.push({
+      kind: "deterministic",
+      evidenceKind,
+      ref: entry.ref,
+      verdict: entry.verdict,
+    });
     if (entry.verdict === "pass") {
-      accumulator.hasDeterministicPass = true;
+      accumulator.bestSatisfyingKind = higherGrade(accumulator.bestSatisfyingKind, evidenceKind);
+      if (meetsRequiredGrade(accumulator.atom, evidenceKind)) {
+        accumulator.hasDeterministicPass = true;
+      }
     } else if (
       accumulator.deterministicFailRef === null ||
       entry.ref < accumulator.deterministicFailRef
@@ -270,6 +372,7 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
   }
 
   for (const outcome of input.independentOutcomes) {
+    const evidenceKind = outcome.evidenceKind ?? "presence";
     for (const atomId of outcome.atomRefs) {
       const accumulator = accumulators.get(atomId);
       if (!accumulator) {
@@ -277,11 +380,15 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
       }
       accumulator.evidence.push({
         kind: "independent_outcome",
+        evidenceKind,
         ref: outcome.ref,
         verdict: outcome.verdict,
       });
       if (outcome.verdict === "pass") {
-        accumulator.hasIndependentPass = true;
+        accumulator.bestSatisfyingKind = higherGrade(accumulator.bestSatisfyingKind, evidenceKind);
+        if (meetsRequiredGrade(accumulator.atom, evidenceKind)) {
+          accumulator.hasIndependentPass = true;
+        }
       } else if (accumulator.findingFailRef === null || outcome.ref < accumulator.findingFailRef) {
         // An independent fail is a non-deterministic violation -> advisory grade,
         // sharing the finding-fail channel (lowest ref wins for determinism).
@@ -296,7 +403,10 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
       if (!accumulator) {
         continue;
       }
-      accumulator.evidence.push({ kind: "authored", ref: authored.ref });
+      // Author coverage is a self-claim: weakest grade by construction, and it
+      // caps at `likelySatisfied` regardless of grade (the perspective axis, not
+      // the grade axis, governs it).
+      accumulator.evidence.push({ kind: "authored", evidenceKind: "presence", ref: authored.ref });
       accumulator.hasAuthored = true;
     }
   }
@@ -318,7 +428,13 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
       if (!accumulator) {
         continue;
       }
-      accumulator.evidence.push({ kind: "finding", ref: finding.findingId });
+      // A finding is a violation, not satisfying evidence; grade is not
+      // meaningful for a fail, so it records the honest weakest (`presence`).
+      accumulator.evidence.push({
+        kind: "finding",
+        evidenceKind: "presence",
+        ref: finding.findingId,
+      });
       if (accumulator.findingFailRef === null || finding.findingId < accumulator.findingFailRef) {
         accumulator.findingFailRef = finding.findingId;
       }
@@ -334,6 +450,7 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     notApplicable: 0,
   };
   const discrepancies: FitnessDiscrepancy[] = [];
+  const insufficientGradeAtoms: InsufficientEvidenceGradeDebt[] = [];
 
   for (const atomId of order) {
     const accumulator = accumulators.get(atomId);
@@ -349,6 +466,19 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     });
     if (state === "violated") {
       discrepancies.push(buildDiscrepancy(accumulator));
+    } else if (
+      !accumulator.hasDeterministicPass &&
+      !accumulator.hasIndependentPass &&
+      accumulator.bestSatisfyingKind !== null
+    ) {
+      // A satisfying pass exists but below this atom's risk floor: positive
+      // coverage capped at `likelySatisfied`, surfaced as honest grade debt —
+      // never a discrepancy, because no fail exists (axiom 7, not a fake conflict).
+      insufficientGradeAtoms.push({
+        atomId,
+        requiredKind: requiredEvidenceKind(accumulator.atom),
+        actualKind: accumulator.bestSatisfyingKind,
+      });
     }
   }
 
@@ -366,14 +496,21 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     )
     .map((entry) => entry.atomId);
 
-  return { atoms, counts, discrepancies: sortedDiscrepancies, unverifiedMustAtoms };
+  return {
+    atoms,
+    counts,
+    discrepancies: sortedDiscrepancies,
+    unverifiedMustAtoms,
+    insufficientGradeAtoms,
+  };
 }
 
 /**
  * Precedence: a live fail (deterministic OR finding/independent) wins over any
- * pass; then a keyed/independent pass reaches `satisfied`; then author coverage
- * alone reaches `likelySatisfied`; else `unverified`. `notApplicable` is never
- * reached — no marker exists on the atom to select it.
+ * pass; then a keyed/independent pass AT OR ABOVE the atom's required grade
+ * reaches `satisfied`; then author coverage OR a sub-floor-grade satisfying pass
+ * reaches `likelySatisfied`; else `unverified`. `notApplicable` is never reached —
+ * no marker exists on the atom to select it.
  */
 function resolveState(accumulator: AtomAccumulator): AtomFitnessState {
   if (accumulator.deterministicFailRef !== null || accumulator.findingFailRef !== null) {
@@ -382,7 +519,9 @@ function resolveState(accumulator: AtomAccumulator): AtomFitnessState {
   if (accumulator.hasDeterministicPass || accumulator.hasIndependentPass) {
     return "satisfied";
   }
-  if (accumulator.hasAuthored) {
+  // Author coverage OR a sub-floor satisfying pass (positive evidence too weak to
+  // reach `satisfied` for this atom's risk class) both read `likelySatisfied`.
+  if (accumulator.hasAuthored || accumulator.bestSatisfyingKind !== null) {
     return "likelySatisfied";
   }
   return "unverified";

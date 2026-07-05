@@ -1,12 +1,14 @@
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
+import { buildTapeRequirementDebtSummary } from "@brewva/brewva-tools/runtime-port";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
 } from "@brewva/brewva-vocabulary/context";
 import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import { decideContinuationAnchorRelevance } from "@brewva/brewva-vocabulary/session";
+import { TASK_REQUIREMENT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import { isAttentionPinnedWorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
 import {
   buildContextBundle,
@@ -19,6 +21,7 @@ import {
   getRuntimeContextEvidenceLatest,
   getRuntimeContextStatus,
   getRuntimeTapeStatus,
+  listRuntimeEvents,
   renderRuntimeTurnDigest,
   type HostedRuntimeAdapterPort,
 } from "../session/runtime-ports.js";
@@ -47,6 +50,7 @@ import {
   renderCacheBreakSection,
   renderConsequenceSection,
   renderContextPressureSection,
+  renderRequirementDebtSection,
   RUNTIME_BRIEF_MAX_CHARS,
 } from "./runtime-brief.js";
 import {
@@ -430,9 +434,36 @@ export function buildRuntimeBriefBlockForSession(
     input.turn > 0 ? buildConsequenceSection(runtime, input.sessionId, input.turn) : null;
   const cache = buildCacheBreakSection(runtime, input.sessionId);
   const recurrence = buildFailureRecurrenceSection(runtime, input.sessionId);
+  const requirements = buildRequirementDebtSection(runtime, input.sessionId);
   return buildRuntimeBriefBlock({
-    sections: [pressure, cache, effects, recurrence],
+    sections: [pressure, cache, effects, recurrence, requirements],
     maxChars: RUNTIME_BRIEF_MAX_CHARS,
+  });
+}
+
+/**
+ * R4: surface the requirement debt run-report already computes for the operator
+ * to the PRODUCING model at turn tail — so "done" is not declared blind. Reuses
+ * the SINGLE shared tape-debt read (`buildTapeRequirementDebtSummary`, one fitness
+ * derivation) so the operator and model views can never diverge. Relevance-gated
+ * inside the renderer: silent when there is no ladder/coverage debt AND no
+ * presence-only high-risk atom.
+ */
+function buildRequirementDebtSection(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+): ReturnType<typeof renderRequirementDebtSection> {
+  const events = listRuntimeEvents(runtime, sessionId);
+  // Cheap short-circuit: with no requirement atoms there is no debt possible, so
+  // skip the whole-tape fitness projection on the (common) turns that recorded none.
+  if (!events.some((event) => event.type === TASK_REQUIREMENT_RECORDED_EVENT_TYPE)) {
+    return null;
+  }
+  const { fitness, debt } = buildTapeRequirementDebtSummary(events);
+  return renderRequirementDebtSection({
+    unverifiedMustCount: debt.unverifiedMustCount,
+    debtReason: debt.reason,
+    insufficientGradeCount: fitness.insufficientGradeAtoms.length,
   });
 }
 

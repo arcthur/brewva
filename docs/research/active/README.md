@@ -68,6 +68,36 @@ discipline.
   self-attestation, compaction fidelity, repository governance), and stays a
   candidate until proven across a second ring. The implementation landed as
   [Decision: Requirement Fitness And Independent Review](../decisions/requirement-fitness-and-independent-review.md).
+- [RFC: Realizing The Requirement Loop — Routing Activation, Pre-Write Atomization, And Graded Evidence](./rfc-requirement-loop-activation-and-graded-evidence.md):
+  active RFC over the now-accepted intent-realization loop, motivated by a
+  controlled four-build experiment where the same model scored 96 unscaffolded
+  but 93→~85 under brewva because the landed loop never ran on a greenfield task
+  (skill shortlist omits `greenfield/verifier/review`; atoms minted 171s after
+  the code was written and signed; a `requirements`-rung pass with all seven must
+  atoms unverified; requirement re-derivation was five `grep`s; zero reviews). The
+  disciplined read finds the loop's anatomy COVERED (perspective evidence,
+  independent-review close-path, whole-tape fitness re-derivation,
+  `VerificationGateManifest` as the sole gate) and the naive fixes axiom-REJECTED
+  (kernel ingress write-block by axiom 4; autonomous egress completion-gate by
+  axiom 18 — which would also deadlock, since a must atom is only closable by an
+  un-dispatched review). The genuine residue is five zero-new-gate couplings: an
+  advisory task-shape forced-candidate bundle + TF-IDF tie-break that renders the
+  loop's skills, gated by an adoption liveness fitness rather than assumed (R1,
+  keystone); a greenfield Phase-1b atomize-before-writes instruction (R2); a
+  structured `evidenceItems[]` receipt field carrying an `evidenceKind` grade
+  (`presence`/`static_guard`/`behavioral`) orthogonal to the landed `perspective`
+  axis (kept off the bare `checks: string[]` so it never re-becomes a string
+  protocol), where risk-class caps a presence-only high-risk atom below `satisfied`
+  and raises a distinct advisory `insufficient_evidence_grade` — while the fail-only
+  `deterministic_conflict` gate bridge stays untouched (only a static-guard adapter
+  FAIL bridges) (R3, net-new); a turn-tail `[RuntimeBrief]` requirement-debt section
+  so the producer sees its own debt before finalizing (R4); and a requirement
+  lifecycle projection over `run-report` split into a tape-only baseline (R5a,
+  build first) and an evidence-anchored view that depends on R3 (R5b).
+  `Runtime decision points added: 0`. Complements `Authorship Taints Verification`
+  as the orthogonal grade axis and a candidate second-ring instance. Under
+  `Route the loop to the requirement, atomize before the write, and grade how the
+check knows — else the loop realizes its memory, not its output.`
 - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md):
   active RFC for closing the last gap in typed, per-entry, promotion-grade
   attention-selection evidence: making attention selection an accountable effect

@@ -46,7 +46,19 @@ probe converts that risk into evidence.
 **If the probe fails**: fix the skeleton first. Do not stack application code
 on an unverified foundation.
 
-### Phase 2: Grow in compilable milestones
+### Phase 1b: Atomize the spec before writing
+
+Before Phase 2's substantial writes, decompose the stated requirements into
+`task_set_spec` atoms — one per independently-checkable requirement — and set
+each atom's `riskClass` when its failure mode is a known trap (event-tap, input
+source, pasteboard, speech lifecycle, credential handling are `runtime`/
+`security`). The atoms are the working set Phase 3 verifies against, and the
+lens each `riskClass` carries is what a static-guard check or an independent
+review runs instead of a token grep. A requirement that is not an atom before
+you write is one you will only ever check from memory — the exact failure where
+process metrics improve while the hardest semantic defect survives. If the
+orient phase surfaced a trap atom, keep it: a `must` you cannot yet satisfy is
+debt to disclose, never a line to drop.
 
 Land code in units the toolchain can check as you go — per module, per
 subsystem, roughly every 150 new lines. Compile between milestones. The first
@@ -82,12 +94,15 @@ empty workspace they are the only project standards that exist.
 
 - Which toolchain assumption, if wrong, invalidates the most written code?
 - What is the smallest stub that proves the build skeleton works?
+- Which requirements are not yet atoms — and which one is a known trap?
 - Which requirement has no evidence yet besides "I remember writing it"?
 - What does the first human who clones this need to know to run it once?
 
 ## Red Flags — STOP
 
 - "I'll write the whole thing and build at the end"
+- "I'll record the requirements after it builds" — atoms recorded after the
+  write are an audit appendix, not the working set the build is judged against
 - "The entry point surely works like I remember"
 - "The build passed, so the requirements are met"
 - "A README can come later" — later never arrives in a single-turn build
