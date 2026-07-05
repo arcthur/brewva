@@ -38,6 +38,7 @@ not-yet-journeyed with the doc to read meanwhile.
 | ACP client ingress                     | `operator/acp-client-ingress.md`                   | operator |
 | Skill routing and activation           | `operator/skill-routing-and-activation.md`         | operator |
 | Recall and knowledge compounding       | `operator/recall-and-knowledge-compounding.md`     | operator |
+| Verification and independent review    | `operator/verification-and-independent-review.md`  | operator |
 | Context and compaction                 | `internal/context-and-compaction.md`               | internal |
 | WAL and crash recovery                 | `internal/wal-and-crash-recovery.md`               | internal |
 | Provider turn, streaming, and fallback | `internal/provider-turn-streaming-and-fallback.md` | internal |

@@ -18,6 +18,8 @@
 - `worker_results_merge`
 - `worker_results_apply`
 - `worker_results_reject`
+- `review_request` (dispatches a bounded fresh-context reviewer; its receipt and
+  fitness semantics live in `verification-and-independent-review`)
 
 ## Objective
 
@@ -37,6 +39,8 @@ parallel-budget limits, isolated workspaces, and parent-controlled adoption.
 - scheduler-daemon time-driven execution → `intent-driven-scheduling`
 - channel ingress / egress → `channel-gateway-and-turn-flow`
 - approval-bound tool governance → `approval-and-rollback`
+- `review_request` receipt semantics, the authored-vs-independent perspective, and
+  requirement fitness → `verification-and-independent-review`
 
 ## Flow
 
@@ -118,7 +122,9 @@ flowchart TD
   references, and output contracts
 - internal review lanes remain parent-orchestrated fan-out behind the review
   ensemble and run as `consult/review` delegates under the explorer envelope
-  family
+  family; the separate `review_request` path dispatches a bounded fresh-context
+  reviewer that commits an `independent`-perspective verification receipt, and its
+  grading lives in `verification-and-independent-review`
 - same-turn `returnMode=supplemental` and durable detached delivery state are
   separate:
   - same-turn supplemental append affects the current parent-turn hidden tail
@@ -224,6 +230,9 @@ Operator expectations:
 - Run / fan-out tools: `packages/brewva-tools/src/families/delegation/subagent-run/api.ts`
 - Status / cancel tools: `packages/brewva-tools/src/families/delegation/subagent-control.ts`
 - Worker adoption: `packages/brewva-tools/src/families/workflow/worker-results.ts`
+- Independent review dispatch: `packages/brewva-tools/src/families/delegation/review-request.ts`
+  (receipt observer: `packages/brewva-gateway/src/delegation/review-receipt-observer.ts`,
+  reviewer model routing: `packages/brewva-gateway/src/delegation/model-routing.ts`)
 
 ## Related Docs
 
@@ -231,3 +240,4 @@ Operator expectations:
 - Tools reference: `docs/reference/tools.md`
 - Runtime API: `docs/reference/runtime.md`
 - Scheduling: `docs/journeys/operator/intent-driven-scheduling.md`
+- Verification and independent review: `docs/journeys/operator/verification-and-independent-review.md`

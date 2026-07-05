@@ -126,6 +126,11 @@ flowchart TD
   aborted, the error is rethrown and the attempt keeps the stream
 - the runtime-provider face requires catalog enumeration; model fallback cannot
   silently degrade because a session omitted `getAll()`
+- the quirks table synthesizes only Codex-channel-supported models into
+  `openai-codex`: mainline `gpt-<major>.<minor>` ids (with optional `-mini`, at
+  5.4+) are eligible, while `-codex` and `-pro` variants always 400 on the Codex
+  channel and are not offered in the catalog, so "pick A, get B" fallback masking
+  cannot originate from an ineligible synthesized id
 - the fallback chain is `fallbackChains[activeRole]` or `fallbackChains.default`
   (one chain, not concatenated), then one appended heuristic same-provider
   candidate; failure classification yields `quota | rate_limit | auth | context
@@ -150,7 +155,11 @@ flowchart TD
     sticky latches are monotonic and cleared on session clear; the tool-schema
     snapshot bumps an epoch on tool-set change
   - Codex continuation reuses `previous_response_id` plus a reduced input slice
-    and is invalidated when the model changes
+    and is invalidated when the model changes. `previous_response_id` is
+    connection-scoped server state (`store: false`, ~5min TTL), so continuation is
+    bound to the connection that produced it and is dropped when a new connection
+    opens — a cross-connection reuse would be silently treated as a fresh session
+    by the backend, evaporating history
 
 ## Failure And Recovery
 
@@ -182,7 +191,10 @@ flowchart TD
   its own; replay sees it through the payload fingerprint field
   `providerFallbackHash` and the per-attempt harness manifest
   (`providerFallbackActive`). Credential rotation is visible through both the
-  tape event and the fingerprint
+  tape event and the fingerprint. In the interactive shell, when a committed
+  assistant message reports a serving model different from the session's selected
+  model, the CLI raises an operator-facing notice so a fallback answer is not
+  mistaken for the selected model's answer
 - `provider_cache_observation` is an evidence-sink kind appended via the runtime
   context evidence sink, not a durable event family; it is lossy by contract — the
   sink type-demands `Lossy<object>` (the `Durable`/`Lossy`/`Advisory` honesty
@@ -237,6 +249,10 @@ flowchart TD
 - Provider-drift sample emit and inspect projection: `appendProviderDriftSample`
   in `packages/brewva-gateway/src/hosted/internal/context/materialization.ts`,
   `packages/brewva-cli/src/operator/inspect/provider-drift.ts`
+- Serving-model drift notice (fallback answered instead of selected):
+  `packages/brewva-cli/src/shell/controller/shell-runtime.ts`
+- Codex continuation connection-scoping:
+  `packages/brewva-provider-core/src/providers/openai-codex-responses/continuation-state.ts`
 
 ## Related Docs
 

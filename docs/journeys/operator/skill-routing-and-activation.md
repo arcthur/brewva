@@ -48,6 +48,9 @@ there it grants no authority (see Execution Semantics).
 - interactive session UX broadly → `interactive-session`
 - verification, finishing, and recovery (runtime-owned, not skills) →
   `docs/guide/category-and-skills.md`
+- orient-time requirement injection — a task-ledger concern that shares the
+  `beforeAgentStart` lifecycle with skill selection but routes requirements, not
+  skills → `verification-and-independent-review`
 
 ## Flow
 
@@ -185,4 +188,5 @@ flowchart TD
 - Category and skills guide: `docs/guide/category-and-skills.md`
 - Skill playbook: `docs/guide/skill-playbook.md`
 - Interactive session: `docs/journeys/operator/interactive-session.md`
+- Verification and independent review: `docs/journeys/operator/verification-and-independent-review.md`
 - Background and parallelism: `docs/journeys/operator/background-and-parallelism.md`

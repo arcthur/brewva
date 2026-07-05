@@ -10,6 +10,7 @@
 
 - `brewva inspect`
 - `brewva inspect --session <id>`
+- `brewva inspect --run-report`
 - `brewva --replay`
 - `brewva --undo`
 - `brewva --redo`
@@ -35,10 +36,12 @@ checks also run. World-changing rewind invalidates verification evidence
 structurally rather than through an authority-bearing event: patch-set rollback
 detaches the patch-set-keyed evidence the gate matches on (`containsAll` over
 `patchSetRefs`), so stale outcomes fall to a `stale`/`missing` posture by
-consequence. A dedicated "verification debt created by recovery" Work Card line
-and original-prompt restoration on `--undo` remain intended refinements. Read
-present-tense descriptions of the unchecked integrity dimensions and those
-refinements as the intended contract, not yet a shipped guarantee.
+consequence. Requirement-fitness grading and a review-debt Work Card line now
+ship as a re-derived read-time view (see
+`verification-and-independent-review`); a dedicated "verification debt created by
+recovery" annotation on that line remains an intended refinement. Read
+present-tense descriptions of the unchecked integrity dimensions as the intended
+contract, not yet a shipped guarantee.
 
 ## In Scope
 
@@ -175,6 +178,9 @@ flowchart TD
 
 - Inspect / replay / undo CLI dispatch: `packages/brewva-cli/src/index.ts`
 - Inspect report implementation: `packages/brewva-cli/src/operator/inspect/report.ts`
+- Run-story projection (`--run-report`): `packages/brewva-cli/src/operator/inspect/run-report.ts`
+- Read-time requirement fitness and review debt: `packages/brewva-cli/src/operator/inspect/{requirement-fitness,review-debt}.ts`
+  (grammar journey: `docs/journeys/operator/verification-and-independent-review.md`)
 - Session lifecycle: `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - Replay engine: `packages/brewva-runtime/src/runtime/tape/impl.ts`
 - Patch-set rollback: `packages/brewva-vocabulary/src/workbench.ts`
@@ -189,3 +195,4 @@ flowchart TD
 - Control and data flow: `docs/architecture/control-and-data-flow.md`
 - Common failures: `docs/troubleshooting/common-failures.md`
 - Approval path: `docs/journeys/operator/approval-and-rollback.md`
+- Verification grammar: `docs/journeys/operator/verification-and-independent-review.md`
