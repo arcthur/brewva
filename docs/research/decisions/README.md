@@ -162,6 +162,7 @@ Every accepted decision inherits these rules:
 ### Projection And Tool Proofs
 
 - [anchored-edit-lsp-resource-plane](./anchored-edit-lsp-resource-plane.md)
+- [graded-evidence-and-routing-activation](./graded-evidence-and-routing-activation.md)
 - [managed-tool-capability-proof](./managed-tool-capability-proof.md)
 - [multi-language-source-intelligence](./multi-language-source-intelligence.md)
 - [projection-admission](./projection-admission.md)

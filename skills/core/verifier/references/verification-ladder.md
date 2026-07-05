@@ -40,6 +40,30 @@ this receipt obligates — the rung says what was checked, the receipt's own
 markers say what is still unverified or unreviewed, and the final answer
 must state both, not just the rung.
 
+## Evidence grade
+
+A rung says how DEEP the check went; the grade says how the check KNOWS — the two
+are orthogonal. Three grades, weakest to strongest:
+
+- `presence` — a token or pattern is there (a grep of the source). It cannot see a
+  MISSING guard: grepping `keyCode` proves nothing about whether suppression is
+  actually keycode-scoped.
+- `static_guard` — a deterministic predicate ran over the real source and checked
+  the failure mode's absence directly, the negative property presence cannot see.
+  At the `requirements` rung, `verification_record` runs these static-guard
+  adapters itself over the fresh-touched source and records the results as
+  `evidenceItems` on the receipt — the grade is earned by the predicate RUNNING,
+  so a model cannot fabricate it.
+- `behavioral` — the property was observed at runtime (the `runtime_smoke` rung).
+
+A requirement whose risk class is `runtime` or `security` cannot reach `satisfied`
+on `presence`-grade evidence alone: a re-grep that a failure-mode atom "looks
+present" is exactly how the counterexample below shipped. Such an atom caps at
+`likelySatisfied` and surfaces in the receipt's `insufficientGradeAtoms` — an
+honest "verified, but not at the grade this risk demands", never a fake pass. A
+`static_guard` FAIL is a real `deterministic_conflict`; the fitness projection,
+not the grep, owns that verdict.
+
 ## The counterexample to remember
 
 A 711-line macOS app once shipped at `exit_code` green with nine latent defects:
