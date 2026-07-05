@@ -32,6 +32,14 @@ canonical `verification.outcome.recorded` event: Work Card Evidence, stall
 adjudication, and `inspect run-report` all read it. An unrecorded verification
 did not happen, no matter what the transcript says.
 
+At `requirements` rung or above, a `pass` outcome is cross-checked against the
+requirement-fitness projection and the result text may carry a `fitness:`
+summary line and a `review_debt:` marker. Reaching the rung is not the finish
+line for the final answer either: see `SKILL.md` Phase 4 for the disclosure
+this receipt obligates — the rung says what was checked, the receipt's own
+markers say what is still unverified or unreviewed, and the final answer
+must state both, not just the rung.
+
 ## The counterexample to remember
 
 A 711-line macOS app once shipped at `exit_code` green with nine latent defects:

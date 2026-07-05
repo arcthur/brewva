@@ -18,6 +18,7 @@ import {
 } from "./delegation-records.js";
 import type { ResolvedDelegationExecutionPlan } from "./execution-plan.js";
 import { buildDelegationLifecyclePayload } from "./lifecycle-payload.js";
+import { commitReviewReceiptsForFinalizedRun } from "./review-receipt-observer.js";
 import { recordDelegationRuntimeEvent } from "./runtime-events.js";
 import {
   extractStructuredOutcomeData,
@@ -595,6 +596,10 @@ export function applyDelegationFinalizationReceipt(input: {
     type: input.receipt.lifecycleEvent.type,
     payload: input.receipt.lifecycleEvent.payload,
   });
+  // Review-tagged runs commit their receipts here — after the terminal
+  // lifecycle event, so receipts never precede the terminal state they
+  // attribute to. Runs without a reviewDispatch anchor are untouched.
+  commitReviewReceiptsForFinalizedRun({ runtime: input.runtime, receipt: input.receipt });
   input.recordLineageOutcome(input.receipt.lineageOutcome);
   if (input.receipt.adoptLineageOutcome) {
     input.adoptLineageOutcome?.(input.receipt.lineageOutcome);

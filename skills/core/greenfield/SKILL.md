@@ -61,6 +61,15 @@ layout, metadata, signatures, platform floors) and the `requirements` rung
 recalled from generation memory). Record the reached rung with
 `verification_record`.
 
+**Final-answer disclosure**: `verification_record`'s result text is the
+disclosure, not a paraphrase target. Never hand off a bare "requirements
+pass" — state the `fitness:` line verbatim when the result carries one
+(`N satisfied / M unverified (K must) / J violated; D discrepancies (G
+deterministic)`), naming every unverified `must`-modality atom by id, and
+state the `review_debt:` marker verbatim when present, reporting the
+delivery as `pass (authored-only, review debt)` rather than a bare pass — a
+freshly built workspace has by construction had no independent review yet.
+
 ### Phase 4: Leave the workspace livable
 
 A greenfield deliverable includes the minimum an operator needs to run it:
@@ -87,7 +96,9 @@ empty workspace they are the only project standards that exist.
 ## Handoff Expectations
 
 - The build skeleton probe result and the milestones actually compiled.
-- The verification rung reached, with the artifact and requirements evidence.
+- The verification rung reached, with the artifact and requirements evidence,
+  plus the Phase 3 fitness/review-debt disclosure for any `pass` — not a bare
+  rung name.
 - The operator-facing run/setup notes that shipped with the code.
 
 ## Stop Conditions

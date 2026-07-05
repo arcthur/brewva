@@ -26,10 +26,12 @@ function createScopedLookAtTool(sessionId: string, filePath: string) {
     }),
   );
   runtime.capabilities.task.spec.set(sessionId, {
-    schema: "brewva.task.v1",
-    goal: "Inspect an explicitly targeted file.",
-    targets: {
-      files: [filePath],
+    spec: {
+      schema: "brewva.task.v1",
+      goal: "Inspect an explicitly targeted file.",
+      targets: {
+        files: [filePath],
+      },
     },
   });
   return {

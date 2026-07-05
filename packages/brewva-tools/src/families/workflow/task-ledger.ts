@@ -1,10 +1,19 @@
+import { readStringList } from "@brewva/brewva-std/text";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   formatTaskStateBlock,
+  REQUIREMENT_MODALITIES,
+  REQUIREMENT_RISK_CLASSES,
+  resolveRequirementAtoms,
   TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
   TASK_AGENT_ITEM_STATUS_VALUES,
 } from "@brewva/brewva-vocabulary/task";
-import type { TaskItemStatus } from "@brewva/brewva-vocabulary/task";
+import type {
+  RequirementModality,
+  RequirementRiskClass,
+  ResolvedRequirementAtoms,
+  TaskItemStatus,
+} from "@brewva/brewva-vocabulary/task";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
@@ -18,6 +27,7 @@ import {
   resolveTaskBlocker,
   updateTaskItem,
 } from "../../runtime-port/task-ledger.js";
+import { readLiteral } from "../../utils/literal.js";
 import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -65,6 +75,152 @@ const TaskAcceptanceStatusSchema = buildStringEnumSchema(TASK_ACCEPTANCE_STATUS_
   guidance:
     "Use accepted when an operator closes the task, rejected when the result is not yet acceptable, and pending to reopen acceptance after new work.",
 });
+
+const RequirementModalitySchema = Type.Union(
+  REQUIREMENT_MODALITIES.map((value) => Type.Literal(value)),
+);
+
+const RequirementRiskClassSchema = Type.Union(
+  REQUIREMENT_RISK_CLASSES.map((value) => Type.Literal(value)),
+);
+
+interface RequirementAtomEntryInput {
+  readonly statement: string;
+  readonly modality: RequirementModality;
+  readonly riskClass?: RequirementRiskClass;
+  readonly observableSignals?: readonly string[];
+  readonly verificationStrategy?: string | null;
+  readonly runtimePrerequisites?: readonly string[];
+}
+
+/**
+ * Builds the four OPTIONAL enrichment fields for one incoming requirement
+ * entry. Per the W3 contract, malformed enrichment COERCES rather than
+ * rejecting the call: `observableSignals` / `runtimePrerequisites` fall back
+ * to `readStringList` (non-array or non-string entries drop silently, same
+ * idiom `verification_record` uses for its own optional string-list
+ * params), and `verificationStrategy` accepts a string or explicit `null`
+ * and is otherwise omitted. Only `riskClass` gates the whole call (see
+ * `readRequirementAtomEntries`) because it is a closed enum the model must
+ * pick correctly, not free-form text or a list.
+ */
+function readRequirementAtomEnrichment(entry: {
+  readonly observableSignals?: unknown;
+  readonly verificationStrategy?: unknown;
+  readonly runtimePrerequisites?: unknown;
+}): Pick<
+  RequirementAtomEntryInput,
+  "observableSignals" | "verificationStrategy" | "runtimePrerequisites"
+> {
+  const enrichment: {
+    observableSignals?: readonly string[];
+    verificationStrategy?: string | null;
+    runtimePrerequisites?: readonly string[];
+  } = {};
+  if (entry.observableSignals !== undefined) {
+    enrichment.observableSignals = readStringList(entry.observableSignals);
+  }
+  if (typeof entry.verificationStrategy === "string" || entry.verificationStrategy === null) {
+    enrichment.verificationStrategy = entry.verificationStrategy;
+  }
+  if (entry.runtimePrerequisites !== undefined) {
+    enrichment.runtimePrerequisites = readStringList(entry.runtimePrerequisites);
+  }
+  return enrichment;
+}
+
+/**
+ * Validates every incoming requirement entry up front and either returns the
+ * whole list typed, or names exactly one offending entry. Matches the
+ * file-local idiom in `verification-record.ts`: an invalid entry rejects the
+ * WHOLE call rather than being silently dropped, so the result text never
+ * under-reports how many atoms were actually recorded. `riskClass` follows
+ * `modality`'s all-or-nothing enum rule (an unrecognized value rejects the
+ * whole call); the remaining three enrichment fields coerce instead
+ * (`readRequirementAtomEnrichment`) since they are free-form text/lists, not
+ * closed enums.
+ */
+function readRequirementAtomEntries(
+  entries: readonly {
+    readonly statement?: unknown;
+    readonly modality?: unknown;
+    readonly riskClass?: unknown;
+    readonly observableSignals?: unknown;
+    readonly verificationStrategy?: unknown;
+    readonly runtimePrerequisites?: unknown;
+  }[],
+):
+  | { readonly ok: true; readonly entries: readonly RequirementAtomEntryInput[] }
+  | {
+      readonly ok: false;
+      readonly message: string;
+    } {
+  const resolved: RequirementAtomEntryInput[] = [];
+  for (const [index, entry] of entries.entries()) {
+    if (typeof entry.statement !== "string") {
+      return {
+        ok: false,
+        message: `Task set spec rejected (invalid_requirement_statement). requirements[${index}].statement must be a string; got ${JSON.stringify(entry.statement)}.`,
+      };
+    }
+    const modality = readLiteral(entry.modality, REQUIREMENT_MODALITIES);
+    if (!modality) {
+      return {
+        ok: false,
+        message:
+          `Task set spec rejected (invalid_requirement_modality). requirements[${index}] ` +
+          `("${entry.statement}") has modality ${JSON.stringify(entry.modality)}; ` +
+          `must be one of ${REQUIREMENT_MODALITIES.join(", ")}.`,
+      };
+    }
+    let riskClass: RequirementRiskClass | undefined;
+    if (entry.riskClass !== undefined) {
+      riskClass = readLiteral(entry.riskClass, REQUIREMENT_RISK_CLASSES);
+      if (!riskClass) {
+        return {
+          ok: false,
+          message:
+            `Task set spec rejected (invalid_requirement_risk_class). requirements[${index}] ` +
+            `("${entry.statement}") has riskClass ${JSON.stringify(entry.riskClass)}; ` +
+            `must be one of ${REQUIREMENT_RISK_CLASSES.join(", ")}.`,
+        };
+      }
+    }
+    resolved.push({
+      statement: entry.statement,
+      modality,
+      ...(riskClass !== undefined ? { riskClass } : {}),
+      ...readRequirementAtomEnrichment(entry),
+    });
+  }
+  return { ok: true, entries: resolved };
+}
+
+/**
+ * `task_set_spec`'s own entries carry provenance "prompt" — the author typed
+ * or otherwise directly authored these requirements via this tool call. The
+ * mint/dedup judgment itself is single-homed in
+ * `resolveRequirementAtoms` (`@brewva/brewva-vocabulary/task`), shared with
+ * the orient-phase trap injection producer so both producers dedupe against
+ * the SAME folded state with the SAME statement-match rule.
+ */
+function resolvePromptRequirementAtoms(
+  foldedRequirements: Parameters<typeof resolveRequirementAtoms>[0],
+  entries: readonly RequirementAtomEntryInput[],
+): ResolvedRequirementAtoms {
+  return resolveRequirementAtoms(
+    foldedRequirements,
+    entries.map((entry) => ({ ...entry, provenance: "prompt" as const })),
+  );
+}
+
+function formatRequirementAtomsResultSuffix(resolved: ResolvedRequirementAtoms): string {
+  if (resolved.atoms.length === 0) {
+    return "";
+  }
+  const amendedSuffix = resolved.amendedCount > 0 ? ` (${resolved.amendedCount} amended)` : "";
+  return ` ${resolved.atoms.length} requirement atoms recorded${amendedSuffix}.`;
+}
 
 export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinition[] {
   const taskSetSpecTool = createRuntimeBoundBrewvaToolFactory(options.runtime, "task_set_spec");
@@ -118,6 +274,18 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
             criteria: Type.Optional(Type.Array(Type.String())),
           }),
         ),
+        requirements: Type.Optional(
+          Type.Array(
+            Type.Object({
+              statement: Type.String(),
+              modality: RequirementModalitySchema,
+              riskClass: Type.Optional(RequirementRiskClassSchema),
+              observableSignals: Type.Optional(Type.Array(Type.String())),
+              verificationStrategy: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+              runtimePrerequisites: Type.Optional(Type.Array(Type.String())),
+            }),
+          ),
+        ),
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
         const sessionId = getSessionId(ctx);
@@ -133,17 +301,36 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
                 criteria: params.acceptance?.criteria,
               }
             : undefined;
+        const requirementEntriesResult = readRequirementAtomEntries(params.requirements ?? []);
+        if (!requirementEntriesResult.ok) {
+          return errTextResult(requirementEntriesResult.message, {
+            ok: false,
+            error: "invalid_requirement",
+          });
+        }
+        const requirementEntries = requirementEntriesResult.entries;
+        const foldedRequirements = getTaskState(taskSetSpecTool.runtime, sessionId).requirements;
+        const resolvedRequirements = resolvePromptRequirementAtoms(
+          foldedRequirements,
+          requirementEntries,
+        );
 
         recordTaskSpec(taskSetSpecTool.runtime, sessionId, {
-          schema: "brewva.task.v1",
-          goal: params.goal,
-          targets: params.targets,
-          expectedBehavior: params.expectedBehavior,
-          constraints: params.constraints,
-          verification: normalizedVerification,
-          acceptance: normalizedAcceptance,
+          spec: {
+            schema: "brewva.task.v1",
+            goal: params.goal,
+            targets: params.targets,
+            expectedBehavior: params.expectedBehavior,
+            constraints: params.constraints,
+            verification: normalizedVerification,
+            acceptance: normalizedAcceptance,
+          },
+          requirements: resolvedRequirements.atoms,
         });
-        return okTextResult("TaskSpec recorded.", { ok: true });
+        return okTextResult(
+          `TaskSpec recorded.${formatRequirementAtomsResultSuffix(resolvedRequirements)}`,
+          { ok: true },
+        );
       },
     },
     {},

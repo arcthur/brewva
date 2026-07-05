@@ -81,6 +81,25 @@ adjudication blind.
 **If verdict is `fail`**: Do not silently repair. Escalate to implementation.
 **If verdict is `inconclusive`**: Name exactly what is missing and why.
 
+**Final-answer disclosure**: when the final answer reports a `pass` at
+`requirements` rung or above, `verification_record`'s result text is the
+disclosure, not a paraphrase target — read it back, don't summarize it away.
+Never state a bare "requirements pass." State instead:
+
+- The `fitness:` line verbatim (`N satisfied / M unverified (K must) / J
+violated; D discrepancies (G deterministic)`) whenever the result carries
+  one. Name every unverified `must`-modality or `runtime_smoke`-relevant atom
+  by id — "M unverified" is a count, not a disclosure, until the atoms behind
+  it are named.
+- The `review_debt:` marker verbatim when the result carries one, reporting
+  the verdict as `pass (authored-only, review debt)` rather than a bare pass —
+  the recorded rung was reached, but no independent receipt has reviewed this
+  tree.
+
+A `pass` with either marker present and neither surfaced in the final answer is
+a disclosure failure, not a formatting choice: the operator reading only the
+final answer must see the same debt the receipt already carries.
+
 ### Phase 5: Emit verification artifacts
 
 Produce `verifier_report`, `verifier_findings`, `verifier_verdict`, `verifier_checks`,
@@ -132,7 +151,7 @@ See `references/example.md` for the grounded example output shape.
 
 - `verifier_report`: what was exercised, what changed, confidence level earned.
 - `verifier_findings`: reproducible, actionable, classified per `references/verifier-taxonomy.md`.
-- `verifier_verdict`: real release confidence, not issue count.
+- `verifier_verdict`: real release confidence, not issue count, per Phase 4.
 - `verifier_checks`: command/tool identity, observed output, probe type on every entry.
 - Handoff explains which risky path was exercised first and why the verdict
   is `pass`, `fail`, or `inconclusive`.

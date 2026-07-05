@@ -205,8 +205,10 @@ describe("system: scheduler daemon", () => {
         configPath: ".brewva/brewva.json",
       });
       setupRuntime.ops.task.spec.set(parentSessionId, {
-        schema: "brewva.task.v1",
-        goal: parentTaskGoal,
+        spec: {
+          schema: "brewva.task.v1",
+          goal: parentTaskGoal,
+        },
       });
       setupRuntime.ops.claim.facts.upsert(parentSessionId, {
         id: "fact-release-review",

@@ -300,8 +300,30 @@ describe("runtime ops capability inventory fitness", () => {
       projections.split("\n").length +
       runtimeOpsBuilders.reduce((sum, builder) => sum + builder.split("\n").length, 0);
     const hostedOpsMirrorLines = runtimeOps.split("\n").length + toolRuntime.split("\n").length;
-    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_050);
-    expect(hostedOpsLines).toBeLessThanOrEqual(2_760);
+    // The intent-realization loop's orient-phase atom injection needed a
+    // `task.requirements.record` port method distinct from `spec.set` (a caller
+    // that only adds atoms must not be forced to re-emit a `task.spec.set`
+    // event) — a real new producer seam with its doc comment, not facade
+    // growth. +13 lines on the tool-runtime contract.
+    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_070);
+    // Same feature, implementation side: the orient-injection `requirements.record`
+    // builder plus its shared `emitRequirementAtoms` helper (one emit site guarding
+    // spec.set/requirements.record against event-shape drift) grew
+    // runtime-ops-builders/task.ts by +25 lines — a real producer, not bloat.
+    // W3's Task 13 (claim-time fitness annotation) then extended the verify()
+    // write side to round-trip the two new receipt fields (discrepancies +
+    // unverifiedMustAtoms) through the SAME whole-payload reader the other
+    // evidence fields use — +11 lines in verification.ts: a real producer of the
+    // accountable-claim annotation, not facade growth. The projection itself and
+    // its assembly live in `@brewva/brewva-vocabulary` and the tools runtime-port
+    // (off this count). The intent-realization positive-half loop then round-trips
+    // ONE more receipt fact — a clear independent atoms-review's `atomRefs` (which
+    // atoms it affirmatively verified) — through that same whole-payload reader on
+    // the verify() write side: +2 lines in verification.ts, again a real receipt
+    // producer, not facade growth. The clear-only producer semantics, the
+    // reviewedAtomIds dispatch threading, and the assembly feed all live in
+    // `@brewva/brewva-vocabulary` and the tools runtime-port (off this count).
+    expect(hostedOpsLines).toBeLessThanOrEqual(2_843);
     // WS2 added tape-derived rebuild projections (workbench/task/resource-lease/
     // worker-results) that fix the invariant-9/12 restart-loses-state bug. A
     // follow-up review pass then completed the tape-authority migration on the
@@ -331,7 +353,38 @@ describe("runtime ops capability inventory fitness", () => {
     // skills are composed per-root project scope (cross-project overlay
     // contamination fix) and the exclusions land in the load report as
     // outOfScopeSkills — catalog composition correctness, not facade growth.
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_695);
+    // The intent-realization loop's Task 2 (producer wiring) then added a
+    // taskRequirements projection reusing foldTaskLedgerEvents (+14 lines in
+    // runtime-ops-projections.ts), spec.set emitting one task.requirement.recorded
+    // per resolved atom instead of a hardcoded empty requirements read (+9 lines
+    // in task.ts), and verify()'s defensive perspective/independenceBasis/
+    // reviewerContext/targetRef mapping reusing the whole-payload reader instead
+    // of a hardcoded authored stub (+2 lines in verification.ts) — the first real
+    // requirement-atom and evidence-perspective producers, not facade growth.
+    // The Task 2 review fix then made the spec.set seam truthful: an explicit
+    // TaskSpecSetInput { spec, requirements } contract type replaced the
+    // index-signature smuggling and its `as` casts at both seam ends (+13 lines
+    // across the contract and the task builder) — compiler-checked seam typing,
+    // not facade growth.
+    // The intent-realization loop's Task 4 (review_request) then added the
+    // `review.finding.recorded` write seam: an explicit RecordReviewFindingInput
+    // contract type plus the verification.findings.record port method (+27 lines
+    // in tool-runtime) and the finding builder that emits through the whole-
+    // payload reader (+21 lines in verification.ts, the hostedOps side) — the
+    // first review-finding receipt producer (the W1 discovery organ), typed at
+    // the seam with zero casts, not facade growth.
+    // W2's Task 8 (orient-phase atom injection) then added the
+    // `task.requirements.record` port method + its `emitRequirementAtoms` builder
+    // (+13 contract, +25 builder) so an atom-only caller need not re-emit
+    // `task.spec.set` — a real orient-time producer seam, not facade growth.
+    // W3's Task 13 fitness-annotation verify() mapping (+11 builder lines, see
+    // above) carries through to the combined budget as well; the tool-runtime
+    // contract itself is unchanged by this task.
+    // The intent-realization positive-half loop's verify() atomRefs round-trip
+    // (+2 builder lines, see above) likewise carries through here; the tool-runtime
+    // contract is again unchanged (the clear-only producer, reviewedAtomIds
+    // threading, and assembly feed all live off this count).
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_832);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

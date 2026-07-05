@@ -17,6 +17,7 @@ import type {
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-vocabulary/delegation";
 import {
   readDelegationLifecycleEventPayload,
+  readDelegationReviewDispatch,
   readWorkerResultsAppliedEventPayload,
   SUBAGENT_CANCELLED_EVENT_TYPE,
   SUBAGENT_COMPLETED_EVENT_TYPE,
@@ -96,6 +97,9 @@ function delegationRunRecordFromIndexRow(
     summary: payload.summary,
     error: payload.error ?? payload.reason,
     resultData: payload.resultData,
+    // Defensive read: the dispatch anchor is only trusted back off the tape in
+    // the exact shape the observer can act on (fail-closed on its targetRef).
+    reviewDispatch: readDelegationReviewDispatch(payload.reviewDispatch) ?? undefined,
     artifactRefs: payload.artifactRefs,
     delivery: payload.delivery,
     totalTokens: payload.totalTokens,

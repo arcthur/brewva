@@ -1,6 +1,7 @@
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { normalizeStringList, readNonEmptyString as readString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import { REVIEW_FINDING_CATEGORIES } from "@brewva/brewva-vocabulary/review";
 import type {
   ExplorerReviewSubagentOutcomeData,
   DelegationOutcomeFinding,
@@ -94,17 +95,33 @@ function readStoredFinding(value: unknown): DelegationOutcomeFinding | undefined
     return undefined;
   }
   const severity = readString(value.severity);
+  const category = readString(value.category);
   return {
     summary,
     severity:
       severity === "critical" || severity === "high" || severity === "medium" || severity === "low"
         ? severity
         : undefined,
+    category: (REVIEW_FINDING_CATEGORIES as readonly string[]).includes(category ?? "")
+      ? (category as DelegationOutcomeFinding["category"])
+      : undefined,
     evidenceRefs: readStringArray(value.evidenceRefs),
+    // Reviewer-reported atom ids (Task 14's atoms target objective asks the
+    // reviewer to name which atom a finding bears on). Absent or malformed
+    // input simply yields undefined here — never invented, and the
+    // receipt-commit seam (`review-receipts.ts`) already defaults an absent
+    // `atomRefs` to `[]` on the finding it records.
+    atomRefs: readStringArray(value.atomRefs),
   };
 }
 
-function coerceStoredReviewOutcomeData(
+/**
+ * Coerce an arbitrary stored value (a `SubagentOutcome.data` or a run record's
+ * `resultData`) into the canonical review-outcome shape. Exported so a
+ * single-reviewer flow (review_request) parses findings through the exact same
+ * one review format the lane ensemble uses — one mechanism, two lens sources.
+ */
+export function coerceStoredReviewOutcomeData(
   value: unknown,
 ): ExplorerReviewSubagentOutcomeData | undefined {
   if (!isRecord(value)) {
@@ -187,7 +204,9 @@ function dedupeFindings(findings: readonly DelegationOutcomeFinding[]): Delegati
       bySummary.set(key, {
         summary: finding.summary,
         severity: finding.severity,
+        category: finding.category,
         evidenceRefs: finding.evidenceRefs ? [...finding.evidenceRefs] : undefined,
+        atomRefs: finding.atomRefs ? [...finding.atomRefs] : undefined,
       });
       continue;
     }
@@ -198,11 +217,20 @@ function dedupeFindings(findings: readonly DelegationOutcomeFinding[]): Delegati
       existing.evidenceRefs || finding.evidenceRefs
         ? uniqueStrings([...(existing.evidenceRefs ?? []), ...(finding.evidenceRefs ?? [])])
         : undefined;
+    // Same union rule for atom refs: two reviewers naming the same finding
+    // against different atoms must both survive the dedupe, not just the
+    // higher-severity report's.
+    const mergedAtomRefs =
+      existing.atomRefs || finding.atomRefs
+        ? uniqueStrings([...(existing.atomRefs ?? []), ...(finding.atomRefs ?? [])])
+        : undefined;
     const keepIncoming = compareFindingSeverity(finding, existing) < 0;
     bySummary.set(key, {
       summary: keepIncoming ? finding.summary : existing.summary,
       severity: keepIncoming ? finding.severity : existing.severity,
+      category: keepIncoming ? finding.category : existing.category,
       evidenceRefs: mergedEvidence,
+      atomRefs: mergedAtomRefs,
     });
   }
   return [...bySummary.values()].toSorted(compareFindingSeverity);
@@ -235,6 +263,32 @@ function inferLaneFromOutcome(outcome: SubagentOutcome): ReviewLaneName | undefi
   );
 }
 
+/**
+ * Derive the review disposition from parsed review-outcome data alone, using
+ * the same fail-closed precedence the lane ensemble applies: an explicit
+ * disposition wins, else findings imply `concern`, else missing evidence
+ * implies `inconclusive`, else `clear`. `undefined` data (the reviewer produced
+ * no structured review verdict) is `blocked`. Exported so review_request maps a
+ * single reviewer's verdict through the identical rule.
+ */
+export function deriveReviewDisposition(
+  data: ExplorerReviewSubagentOutcomeData | undefined,
+): ReviewLaneDisposition {
+  if (!data) {
+    return "blocked";
+  }
+  if (data.disposition) {
+    return data.disposition;
+  }
+  if ((data.findings?.length ?? 0) > 0) {
+    return "concern";
+  }
+  if ((data.missingEvidence?.length ?? 0) > 0) {
+    return "inconclusive";
+  }
+  return "clear";
+}
+
 function coerceDisposition(
   outcome: SubagentOutcome,
   data: ExplorerReviewSubagentOutcomeData | undefined,
@@ -242,19 +296,7 @@ function coerceDisposition(
   if (!outcome.ok) {
     return "blocked";
   }
-  if (!data) {
-    return "blocked";
-  }
-  if (data?.disposition) {
-    return data.disposition;
-  }
-  if ((data?.findings?.length ?? 0) > 0) {
-    return "concern";
-  }
-  if ((data?.missingEvidence?.length ?? 0) > 0) {
-    return "inconclusive";
-  }
-  return "clear";
+  return deriveReviewDisposition(data);
 }
 
 function buildLaneSummary(
@@ -491,7 +533,14 @@ function aggregateReviewLane(
     ...(representativeSummary ? { summary: representativeSummary } : {}),
   };
 
-  return { summary, findings, missingEvidence, blindSpots, disagreements, blockedReasons };
+  return {
+    summary,
+    findings,
+    missingEvidence,
+    blindSpots,
+    disagreements,
+    blockedReasons,
+  };
 }
 
 export function synthesizeReviewEnsemble(

@@ -759,7 +759,7 @@ export async function runCliRootOperation(): Promise<void> {
   rememberSessionEventBaseline(initialSessionId);
   if (taskSpec) {
     await ensureSessionInitialPersistence();
-    operator.task.setSpec(initialSessionId, taskSpec);
+    operator.task.setSpec(initialSessionId, { spec: taskSpec });
   }
   const gracefulTimeoutMs = runtime.config.infrastructure.interruptRecovery.gracefulTimeoutMs;
   let terminatedBySignal = false;

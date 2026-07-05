@@ -7,6 +7,10 @@ export {
   normalizeTaskSpec,
   readTaskStallAdjudicatedEventPayload,
   readTaskStuckDetectedEventPayload,
+  REQUIREMENT_MODALITIES,
+  REQUIREMENT_PROVENANCES,
+  REQUIREMENT_RISK_CLASSES,
+  resolveRequirementAtoms,
   TASK_ACCEPTANCE_RECORDED_EVENT_TYPE,
   TASK_AGENT_ITEM_STATUS_RUNTIME_MAP,
   TASK_AGENT_ITEM_STATUS_VALUES,
@@ -14,6 +18,7 @@ export {
   TASK_BLOCKER_RESOLVED_EVENT_TYPE,
   TASK_ITEM_ADDED_EVENT_TYPE,
   TASK_ITEM_UPDATED_EVENT_TYPE,
+  TASK_REQUIREMENT_RECORDED_EVENT_TYPE,
   TASK_SPEC_SET_EVENT_TYPE,
   TASK_STALL_ADJUDICATED_EVENT_TYPE,
   TASK_STALL_ADJUDICATION_ERROR_EVENT_TYPE,
@@ -23,6 +28,12 @@ export {
 } from "./internal/task.js";
 
 export type {
+  RequirementAtom,
+  RequirementAtomResolutionEntry,
+  RequirementModality,
+  RequirementProvenance,
+  RequirementRiskClass,
+  ResolvedRequirementAtoms,
   TaskAcceptanceRecordResult,
   TaskBlockerRecordResult,
   TaskBlockerResolveResult,

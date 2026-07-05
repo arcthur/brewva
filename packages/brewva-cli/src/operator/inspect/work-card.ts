@@ -1,3 +1,4 @@
+import { FITNESS_DISCREPANCY_GRADES } from "@brewva/brewva-vocabulary/fitness";
 import {
   decideContinuationAnchorRelevance,
   TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
@@ -5,6 +6,7 @@ import {
   type TaskWorkCardContextPressure,
   type TaskWorkCardProjection,
 } from "@brewva/brewva-vocabulary/session";
+import { readReceiptFitnessSummary } from "./fitness-summary.js";
 import type { InspectReport } from "./report.js";
 
 const ACTIVE_DELEGATION_LIFECYCLES = new Set(["pending", "running", "blocked"]);
@@ -117,6 +119,21 @@ export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCard
       missingEvidence: report.verification.missingEvidence,
       verificationDebtCount: report.delegation.workboard.verificationDebt.length,
       latestPatchSetRef,
+      verificationPerspective: report.verification.perspective,
+      independenceBasis: report.verification.independenceBasis,
+      // Tape-only judgment (`projectTapeReviewDebt`, shared with run-report
+      // verification): already computed on `InspectReport.reviewDebt` from the
+      // whole receipt history — read here, never re-derived.
+      reviewDebt: report.reviewDebt.debt,
+      // SINGLE-HOMED (Task 15): the SAME `readReceiptFitnessSummary` call
+      // `inspect run-report`'s Fitness section makes, over the SAME latest
+      // receipt's raw `discrepancies`/`unverifiedMustAtoms` fields
+      // (`InspectReport.verification`, Task 13's claim-time annotation) —
+      // never a re-run of `projectRequirementFitness`, never a second tally.
+      fitness: readReceiptFitnessSummary({
+        discrepancies: report.verification.discrepancies,
+        unverifiedMustAtoms: report.verification.unverifiedMustAtoms,
+      }),
     },
     continuationAnchor: {
       anchorId: continuationAnchor?.id ?? null,
@@ -144,12 +161,34 @@ export function formatTaskWorkCardText(
     `Options: generated=${projection.options.generatedCount} consumed=${projection.options.consumedRefs.length} pinned=${projection.options.pinnedRefs.length} ignored=${projection.options.ignoredRefs.length} verifyPlans=${projection.options.verifyPlanRefs.length}`,
     `Authority: capabilities=${renderList(projection.authority.selectedCapabilities)} pendingAsks=${projection.authority.pendingAskCount} denials=${projection.authority.denialCount} receipts=${renderList(projection.authority.capabilityReceiptRefs)}`,
     `Work: activeRuns=${projection.work.activeRunCount} workerPatches=${projection.work.pendingWorkerPatchCount} knowledge=${projection.work.pendingKnowledgeAdoptionCount} unreadEvidence=${projection.work.unreadEvidenceCount} blockedOrFailed=${projection.work.blockedOrFailedRunCount} nextReceiptOwner=${projection.work.recoveryNextOwner}`,
-    `Evidence: outcome=${projection.evidence.verificationOutcome ?? "n/a"} level=${projection.evidence.verificationLevel ?? "n/a"} failed=${renderList(projection.evidence.failedChecks)} missing=${renderList([...projection.evidence.missingChecks, ...projection.evidence.missingEvidence])} verificationDebt=${projection.evidence.verificationDebtCount} patch=${projection.evidence.latestPatchSetRef ?? "none"}`,
+    `Evidence: outcome=${projection.evidence.verificationOutcome ?? "n/a"} level=${projection.evidence.verificationLevel ?? "n/a"} perspective=${projection.evidence.verificationPerspective} basis=${renderList(projection.evidence.independenceBasis)} failed=${renderList(projection.evidence.failedChecks)} missing=${renderList([...projection.evidence.missingChecks, ...projection.evidence.missingEvidence])} verificationDebt=${projection.evidence.verificationDebtCount} reviewDebt=${projection.evidence.reviewDebt} patch=${projection.evidence.latestPatchSetRef ?? "none"}`,
+    formatFitnessLine(projection.evidence.fitness),
     `Continuation Anchor: anchor=${projection.continuationAnchor.anchorId ?? "none"} name=${projection.continuationAnchor.name ?? "n/a"} summary=${projection.continuationAnchor.summary ?? "n/a"} next=${projection.continuationAnchor.nextSteps ?? "n/a"}`,
     `Refs: ${renderList(projection.refs.slice(0, 8))}${projection.refs.length > 8 ? ` (+${projection.refs.length - 8} more)` : ""}`,
   ];
 
   return lines.slice(0, Math.max(1, maxLines)).join("\n");
+}
+
+/**
+ * The Work Card's session-scale fitness line — `violated=`/`unverifiedMust=`/
+ * by-grade counts read via the SAME `readReceiptFitnessSummary` call `inspect
+ * run-report`'s Fitness section makes over the same latest-receipt fields.
+ * Deliberately narrower than run-report's line: it has no `atoms=` total,
+ * because that count is a task-ledger fold (`foldTaskLedgerEvents`), not a
+ * receipt field — the Work Card reads ONLY what the receipt itself carries,
+ * per the W3 wave review's binding ruling against thickening the receipt with
+ * re-derivable projection output. Honestly rendered even when every count is
+ * zero (no receipt, or the latest receipt carries no annotation) — a session
+ * with nothing to report on still gets a present, all-zero line, never an
+ * omitted one, so a reader is never left wondering whether fitness was
+ * checked at all. Read-only pressure surface (axiom 18): nothing here gates.
+ */
+function formatFitnessLine(fitness: TaskWorkCardProjection["evidence"]["fitness"]): string {
+  const byGrade = FITNESS_DISCREPANCY_GRADES.map(
+    (grade) => `${grade}=${fitness.discrepanciesByGrade[grade]}`,
+  ).join(" ");
+  return `fitness: violated=${fitness.violated} unverifiedMust=${fitness.unverifiedMust} ${byGrade}`;
 }
 
 function resolveContextPressure(report: InspectReport): TaskWorkCardContextPressure {

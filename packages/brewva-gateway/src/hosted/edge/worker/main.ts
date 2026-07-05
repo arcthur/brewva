@@ -413,8 +413,10 @@ async function handleInit(
     const watchdogOverrides = workerTestHarness.watchdog;
     if (watchdogOverrides.taskGoal) {
       setRuntimeTaskSpec(sessionResult.runtime, agentSessionId, {
-        schema: "brewva.task.v1",
-        goal: watchdogOverrides.taskGoal,
+        spec: {
+          schema: "brewva.task.v1",
+          goal: watchdogOverrides.taskGoal,
+        },
       });
     }
     process.title = `brewva-worker:${requestedSessionId}`;

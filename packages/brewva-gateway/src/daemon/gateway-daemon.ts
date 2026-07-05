@@ -732,7 +732,7 @@ export class GatewayDaemon {
     const currentTaskSpecRaw = getRuntimeTaskState(runtime, policy.parentSessionId).spec;
     const currentTaskSpec = currentTaskSpecRaw ? normalizeTaskSpec(currentTaskSpecRaw) : null;
     if (JSON.stringify(currentTaskSpec) !== JSON.stringify(expectedTaskSpec)) {
-      setRuntimeTaskSpec(runtime, policy.parentSessionId, expectedTaskSpec);
+      setRuntimeTaskSpec(runtime, policy.parentSessionId, { spec: expectedTaskSpec });
     }
   }
 

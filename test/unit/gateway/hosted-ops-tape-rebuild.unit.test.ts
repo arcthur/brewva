@@ -157,8 +157,10 @@ describe("hosted ops tape authority (WS2)", () => {
     const first = createHostedRuntimeAdapter({ cwd });
     await first.runtime.start();
     first.ops.task.spec.set(sessionId, {
-      schema: "brewva.task.v1",
-      goal: "persisted across restart",
+      spec: {
+        schema: "brewva.task.v1",
+        goal: "persisted across restart",
+      },
     });
     await first.runtime.close();
 

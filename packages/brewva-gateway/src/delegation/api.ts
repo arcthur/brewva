@@ -49,6 +49,15 @@ export {
 } from "./parallel-admission.js";
 export { buildDelegationPrompt } from "./prompt.js";
 export {
+  buildDelegationRunRecordSeed,
+  buildDelegationTaskIdentity,
+  type DelegationTaskIdentity,
+} from "./delegation-records.js";
+export {
+  applyDelegationFinalizationReceipt,
+  type DelegationFinalizationReceipt,
+} from "./run-finalization.js";
+export {
   createIsolatedWorkspace,
   capturePatchSetFromIsolatedWorkspace,
   collectChangedPathsFromIsolatedWorkspace,

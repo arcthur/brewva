@@ -57,6 +57,17 @@ discipline.
   distills failure precedent from the session index into explicit-pull
   `docs/solutions/**` records (RDP). Resolves the recall-versus-summary
   fact-ownership question tracked by the context-OS RFC.
+- [Candidate Axiom: Authorship Taints Verification](./candidate-axiom-authorship-taints-verification.md):
+  candidate-axiom proposal distilling the essence of the now-accepted
+  intent-realization loop — self-verification and independent review are
+  different receipt kinds, so verification evidence must carry a `perspective`
+  and an `independent` receipt a composed `independenceBasis[]`, with
+  self-attestation impossible by construction (the authoring path has no
+  perspective input). Proposes `Authorship taints verification` for
+  `design-axioms.md` (extends axiom 11), maps the negative space (tool
+  self-attestation, compaction fidelity, repository governance), and stays a
+  candidate until proven across a second ring. The implementation landed as
+  [Decision: Requirement Fitness And Independent Review](../decisions/requirement-fitness-and-independent-review.md).
 - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md):
   active RFC for closing the last gap in typed, per-entry, promotion-grade
   attention-selection evidence: making attention selection an accountable effect

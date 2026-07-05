@@ -64,3 +64,13 @@ owner: runtime-maintainers
   ratio keys exist so token budgets scale with the model context window; do
   not add further keys without updating this rule and the owning decision
   record.
+- A receipt or advisory surface is not shipped until at least one producer is
+  wired AND a liveness fitness asserts a canonical run emits it. A vocabulary
+  event kind, receipt shape, or advisory card that only consumers reference is
+  an organ without circulation — reachable in review, silent in every real
+  session. `test/fitness/event-contract-liveness.fitness.test.ts` is the
+  enforcing fitness for event kinds: it scans for a live emit-shaped producer
+  behind every vocabulary literal and pins the dead-contract inventory exact,
+  so a newly wireless event kind fails the fitness rather than shipping quiet.
+  Land the producer and its liveness coverage in the same change as the
+  consumer, not as a follow-up.

@@ -11,8 +11,7 @@ import type {
   SessionRewindResult,
 } from "@brewva/brewva-vocabulary/session";
 import {
-  ROLLBACK_EVENT_TYPE,
-  SOURCE_PATCH_APPLIED_EVENT_TYPE,
+  deriveAppliedPatchSetIds,
   type PatchRollbackResult,
 } from "@brewva/brewva-vocabulary/workbench";
 import { buildHostedPatchRollbackOps } from "../runtime-ops-builders/patches/rollback.js";
@@ -87,6 +86,13 @@ interface WorkspaceRollbackOutcome {
 // newest. Boundary and older patch sets are excluded by construction, so their
 // rollback material is irrelevant to this rewind. Tape order is authoritative —
 // same-millisecond or replayed events must not reorder or drop the window.
+//
+// Delegates the applied-minus-rolled-back fold to the shared
+// deriveAppliedPatchSetIds (@brewva/brewva-vocabulary/workbench) — the same
+// pure scan the review-debt projection's effectful shell uses for "what is
+// applied right now" — over the slice strictly after the checkpoint. Slicing
+// first, folding second is equivalent to the prior single-pass index guard:
+// the fold only ever looks at events at its own index, never ahead.
 function derivePatchWindowAfterCheckpoint(
   ctx: HostedRuntimeOpsContext,
   sessionId: string,
@@ -96,24 +102,7 @@ function derivePatchWindowAfterCheckpoint(
   const checkpointIndex = checkpointEventId
     ? events.findIndex((event) => event.id === checkpointEventId)
     : -1;
-  const appliedAfter: string[] = [];
-  const rolledBack = new Set<string>();
-  events.forEach((event, index) => {
-    if (index <= checkpointIndex || !isRecord(event.payload) || event.payload.ok !== true) {
-      return;
-    }
-    const patchSetId =
-      typeof event.payload.patchSetId === "string" ? event.payload.patchSetId : undefined;
-    if (!patchSetId) {
-      return;
-    }
-    if (event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE) {
-      if (!appliedAfter.includes(patchSetId)) appliedAfter.push(patchSetId);
-    } else if (event.type === ROLLBACK_EVENT_TYPE) {
-      rolledBack.add(patchSetId);
-    }
-  });
-  return appliedAfter.filter((patchSetId) => !rolledBack.has(patchSetId));
+  return [...deriveAppliedPatchSetIds(events.slice(checkpointIndex + 1))];
 }
 
 // Reverse exactly the checkpoint window, newest first, through the receipt-bearing

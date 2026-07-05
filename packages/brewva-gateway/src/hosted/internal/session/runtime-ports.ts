@@ -23,6 +23,7 @@ import {
   RECOVERY_WAL_RECOVERY_COMPLETED_EVENT_TYPE,
   RECOVERY_WAL_STATUS_CHANGED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
+import type { RequirementAtom } from "@brewva/brewva-vocabulary/task";
 import { createRecoveryWalStore } from "../../../daemon/api.js";
 import type { CollectSessionPromptOutputSession } from "../turn/collect-output.js";
 import {
@@ -68,6 +69,16 @@ export interface RuntimeSkillSelectionWriter {
     readonly skills: {
       readonly selection: {
         record(sessionId: string, receipt: object): unknown;
+      };
+    };
+  };
+}
+
+export interface RuntimeRequirementAtomWriter {
+  readonly ops: {
+    readonly task: {
+      readonly requirements: {
+        record(sessionId: string, atoms: readonly RequirementAtom[]): void;
       };
     };
   };
@@ -647,6 +658,14 @@ export function recordRuntimeSkillSelection(
   receipt: object,
 ): unknown {
   return runtime.ops.skills.selection.record(sessionId, receipt);
+}
+
+export function recordRequirementAtoms(
+  runtime: RuntimeRequirementAtomWriter,
+  sessionId: string,
+  atoms: readonly RequirementAtom[],
+): void {
+  runtime.ops.task.requirements.record(sessionId, atoms);
 }
 
 export function getRuntimeSkillCatalogEntry(

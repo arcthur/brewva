@@ -354,4 +354,9 @@ export function deriveReviewLaneActivationPlan(
 }
 
 export { buildReviewLaneDelegationTasks } from "./delegation.js";
-export { materializeReviewLaneOutcomes, synthesizeReviewEnsemble } from "./synthesis.js";
+export {
+  coerceStoredReviewOutcomeData,
+  deriveReviewDisposition,
+  materializeReviewLaneOutcomes,
+  synthesizeReviewEnsemble,
+} from "./synthesis.js";

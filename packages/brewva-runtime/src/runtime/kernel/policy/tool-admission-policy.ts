@@ -509,6 +509,7 @@ export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
   worker_results_apply: workspacePatch(),
   worker_results_reject: controlStateMutation(),
   subagent_run: delegation(),
+  review_request: delegation(),
   subagent_fanout: delegation(),
   subagent_fork: delegation(),
   subagent_run_diagnostic: delegation("high"),

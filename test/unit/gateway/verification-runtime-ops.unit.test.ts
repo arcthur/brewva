@@ -51,6 +51,126 @@ describe("verification runtime ops seam", () => {
     expect(outcomes[1]).toMatchObject({ outcome: "pass", failedChecks: [] });
   });
 
+  test("checks.verify defensively maps perspective/independenceBasis/reviewerContext/targetRef, defaulting to authored", () => {
+    // Non-tool callers (this ops-builder write side) must not be able to
+    // silently produce a malformed receipt: missing or invalid evidence
+    // fields must coerce to the authored defaults, and well-formed fields
+    // must carry through, exactly as `readVerificationOutcomeRecordedEventPayload`
+    // would coerce them on read.
+    const runtime = createRuntimeFixture();
+    const sessionId = "verification-ops-perspective-1";
+
+    // Call 1: caller supplies nothing for the four fields -> authored defaults.
+    void runtime.ops.verification.checks.verify(sessionId, {
+      outcome: "pass",
+      level: "commands",
+    });
+
+    // Call 2: caller supplies a fully-formed independent receipt.
+    void runtime.ops.verification.checks.verify(sessionId, {
+      outcome: "pass",
+      level: "commands",
+      perspective: "independent",
+      independenceBasis: ["fresh_context", "different_model"],
+      reviewerContext: { model: "reviewer-model", contextId: "ctx-9", lenses: ["security"] },
+      targetRef: { kind: "patch_sets", patchSetRefs: ["patch-1", "patch-2"] },
+    });
+
+    // Call 3: caller supplies garbage for every field -> must not throw and
+    // must coerce to authored defaults (fail-closed, not silently malformed).
+    void runtime.ops.verification.checks.verify(sessionId, {
+      outcome: "pass",
+      level: "commands",
+      perspective: "not-a-real-perspective",
+      independenceBasis: "not-an-array",
+      reviewerContext: "not-an-object",
+      targetRef: { kind: "unknown_kind" },
+    });
+
+    const outcomes = runtime.ops.events.records
+      .query(sessionId, { type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE })
+      .map((event) =>
+        readVerificationOutcomeRecordedEventPayload(event as { payload?: Record<string, unknown> }),
+      );
+    expect(outcomes).toHaveLength(3);
+    expect(outcomes[0]).toMatchObject({
+      perspective: "authored",
+      independenceBasis: [],
+      reviewerContext: null,
+      targetRef: null,
+    });
+    expect(outcomes[1]).toMatchObject({
+      perspective: "independent",
+      independenceBasis: ["fresh_context", "different_model"],
+      reviewerContext: { model: "reviewer-model", contextId: "ctx-9", lenses: ["security"] },
+      targetRef: { kind: "patch_sets", patchSetRefs: ["patch-1", "patch-2"] },
+    });
+    expect(outcomes[2]).toMatchObject({
+      perspective: "authored",
+      independenceBasis: [],
+      reviewerContext: null,
+      targetRef: null,
+    });
+  });
+
+  test("checks.verify defensively maps discrepancies/unverifiedMustAtoms, defaulting to [] and dropping malformed entries", () => {
+    // The fitness annotation must round-trip through the write seam exactly like
+    // the perspective/targetRef fields: a non-tool caller that omits or malforms
+    // them lands on the same [] defaults a consumer derives on read, and a
+    // malformed discrepancy entry is dropped, never persisted as garbage.
+    const runtime = createRuntimeFixture();
+    const sessionId = "verification-ops-fitness-1";
+
+    // Call 1: caller supplies nothing -> both default to [].
+    void runtime.ops.verification.checks.verify(sessionId, {
+      outcome: "pass",
+      level: "requirements",
+    });
+
+    // Call 2: caller supplies well-formed fitness annotation.
+    void runtime.ops.verification.checks.verify(sessionId, {
+      outcome: "pass",
+      level: "requirements",
+      discrepancies: [
+        {
+          atomId: "req-1",
+          grade: "deterministic_conflict",
+          statement: "keycode-scoped suppression",
+          evidenceRef: "gate-1",
+        },
+      ],
+      unverifiedMustAtoms: ["req-2"],
+    });
+
+    // Call 3: caller supplies garbage -> must not throw; malformed dropped, [].
+    void runtime.ops.verification.checks.verify(sessionId, {
+      outcome: "pass",
+      level: "requirements",
+      discrepancies: [{ atomId: "req-3", grade: "not-a-grade" }, "junk", 42],
+      unverifiedMustAtoms: "not-an-array",
+    });
+
+    const outcomes = runtime.ops.events.records
+      .query(sessionId, { type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE })
+      .map((event) =>
+        readVerificationOutcomeRecordedEventPayload(event as { payload?: Record<string, unknown> }),
+      );
+    expect(outcomes).toHaveLength(3);
+    expect(outcomes[0]).toMatchObject({ discrepancies: [], unverifiedMustAtoms: [] });
+    expect(outcomes[1]).toMatchObject({
+      discrepancies: [
+        {
+          atomId: "req-1",
+          grade: "deterministic_conflict",
+          statement: "keycode-scoped suppression",
+          evidenceRef: "gate-1",
+        },
+      ],
+      unverifiedMustAtoms: ["req-2"],
+    });
+    expect(outcomes[2]).toMatchObject({ discrepancies: [], unverifiedMustAtoms: [] });
+  });
+
   test("a successfully applied source patch marks the write for verification hygiene", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "verification-write-marked-1";

@@ -1,12 +1,12 @@
-import type { TaskItemStatus, TaskSpec } from "@brewva/brewva-vocabulary/task";
-import type { BrewvaToolRuntime } from "../contracts/index.js";
+import type { TaskItemStatus } from "@brewva/brewva-vocabulary/task";
+import type { BrewvaToolRuntime, TaskSpecSetInput } from "../contracts/index.js";
 
 export function recordTaskSpec(
   runtime: BrewvaToolRuntime,
   sessionId: string,
-  spec: TaskSpec,
+  input: TaskSpecSetInput,
 ): void {
-  runtime.capabilities.task.spec.set(sessionId, spec);
+  runtime.capabilities.task.spec.set(sessionId, input);
 }
 
 export function addTaskItem(

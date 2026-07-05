@@ -3,6 +3,7 @@ import type {
   DelegationForkTurns,
   DelegationGateReason,
   DelegationResultMode,
+  DelegationReviewDispatch,
   PublicSubagentRole,
 } from "@brewva/brewva-vocabulary/delegation";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
@@ -57,6 +58,13 @@ export interface SubagentRunRequest {
     returnLabel?: string;
     returnScopeId?: string;
   };
+  /**
+   * Dispatch-time review anchor (set by review_request only). Rides the
+   * request onto the delegation run record so the gateway's finalization
+   * observer can commit review receipts against the PRE-DISPATCH snapshot when
+   * the run reaches a terminal status. Absence means "not a review run".
+   */
+  reviewDispatch?: DelegationReviewDispatch;
 }
 
 export interface SubagentForkRequest {

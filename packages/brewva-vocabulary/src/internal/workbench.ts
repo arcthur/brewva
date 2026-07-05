@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { BrewvaEventRecord } from "./events.js";
 import type { RcrReference } from "./rcr.js";
 import { optionalStringField } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
@@ -137,6 +138,77 @@ export const ROLLBACK_EVENT_TYPE = "rollback.recorded" as const;
 export const ROLLBACK_STARTED_EVENT_TYPE = "rollback.started" as const;
 
 export const SOURCE_PATCH_APPLIED_EVENT_TYPE = "source_patch_applied" as const;
+
+/**
+ * Pure tape fold: which patch-set ids are currently applied, given the full
+ * event history? A patch set counts once a `source_patch_applied` receipt
+ * with `payload.ok === true` names it, and stops counting once a
+ * `rollback.recorded` receipt names it — re-applying the same id after a
+ * rollback restores it. Order in the returned array is first-applied-first
+ * (tape order), deduplicated; the caller decides whether order matters.
+ *
+ * Shared by the rewind engine's checkpoint-window derivation (gateway
+ * recovery) and the review-debt projection's `matchesTree` (tools runtime
+ * port) — both need "what is applied right now," so this is the one
+ * definition instead of two copies of the same applied-minus-rolled-back
+ * scan.
+ */
+export function deriveAppliedPatchSetIds(events: readonly BrewvaEventRecord[]): readonly string[] {
+  const applied: string[] = [];
+  const rolledBack = new Set<string>();
+  for (const event of events) {
+    const payload = event.payload;
+    // A failed rollback (ok: false) never actually restored the patch set's
+    // files, so it must not count as removing the patch set from "applied" —
+    // same "ok gates whether this receipt is honored" rule for both event
+    // types, matching the rewind engine's existing checkpoint-window scan.
+    if (!payload || typeof payload !== "object" || payload.ok !== true) {
+      continue;
+    }
+    const patchSetId = typeof payload.patchSetId === "string" ? payload.patchSetId : undefined;
+    if (!patchSetId) {
+      continue;
+    }
+    if (event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE) {
+      rolledBack.delete(patchSetId);
+      if (!applied.includes(patchSetId)) {
+        applied.push(patchSetId);
+      }
+    } else if (event.type === ROLLBACK_EVENT_TYPE) {
+      rolledBack.add(patchSetId);
+    }
+  }
+  return applied.filter((patchSetId) => !rolledBack.has(patchSetId));
+}
+
+/**
+ * Map each successfully-applied patch set id to its `source_patch_applied`
+ * receipt's `appliedPaths` (ok === true) — the patch-set→files index the
+ * review-debt coverage join needs (a `patch_sets` targetRef's attested files
+ * are the union of its sets' appliedPaths). Single-homed here beside
+ * {@link deriveAppliedPatchSetIds}: both the live (`runtime-port/verification`)
+ * and tape (`cli/review-debt`) debt shells derive it through ONE definition.
+ * Not reduced by rollbacks on purpose — the caller's universe is
+ * superset-leaning (a patched-then-rolled-back file stays in the set), which
+ * can only make coverage harder, never falsely clear debt.
+ */
+export function collectPatchSetAppliedPaths(
+  events: readonly BrewvaEventRecord[],
+): Record<string, readonly string[]> {
+  const map: Record<string, readonly string[]> = {};
+  for (const event of events) {
+    if (event.type !== SOURCE_PATCH_APPLIED_EVENT_TYPE) continue;
+    const payload = event.payload;
+    if (!payload || typeof payload !== "object") continue;
+    const record = payload as { ok?: unknown; patchSetId?: unknown; appliedPaths?: unknown };
+    if (record.ok !== true || typeof record.patchSetId !== "string") continue;
+    const appliedPaths = Array.isArray(record.appliedPaths)
+      ? record.appliedPaths.filter((path): path is string => typeof path === "string")
+      : [];
+    map[record.patchSetId] = appliedPaths;
+  }
+  return map;
+}
 
 export const SOURCE_PATCH_PREPARED_EVENT_TYPE = "source_patch_prepared" as const;
 

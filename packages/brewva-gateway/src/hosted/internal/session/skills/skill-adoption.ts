@@ -1,7 +1,10 @@
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
-import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
+import {
+  projectFreshCodeWritten,
+  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/iteration";
 
 /** The minimal event surface these projections read (BrewvaEventRecord-compatible). */
 export interface SkillProjectionEvent {
@@ -25,7 +28,9 @@ export interface SkillProjectionEvent {
 // createHostedCustomTools — read/edit/write take `path`/`file_path`).
 
 const READ_TOOL_NAMES = new Set(["source_read", "resource_read", "look_at", "read"]);
-const WRITE_TOOL_NAMES = new Set(["write", "edit", "source_patch_apply"]);
+// The fresh-code SCAN (not just the WRITE_TOOL_NAMES set) is shared with the
+// tools-side review-debt projection via projectFreshCodeWritten
+// (@brewva/brewva-vocabulary/iteration) — one definition, two consumers.
 
 export interface SkillAdoptionSample {
   readonly selectionId: string;
@@ -344,15 +349,14 @@ export function projectPostGreenReviewSignal(input: {
   verificationEvents: readonly SkillProjectionEvent[];
   reviewSkillFilePath: string | null;
 }): PostGreenReviewSignal {
-  let freshCodeWritten = false;
+  // Fresh-code detection is the one definition shared with the tools-side
+  // review-debt projection (internal/iteration.ts's projectFreshCodeWritten) —
+  // a second pass over the same bounded per-session invocation list, not a
+  // second copy of the write-tool scan.
+  const freshCodeWritten = projectFreshCodeWritten(input.invocationEvents);
   let reviewAdopted = false;
   for (const event of input.invocationEvents) {
     if (event.type !== RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND) continue;
-    const invocation = readInvocationArgs(event.payload);
-    if (!invocation) continue;
-    if (WRITE_TOOL_NAMES.has(invocation.toolName)) {
-      freshCodeWritten = true;
-    }
     if (input.reviewSkillFilePath && !reviewAdopted) {
       const target = readInvocationReadTarget(event.payload);
       if (target && readTargetMatchesSkillFile(target, input.reviewSkillFilePath)) {

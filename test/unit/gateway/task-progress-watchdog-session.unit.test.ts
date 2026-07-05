@@ -31,8 +31,10 @@ describe("gateway session watchdog integration", () => {
 
       now = 1_740_000_000_100;
       result.runtime.ops.task.spec.set(sessionId, {
-        schema: "brewva.task.v1",
-        goal: "Detect stalled work on a real gateway-backed session",
+        spec: {
+          schema: "brewva.task.v1",
+          goal: "Detect stalled work on a real gateway-backed session",
+        },
       });
 
       const watchdog = new TaskProgressWatchdog({

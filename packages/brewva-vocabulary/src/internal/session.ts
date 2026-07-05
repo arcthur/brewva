@@ -147,81 +147,11 @@ export interface SessionCompactionResourceRef extends ProtocolRecord {
   readonly path: string;
 }
 
-export const TASK_WORK_CARD_PROJECTION_SCHEMA_V2 = "brewva.task-work-card.projection.v2" as const;
-
-export type TaskWorkCardContextPressure = "low" | "medium" | "high" | "forced" | "unknown";
-
-export interface TaskWorkCardProjection extends ProtocolRecord {
-  readonly schema: typeof TASK_WORK_CARD_PROJECTION_SCHEMA_V2;
-  readonly version: 2;
-  readonly sessionId: string;
-  readonly refs: readonly string[];
-  readonly goal: {
-    readonly current: string | null;
-    readonly phase: string | null;
-    readonly health: string | null;
-    readonly targetRoots: readonly string[];
-    readonly taskItemCount: number;
-    readonly blockerCount: number;
-  };
-  readonly persistentGoal?: {
-    readonly objective: string | null;
-    readonly status: string | null;
-    readonly tokenBudget: number | null;
-    readonly tokensUsed: number;
-    readonly elapsedMs: number;
-    readonly lastLifecycleEvent: string | null;
-    readonly latestContinuationRef: string | null;
-    readonly latestCompletionEvidenceRef: string | null;
-    readonly latestBlockEvidenceRef: string | null;
-  };
-  readonly context: {
-    readonly pressure: TaskWorkCardContextPressure;
-    readonly workbenchEntryCount: number;
-    readonly skillInvocationRefs: readonly string[];
-    readonly resourceRefs: readonly string[];
-    readonly recallResultRefs: readonly string[];
-    readonly compactBaselineRef: string | null;
-    readonly automaticallyAvailableRefs: readonly string[];
-  };
-  readonly options: {
-    readonly generatedCount: number;
-    readonly consumedRefs: readonly string[];
-    readonly pinnedRefs: readonly string[];
-    readonly ignoredRefs: readonly string[];
-    readonly verifyPlanRefs: readonly string[];
-  };
-  readonly authority: {
-    readonly selectedCapabilities: readonly string[];
-    readonly capabilityReceiptRefs: readonly string[];
-    readonly pendingAskCount: number;
-    readonly denialCount: number;
-    readonly recentDecisionRefs: readonly string[];
-  };
-  readonly work: {
-    readonly activeRunCount: number;
-    readonly pendingWorkerPatchCount: number;
-    readonly pendingKnowledgeAdoptionCount: number;
-    readonly unreadEvidenceCount: number;
-    readonly blockedOrFailedRunCount: number;
-    readonly recoveryNextOwner: string;
-  };
-  readonly evidence: {
-    readonly verificationOutcome: string | null;
-    readonly verificationLevel: string | null;
-    readonly failedChecks: readonly string[];
-    readonly missingChecks: readonly string[];
-    readonly missingEvidence: readonly string[];
-    readonly verificationDebtCount: number;
-    readonly latestPatchSetRef: string | null;
-  };
-  readonly continuationAnchor: {
-    readonly anchorId: string | null;
-    readonly name: string | null;
-    readonly summary: string | null;
-    readonly nextSteps: string | null;
-  };
-}
+// Work Card projection domain (TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
+// TaskWorkCardContextPressure, TaskWorkCardProjection) lives in
+// internal/work-card.ts: Task 6's evidence fields pushed this module past the
+// 800-line internal budget, and split-over-bump is the sanctioned convention.
+// The public path (@brewva/brewva-vocabulary/session) is unchanged.
 
 export const ATTENTION_OPTION_PROJECTION_SCHEMA_V1 =
   "brewva.attention-option.projection.v1" as const;
@@ -231,7 +161,12 @@ export type AttentionOptionSourceFamily =
   | "workbench"
   | "surfaced_recall"
   | "session_tape_evidence"
-  | "repository_precedent";
+  | "repository_precedent"
+  // A write/verify-phase trap-library lens that matched a file the session
+  // touched (see @brewva/brewva-tools/trap-library) — an advisory review
+  // stance surfaced as its own candidate card, honestly distinct from a
+  // recall/skill/workbench/tape-evidence source (Task 9).
+  | "trap_lens";
 
 export type AttentionOptionAuthorityPosture = "none" | "read_context" | "write_workbench";
 

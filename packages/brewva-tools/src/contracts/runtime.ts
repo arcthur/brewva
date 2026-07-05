@@ -52,6 +52,11 @@ import type {
 } from "@brewva/brewva-vocabulary/iteration";
 import type { RcrReference } from "@brewva/brewva-vocabulary/rcr";
 import type {
+  ReviewFindingCategory,
+  ReviewFindingSeverity,
+  ReviewTargetRef,
+} from "@brewva/brewva-vocabulary/review";
+import type {
   ScheduleIntentCancelInput,
   ScheduleIntentCancelResult,
   ScheduleIntentCreateInput,
@@ -85,6 +90,7 @@ import type {
   TapeStatusState,
 } from "@brewva/brewva-vocabulary/session";
 import type {
+  RequirementAtom,
   TaskAcceptanceRecordResult,
   TaskBlockerRecordResult,
   TaskBlockerResolveResult,
@@ -312,6 +318,41 @@ export interface WorkerResultsClearInput {
   readonly reason?: string;
 }
 
+/**
+ * Input to `task.spec.set`: the spec plane and the requirement-atom plane as
+ * two declared, separate fields — never merged into one widened `TaskSpec`.
+ * `task_set_spec` has already resolved amend-vs-mint against folded state
+ * before calling here, so `requirements` arrives pre-resolved. The builder
+ * emits one `task.spec.set` event carrying only `spec` (unchanged, no field
+ * stripping needed) plus one `task.requirement.recorded` per atom — so the
+ * persisted `task.spec.set` payload is exactly `TaskSpec`, with the atom
+ * plane living in its own event stream, matching `RequirementAtom`'s own
+ * `task.requirement.recorded` events.
+ */
+export interface TaskSpecSetInput {
+  readonly spec: TaskSpec;
+  readonly requirements?: readonly RequirementAtom[];
+}
+
+/**
+ * Input to `verification.findings.record`: the fields of one
+ * `review.finding.recorded` receipt, declared as an explicit named seam type
+ * (no widened payload, no `as` casts at either end) so a review finding cannot
+ * be smuggled through a looser shape. `lens` is the producing lens or null for
+ * an open adversarial stance; `atomRefs` links the finding to requirement atoms
+ * (empty until requirement wiring lands in a later wave).
+ */
+export interface RecordReviewFindingInput {
+  readonly findingId: string;
+  readonly severity: ReviewFindingSeverity;
+  readonly category: ReviewFindingCategory;
+  readonly statement: string;
+  readonly anchors: readonly string[];
+  readonly lens: string | null;
+  readonly targetRef: ReviewTargetRef;
+  readonly atomRefs: readonly string[];
+}
+
 export type GoalRuntimeMutationResult =
   | {
       readonly ok: true;
@@ -491,7 +532,20 @@ export interface BrewvaToolRuntimeCommandPort {
       ): TaskItemUpdateResult;
     };
     readonly spec: {
-      set(sessionId: string, input: TaskSpec): void;
+      set(sessionId: string, input: TaskSpecSetInput): void;
+    };
+    readonly requirements: {
+      /**
+       * Emits one `task.requirement.recorded` event per already-resolved atom
+       * — nothing else. Distinct from `spec.set`, which ALSO emits
+       * `task.spec.set`: a caller that has no spec plane to persist (e.g. the
+       * orient-phase trap injection, which only ever adds atoms) must not be
+       * forced to re-emit a spec.set event just to record atoms. Callers
+       * resolve mint-vs-amend against folded state themselves (via
+       * `resolveRequirementAtoms` from `@brewva/brewva-vocabulary/task`)
+       * before calling this — this port only emits.
+       */
+      record(sessionId: string, atoms: readonly RequirementAtom[]): void;
     };
   };
   readonly tools: {
@@ -589,6 +643,9 @@ export interface BrewvaToolRuntimeCommandPort {
         sessionId: string,
         input?: unknown,
       ): RuntimeMutationResult | Promise<RuntimeMutationResult>;
+    };
+    readonly findings: {
+      record(sessionId: string, input: RecordReviewFindingInput): BrewvaEventRecord | undefined;
     };
   };
   readonly workbench: {

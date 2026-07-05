@@ -186,6 +186,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   ]),
   verification_record: metadata("base", "memory_write", [
     "capabilities.verification.checks.verify",
+    "capabilities.events.records.list",
   ]),
   get_goal: metadata("control_plane", "runtime_observe", ["capabilities.goal.state.get"]),
   update_goal: metadata("control_plane", "control_state_mutation", [
@@ -423,6 +424,19 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.schedule.intents.cancel",
   ]),
   subagent_run: metadata("skill", "delegation"),
+  review_request: metadata("skill", "delegation", [
+    // Snapshot the pre-dispatch targetRef, derive session_diff's applied
+    // patch sets, and (Task 9) preload write/verify trap lenses over the
+    // session's applied-patch-set files: all three read the tape through the
+    // shared session-touched-files helper's `records.query` (this tool runs
+    // no review-debt query — debt is a downstream projection, not something
+    // review_request itself computes).
+    "capabilities.events.records.query",
+    // Commit the receipts: one finding per parsed finding, then exactly one
+    // independent verification outcome.
+    "capabilities.verification.findings.record",
+    "capabilities.verification.checks.verify",
+  ]),
   subagent_fanout: metadata("skill", "delegation"),
   subagent_fork: metadata("skill", "delegation"),
   subagent_run_diagnostic: metadata("control_plane", "delegation"),
@@ -442,7 +456,13 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   task_resolve_blocker: metadata("control_plane", "memory_write", [
     "capabilities.task.blockers.resolve",
   ]),
-  task_set_spec: metadata("control_plane", "memory_write", ["capabilities.task.spec.set"]),
+  task_set_spec: metadata("control_plane", "memory_write", [
+    "capabilities.task.spec.set",
+    // Requirement-atom minting must derive the next id and amend-vs-mint
+    // decision from the folded requirement list (no second counter store),
+    // so this tool also reads task state (RFC intent-realization loop).
+    "capabilities.task.state.get",
+  ]),
   task_update_item: metadata("control_plane", "memory_write", ["capabilities.task.items.update"]),
   cost_view: metadata("operator", "runtime_observe", ["capabilities.cost.summary.get"]),
   obs_query: metadata("operator", "runtime_observe", [

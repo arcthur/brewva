@@ -14,6 +14,7 @@ import type { BrewvaForensicConfigWarning } from "@brewva/brewva-runtime/config"
 import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
 import type { DelegationInspectionProjection } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import type { FitnessDiscrepancy } from "@brewva/brewva-vocabulary/fitness";
 import {
   CLAIM_UPSERTED_EVENT_TYPE,
   foldClaimLedgerEvents,
@@ -21,6 +22,11 @@ import {
   readVerificationOutcomeRecordedEventPayload,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
+import type {
+  IndependenceBasis,
+  ReviewDebt,
+  VerificationPerspective,
+} from "@brewva/brewva-vocabulary/review";
 import {
   type ManagedToolMode,
   TAPE_HANDOFF_EVENT_TYPE,
@@ -40,6 +46,7 @@ import {
 import { buildContextCockpitReport, type ContextCockpitReport } from "./context-cockpit.js";
 import { buildProviderDriftProjection, type ProviderDriftProjection } from "./provider-drift.js";
 import { deriveRecoveryCapabilities, type RecoveryCapabilities } from "./recovery-capabilities.js";
+import { buildTapeReviewDebt } from "./review-debt.js";
 import {
   buildShadowAdmissionProjection,
   type ShadowAdmissionProjection,
@@ -87,6 +94,22 @@ interface InspectVerification {
   missingChecks: string[];
   missingEvidence: string[];
   reason: string | null;
+  /** Perspective of the latest receipt (`authored` when no receipt exists yet — the same semantic default the reader uses for a missing field). */
+  perspective: VerificationPerspective;
+  /** Independence basis of the latest receipt, `[]` when authored or absent. */
+  independenceBasis: readonly IndependenceBasis[];
+  /**
+   * The latest receipt's claim-time fitness annotation (Task 13):
+   * `discrepancies[]` graded `deterministic_conflict`/`advisory_conflict`, `[]`
+   * when no receipt exists or the latest one was not annotated (below the
+   * `requirements` rung, or not a `pass`). This is the RAW receipt field —
+   * `readReceiptFitnessSummary` (fitness-summary.ts) is where a reader tallies
+   * it into counts; this module never tallies, only reads back what the
+   * receipt itself carries.
+   */
+  discrepancies: readonly FitnessDiscrepancy[];
+  /** Ids of unmet `must`-modality atoms the latest receipt named, `[]` when none or absent. */
+  unverifiedMustAtoms: readonly string[];
 }
 
 interface InspectConfigLoadReport {
@@ -250,6 +273,15 @@ interface InspectReport {
     updatedAt: string | null;
   };
   verification: InspectVerification;
+  /**
+   * Tape-only review debt (`projectTapeReviewDebt`): does the tape's latest
+   * verification receipt leave debt behind under the conservative match rule
+   * shared with Work Card evidence and run-report verification. Never reads
+   * the filesystem. Kept separate from `verification` (which only carries the
+   * latest receipt's own fields) since this is a derived judgment over the
+   * WHOLE receipt history, not a field of one receipt.
+   */
+  reviewDebt: ReviewDebt;
   delegation: DelegationInspectionProjection;
   operatorSafety: {
     recentDecisions: InspectOperatorSafetyDecision[];
@@ -445,6 +477,13 @@ function buildVerificationInspection(
       missingChecks: [],
       missingEvidence: [],
       reason: null,
+      // No receipt exists yet: "authored" is the same semantic default the
+      // reader coerces a missing/malformed `perspective` field to, not a
+      // fabricated claim about a receipt that does not exist.
+      perspective: "authored",
+      independenceBasis: [],
+      discrepancies: [],
+      unverifiedMustAtoms: [],
     };
   }
 
@@ -456,6 +495,10 @@ function buildVerificationInspection(
     missingChecks: latest.missingChecks,
     missingEvidence: latest.missingEvidence,
     reason: latest.reason,
+    perspective: latest.perspective,
+    independenceBasis: latest.independenceBasis,
+    discrepancies: latest.discrepancies,
+    unverifiedMustAtoms: latest.unverifiedMustAtoms,
   };
 }
 
@@ -753,6 +796,7 @@ function buildInspectReport(
       ? bootstrapArtifactRoots.recoveryWalDir
       : runtime.config.infrastructure.recoveryWal.dir;
   const verification = buildVerificationInspection(inspect, sessionId);
+  const reviewDebt = buildTapeReviewDebt(events);
   const contextEvidenceReport = buildContextEvidenceReport(runtime, {
     sessionIds: [sessionId],
   });
@@ -1003,6 +1047,7 @@ function buildInspectReport(
       updatedAt: toIso(claimState.updatedAt),
     },
     verification,
+    reviewDebt,
     delegation: projectDelegationInspectionState({ sessionId, records: events }),
     operatorSafety: buildOperatorSafetyInspection(events),
     hostedTransitions: createEmptySessionTransitionSnapshot(),

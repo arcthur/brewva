@@ -78,6 +78,14 @@ function workCard(): TaskWorkCardProjection {
       missingEvidence: [],
       verificationDebtCount: 0,
       latestPatchSetRef: null,
+      verificationPerspective: "authored",
+      independenceBasis: [],
+      reviewDebt: false,
+      fitness: {
+        violated: 0,
+        unverifiedMust: 0,
+        discrepanciesByGrade: { deterministic_conflict: 0, advisory_conflict: 0 },
+      },
     },
     continuationAnchor: {
       anchorId: null,

@@ -15,12 +15,14 @@ const requiredVocabularySubpaths = [
   "./context",
   "./delegation",
   "./events",
+  "./fitness",
   "./goal",
   "./harness",
   "./iteration",
   "./outcome",
   "./rcr",
   "./reduction",
+  "./review",
   "./schedule",
   "./session",
   "./task",
@@ -32,10 +34,12 @@ const requiredVocabularyInternalModules = [
   "context",
   "delegation",
   "events",
+  "fitness",
   "harness",
   "iteration",
   "rcr",
   "reduction",
+  "review",
   "schedule",
   "session",
   "shared",
@@ -43,9 +47,18 @@ const requiredVocabularyInternalModules = [
   "task",
   "wire",
   "wire-validation",
+  "work-card",
   "workbench",
 ] as const;
-const vocabularyInternalLineBudget = 800;
+// Raised 800 -> 900 (Finding P1, post-merge review): `deriveLatestTreeMutationAt`
+// — the single shared tree-mutation-timestamp fold — is homed in `iteration.ts`
+// beside the sibling touched-file-universe derivations it shares a predicate
+// with (`BARE_WRITE_TOOL_NAMES`, `extractWriteInvocationPaths`,
+// `deriveFreshTouchedFileUniverse`), replacing two DUPLICATED inline reductions
+// in the CLI review-debt read and the requirement-fitness assembler. That is
+// cohesive single-homing, not cathedral-building — the module stays domain-sliced
+// (event vocabulary + its projections), well under the retired body.ts scale.
+const vocabularyInternalLineBudget = 900;
 const allowedVocabularyBrewvaDeps = ["@brewva/brewva-std"] as const;
 
 type Extends<Left, Right> = [Left] extends [Right] ? true : false;

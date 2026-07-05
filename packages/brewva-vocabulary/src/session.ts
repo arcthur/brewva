@@ -30,12 +30,14 @@ export {
   SESSION_REWIND_DIVERGENCE_SCHEMA,
   SESSION_SHUTDOWN_EVENT_TYPE,
   SESSION_TITLE_GENERATED_EVENT_TYPE,
-  TASK_WORK_CARD_PROJECTION_SCHEMA_V2,
   TAPE_HANDOFF_EVENT_TYPE,
   CHECKPOINT_COMMITTED_EVENT_TYPE,
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "./internal/session.js";
+
+export { TASK_WORK_CARD_PROJECTION_SCHEMA_V2 } from "./internal/work-card.js";
+export type { TaskWorkCardContextPressure, TaskWorkCardProjection } from "./internal/work-card.js";
 
 export {
   listSkillResourceRefs,
@@ -89,8 +91,6 @@ export type {
   SessionRewindSummary,
   SessionRewindTargetView,
   SessionUncleanShutdownDiagnostic,
-  TaskWorkCardContextPressure,
-  TaskWorkCardProjection,
   TapeHandoffResult,
   TapeLedgerRow,
   TapePressureLevel,

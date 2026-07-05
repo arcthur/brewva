@@ -51,7 +51,7 @@ export function applySchedulePromptTrigger(
 
   let taskSpecApplied = false;
   if (trigger.taskSpec) {
-    setRuntimeTaskSpec(runtime, sessionId, trigger.taskSpec);
+    setRuntimeTaskSpec(runtime, sessionId, { spec: trigger.taskSpec });
     taskSpecApplied = true;
   }
 

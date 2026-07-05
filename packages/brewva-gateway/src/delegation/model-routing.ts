@@ -353,6 +353,33 @@ export function resolveDelegationModelRoute(input: {
     });
   }
 
+  // Advisory model hint: when the packet carries one that resolves against the
+  // configured registry, the gateway honors it. The decision stays gateway-
+  // owned — an unresolvable hint is ignored and routing falls through to the
+  // keyword policies below rather than failing the run. A preset-explicit
+  // mapping (handled above) still outranks the hint.
+  const modelHint = input.packet.modelHint?.trim();
+  if (modelHint) {
+    try {
+      const selectedModel = resolveModelTextAgainstInventory(modelHint, input.modelRouting);
+      return {
+        model: selectedModel,
+        modelRole: role,
+        modelRoute: {
+          selectedModel,
+          category,
+          ...(role ? { role } : {}),
+          source: "hint",
+          mode: "explicit",
+          reason: `Model selected from the advisory request hint "${modelHint}".`,
+          ...(presetMissReason ? { presetMissReason } : {}),
+        },
+      };
+    } catch {
+      // Unresolvable hint: ignore it and let keyword policies decide.
+    }
+  }
+
   const keywordText = normalizeKeywordText(normalizeObjectiveText(input.packet));
   let resolvedRoute: ResolvedDelegationModelRoute | undefined;
   let resolvedScore = 0;

@@ -48,8 +48,10 @@ describe("gateway contract: schedule runner", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const parentSessionId = "parent-session";
     runtime.ops.task.spec.set(parentSessionId, {
-      schema: "brewva.task.v1",
-      goal: "Finish the release checklist",
+      spec: {
+        schema: "brewva.task.v1",
+        goal: "Finish the release checklist",
+      },
     });
     runtime.ops.claim.facts.upsert(parentSessionId, {
       id: "fact-1",
@@ -224,8 +226,10 @@ describe("gateway contract: schedule runner", () => {
     const runtime = createHostedTestRuntime({ cwd: workspace });
     const parentSessionId = "parent-session";
     runtime.ops.task.spec.set(parentSessionId, {
-      schema: "brewva.task.v1",
-      goal: "Finish the release checklist",
+      spec: {
+        schema: "brewva.task.v1",
+        goal: "Finish the release checklist",
+      },
     });
     runtime.ops.claim.facts.upsert(parentSessionId, {
       id: "fact-1",

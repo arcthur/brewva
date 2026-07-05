@@ -393,6 +393,13 @@ function foldSkillSelection(state: HarnessProjectionState, record: BrewvaEventRe
 function foldVerificationOutcome(state: HarnessProjectionState, record: BrewvaEventRecord): void {
   addStateEvent(state, record);
   const verification = readVerificationOutcomeRecordedEventPayload(record);
+  // Task 6 (W1 read surfaces) decision: no perspective-specific carve-out here.
+  // "Weak evidence" means the receipt does not establish confidence; an
+  // `independent` `skipped` receipt (an inconclusive review) is exactly that,
+  // same as an authored skip — the existing `outcome !== "pass"` branch
+  // already covers it correctly. This branch compiles unmodified against the
+  // Task 1-widened payload (perspective/independenceBasis/reviewerContext/
+  // targetRef); see the dedicated test proving the fold.
   if (
     verification.outcome !== "pass" ||
     verification.evidenceFreshness === "stale" ||

@@ -771,6 +771,46 @@ describe("skill catalog layer and widened signals", () => {
     expect(english.receipt.candidateSkillCount).toBe(0);
   });
 
+  test("bridges a CJK greenfield prompt to the greenfield SkillCard deterministically", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "greenfield",
+        description:
+          "Standing up a new project in an empty or foreign workspace with staged writes and ladder-based verification.",
+        whenToUse:
+          "Use when implementing a new application or package in an empty or foreign workspace where no repository conventions, checks, or instructions exist yet.",
+      }),
+      skill({
+        name: "implementation",
+        description: "Implement a change inside an existing project with established conventions.",
+      }),
+    ]);
+
+    // "从零搭一个新项目" (build a new project from zero): the greenfield bridge
+    // pattern must fire and shortlist greenfield deterministically, without
+    // relying on catalog luck (text_match alone, no explicit mention or path).
+    const greenfieldPrompt = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "帮我从零搭一个新项目，用什么脚手架初始化项目比较好",
+    });
+    expect(greenfieldPrompt.receipt.renderedSkillReasons.map((entry) => entry.name)).toContain(
+      "greenfield",
+    );
+    expect(
+      greenfieldPrompt.receipt.renderedSkillReasons.find((entry) => entry.name === "greenfield"),
+    ).toMatchObject({ reasons: ["text_match"] });
+
+    // A non-matching CJK prompt (no greenfield trigger terms) must not
+    // shortlist greenfield.
+    const unrelatedPrompt = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "帮我看看这段代码里的循环有没有问题",
+    });
+    expect(unrelatedPrompt.receipt.renderedSkillReasons.map((entry) => entry.name)).not.toContain(
+      "greenfield",
+    );
+  });
+
   test("lifecycle derives recent paths and previous adoption from the event tape", () => {
     const { runtime, events } = createRuntime(createSkillCatalog());
     const tape: Array<{ type: string; timestamp: number; payload?: object }> = [];

@@ -101,6 +101,87 @@ admission or modify approval state directly.
 Verification gate manifests are valid only on `verifier.adapter` extension
 plugins. Other advisory slots cannot attach verification gate manifests.
 
+## The Gate-Bridge Recipe: Promoting a Recurring Discrepancy to a Gate
+
+The requirement-fitness projection (`@brewva/brewva-vocabulary/fitness`,
+`projectRequirementFitness`) annotates a `pass` claim's
+`verification.outcome.recorded` receipt with graded `discrepancies[]` when the
+claim contradicts a requirement atom — visible debt on the Work Card fitness
+line and `inspect run-report`'s Fitness section. The annotation never
+blocks anything (axiom 18): recording it is the same claim, made honest. This
+section documents the operator's OWN move for turning a recurring, high-risk
+instance of that debt into an actual blocking gate, using the mechanism this
+page already describes above — it adds no second blocking path.
+
+**Eligibility: `deterministic_conflict` only.** A discrepancy's `grade` is
+either `deterministic_conflict` (a deterministic evidence entry — a scripted
+check, a lint with a stable rule id — drove the violation) or
+`advisory_conflict` (only an LLM review finding did). **`advisory_conflict`
+findings are never gate-eligible.** An LLM judgment is not deterministic
+evidence and promoting one to a blocking gate would smuggle non-deterministic
+authority into kernel admission through the back door. Only a
+`deterministic_conflict` — because it is backed by a check an operator can
+point at and re-run — is a valid input to the recipe below.
+
+**When to promote.** Not on the first occurrence — the fitness annotation
+already makes a single instance visible as debt without blocking anyone. The
+recipe applies once a `deterministic_conflict` on the same atom (or the same
+underlying check) recurs across sessions on a genuinely high-risk atom
+(`riskClass: security | runtime`, or any atom an operator judges
+ship-blocking) and the operator decides visible-but-passable debt is no
+longer the right posture for that specific risk.
+
+**Current wiring note.** `assembleRequirementFitnessInput` now feeds the
+`independent` outcome channel: a clear independent atoms-review commits a `pass`
+naming its reviewed atoms (`atomRefs`), so the positive half — `satisfied`
+via an independent confirmation — is production-live. The other two channels
+remain honest gaps: `authoredOutcomes` (which would yield `likelySatisfied`)
+has no producer yet, and `deterministicEvidence` has no default tape source —
+a caller (or an operator-supplied deterministic check) must feed it explicitly
+to produce a `deterministic_conflict` in the first place. This recipe describes
+the bridge FROM a `deterministic_conflict` (however it was produced) TO a gate;
+it does not itself wire new deterministic-evidence producers, and it names no
+producer that does not already exist.
+
+**The promotion, field by field.** A `VerificationGateManifest`
+(`VERIFICATION_GATE_MANIFEST_SCHEMA_V1`) is only valid on a `verifier.adapter`
+extension plugin (see above). Populate it from the recurring discrepancy's own
+evidence:
+
+- `adapter` — the identity of the SAME deterministic check whose fail produced
+  the `deterministic_conflict` (the check the discrepancy's `evidenceRef`
+  traces back to). This is not a new adapter; it is the existing scripted
+  check being given a gate identity.
+- `targetRoots` — the path(s) the check actually covers, per the manifest's
+  existing semantics (unrelated to and no wider than the fitness atom's own
+  scope).
+- `patchSetRefs` — populated per the manifest's existing freshness semantics;
+  the same tape-derived patch-set identity `reviewTargetRefMatchesTapeOnly`
+  already uses for staleness elsewhere in this RFC's surfaces.
+- `freshness.maxAgeMs` — the evidence-staleness budget the operator is willing
+  to accept before treating a gap as `missing`/`stale`, same field the
+  manifest always had.
+- `posture.missing` / `posture.stale` / `posture.failed` — chosen by the
+  operator (`advisory | defer | abort`) exactly as for any other verification
+  gate; nothing about the fitness origin changes what postures are legal
+  here.
+
+`evaluateVerificationGateManifest(...)` then compares this manifest's bound
+evidence with freshness and status, and emits a structural policy input for
+`missing`, `stale`, or `failed` states — the same evaluation path every other
+verification gate already goes through. Kernel admission accepts that policy
+input through `ToolCallProposal.verificationGates`, unchanged.
+
+**What this recipe is not.** The `VerificationGateManifest` remains the
+SINGLE blocking path (axiom 18) for this whole fitness surface — this recipe
+does not add a second one. The fitness annotation itself, the Work Card
+fitness line, and `inspect run-report`'s Fitness section stay exactly what
+they are: read-only pressure. Promotion is a manifest an operator authors and
+owns; the projection that made the recurring discrepancy visible in the first
+place never gates on its own, no matter how many times a `deterministic_conflict`
+recurs. Nothing automates this promotion — it is a deliberate operator
+decision, not a threshold-triggered escalation.
+
 ## Boundary
 
 Default hosted behavior belongs to `@brewva/brewva-gateway/hosted`. External

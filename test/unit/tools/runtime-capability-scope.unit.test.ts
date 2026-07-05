@@ -174,6 +174,12 @@ function createToolRuntimeFixture(): BrewvaToolRuntime {
             return { ok: true, sessionId };
           },
         },
+        requirements: {
+          record() {
+            // No-op: this capability-scope fixture never asserts on emitted
+            // requirement atoms, only on which capability paths are reachable.
+          },
+        },
         items: {
           add(sessionId: string) {
             return { ok: true, sessionId };

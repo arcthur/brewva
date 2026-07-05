@@ -5,6 +5,7 @@ import type {
   DelegationIsolationStrategy,
   DelegationLineageRecord,
   DelegationModelRouteRecord,
+  DelegationReviewDispatch,
   DelegationRunRecord,
   DelegationVisibility,
 } from "@brewva/brewva-vocabulary/delegation";
@@ -182,6 +183,8 @@ export function buildDelegationRunRecordSeed(input: {
   modelRoute?: DelegationModelRouteRecord;
   delivery?: DelegationRunRecord["delivery"];
   workerSessionId?: DelegationRunRecord["workerSessionId"];
+  /** Dispatch-time review anchor; present only when the run is a review dispatch. */
+  reviewDispatch?: DelegationReviewDispatch;
 }): DelegationRunRecord {
   return {
     runId: input.runId,
@@ -209,5 +212,6 @@ export function buildDelegationRunRecordSeed(input: {
     modelRoute: input.modelRoute,
     delivery: input.delivery,
     workerSessionId: input.workerSessionId,
+    reviewDispatch: input.reviewDispatch,
   };
 }

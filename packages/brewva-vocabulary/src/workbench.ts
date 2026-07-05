@@ -1,6 +1,8 @@
 export {
   ATTENTION_PIN_RETENTION_HINT,
+  collectPatchSetAppliedPaths,
   collectPersistedPatchPaths,
+  deriveAppliedPatchSetIds,
   isAttentionPinnedWorkbenchEntry,
   listInvalidWorkbenchEvictionSpanRefs,
   listPersistedPatchSets,

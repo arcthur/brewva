@@ -15,7 +15,10 @@ import type {
   SubagentStartResult,
   SubagentStatusResult,
 } from "@brewva/brewva-tools/contracts";
-import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import type {
+  DelegationReviewDispatch,
+  DelegationRunRecord,
+} from "@brewva/brewva-vocabulary/delegation";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-vocabulary/delegation";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-vocabulary/delegation";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
@@ -460,6 +463,7 @@ export function createHostedSubagentAdapter(
     forkTurns?: SubagentRunRequest["forkTurns"];
     timeoutMs?: number;
     delivery?: NonNullable<SubagentRunRequest["delivery"]>;
+    reviewDispatch?: DelegationReviewDispatch;
   }): LiveHostedDelegationRun {
     const runId = randomUUID();
     const startedAt = Date.now();
@@ -498,6 +502,7 @@ export function createHostedSubagentAdapter(
           taskIdentity,
           forkTurns,
           delivery: buildDeliveryRecordFromRequest(input.delivery, failedAt),
+          reviewDispatch: input.reviewDispatch,
         }),
         status: "failed",
         summary: error,
@@ -578,6 +583,7 @@ export function createHostedSubagentAdapter(
           boundary: executionPlan.boundary,
           modelRoute: executionPlan.modelRoute,
           delivery: buildDeliveryRecordFromRequest(input.delivery, startedAt),
+          reviewDispatch: input.reviewDispatch,
         }),
       };
 
@@ -1184,6 +1190,7 @@ export function createHostedSubagentAdapter(
           parentTaskPath,
           forkTurns: request.forkTurns,
           timeoutMs: request.timeoutMs,
+          reviewDispatch: request.reviewDispatch,
         }),
       );
       const outcomes = await Promise.all(liveRuns.map((run) => run.outcomePromise));
@@ -1236,6 +1243,7 @@ export function createHostedSubagentAdapter(
               forkTurns: request.forkTurns,
               timeoutMs: request.timeoutMs,
               delivery: request.delivery,
+              reviewDispatch: request.reviewDispatch,
             }),
           ),
         );
@@ -1271,6 +1279,7 @@ export function createHostedSubagentAdapter(
           forkTurns: request.forkTurns,
           timeoutMs: request.timeoutMs,
           delivery: request.delivery,
+          reviewDispatch: request.reviewDispatch,
         }),
       );
       const failedLiveRun = liveRuns.find((run) => run.record.status === "failed");

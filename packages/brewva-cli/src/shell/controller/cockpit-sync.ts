@@ -8,6 +8,7 @@ import {
 import { traceSync } from "../../internal/perf-trace.js";
 import type { ContextCockpitReport } from "../../operator/inspect.js";
 import { buildInspectReport, buildTaskWorkCardProjection } from "../../operator/inspect.js";
+import { readReceiptFitnessSummary } from "../../operator/inspect/fitness-summary.js";
 import type { CliInspectPort } from "../../runtime/cli-runtime-ports.js";
 import type { ShellCommitOptions } from "../domain/actions.js";
 import type { ShellClock, ShellScheduledTimeout } from "../domain/clock.js";
@@ -165,6 +166,15 @@ function fallbackWorkCard(input: {
       missingEvidence: [],
       verificationDebtCount: 0,
       latestPatchSetRef: null,
+      verificationPerspective: "authored",
+      independenceBasis: [],
+      reviewDebt: false,
+      // Fallback carries no receipt at all, so the honest fitness line is
+      // all-zero — routed through the SAME `readReceiptFitnessSummary` call
+      // every other CLI fitness surface uses (Task 15's single-home rule),
+      // fed an empty annotation, rather than a hand-rolled literal that would
+      // silently miss a third discrepancy grade.
+      fitness: readReceiptFitnessSummary({ discrepancies: [], unverifiedMustAtoms: [] }),
     },
     continuationAnchor: {
       anchorId: null,

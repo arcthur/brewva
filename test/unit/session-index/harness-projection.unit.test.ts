@@ -225,6 +225,60 @@ describe("harness trace projection", () => {
     });
   });
 
+  test("an independent skipped receipt is flagged as weak evidence like any other non-pass outcome (Task 6 harness decision: no perspective-specific carve-out)", () => {
+    // Task 6 decision: `weakVerificationEventIds` does NOT special-case
+    // `independent` + `skipped` receipts. Reasoning: "weak evidence" here
+    // means "this receipt does not establish confidence" — an independent
+    // review that came back inconclusive (skipped, with a reason) is exactly
+    // that, same as an authored skip; the existing `outcome !== "pass"` branch
+    // already catches it correctly with no perspective-aware logic needed, and
+    // this test proves the wider payload (Task 1's four new fields) compiles
+    // and folds through this exact path without any code change here.
+    const manifest = buildHarnessManifest({
+      sessionId: "session-harness-projection",
+      turn: 9,
+      attempt: 1,
+      skillSelection: {
+        selectionId: "skill-selection-independent-skipped",
+        mode: "shortlist_prompt_context",
+        selectedSkillIds: ["skill-a"],
+      },
+    });
+    const records = [
+      harnessManifestEvent({
+        id: "event-manifest-independent-skipped",
+        timestamp: 4_000,
+        turn: 9,
+        payload: manifest,
+      }),
+      event({
+        id: "event-verification-independent-skipped",
+        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+        timestamp: 4_010,
+        turn: 9,
+        payload: {
+          outcome: "skipped",
+          level: "requirements",
+          perspective: "independent",
+          independenceBasis: ["fresh_context"],
+          reviewerContext: { model: "reviewer-model", contextId: "run-1", lenses: [] },
+          targetRef: { kind: "patch_sets", patchSetRefs: ["ps-1"] },
+          reason: "review was inconclusive: evidence was insufficient to reach a verdict.",
+        },
+      }),
+    ];
+
+    const snapshots = projectSessionHarnessTraceSnapshots({
+      sessionId: "session-harness-projection",
+      records,
+    });
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]?.verification).toEqual({ weakEvidence: true });
+    expect(snapshots[0]?.signals.map((signal) => signal.kind)).toEqual(["verification_hygiene"]);
+    expect(snapshots[0]?.signals[0]?.eventIds).toEqual(["event-verification-independent-skipped"]);
+  });
+
   test("uses exact verification and provider retry semantics", () => {
     const manifest = buildHarnessManifest({
       sessionId: "session-harness-projection",

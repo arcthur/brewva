@@ -117,6 +117,10 @@ const CJK_SKILL_INTENT_KEYWORD_BRIDGES: readonly {
     pattern: /测试|验证|校验/u,
     keywords: ["test", "verification", "verifier"],
   },
+  {
+    pattern: /从零|从头搭|新项目|脚手架|初始化项目/u,
+    keywords: ["greenfield", "staged", "workspace", "empty", "foreign"],
+  },
 ];
 
 export type SkillSelectionTrigger = "user_message" | "discover_skills";

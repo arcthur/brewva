@@ -4,6 +4,10 @@ import {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   type VerificationOutcomeRecordedEventPayload,
 } from "@brewva/brewva-vocabulary/iteration";
+import {
+  readReviewFindingRecordedEventPayload,
+  REVIEW_FINDING_RECORDED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/review";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
 
@@ -38,6 +42,23 @@ export function buildVerificationRuntimeOps(
       verify(sessionId, input) {
         const record = ctx.readObjectPayload(input);
         const outcome = normalizeOutcome(record.outcome);
+        // Defensive coercion of the evidence + fitness-annotation fields reuses
+        // the exact reader a receipt is parsed back through
+        // (readVerificationOutcomeRecordedEventPayload), so a non-tool caller
+        // that omits or malforms them lands on the same defaults a consumer
+        // would derive on read — it can not silently produce a receipt that
+        // reads back as independent, nor drop the fitness discrepancies/
+        // unverified-must atoms (a malformed discrepancy is dropped, not
+        // persisted as garbage).
+        const {
+          perspective,
+          independenceBasis,
+          reviewerContext,
+          targetRef,
+          discrepancies,
+          unverifiedMustAtoms,
+          atomRefs,
+        } = readVerificationOutcomeRecordedEventPayload({ payload: record });
         const payload: VerificationOutcomeRecordedEventPayload = {
           outcome,
           evidenceFreshness:
@@ -48,9 +69,33 @@ export function buildVerificationRuntimeOps(
           missingEvidence: readStringList(record.missingEvidence),
           failedChecks: readStringList(record.failedChecks),
           reason: typeof record.reason === "string" ? record.reason : null,
+          perspective,
+          independenceBasis,
+          reviewerContext,
+          targetRef,
+          discrepancies,
+          unverifiedMustAtoms,
+          atomRefs,
         };
         ctx.emit(sessionId, VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE, payload);
         return outcome === "fail" ? { ok: false, reason: "verification_failed" } : { ok: true };
+      },
+    },
+    findings: {
+      // Write side for `review.finding.recorded`. Mirrors the verify seam: the
+      // whole payload is normalized through the exact reader a consumer parses
+      // it back with, so a malformed or target-ref-less finding lands on the
+      // same authored defaults (or is rejected) instead of persisting a receipt
+      // that reads back differently. A finding whose targetRef will not parse is
+      // dropped (reader returns null) rather than recorded as evidence with no
+      // provable tree state.
+      record(sessionId, input) {
+        const record = ctx.readObjectPayload(input);
+        const payload = readReviewFindingRecordedEventPayload({ payload: record });
+        if (!payload) {
+          return undefined;
+        }
+        return ctx.emit(sessionId, REVIEW_FINDING_RECORDED_EVENT_TYPE, payload);
       },
     },
   };

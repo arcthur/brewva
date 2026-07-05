@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { executeKnowledgeSearch } from "@brewva/brewva-recall/knowledge";
 import { scoreDocumentsByTfIdf } from "@brewva/brewva-search";
 import { sha256Hex } from "@brewva/brewva-std/hash";
@@ -31,8 +33,13 @@ import {
   recordAttentionConsumption,
   recordMetricObservation,
 } from "../../runtime-port/iteration.js";
+import {
+  resolveWorkspaceRoot,
+  sessionAppliedTouchedFilePaths,
+} from "../../runtime-port/session-touched-files.js";
 import { resolveToolTargetScope } from "../../runtime-port/target-scope.js";
 import { noteWorkbench } from "../../runtime-port/workbench.js";
+import { matchFileAgainstWriteVerifyTraps } from "../../shared/trap-library/index.js";
 import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 
@@ -42,6 +49,11 @@ const MAX_CONSUMED_CHARS = 12_000;
 const MAX_TAPE_EVENT_SAFE_KEYS = 16;
 const MAX_TAPE_EVENT_SAFE_FIELDS = 12;
 const MAX_TAPE_EVENT_SAFE_FIELD_CHARS = 240;
+// Same per-source-family bound as recentTapeDocuments' `.slice(-8)` and
+// repositoryPrecedentDocuments' knowledge-search `limit: 8` — one shared
+// per-turn cap value reused across every bounded card source in this file,
+// rather than a fresh magic number for trap-lens cards.
+const MAX_TRAP_LENS_CARDS = 8;
 
 const SENSITIVE_PAYLOAD_KEY_TOKENS = new Set([
   "args",
@@ -111,6 +123,7 @@ const ATTENTION_SOURCE_TYPES = Type.Union([
   Type.Literal("surfaced_recall"),
   Type.Literal("session_tape_evidence"),
   Type.Literal("repository_precedent"),
+  Type.Literal("trap_lens"),
 ]);
 
 const ATTENTION_SOURCE_FAMILY_VALUES = [
@@ -119,6 +132,7 @@ const ATTENTION_SOURCE_FAMILY_VALUES = [
   "surfaced_recall",
   "session_tape_evidence",
   "repository_precedent",
+  "trap_lens",
 ] as const satisfies readonly AttentionOptionSourceFamily[];
 
 const ATTENTION_SOURCE_FAMILY_SET = new Set<string>(ATTENTION_SOURCE_FAMILY_VALUES);
@@ -376,6 +390,79 @@ function recentTapeDocuments(
     });
 }
 
+/** Best-effort file read for trap-lens matching — an unreadable file contributes no card rather than failing the whole source. */
+function readTouchedFileTextOrNull(workspaceRoot: string, path: string): string | null {
+  try {
+    return readFileSync(resolve(workspaceRoot, path), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Trap-lens card source (Task 9): for every file touched by the session's
+ * applied patch sets, run the shared write/verify trap match over its CURRENT
+ * content and surface one bounded advisory card per distinct lens that fires.
+ * `title` is the firing entry's id, `whyRelevant` is the lens text itself —
+ * the card names both so a reader can trace a lens back to its trap entry.
+ *
+ * Deterministic and bounded: file order comes from
+ * `sessionAppliedTouchedFilePaths` (first-seen tape order), lens order within
+ * a file comes from `matchFileAgainstWriteVerifyTraps` (write-then-verify,
+ * entry order) — the loop below stops the instant `MAX_TRAP_LENS_CARDS` cards
+ * exist, so which files/lenses are seen next never affects which cards ship.
+ * No I/O in the trap engine itself (axiom: pure engine, caller reads
+ * content) — this function is the caller that reads the workspace file text
+ * via the same best-effort pattern `review_request`'s lens preload uses.
+ *
+ * Advisory only (axiom 18): a firing card is an invitation to look, never a
+ * defect claim and never a gate — see the trap-library module doc on
+ * lens != verdict. `authorityPosture: "none"` because consuming this card
+ * grants no write capability, matching `session_tape_evidence` and
+ * `repository_precedent`.
+ */
+function trapLensDocuments(input: {
+  readonly runtime: BrewvaToolRuntime;
+  readonly sessionId: string;
+  readonly workspaceRoot: string;
+  readonly generation: string;
+}): AttentionOptionDocument[] {
+  const touchedPaths = sessionAppliedTouchedFilePaths(input.runtime, input.sessionId);
+  const documents: AttentionOptionDocument[] = [];
+  for (const path of touchedPaths) {
+    if (documents.length >= MAX_TRAP_LENS_CARDS) {
+      break;
+    }
+    const text = readTouchedFileTextOrNull(input.workspaceRoot, path);
+    if (text === null) {
+      continue;
+    }
+    for (const match of matchFileAgainstWriteVerifyTraps(text)) {
+      if (documents.length >= MAX_TRAP_LENS_CARDS) {
+        break;
+      }
+      const rootRef = path;
+      const optionId = `trap_lens:${path}:${match.entry.id}`;
+      const card: AttentionOptionProjection = {
+        schema: ATTENTION_OPTION_PROJECTION_SCHEMA_V1,
+        optionId,
+        generationId: input.generation,
+        sourceFamily: "trap_lens",
+        rootRef,
+        title: match.entry.id,
+        whyRelevant: boundedText(match.lens),
+        tokenEstimate: estimateTokens(match.lens),
+        resourceRefs: [rootRef],
+        outputArtifacts: [],
+        allowedActions: ["consume", "pin", "ignore", "verify_plan"],
+        authorityPosture: "none",
+      };
+      documents.push({ id: optionId, text: [match.entry.id, path, match.lens].join("\n"), card });
+    }
+  }
+  return documents;
+}
+
 function repositoryPrecedentDocuments(input: {
   readonly searchRoots: readonly string[];
   readonly query: string | null;
@@ -421,6 +508,7 @@ function collectOptionDocuments(input: {
   readonly query: string | null;
   readonly sourceFamilies: readonly AttentionOptionSourceFamily[];
   readonly searchRoots: readonly string[];
+  readonly workspaceRoot: string;
 }): { readonly generation: string; readonly documents: readonly AttentionOptionDocument[] } {
   const sourceFamilies = input.sourceFamilies.length
     ? input.sourceFamilies
@@ -442,6 +530,9 @@ function collectOptionDocuments(input: {
   const tapeEvents = sourceFamilies.includes("session_tape_evidence")
     ? input.runtime.capabilities.events.records.query(input.sessionId, { last: 25 })
     : [];
+  const trapLensTouchedPaths = sourceFamilies.includes("trap_lens")
+    ? sessionAppliedTouchedFilePaths(input.runtime, input.sessionId)
+    : [];
   const basisRefs = [
     ...sourceFamilies,
     ...skills.map((skill) => `skill:${skill.name}`),
@@ -449,6 +540,7 @@ function collectOptionDocuments(input: {
     ...recallDocuments.map((document) => document.id),
     ...tapeEvents.map((event) => `event:${event.id}`),
     ...input.searchRoots.map((root) => `root:${root}`),
+    ...trapLensTouchedPaths.map((path) => `trap_lens_touched:${path}`),
   ];
   const generation = generationId({
     sessionId: input.sessionId,
@@ -488,6 +580,16 @@ function collectOptionDocuments(input: {
   }
   if (sourceFamilies.includes("session_tape_evidence")) {
     documents.push(...recentTapeDocuments(tapeEvents, generation));
+  }
+  if (sourceFamilies.includes("trap_lens")) {
+    documents.push(
+      ...trapLensDocuments({
+        runtime: input.runtime,
+        sessionId: input.sessionId,
+        workspaceRoot: input.workspaceRoot,
+        generation,
+      }),
+    );
   }
   return { generation, documents: dedupeDocuments(documents) };
 }
@@ -616,16 +718,62 @@ function recordAttentionConsumeRatio(input: {
   });
 }
 
+/**
+ * Re-derive a `trap_lens:<path>:<entry.id>` option id's content on explicit
+ * consumption: re-read the file and re-run the shared match rather than
+ * caching the lens body from card-generation time, so consumption always
+ * reflects the file's CURRENT content — consistent with every other source
+ * family here, none of which caches content across the options/consume
+ * round trip. Splits on the LAST colon: entry ids are plain kebab-case
+ * (never contain a colon), so this recovers the exact path even in the
+ * unlikely event a workspace path itself contains one.
+ */
+function resolveTrapLensConsumedContent(
+  workspaceRoot: string,
+  optionId: string,
+): {
+  readonly title: string;
+  readonly content: string;
+  readonly refs: readonly string[];
+  readonly sourceFamily: AttentionOptionSourceFamily;
+} | null {
+  const rest = optionId.slice("trap_lens:".length);
+  const splitAt = rest.lastIndexOf(":");
+  if (splitAt <= 0 || splitAt === rest.length - 1) {
+    return null;
+  }
+  const path = rest.slice(0, splitAt);
+  const entryId = rest.slice(splitAt + 1);
+  const text = readTouchedFileTextOrNull(workspaceRoot, path);
+  if (text === null) {
+    return null;
+  }
+  const match = matchFileAgainstWriteVerifyTraps(text).find((entry) => entry.entry.id === entryId);
+  if (!match) {
+    return null;
+  }
+  return {
+    title: match.entry.id,
+    content: [`trap_id: ${match.entry.id}`, `file: ${path}`, `lens: ${match.lens}`].join("\n"),
+    refs: [path],
+    sourceFamily: "trap_lens",
+  };
+}
+
 function resolveConsumedContent(input: {
   readonly runtime: BrewvaToolRuntime;
   readonly sessionId: string;
   readonly optionId: string;
+  readonly workspaceRoot: string;
 }): {
   readonly title: string;
   readonly content: string;
   readonly refs: readonly string[];
   readonly sourceFamily: AttentionOptionSourceFamily;
 } | null {
+  if (input.optionId.startsWith("trap_lens:")) {
+    return resolveTrapLensConsumedContent(input.workspaceRoot, input.optionId);
+  }
   if (input.optionId.startsWith("skill:")) {
     const name = input.optionId.slice("skill:".length);
     const skill = input.runtime.capabilities.skills.catalog.get(name);
@@ -730,12 +878,14 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
       const query = readNonEmptyString(params.query) ?? null;
       const sourceFamilies = readStringArray(params.sources).filter(isAttentionSourceFamily);
       const scope = resolveToolTargetScope(attentionOptionsTool.runtime, ctx);
+      const workspaceRoot = resolveWorkspaceRoot(attentionOptionsTool.runtime, ctx);
       const { generation, documents } = collectOptionDocuments({
         runtime: attentionOptionsTool.runtime,
         sessionId,
         query,
         sourceFamilies,
         searchRoots: scope.allowedRoots,
+        workspaceRoot,
       });
       const cards = selectCards({
         documents,
@@ -769,10 +919,12 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const optionId = params.option_id.trim();
+      const workspaceRoot = resolveWorkspaceRoot(attentionConsumeTool.runtime, ctx);
       const consumed = resolveConsumedContent({
         runtime: attentionConsumeTool.runtime,
         sessionId,
         optionId,
+        workspaceRoot,
       });
       if (!consumed) {
         return errTextResult(`attention_consume could not resolve option ${optionId}.`, {

@@ -5,7 +5,9 @@ import {
   TASK_BLOCKER_RESOLVED_EVENT_TYPE,
   TASK_ITEM_ADDED_EVENT_TYPE,
   TASK_ITEM_UPDATED_EVENT_TYPE,
+  TASK_REQUIREMENT_RECORDED_EVENT_TYPE,
   TASK_SPEC_SET_EVENT_TYPE,
+  type RequirementAtom,
   type TaskItem,
 } from "@brewva/brewva-vocabulary/task";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
@@ -20,13 +22,47 @@ function normalizeBlocker(value: ProtocolRecord): { message: string; source?: st
   return source ? { message, source } : { message };
 }
 
+/**
+ * The one emit site for `task.requirement.recorded`: every producer (the
+ * `task_set_spec` tool via `spec.set`, and the orient-phase trap injection via
+ * `requirements.record`) funnels through this same loop, so the event's
+ * shape (`{ atom }`) can never drift between call sites.
+ */
+function emitRequirementAtoms(
+  ctx: HostedRuntimeOpsContext,
+  sessionId: string,
+  atoms: readonly RequirementAtom[],
+): void {
+  for (const atom of atoms) {
+    ctx.emit(sessionId, TASK_REQUIREMENT_RECORDED_EVENT_TYPE, { atom });
+  }
+}
+
 export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntimeOpsPort["task"] {
-  const { taskSpec, taskItems, taskBlockers } = ctx.projections;
+  const { taskSpec, taskItems, taskBlockers, taskRequirements } = ctx.projections;
   return {
     spec: {
-      set(sessionId, spec): void {
+      set(sessionId, input): void {
+        // `input.requirements` is a resolved atom list (task_set_spec has
+        // already decided amend-vs-mint against folded state before calling
+        // here), so this seam only emits: one task.spec.set carrying exactly
+        // `input.spec` (never widened, never stripped), plus one
+        // task.requirement.recorded per atom. The two planes are declared,
+        // separate fields on `TaskSpecSetInput` — no cast needed to keep them
+        // apart, and TaskState.spec / TaskState.requirements stay separate.
         ctx.recordProgress(sessionId);
-        ctx.emit(sessionId, TASK_SPEC_SET_EVENT_TYPE, { spec });
+        ctx.emit(sessionId, TASK_SPEC_SET_EVENT_TYPE, { spec: input.spec });
+        emitRequirementAtoms(ctx, sessionId, input.requirements ?? []);
+      },
+    },
+    requirements: {
+      record(sessionId, atoms): void {
+        // Atom-only: no task.spec.set, and deliberately NO recordProgress —
+        // recordProgress stamps Date.now() into the stall-watchdog clock,
+        // and this port exists specifically for a deterministic, advisory
+        // background pass (orient-phase trap injection) that must never
+        // read a clock or count as agent-driven task progress.
+        emitRequirementAtoms(ctx, sessionId, atoms);
       },
     },
     state: {
@@ -37,6 +73,7 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
           status: { phase: "active" },
           acceptance: { status: "pending" },
           items: taskItems(sessionId),
+          requirements: taskRequirements(sessionId),
           blockers: taskBlockers(sessionId)
             .map(normalizeBlocker)
             .filter((value): value is { message: string; source?: string } => value !== undefined),

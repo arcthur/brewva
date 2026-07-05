@@ -12,11 +12,13 @@ import {
 import type { BrewvaEventQuery, ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type { ResourceLeaseRecord } from "@brewva/brewva-vocabulary/iteration";
 import {
+  foldTaskLedgerEvents,
   TASK_BLOCKER_RECORDED_EVENT_TYPE,
   TASK_BLOCKER_RESOLVED_EVENT_TYPE,
   TASK_ITEM_ADDED_EVENT_TYPE,
   TASK_ITEM_UPDATED_EVENT_TYPE,
   TASK_SPEC_SET_EVENT_TYPE,
+  type RequirementAtom,
   type TaskItem,
   type TaskSpec,
 } from "@brewva/brewva-vocabulary/task";
@@ -49,6 +51,7 @@ export interface HostedProjections {
   readonly taskSpec: (sessionId: string) => TaskSpec | undefined;
   readonly taskItems: (sessionId: string) => TaskItem[];
   readonly taskBlockers: (sessionId: string) => ProtocolRecord[];
+  readonly taskRequirements: (sessionId: string) => readonly RequirementAtom[];
   readonly resourceLeases: (sessionId: string) => ResourceLeaseRecord[];
   readonly workbench: (sessionId: string) => WorkbenchEntry[];
   readonly workerResults: (sessionId: string) => WorkerResult[];
@@ -132,6 +135,16 @@ function projectTaskSpec(listEvents: ListEvents, sessionId: string): TaskSpec | 
   const event = listEvents(sessionId, { type: TASK_SPEC_SET_EVENT_TYPE, last: 1 })[0];
   const spec = isRecord(event?.payload) ? event.payload.spec : undefined;
   return isRecord(spec) ? (spec as TaskSpec) : undefined;
+}
+
+// Reuses foldTaskLedgerEvents (the same fold task_set_spec's amend-vs-mint
+// decision reads through) rather than re-deriving requirement-atom reduction
+// here: one fold, two callers.
+function projectTaskRequirements(
+  listEvents: ListEvents,
+  sessionId: string,
+): readonly RequirementAtom[] {
+  return foldTaskLedgerEvents(listEvents(sessionId)).requirements;
 }
 
 function isResourceLease(value: unknown): value is ResourceLeaseRecord {
@@ -288,6 +301,7 @@ export function createHostedProjections(deps: {
     taskSpec: (sessionId) => projectTaskSpec(listEvents, sessionId),
     taskItems: (sessionId) => projectTaskItems(listEvents, sessionId),
     taskBlockers: (sessionId) => projectTaskBlockers(listEvents, sessionId),
+    taskRequirements: (sessionId) => projectTaskRequirements(listEvents, sessionId),
     resourceLeases: (sessionId) => projectResourceLeases(listEvents, sessionId),
     workbench: (sessionId) => projectWorkbench(listEvents, sessionId),
     workerResults: (sessionId) => projectWorkerResults(listEvents, sessionId),

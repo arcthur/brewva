@@ -31,8 +31,10 @@ describe("task progress watchdog", () => {
 
       now = 1_710_000_000_100;
       runtime.ops.task.spec.set(sessionId, {
-        schema: "brewva.task.v1",
-        goal: "Detect long-running idle periods",
+        spec: {
+          schema: "brewva.task.v1",
+          goal: "Detect long-running idle periods",
+        },
       });
 
       const watchdog = new TaskProgressWatchdog({
@@ -129,8 +131,10 @@ describe("task progress watchdog", () => {
 
       now = 1_725_000_000_100;
       runtime.ops.task.spec.set(sessionId, {
-        schema: "brewva.task.v1",
-        goal: "Exercise worker-local watchdog lifecycle wiring",
+        spec: {
+          schema: "brewva.task.v1",
+          goal: "Exercise worker-local watchdog lifecycle wiring",
+        },
       });
 
       expect(TASK_PROGRESS_WATCHDOG_TEST_ONLY.sanitizeDelayMs(250, 5_000)).toBe(1_000);
@@ -205,8 +209,10 @@ describe("task progress watchdog", () => {
 
       now = 1_726_000_000_100;
       runtime.ops.task.spec.set(sessionId, {
-        schema: "brewva.task.v1",
-        goal: "Exercise hook-backed stall adjudication",
+        spec: {
+          schema: "brewva.task.v1",
+          goal: "Exercise hook-backed stall adjudication",
+        },
       });
       runtime.ops.task.blockers.record(sessionId, {
         message: "Awaiting operator decision on retry scope",

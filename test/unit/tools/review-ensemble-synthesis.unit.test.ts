@@ -148,14 +148,24 @@ describe("review ensemble synthesis aggregates every reviewer per lane", () => {
             nickname: "r1",
             lane: LANE,
             disposition: "concern",
-            findings: [{ summary: "races on the cache", severity: "high", evidenceRefs: ["ev-a"] }],
+            findings: [
+              {
+                summary: "races on the cache",
+                severity: "high",
+                evidenceRefs: ["ev-a"],
+              },
+            ],
           }),
           reviewOutcome({
             nickname: "r2",
             lane: LANE,
             disposition: "concern",
             findings: [
-              { summary: "races on the cache", severity: "critical", evidenceRefs: ["ev-b"] },
+              {
+                summary: "races on the cache",
+                severity: "critical",
+                evidenceRefs: ["ev-b"],
+              },
             ],
           }),
         ],
@@ -166,6 +176,49 @@ describe("review ensemble synthesis aggregates every reviewer per lane", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]!.severity).toBe("critical");
     expect([...(merged[0]!.evidenceRefs ?? [])].toSorted()).toEqual(["ev-a", "ev-b"]);
+  });
+
+  // Task 14: atomRefs is a same-shape sibling of evidenceRefs on
+  // DelegationOutcomeFinding — the lane-ensemble path is a second consumer of
+  // dedupeFindings, so it must merge atomRefs by the identical union rule
+  // rather than silently dropping the field on the higher-severity survivor.
+  test("merges atomRefs across reviewers that raised the same finding by different atoms", () => {
+    const result = synthesizeReviewEnsemble(
+      inputFor(
+        [LANE],
+        [
+          reviewOutcome({
+            nickname: "r1",
+            lane: LANE,
+            disposition: "concern",
+            findings: [
+              {
+                summary: "atom not realized",
+                severity: "high",
+                atomRefs: ["req-a"],
+              },
+            ],
+          }),
+          reviewOutcome({
+            nickname: "r2",
+            lane: LANE,
+            disposition: "concern",
+            findings: [
+              {
+                summary: "atom not realized",
+                severity: "critical",
+                atomRefs: ["req-b"],
+              },
+            ],
+          }),
+        ],
+      ),
+    );
+
+    const merged = result.reviewFindings.filter((entry) => entry.summary === "atom not realized");
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.severity).toBe("critical");
+    expect([...(merged[0]!.atomRefs ?? [])].toSorted()).toEqual(["req-a", "req-b"]);
   });
 
   test("a single blocking reviewer blocks the lane fail-closed and keeps dissent", () => {
@@ -201,8 +254,18 @@ describe("review ensemble synthesis aggregates every reviewer per lane", () => {
       inputFor(
         [LANE],
         [
-          reviewOutcome({ nickname: "r1", lane: LANE, disposition: "clear", confidence: "high" }),
-          reviewOutcome({ nickname: "r2", lane: LANE, disposition: "clear", confidence: "low" }),
+          reviewOutcome({
+            nickname: "r1",
+            lane: LANE,
+            disposition: "clear",
+            confidence: "high",
+          }),
+          reviewOutcome({
+            nickname: "r2",
+            lane: LANE,
+            disposition: "clear",
+            confidence: "low",
+          }),
         ],
       ),
     );
@@ -221,7 +284,12 @@ describe("review ensemble synthesis aggregates every reviewer per lane", () => {
       inputFor(
         [LANE],
         [
-          reviewOutcome({ nickname: "r1", lane: LANE, disposition: "clear", confidence: "high" }),
+          reviewOutcome({
+            nickname: "r1",
+            lane: LANE,
+            disposition: "clear",
+            confidence: "high",
+          }),
           reviewOutcome({ nickname: "r2", lane: LANE, disposition: "clear" }),
         ],
       ),
@@ -284,7 +352,12 @@ describe("review ensemble synthesis aggregates every reviewer per lane", () => {
       consultKind: "review",
       status: "ok",
       summary: "r1 reviewed nothing structured",
-      data: { kind: "consult", consultKind: "review", conclusion: "looked around", lane: LANE },
+      data: {
+        kind: "consult",
+        consultKind: "review",
+        conclusion: "looked around",
+        lane: LANE,
+      },
       metrics: { durationMs: 1 },
       evidenceRefs: [],
     };

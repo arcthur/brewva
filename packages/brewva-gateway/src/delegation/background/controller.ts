@@ -7,7 +7,11 @@ import type {
   SubagentCancelResult,
   SubagentRunRequest,
 } from "@brewva/brewva-tools/contracts";
-import type { DelegationRunQuery, DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import type {
+  DelegationReviewDispatch,
+  DelegationRunQuery,
+  DelegationRunRecord,
+} from "@brewva/brewva-vocabulary/delegation";
 import { isDelegationRunTerminalStatus } from "@brewva/brewva-vocabulary/delegation";
 import { readWorkerResultsAppliedEventPayload } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
@@ -66,6 +70,7 @@ export interface HostedSubagentBackgroundController {
     forkTurns?: SubagentRunRequest["forkTurns"];
     timeoutMs?: number;
     delivery?: NonNullable<SubagentRunRequest["delivery"]>;
+    reviewDispatch?: DelegationReviewDispatch;
   }): Promise<DelegationRunRecord>;
   inspectLiveRuns(input: {
     parentSessionId: string;
@@ -469,6 +474,7 @@ export function createDetachedSubagentBackgroundController(
             taskIdentity,
             forkTurns,
             delivery: buildDeliveryRecord(input.delivery, createdAt),
+            reviewDispatch: input.reviewDispatch,
           }),
           "failed",
           error instanceof Error ? error.message : String(error),
@@ -486,6 +492,7 @@ export function createDetachedSubagentBackgroundController(
         boundary: executionPlan.boundary,
         modelRoute: executionPlan.modelRoute,
         delivery: buildDeliveryRecord(input.delivery, createdAt),
+        reviewDispatch: input.reviewDispatch,
       });
       if (
         input.packet.completionPredicate &&

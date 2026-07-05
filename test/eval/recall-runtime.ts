@@ -160,9 +160,11 @@ export async function executeRecallRuntimeScenario(input: {
   for (const session of dataset.sessions) {
     runtime.ops.context.lifecycle.onTurnStart(session.id, 1);
     runtime.ops.task.spec.set(session.id, {
-      schema: "brewva.task.v1",
-      goal: session.goal,
-      targets: session.target_files ? { files: session.target_files } : undefined,
+      spec: {
+        schema: "brewva.task.v1",
+        goal: session.goal,
+        targets: session.target_files ? { files: session.target_files } : undefined,
+      },
     });
 
     for (const event of session.events ?? []) {

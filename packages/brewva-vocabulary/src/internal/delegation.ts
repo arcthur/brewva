@@ -1,5 +1,6 @@
 import { type BrewvaEventRecord } from "./events.js";
 import { type VerifierCheck } from "./iteration.js";
+import { readReviewTargetRef, type ReviewTargetRef } from "./review.js";
 import type { ProtocolRecord } from "./types/foundation.js";
 
 export type { ProtocolRecord } from "./types/foundation.js";
@@ -360,6 +361,69 @@ export interface DelegationInspectionProjection {
   readonly recoveryPreview: RecoveryPreview;
 }
 
+/**
+ * Dispatch-time review anchor carried on a delegation run record when the run
+ * was dispatched as an independent review (review_request). It preserves what
+ * the receipt-commit path cannot re-derive at completion time:
+ *
+ * - `targetRef`: the pre-dispatch snapshot of what the reviewer saw. Receipts
+ *   MUST record this snapshot, never the completion-time tree — re-deriving at
+ *   completion would silently defeat the staleness match rule when the author
+ *   keeps writing while the review runs.
+ * - `lenses`: the preloaded lens texts (reviewer-context + checks + the
+ *   preloaded_lens independence basis on the receipt).
+ * - `stanceOverridden`: whether the caller replaced the open adversarial
+ *   stance wholesale (the receipt's checks label must stay honest).
+ *
+ * Deliberately distinct from the receipt-side `ReviewerContext` (the reviewer
+ * fingerprint: routed model + context id): this is the dispatch anchor, that is
+ * the reviewer identity. Absence of this field means "not a review run".
+ */
+export interface DelegationReviewDispatch {
+  readonly targetRef: ReviewTargetRef;
+  readonly lenses: readonly string[];
+  readonly stanceOverridden: boolean;
+  /**
+   * The reviewed atom ids when this dispatch targeted atoms (all folded atoms,
+   * or the caller-listed `atomIds`); absent/`[]` for a files/session_diff
+   * target. Carried on the anchor so BOTH commit paths — the in-tool completion
+   * mode AND the gateway observer's start mode (which reads this back off the
+   * run record) — can populate a clear outcome's `atomRefs` without re-resolving
+   * the target. Only a `pass` (clear) outcome consumes it; a fail ignores it.
+   */
+  readonly reviewedAtomIds?: readonly string[];
+}
+
+/**
+ * Defensive parse of a `DelegationReviewDispatch` read back from a run record
+ * or lifecycle payload. Fail-closed on the essential datum: an unparsable
+ * `targetRef` rejects the WHOLE dispatch (a review anchor that cannot say what
+ * tree state was reviewed is not an anchor); `lenses`/`stanceOverridden`
+ * degrade field-by-field to their empty/false defaults.
+ */
+export function readDelegationReviewDispatch(value: unknown): DelegationReviewDispatch | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as ProtocolRecord;
+  const targetRef = readReviewTargetRef(record.targetRef);
+  if (targetRef === null) {
+    return null;
+  }
+  return {
+    targetRef,
+    lenses: Array.isArray(record.lenses)
+      ? record.lenses.filter((entry): entry is string => typeof entry === "string")
+      : [],
+    stanceOverridden: record.stanceOverridden === true,
+    // Round-trips onto the run record so the observer's start-mode commit can
+    // populate a clear atoms-review's atomRefs. Missing/malformed → [].
+    reviewedAtomIds: Array.isArray(record.reviewedAtomIds)
+      ? record.reviewedAtomIds.filter((entry): entry is string => typeof entry === "string")
+      : [],
+  };
+}
+
 export interface DelegationRunRecord {
   readonly contractVersion: typeof CURRENT_DELEGATION_CONTRACT_VERSION;
   readonly runId: string;
@@ -402,6 +466,7 @@ export interface DelegationRunRecord {
   readonly totalTokens?: number;
   readonly costUsd?: number;
   readonly resultData?: ProtocolRecord;
+  readonly reviewDispatch?: DelegationReviewDispatch;
   readonly startedAt?: number;
   readonly completedAt?: number;
   readonly [key: string]: unknown;
@@ -477,6 +542,7 @@ export interface DelegationLifecycleEventPayload extends ProtocolRecord {
   readonly error?: string;
   readonly reason?: string;
   readonly resultData?: ProtocolRecord;
+  readonly reviewDispatch?: DelegationReviewDispatch | null;
   readonly artifactRefs?: DelegationArtifactRef[];
   readonly delivery?: DelegationDeliveryRecord;
   readonly totalTokens?: number;

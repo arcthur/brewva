@@ -34,6 +34,7 @@ export function buildDelegationLifecyclePayload(
     summary: record.summary ?? null,
     error: record.error ?? null,
     resultData: record.resultData ?? null,
+    reviewDispatch: record.reviewDispatch ?? null,
     artifactRefs: record.artifactRefs ?? [],
     totalTokens: record.totalTokens ?? null,
     costUsd: record.costUsd ?? null,

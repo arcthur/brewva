@@ -4,6 +4,7 @@ import type {
   DelegationRunQuery,
   DelegationRunRecord as RuntimeDelegationRunRecord,
 } from "@brewva/brewva-vocabulary/delegation";
+import type { ReviewFindingCategory } from "@brewva/brewva-vocabulary/review";
 import type { A2ABroadcastResult, A2ASendResult } from "./a2a.js";
 import type { ExplorerConsultBrief } from "./explorer.js";
 import type {
@@ -75,6 +76,15 @@ export interface DelegationPacket {
   effectCeiling?: {
     boundary?: DelegationExecutionBoundary;
   };
+  /**
+   * Advisory model-routing hint. Rides the packet into gateway model routing,
+   * which stays the sole decider — the hint only biases the choice and the
+   * resolved model still lands in the run record's `modelRoute`. The packet is
+   * the honest carrier because it already flows tool -> gateway -> routing
+   * untouched (spread-preserved through target-default merge), so no request
+   * field needs threading at every dispatch call site.
+   */
+  modelHint?: string;
 }
 
 export interface DelegationTaskPacket extends DelegationPacket {
@@ -86,7 +96,25 @@ export interface DelegationTaskPacket extends DelegationPacket {
 export interface DelegationOutcomeFinding {
   summary: string;
   severity?: "critical" | "high" | "medium" | "low";
+  /**
+   * The reviewer's declared finding category (the open-adversarial stance in
+   * `review-request.ts` asks for one of `REVIEW_FINDING_CATEGORIES`). Optional
+   * because lane-ensemble findings predate this field; a missing or
+   * unrecognized value defaults to `"unknown"` at the receipt-commit seam
+   * (`categoryForFinding` in `review-receipts.ts`), never here.
+   */
+  category?: ReviewFindingCategory;
   evidenceRefs?: string[];
+  /**
+   * Requirement-atom ids the reviewer says this finding bears on (Task 14's
+   * atoms target). Optional because most findings never name atoms; parsed
+   * from the reviewer's structured deliverable at
+   * `readStoredFinding`/`coerceStoredReviewOutcomeData` and carried verbatim
+   * onto the committed `review.finding.recorded` receipt's own `atomRefs`
+   * (`commitReviewReceipts` in `review-receipts.ts`) — never invented when
+   * absent.
+   */
+  atomRefs?: string[];
 }
 
 export interface DelegationOutcomeChange {

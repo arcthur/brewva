@@ -23,6 +23,12 @@
       "import": "./dist/events.js",
       "default": "./dist/events.js"
     },
+    "./fitness": {
+      "types": "./dist/fitness.d.ts",
+      "bun": "./src/fitness.ts",
+      "import": "./dist/fitness.js",
+      "default": "./dist/fitness.js"
+    },
     "./goal": {
       "types": "./dist/goal.d.ts",
       "bun": "./src/goal.ts",
@@ -58,6 +64,12 @@
       "bun": "./src/reduction.ts",
       "import": "./dist/reduction.js",
       "default": "./dist/reduction.js"
+    },
+    "./review": {
+      "types": "./dist/review.d.ts",
+      "bun": "./src/review.ts",
+      "import": "./dist/review.js",
+      "default": "./dist/review.js"
     },
     "./schedule": {
       "types": "./dist/schedule.d.ts",

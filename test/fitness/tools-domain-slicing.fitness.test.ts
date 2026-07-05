@@ -39,6 +39,10 @@ const PUBLIC_TOOLS_SUBPATHS = [
   "delegation",
   "skills",
   "workflow",
+  // Pure trap library (deterministic engine + seed data, no tool-runtime deps).
+  // Exported as a subpath because it is consumed cross-package by the gateway's
+  // orient-phase atom injection, not just by tool families.
+  "trap-library",
 ] as const;
 const RUNTIME_FREE_MANAGED_FACTORY_TOOL_NAMES = new Set([
   "agent_broadcast",

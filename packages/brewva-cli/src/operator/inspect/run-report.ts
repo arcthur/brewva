@@ -2,6 +2,16 @@ import { classifyCommandClass } from "@brewva/brewva-std/command-class";
 import { readNonEmptyString, readStringList } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import { FITNESS_DISCREPANCY_GRADES } from "@brewva/brewva-vocabulary/fitness";
+import type {
+  FitnessDiscrepancy,
+  FitnessDiscrepancyGrade,
+} from "@brewva/brewva-vocabulary/fitness";
+import { readVerificationOutcomeRecordedEventPayload } from "@brewva/brewva-vocabulary/iteration";
+import { REVIEW_FINDING_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/review";
+import { foldTaskLedgerEvents } from "@brewva/brewva-vocabulary/task";
+import { readReceiptFitnessSummary } from "./fitness-summary.js";
+import { buildTapeReviewDebt } from "./review-debt.js";
 
 /**
  * Run report: the story of a session reconstructed from its tape.
@@ -45,6 +55,51 @@ export interface RunReportVerification {
    * receipt consumer (Work Card Evidence, stall adjudication) stayed blind.
    */
   readonly unreceiptedGreenVerification: boolean;
+  /** `verification.outcome.recorded` receipts with `perspective === "authored"` (the default for pre-perspective receipts). */
+  readonly authoredReceipts: number;
+  /** `verification.outcome.recorded` receipts with `perspective === "independent"`. */
+  readonly independentReceipts: number;
+  /** Count of `review.finding.recorded` receipts this session. */
+  readonly findingsRecorded: number;
+  /**
+   * The same conservative, tape-only debt rule Work Card evidence uses
+   * (`projectTapeReviewDebt`): does the tape's LATEST verification receipt
+   * leave review debt behind — a `pass` at `requirements`+ on fresh code with
+   * no independent receipt whose `targetRef` still matches (tape-only match:
+   * `patch_sets` set-equality, `file_digests` "no patch landed since the
+   * receipt"). Never reads the filesystem.
+   */
+  readonly reviewDebt: boolean;
+  /**
+   * The LATEST `verification.outcome.recorded` receipt's `discrepancies`,
+   * read straight off the payload the vocabulary reader already parses — this
+   * projection never re-runs `projectRequirementFitness` (Task 12's join);
+   * `verification_record` (Task 13) already computed and committed the
+   * annotation onto the receipt at claim time. Empty when the latest receipt
+   * carries none (or no receipt exists at all).
+   */
+  readonly latestDiscrepancies: readonly FitnessDiscrepancy[];
+}
+
+/**
+ * A receipt-only tally of the requirement-fitness accounting, never a
+ * re-derivation of the per-atom evidence join. `atomsTotal` folds the tape's
+ * requirement atoms directly (`foldTaskLedgerEvents`, the same fold every
+ * task-ledger reader uses); `violatedAtoms` and `unverifiedMustAtoms` count
+ * the LATEST `verification.outcome.recorded` receipt's own
+ * `discrepancies`/`unverifiedMustAtoms` fields (one discrepancy per violated
+ * atom, by construction of `projectRequirementFitness` — see
+ * `internal/fitness.ts`). Every other atom (satisfied, likelySatisfied,
+ * non-must unverified, notApplicable) is not distinguishable from receipt
+ * fields alone and is intentionally left uncounted here — a full per-atom
+ * state breakdown requires re-running the evidence join, which this pure
+ * read surface deliberately does not do (see the module doc comment).
+ */
+export interface RunReportFitness {
+  readonly atomsTotal: number;
+  readonly violatedAtoms: number;
+  readonly unverifiedMustAtoms: number;
+  readonly discrepanciesByGrade: Readonly<Record<FitnessDiscrepancyGrade, number>>;
 }
 
 export interface RunReportProjection {
@@ -70,6 +125,7 @@ export interface RunReportProjection {
   };
   readonly errorFixCycles: readonly RunReportErrorFixCycle[];
   readonly verification: RunReportVerification;
+  readonly fitness: RunReportFitness;
   readonly skills: {
     readonly selections: number;
     readonly renderedSkillNames: readonly string[];
@@ -154,6 +210,14 @@ export function buildRunReportProjection(
   let latestVerificationRung: string | null = null;
   let verificationCommandsObserved = 0;
   let verificationCommandsGreen = 0;
+  let authoredReceipts = 0;
+  let independentReceipts = 0;
+  let findingsRecorded = 0;
+  // The LATEST verification.outcome.recorded receipt's fitness annotation
+  // (Task 13) — replaced wholesale on every receipt seen, in tape order, so
+  // the final value is exactly the most recent claim's own committed fields.
+  let latestDiscrepancies: readonly FitnessDiscrepancy[] = [];
+  let latestUnverifiedMustAtoms: readonly string[] = [];
 
   let skillSelections = 0;
   const renderedSkillNames = new Set<string>();
@@ -210,7 +274,12 @@ export function buildRunReportProjection(
         const call = readCall(payload);
         const toolName = call.toolName ?? "unknown";
         const outcome = event.type === "tool.aborted" ? "err" : (readOutcomeKind(payload) ?? "ok");
-        const stat = toolStats.get(toolName) ?? { calls: 0, ok: 0, err: 0, inc: 0 };
+        const stat = toolStats.get(toolName) ?? {
+          calls: 0,
+          ok: 0,
+          err: 0,
+          inc: 0,
+        };
         stat.calls += 1;
         if (outcome === "ok") stat.ok += 1;
         else if (outcome === "err") stat.err += 1;
@@ -282,6 +351,27 @@ export function buildRunReportProjection(
         verificationReceipts += 1;
         latestVerificationOutcome = readString(payload, "outcome");
         latestVerificationRung = readString(payload, "level");
+        // The typed reader (not local ad hoc parsing) so the perspective split
+        // — and the fitness annotation below — can never diverge from what
+        // every other receipt consumer (Work Card, inspect report) sees; the
+        // full-tape debt fold (below, after the loop) reuses this same reader
+        // independently via `buildTapeReviewDebt`, so this pass only needs
+        // the perspective count and the latest fitness fields.
+        const parsed = readVerificationOutcomeRecordedEventPayload(event);
+        if (parsed.perspective === "independent") {
+          independentReceipts += 1;
+        } else {
+          authoredReceipts += 1;
+        }
+        // Replaced wholesale (not merged) on every receipt, in tape order:
+        // the LATEST claim's own committed annotation is the current truth —
+        // never re-run the join, just read what Task 13 already wrote.
+        latestDiscrepancies = parsed.discrepancies;
+        latestUnverifiedMustAtoms = parsed.unverifiedMustAtoms;
+        continue;
+      }
+      case REVIEW_FINDING_RECORDED_EVENT_TYPE: {
+        findingsRecorded += 1;
         continue;
       }
       case "skill.selection.recorded": {
@@ -336,6 +426,32 @@ export function buildRunReportProjection(
       (left, right) => right.calls - left.calls || left.toolName.localeCompare(right.toolName),
     );
 
+  // Same shared fold Work Card and the inspect report use (`buildTapeReviewDebt`)
+  // — a full-tape pass over the original `events`, not the ordered/switched
+  // loop above, so it can not diverge by depending on this projection's own
+  // per-field accumulation order.
+  const reviewDebt = buildTapeReviewDebt(events).debt;
+
+  // Requirement atoms fold from the tape directly (the same shared vocabulary
+  // fold every task-ledger reader uses), independent of the switch above —
+  // this is a plain atom-identity count, never the fitness evidence join.
+  const atomsTotal = foldTaskLedgerEvents(events).requirements.length;
+  // SINGLE-HOMED (Task 15): the receipt->fitness-summary tally itself (one
+  // discrepancy per violated atom, unverifiedMust count, by-grade total map)
+  // lives in `readReceiptFitnessSummary` — the Work Card fitness line calls
+  // the exact same function over its own latest-receipt fields, so the two
+  // surfaces can never fork this computation.
+  const receiptFitness = readReceiptFitnessSummary({
+    discrepancies: latestDiscrepancies,
+    unverifiedMustAtoms: latestUnverifiedMustAtoms,
+  });
+  const fitness: RunReportFitness = {
+    atomsTotal,
+    violatedAtoms: receiptFitness.violated,
+    unverifiedMustAtoms: receiptFitness.unverifiedMust,
+    discrepanciesByGrade: receiptFitness.discrepanciesByGrade,
+  };
+
   return {
     schema: "brewva.run-report.v1",
     sessionId,
@@ -370,7 +486,13 @@ export function buildRunReportProjection(
       verificationCommandsObserved,
       verificationCommandsGreen,
       unreceiptedGreenVerification: verificationCommandsGreen > 0 && verificationReceipts === 0,
+      authoredReceipts,
+      independentReceipts,
+      findingsRecorded,
+      reviewDebt,
+      latestDiscrepancies,
     },
+    fitness,
     skills: {
       selections: skillSelections,
       renderedSkillNames: [...renderedSkillNames].toSorted((left, right) =>
@@ -443,9 +565,35 @@ export function formatRunReportText(report: RunReportProjection): string {
   const debt = verification.unreceiptedGreenVerification
     ? " debt=green-verification-without-receipt"
     : "";
+  // The latest receipt's fitness discrepancies, named by atom id — a compact
+  // pointer into the dedicated Fitness: line below, surfaced right where the
+  // rest of the verification story already lives.
+  const latestDiscrepancySuffix =
+    verification.latestDiscrepancies.length > 0
+      ? ` latestDiscrepancies=${verification.latestDiscrepancies
+          .map((entry) => `${entry.atomId}(${entry.grade})`)
+          .join(", ")}`
+      : "";
   lines.push(
-    `Verification: ${verificationSummary} commandsObserved=${verification.verificationCommandsObserved} commandsGreen=${verification.verificationCommandsGreen}${debt}`,
+    `Verification: ${verificationSummary} commandsObserved=${verification.verificationCommandsObserved} commandsGreen=${verification.verificationCommandsGreen}${debt}${latestDiscrepancySuffix}`,
   );
+  lines.push(
+    `Verification perspective: authored=${verification.authoredReceipts} independent=${verification.independentReceipts} findings=${verification.findingsRecorded} reviewDebt=${verification.reviewDebt}`,
+  );
+  // Fitness section is omitted entirely when no requirement atoms exist —
+  // there is nothing to account for, mirroring `verification_record`'s own
+  // omit-when-empty summary-line convention (Task 13).
+  if (report.fitness.atomsTotal > 0) {
+    // Rendered by ITERATING FITNESS_DISCREPANCY_GRADES (not two named fields)
+    // so a future third grade appears in the printed line automatically.
+    const byGrade = FITNESS_DISCREPANCY_GRADES.map(
+      (grade) => `${grade}=${report.fitness.discrepanciesByGrade[grade]}`,
+    ).join(" ");
+    lines.push(
+      `Fitness: atoms=${report.fitness.atomsTotal} violated=${report.fitness.violatedAtoms} ` +
+        `unverifiedMust=${report.fitness.unverifiedMustAtoms} ${byGrade}`,
+    );
+  }
   lines.push(
     `Skills: selections=${report.skills.selections} rendered=${
       report.skills.renderedSkillNames.length > 0

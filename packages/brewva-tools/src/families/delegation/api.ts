@@ -2,10 +2,24 @@ export { createA2ATools, type CreateA2AToolsOptions } from "./a2a.js";
 export { createDelegationInboxQueryTool } from "./delegation-inbox-query.js";
 export { createQuestionTool } from "./question.js";
 export {
+  createReviewRequestTool,
+  OPEN_ADVERSARIAL_REVIEW_STANCE,
+  ReviewRequestParamsSchema,
+} from "./review-request.js";
+export {
+  commitReviewReceipts,
+  resolveRoutedModel,
+  type CommitReviewReceiptsInput,
+  type CommitReviewReceiptsResult,
+  type ReviewReceiptSource,
+} from "./review-receipts.js";
+export {
   ALL_REVIEW_LANES,
   ALWAYS_ON_REVIEW_LANES,
   CONDITIONAL_REVIEW_LANES,
   buildReviewLaneDelegationTasks,
+  coerceStoredReviewOutcomeData,
+  deriveReviewDisposition,
   deriveReviewLaneActivationPlan,
   isReviewLaneName,
   materializeReviewLaneOutcomes,
