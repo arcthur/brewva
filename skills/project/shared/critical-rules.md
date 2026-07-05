@@ -74,3 +74,16 @@ owner: runtime-maintainers
   so a newly wireless event kind fails the fitness rather than shipping quiet.
   Land the producer and its liveness coverage in the same change as the
   consumer, not as a follow-up.
+- The static event-contract scan above has a blind spot it CANNOT close: it
+  credits an event kind as produced whenever an emit-shaped producer exists
+  anywhere in source — but a producer can exist while the hosted managed-session
+  execution path never invokes it. `tool.invocation.started` was exactly this: a
+  real runtime-ops producer, zero occurrences on every real hosted tape, so an
+  entire family of attention/feedback projections shipped green on synthetic
+  fixtures and ran dead in production. Therefore: a projection that READS the
+  tape is not shipped until it has a non-empty assertion in the DYNAMIC real-tape
+  liveness fitness (`test/fitness/hosted-tape-projection-liveness.fitness.test.ts`),
+  which folds a curated, redacted real hosted tape and asserts the projection
+  yields real output — the terminal number it produces, not merely that its event
+  kind has some producer somewhere. Any new tape-reading projection adds its own
+  non-empty assertion there in the same change.

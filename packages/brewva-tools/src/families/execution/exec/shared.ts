@@ -1,5 +1,6 @@
 import { relative, resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
+import { classifyCommandClass } from "@brewva/brewva-std/command-class";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { textResultForOutcome, type ToolTextOutcomeKind } from "../../../utils/result.js";
 
@@ -99,6 +100,46 @@ export function resolveVerificationForegroundWaitMs(
     return DEFAULT_VERIFICATION_FOREGROUND_WAIT_MS;
   }
   return Math.max(1, Math.min(120_000, Math.trunc(raw)));
+}
+
+/**
+ * The foreground wait (yieldMs) an exec call blocks for before it backgrounds.
+ * `background: true` yields immediately (0). Otherwise the model's explicit
+ * yieldMs wins for a general command; for a verification-class command the
+ * operator-configured wait is a FLOOR — an explicit value may RAISE it but must
+ * not silently truncate the build below the configured wait (a low value would
+ * collapse P3 into a background + activity-poll loop). Pure and deterministic so
+ * the pacing decision is unit-testable in isolation from the exec effect.
+ */
+export function resolveExecForegroundYieldMs(input: {
+  command: string;
+  background: boolean;
+  params: { yieldMs?: unknown };
+  autoBackground: ExecutionAutoBackgroundConfig | undefined;
+}): number {
+  if (input.background) {
+    return 0;
+  }
+  const isVerification = classifyCommandClass(input.command) === "verification";
+  const defaultYieldMs = isVerification
+    ? resolveVerificationForegroundWaitMs(input.autoBackground)
+    : resolveForegroundWaitMs(input.autoBackground);
+  const resolved = resolveYieldMs(input.params, defaultYieldMs);
+  return isVerification ? Math.max(resolved, defaultYieldMs) : resolved;
+}
+
+/**
+ * Follow-up guidance for a command that backgrounded despite its foreground
+ * wait. A verification-class command (build/test/lint/typecheck) that still ran
+ * long should be polled with `until=exit` so the model blocks for the exit
+ * verdict in ONE call instead of churning `until="activity"` polls; every other
+ * command gets the generic process surface. The command is re-classified from
+ * the same static table the pacing decision used — no new state to thread.
+ */
+export function backgroundFollowUpLine(command: string, genericFollowUp: string): string {
+  return classifyCommandClass(command) === "verification"
+    ? "Verification command still running — poll with `process poll until=exit` to block for the exit verdict in one call (avoids an activity-poll loop)."
+    : genericFollowUp;
 }
 
 export function resolveTimeoutSec(params: { timeout?: unknown }): number | undefined {

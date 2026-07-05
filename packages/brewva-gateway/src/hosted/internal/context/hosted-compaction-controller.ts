@@ -13,6 +13,10 @@ import type {
   SessionCompactionInputProvenance,
 } from "@brewva/brewva-vocabulary/session";
 import {
+  projectToolInvocations,
+  TOOL_COMMITTED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/tool-invocations";
+import {
   SOURCE_PATCH_APPLIED_EVENT_TYPE,
   SOURCE_RESOURCE_READ_EVENT_TYPE,
   SOURCE_SNAPSHOT_RECORDED_EVENT_TYPE,
@@ -314,6 +318,13 @@ function buildRuntimeCompactionInputProvenance(input: {
     recallEvents: queryRuntimeEvents(input.runtime, input.sessionId, {
       type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
     }),
+    // Authoritative modified/read-file provenance: project the commitment
+    // boundary the hosted path actually writes. `usageEvents` stays as the
+    // in-process fallback (its annotation kinds are absent on hosted tapes).
+    toolInvocations: projectToolInvocations(
+      queryRuntimeEvents(input.runtime, input.sessionId, { type: TOOL_COMMITTED_EVENT_TYPE }),
+    ),
+    workspaceRoot: input.runtime.identity.workspaceRoot ?? null,
     usageEvents: queryCompactionInputProvenanceEvents({
       runtime: input.runtime,
       sessionId: input.sessionId,

@@ -208,6 +208,82 @@ describe("compaction input provenance", () => {
     });
   });
 
+  test("derives modified/read files from committed tool runs (the hosted authority), relativized and outcome-filtered", () => {
+    // Feed the SHAPE the hosted path emits — projected `tool.committed` runs —
+    // not the runtime-ops annotation that never reaches a hosted tape. A write
+    // that errored did not mutate the tree, so it is excluded.
+    const provenance = buildCompactionInputProvenance({
+      workbenchEntries: [],
+      recallEvents: [],
+      workspaceRoot: "/workspace/app",
+      toolInvocations: [
+        {
+          toolCallId: "c1",
+          toolName: "write",
+          args: { path: "/workspace/app/Sources/App/Main.swift" },
+          timestamp: 1,
+          outcome: "ok",
+        },
+        {
+          toolCallId: "c2",
+          toolName: "edit",
+          args: { path: "/workspace/app/Sources/App/View.swift" },
+          timestamp: 2,
+          outcome: null,
+        },
+        {
+          toolCallId: "c3",
+          toolName: "write",
+          args: { path: "/workspace/app/Sources/App/Broken.swift" },
+          timestamp: 3,
+          outcome: "err",
+        },
+        {
+          toolCallId: "c4",
+          toolName: "read",
+          args: { path: "/workspace/app/Sources/App/Config.swift" },
+          timestamp: 4,
+          outcome: "ok",
+        },
+      ],
+      usageEvents: [],
+      compactBaseline: null,
+      recallTokenBudget: 400,
+    });
+
+    expect(provenance.modifiedFiles).toEqual(["Sources/App/Main.swift", "Sources/App/View.swift"]);
+    expect(provenance.readFiles).toEqual(["Sources/App/Config.swift"]);
+  });
+
+  test("unions commitment-derived files with the in-process usageEvents channel", () => {
+    const provenance = buildCompactionInputProvenance({
+      workbenchEntries: [],
+      recallEvents: [],
+      workspaceRoot: "/workspace/app",
+      toolInvocations: [
+        {
+          toolCallId: "c1",
+          toolName: "write",
+          args: { path: "/workspace/app/src/committed.ts" },
+          timestamp: 1,
+          outcome: "ok",
+        },
+      ],
+      usageEvents: [
+        {
+          type: "source.patch.applied",
+          payload: { modifiedFiles: ["src/in-process.ts"] },
+        },
+      ],
+      compactBaseline: null,
+      recallTokenBudget: 400,
+    });
+
+    // Commitment authority first, then the in-process fallback — neither path
+    // regresses the other.
+    expect(provenance.modifiedFiles).toEqual(["src/committed.ts", "src/in-process.ts"]);
+  });
+
   test("normalizes structured file resource URIs without admitting non-file resources", () => {
     const provenance = buildCompactionInputProvenance({
       workbenchEntries: [

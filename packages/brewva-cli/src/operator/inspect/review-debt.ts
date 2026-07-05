@@ -1,11 +1,5 @@
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
-  RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-  type BrewvaEventRecord,
-} from "@brewva/brewva-vocabulary/events";
-import {
-  deriveLatestTreeMutationAt,
-  extractWriteInvocationPaths,
-  projectFreshCodeWritten,
   readVerificationOutcomeRecordedEventPayload,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
@@ -15,6 +9,12 @@ import {
   type ReviewDebt,
   type TapeVerificationReceipt,
 } from "@brewva/brewva-vocabulary/review";
+import {
+  deriveLatestTreeMutationAt,
+  extractWriteInvocationPaths,
+  projectFreshCodeWritten,
+  projectToolInvocations,
+} from "@brewva/brewva-vocabulary/tool-invocations";
 import {
   collectPatchSetAppliedPaths,
   deriveAppliedPatchSetIds,
@@ -55,10 +55,11 @@ export function buildTapeReviewDebt(events: readonly BrewvaEventRecord[]): Revie
         targetRef: parsed.targetRef,
       };
     });
-  const invocationStartedEvents = events.filter(
-    (event) => event.type === RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-  );
-  const freshCodeWritten = projectFreshCodeWritten(invocationStartedEvents);
+  // Authoritative "a tool ran" fact = the kernel commitment boundary, which the
+  // hosted tape always carries (the runtime-ops `tool.invocation.started`
+  // annotation is absent on every real hosted tape).
+  const invocations = projectToolInvocations(events);
+  const freshCodeWritten = projectFreshCodeWritten(invocations);
   const patchTapeEvents = events.filter(
     (event) => event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE || event.type === ROLLBACK_EVENT_TYPE,
   );
@@ -71,17 +72,28 @@ export function buildTapeReviewDebt(events: readonly BrewvaEventRecord[]): Revie
   // and blocked writes never touched the tree and are excluded.
   const latestTreeMutationAt = deriveLatestTreeMutationAt({
     patchRollbackEvents: patchTapeEvents,
-    writeInvocationEvents: invocationStartedEvents,
+    writeInvocations: invocations,
   });
   // Fresh-touched-file universe + per-patch-set attested paths (Finding P1-C).
   // The universe unions every successful patch's `appliedPaths` with the target
   // path of every bare-write (write/edit) invocation; a matching independent
   // receipt clears debt only when it also COVERS the universe. Every input is
   // tape-derived — no filesystem access.
+  //
+  // Known absolute/relative split (deliberate, conservatively safe): commitment
+  // write args are ABSOLUTE and this pure tape fold has no workspace root to
+  // relativize against (`buildRunReportProjection` calls it with events only, no
+  // runtime), so bare-write paths stay absolute here while patch `appliedPaths`
+  // are workspace-relative. A `file_digests` receipt keyed workspace-relative may
+  // therefore fail to COVER an absolute bare-write path → debt is UNDER-cleared
+  // (shown), never falsely cleared — exactly this module's stated "under-claims
+  // freshness at worst" contract. The debt-CLEARING producer that must be exact
+  // (`sessionFreshTouchedFilePaths`) DOES relativize via the workspace root; this
+  // read-only display surface intentionally does not.
   const patchSetAppliedPaths = collectPatchSetAppliedPaths(events);
   const freshTouchedUniverse = deriveFreshTouchedFileUniverse({
     appliedPaths: Object.values(patchSetAppliedPaths).flat(),
-    writeInvocationPaths: extractWriteInvocationPaths(invocationStartedEvents),
+    writeInvocationPaths: extractWriteInvocationPaths(invocations),
   });
   return projectTapeReviewDebt({
     freshCodeWritten,

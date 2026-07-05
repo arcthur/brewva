@@ -245,10 +245,9 @@ describe("buildRunReportProjection", () => {
   test("reviewDebt: an authored pass at requirements+ on fresh code with no independent receipt at all", () => {
     const events: BrewvaEventRecord[] = [
       record("turn.started", 0, {}),
-      record("tool.invocation.started", 50, {
-        toolName: "write",
-        allowed: true,
-        args: { path: "src/a.ts" },
+      record("tool.committed", 50, {
+        call: { toolName: "write", args: { path: "src/a.ts" } },
+        result: { outcome: { kind: "ok" } },
       }),
       record("verification.outcome.recorded", 100, {
         outcome: "pass",
@@ -267,10 +266,9 @@ describe("buildRunReportProjection", () => {
       record("turn.started", 0, {}),
       // The fresh-touched file is exactly the patch-applied file, so the
       // patch_sets receipt over ps-1 covers the whole change (Finding P1-C).
-      record("tool.invocation.started", 50, {
-        toolName: "write",
-        allowed: true,
-        args: { path: "src/a.ts" },
+      record("tool.committed", 50, {
+        call: { toolName: "write", args: { path: "src/a.ts" } },
+        result: { outcome: { kind: "ok" } },
       }),
       record("source_patch_applied", 70, {
         ok: true,
@@ -315,10 +313,9 @@ describe("buildRunReportProjection", () => {
       // The fresh-touched file IS the reviewed file, so coverage is satisfied
       // and the ONLY thing that can fire debt here is the rollback aging the
       // review (Finding P1-C isolates coverage from the freshness gate).
-      record("tool.invocation.started", 50, {
-        toolName: "write",
-        allowed: true,
-        args: { path: "src/a.ts" },
+      record("tool.committed", 50, {
+        call: { toolName: "write", args: { path: "src/a.ts" } },
+        result: { outcome: { kind: "ok" } },
       }),
       // A patch applied BEFORE the review does not stale it.
       record("source_patch_applied", 70, {
@@ -346,10 +343,9 @@ describe("buildRunReportProjection", () => {
   test("reviewDebt stays false when the rollback after a file_digests receipt failed (a failed rollback never touched the tree)", () => {
     const events: BrewvaEventRecord[] = [
       record("turn.started", 0, {}),
-      record("tool.invocation.started", 50, {
-        toolName: "write",
-        allowed: true,
-        args: { path: "src/a.ts" },
+      record("tool.committed", 50, {
+        call: { toolName: "write", args: { path: "src/a.ts" } },
+        result: { outcome: { kind: "ok" } },
       }),
       record("source_patch_applied", 70, {
         ok: true,

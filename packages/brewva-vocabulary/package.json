@@ -89,6 +89,12 @@
       "import": "./dist/task.js",
       "default": "./dist/task.js"
     },
+    "./tool-invocations": {
+      "types": "./dist/tool-invocations.d.ts",
+      "bun": "./src/tool-invocations.ts",
+      "import": "./dist/tool-invocations.js",
+      "default": "./dist/tool-invocations.js"
+    },
     "./user-model": {
       "types": "./dist/user-model.d.ts",
       "bun": "./src/user-model.ts",

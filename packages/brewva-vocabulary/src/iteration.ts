@@ -15,7 +15,6 @@ export {
   buildReasoningRevertSummaryDetails,
   CLAIM_UPSERTED_EVENT_TYPE,
   classifyToolFailure,
-  deriveLatestTreeMutationAt,
   deriveWorkflowArtifacts,
   deriveWorkflowArtifactsFromEvent,
   deriveWorkflowStatus,
@@ -28,12 +27,10 @@ export {
   ITERATION_GUARD_STATUS_VALUES,
   ITERATION_METRIC_AGGREGATION_VALUES,
   MODEL_PRESET_SELECT_EVENT_TYPE,
-  extractWriteInvocationPaths,
   MODEL_SELECT_EVENT_TYPE,
   OBSERVABILITY_ASSERTION_RECORDED_EVENT_TYPE,
   OBSERVABILITY_QUERY_EXECUTED_EVENT_TYPE,
   projectAttentionEntryConsumption,
-  projectFreshCodeWritten,
   PROVIDER_CREDENTIAL_ROTATED_EVENT_TYPE,
   readReasoningRevertEventPayload,
   readToolResultRecordedEventPayload,
@@ -53,7 +50,6 @@ export {
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_RUNGS,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
-  WRITE_TOOL_NAMES,
 } from "./internal/iteration.js";
 
 export type {
@@ -72,7 +68,6 @@ export type {
   EffectCommitmentRequestRecord,
   EffectCommitmentRequestState,
   EvidenceRef,
-  FreshCodeScanEvent,
   GuardResultInput,
   GuardResultQuery,
   GuardResultRecord,

@@ -22,6 +22,7 @@ import {
   createRuntimeFixture,
   type HostedRuntimeAdapterPort,
 } from "../../helpers/runtime.js";
+import { committedToolEvent, seedCommittedToolEvents } from "../../helpers/tool-events.js";
 
 const FIXTURES_DIR = resolve(import.meta.dir, "../../fixtures/intent-realization");
 
@@ -1410,19 +1411,23 @@ function applyPatch(
   });
 }
 
-/** Seed a bare write/edit invocation (no patch set) so the session has a
- *  fresh-touched file without any applied patch — the P2 fallback case. */
+/** Seed a bare write/edit commitment (no patch set) so the session has a
+ *  fresh-touched file without any applied patch — the P2 fallback case. Seeds
+ *  the `tool.committed` boundary the touched-file projection reads (not the
+ *  runtime-ops annotation the hosted path never emits). */
 function seedBareWrite(
   runtime: ReturnType<typeof createRuntimeFixture>,
   sessionId: string,
   filePath: string,
 ): void {
-  runtime.ops.tools.invocation.start({
-    sessionId,
-    toolName: "edit",
-    args: { file_path: filePath },
-    runtimeCapabilityAccess: { allowed: true, basis: "test" },
-  });
+  seedCommittedToolEvents(runtime, [
+    committedToolEvent({
+      sessionId,
+      toolName: "edit",
+      args: { file_path: filePath },
+      timestamp: 1,
+    }),
+  ]);
 }
 
 describe("review_request tool — atoms target (Task 14)", () => {

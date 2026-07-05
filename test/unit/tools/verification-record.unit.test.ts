@@ -4,7 +4,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createVerificationRecordTool } from "@brewva/brewva-tools/workflow";
-import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { projectRequirementFitness } from "@brewva/brewva-vocabulary/fitness";
 import {
   readVerificationOutcomeRecordedEventPayload,
@@ -16,6 +15,46 @@ import {
   recordVerificationOutcome,
 } from "../../../packages/brewva-tools/src/runtime-port/verification.js";
 import { createBundledToolRuntime, createRuntimeFixture } from "../../helpers/runtime.js";
+import {
+  committedToolEvent,
+  seedCommittedToolEvents,
+  type CommittedToolEvent,
+} from "../../helpers/tool-events.js";
+
+// Seed a write as the kernel COMMITMENT it really is (see seedCommittedToolEvents
+// — the shared delegating-records seam serves seeded `tool.committed` while every
+// receipt/finding this tool emits still hits the real store). Seeded commitments
+// are stamped AFTER every real-clock event already on the tape, so the
+// tree-mutation-after-finding staleness scenarios below hold.
+interface CommittedSeam {
+  count: number;
+  readonly baseTs: number;
+}
+const committedSeeds = new WeakMap<object, CommittedSeam>();
+function seedCommittedWrite(
+  runtime: ReturnType<typeof createRuntimeFixture>,
+  sessionId: string,
+  writePath: string | null = "reviewed-file.ts",
+): CommittedToolEvent {
+  let seam = committedSeeds.get(runtime);
+  if (!seam) {
+    const records = runtime.ops.events.records as {
+      list: (s: string, q?: unknown) => Array<{ timestamp?: number }>;
+    };
+    const maxRealTs = Math.max(0, ...records.list(sessionId).map((event) => event.timestamp ?? 0));
+    seam = { count: 0, baseTs: maxRealTs };
+    committedSeeds.set(runtime, seam);
+  }
+  seam.count += 1;
+  const event = committedToolEvent({
+    toolName: "edit",
+    sessionId,
+    timestamp: seam.baseTs + seam.count,
+    ...(writePath !== null ? { args: { file_path: writePath } } : {}),
+  });
+  seedCommittedToolEvents(runtime, [event]);
+  return event;
+}
 
 const toolContext = (sessionId: string) =>
   ({
@@ -85,23 +124,12 @@ describe("verification_record tool", () => {
 describe("verification_record tool — review-debt marker", () => {
   const REVIEW_DEBT_MARKER_SUFFIX = "— consider review_request before shipping.";
 
-  // Seed a write-class invocation. A real edit always carries its target path;
+  // Seed a write-class commitment. A real edit always carries its target path;
   // supplying it lets the P1-C coverage rule know exactly which file the
   // session touched. Omitting the path (writePath: null) models an unparseable
   // write, which makes the fresh-touched universe not-fully-known (coverage can
   // never be proven -> debt shows).
-  function markFreshCodeWritten(
-    runtime: ReturnType<typeof createRuntimeFixture>,
-    sessionId: string,
-    writePath: string | null = "reviewed-file.ts",
-  ): void {
-    runtime.ops.tools.invocation.start({
-      sessionId,
-      toolName: "edit",
-      ...(writePath !== null ? { args: { file_path: writePath } } : {}),
-      runtimeCapabilityAccess: { allowed: true, basis: "test" },
-    });
-  }
+  const markFreshCodeWritten = seedCommittedWrite;
 
   test("no marker when no fresh code was written this session", async () => {
     const runtime = createRuntimeFixture();
@@ -660,19 +688,10 @@ describe("verification_record tool — claim-time fitness discrepancy annotation
     const sessionId = "fitness-p1-bare-write-1";
     seedAtom(runtime, sessionId);
 
-    // No patch/rollback events at all — only a bare edit.
-    runtime.ops.tools.invocation.start({
-      sessionId,
-      toolName: "edit",
-      args: { file_path: "reviewed-file.ts" },
-      runtimeCapabilityAccess: { allowed: true, basis: "test" },
-    });
-
-    // Read the bare edit's own tape timestamp; the assembled fitness input must
-    // report exactly that as the latest tree mutation (not null).
-    const writeEvent = runtime.ops.events.records.query(sessionId, {
-      type: RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-    })[0]!;
+    // No patch/rollback events at all — only a bare edit commitment. Its tape
+    // timestamp is the latest tree mutation the assembled fitness input must
+    // report (not null).
+    const writeEvent = seedCommittedWrite(runtime, sessionId, "reviewed-file.ts");
     const fitnessInput = assembleRequirementFitnessInput(bundled, sessionId);
 
     expect(fitnessInput.latestTreeMutationAt).toBe(writeEvent.timestamp);
@@ -704,36 +723,23 @@ describe("verification_record tool — claim-time fitness discrepancy annotation
       type: "review.finding.recorded",
     })[0]!;
 
-    // A bare edit lands AFTER the finding's receipt. The assemble path derives
-    // latestTreeMutationAt from this bare write (Finding P1); it must exceed the
-    // finding's receipt timestamp so the tape-only matcher stales the finding.
-    runtime.ops.tools.invocation.start({
-      sessionId,
-      toolName: "edit",
-      args: { file_path: "overbroad-tap.swift" },
-      runtimeCapabilityAccess: { allowed: true, basis: "test" },
-    });
-    const writeEvent = runtime.ops.events.records.query(sessionId, {
-      type: RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-    })[0]!;
-    // Ordering guard: the fixture records events with a monotonic clock, so the
-    // later bare edit is at-or-after the finding. This scenario only proves the
-    // drop when the edit is strictly later; skip the assertion in the (rare)
-    // same-millisecond case rather than assert a false positive.
-    expect(writeEvent.timestamp).toBeGreaterThanOrEqual(findingEvent.timestamp);
+    // A bare edit commitment lands AFTER the finding's receipt. The assemble
+    // path derives latestTreeMutationAt from this bare write (Finding P1); the
+    // seam stamps it after every prior real event, so it strictly exceeds the
+    // finding's receipt timestamp and the tape-only matcher stales the finding.
+    const writeEvent = seedCommittedWrite(runtime, sessionId, "overbroad-tap.swift");
+    expect(writeEvent.timestamp).toBeGreaterThan(findingEvent.timestamp);
 
     const fitnessInput = assembleRequirementFitnessInput(bundled, sessionId);
     // The bare edit fed latestTreeMutationAt (would be null before the fix).
     expect(fitnessInput.latestTreeMutationAt).toBe(writeEvent.timestamp);
 
-    if (writeEvent.timestamp > findingEvent.timestamp) {
-      const projection = projectRequirementFitness(fitnessInput);
-      const atom = projection.atoms.find((entry) => entry.atomId === EVENT_TAP_ATOM.id);
-      // STALENESS NEVER VIOLATES: the finding is dropped whole — atom unverified,
-      // no discrepancy on the claim-time annotation.
-      expect(atom?.state).toBe("unverified");
-      expect(projection.discrepancies).toEqual([]);
-    }
+    const projection = projectRequirementFitness(fitnessInput);
+    const atom = projection.atoms.find((entry) => entry.atomId === EVENT_TAP_ATOM.id);
+    // STALENESS NEVER VIOLATES: the finding is dropped whole — atom unverified,
+    // no discrepancy on the claim-time annotation.
+    expect(atom?.state).toBe("unverified");
+    expect(projection.discrepancies).toEqual([]);
   });
 
   test("DEFENSE-IN-DEPTH: an independent FAIL outcome that wrongly carries atomRefs is stripped by the assembly — clear-only is enforced at the consumption point too, so no blanket-violation", () => {

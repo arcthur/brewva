@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { makeEvent } from "@brewva/brewva-vocabulary/events";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type { ReviewTargetRef } from "@brewva/brewva-vocabulary/review";
+import { TOOL_COMMITTED_EVENT_TYPE } from "@brewva/brewva-vocabulary/tool-invocations";
 import { SOURCE_PATCH_APPLIED_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
 import { buildTapeReviewDebt } from "../../../packages/brewva-cli/src/operator/inspect/review-debt.js";
 
@@ -13,9 +13,14 @@ import { buildTapeReviewDebt } from "../../../packages/brewva-cli/src/operator/i
 // home for the per-receipt-timestamp (P1-A) and coverage (P1-C) assertions.
 
 function writeInvocation(sessionId: string, path: string, timestamp: number) {
+  // The commitment boundary the projections actually read — a bare edit that
+  // ran, in the shape the hosted path emits.
   return makeEvent(
-    RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-    { sessionId, toolName: "edit", allowed: true, args: { file_path: path } },
+    TOOL_COMMITTED_EVENT_TYPE,
+    {
+      call: { sessionId, toolName: "edit", args: { file_path: path } },
+      result: { outcome: { kind: "ok" } },
+    },
     { timestamp, id: `write-${path}-${timestamp}` },
   );
 }

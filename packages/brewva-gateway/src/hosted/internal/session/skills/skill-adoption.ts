@@ -1,10 +1,12 @@
 import { readNonEmptyString } from "@brewva/brewva-std/text";
-import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
 import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
+import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   projectFreshCodeWritten,
-  VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-} from "@brewva/brewva-vocabulary/iteration";
+  projectToolInvocations,
+  relativizeToWorkspace,
+  TOOL_COMMITTED_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/tool-invocations";
 
 /** The minimal event surface these projections read (BrewvaEventRecord-compatible). */
 export interface SkillProjectionEvent {
@@ -28,9 +30,9 @@ export interface SkillProjectionEvent {
 // createHostedCustomTools — read/edit/write take `path`/`file_path`).
 
 const READ_TOOL_NAMES = new Set(["source_read", "resource_read", "look_at", "read"]);
-// The fresh-code SCAN (not just the WRITE_TOOL_NAMES set) is shared with the
-// tools-side review-debt projection via projectFreshCodeWritten
-// (@brewva/brewva-vocabulary/iteration) — one definition, two consumers.
+// The fresh-code scan is shared with the tools-side review-debt projection via
+// projectFreshCodeWritten (@brewva/brewva-vocabulary/tool-invocations) — one
+// definition over the commitment boundary, two consumers.
 
 export interface SkillAdoptionSample {
   readonly selectionId: string;
@@ -109,34 +111,28 @@ function readRenderedSkillRefs(payload: unknown): RenderedSkillRef[] {
   return refs;
 }
 
-function readInvocationArgs(
-  payload: unknown,
-): { toolName: string; args: object; cwd: string | null } | null {
+function readInvocationArgs(payload: unknown): { toolName: string; args: object } | null {
+  // Reads the kernel COMMITMENT envelope (`tool.committed` → `payload.call`),
+  // the authoritative "a tool ran" fact. A blocked/aborted call never commits,
+  // so there is no `allowed` flag to check — presence in the commitment stream
+  // IS "it ran." (The hosted managed-session path does not emit the runtime-ops
+  // `tool.invocation.started` annotation these projections used to read, which
+  // is why they were blind on every real tape.)
   if (!payload || typeof payload !== "object") {
     return null;
   }
-  const record = payload as {
-    toolName?: unknown;
-    args?: unknown;
-    allowed?: unknown;
-    cwd?: unknown;
-  };
-  // A blocked invocation never executed: the model saw nothing and touched
-  // nothing, so it must count neither as adoption nor as a work location.
-  if (record.allowed === false) {
+  const call = (payload as { call?: unknown }).call;
+  if (!call || typeof call !== "object") {
     return null;
   }
+  const record = call as { toolName?: unknown; args?: unknown };
   if (typeof record.toolName !== "string") {
     return null;
   }
   if (!record.args || typeof record.args !== "object") {
     return null;
   }
-  return {
-    toolName: record.toolName,
-    args: record.args,
-    cwd: typeof record.cwd === "string" && record.cwd.length > 0 ? record.cwd : null,
-  };
+  return { toolName: record.toolName, args: record.args };
 }
 
 /** Null-contract shim over the std non-empty-string rule. */
@@ -144,6 +140,11 @@ function nonEmptyString(value: unknown): string | null {
   return readNonEmptyString(value) ?? null;
 }
 
+// Deliberately NOT the read-model's `readToolArgPath` — this omits `uri` on
+// purpose. `collectInvocationTargetPaths` dispatches `uri` per-tool
+// (source_read/resource_read → args.uri, source_patch_prepare → args.edits[].uri)
+// so the single-path tools (write/edit/read/look_at) must read only
+// path/file_path/filePath here; folding in `uri` would wrongly grab it for them.
 function readSinglePathArg(args: object): string | null {
   const record = args as { path?: unknown; file_path?: unknown; filePath?: unknown };
   return (
@@ -207,7 +208,7 @@ export function projectLatestSkillAdoption(
       : "unknown_selection";
   const adopted = new Set<string>();
   for (const event of events) {
-    if (event.type !== RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND) continue;
+    if (event.type !== TOOL_COMMITTED_EVENT_TYPE) continue;
     if (event.timestamp < latestSelection.event.timestamp) continue;
     const target = readInvocationReadTarget(event.payload);
     if (!target) continue;
@@ -272,39 +273,20 @@ function collectInvocationTargetPaths(invocation: { toolName: string; args: obje
 }
 
 /**
- * Skill path-globs are workspace-relative; tools accept absolute targets too.
- * Strip the invocation's own cwd so `src/payment/**` matches a read of
- * `/repo/src/payment/checkout.ts`. Absolute paths outside the workspace stay
- * absolute (and correctly never match workspace globs).
- */
-function relativizeToCwd(target: string, cwd: string | null): string {
-  if (!cwd || !target.startsWith("/")) {
-    return target;
-  }
-  const normalizedCwd = normalizePath(cwd).replace(/\/+$/u, "");
-  if (normalizedCwd.length === 0) {
-    return target;
-  }
-  if (target === normalizedCwd) {
-    return "";
-  }
-  return target.startsWith(`${normalizedCwd}/`) ? target.slice(normalizedCwd.length + 1) : target;
-}
-
-/**
  * Workspace paths the session actually touched recently (read/edit/write,
- * look_at, grep/glob scopes, and patch-prepare invocation receipts, newest
- * first, deduplicated). This widens the skill path-glob signal from "paths
- * the user happened to type" to "paths the work is happening in" — the
- * magika-audit gap where a skill scoped to src/payment/** should surface once
- * the model starts editing there, whether or not the prompt names a path.
+ * look_at, grep/glob scopes, and patch-prepare commitments, newest first,
+ * deduplicated). This widens the skill path-glob signal from "paths the user
+ * happened to type" to "paths the work is happening in" — the magika-audit gap
+ * where a skill scoped to src/payment/** should surface once the model starts
+ * editing there, whether or not the prompt names a path.
  */
 export function projectRecentToolTargetPaths(
   events: readonly SkillProjectionEvent[],
   limit: number,
+  workspaceRoot: string | null = null,
 ): string[] {
   const ordered = [...events]
-    .filter((event) => event.type === RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND)
+    .filter((event) => event.type === TOOL_COMMITTED_EVENT_TYPE)
     .toSorted((left, right) => right.timestamp - left.timestamp);
   const paths: string[] = [];
   const seen = new Set<string>();
@@ -312,7 +294,10 @@ export function projectRecentToolTargetPaths(
     const invocation = readInvocationArgs(event.payload);
     if (!invocation) continue;
     for (const target of collectInvocationTargetPaths(invocation)) {
-      const normalized = relativizeToCwd(normalizePath(pathFromUriLike(target)), invocation.cwd);
+      const normalized = relativizeToWorkspace(
+        normalizePath(pathFromUriLike(target)),
+        workspaceRoot,
+      );
       if (normalized.length === 0 || seen.has(normalized)) continue;
       seen.add(normalized);
       paths.push(normalized);
@@ -353,10 +338,10 @@ export function projectPostGreenReviewSignal(input: {
   // review-debt projection (internal/iteration.ts's projectFreshCodeWritten) —
   // a second pass over the same bounded per-session invocation list, not a
   // second copy of the write-tool scan.
-  const freshCodeWritten = projectFreshCodeWritten(input.invocationEvents);
+  const freshCodeWritten = projectFreshCodeWritten(projectToolInvocations(input.invocationEvents));
   let reviewAdopted = false;
   for (const event of input.invocationEvents) {
-    if (event.type !== RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND) continue;
+    if (event.type !== TOOL_COMMITTED_EVENT_TYPE) continue;
     if (input.reviewSkillFilePath && !reviewAdopted) {
       const target = readInvocationReadTarget(event.payload);
       if (target && readTargetMatchesSkillFile(target, input.reviewSkillFilePath)) {
@@ -370,6 +355,12 @@ export function projectPostGreenReviewSignal(input: {
   // events carry a different stored kind, background exits emit no failure
   // event, and an older pass must never outweigh a newer fail. The receipt is
   // the only honest green (axiom: every commitment has a receipt).
+  //
+  // Intentionally rung-AGNOSTIC (any pass, no requirements-level floor): this is
+  // the softer of the two post-green surfaces — it merely makes the `review`
+  // SkillCard visible. The stronger "you owe an independent review" claim (the
+  // tools-side review-debt marker) keeps its requirements+ floor; surfacing the
+  // affordance a rung earlier costs nothing and never asserts debt.
   const latestReceipt = input.verificationEvents
     .filter((event) => event.type === VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE)
     .toSorted((left, right) => left.timestamp - right.timestamp)
@@ -413,7 +404,7 @@ export function projectNeglectedTextMatchOffers(
   }
   const reads: Array<{ timestamp: number; target: string }> = [];
   for (const event of events) {
-    if (event.type !== RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND) continue;
+    if (event.type !== TOOL_COMMITTED_EVENT_TYPE) continue;
     const target = readInvocationReadTarget(event.payload);
     if (target) {
       reads.push({ timestamp: event.timestamp, target });
@@ -494,9 +485,9 @@ const EMPTY_PROJECTION_INPUTS: RecentSkillProjectionInputs = {
 
 // Selection receipts scanned back for the previous-adoption trace line.
 const RECENT_SELECTION_WINDOW = 8;
-// Tail of tool.invocation.started events QUERIED for the recent_path signal —
-// the INPUT side; the deduplicated output is capped separately by the
-// selection-side RECENT_TOOL_PATH_LIMIT.
+// Tail of tool.committed events QUERIED for the recent_path signal — the INPUT
+// side; the deduplicated output is capped separately by the selection-side
+// RECENT_TOOL_PATH_LIMIT.
 const RECENT_INVOCATION_QUERY_WINDOW = 60;
 // Invocations examined after a visible selection when measuring adoption and
 // neglect; skill reads happen early in a turn, so a generous cap suffices.
@@ -530,7 +521,7 @@ export function queryRecentSkillProjectionInputs(
       }) ?? [];
     const recentInvocations =
       records.query(sessionId, {
-        type: RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+        type: TOOL_COMMITTED_EVENT_TYPE,
         last: RECENT_INVOCATION_QUERY_WINDOW,
       }) ?? [];
     let latestVisibleSelectionTimestamp: number | null = null;
@@ -557,7 +548,7 @@ export function queryRecentSkillProjectionInputs(
       latestVisibleSelectionTimestamp === null
         ? []
         : (records.query(sessionId, {
-            type: RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+            type: TOOL_COMMITTED_EVENT_TYPE,
             after: latestVisibleSelectionTimestamp - 1,
             limit: ADOPTION_INVOCATION_SCAN_LIMIT,
           }) ?? []);
@@ -565,7 +556,7 @@ export function queryRecentSkillProjectionInputs(
       visibleSelectionCount > 1 && oldestVisibleSelectionTimestamp !== null;
     const sinceOldest = wantsNeglectWindow
       ? (records.query(sessionId, {
-          type: RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+          type: TOOL_COMMITTED_EVENT_TYPE,
           after: (oldestVisibleSelectionTimestamp ?? 0) - 1,
           limit: ADOPTION_INVOCATION_SCAN_LIMIT,
         }) ?? [])

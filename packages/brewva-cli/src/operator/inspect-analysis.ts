@@ -8,6 +8,7 @@ import {
 } from "@brewva/brewva-runtime/config";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import { CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
 import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
@@ -37,11 +38,27 @@ const OPS_INSIGHT_EVENT_TYPES = new Set<string>([
   BOX_EXEC_FAILED_EVENT_TYPE,
   EXEC_FAILED_EVENT_TYPE,
 ]);
-const RUNTIME_PRESSURE_EVENT_TYPES = new Set<string>([PARALLEL_SLOT_REJECTED_EVENT_TYPE]);
+// Compaction-gate budget pressure feeds the runtime_pressure finding from TWO
+// signals so BOTH execution modes are covered:
+//   - HOSTED managed-session: the durable `context.compaction.gate.armed`
+//     receipt (emitted by the context-budget seam when the hard gate arms,
+//     carrying reason + usage/hard-limit ratios). This is the authoritative
+//     hosted signal — the runtime-ops `tool.invocation.started` annotation the
+//     old detection read is NEVER emitted on a hosted tape (verified: zero
+//     occurrences across every real hosted tape), so before this it ran dead on
+//     every hosted session.
+//   - IN-PROCESS: the runtime-ops `tool.invocation.started` annotation with
+//     allowed:false + reason=context_compaction_gate_required, which IS emitted
+//     on that path (via `invocation.start` → `checkGate`) but not on hosted.
+// `isCompactionGateBlockedInvocation` matches the in-process annotation;
+// `context.compaction.gate.armed` (in RUNTIME_PRESSURE_EVENT_TYPES) matches the
+// hosted receipt. Distinct from a tool_contract block (capability/policy denial)
+// so the two findings never double-count.
+const RUNTIME_PRESSURE_EVENT_TYPES = new Set<string>([
+  PARALLEL_SLOT_REJECTED_EVENT_TYPE,
+  CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE,
+]);
 
-// Compaction-gate blocks land as tool.invocation.started with allowed:false
-// (there is no dedicated blocked_tool event; the contract-liveness audit
-// retired that dead type).
 function isCompactionGateBlockedInvocation(event: BrewvaEventRecord): boolean {
   if (event.type !== RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND) {
     return false;
@@ -650,7 +667,7 @@ function buildOpsEnvironmentFinding(events: BrewvaEventRecord[]): InspectFinding
   };
 }
 
-function buildRuntimePressureFinding(events: BrewvaEventRecord[]): InspectFinding | null {
+export function buildRuntimePressureFinding(events: BrewvaEventRecord[]): InspectFinding | null {
   const pressureEvents = events.filter(
     (event) =>
       RUNTIME_PRESSURE_EVENT_TYPES.has(event.type) || isCompactionGateBlockedInvocation(event),
@@ -673,7 +690,9 @@ function buildRuntimePressureFinding(events: BrewvaEventRecord[]): InspectFindin
 
   const severity = pressureEvents.some(
     (event) =>
-      isCompactionGateBlockedInvocation(event) || event.type === PARALLEL_SLOT_REJECTED_EVENT_TYPE,
+      isCompactionGateBlockedInvocation(event) ||
+      event.type === CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE ||
+      event.type === PARALLEL_SLOT_REJECTED_EVENT_TYPE,
   )
     ? "error"
     : "warn";

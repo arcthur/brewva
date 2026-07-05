@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildInspectReport } from "../../../packages/brewva-cli/src/operator/inspect.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { committedToolEvent, seedCommittedToolEvents } from "../../helpers/tool-events.js";
 
 // Task 6 (W1 read surfaces): `InspectVerification` gains the perspective and
 // independence basis of the latest `verification.outcome.recorded` receipt,
@@ -162,7 +163,9 @@ describe("inspect report — tape-only review debt (shared with Work Card and ru
     });
     const sessionId = "inspect-review-debt-none-1";
 
-    runtime.ops.tools.invocation.start({ sessionId, toolName: "write", callId: "call-1" });
+    seedCommittedToolEvents(runtime, [
+      committedToolEvent({ sessionId, toolName: "write", timestamp: 1 }),
+    ]);
     void runtime.ops.verification.checks.verify(sessionId, {
       outcome: "pass",
       level: "requirements",
@@ -182,12 +185,14 @@ describe("inspect report — tape-only review debt (shared with Work Card and ru
 
     // The only fresh-touched file is the one the patch applied, so the
     // patch_sets receipt over ps-1 covers the whole change (Finding P1-C).
-    runtime.ops.tools.invocation.start({
-      sessionId,
-      toolName: "write",
-      callId: "call-1",
-      args: { path: "src/a.ts" },
-    });
+    seedCommittedToolEvents(runtime, [
+      committedToolEvent({
+        sessionId,
+        toolName: "write",
+        args: { path: "src/a.ts" },
+        timestamp: 1,
+      }),
+    ]);
     runtime.ops.tools.sourcePatch.plans.apply(sessionId, {
       ok: true,
       planId: "plan-1",
@@ -237,18 +242,20 @@ describe("inspect report — tape-only review debt (shared with Work Card and ru
     });
     const sessionId = "inspect-review-debt-partial-1";
 
-    runtime.ops.tools.invocation.start({
-      sessionId,
-      toolName: "edit",
-      callId: "call-a",
-      args: { file_path: "a.ts" },
-    });
-    runtime.ops.tools.invocation.start({
-      sessionId,
-      toolName: "edit",
-      callId: "call-b",
-      args: { file_path: "b.ts" },
-    });
+    seedCommittedToolEvents(runtime, [
+      committedToolEvent({
+        sessionId,
+        toolName: "edit",
+        args: { file_path: "a.ts" },
+        timestamp: 1,
+      }),
+      committedToolEvent({
+        sessionId,
+        toolName: "edit",
+        args: { file_path: "b.ts" },
+        timestamp: 2,
+      }),
+    ]);
     void runtime.ops.verification.checks.verify(sessionId, {
       outcome: "pass",
       level: "requirements",

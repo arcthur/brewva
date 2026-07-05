@@ -202,6 +202,7 @@ export function createVerificationRecordTool(options: BrewvaBundledToolOptions):
             runtime,
             sessionId,
             { outcome, level },
+            workspaceRoot,
             (path) => readWorkspaceFileDigest(workspaceRoot, path),
           );
           const debt = projectReviewDebt(debtInput);

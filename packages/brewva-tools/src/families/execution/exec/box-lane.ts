@@ -20,6 +20,7 @@ import { ManagedExecProcessRegistryService } from "../exec-process-registry/serv
 import { mapHostPathToGuest, type BoxRootMapping } from "./box-root-map.js";
 import type { ResolvedExecutionPolicy } from "./policy.js";
 import {
+  backgroundFollowUpLine,
   ExecAbortedError,
   isSafeEnvKey,
   SHELL_ARGS,
@@ -360,7 +361,10 @@ export const executeBoxCommandEffect: (
         });
         const outputLines = [
           `Command still running (session ${started.session.id}, box ${box.id}, execution ${execution.id}).`,
-          "Use process (list/poll/log/kill/clear/remove) for follow-up.",
+          backgroundFollowUpLine(
+            input.command,
+            "Use process (list/poll/log/kill/clear/remove) for follow-up.",
+          ),
         ];
         if (started.session.tail.trim().length > 0) {
           outputLines.push("", started.session.tail.trimEnd());
@@ -410,7 +414,10 @@ export const executeBoxCommandEffect: (
         });
         const outputLines = [
           `Command still running (session ${started.session.id}, box ${box.id}, execution ${execution.id}).`,
-          "Use process (list/poll/log/kill/clear/remove) for follow-up.",
+          backgroundFollowUpLine(
+            input.command,
+            "Use process (list/poll/log/kill/clear/remove) for follow-up.",
+          ),
         ];
         if (started.session.tail.trim().length > 0) {
           outputLines.push("", started.session.tail.trimEnd());

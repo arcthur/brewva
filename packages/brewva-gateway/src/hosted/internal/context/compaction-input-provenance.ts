@@ -17,6 +17,12 @@ import {
   type SessionCompactionResourceRef,
 } from "@brewva/brewva-vocabulary/session";
 import {
+  readToolArgPath,
+  relativizeToWorkspace,
+  WRITE_TOOL_NAMES,
+  type ToolInvocation,
+} from "@brewva/brewva-vocabulary/tool-invocations";
+import {
   isAttentionPinnedWorkbenchEntry,
   type WorkbenchEntry,
 } from "@brewva/brewva-vocabulary/workbench";
@@ -31,11 +37,27 @@ interface CompactionProvenanceInput {
   readonly skillSelection?: unknown;
   readonly capabilitySelection?: unknown;
   readonly recallEvents: readonly CompactionProvenanceEvent[];
+  // Committed tool runs, projected off `tool.committed` — the authoritative
+  // source of "which files this session modified/read." The legacy
+  // `usageEvents` file channels below (`tool.invocation.started`,
+  // `source.patch.applied`, ...) are runtime-ops annotations the hosted path
+  // never emits, so on every real hosted tape they contribute nothing; the
+  // commitment boundary is what actually carries the writes. Kept as a union so
+  // the in-process runtime (which does emit the annotations) never regresses.
+  readonly toolInvocations?: readonly ToolInvocation[];
+  readonly workspaceRoot?: string | null;
   readonly usageEvents?: readonly CompactionProvenanceEvent[];
   readonly attentionEvents?: readonly CompactionProvenanceEvent[];
   readonly compactBaseline?: unknown;
   readonly recallTokenBudget?: number | null;
 }
+
+// Read-class committed tools whose target path fed the compacted summary. `read`
+// is the hosted builtin; the canonical-family read tools are included for
+// symmetry with WRITE_TOOL_NAMES (which carries the canonical `source_patch_apply`)
+// so a session that reads via them still contributes read provenance — their
+// `uri`/`file_path` args are read by readToolArgPath + normalizeStructuredFilePath.
+const READ_TOOL_NAMES = new Set<string>(["read", "source_read", "resource_read", "look_at"]);
 
 const RECALL_SOURCE_FAMILIES = ["tape_evidence", "repository_precedent"] as const;
 const RECALL_SESSION_SCOPES = ["current_session", "prior_session", "cross_workspace"] as const;
@@ -372,6 +394,29 @@ function readModifiedFilesFromEvents(events: readonly CompactionProvenanceEvent[
   return readStringArray(events.flatMap((event) => readModifiedFilesFromPayload(event.payload)));
 }
 
+// File paths from committed tool runs (the authoritative modified/read source on
+// hosted tapes). Commitment args carry the ABSOLUTE host path; provenance is
+// workspace-relative, so the shared read-model relativizer strips the root
+// before the structured-path normalizer runs. A committed write that errored did
+// not mutate the tree, so it is excluded on outcome, mirroring the read-model's
+// tree-mutation predicate.
+function readCommittedFilePaths(
+  invocations: readonly ToolInvocation[],
+  toolNames: ReadonlySet<string>,
+  workspaceRoot: string | null | undefined,
+): string[] {
+  return readStringArray(
+    invocations
+      .filter((invocation) => toolNames.has(invocation.toolName) && invocation.outcome !== "err")
+      .map((invocation) => readToolArgPath(invocation.args))
+      .filter((path): path is string => path !== null)
+      .map((path) =>
+        normalizeStructuredFilePath(relativizeToWorkspace(path, workspaceRoot ?? null)),
+      )
+      .filter((path): path is string => path !== null),
+  );
+}
+
 function readAttentionOptionRef(value: unknown): string | null {
   return stringOrNull(value);
 }
@@ -498,8 +543,13 @@ export function buildCompactionInputProvenance(
       .map(readFilePathFromRecallRef)
       .filter((entry): entry is string => entry !== null),
   );
-  const modifiedFiles = readModifiedFilesFromEvents(input.usageEvents ?? []);
+  const toolInvocations = input.toolInvocations ?? [];
+  const modifiedFiles = readStringArray([
+    ...readCommittedFilePaths(toolInvocations, WRITE_TOOL_NAMES, input.workspaceRoot),
+    ...readModifiedFilesFromEvents(input.usageEvents ?? []),
+  ]);
   const readFiles = readStringArray([
+    ...readCommittedFilePaths(toolInvocations, READ_TOOL_NAMES, input.workspaceRoot),
     ...readReadFilesFromEvents(input.usageEvents ?? []),
     ...workbenchReferencedFiles,
     ...readSkillResourceFiles(input.skillSelection),

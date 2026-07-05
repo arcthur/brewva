@@ -265,7 +265,7 @@ export function snapshotTargetRef(
     // No applied patch sets: fall back to a file_digests snapshot over the
     // session's fresh-touched files (bare write/edit paths). Same digest
     // fail-closed discipline as a files target.
-    const touched = sessionFreshTouchedFilePaths(runtime, sessionId);
+    const touched = sessionFreshTouchedFilePaths(runtime, sessionId, workspaceRoot);
     if (touched.length === 0) {
       return {
         ok: false,

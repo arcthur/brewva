@@ -1,8 +1,10 @@
 import { resolve } from "node:path";
 import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate/tools";
-import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
-import { extractWriteInvocationPaths } from "@brewva/brewva-vocabulary/iteration";
 import { deriveFreshTouchedFileUniverse } from "@brewva/brewva-vocabulary/review";
+import {
+  extractWriteInvocationPaths,
+  projectToolInvocations,
+} from "@brewva/brewva-vocabulary/tool-invocations";
 import {
   collectPatchSetAppliedPaths,
   deriveAppliedPatchSetIds,
@@ -125,20 +127,30 @@ export function sessionAppliedTouchedFilePaths(
  * Reuses the existing universe derivation — no new touched-files scan. Returns
  * paths in a stable order (patch paths first, then bare-write paths, both
  * first-seen-wins via the underlying Set insertion order).
+ *
+ * `workspaceRoot` relativizes the bare-write paths: commitment write args are
+ * ABSOLUTE, but the resulting `file_digests` receipt must key files
+ * workspace-relative so it matches the coverage universe
+ * {@link assembleReviewDebtInput} builds (which also relativizes) — otherwise an
+ * atoms review of exactly these files could never clear debt on a real hosted
+ * tape (Finding P2, absolute-path regression).
  */
 export function sessionFreshTouchedFilePaths(
   runtime: BrewvaToolRuntime,
   sessionId: string,
+  workspaceRoot: string,
 ): readonly string[] {
   const records = runtime.capabilities.events?.records;
   const allEvents = records?.query ? records.query(sessionId) : [];
-  const invocationEvents = allEvents.filter(
-    (event) => event.type === RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-  );
   const patchSetAppliedPaths = collectPatchSetAppliedPaths(allEvents);
   const universe = deriveFreshTouchedFileUniverse({
     appliedPaths: Object.values(patchSetAppliedPaths).flat(),
-    writeInvocationPaths: extractWriteInvocationPaths(invocationEvents),
+    // The read-model relativizes the absolute commitment paths against the
+    // session root, so the universe files match the review targetRef keys.
+    writeInvocationPaths: extractWriteInvocationPaths(
+      projectToolInvocations(allEvents),
+      workspaceRoot,
+    ),
   });
   return [...universe.files];
 }

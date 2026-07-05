@@ -669,6 +669,38 @@ describe("skill catalog layer and widened signals", () => {
     expect(promptPathRendered?.score).toBe(400);
   });
 
+  test("a forced candidate (P1 post-green review nudge) shortlists a skill the prompt never names — data, not a branch", () => {
+    const { runtime } = createRuntime([
+      skill({
+        name: "review",
+        description: "Adversarial independent review pass after implementation.",
+      }),
+      skill({ name: "changelog-format", description: "Formatting of changelog entries." }),
+    ]);
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "please keep going",
+      forcedCandidates: new Map([["review", "post_green_review"]]),
+    });
+
+    // The nudge is data through the generic scorer: `review` shortlists with the
+    // post_green_review reason though the prompt has no matching token, exactly
+    // as the lifecycle injects it when projectPostGreenReviewSignal.active.
+    const reviewRendered = result.receipt.renderedSkillReasons.find(
+      (entry) => entry.name === "review",
+    );
+    expect(reviewRendered?.reasons).toContain("post_green_review");
+    // Recorded as accountable provenance on the selection receipt.
+    expect(result.receipt.forcedCandidates).toContainEqual({
+      skillName: "review",
+      reason: "post_green_review",
+    });
+    // Exactly the forced skill shortlists — the un-forced, unmentioned skill
+    // stays OUT (the nudge shortlists only what it names, no floodgates).
+    expect(renderedNames(result.renderedSection)).toEqual(["review"]);
+    expect(result.receipt.renderedSkillReasons.map((entry) => entry.name)).toEqual(["review"]);
+  });
+
   test("stop-word overlap alone never matches, but corroborates a strong overlap", () => {
     const { runtime } = createRuntime([
       skill({
@@ -860,18 +892,25 @@ describe("skill catalog layer and widened signals", () => {
       timestamp: 100,
       payload: events.at(-1)?.payload,
     });
-    // The model read the rendered skill file, then edited a package file.
+    // The model read the rendered skill file, then edited a package file —
+    // both as kernel commitments (the shape the projections actually read).
     tape.push({
-      type: "tool.invocation.started",
+      type: "tool.committed",
       timestamp: 110,
-      payload: { toolName: "source_read", args: { uri: "/skills/migration-safety/SKILL.md" } },
+      payload: {
+        call: { toolName: "source_read", args: { uri: "/skills/migration-safety/SKILL.md" } },
+        result: { outcome: { kind: "ok" } },
+      },
     });
     tape.push({
-      type: "tool.invocation.started",
+      type: "tool.committed",
       timestamp: 120,
       payload: {
-        toolName: "source_patch_prepare",
-        args: { edits: [{ kind: "replace_anchor", uri: "packages/core/index.ts" }] },
+        call: {
+          toolName: "source_patch_prepare",
+          args: { edits: [{ kind: "replace_anchor", uri: "packages/core/index.ts" }] },
+        },
+        result: { outcome: { kind: "ok" } },
       },
     });
 
@@ -908,9 +947,12 @@ describe("skill catalog layer and widened signals", () => {
     // selection", not a recency tail.
     for (let index = 0; index < 80; index += 1) {
       tape.push({
-        type: "tool.invocation.started",
+        type: "tool.committed",
         timestamp: 200 + index,
-        payload: { toolName: "grep", args: { query: "x", paths: [`dir/f${index}`] } },
+        payload: {
+          call: { toolName: "grep", args: { query: "x", paths: [`dir/f${index}`] } },
+          result: { outcome: { kind: "ok" } },
+        },
       });
     }
     const third = lifecycle.beforeAgentStart(

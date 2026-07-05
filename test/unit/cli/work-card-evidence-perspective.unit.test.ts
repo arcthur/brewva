@@ -8,6 +8,7 @@ import {
   formatTaskWorkCardText,
 } from "../../../packages/brewva-cli/src/operator/inspect.js";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
+import { committedToolEvent, seedCommittedToolEvents } from "../../helpers/tool-events.js";
 
 // Task 6 (W1 read surfaces): Work Card evidence gains verificationPerspective,
 // independenceBasis, and reviewDebt — all read straight off `InspectReport`
@@ -71,7 +72,9 @@ describe("Work Card evidence — verification perspective and review debt", () =
     });
     const sessionId = "work-card-review-debt-true-1";
 
-    runtime.ops.tools.invocation.start({ sessionId, toolName: "write", callId: "call-1" });
+    seedCommittedToolEvents(runtime, [
+      committedToolEvent({ sessionId, toolName: "write", timestamp: 1 }),
+    ]);
     void runtime.ops.verification.checks.verify(sessionId, {
       outcome: "pass",
       level: "requirements",
@@ -92,12 +95,14 @@ describe("Work Card evidence — verification perspective and review debt", () =
 
     // The only fresh-touched file is the one the patch applied, so the
     // patch_sets receipt over ps-1 covers the whole change (Finding P1-C).
-    runtime.ops.tools.invocation.start({
-      sessionId,
-      toolName: "write",
-      callId: "call-1",
-      args: { path: "src/a.ts" },
-    });
+    seedCommittedToolEvents(runtime, [
+      committedToolEvent({
+        sessionId,
+        toolName: "write",
+        args: { path: "src/a.ts" },
+        timestamp: 1,
+      }),
+    ]);
     runtime.ops.tools.sourcePatch.plans.apply(sessionId, {
       ok: true,
       planId: "plan-1",

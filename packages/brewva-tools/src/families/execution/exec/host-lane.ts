@@ -12,7 +12,7 @@ import {
   type ManagedExecRunningSession,
 } from "../exec-process-registry/api.js";
 import { ManagedExecProcessRegistryService } from "../exec-process-registry/service.js";
-import { execDisplayResult, isSafeEnvKey } from "./shared.js";
+import { backgroundFollowUpLine, execDisplayResult, isSafeEnvKey } from "./shared.js";
 
 type HostCommandResult = ReturnType<typeof okTextResult>;
 
@@ -24,7 +24,10 @@ function formatExit(session: ManagedExecFinishedSession): string {
 function runningResult(session: ManagedExecRunningSession) {
   const lines = [
     `Command still running (session ${session.id}, pid ${session.pid ?? "n/a"}).`,
-    "Use process (list/poll/log/write/kill/clear/remove) for follow-up.",
+    backgroundFollowUpLine(
+      session.command,
+      "Use process (list/poll/log/write/kill/clear/remove) for follow-up.",
+    ),
   ];
   if (session.tail.trim().length > 0) {
     lines.push("", session.tail.trimEnd());

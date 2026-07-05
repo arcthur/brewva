@@ -170,6 +170,13 @@ export interface SkillSelectionRuntime {
       records: SkillProjectionQueryPort;
     };
   };
+  /**
+   * Session workspace root, used to relativize the absolute paths on commitment
+   * events to the workspace-relative form skill path-globs match against. Absent
+   * in narrow fixtures; recent-path relativization degrades to absolute paths
+   * (which correctly never match workspace globs) rather than failing.
+   */
+  identity?: { workspaceRoot?: string | null };
 }
 
 export interface SkillSelectionEventQueryRuntime {
@@ -993,6 +1000,7 @@ export function createSkillSelectionLifecycle(
       const recentToolPaths = projectRecentToolTargetPaths(
         sessionEvents.recentInvocations,
         RECENT_TOOL_PATH_LIMIT,
+        runtime.identity?.workspaceRoot ?? null,
       );
       const previousAdoption = projectLatestSkillAdoption(sessionEvents.adoptionEvents);
       const reviewSkillFilePath = runtime.ops.skills.catalog.get(REVIEW_SKILL_NAME)?.filePath;

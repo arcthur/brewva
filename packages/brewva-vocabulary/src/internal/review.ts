@@ -1,4 +1,5 @@
 import { payloadOf } from "./events.js";
+import type { WriteInvocationPath } from "./tool-invocations.js";
 import type { ProtocolRecord } from "./types/foundation.js";
 
 /**
@@ -303,13 +304,6 @@ function decodeUriComponentSafe(raw: string): string {
 export interface FreshTouchedFileUniverse {
   readonly files: ReadonlySet<string>;
   readonly fullyKnown: boolean;
-}
-
-/** One write-class tool invocation's target: the parsed path, or null when it could not be read. */
-export interface WriteInvocationPath {
-  readonly path: string | null;
-  /** The invocation's cwd, used to relativize an absolute `path`; null when unknown. */
-  readonly cwd: string | null;
 }
 
 /**

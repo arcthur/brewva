@@ -2,11 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readStringList } from "@brewva/brewva-std/text";
 import { type ContextBudgetUsage } from "./context.js";
-import {
-  payloadOf,
-  RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-  type BrewvaEventRecord,
-} from "./events.js";
+import { payloadOf, type BrewvaEventRecord } from "./events.js";
 // Single-homed in fitness.ts (where the projection mints it); the receipt only
 // carries a copy as claim-time debt. No cycle: fitness -> {review, task}, and
 // neither review nor task imports iteration, so `iteration -> fitness` is a DAG.
@@ -20,7 +16,6 @@ import {
   type ReviewTargetRef,
   type VerificationPerspective,
   type VerificationRung,
-  type WriteInvocationPath,
 } from "./review.js";
 import { numberField, optionalStringField } from "./shared.js";
 import type { JsonValue, ProtocolRecord } from "./types/foundation.js";
@@ -572,184 +567,6 @@ export const readVerificationOutcomeRecordedEventPayload = (event: {
       : [],
   };
 };
-
-/**
- * Write-class tool names used to detect "fresh code was written this
- * session" — the shared basis for the post-green review nudge (gateway
- * skill-adoption) and the intent-realization loop's own fresh-code signal.
- * One definition; skill-adoption imports it instead of holding its own copy.
- */
-export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "write",
-  "edit",
-  "source_patch_apply",
-]);
-
-/**
- * The minimal invocation-started event shape the fresh-code scan reads.
- * `timestamp` is optional so the pure boolean/path scans that never need it can
- * pass a bare `{type, payload}`; the callers' real events ({@link BrewvaEventRecord})
- * always carry it, which is what {@link deriveLatestTreeMutationAt} folds over.
- */
-export interface FreshCodeScanEvent {
-  readonly type: string;
-  readonly timestamp?: number;
-  readonly payload?: unknown;
-}
-
-/**
- * Pure scan: did any invocation of a {@link WRITE_TOOL_NAMES} tool actually
- * execute this session? A blocked invocation (`payload.allowed === false`)
- * never ran, so it does not count — the model saw nothing and touched
- * nothing. Shared by the gateway's post-green review signal
- * (`projectPostGreenReviewSignal`) and the tools-side review-debt projection's
- * effectful shell, so the fresh-code definition lives in exactly one place
- * instead of two independently-drifting copies of the same invocation scan.
- */
-export function projectFreshCodeWritten(
-  events: readonly FreshCodeScanEvent[],
-  invocationKind: string = RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-): boolean {
-  for (const event of events) {
-    if (event.type !== invocationKind) continue;
-    const payload = event.payload;
-    if (!payload || typeof payload !== "object") continue;
-    const record = payload as { toolName?: unknown; allowed?: unknown };
-    if (record.allowed === false) continue;
-    if (typeof record.toolName === "string" && WRITE_TOOL_NAMES.has(record.toolName)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Bare-write tools whose target FILE path must be read from their invocation
- * args to build the fresh-touched-file universe (Finding P1-C). This is a
- * SUBSET of {@link WRITE_TOOL_NAMES}: `source_patch_apply` is excluded because
- * its touched paths come authoritatively from the `source_patch_applied`
- * receipt's `appliedPaths` (folded into the universe separately), not from its
- * invocation args — counting it here would double-source and could miss the
- * real applied set.
- */
-const BARE_WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(["write", "edit"]);
-
-/**
- * THE single predicate for "this invocation-started payload is a bare-write
- * (write/edit) that actually ran." Single-homed so the two consumers that must
- * agree on the write set — {@link extractWriteInvocationPaths} (the touched-file
- * universe) and {@link deriveLatestTreeMutationAt} (the tree-mutation timestamp)
- * — select the exact same events. A blocked invocation (`allowed === false`)
- * never ran, so it is excluded; anything else (including `allowed` omitted) is
- * the conservative superset the universe already uses. Callers pre-filter to the
- * invocation-started kind, so this only checks the payload's toolName/allowed.
- */
-function isBareWriteInvocationPayload(payload: unknown): payload is { readonly args?: unknown } {
-  if (!payload || typeof payload !== "object") {
-    return false;
-  }
-  const record = payload as { toolName?: unknown; allowed?: unknown };
-  if (record.allowed === false) {
-    return false;
-  }
-  return typeof record.toolName === "string" && BARE_WRITE_TOOL_NAMES.has(record.toolName);
-}
-
-function readWriteArgPath(args: unknown): string | null {
-  if (!args || typeof args !== "object") {
-    return null;
-  }
-  const record = args as { path?: unknown; file_path?: unknown; filePath?: unknown; uri?: unknown };
-  for (const candidate of [record.path, record.file_path, record.filePath, record.uri]) {
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-/**
- * Extract each bare-write (write/edit) invocation's target path from the tape,
- * as {@link WriteInvocationPath} entries for
- * {@link deriveFreshTouchedFileUniverse} (Finding P1-C). A blocked invocation
- * (`allowed === false`) never ran, so it is skipped entirely. A write that ran
- * but whose path can NOT be parsed yields `{ path: null }`, which makes the
- * universe not-fully-known downstream (conservative: coverage can never be
- * proven, so debt shows rather than falsely clears). The invocation `cwd` is
- * carried so an absolute target can be made workspace-relative for coverage
- * comparison. Single-homed here so both the live and tape debt shells derive
- * the write set through ONE definition, mirroring `projectFreshCodeWritten`.
- */
-export function extractWriteInvocationPaths(
-  events: readonly FreshCodeScanEvent[],
-  invocationKind: string = RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-): WriteInvocationPath[] {
-  const paths: WriteInvocationPath[] = [];
-  for (const event of events) {
-    if (event.type !== invocationKind) continue;
-    const payload = event.payload;
-    if (!isBareWriteInvocationPayload(payload)) continue;
-    const record = payload as { args?: unknown; cwd?: unknown };
-    const cwd = typeof record.cwd === "string" && record.cwd.length > 0 ? record.cwd : null;
-    paths.push({ path: readWriteArgPath(record.args), cwd });
-  }
-  return paths;
-}
-
-/**
- * Pure, deterministic fold: the latest tape timestamp at which the working tree
- * was mutated, or null when nothing mutated it. SINGLE-HOMED here (Finding P1)
- * so the tape-only review-debt read (`buildTapeReviewDebt`) and the
- * requirement-fitness assembler (`assembleRequirementFitnessInput`) compute the
- * SAME `latestTreeMutationAt` the tape-only staleness matcher
- * (`reviewTargetRefMatchesTapeOnly`) consumes — instead of two inline
- * reductions that both wrongly counted only patch/rollback.
- *
- * A tree mutation is:
- *  (a) a `source_patch_applied` OR `rollback.recorded` receipt with
- *      `payload.ok === true` — an application writes the patch, a rollback
- *      restores prior files; both rewrite the tree. Failed events (`ok !== true`)
- *      never touched the tree and are excluded (matching `deriveAppliedPatchSetIds`).
- *  (b) a bare-write (write/edit) invocation that ran — selected by the EXACT
- *      same predicate the touched-file universe uses
- *      ({@link isBareWriteInvocationPayload}, shared with
- *      {@link extractWriteInvocationPaths}). A bare `write`/`edit` mutates the
- *      tree just like a patch application, so it MUST advance the timestamp; the
- *      prior omission let a bare edit after an independent receipt leave that
- *      receipt wrongly FRESH.
- *
- * Conservatism (same superset the universe already uses): a bare-write
- * invocation that was allowed but may have FAILED still advances the timestamp.
- * This can only age a receipt to stale (an honest "we don't know if it is still
- * fresh"), never falsely keep a stale receipt live — an under-claim of freshness
- * at worst, never an over-claim.
- *
- * Callers pass their already-filtered event arrays: `patchRollbackEvents` is the
- * `source_patch_applied`/`rollback.recorded` slice; `writeInvocationEvents` is
- * the invocation-started slice. No I/O, no clock.
- */
-export function deriveLatestTreeMutationAt(input: {
-  readonly patchRollbackEvents: readonly FreshCodeScanEvent[];
-  readonly writeInvocationEvents: readonly FreshCodeScanEvent[];
-}): number | null {
-  let latest: number | null = null;
-  const advance = (timestamp: number | undefined): void => {
-    if (typeof timestamp !== "number") return;
-    latest = latest === null ? timestamp : Math.max(latest, timestamp);
-  };
-  for (const event of input.patchRollbackEvents) {
-    const payload = event.payload;
-    if (payload && typeof payload === "object" && (payload as { ok?: unknown }).ok === true) {
-      advance(event.timestamp);
-    }
-  }
-  for (const event of input.writeInvocationEvents) {
-    if (isBareWriteInvocationPayload(event.payload)) {
-      advance(event.timestamp);
-    }
-  }
-  return latest;
-}
 
 export interface ReasoningContinuityPacket extends ProtocolRecord {
   readonly schema: string;

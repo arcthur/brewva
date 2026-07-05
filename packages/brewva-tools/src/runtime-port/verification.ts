@@ -1,4 +1,3 @@
-import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
 import type {
   DeterministicFitnessEvidence,
   FitnessDiscrepancy,
@@ -7,9 +6,6 @@ import type {
   RequirementFitnessInput,
 } from "@brewva/brewva-vocabulary/fitness";
 import {
-  deriveLatestTreeMutationAt,
-  extractWriteInvocationPaths,
-  projectFreshCodeWritten,
   readVerificationOutcomeRecordedEventPayload,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
@@ -27,6 +23,12 @@ import {
   type VerificationPerspective,
 } from "@brewva/brewva-vocabulary/review";
 import { foldTaskLedgerEvents, type RequirementAtom } from "@brewva/brewva-vocabulary/task";
+import {
+  deriveLatestTreeMutationAt,
+  extractWriteInvocationPaths,
+  projectFreshCodeWritten,
+  projectToolInvocations,
+} from "@brewva/brewva-vocabulary/tool-invocations";
 import {
   collectPatchSetAppliedPaths,
   deriveAppliedPatchSetIds,
@@ -109,32 +111,31 @@ export function assembleReviewDebtInput(
   runtime: BrewvaToolRuntime,
   sessionId: string,
   claim: ReviewDebtInput["claim"],
+  workspaceRoot: string,
   fileDigest: (path: string) => string | null,
 ): ReviewDebtInput {
   const records = runtime.capabilities.events?.records;
-  const invocationEvents = records?.list
-    ? records.list(sessionId, {
-        type: RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-      })
-    : [];
-  const freshCodeWritten = projectFreshCodeWritten(invocationEvents);
+  // Read the full unfiltered tape ONCE and project from it. `projectToolInvocations`
+  // self-filters to the commitment boundary (`tool.committed`) — the authoritative
+  // "a tool ran" fact; the hosted managed-session path does not emit the runtime-
+  // ops `tool.invocation.started` annotation, so reading THAT left this projection
+  // blind on every real tape. The full tape is also what the patch fold below
+  // needs: tape order matters (deriveAppliedPatchSetIds processes strictly in
+  // array order), so a same-millisecond apply/rollback pair must not be reordered
+  // by a per-type-query timestamp merge. Same event source everywhere the read
+  // model is folded (assembleRequirementFitnessInput and buildTapeReviewDebt).
+  const allEvents = records?.list ? records.list(sessionId) : [];
+  const invocations = projectToolInvocations(allEvents);
+  const freshCodeWritten = projectFreshCodeWritten(invocations);
 
   const outcomeEvents = records?.list
-    ? records.list(sessionId, {
-        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-      })
+    ? records.list(sessionId, { type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE })
     : [];
   const independentReceipts = outcomeEvents
     .map((event) => readVerificationOutcomeRecordedEventPayload(event))
     .filter((payload) => payload.perspective === "independent")
     .map((payload) => ({ targetRef: payload.targetRef }));
 
-  // Tape order matters here (deriveAppliedPatchSetIds processes strictly in
-  // array order), so this reads the full unfiltered tape and filters
-  // client-side instead of merging two separately-queried, same-type-ordered
-  // lists by timestamp — a same-millisecond apply/rollback pair could
-  // otherwise be misordered by a timestamp-based merge.
-  const allEvents = records?.list ? records.list(sessionId) : [];
   const appliedEvents = allEvents.filter(
     (event) => event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE || event.type === ROLLBACK_EVENT_TYPE,
   );
@@ -149,7 +150,10 @@ export function assembleReviewDebtInput(
   const appliedPathsUnion = Object.values(patchSetAppliedPaths).flat();
   const freshTouchedUniverse = deriveFreshTouchedFileUniverse({
     appliedPaths: appliedPathsUnion,
-    writeInvocationPaths: extractWriteInvocationPaths(invocationEvents),
+    // Commitment write paths are absolute; the read-model relativizes them
+    // against the workspace root so the coverage set matches the review
+    // targetRef keys (otherwise coverage could never clear).
+    writeInvocationPaths: extractWriteInvocationPaths(invocations, workspaceRoot),
   });
   const appliedPathsForPatchSet = (patchSetId: string): readonly string[] =>
     patchSetAppliedPaths[patchSetId] ?? [];
@@ -250,18 +254,18 @@ export function assembleRequirementFitnessInput(
     (event) => event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE || event.type === ROLLBACK_EVENT_TYPE,
   );
   const appliedPatchSetRefs = deriveAppliedPatchSetIds(appliedEvents);
-  const invocationStartedEvents = allEvents.filter(
-    (event) => event.type === RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
-  );
-  // A successful patch/rollback OR a bare write/edit invocation ages the tree
+  // A successful patch/rollback OR a bare write/edit commitment ages the tree
   // (Finding P1): all three rewrite files, so any must stale a file_digests
   // finding. Single-homed in `deriveLatestTreeMutationAt` — the SAME mutation
   // set the tape-only review-debt read uses. A bare edit that finished the
   // session (no patches) must age the tree, or a stale file_digests finding
-  // would wrongly count as live reviewer counter-evidence.
+  // would wrongly count as live reviewer counter-evidence. Same
+  // `projectToolInvocations(<full tape>)` fold as assembleReviewDebtInput and
+  // buildTapeReviewDebt — one shape everywhere.
+  const invocations = projectToolInvocations(allEvents);
   const latestTreeMutationAt = deriveLatestTreeMutationAt({
     patchRollbackEvents: appliedEvents,
-    writeInvocationEvents: invocationStartedEvents,
+    writeInvocations: invocations,
   });
 
   return {

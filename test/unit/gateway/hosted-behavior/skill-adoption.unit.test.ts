@@ -1,12 +1,25 @@
 import { describe, expect, test } from "bun:test";
+import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   formatSkillAdoptionLine,
   projectLatestSkillAdoption,
+  projectPostGreenReviewSignal,
   projectRecentToolTargetPaths,
   queryRecentSkillProjectionInputs,
   readTargetMatchesSkillFile,
   type SkillProjectionEvent,
 } from "../../../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.js";
+
+function verificationReceiptEvent(input: {
+  timestamp: number;
+  outcome: string;
+}): SkillProjectionEvent {
+  return {
+    type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
+    timestamp: input.timestamp,
+    payload: { outcome: input.outcome },
+  };
+}
 
 function selectionEvent(input: {
   timestamp: number;
@@ -35,16 +48,18 @@ function invocationEvent(input: {
   toolName: string;
   args?: object;
   allowed?: boolean;
-  cwd?: string;
 }): SkillProjectionEvent {
+  // The projections read the kernel COMMITMENT boundary. A blocked call never
+  // commits (it aborts), so `allowed: false` is modeled as `tool.aborted`,
+  // which the commitment-typed projections skip — the same "did not count"
+  // outcome the old `allowed: false` flag produced, now via the real shape.
+  const committed = input.allowed !== false;
   return {
-    type: "tool.invocation.started",
+    type: committed ? "tool.committed" : "tool.aborted",
     timestamp: input.timestamp,
     payload: {
-      toolName: input.toolName,
-      ...(input.args ? { args: input.args } : {}),
-      ...(input.allowed === undefined ? {} : { allowed: input.allowed }),
-      ...(input.cwd ? { cwd: input.cwd } : {}),
+      call: { toolName: input.toolName, ...(input.args ? { args: input.args } : {}) },
+      result: { outcome: { kind: "ok" } },
     },
   };
 }
@@ -275,41 +290,32 @@ describe("projectRecentToolTargetPaths", () => {
     expect(paths).toEqual(["a.ts", "dir/c"]);
   });
 
-  test("absolute targets are relativized to the invocation cwd for glob matching", () => {
+  test("absolute targets are relativized to the session workspace root for glob matching", () => {
     const paths = projectRecentToolTargetPaths(
       [
         invocationEvent({
           timestamp: 1,
           toolName: "read",
           args: { path: "/repo/src/payment/checkout.ts" },
-          cwd: "/repo",
         }),
         invocationEvent({
           timestamp: 2,
           toolName: "edit",
           args: { path: "/elsewhere/outside.ts" },
-          cwd: "/repo",
         }),
         invocationEvent({
           timestamp: 3,
           toolName: "write",
           args: { path: "docs/notes.md" },
-          cwd: "/repo",
-        }),
-        invocationEvent({
-          timestamp: 4,
-          toolName: "read",
-          args: { path: "/no-cwd/abs.ts" },
         }),
       ],
       8,
+      "/repo",
     );
-    expect(paths).toEqual([
-      "/no-cwd/abs.ts",
-      "docs/notes.md",
-      "/elsewhere/outside.ts",
-      "src/payment/checkout.ts",
-    ]);
+    // Under-workspace absolute path relativizes; an outside-workspace absolute
+    // path stays absolute (and correctly never matches a workspace glob); an
+    // already-relative path passes through.
+    expect(paths).toEqual(["docs/notes.md", "/elsewhere/outside.ts", "src/payment/checkout.ts"]);
   });
 
   test("blocked invocations contribute no recent paths", () => {
@@ -349,5 +355,80 @@ describe("projectRecentToolTargetPaths", () => {
       8,
     );
     expect(paths).toEqual(["/abs/y.ts", "packages/core", "packages/cli", "src/x.ts"]);
+  });
+});
+
+// P1 post-green nudge — SURFACE 2 gate. This projection decides whether the
+// skill lifecycle force-shortlists `review`. It reads the SAME committed
+// boundary as the tools-side debt marker; without a direct test a regression
+// (e.g. reading a never-emitted annotation, or a stale-pass gate) would ship
+// green exactly as the original dead projection did.
+describe("projectPostGreenReviewSignal", () => {
+  const REVIEW_SKILL = "/skills/core/review/SKILL.md";
+  const freshWrite = invocationEvent({
+    timestamp: 10,
+    toolName: "write",
+    args: { path: "src/a.ts" },
+  });
+  const greenPass = verificationReceiptEvent({ timestamp: 20, outcome: "pass" });
+
+  test("active: fresh code + latest receipt pass + review not adopted + a review skill exists", () => {
+    expect(
+      projectPostGreenReviewSignal({
+        invocationEvents: [freshWrite],
+        verificationEvents: [greenPass],
+        reviewSkillFilePath: REVIEW_SKILL,
+      }),
+    ).toEqual({
+      freshCodeWritten: true,
+      verificationGreen: true,
+      reviewAdopted: false,
+      active: true,
+    });
+  });
+
+  test("inactive without fresh code — nothing to review", () => {
+    const signal = projectPostGreenReviewSignal({
+      invocationEvents: [
+        invocationEvent({ timestamp: 10, toolName: "read", args: { path: "src/a.ts" } }),
+      ],
+      verificationEvents: [greenPass],
+      reviewSkillFilePath: REVIEW_SKILL,
+    });
+    expect(signal.freshCodeWritten).toBe(false);
+    expect(signal.active).toBe(false);
+  });
+
+  test("inactive when the LATEST receipt is a fail — an older pass never outweighs a newer fail", () => {
+    const signal = projectPostGreenReviewSignal({
+      invocationEvents: [freshWrite],
+      verificationEvents: [greenPass, verificationReceiptEvent({ timestamp: 30, outcome: "fail" })],
+      reviewSkillFilePath: REVIEW_SKILL,
+    });
+    expect(signal.verificationGreen).toBe(false);
+    expect(signal.active).toBe(false);
+  });
+
+  test("inactive once the review skill has been read (adopted) — the nudge does not repeat", () => {
+    const signal = projectPostGreenReviewSignal({
+      invocationEvents: [
+        freshWrite,
+        invocationEvent({ timestamp: 25, toolName: "read", args: { path: REVIEW_SKILL } }),
+      ],
+      verificationEvents: [greenPass],
+      reviewSkillFilePath: REVIEW_SKILL,
+    });
+    expect(signal.reviewAdopted).toBe(true);
+    expect(signal.active).toBe(false);
+  });
+
+  test("inactive when no review skill exists to nudge toward (reviewSkillFilePath null)", () => {
+    expect(
+      projectPostGreenReviewSignal({
+        invocationEvents: [freshWrite],
+        verificationEvents: [greenPass],
+        reviewSkillFilePath: null,
+      }).active,
+    ).toBe(false);
   });
 });

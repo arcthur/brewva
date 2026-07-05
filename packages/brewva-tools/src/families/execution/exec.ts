@@ -4,7 +4,6 @@ import {
   classifyToolBoundaryRequest,
   evaluateBoundaryClassification,
 } from "@brewva/brewva-runtime/security";
-import { classifyCommandClass } from "@brewva/brewva-std/command-class";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   EXEC_FAILED_EVENT_TYPE,
@@ -42,13 +41,11 @@ import {
   isExecAbortedError,
   normalizeCommand,
   normalizeOptionalString,
-  resolveForegroundWaitMs,
+  resolveExecForegroundYieldMs,
   resolveRequestedEnv,
   resolveTimeoutSec,
-  resolveVerificationForegroundWaitMs,
   resolveWorkdir,
   resolveWorkspaceRootForCwd,
-  resolveYieldMs,
   type ExecToolOptions,
 } from "./exec/shared.js";
 import {
@@ -113,17 +110,16 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
         const hostEnv = buildHostEnv(requestedEnv.env);
         const timeoutSec = resolveTimeoutSec(params);
         const background = params.background === true;
-        const foregroundWaitMs = resolveForegroundWaitMs(
-          runtime?.config.security.execution.autoBackground,
-        );
-        // Verification-class commands get their own operator-configured
-        // foreground wait: a typical build or test run then completes in one
-        // call instead of a background + poll loop. An explicit yieldMs wins.
-        const defaultYieldMs =
-          classifyCommandClass(command) === "verification"
-            ? resolveVerificationForegroundWaitMs(runtime?.config.security.execution.autoBackground)
-            : foregroundWaitMs;
-        const yieldMs = background ? 0 : resolveYieldMs(params, defaultYieldMs);
+        // Verification-class commands (build/test/lint/typecheck) block for an
+        // operator-configured foreground wait that a low explicit yieldMs cannot
+        // truncate — see resolveExecForegroundYieldMs. `background: true` still
+        // opts out entirely.
+        const yieldMs = resolveExecForegroundYieldMs({
+          command,
+          background,
+          params,
+          autoBackground: runtime?.config.security.execution.autoBackground,
+        });
 
         const actionPolicy = getToolActionPolicy(
           "exec",

@@ -30,5 +30,5 @@ export type {
   TapeVerificationReceipt,
   VerificationPerspective,
   VerificationRung,
-  WriteInvocationPath,
 } from "./internal/review.js";
+export type { WriteInvocationPath } from "./internal/tool-invocations.js";
