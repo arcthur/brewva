@@ -26,6 +26,9 @@ export {
   type ToolRuntimeEventInput,
 } from "./extensions.js";
 export { blockGoal, completeGoal, getGoalState } from "./goal.js";
+// The pure tape->fitness-input assembler, for the CLI operator surfaces to
+// re-derive the CURRENT requirement fitness from the whole tape.
+export { assembleRequirementFitnessInputFromEvents } from "./verification.js";
 export {
   getToolSessionId,
   readTextBatch,

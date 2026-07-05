@@ -87,17 +87,16 @@ export interface TaskWorkCardProjection extends ProtocolRecord {
      */
     readonly reviewDebt: boolean;
     /**
-     * The latest verification receipt's fitness annotation, tallied by the
-     * SAME `readReceiptFitnessSummary` helper `inspect run-report`'s Fitness
-     * section calls — one shared computation, never forked. Carries ONLY what
-     * the receipt legitimately owns (violated via discrepancies,
-     * unverifiedMust): no satisfied/likelySatisfied/notApplicable counts,
-     * which are re-derivable `projectRequirementFitness` output, not
-     * receipt-committed fact (W3 wave review's binding ruling). All-zero
-     * (never omitted) when no receipt exists or the latest one carries no
-     * annotation.
+     * Requirement fitness RE-DERIVED over the whole tape (the SAME
+     * `summarizeRequirementFitness(buildTapeRequirementFitness)` result `inspect
+     * run-report`'s Fitness section shows — one shared computation, never forked).
+     * `satisfied` is the positive half — an independent clear atoms-review's
+     * affirmatively-verified atoms, which lands AFTER the authored verify and so
+     * only surfaces when the whole tape is re-derived (not the latest receipt's
+     * frozen/empty annotation). All-zero (never omitted) when there are no atoms.
      */
     readonly fitness: {
+      readonly satisfied: number;
       readonly violated: number;
       readonly unverifiedMust: number;
       readonly discrepanciesByGrade: Readonly<Record<FitnessDiscrepancyGrade, number>>;

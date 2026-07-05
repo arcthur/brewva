@@ -417,7 +417,7 @@ describe("buildRunReportProjection — fitness section", () => {
     expect(report.fitness.atomsTotal).toBe(2);
   });
 
-  test("surfaces the LATEST receipt's discrepancies and unverifiedMustAtoms counts, by grade", () => {
+  test("re-derives the CURRENT fitness over the whole tape: satisfied (independent pass), violated (live finding), unverifiedMust, by grade", () => {
     const events: BrewvaEventRecord[] = [
       record("turn.started", 0, {}),
       record("task.requirement.recorded", 10, {
@@ -429,48 +429,46 @@ describe("buildRunReportProjection — fitness section", () => {
       record("task.requirement.recorded", 12, {
         atom: requirementAtom("req-3", "must log"),
       }),
+      // req-1 carries a live LLM review finding -> advisory_conflict violation.
+      // The file_digests targetRef is fresh tape-only (nothing mutates the tree
+      // after it); the digest value itself is never read off disk on this path.
+      record("review.finding.recorded", 90, {
+        findingId: "finding-1",
+        severity: "high",
+        category: "correctness",
+        statement: "must be atomic",
+        anchors: [],
+        lens: "correctness",
+        targetRef: { kind: "file_digests", digests: { "a.ts": "digest-a" } },
+        atomRefs: ["req-1"],
+      }),
+      // req-2 is cleared by an INDEPENDENT atoms-review pass naming it -> satisfied.
+      // This is the positive channel the old receipt-read surface never showed.
       record("verification.outcome.recorded", 100, {
         outcome: "pass",
         level: "requirements",
-        perspective: "authored",
-        discrepancies: [
-          {
-            atomId: "req-1",
-            grade: "deterministic_conflict",
-            statement: "must be atomic",
-            evidenceRef: "gate-1",
-          },
-          {
-            atomId: "req-2",
-            grade: "advisory_conflict",
-            statement: "must be fast",
-            evidenceRef: "finding-1",
-          },
-        ],
-        unverifiedMustAtoms: ["req-3"],
+        perspective: "independent",
+        atomRefs: ["req-2"],
       }),
+      // req-3 has no evidence at all -> unverified (and it is a `must`).
     ];
     const report = buildRunReportProjection(SESSION, events);
 
     expect(report.fitness.atomsTotal).toBe(3);
-    expect(report.fitness.violatedAtoms).toBe(2);
+    expect(report.fitness.satisfiedAtoms).toBe(1);
+    expect(report.fitness.violatedAtoms).toBe(1);
     expect(report.fitness.unverifiedMustAtoms).toBe(1);
     expect(report.fitness.discrepanciesByGrade).toEqual({
-      deterministic_conflict: 1,
+      deterministic_conflict: 0,
       advisory_conflict: 1,
     });
-    expect(report.verification.latestDiscrepancies).toHaveLength(2);
-    expect(report.verification.latestDiscrepancies.map((entry) => entry.atomId)).toEqual([
-      "req-1",
-      "req-2",
-    ]);
 
     const text = formatRunReportText(report);
     expect(text).toContain("Fitness:");
     expect(text).toContain("atoms=3");
-    expect(text).toContain("violated=2");
+    expect(text).toContain("satisfied=1");
+    expect(text).toContain("violated=1");
     expect(text).toContain("unverifiedMust=1");
-    expect(text).toContain("deterministic_conflict=1");
     expect(text).toContain("advisory_conflict=1");
   });
 
@@ -510,23 +508,49 @@ describe("buildRunReportProjection — fitness section", () => {
     expect(report.verification.latestDiscrepancies).toEqual([]);
   });
 
-  test("a receipt below the requirements rung (or a non-pass claim) carries no fitness annotation — zero counts, no crash", () => {
+  test("latent-bug fix: after an independent atoms-review, re-deriving still reports the true unverifiedMust and surfaces satisfied — reading the latest (empty) independent receipt reported both zero", () => {
     const events: BrewvaEventRecord[] = [
       record("turn.started", 0, {}),
       record("task.requirement.recorded", 10, {
-        atom: requirementAtom("req-1", "must hold"),
+        atom: requirementAtom("req-clear", "must be atomic"),
       }),
+      record("task.requirement.recorded", 11, {
+        atom: requirementAtom("req-open", "must be fast"),
+      }),
+      // The author's own pass@requirements: at claim time both atoms are still
+      // unverified, so this frozen annotation names them in unverifiedMustAtoms.
       record("verification.outcome.recorded", 100, {
         outcome: "pass",
-        level: "artifact",
+        level: "requirements",
         perspective: "authored",
+        discrepancies: [],
+        unverifiedMustAtoms: ["req-clear", "req-open"],
+      }),
+      // THEN a clear independent atoms-review lands, clearing ONLY req-clear. Its
+      // own claim-time annotation is empty by design (a receipt commits only the
+      // negative side, computed before its own outcome is on the tape). This is
+      // now the LATEST receipt — reading it wholesale reports unverifiedMust=0.
+      record("verification.outcome.recorded", 200, {
+        outcome: "pass",
+        level: "requirements",
+        perspective: "independent",
+        atomRefs: ["req-clear"],
+        discrepancies: [],
+        unverifiedMustAtoms: [],
       }),
     ];
     const report = buildRunReportProjection(SESSION, events);
 
-    expect(report.fitness.atomsTotal).toBe(1);
+    // Re-derived: req-clear is satisfied by the independent pass; req-open remains
+    // an unverified `must`. Reading the latest (independent, empty) receipt would
+    // have falsely reported satisfied=0 AND unverifiedMust=0.
+    expect(report.fitness.atomsTotal).toBe(2);
+    expect(report.fitness.satisfiedAtoms).toBe(1);
+    expect(report.fitness.unverifiedMustAtoms).toBe(1);
     expect(report.fitness.violatedAtoms).toBe(0);
-    expect(report.fitness.unverifiedMustAtoms).toBe(0);
-    expect(report.verification.latestDiscrepancies).toEqual([]);
+
+    const text = formatRunReportText(report);
+    expect(text).toContain("satisfied=1");
+    expect(text).toContain("unverifiedMust=1");
   });
 });

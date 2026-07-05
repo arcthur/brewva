@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   deriveLatestTreeMutationAt,
   extractWriteInvocationPaths,
@@ -8,6 +9,7 @@ import {
   projectToolInvocations,
   TOOL_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/tool-invocations";
+import { buildTapeRequirementFitness } from "../../packages/brewva-cli/src/operator/inspect/requirement-fitness.js";
 import { buildTapeReviewDebt } from "../../packages/brewva-cli/src/operator/inspect/review-debt.js";
 import { buildCompactionInputProvenance } from "../../packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.js";
 import { projectRecentToolTargetPaths } from "../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.js";
@@ -157,6 +159,33 @@ describe("hosted-tape projection liveness (real gpt-5.5 session)", () => {
         (atom) => typeof atom.statement === "string" && atom.statement.includes("keycode-scoped"),
       ),
     ).toBe(true);
+  });
+
+  test("requirement fitness RE-DERIVES over the real tape: 7 atoms folded, satisfied=0 (no independent atoms-review ran), unverifiedMust=7", () => {
+    // The satisfied-timing fix's real-data guard. The operator surfaces
+    // (run-report's Fitness section / the Work Card line) now re-derive fitness
+    // over the WHOLE tape through THIS exact call, instead of reading the latest
+    // receipt's frozen annotation. On this real session the fold recovers all 7
+    // requirement atoms (prompt + trap provenance) — proof the re-derive runs on
+    // hosted data, not just synthetic fixtures. Runtime-ops events are unwrapped
+    // first, exactly as the events port serves them to inspect.
+    const projection = buildTapeRequirementFitness(
+      unwrapOpsEnvelopes(events) as unknown as readonly BrewvaEventRecord[],
+    );
+    expect(projection.atoms.length).toBe(7);
+    // The session authored a single verify and NEVER ran an INDEPENDENT
+    // atoms-review, so the positive channel is dark: satisfied=0. This assertion
+    // goes non-zero the day a real session's independent review commits a pass
+    // naming its atoms — the exact wire this change energized. Watching it here on
+    // real data guards the channel end-to-end, per Arthur's "reuse the real-tape
+    // probe to guard it".
+    expect(projection.counts.satisfied).toBe(0);
+    // Re-deriving surfaces the real debt: every `must` atom is still unverified.
+    // Reading the authored receipt's frozen annotation could not show this whole-
+    // tape truth — and after ANY independent review it reads empty (the latent
+    // bug this fix closes). No live finding exists, so nothing is violated.
+    expect(projection.unverifiedMustAtoms.length).toBe(7);
+    expect(projection.counts.violated).toBe(0);
   });
 
   test("compaction input provenance records the modified files from the commitment boundary", () => {

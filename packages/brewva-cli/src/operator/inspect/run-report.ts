@@ -10,7 +10,8 @@ import type {
 import { readVerificationOutcomeRecordedEventPayload } from "@brewva/brewva-vocabulary/iteration";
 import { REVIEW_FINDING_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/review";
 import { foldTaskLedgerEvents } from "@brewva/brewva-vocabulary/task";
-import { readReceiptFitnessSummary } from "./fitness-summary.js";
+import { summarizeRequirementFitness } from "./fitness-summary.js";
+import { buildTapeRequirementFitness } from "./requirement-fitness.js";
 import { buildTapeReviewDebt } from "./review-debt.js";
 
 /**
@@ -82,21 +83,24 @@ export interface RunReportVerification {
 }
 
 /**
- * A receipt-only tally of the requirement-fitness accounting, never a
- * re-derivation of the per-atom evidence join. `atomsTotal` folds the tape's
- * requirement atoms directly (`foldTaskLedgerEvents`, the same fold every
- * task-ledger reader uses); `violatedAtoms` and `unverifiedMustAtoms` count
- * the LATEST `verification.outcome.recorded` receipt's own
- * `discrepancies`/`unverifiedMustAtoms` fields (one discrepancy per violated
- * atom, by construction of `projectRequirementFitness` — see
- * `internal/fitness.ts`). Every other atom (satisfied, likelySatisfied,
- * non-must unverified, notApplicable) is not distinguishable from receipt
- * fields alone and is intentionally left uncounted here — a full per-atom
- * state breakdown requires re-running the evidence join, which this pure
- * read surface deliberately does not do (see the module doc comment).
+ * The requirement-fitness accounting RE-DERIVED over the whole tape
+ * (`summarizeRequirementFitness(buildTapeRequirementFitness)`), NOT a snapshot
+ * read off the latest receipt. `atomsTotal` folds the tape's requirement atoms
+ * directly (`foldTaskLedgerEvents`, the same fold every task-ledger reader uses);
+ * `satisfiedAtoms`/`violatedAtoms`/`unverifiedMustAtoms`/`discrepanciesByGrade`
+ * come from re-running the per-atom evidence join (`projectRequirementFitness`)
+ * over the current tape. Re-deriving is what lands `satisfiedAtoms`: a clear
+ * independent atoms-review's affirmative half arrives AFTER the authored verify,
+ * so the latest receipt's frozen annotation never carries it. It also fixes the
+ * bug where the latest receipt after ANY review is the independent one whose
+ * claim-time annotation is empty by design — reading it wholesale falsely
+ * reported "nothing unverified". Axiom 6: rebuild the view from receipts; it
+ * stores nothing new (the receipt still commits only the negative side).
  */
 export interface RunReportFitness {
   readonly atomsTotal: number;
+  /** Atoms an independent clear atoms-review affirmatively verified — the positive half. */
+  readonly satisfiedAtoms: number;
   readonly violatedAtoms: number;
   readonly unverifiedMustAtoms: number;
   readonly discrepanciesByGrade: Readonly<Record<FitnessDiscrepancyGrade, number>>;
@@ -213,11 +217,13 @@ export function buildRunReportProjection(
   let authoredReceipts = 0;
   let independentReceipts = 0;
   let findingsRecorded = 0;
-  // The LATEST verification.outcome.recorded receipt's fitness annotation
-  // (Task 13) — replaced wholesale on every receipt seen, in tape order, so
-  // the final value is exactly the most recent claim's own committed fields.
+  // The LATEST verification.outcome.recorded receipt's OWN claim-time
+  // discrepancies — replaced wholesale on every receipt seen, in tape order, so
+  // the final value is exactly the most recent claim's committed field. This
+  // feeds only the `verification` line (what the last verify itself asserted);
+  // the re-derived Fitness section owns the current-truth violated/unverified
+  // tally, so no `unverifiedMustAtoms` snapshot is needed here.
   let latestDiscrepancies: readonly FitnessDiscrepancy[] = [];
-  let latestUnverifiedMustAtoms: readonly string[] = [];
 
   let skillSelections = 0;
   const renderedSkillNames = new Set<string>();
@@ -363,11 +369,11 @@ export function buildRunReportProjection(
         } else {
           authoredReceipts += 1;
         }
-        // Replaced wholesale (not merged) on every receipt, in tape order:
-        // the LATEST claim's own committed annotation is the current truth —
-        // never re-run the join, just read what Task 13 already wrote.
+        // Replaced wholesale (not merged) on every receipt, in tape order: the
+        // LATEST claim's own committed discrepancies, surfaced verbatim on the
+        // verification line as "what the last verify asserted". This is NOT the
+        // fitness view — that re-derives over the whole tape below.
         latestDiscrepancies = parsed.discrepancies;
-        latestUnverifiedMustAtoms = parsed.unverifiedMustAtoms;
         continue;
       }
       case REVIEW_FINDING_RECORDED_EVENT_TYPE: {
@@ -436,20 +442,21 @@ export function buildRunReportProjection(
   // fold every task-ledger reader uses), independent of the switch above —
   // this is a plain atom-identity count, never the fitness evidence join.
   const atomsTotal = foldTaskLedgerEvents(events).requirements.length;
-  // SINGLE-HOMED (Task 15): the receipt->fitness-summary tally itself (one
-  // discrepancy per violated atom, unverifiedMust count, by-grade total map)
-  // lives in `readReceiptFitnessSummary` — the Work Card fitness line calls
-  // the exact same function over its own latest-receipt fields, so the two
-  // surfaces can never fork this computation.
-  const receiptFitness = readReceiptFitnessSummary({
-    discrepancies: latestDiscrepancies,
-    unverifiedMustAtoms: latestUnverifiedMustAtoms,
-  });
+  // Re-derive the CURRENT fitness over the WHOLE tape (buildTapeRequirementFitness,
+  // shared with the Work Card fitness line) rather than reading the latest
+  // receipt's frozen annotation: a clear independent atoms-review's `satisfied`
+  // lands AFTER the authored verify in the natural order, and the latest receipt
+  // after any review is the independent one whose claim-time annotation is empty
+  // by design — reading it would report a false "nothing unverified". The by-grade
+  // tally stays single-homed in `readReceiptFitnessSummary`, now fed the
+  // re-derived annotation instead of a stale receipt snapshot.
+  const fitnessSummary = summarizeRequirementFitness(buildTapeRequirementFitness(events));
   const fitness: RunReportFitness = {
     atomsTotal,
-    violatedAtoms: receiptFitness.violated,
-    unverifiedMustAtoms: receiptFitness.unverifiedMust,
-    discrepanciesByGrade: receiptFitness.discrepanciesByGrade,
+    satisfiedAtoms: fitnessSummary.satisfied,
+    violatedAtoms: fitnessSummary.violated,
+    unverifiedMustAtoms: fitnessSummary.unverifiedMust,
+    discrepanciesByGrade: fitnessSummary.discrepanciesByGrade,
   };
 
   return {
@@ -590,8 +597,8 @@ export function formatRunReportText(report: RunReportProjection): string {
       (grade) => `${grade}=${report.fitness.discrepanciesByGrade[grade]}`,
     ).join(" ");
     lines.push(
-      `Fitness: atoms=${report.fitness.atomsTotal} violated=${report.fitness.violatedAtoms} ` +
-        `unverifiedMust=${report.fitness.unverifiedMustAtoms} ${byGrade}`,
+      `Fitness: atoms=${report.fitness.atomsTotal} satisfied=${report.fitness.satisfiedAtoms} ` +
+        `violated=${report.fitness.violatedAtoms} unverifiedMust=${report.fitness.unverifiedMustAtoms} ${byGrade}`,
     );
   }
   lines.push(

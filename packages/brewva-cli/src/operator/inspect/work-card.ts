@@ -6,7 +6,6 @@ import {
   type TaskWorkCardContextPressure,
   type TaskWorkCardProjection,
 } from "@brewva/brewva-vocabulary/session";
-import { readReceiptFitnessSummary } from "./fitness-summary.js";
 import type { InspectReport } from "./report.js";
 
 const ACTIVE_DELEGATION_LIFECYCLES = new Set(["pending", "running", "blocked"]);
@@ -125,15 +124,12 @@ export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCard
       // verification): already computed on `InspectReport.reviewDebt` from the
       // whole receipt history — read here, never re-derived.
       reviewDebt: report.reviewDebt.debt,
-      // SINGLE-HOMED (Task 15): the SAME `readReceiptFitnessSummary` call
-      // `inspect run-report`'s Fitness section makes, over the SAME latest
-      // receipt's raw `discrepancies`/`unverifiedMustAtoms` fields
-      // (`InspectReport.verification`, Task 13's claim-time annotation) —
-      // never a re-run of `projectRequirementFitness`, never a second tally.
-      fitness: readReceiptFitnessSummary({
-        discrepancies: report.verification.discrepancies,
-        unverifiedMustAtoms: report.verification.unverifiedMustAtoms,
-      }),
+      // The SAME re-derived fitness `inspect run-report`'s Fitness section shows,
+      // read straight off `InspectReport.requirementFitness` (folded once over the
+      // whole tape via `summarizeRequirementFitness(buildTapeRequirementFitness)`).
+      // Re-derived, not the latest receipt's frozen/empty annotation, so a clear
+      // independent atoms-review's `satisfied` surfaces here too.
+      fitness: report.requirementFitness,
     },
     continuationAnchor: {
       anchorId: continuationAnchor?.id ?? null,
@@ -171,24 +167,21 @@ export function formatTaskWorkCardText(
 }
 
 /**
- * The Work Card's session-scale fitness line — `violated=`/`unverifiedMust=`/
- * by-grade counts read via the SAME `readReceiptFitnessSummary` call `inspect
- * run-report`'s Fitness section makes over the same latest-receipt fields.
- * Deliberately narrower than run-report's line: it has no `atoms=` total,
- * because that count is a task-ledger fold (`foldTaskLedgerEvents`), not a
- * receipt field — the Work Card reads ONLY what the receipt itself carries,
- * per the W3 wave review's binding ruling against thickening the receipt with
- * re-derivable projection output. Honestly rendered even when every count is
- * zero (no receipt, or the latest receipt carries no annotation) — a session
- * with nothing to report on still gets a present, all-zero line, never an
- * omitted one, so a reader is never left wondering whether fitness was
- * checked at all. Read-only pressure surface (axiom 18): nothing here gates.
+ * The Work Card's session-scale fitness line — `satisfied=`/`violated=`/
+ * `unverifiedMust=`/by-grade counts from the SAME re-derived fitness `inspect
+ * run-report`'s Fitness section shows (`InspectReport.requirementFitness`, folded
+ * once over the whole tape). Deliberately narrower than run-report's line: it has
+ * no `atoms=` total. The `satisfied` count closes the loop — an independent clear
+ * atoms-review's affirmative half now shows, not just the negative violated/
+ * unverified side. Honestly rendered even when every count is zero, so a reader is
+ * never left wondering whether fitness was checked. Read-only pressure surface
+ * (axiom 18): nothing here gates.
  */
 function formatFitnessLine(fitness: TaskWorkCardProjection["evidence"]["fitness"]): string {
   const byGrade = FITNESS_DISCREPANCY_GRADES.map(
     (grade) => `${grade}=${fitness.discrepanciesByGrade[grade]}`,
   ).join(" ");
-  return `fitness: violated=${fitness.violated} unverifiedMust=${fitness.unverifiedMust} ${byGrade}`;
+  return `fitness: satisfied=${fitness.satisfied} violated=${fitness.violated} unverifiedMust=${fitness.unverifiedMust} ${byGrade}`;
 }
 
 function resolveContextPressure(report: InspectReport): TaskWorkCardContextPressure {

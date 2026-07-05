@@ -169,12 +169,14 @@ function fallbackWorkCard(input: {
       verificationPerspective: "authored",
       independenceBasis: [],
       reviewDebt: false,
-      // Fallback carries no receipt at all, so the honest fitness line is
-      // all-zero — routed through the SAME `readReceiptFitnessSummary` call
-      // every other CLI fitness surface uses (Task 15's single-home rule),
-      // fed an empty annotation, rather than a hand-rolled literal that would
-      // silently miss a third discrepancy grade.
-      fitness: readReceiptFitnessSummary({ discrepancies: [], unverifiedMustAtoms: [] }),
+      // Fallback carries no tape at all, so the honest fitness line is all-zero
+      // — the by-grade tally routes through the SAME `readReceiptFitnessSummary`
+      // helper every CLI fitness surface uses (fed an empty annotation, never a
+      // hand-rolled literal that would miss a future grade), plus satisfied=0.
+      fitness: {
+        ...readReceiptFitnessSummary({ discrepancies: [], unverifiedMustAtoms: [] }),
+        satisfied: 0,
+      },
     },
     continuationAnchor: {
       anchorId: null,

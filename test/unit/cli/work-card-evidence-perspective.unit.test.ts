@@ -143,61 +143,70 @@ describe("Work Card evidence — verification perspective and review debt", () =
   });
 });
 
-// Task 15 (W4): the Work Card fitness line — SAME counts as run-report's
-// Fitness section (violated, unverifiedMust, discrepancies-by-grade), from
-// the SAME latest `verification.outcome.recorded` receipt's committed
-// `discrepancies`/`unverifiedMustAtoms` fields, via the SHARED
-// `readReceiptFitnessSummary` helper both surfaces call. Per the W3 wave
-// review's binding ruling, this is deliberately PARTIAL — no
-// satisfied/likelySatisfied/notApplicable counts, which are re-derivable
-// projection output that does not belong on a receipt. Nothing here re-runs
-// `projectRequirementFitness` and nothing here gates (axiom 18): this is a
-// read-only pressure surface.
+// The Work Card fitness line — SAME counts as run-report's Fitness section,
+// now RE-DERIVED over the whole tape (`report.requirementFitness` =
+// `summarizeRequirementFitness(buildTapeRequirementFitness)`), not read off the
+// latest receipt (superseding the earlier W3 "read the frozen receipt" ruling,
+// per the satisfied-timing fix). Re-deriving is what surfaces `satisfied` — a
+// clear independent atoms-review's affirmative half, which lands AFTER the
+// authored verify — and it fixes the bug where the latest receipt after ANY
+// review is the independent one whose claim-time annotation is empty by design.
+// The receipt still commits only the negative side; this view rebuilds from
+// receipts (axiom 6) and stores nothing new. Nothing here gates (axiom 18).
 describe("Work Card evidence — fitness line", () => {
-  test("a seeded latest receipt with discrepancies and unverifiedMustAtoms renders violated/unverifiedMust/by-grade", () => {
+  test("re-derives the whole-tape fitness: the line renders satisfied (independent pass), violated (live finding) by grade, and unverifiedMust", () => {
     const runtime = createRuntimeInstanceFixture({
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-work-card-fitness-seeded-")),
     });
     const sessionId = "work-card-fitness-seeded-1";
 
+    // Three `must` atoms: one violated by a live finding, one cleared by an
+    // independent atoms-review, one left with no evidence. The line re-derives
+    // all three from the tape — it no longer reads a single receipt's annotation.
+    runtime.ops.task.requirements.record(sessionId, [
+      { id: "req-1", statement: "must be atomic", modality: "must", provenance: "prompt" },
+      { id: "req-2", statement: "must be fast", modality: "must", provenance: "prompt" },
+      { id: "req-3", statement: "must log", modality: "must", provenance: "prompt" },
+    ]);
+    // req-1: a live LLM review finding -> advisory_conflict violation (tape-only
+    // fresh: nothing mutates the tree after it, so the digest is never read).
+    runtime.ops.verification.findings.record(sessionId, {
+      findingId: "finding-1",
+      severity: "high",
+      category: "correctness",
+      statement: "must be atomic",
+      anchors: [],
+      lens: "correctness",
+      targetRef: { kind: "file_digests", digests: { "a.ts": "digest-a" } },
+      atomRefs: ["req-1"],
+    });
+    // req-2: an independent atoms-review pass naming it -> satisfied.
     void runtime.ops.verification.checks.verify(sessionId, {
       outcome: "pass",
       level: "requirements",
-      discrepancies: [
-        {
-          atomId: "req-1",
-          grade: "deterministic_conflict",
-          statement: "must be atomic",
-          evidenceRef: "gate-1",
-        },
-        {
-          atomId: "req-2",
-          grade: "advisory_conflict",
-          statement: "must be fast",
-          evidenceRef: "finding-1",
-        },
-      ],
-      unverifiedMustAtoms: ["req-3"],
+      perspective: "independent",
+      atomRefs: ["req-2"],
     });
 
     const report = buildInspectReport(runtime, sessionId);
     const workCard = buildTaskWorkCardProjection(report);
 
     expect(workCard.evidence.fitness).toEqual({
-      violated: 2,
+      satisfied: 1,
+      violated: 1,
       unverifiedMust: 1,
-      discrepanciesByGrade: { deterministic_conflict: 1, advisory_conflict: 1 },
+      discrepanciesByGrade: { deterministic_conflict: 0, advisory_conflict: 1 },
     });
 
     const text = formatTaskWorkCardText(workCard);
     expect(text).toContain("fitness:");
-    expect(text).toContain("violated=2");
+    expect(text).toContain("satisfied=1");
+    expect(text).toContain("violated=1");
     expect(text).toContain("unverifiedMust=1");
-    expect(text).toContain("deterministic_conflict=1");
     expect(text).toContain("advisory_conflict=1");
   });
 
-  test("a session with no fitness annotation renders the line honestly empty (all zero), not omitted or fabricated", () => {
+  test("a session with no requirement atoms renders the line honestly empty (all zero), not omitted or fabricated", () => {
     const runtime = createRuntimeInstanceFixture({
       cwd: mkdtempSync(join(tmpdir(), "brewva-cli-work-card-fitness-empty-")),
     });
@@ -207,12 +216,14 @@ describe("Work Card evidence — fitness line", () => {
     const workCard = buildTaskWorkCardProjection(report);
 
     expect(workCard.evidence.fitness).toEqual({
+      satisfied: 0,
       violated: 0,
       unverifiedMust: 0,
       discrepanciesByGrade: { deterministic_conflict: 0, advisory_conflict: 0 },
     });
 
     const text = formatTaskWorkCardText(workCard);
+    expect(text).toContain("satisfied=0");
     expect(text).toContain("violated=0");
     expect(text).toContain("unverifiedMust=0");
   });

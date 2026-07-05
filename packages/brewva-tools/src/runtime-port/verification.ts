@@ -1,3 +1,4 @@
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type {
   DeterministicFitnessEvidence,
   FitnessDiscrepancy,
@@ -208,7 +209,23 @@ export function assembleRequirementFitnessInput(
 ): RequirementFitnessInput {
   const records = runtime.capabilities.events?.records;
   const allEvents = records?.list ? records.list(sessionId) : [];
+  return assembleRequirementFitnessInputFromEvents(allEvents, options);
+}
 
+/**
+ * The pure {@link RequirementFitnessInput} assembler over a raw tape event list.
+ * THE single fold both the runtime path ({@link assembleRequirementFitnessInput})
+ * and the CLI operator surfaces re-derive through — the latter
+ * (`buildTapeRequirementFitness`) rebuilds the CURRENT fitness from the whole
+ * tape so a later independent atoms-review's `satisfied` surfaces (axiom 6:
+ * views rebuild from receipts), where reading only the latest receipt's frozen
+ * annotation misses it — and worse, mis-reads an independent receipt's empty
+ * annotation as "nothing unverified".
+ */
+export function assembleRequirementFitnessInputFromEvents(
+  allEvents: readonly BrewvaEventRecord[],
+  options: RequirementFitnessAssemblyOptions = {},
+): RequirementFitnessInput {
   const atoms: readonly RequirementAtom[] = foldTaskLedgerEvents(allEvents).requirements;
 
   const findings: FitnessReviewFinding[] = [];

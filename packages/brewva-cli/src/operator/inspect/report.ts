@@ -44,8 +44,10 @@ import {
   type InspectDirectory,
 } from "../inspect-analysis.js";
 import { buildContextCockpitReport, type ContextCockpitReport } from "./context-cockpit.js";
+import { summarizeRequirementFitness, type RequirementFitnessSummary } from "./fitness-summary.js";
 import { buildProviderDriftProjection, type ProviderDriftProjection } from "./provider-drift.js";
 import { deriveRecoveryCapabilities, type RecoveryCapabilities } from "./recovery-capabilities.js";
+import { buildTapeRequirementFitness } from "./requirement-fitness.js";
 import { buildTapeReviewDebt } from "./review-debt.js";
 import {
   buildShadowAdmissionProjection,
@@ -282,6 +284,13 @@ interface InspectReport {
    * WHOLE receipt history, not a field of one receipt.
    */
   reviewDebt: ReviewDebt;
+  /**
+   * Requirement fitness RE-DERIVED over the whole tape (not the latest receipt's
+   * frozen annotation): surfaces a clear independent atoms-review's `satisfied`,
+   * and never mis-reads a review's empty independent receipt as "nothing
+   * unverified". Shared with run-report's Fitness section via `summarizeRequirementFitness`.
+   */
+  requirementFitness: RequirementFitnessSummary;
   delegation: DelegationInspectionProjection;
   operatorSafety: {
     recentDecisions: InspectOperatorSafetyDecision[];
@@ -797,6 +806,10 @@ function buildInspectReport(
       : runtime.config.infrastructure.recoveryWal.dir;
   const verification = buildVerificationInspection(inspect, sessionId);
   const reviewDebt = buildTapeReviewDebt(events);
+  // Re-derive the CURRENT fitness over the whole tape (shared with run-report):
+  // surfaces a clear independent atoms-review's `satisfied` and avoids the
+  // latest-receipt-is-an-empty-independent-annotation mis-read.
+  const requirementFitness = summarizeRequirementFitness(buildTapeRequirementFitness(events));
   const contextEvidenceReport = buildContextEvidenceReport(runtime, {
     sessionIds: [sessionId],
   });
@@ -1048,6 +1061,7 @@ function buildInspectReport(
     },
     verification,
     reviewDebt,
+    requirementFitness,
     delegation: projectDelegationInspectionState({ sessionId, records: events }),
     operatorSafety: buildOperatorSafetyInspection(events),
     hostedTransitions: createEmptySessionTransitionSnapshot(),

@@ -82,6 +82,7 @@ function workCard(): TaskWorkCardProjection {
       independenceBasis: [],
       reviewDebt: false,
       fitness: {
+        satisfied: 0,
         violated: 0,
         unverifiedMust: 0,
         discrepanciesByGrade: { deterministic_conflict: 0, advisory_conflict: 0 },

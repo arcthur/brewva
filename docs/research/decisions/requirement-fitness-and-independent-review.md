@@ -12,9 +12,11 @@
   fitness join grades atoms × evidence into `deterministic_conflict` /
   `advisory_conflict` discrepancies; `verification_record` annotates a
   `pass`@`requirements`+ receipt with them and `unverifiedMustAtoms` while
-  recording the outcome exactly as claimed; run-report and the Work Card surface
-  it; and an operator may bridge a recurring `deterministic_conflict` into the
-  existing `VerificationGateManifest`, which stays the sole gate.
+  recording the outcome exactly as claimed; run-report and the Work Card
+  RE-DERIVE that fitness over the whole tape at read time (not off the latest
+  receipt) so a later independent atoms-review's `satisfied` surfaces; and an
+  operator may bridge a recurring `deterministic_conflict` into the existing
+  `VerificationGateManifest`, which stays the sole gate.
 - Date: `2026-07-05`
 - Status: accepted
 - Stable docs:
@@ -28,7 +30,7 @@
   - `packages/brewva-vocabulary/src/internal/{iteration,review,fitness,task}.ts`
   - `packages/brewva-tools/src/{families/delegation/review-request*,shared/trap-library,families/workflow/verification-record,runtime-port/verification}.ts`
   - `packages/brewva-gateway/src/hosted/internal/session/skills/orient-requirement-injection.ts`
-  - `packages/brewva-cli/src/operator/inspect/{fitness-summary,run-report,work-card,review-debt}.ts`
+  - `packages/brewva-cli/src/operator/inspect/{fitness-summary,requirement-fitness,run-report,work-card,review-debt}.ts`
 
 ## Decision Summary
 
@@ -43,6 +45,13 @@
   exactly as claimed; a pass-with-discrepancies is visible debt; only
   `deterministic_conflict` is eligible for a gate manifest, and LLM findings gate
   nothing. Fitness counts stay a re-derivable view, not commitment memory.
+- The operator surfaces re-derive that view at read time, not off the frozen
+  receipt: run-report's Fitness section and the Work Card line fold the CURRENT
+  fitness over the whole tape (`buildTapeRequirementFitness`, the SAME producer-
+  side fold). That lands `satisfied` (the independent atoms-review's affirmative
+  half arrives after the authored verify, so no single receipt carries it) and
+  closes the "empty post-review receipt reads as nothing-unverified" bug. It
+  stores nothing new (axiom 6). Supersedes the earlier "frozen receipt" ruling.
 - A lens surfaces a stance, it never asserts a defect; the precision guard lives
   in the fitness join, not in trap surfacing, and the trap library gates nothing.
 - Surfaces ship with producers — a receipt or advisory surface is not shipped
