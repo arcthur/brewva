@@ -33,12 +33,21 @@ function collectExactMatches(
   pattern: string,
   availableModels: RegisteredModel[],
 ): RegisteredModel[] {
-  return dedupeMatches(
-    availableModels.filter((model) => {
-      const candidates = [model.id, `${model.provider}/${model.id}`];
-      return candidates.some((candidate) => candidate === pattern);
-    }),
+  // A fully-qualified `provider/id` match is MORE SPECIFIC than a bare `id`
+  // match, so it wins outright instead of tying. "deepseek/deepseek-v4-pro" must
+  // resolve to the deepseek-provider model whose qualified name IS the pattern,
+  // not go ambiguous against an aggregator whose bare id happens to equal the
+  // pattern (its qualified name is "openrouter/deepseek/deepseek-v4-pro"). A
+  // qualified name is unique, so this yields at most one match. Only when NO
+  // qualified match exists do bare-id matches apply — and there a genuine
+  // cross-provider id collision still, correctly, surfaces as ambiguous.
+  const qualified = dedupeMatches(
+    availableModels.filter((model) => `${model.provider}/${model.id}` === pattern),
   );
+  if (qualified.length > 0) {
+    return qualified;
+  }
+  return dedupeMatches(availableModels.filter((model) => model.id === pattern));
 }
 
 function toMatchResult(matches: RegisteredModel[]): ModelMatchResult {
