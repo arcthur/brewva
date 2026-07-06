@@ -70,6 +70,14 @@ Produce:
 **If the hypothesis cannot name specific evidence anchors**: Stop. Return to
 Phase 1 and collect more data.
 
+**If the pattern recurred after a prior fix was already applied** (the same
+finding, rollback, or escalation returned post-remediation): the smallest change
+is being absorbed. Recurrence is evidence the fix altitude is wrong, not that the
+prior fix needs another increment. Make the corrective change a targeted
+structural change to the default, gate, or mechanism that keeps regenerating the
+pattern — as the lead hypothesis, not a backlog item. One mechanism changed, not
+a broad rewrite.
+
 ### Phase 3: Route the lesson
 
 Decide the improvement home:
@@ -102,6 +110,8 @@ permanent rule. Validate before promoting.
 - Which home should absorb the fix: skill, overlay, project rule, runtime doc, or tool?
 - What bounded experiment would falsify this lesson if it is wrong?
 - Is the improvement narrow enough to match the evidence, or is it over-generalized?
+- Did this pattern recur _after_ a prior fix was applied? If so the small fix is
+  being absorbed — the lesson is a targeted structural change, not another increment.
 
 ## Red Flags — STOP
 
@@ -111,6 +121,8 @@ If you catch yourself thinking any of these, STOP and return to Phase 1:
 - "The architecture needs a broad rewrite based on this incident"
 - "This is obviously a pattern, no need to find more evidence"
 - "Let me propose the fix during this active incident"
+- "The same kind of small fix should work, we just applied it wrong" (when the
+  pattern already recurred after a prior fix — the fix altitude is wrong, go structural)
 
 ## Common Rationalizations
 
