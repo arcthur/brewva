@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
@@ -55,7 +56,7 @@ import type {
   DetachedSubagentLiveState,
   DetachedSubagentRunSpec,
 } from "./protocol.js";
-import { readDetachedSubagentStderrTail } from "./protocol.js";
+import { readDetachedSubagentStderrTail, resolveDetachedSubagentSpecPath } from "./protocol.js";
 
 export interface HostedSubagentBackgroundController {
   startRun(input: {
@@ -368,7 +369,18 @@ export function createDetachedSubagentBackgroundController(
     const liveState = readLiveState(record.parentSessionId, record.runId);
     if (!liveState) {
       trackedPredicates.delete(record.runId);
-      if (!isDelegationRunTerminalStatus(record.status)) {
+      // Only a DETACHED run can be terminalized from a missing live-state. An
+      // in-process consult shares the delegation store but is tracked entirely
+      // in memory (liveRun + runPromise) and never writes a detached spec or
+      // live.json, so a null read is normal for it — terminalizing it here
+      // misreports a still-running consult as failed (up6: a review consult ran
+      // 183s and produced findings, yet was marked `background_registry_missing`
+      // 0.5s in). A detached run is the one that owns a spec.json the lifecycle
+      // never deletes; that file is the authoritative "this run is detached" mark.
+      const isDetachedRun = existsSync(
+        resolveDetachedSubagentSpecPath(runtime.identity.workspaceRoot, record.runId),
+      );
+      if (isDetachedRun && !isDelegationRunTerminalStatus(record.status)) {
         // The child left no live-state and no terminal event reached the parent.
         // Read its captured stderr so a masked crash surfaces its REAL reason
         // instead of the generic marker — up5: the child's `main().catch`
@@ -388,8 +400,12 @@ export function createDetachedSubagentBackgroundController(
           record: failed,
         };
       }
+      // In-process consult (no detached spec) or an already-terminal detached
+      // run: report liveness from the in-memory record. An in-process consult's
+      // terminal state arrives via its normal completion event, not this
+      // detached watchdog — so a running consult stays live, never force-failed.
       return {
-        live: false,
+        live: !isDelegationRunTerminalStatus(record.status),
         cancelable: false,
         record,
       };
