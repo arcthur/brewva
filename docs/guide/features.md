@@ -86,8 +86,9 @@ Skill taxonomy is split by role:
 - shared project guidance adds repo-local context and provenance
 
 Delegated public specialist roles remain narrow: `navigator`, `explorer`,
-`worker`, `verifier`, and `librarian`. Internal review lanes remain control-plane
-implementation detail behind `explorer`.
+`worker`, `verifier`, and `librarian`. The review-lane capsules survive as
+review-skill vocabulary the model activates by hand — there is no host-side lane
+fan-out planner (see `docs/guide/orchestration.md`).
 
 ## Where To Inspect Exact State
 

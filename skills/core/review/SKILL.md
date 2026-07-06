@@ -65,8 +65,7 @@ Check scope drift before judging implementation quality:
 Derive lanes with the inputs and mapping in
 `invariants/review-lane-rules.md`:
 `change_categories`, `changed_file_classes`, and evidence availability flags.
-This skill is read-only; use host-provided lane output when already available,
-otherwise apply the invariant manually.
+This skill is read-only; apply the invariant manually to derive them.
 
 Always-on: `review-correctness`, `review-boundaries`, `review-operability`.
 Conditional: `review-security`, `review-concurrency`, `review-compatibility`,
@@ -82,18 +81,16 @@ Proceed with all lanes rather than guessing which to skip.
 
 ### Phase 3: Security gate
 
-Apply the secret-exposure gate from `invariants/review-lane-rules.md`. Use
-host-provided scan results when already available; otherwise inspect the changed
-content directly without mutating files. This is a gate, not a score — any
-finding blocks the review regardless of other lane outcomes.
+Apply the secret-exposure gate from `invariants/review-lane-rules.md`. Inspect
+the changed content directly without mutating files. This is a gate, not a score —
+any finding blocks the review regardless of other lane outcomes.
 
 **If `clean: false`**: Add a blocking finding. Do not proceed to merge readiness.
 
 ### Phase 4: Synthesize and decide
 
 Synthesize lane dispositions with the invariant inputs: `activated_lanes` from
-Phase 2 and all `lane_outcomes`. Use host-provided synthesis when available;
-otherwise apply the missing-lane rule manually.
+Phase 2 and all `lane_outcomes`. Apply the missing-lane rule manually.
 
 **If lanes disagree materially**: Keep the disagreement visible in
 `review_report`. Do not smooth it away.
@@ -110,9 +107,8 @@ Produce `review_findings`, `review_report`, `merge_decision`.
 ## Invariants
 
 - `invariants/review-lane-rules.md` — Canonical lane activation, lane outcome
-  schema, secret exposure gate, and merge-decision synthesis rules. Use
-  host-provided output when available; otherwise apply the invariant manually
-  without crossing the read-only boundary.
+  schema, secret exposure gate, and merge-decision synthesis rules. Apply the
+  invariant manually without crossing the read-only boundary.
 
 ## Decision Protocol
 

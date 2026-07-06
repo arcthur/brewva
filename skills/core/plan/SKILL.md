@@ -119,9 +119,8 @@ signal before implementation begins. Do not smuggle code edits into plan output.
 ## Invariants
 
 - `invariants/planning-posture.md` — Canonical posture classifier rule set
-  (scope inputs to posture classification and reason). Use host-provided output
-  when available; otherwise classify manually without crossing the read-only
-  boundary.
+  (scope inputs to posture classification and reason). Classify manually without
+  crossing the read-only boundary.
 
 ## Decision Protocol
 

@@ -52,8 +52,7 @@ unrequested configurability and impossible-scenario handling as proposed
 features unless the request or existing contract requires them.
 
 Evaluate the approach with `invariants/simplicity-check.md`. This skill is
-read-only; use host-provided simplicity-check output when already available,
-otherwise apply the invariant manually.
+read-only; apply the invariant manually.
 
 **If `verdict: over_engineered`**: Trim the approach — remove speculative features and unnecessary abstractions. Re-apply the check until `verdict: acceptable`.
 **If `verdict: acceptable`**: Proceed to Phase 3.
@@ -76,9 +75,8 @@ Produce all four outputs. Hand off to `implementation`.
 - `invariants/simplicity-check.md` — Canonical simplicity rule set. Input:
   `estimated_line_count`, `abstraction_count`, `requested_features` list,
   `proposed_features` list. Output: `verdict` (`acceptable` |
-  `over_engineered`), `speculative_features`, `over_abstracted`, `flags`. Use
-  host-provided output when available; otherwise classify manually in Phase 2
-  and after trimming.
+  `over_engineered`), `speculative_features`, `over_abstracted`, `flags`.
+  Classify manually in Phase 2 and after trimming.
 
 ## Decision Protocol
 
