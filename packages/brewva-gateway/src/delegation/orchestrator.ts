@@ -75,6 +75,7 @@ import {
   resolveRunRecords,
 } from "./orchestrator/records.js";
 import { getCanonicalForkPrompt } from "./protocol.js";
+import { resumeDelegatedApprovalsWithinEnvelope } from "./resume-delegated-approvals.js";
 import {
   applyDelegationFinalizationReceipt,
   aggregateChildCost,
@@ -749,12 +750,38 @@ export function createHostedSubagentAdapter(
           contextBundle: plan.contextBundle,
         });
         const { delegatedSkill, childOwnsSkill, prompt } = preparedEntry;
-        const output = await runHostedTurnEnvelope({
+        let output = await runHostedTurnEnvelope({
           session: child.session,
           prompt,
           runtime: child.runtime,
           sessionId: childSessionId,
           source: "subagent",
+        });
+        // Capture the narrowed child handles as const so the auto-approve
+        // callbacks (deferred closures) keep the non-undefined narrowing.
+        const approvalChildRuntime = child.runtime;
+        const approvalChildSession = child.session;
+        const approvalChildSessionId = childSessionId;
+        output = await resumeDelegatedApprovalsWithinEnvelope({
+          initial: output,
+          sessionId: approvalChildSessionId,
+          listPendingApprovals: (sessionId) =>
+            approvalChildRuntime.ops.proposals.requests.listPending(sessionId),
+          acceptApproval: (sessionId, requestId) =>
+            approvalChildRuntime.ops.proposals.requests.decide(sessionId, requestId, {
+              decision: "accept",
+              actor: "delegation-envelope",
+              reason: "delegated child auto-approves effectful tools within its governed envelope",
+            }),
+          resumeTurn: (resolveApproval) =>
+            runHostedTurnEnvelope({
+              session: approvalChildSession,
+              prompt: "",
+              runtime: approvalChildRuntime,
+              sessionId: approvalChildSessionId,
+              source: "subagent",
+              resolveApproval,
+            }),
         });
         if (output.status !== "completed") {
           throw new Error(`subagent_thread_loop_${output.status}`);
