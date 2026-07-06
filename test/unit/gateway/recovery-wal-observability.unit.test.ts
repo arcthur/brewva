@@ -33,10 +33,17 @@ describe("Recovery WAL observability seam", () => {
   test("store transitions reach the tape as the vocabulary recovery.wal.* types (producer seam)", async () => {
     const runtime = createRuntimeFixture();
     const workspace = createTestWorkspace("recovery-wal-observability");
+    // Drive the store off an injected clock so compaction is deterministic. With
+    // `compactAfterMs: 0` a real clock can land markDone and compact in the SAME
+    // millisecond, leaving `at - updatedAt === 0`, which the `> compactAfterMs`
+    // gate does not remove — CI is fast enough to hit this while a slower local
+    // run is not, which is exactly the observed flake.
+    let clock = 1_700_000_000_000;
     const store = createRecoveryWalStore({
       workspaceRoot: workspace,
       config: { ...DEFAULT_BREWVA_CONFIG.infrastructure.recoveryWal, compactAfterMs: 0 },
       scope: "runtime",
+      now: () => clock,
       // The exact wiring the channel host uses: store lifecycle -> bridge ->
       // channel recovery verbs. This chain was declared but never invoked
       // before the contract-liveness audit.
@@ -47,6 +54,7 @@ describe("Recovery WAL observability seam", () => {
 
     const pending = store.appendPending(createEnvelope("turn-1"), "channel");
     store.markDone(pending.walId);
+    clock += 1; // advance past the done timestamp so compaction sees a positive age
     store.compact();
 
     const appended = runtime.ops.events.records.query("wal-obs-1", {
