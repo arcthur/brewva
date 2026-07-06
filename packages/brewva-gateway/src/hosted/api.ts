@@ -92,9 +92,14 @@ export {
 } from "./provider.js";
 export {
   buildContextEvidenceReport,
+  buildDelegationEvidenceReport,
   deriveContextEvidenceRecommendation,
   persistContextEvidenceReport,
   type ContextEvidenceAggregateReport,
   type ContextEvidenceRecommendation,
   type ContextEvidenceRecommendationInput,
+  type DelegationEvidenceAggregate,
+  type DelegationEvidenceReport,
+  type DelegationEvidenceReportOptions,
+  type DelegationEvidenceSessionReport,
 } from "./context.js";

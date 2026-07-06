@@ -1,12 +1,19 @@
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaAgentProtocolMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
-import { buildTapeRequirementDebtSummary } from "@brewva/brewva-tools/runtime-port";
+import {
+  buildTapeRequirementDebtSummary,
+  buildTapeReviewDebt,
+} from "@brewva/brewva-tools/runtime-port";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
+  ContextCompactionReason,
 } from "@brewva/brewva-vocabulary/context";
-import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
+import {
+  deriveParallelBudgetStateFromEvents,
+  type DelegationRunRecord,
+} from "@brewva/brewva-vocabulary/delegation";
 import { decideContinuationAnchorRelevance } from "@brewva/brewva-vocabulary/session";
 import { TASK_REQUIREMENT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
 import { isAttentionPinnedWorkbenchEntry } from "@brewva/brewva-vocabulary/workbench";
@@ -28,7 +35,12 @@ import {
 import { estimateTokens } from "../session/tools/tool-output-distiller.js";
 import { renderCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import { applyContextContract } from "./context-contract.js";
-import { decideContextNudge, decideContextPressure } from "./context-lifecycle.js";
+import {
+  decideContextNudge,
+  decideContextPressure,
+  type ContextLifecyclePressureDecision,
+  type ContextNudgeCadenceTracker,
+} from "./context-lifecycle.js";
 import { resolveContextScopeId } from "./context-shared.js";
 import { buildFailureRecurrenceSection } from "./failure-recurrence.js";
 import type { HostedContextGateStatePort } from "./hosted-compaction-controller.js";
@@ -50,6 +62,7 @@ import {
   renderCacheBreakSection,
   renderConsequenceSection,
   renderContextPressureSection,
+  renderDelegationAdvisorySection,
   renderRequirementDebtSection,
   RUNTIME_BRIEF_MAX_CHARS,
 } from "./runtime-brief.js";
@@ -399,17 +412,41 @@ function buildWorkbenchBlock(
 
 // Model-facing runtime intelligence brief: a legible `[RuntimeBrief]` block under
 // a provenance frame (see runtime-brief.ts), composing relevance-gated sections —
-// context-pressure posture, an unexpected cache-break, last-turn effects, and
-// repeated identical tool failures (failure-recurrence.ts).
+// context-pressure posture, an unexpected cache-break, last-turn effects,
+// repeated identical tool failures (failure-recurrence.ts), requirement debt
+// (R4), and the delegation advisory (Lever 2, when a delegation context is
+// threaded in).
 // Each section is silent when not decision-relevant, so the block is absent on a
 // fully calm turn. Replaces the former always-on 16-line `[Context Status]` ledger
 // dump and the bare consequence-digest block.
+/**
+ * Inputs the delegation advisory (Lever 2) needs that the brief's own section
+ * builders do not — the compaction gate/pressure state (for the ADVISORY-tier
+ * pressure-relief reason and the "would the gate reject" budget suppression) and
+ * the delegation cadence tracker. Threaded from `buildHostedDynamicTail`, which
+ * already holds them, so the section can live in the brief's sections array
+ * (after `requirements`) exactly like every other section. Absent → the
+ * advisory is silent (e.g. a caller with no delegation store).
+ */
+export interface DelegationAdvisoryContext {
+  readonly gateStatus: ContextCompactionGateStatus;
+  readonly pendingCompactionReason: ContextCompactionReason | null;
+  readonly cadenceTracker: ContextNudgeCadenceTracker;
+  /**
+   * The session has a delegation store (delegation is available at all). False →
+   * the advisory is suppressed: recommending an action with no store to serve it
+   * is worse than silence.
+   */
+  readonly delegationEnabled: boolean;
+}
+
 export function buildRuntimeBriefBlockForSession(
   runtime: HostedRuntimeAdapterPort,
   input: {
     sessionId: string;
     turn: number;
     usage?: ContextBudgetUsage;
+    delegationAdvisory?: DelegationAdvisoryContext;
   },
 ): HostedContextBlock | null {
   const status = getRuntimeContextStatus(runtime, input.sessionId, input.usage);
@@ -435,8 +472,11 @@ export function buildRuntimeBriefBlockForSession(
   const cache = buildCacheBreakSection(runtime, input.sessionId);
   const recurrence = buildFailureRecurrenceSection(runtime, input.sessionId);
   const requirements = buildRequirementDebtSection(runtime, input.sessionId);
+  const delegation = input.delegationAdvisory
+    ? buildDelegationAdvisorySection(runtime, input.sessionId, input.turn, input.delegationAdvisory)
+    : null;
   return buildRuntimeBriefBlock({
-    sections: [pressure, cache, effects, recurrence, requirements],
+    sections: [pressure, cache, effects, recurrence, requirements, delegation],
     maxChars: RUNTIME_BRIEF_MAX_CHARS,
   });
 }
@@ -465,6 +505,124 @@ function buildRequirementDebtSection(
     debtReason: debt.reason,
     insufficientGradeCount: fitness.insufficientGradeAtoms.length,
   });
+}
+
+/**
+ * Would the parallel-admission gate reject a NEW delegation right now, given only
+ * tape-derived budget state + config? A pure mirror of the gate's own `evaluate`
+ * reject predicate (parallel-admission.ts): reject when concurrency is at the
+ * ceiling OR the session lifetime cap is exhausted. Deliberately uses the BASE
+ * `maxConcurrent` ceiling, ignoring the lease-raised ceiling the live gate can
+ * grant — leases only RAISE the ceiling, so this over-predicts rejection at
+ * worst, keeping the advisory silent slightly more often (the safe direction: an
+ * advisory the gate would refuse is worse than silence). No side effects, unlike
+ * a probe `acquire`.
+ */
+function parallelGateWouldReject(runtime: HostedRuntimeAdapterPort, sessionId: string): boolean {
+  const config = runtime.config.parallel;
+  if (!config.enabled) {
+    return false;
+  }
+  const budget = deriveParallelBudgetStateFromEvents(listRuntimeEvents(runtime, sessionId));
+  if (budget.totalStarted >= config.maxTotalPerSession) {
+    return true;
+  }
+  return budget.activeCount >= config.maxConcurrent;
+}
+
+/**
+ * Lever 2: the render-time delegation advisory. Names delegation as an instrument
+ * at turn tail, inform-only (axiom 18 — derives NO gate). Two reasons decided
+ * here from runtime state, then rendered by {@link renderDelegationAdvisorySection}:
+ *
+ *  - pressure-relief: context pressure is at the ADVISORY tier
+ *    (`decideContextPressure(...).action === "workbench_compact_soon"`, NOT the
+ *    gate tier).
+ *  - review-debt-closure: the shared tape read (`buildTapeReviewDebt`, the SAME
+ *    projection the CLI operator surfaces use) reports open review debt.
+ *
+ * SUPPRESSION — silent unless actionable, because an advisory recommending an
+ * action the gate will refuse is worse than silence:
+ *  - no delegation store (`delegationEnabled === false`);
+ *  - a delegation is already pending/running on the tape;
+ *  - the parallel gate would reject a new delegation (no budget).
+ *
+ * CADENCE — the delegation tracker (its own instance) is keyed `delegation:<reason>`
+ * via a synthetic ADVISORY-tier pressure decision, so the advisory renders
+ * full-then-brief (the runtime brief has no stub-vs-full distinction, so a
+ * `brief` verdict simply suppresses this turn) and never nags every turn.
+ */
+function buildDelegationAdvisorySection(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+  turn: number,
+  context: DelegationAdvisoryContext,
+): ReturnType<typeof renderDelegationAdvisorySection> {
+  // Suppression 1: no store to serve the recommendation.
+  if (!context.delegationEnabled) {
+    return null;
+  }
+  const pressure = decideContextPressure({
+    gateStatus: context.gateStatus,
+    pendingCompactionReason: context.pendingCompactionReason,
+  });
+  const pressureRelief = pressure.action === "workbench_compact_soon";
+  // NOTE (Open Question, Lever 2): on a post-implementation turn the R4
+  // requirement-debt section also says "dispatch an independent review", so this
+  // review-debt reason DELIBERATELY complements it with the economic framing (the
+  // one `independent` receipt the model cannot mint for itself) rather than
+  // repeating it. Salience-ordered (this section is `low`, requirement debt is
+  // `normal`), so under budget the delegation line demotes to its stub first. A
+  // maintainer may gate this on `requirementDebtRendered` if the overlap outweighs
+  // the framing — tracked in the RFC.
+  const reviewDebtClosure = buildTapeReviewDebt(listRuntimeEvents(runtime, sessionId)).debt;
+  // Nothing to say → silent before paying for any suppression checks.
+  if (!pressureRelief && !reviewDebtClosure) {
+    return null;
+  }
+  // Suppression 2: a delegation is already in flight — the model has already
+  // reached for the instrument; recommending it again is noise.
+  const alreadyPending =
+    deriveParallelBudgetStateFromEvents(listRuntimeEvents(runtime, sessionId)).activeCount > 0;
+  if (alreadyPending) {
+    return null;
+  }
+  // Suppression 3: the gate would refuse a new delegation (no budget).
+  if (parallelGateWouldReject(runtime, sessionId)) {
+    return null;
+  }
+  // Cadence: full-then-brief. The reason string picks the cadence bucket, so a
+  // change of reason resets the window to full (a genuinely new actionable reason
+  // deserves a fresh render); the tracker holds one state per session.
+  const reason = pressureRelief ? "delegation:pressure_relief" : "delegation:review_debt";
+  if (!delegationAdvisoryCadenceAllows(context.cadenceTracker, sessionId, turn, reason)) {
+    return null;
+  }
+  return renderDelegationAdvisorySection({ pressureRelief, reviewDebtClosure });
+}
+
+/**
+ * Full-then-brief cadence for the delegation advisory, reusing the compaction
+ * nudge tracker's shape (a SEPARATE instance, so no cross-talk). A synthetic
+ * ADVISORY-tier pressure decision carrying the delegation reason drives the
+ * tracker to key `advisory:delegation:<reason>` and emit `full` on the first
+ * render then `brief` within the cooldown window. The runtime brief has no
+ * stub-vs-full form for this section, so `brief` is treated as "hold this turn":
+ * the advisory renders on the full turns and stays silent between them, which is
+ * exactly the anti-nag behavior wanted.
+ */
+function delegationAdvisoryCadenceAllows(
+  tracker: ContextNudgeCadenceTracker,
+  sessionId: string,
+  turn: number,
+  reason: string,
+): boolean {
+  const syntheticPressure: ContextLifecyclePressureDecision = {
+    action: "workbench_compact_soon",
+    reason,
+  };
+  const decision = tracker.decide({ sessionId, turn, pressure: syntheticPressure });
+  return decision.mode === "full";
 }
 
 function buildCacheBreakSection(
@@ -598,6 +756,14 @@ async function buildHostedDynamicTail(input: {
       sessionId: input.sessionId,
       turn: input.turn,
       usage: input.usage,
+      delegationAdvisory: {
+        gateStatus: input.gateStatus,
+        pendingCompactionReason: input.pendingCompactionReason,
+        cadenceTracker: input.statePort.delegationAdvisoryTracker,
+        // The advisory only makes sense where delegation can actually be served;
+        // absent a store, suppress it (a recommendation with no store is noise).
+        delegationEnabled: input.delegationStore !== undefined,
+      },
     }),
     continuationAnchor.include
       ? buildLatestContinuationAnchorBlock(input.runtime, input.sessionId)

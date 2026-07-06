@@ -110,7 +110,8 @@ When the user selects a candidate, produce `interface_exploration_brief` before
 handoff to `plan`. This brief pressures the interface; it does not choose the
 final plan. Use `references/interface-exploration.md` for required brief fields
 and optional design-it-twice protocol. Delegation can help produce competing
-options, but this skill must still work without delegation.
+options; it is never required, so when the parallel budget is exhausted the
+skill degrades gracefully to inline exploration without losing rigor.
 
 **If interface choice depends on trade-offs, rollout cost, or owner preference**:
 Do not pick a winner here. Hand off the sketches and decision criteria to

@@ -15,6 +15,8 @@ import {
 } from "../../packages/brewva-cli/src/operator/inspect/requirement-fitness.js";
 import { buildTapeReviewDebt } from "../../packages/brewva-cli/src/operator/inspect/review-debt.js";
 import { buildCompactionInputProvenance } from "../../packages/brewva-gateway/src/hosted/internal/context/compaction-input-provenance.js";
+import { createContextNudgeCadenceTracker } from "../../packages/brewva-gateway/src/hosted/internal/context/context-lifecycle.js";
+import { buildRuntimeBriefBlockForSession } from "../../packages/brewva-gateway/src/hosted/internal/context/workbench-context.js";
 import { projectRecentToolTargetPaths } from "../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.js";
 
 // DYNAMIC projection-liveness tripwire, complementary to the STATIC
@@ -272,5 +274,65 @@ describe("hosted-tape projection liveness (real gpt-5.5 session)", () => {
     const debt = buildTapeReviewDebt(unwrapOpsEnvelopes(events) as never);
     expect(debt.debt).toBe(true);
     expect(debt.reason).toBe("no_independent_receipt");
+  });
+
+  // Lever 2 PRODUCER-WIRING invariant: the delegation advisory must actually
+  // render on this canonical run, not merely be renderable in isolation. The real
+  // tape carries open review debt (asserted above) and zero active delegations,
+  // so the review-debt-closure reason MUST fire when the hosted tail composes the
+  // brief over this exact tape. If the section is ever unwired from
+  // buildRuntimeBriefBlockForSession, or its suppression inverts, this goes red —
+  // that is the whole point of the advisory.
+  test("the delegation advisory RENDERS on the real review-debt tape (Lever 2 wiring is live)", () => {
+    const unwrapped = unwrapOpsEnvelopes(events);
+    const runtime = {
+      config: {
+        infrastructure: { contextBudget: { consequenceDigestMaxChars: 1200 } },
+        parallel: { enabled: true, maxConcurrent: 4, maxTotalPerSession: 16 },
+      },
+      ops: {
+        context: {
+          // Calm token usage: the review-debt reason, not pressure, is the signal.
+          usage: {
+            getStatus: () => ({
+              tokensUsed: 20_000,
+              tokensTotal: 200_000,
+              compactionAdvised: false,
+              forcedCompaction: false,
+              predictedOverflow: false,
+            }),
+          },
+          evidence: { latest: () => undefined },
+        },
+        events: {
+          effects: { renderTurnDigest: () => "" },
+          records: {
+            list: () => unwrapped,
+            query: (_sessionId: string, query?: { type?: string; last?: number }) => {
+              const matched = unwrapped.filter(
+                (event) => !query?.type || event.type === query.type,
+              );
+              return typeof query?.last === "number" ? matched.slice(-query.last) : matched;
+            },
+          },
+        },
+        workbench: { list: () => [] },
+      },
+    } as unknown as Parameters<typeof buildRuntimeBriefBlockForSession>[0];
+
+    const block = buildRuntimeBriefBlockForSession(runtime, {
+      sessionId: "s",
+      turn: 3,
+      delegationAdvisory: {
+        // No compaction pressure: isolate the review-debt-closure reason.
+        gateStatus: { status: {} } as never,
+        pendingCompactionReason: null,
+        cadenceTracker: createContextNudgeCadenceTracker(),
+        delegationEnabled: true,
+      },
+    });
+
+    expect(block?.content).toContain("delegation:");
+    expect(block?.content).toContain("`review_request`");
   });
 });

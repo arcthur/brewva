@@ -5,6 +5,7 @@ import {
   renderCacheBreakSection,
   renderConsequenceSection,
   renderContextPressureSection,
+  renderDelegationAdvisorySection,
   renderRequirementDebtSection,
   type RuntimeBriefSection,
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/runtime-brief.js";
@@ -289,5 +290,49 @@ describe("renderRequirementDebtSection (R4)", () => {
       "requirements: 1 must atom(s) unverified (unverified_after_requirements); " +
         "3 high-risk atom(s) on presence-only evidence",
     );
+  });
+});
+
+describe("renderDelegationAdvisorySection (Lever 2)", () => {
+  test("silent when neither reason applies", () => {
+    expect(
+      renderDelegationAdvisorySection({ pressureRelief: false, reviewDebtClosure: false }),
+    ).toBeNull();
+  });
+
+  test("pressure-relief alone names delegation as a pressure-relief instrument", () => {
+    const section = renderDelegationAdvisorySection({
+      pressureRelief: true,
+      reviewDebtClosure: false,
+    });
+    expect(section?.key).toBe("delegation");
+    // Lowest salience: an instrument suggestion demotes before the postures it complements.
+    expect(section?.salience).toBe("low");
+    expect(section?.line).toContain("cheaper in a child session");
+    expect(section?.line).toContain("advisory pressure");
+    expect(section?.line).not.toContain("review_request");
+    expect(section?.stub).toBe("delegation: a child session can relieve context pressure");
+  });
+
+  test("review-debt-closure alone names review_request as the closure path", () => {
+    const section = renderDelegationAdvisorySection({
+      pressureRelief: false,
+      reviewDebtClosure: true,
+    });
+    expect(section?.line).toContain("`review_request`");
+    expect(section?.line).toContain("independent-perspective receipt you cannot mint");
+    expect(section?.line).not.toContain("child session");
+    expect(section?.stub).toBe("delegation: `review_request` closes open review debt");
+  });
+
+  test("both reasons compose into one line", () => {
+    const section = renderDelegationAdvisorySection({
+      pressureRelief: true,
+      reviewDebtClosure: true,
+    });
+    expect(section?.line).toContain("cheaper in a child session");
+    expect(section?.line).toContain("`review_request`");
+    // The review-debt closure wins the stub when both apply.
+    expect(section?.stub).toBe("delegation: `review_request` closes open review debt");
   });
 });

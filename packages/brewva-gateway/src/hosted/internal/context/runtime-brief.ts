@@ -260,6 +260,71 @@ export function renderRequirementDebtSection(
   };
 }
 
+export interface DelegationAdvisoryInput {
+  /**
+   * Context pressure is at the ADVISORY tier (`workbench_compact_soon`), NOT the
+   * gate tier. At the advisory tier delegation is a pressure-relief instrument:
+   * broad remaining work is cheaper in a fresh child window than in this one.
+   * (At the gate tier the imperative is `workbench_compact` now — naming
+   * delegation there would compete with the gate, so the caller passes false.)
+   */
+  readonly pressureRelief: boolean;
+  /**
+   * Open review debt exists on the tape (fresh code written, a `requirements`+
+   * pass claimed, but no independent receipt that matches-and-covers). The one
+   * `independent`-perspective receipt the model cannot mint for itself; a
+   * `review_request` delegation is the closure path.
+   */
+  readonly reviewDebtClosure: boolean;
+}
+
+/**
+ * Delegation advisory posture (Lever 2, axiom 18): names delegation as an
+ * instrument at turn tail when — and only when — it is the cheaper or the only
+ * path forward. Two independent reasons, silent when NEITHER applies (an
+ * advisory nobody can act on is noise):
+ *
+ *  - pressure-relief: at the ADVISORY pressure tier, broad remaining exploration
+ *    or verification is cheaper in a child session than in a window already
+ *    under advisory pressure.
+ *  - review-debt-closure: with open review debt, a `review_request` is the one
+ *    `independent`-perspective receipt the model cannot mint for itself.
+ *
+ * Inform-only — it derives NO gate (the sole gate stays the operator-promoted
+ * verification-gate manifest). Lowest salience: an instrument suggestion sits
+ * below the pressure/requirement postures it complements, so it demotes first
+ * under budget. Suppression that would make the advisory recommend an action the
+ * parallel gate will refuse (pending delegation, exhausted budget, no store)
+ * lives in the caller (`buildDelegationAdvisorySection`), not here — this
+ * renderer is a pure function of its two reasons.
+ */
+export function renderDelegationAdvisorySection(
+  input: DelegationAdvisoryInput,
+): RuntimeBriefSection | null {
+  if (!input.pressureRelief && !input.reviewDebtClosure) {
+    return null;
+  }
+  const parts: string[] = [];
+  if (input.pressureRelief) {
+    parts.push(
+      "broad remaining exploration or verification is cheaper in a child session than in a window already under advisory pressure",
+    );
+  }
+  if (input.reviewDebtClosure) {
+    parts.push(
+      "open review debt closes with a `review_request` — the one independent-perspective receipt you cannot mint for yourself",
+    );
+  }
+  return {
+    key: "delegation",
+    salience: "low",
+    line: `delegation: ${parts.join("; ")}`,
+    stub: input.reviewDebtClosure
+      ? "delegation: `review_request` closes open review debt"
+      : "delegation: a child session can relieve context pressure",
+  };
+}
+
 export function formatTokens(count: number): string {
   if (!Number.isFinite(count) || count < 0) {
     return "0";

@@ -37,10 +37,10 @@ describe("brewva-tools public entrypoints", () => {
     expect(typeof execution.createExecTool).toBe("function");
     expect(typeof memory.createRecallSearchTool).toBe("function");
     expect(typeof delegation.createSubagentRunTool).toBe("function");
-    expect(typeof delegation.synthesizeReviewEnsemble).toBe("function");
+    expect(typeof delegation.coerceStoredReviewOutcomeData).toBe("function");
     expect(typeof delegation.classifyReviewChangedFiles).toBe("function");
     expect(typeof workflow.createWorkflowStatusTool).toBe("function");
-    expect("synthesizeReviewEnsemble" in workflow).toBe(false);
+    expect("coerceStoredReviewOutcomeData" in workflow).toBe(false);
     expect("classifyReviewChangedFiles" in workflow).toBe(false);
     expect(typeof modelRouting.resolveBrewvaModelSelection).toBe("function");
     expect(typeof modelRouting.selectBrewvaFallbackModel).toBe("function");

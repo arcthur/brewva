@@ -93,3 +93,13 @@ when one of these is true:
 
 Do not add automatic cascade behavior. Do not infer a hidden chain from this
 document. Do not preserve old skill-name aliases.
+
+## Delegation In Skills
+
+Delegation is authored INTO the skill bodies, not routed from here: the Pre-Build
+and Build skills (`discovery`, `repository-analysis`, `plan`, `implementation`)
+carry fan-out and review-closure steps, and `review`/`architecture` carry their
+own. The invariant is that those steps are advisory — delegation is never required
+(a parallel budget can be exhausted), so every skill degrades to inline work
+without losing rigor. Reach for it on the shapes the skill bodies name; keep
+single directed lookups inline.

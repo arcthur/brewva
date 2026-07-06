@@ -63,3 +63,10 @@ export {
   type ContextEvidenceRecommendation,
   type ContextEvidenceRecommendationInput,
 } from "./internal/context/evidence/context-evidence.js";
+export {
+  buildDelegationEvidenceReport,
+  type DelegationEvidenceAggregate,
+  type DelegationEvidenceReport,
+  type DelegationEvidenceReportOptions,
+  type DelegationEvidenceSessionReport,
+} from "./internal/context/evidence/delegation-evidence.js";

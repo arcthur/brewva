@@ -60,14 +60,11 @@ Prefer official or repository-native solutions first:
 
 ### Phase 1: Classify planning posture
 
-Classify posture with the rule set in `invariants/planning-posture.md`. This
-skill is read-only and does not require local execution; use host-provided
-posture output when already available, otherwise apply the invariant manually.
-Use the posture to calibrate depth: `trivial` gets a lightweight plan,
-`high_risk` gets full trade-off analysis and risk register.
+Classify posture with the rule set in `invariants/planning-posture.md`, then use
+it to calibrate depth: `trivial` gets a lightweight plan, `high_risk` gets full
+trade-off analysis and risk register.
 
-If upstream `planning_posture` exists, reconcile it with the classifier result.
-If they disagree, use the stricter posture and note the gap.
+If upstream `planning_posture` disagrees, use the stricter posture, noting the gap.
 
 **If scope data is unavailable**: Default to `moderate`. Do not assume triviality.
 
@@ -82,6 +79,10 @@ Attack the favored path:
 - Which boundary or persisted format would make rollback expensive?
 - What simpler official or repo-native pattern would a reviewer expect instead?
 - What fails under partial implementation or stale context?
+
+Gather comparison evidence with parallel `subagent_run(agent=navigator)` runs;
+when designs genuinely compete, open an `explorer` design consult per candidate
+(`references/explorer-consultation-protocol.md`), advisory to the trade-off.
 
 **If all approaches violate hard constraints**: Stop. Report the constraint
 conflict. Do not force a plan through broken constraints.
@@ -117,11 +118,10 @@ signal before implementation begins. Do not smuggle code edits into plan output.
 
 ## Invariants
 
-- `invariants/planning-posture.md` — Canonical posture classifier rule set.
-  Input: affected_paths_count, boundaries_crossed, has_public_surface,
-  has_persisted_format, has_security_surface. Output: posture classification
-  and reason. Use host-provided output when available; otherwise classify
-  manually without crossing the read-only boundary.
+- `invariants/planning-posture.md` — Canonical posture classifier rule set
+  (scope inputs to posture classification and reason). Use host-provided output
+  when available; otherwise classify manually without crossing the read-only
+  boundary.
 
 ## Decision Protocol
 

@@ -32,6 +32,7 @@ export {
   assembleRequirementFitnessInputFromEvents,
   buildTapeRequirementDebtSummary,
   buildTapeRequirementFitness,
+  buildTapeReviewDebt,
   buildTapeUnverifiedRequirementDebt,
   type TapeRequirementDebtSummary,
 } from "./verification.js";

@@ -89,6 +89,7 @@ Every accepted decision inherits these rules:
 - [cli-shell-import-graph-baseline](./cli-shell-import-graph-baseline.md)
 - [cli-tui-dual-layer-operator-shell](./cli-tui-dual-layer-operator-shell.md)
 - [cli-tui-experience-ring-decomposition-and-shell-port-boundaries](./cli-tui-experience-ring-decomposition-and-shell-port-boundaries.md)
+- [delegation-activation-surface-and-trigger-economics](./delegation-activation-surface-and-trigger-economics.md)
 - [delegation-plane-hardening-and-envelope-archetype-cutover](./delegation-plane-hardening-and-envelope-archetype-cutover.md)
 - [delegation-verification-and-replay-inspection-ux](./delegation-verification-and-replay-inspection-ux.md)
 - [inspectable-operator-experience-overlays](./inspectable-operator-experience-overlays.md)

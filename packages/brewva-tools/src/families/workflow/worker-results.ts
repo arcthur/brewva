@@ -336,12 +336,12 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
       name: "worker_results_apply",
       label: "Worker Results Apply",
       description:
-        "Prepare or apply recorded worker results through SourcePatchPlan. Without plan_id this only prepares a plan.",
+        "Prepare or apply recorded worker results through SourcePatchPlan. Without plan_id it merge-checks the worker set and, when clean, prepares a plan in the same call — returning the plan preview or a conflict report; with plan_id it applies the prepared plan through the source patch gate.",
       promptSnippet:
-        "Prepare a clean merged worker patch set, review the SourcePatchPlan, then apply it by plan_id.",
+        "Prepare the merged worker patch set (merge-checked in the same call), review the SourcePatchPlan, then apply it by plan_id.",
       promptGuidelines: [
-        "Prefer calling worker_results_merge first when the current worker set may conflict.",
-        "Call without plan_id to prepare a SourcePatchPlan; call with plan_id to apply through the source patch gate.",
+        "Call without plan_id to merge-check and prepare in one step: a clean set returns a SourcePatchPlan preview, a conflicting set returns the conflict report. Call with plan_id to apply the prepared plan through the source patch gate.",
+        "worker_results_merge is standalone conflict inspection — you do not need it before apply, which already merge-checks.",
       ],
       parameters: Type.Object(
         {

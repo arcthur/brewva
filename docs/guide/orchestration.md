@@ -123,13 +123,25 @@ attention items (unconsumed evidence, verifier debt, blocked or failed runs).
 `workflow_status` surfaces it; the board owns no truth and resolves nothing
 itself.
 
+## Delegation Measurement Loop
+
+`bun run report:delegation-evidence [workspace] [--session <id>...]` grades the
+delegation surface from the tape, explicit-pull and rebuildable — reach by role,
+primitive, and wait mode; parallel-gate rejections by reason; adoption outcomes;
+and a delegation FAILURE rate (dispatch, spawn, consult). The failure rate is the
+reliability counter-signal to any activation gain: a doctrine that lifts reach
+while dispatches fail is pushing the model into a wall, not adoption. The report
+auto-applies nothing — it is the instrument that calibrates whether a doctrine
+change actually moved the trigger rate, before and after, rather than assuming so.
+
 ## Specialist Cutover Snapshot
 
 The current stable built-in specialist surface is:
 
 - public specialists: `navigator`, `explorer`, `worker`, `verifier`, and `librarian`
-- internal review fan-out lanes remain behind the review ensemble and are not
-  part of the public specialist taxonomy; they are internal `explorer` targets
+- review runs go through `review_request`'s single bounded fresh-context
+  reviewer; there is no internal lane fan-out planner (removed — the
+  requirement-fitness reviewer superseded the lane taxonomy)
 
 For each role's execution posture and the three execution archetypes
 (`readonly-shared`, `exec-ephemeral`, `patch-snapshot`), see
@@ -143,8 +155,9 @@ Orchestration-specific notes on top of that:
 - recovery-critical baseline materialization (`historyViewBaseline` +
   `recoveryWorkingSet`) is preserved by the gateway context materializer when the
   hosted lane needs it
-- the review ensemble keeps internal evidence-audit coverage for stale evidence,
-  missing probes, rollback posture, and operator-visible recovery burden
+- `review_request`'s single reviewer covers evidence-audit concerns (stale
+  evidence, missing probes, rollback posture) as one bounded consult, not a
+  multi-lane ensemble
 
 `HostedRuntimeAdapterPort.ops.verification.*` remains the repo-owned adapter for
 evidence sufficiency and freshness. It is not a delegated specialist, and new

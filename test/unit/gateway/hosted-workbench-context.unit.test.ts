@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { ContextCompactionGateStatus } from "@brewva/brewva-vocabulary/context";
 import type { TapeStatusState } from "@brewva/brewva-vocabulary/session";
+import { createContextNudgeCadenceTracker } from "../../../packages/brewva-gateway/src/hosted/internal/context/context-lifecycle.js";
 import {
   buildLatestContinuationAnchorBlock,
   buildRuntimeBriefBlockForSession,
+  type DelegationAdvisoryContext,
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/workbench-context.js";
 import type { HostedRuntimeAdapterPort } from "../../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js";
 
@@ -73,10 +76,12 @@ function runtimeWithBriefSources(input: {
   workbenchEntries?: readonly Record<string, unknown>[];
   toolResultEvents?: readonly Record<string, unknown>[];
   tapeEvents?: readonly Record<string, unknown>[];
+  parallel?: { enabled: boolean; maxConcurrent: number; maxTotalPerSession: number };
 }): HostedRuntimeAdapterPort {
   return {
     config: {
       infrastructure: { contextBudget: { consequenceDigestMaxChars: input.maxChars ?? 1200 } },
+      parallel: input.parallel ?? { enabled: true, maxConcurrent: 4, maxTotalPerSession: 16 },
     },
     ops: {
       context: {
@@ -356,5 +361,194 @@ describe("hosted runtime brief block (end-to-end wiring)", () => {
 
     expect(block?.content).toContain("context:");
     expect(block?.content).not.toContain("effects");
+  });
+});
+
+// Lever 2: the delegation advisory decision, exercised end-to-end through
+// buildRuntimeBriefBlockForSession (the only public seam). Each case pins one
+// suppression or firing rule.
+describe("delegation advisory decision (Lever 2)", () => {
+  // A calm-token status: pressure comes ONLY from the gateStatus/pendingReason in
+  // the delegation context, so the runtime-brief pressure section itself stays
+  // silent and the delegation line is the signal under test.
+  const CALM_STATUS = {
+    tokensUsed: 20_000,
+    tokensTotal: 200_000,
+    compactionAdvised: false,
+    forcedCompaction: false,
+    predictedOverflow: false,
+  };
+  const CALM_DIGEST =
+    "runtimeTurn=2 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0";
+
+  function advisoryTierGateStatus(): ContextCompactionGateStatus {
+    // required falsy + reason resolves to usage_threshold + not forced -> soon.
+    return {
+      status: { compactionAdvised: true, forcedCompaction: false } as never,
+      required: false,
+    } as ContextCompactionGateStatus;
+  }
+
+  function gateTierGateStatus(): ContextCompactionGateStatus {
+    // required truthy -> workbench_compact_now (the gate tier).
+    return {
+      status: { compactionAdvised: true, forcedCompaction: true } as never,
+      required: true,
+      reason: "hard_limit",
+    } as ContextCompactionGateStatus;
+  }
+
+  function delegationContext(
+    over: Partial<DelegationAdvisoryContext> & { gateStatus: ContextCompactionGateStatus },
+  ): DelegationAdvisoryContext {
+    return {
+      pendingCompactionReason: null,
+      cadenceTracker: createContextNudgeCadenceTracker(),
+      delegationEnabled: true,
+      ...over,
+    };
+  }
+
+  function spawned(runId: string, timestamp: number): Record<string, unknown> {
+    return { type: "subagent_spawned", timestamp, payload: { runId } };
+  }
+
+  function completed(runId: string, timestamp: number): Record<string, unknown> {
+    return { type: "subagent_completed", timestamp, payload: { runId } };
+  }
+
+  function block(input: {
+    tapeEvents?: readonly Record<string, unknown>[];
+    parallel?: { enabled: boolean; maxConcurrent: number; maxTotalPerSession: number };
+    advisory: DelegationAdvisoryContext;
+    turn?: number;
+  }) {
+    return buildRuntimeBriefBlockForSession(
+      runtimeWithBriefSources({
+        status: CALM_STATUS,
+        digest: CALM_DIGEST,
+        tapeEvents: input.tapeEvents ?? [],
+        parallel: input.parallel,
+      }),
+      {
+        sessionId: "sess_del",
+        turn: input.turn ?? 3,
+        delegationAdvisory: input.advisory,
+      },
+    );
+  }
+
+  test("fires on workbench_compact_soon with no pending delegation and available budget", () => {
+    const rendered = block({
+      advisory: delegationContext({ gateStatus: advisoryTierGateStatus() }),
+    });
+    expect(rendered?.content).toContain("delegation:");
+    expect(rendered?.content).toContain("cheaper in a child session");
+    // Inform-only: it never asserts a gate.
+    expect(rendered?.content).not.toContain("must ");
+  });
+
+  test("silent under the gate tier (workbench_compact_now)", () => {
+    const rendered = block({
+      advisory: delegationContext({ gateStatus: gateTierGateStatus() }),
+    });
+    expect(rendered?.content ?? "").not.toContain("delegation:");
+  });
+
+  test("silent when the parallel gate would reject: session lifetime exhausted", () => {
+    const rendered = block({
+      // totalStarted (2) >= maxTotalPerSession (2) -> reject predicted. Both runs
+      // terminal so nothing is 'pending' (that suppression is not what fires here).
+      tapeEvents: [spawned("r1", 1), completed("r1", 2), spawned("r2", 3), completed("r2", 4)],
+      parallel: { enabled: true, maxConcurrent: 4, maxTotalPerSession: 2 },
+      advisory: delegationContext({ gateStatus: advisoryTierGateStatus() }),
+    });
+    expect(rendered?.content ?? "").not.toContain("delegation:");
+  });
+
+  test("silent when a delegation is already pending (active on the tape)", () => {
+    const rendered = block({
+      tapeEvents: [spawned("r1", 1)], // spawned, never terminal -> active.
+      advisory: delegationContext({ gateStatus: advisoryTierGateStatus() }),
+    });
+    expect(rendered?.content ?? "").not.toContain("delegation:");
+  });
+
+  test("silent on sessions without a delegation store", () => {
+    const rendered = block({
+      advisory: delegationContext({
+        gateStatus: advisoryTierGateStatus(),
+        delegationEnabled: false,
+      }),
+    });
+    expect(rendered?.content ?? "").not.toContain("delegation:");
+  });
+
+  test("silent within cadence cooldown: the second consecutive same-reason turn holds", () => {
+    const tracker = createContextNudgeCadenceTracker();
+    const advisory = delegationContext({
+      gateStatus: advisoryTierGateStatus(),
+      cadenceTracker: tracker,
+    });
+    // Same tracker across turns keyed delegation:pressure_relief: turn 1 renders
+    // full, turn 2 is 'brief' -> held silent (no stub form for this section).
+    const first = block({ advisory, turn: 3 });
+    const second = block({ advisory, turn: 4 });
+    expect(first?.content).toContain("delegation:");
+    expect(second?.content ?? "").not.toContain("delegation:");
+  });
+
+  test("review-debt variant fires when an authored requirements+ pass coexists with open review debt", () => {
+    const rendered = block({
+      // No pressure (gateStatus resolves to none), so ONLY the review-debt reason
+      // can fire: fresh code + an authored requirements pass + no independent
+      // receipt that matches-and-covers -> open review debt.
+      tapeEvents: [
+        {
+          type: "tool.committed",
+          timestamp: 1,
+          payload: {
+            call: { toolName: "write", args: { path: "src/a.ts" } },
+            result: { outcome: { kind: "ok" } },
+          },
+        },
+        {
+          type: "verification.outcome.recorded",
+          timestamp: 2,
+          payload: { outcome: "pass", level: "requirements", perspective: "authored" },
+        },
+      ],
+      advisory: delegationContext({
+        gateStatus: { status: {} as never } as ContextCompactionGateStatus,
+      }),
+    });
+    expect(rendered?.content).toContain("`review_request`");
+    expect(rendered?.content).toContain("open review debt");
+  });
+
+  test("review-debt variant stays silent when the authored pass is BELOW the requirements rung", () => {
+    const rendered = block({
+      // An artifact-rung pass is below the review-debt minimum rung: no review
+      // debt, and no pressure -> the advisory is silent.
+      tapeEvents: [
+        {
+          type: "tool.committed",
+          timestamp: 1,
+          payload: {
+            call: { toolName: "write", args: { path: "src/a.ts" } },
+            result: { outcome: { kind: "ok" } },
+          },
+        },
+        {
+          type: "verification.outcome.recorded",
+          timestamp: 2,
+          payload: { outcome: "pass", level: "artifact", perspective: "authored" },
+        },
+      ],
+      advisory: delegationContext({
+        gateStatus: { status: {} as never } as ContextCompactionGateStatus,
+      }),
+    });
+    expect(rendered?.content ?? "").not.toContain("delegation:");
   });
 });

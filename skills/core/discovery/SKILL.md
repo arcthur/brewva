@@ -51,6 +51,8 @@ Do NOT use when:
 
 Identify the user pain, current workaround, and why the stated request may be a proxy for a deeper need.
 
+When reconstruction splits into independent slices — separate surfaces, workflows, or callers to inspect — enumerate them and dispatch one `subagent_run(agent=navigator)` per slice, or a single `subagent_fanout` across them. Keep directed single-symbol or single-path lookups inline; a delegated sweep returns a bounded outcome instead of raw tool frames.
+
 **If the prompt is a new idea whose worth, audience, or demand is not yet
 diagnosed**: Stop and hand off to `office-hours`. Do not turn idea diagnosis
 into product framing prematurely.

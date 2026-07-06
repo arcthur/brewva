@@ -38,6 +38,8 @@ Do NOT use when:
 
 Identify entrypoints, main packages, ownership boundaries, and the hot path relevant to the request.
 
+When the surface splits into independent subsystems, enumerate them and map each in a parallel `subagent_run(agent=navigator)` run, or one `subagent_fanout` across the set. Keep single-file reads inline; a delegated sweep returns a bounded outcome instead of raw tool frames.
+
 **If entrypoints cannot be identified from the local repo**: Stop. Record what is missing in `unknowns`. Do not guess at ownership.
 **If entrypoints are clear**: Proceed to Phase 2.
 

@@ -70,6 +70,14 @@ export type HostedManualCompact = ((options: HostedManualCompactOptions) => void
 export interface HostedContextGateStatePort {
   getTurnIndex: (sessionId: string) => number;
   readonly nudgeTracker: ContextNudgeCadenceTracker;
+  /**
+   * A SEPARATE cadence-tracker instance (its own per-session state, zero
+   * cross-talk with `nudgeTracker`) for the delegation advisory (Lever 2), keyed
+   * `delegation:<reason>` so the advisory renders full-then-brief and never nags
+   * every turn. Reuses the existing tracker shape rather than new cadence
+   * machinery.
+   */
+  readonly delegationAdvisoryTracker: ContextNudgeCadenceTracker;
 }
 
 export interface HostedCompactionController extends HostedContextGateStatePort {
@@ -374,6 +382,10 @@ export function createHostedCompactionController(
 ): HostedCompactionController {
   const gateStateBySession = new Map<string, CompactionGateState>();
   const nudgeTracker = createContextNudgeCadenceTracker();
+  // Independent instance for the delegation advisory (Lever 2): its own state
+  // map, so delegation cadence never perturbs (or is perturbed by) the
+  // compaction-nudge cadence.
+  const delegationAdvisoryTracker = createContextNudgeCadenceTracker();
   const autoCompactionWatchdogMs = Math.max(
     1,
     Math.trunc(options.autoCompactionWatchdogMs ?? DEFAULT_AUTO_COMPACTION_WATCHDOG_MS),
@@ -384,6 +396,7 @@ export function createHostedCompactionController(
 
   return {
     nudgeTracker,
+    delegationAdvisoryTracker,
     getTurnIndex(sessionId) {
       return getSessionState(sessionId).turnIndex;
     },
@@ -627,6 +640,7 @@ export function createHostedCompactionController(
       }
       gateStateBySession.delete(input.sessionId);
       nudgeTracker.clearSession(input.sessionId);
+      delegationAdvisoryTracker.clearSession(input.sessionId);
       turnClock.clearSession(input.sessionId);
     },
   };

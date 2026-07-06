@@ -115,7 +115,7 @@ describe("Brewva system prompt document", () => {
     expect(prompt).toContain("use discover_skills before guessing");
     expect(prompt).toContain("Use short working updates during long-running work");
     expect(prompt).toContain("The user may not see raw tool output");
-    expect(prompt).toContain("navigator for evidence, explorer for judgment");
+    expect(prompt).toContain("Reach for delegation when the shape fits");
     expect(prompt).toContain("When progress depends on a blocking user choice");
   });
 

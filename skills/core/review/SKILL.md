@@ -72,7 +72,10 @@ Always-on: `review-correctness`, `review-boundaries`, `review-operability`.
 Conditional: `review-security`, `review-concurrency`, `review-compatibility`,
 `review-performance` — activated deterministically by the lane rules.
 
-For non-trivial review, fan out lanes via `subagent_fanout`.
+For non-trivial review, treat each activated lane as an independent slice:
+enumerate the lanes, then fan them out in one `subagent_fanout` message so each
+runs as a bounded consult against its own dimension. Synthesize their
+dispositions in Phase 4; a lane that returns no findings must have actually run.
 
 **If the lane rules widen to the full conditional set**: Review evidence is weak.
 Proceed with all lanes rather than guessing which to skip.

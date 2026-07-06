@@ -20,7 +20,7 @@ knowledge authority.
   receipt tools
 - channel A2A broadcast/list/send
 - operator question prompts
-- review-lane planning, review classification, and review synthesis
+- review classification and review synthesis
 
 `agent` is the public trigger. `skillName` is an optional semantic contract and
 must be compatible with the selected role. Maintainer diagnostics use
@@ -69,15 +69,25 @@ any archetype (the `librarian` runs read-only yet still requires it);
 
 ## Cognitive Routing
 
-Delegation is runtime orchestration, not the first search modality. For direct
-path, symbol, or exact-string lookup, the parent should use local read/search
-tools first. Delegate when a bounded role materially improves the work:
+Reach for delegation when the shape of the work fits a bounded role — that is the
+first question, not a last resort. Keep direct path, symbol, or exact-string
+lookups inline (one local read/search is cheaper than a capsule); delegate when a
+bounded role materially improves the work:
 
 - `navigator`: task-local evidence collection
 - `explorer`: cross-module judgment, diagnosis, design, strategy, or review
 - `librarian`: institutional knowledge, history, conventions, and prior art
 - `worker`: isolated implementation in a patch-producing workspace
 - `verifier`: non-trivial implementation checks and adversarial verification
+
+The economic case, in Brewva's own terms: a delegated sweep returns a bounded
+outcome instead of raw tool frames, protecting the parent window and the
+compaction budget; navigator runs route to a cheaper `fast-evidence` model
+category; and independent delegations launch in a single message with multiple
+tool calls for parallel wall-clock. Anti-patterns: never delegate the
+understanding the parent has not yet framed, never poll `subagent_status` in a
+loop after `waitMode=start` (the dynamic tail surfaces completed outcomes), and
+never narrate a background child's results before they arrive.
 
 This routing guidance does not auto-spawn subagents and does not change the
 public schema. `subagent_run` and `subagent_fanout` remain explicit tool calls

@@ -99,7 +99,7 @@ export function createSubagentForkTool(options: BrewvaToolOptions): ToolDefiniti
     promptSnippet:
       "Use this when the child should inherit filtered parent turns and continue a same-context branch.",
     promptGuidelines: [
-      "Use fork for same-context exploration, trial reasoning, or parallel probes that should not become public specialist names.",
+      "Reach for a fork when the work needs the parent's context but its output should not land in the parent's window — same-context exploration, trial reasoning, or parallel probes that should not become public specialist names.",
       "forkTurns defaults to all, meaning filtered mainline turns without raw tool frames or internal reasoning.",
       "Do not use fork to request additional authority; the runtime records lineage and keeps the fork under the parent ceiling.",
       "Use subagent_run or subagent_fanout when the work fits navigator, explorer, worker, verifier, or librarian contracts.",

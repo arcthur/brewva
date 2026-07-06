@@ -78,6 +78,11 @@ Derive task-shaped checks from the verification ladder
 require the `artifact` and `requirements` rungs before completion. Record the
 reached rung with `verification_record`; state it in the completion claim.
 
+On non-trivial work, close with an independent perspective the parent cannot
+mint for itself: send `review_request` for adversarial-read closure, and run a
+`verifier` pass for executable adversarial checks. Both stay advisory — they
+inform the completion claim, they do not gate it.
+
 **If verification fails**: Preserve attempted evidence in `verification_evidence`. Hand control to debug loop. Do not retry blindly.
 **If verification passes**: Proceed to Phase 4.
 

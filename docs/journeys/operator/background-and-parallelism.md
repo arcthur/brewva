@@ -60,10 +60,10 @@ flowchart TD
   H --> M["Persist WorkerResult and patch artifacts"]
   I --> N["Return knowledge proposal / provenance"]
   M --> O["Parent reviews results"]
-  O --> P["worker_results_merge"]
+  O --> P["worker_results_apply (no plan_id): merge-check + prepare"]
   P --> Q{"Conflicts?"}
   Q -->|Yes| R["Return conflict report"]
-  Q -->|No| S["worker_results_apply"]
+  Q -->|No| S["worker_results_apply (plan_id): commit through gate"]
   S --> T["Record reversible mutation receipt"]
   J --> U["Release slot"]
   K --> U
@@ -89,10 +89,13 @@ flowchart TD
    and emits `WorkerResult` plus `PatchSet` artifacts instead of mutating the
    parent
    workspace directly.
-6. The parent session must explicitly call `worker_results_merge` and
-   `worker_results_apply` before adopting a worker patch. If the parent rejects
-   the patch, it must call `worker_results_reject` to record the rejection
-   receipt.
+6. The parent adopts a worker patch with an explicit `worker_results_apply`:
+   called without `plan_id` it runs the merge check and prepares the plan in one
+   step (returning the prepared plan or a conflict report); called with `plan_id`
+   it commits through the gate. `worker_results_merge` remains available for
+   standalone conflict inspection but is no longer a required pre-apply step. If
+   the parent rejects the patch, it calls `worker_results_reject` to record the
+   rejection receipt.
 7. Pending worker outcomes flow into `workflow_status` until the parent
    resolves the adoption step; Verifier outcomes surface as delegation outcomes and
    `workflow.verifier`, not as pending patch adoption work.
@@ -120,11 +123,10 @@ flowchart TD
 - when `skillName` is present, the child prompt is assembled from authored
   specialist instructions, delegated skill body, task packet, context
   references, and output contracts
-- internal review lanes remain parent-orchestrated fan-out behind the review
-  ensemble and run as `consult/review` delegates under the explorer envelope
-  family; the separate `review_request` path dispatches a bounded fresh-context
-  reviewer that commits an `independent`-perspective verification receipt, and its
-  grading lives in `verification-and-independent-review`
+- independent review runs through the `review_request` path: it dispatches a
+  bounded fresh-context reviewer as a `consult/review` delegate under the
+  explorer envelope family and commits an `independent`-perspective verification
+  receipt; its grading lives in `verification-and-independent-review`
 - same-turn `returnMode=supplemental` and durable detached delivery state are
   separate:
   - same-turn supplemental append affects the current parent-turn hidden tail
@@ -194,6 +196,12 @@ Operator expectations:
   - `workflow_status`
   - `HostedDelegationStore.listPendingOutcomes(...)`
   - session-index delegation and parallel views
+- model-facing advisory:
+  - the delegation advisory renders in the hosted `[RuntimeBrief]` dynamic tail
+    (salience low, silent unless actionable), surfacing delegation as a
+    pressure-relief or review-debt-closure instrument — inform-only, no gate
+  - its adoption is graded off the tape by `report:delegation-evidence` (see the
+    orchestration guide's measurement loop)
 - durable artifacts:
   - `.orchestrator/subagent-runs/<runId>/`
   - `WorkerResult`
