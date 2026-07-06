@@ -139,6 +139,32 @@ export function resolveDetachedSubagentOutcomePath(workspaceRoot: string, runId:
   return resolve(resolveDetachedSubagentRunDir(workspaceRoot, runId), "outcome.json");
 }
 
+export function resolveDetachedSubagentStderrLogPath(workspaceRoot: string, runId: string): string {
+  return resolve(resolveDetachedSubagentRunDir(workspaceRoot, runId), "stderr.log");
+}
+
+/**
+ * The tail of a detached child's stderr, if any. A masked child crash — an early
+ * throw before its try, or its top-level `main().catch` — writes the real reason
+ * here; the parent reads it so a `background_registry_missing` reconcile can
+ * surface the actual failure instead of the generic marker. Empty/absent → null.
+ */
+export function readDetachedSubagentStderrTail(
+  workspaceRoot: string,
+  runId: string,
+  maxChars = 600,
+): string | null {
+  try {
+    const content = readFileSync(
+      resolveDetachedSubagentStderrLogPath(workspaceRoot, runId),
+      "utf8",
+    ).trim();
+    return content.length > 0 ? content.slice(-maxChars) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function writeDetachedSubagentSpec(
   workspaceRoot: string,
   runId: string,

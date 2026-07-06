@@ -1,4 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { openSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   writeDelegationContextBundleManifest,
   type DelegationContextBundleManifest,
@@ -56,10 +58,16 @@ function defaultSpawnProcess(input: {
   specPath: string;
   workspaceRoot: string;
 }): ChildProcess {
+  // Capture the child's stderr to a per-run log instead of discarding it. The
+  // child's `main().catch` console.error's the real failure reason; with
+  // `stdio: "ignore"` that vanished, leaving the parent to misreport a generic
+  // `background_registry_missing`. The log sits in the run dir (beside the spec)
+  // so reconcile and operators can read the actual crash.
+  const stderrFd = openSync(join(dirname(input.specPath), "stderr.log"), "a");
   const child = spawn(process.execPath, [input.modulePath, input.specPath], {
     cwd: input.workspaceRoot,
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", "ignore", stderrFd],
     env: {
       ...process.env,
       BREWVA_SUBAGENT_BACKGROUND: "1",

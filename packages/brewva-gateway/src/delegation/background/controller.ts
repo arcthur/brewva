@@ -55,6 +55,7 @@ import type {
   DetachedSubagentLiveState,
   DetachedSubagentRunSpec,
 } from "./protocol.js";
+import { readDetachedSubagentStderrTail } from "./protocol.js";
 
 export interface HostedSubagentBackgroundController {
   startRun(input: {
@@ -368,7 +369,19 @@ export function createDetachedSubagentBackgroundController(
     if (!liveState) {
       trackedPredicates.delete(record.runId);
       if (!isDelegationRunTerminalStatus(record.status)) {
-        const failed = writeTerminalFailure(record, "failed", "background_registry_missing");
+        // The child left no live-state and no terminal event reached the parent.
+        // Read its captured stderr so a masked crash surfaces its REAL reason
+        // instead of the generic marker — up5: the child's `main().catch`
+        // console.error'd the real error but `stdio:"ignore"` discarded it, so
+        // every failure read as `background_registry_missing` regardless of cause.
+        const stderrTail = readDetachedSubagentStderrTail(
+          runtime.identity.workspaceRoot,
+          record.runId,
+        );
+        const reason = stderrTail
+          ? `background_subagent_crashed: ${stderrTail}`
+          : "background_registry_missing";
+        const failed = writeTerminalFailure(record, "failed", reason);
         return {
           live: false,
           cancelable: false,
