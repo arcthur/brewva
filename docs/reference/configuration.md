@@ -255,14 +255,21 @@ at a wrong time.
   model-facing turn consequence digest before it enters hosted context.
 - `compactionInstructions` (`string`) provides default model-facing
   compaction guidance.
+- `compaction.pruneEnabled` (`boolean`, default `true`) is the master switch for
+  the deterministic pre-compaction prune. When enabled, the LLM compaction
+  summarizer's input is deduped / informative-replaced / image-stripped before
+  summarization (never the tape, never the retained tail), and a
+  `session.pre_compact_prune` receipt is recorded. Set to `false` to feed the
+  summarizer the unpruned input.
 - `compaction.minTurnsBetween` (`number`, default `2`) is the turn-based
   compaction cooldown.
 - `protectedTools` (`string[]`, default
   `["workbench_note", "workbench_evict", "workbench_undo_evict", "workbench_compact", "recall_search", "recall_curate", "tape_handoff"]`):
   tool names whose tool-result messages are exempt from transient outbound
-  provider-request reduction. Adding a tool here keeps its observations and
-  return digests in the outbound payload even when the request would otherwise
-  be a candidate for clearing.
+  provider-request reduction and from the pre-compaction prune. Adding a tool
+  here keeps its observations and return digests in the outbound payload even
+  when the request would otherwise be a candidate for clearing, and prevents the
+  prune from deduping or eliding its results before summarization.
 - `compaction.tailProtectRatio` (`number`, default `0.2`): cumulative tail
   budget protected from outbound reduction and session compaction cut-point
   selection, expressed as a fraction of the session context window so the

@@ -333,7 +333,9 @@ describe("runtime ops capability inventory fitness", () => {
     // wiring, not facade growth.
     // tool_chain's `recordChainResult` builder (compound-envelope chain-receipt
     // emitter) adds +6 real producer lines — not facade growth.
-    expect(hostedOpsLines).toBeLessThanOrEqual(2_851);
+    // The pre-compaction prune's `preCompactPrune` telemetry recorder (its tape
+    // receipt) plus the vocabulary event-type import add +2 real producer lines.
+    expect(hostedOpsLines).toBeLessThanOrEqual(2_853);
     // WS2 added tape-derived rebuild projections (workbench/task/resource-lease/
     // worker-results) that fix the invariant-9/12 restart-loses-state bug. A
     // follow-up review pass then completed the tape-authority migration on the
@@ -398,7 +400,9 @@ describe("runtime ops capability inventory fitness", () => {
     // threading) carry the same +2 into the combined budget.
     // tool_chain's `recordChainResult` (+6 builder, +1 tool-runtime contract)
     // carries +7 into the combined budget.
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_841);
+    // The pre-compaction prune's `preCompactPrune` telemetry recorder + its import
+    // (+2 builder, no tool-runtime contract change) carry +2 into the combined budget.
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_843);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

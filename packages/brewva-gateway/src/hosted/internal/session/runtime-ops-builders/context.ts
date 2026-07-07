@@ -1,4 +1,5 @@
 import { CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
+import { SESSION_PRE_COMPACT_PRUNE_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import { createContextBudgetRuntimeController } from "../runtime-ops-context-budget.js";
 import type { HostedRuntimeOpsContext } from "../runtime-ops-context.js";
 import type { HostedRuntimeOpsPort } from "../runtime-ops-port.js";
@@ -89,6 +90,7 @@ export function buildContextRuntimeOps(
         });
       },
       hardGateRequired: ctx.recordInputPayload("context.compaction.gate.armed"),
+      preCompactPrune: ctx.recordInputPayload(SESSION_PRE_COMPACT_PRUNE_EVENT_TYPE),
       sessionCompact: ctx.recordInputPayload("session.compact"),
     },
   };

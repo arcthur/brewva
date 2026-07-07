@@ -25,3 +25,5 @@ export {
   type CreateBrewvaCompactionSummaryMessageInput,
   type ProjectBrewvaCompactionMessagesInput,
 } from "./api.js";
+
+export { pruneCompactionInput, type PruneOptions, type PruneResult } from "./prune.js";

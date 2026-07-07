@@ -133,6 +133,9 @@
                         "type": "string"
                       }
                     },
+                    "pruneEnabled": {
+                      "type": "boolean"
+                    },
                     "tailProtectRatio": {
                       "type": "number"
                     },

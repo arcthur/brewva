@@ -53,6 +53,8 @@ function createPreparedCompaction(
     sourceLeafEntryId: null,
     summary: "Goal: keep working.",
     summaryGeneration: { strategy: "llm_primary" },
+    pruneOperations: [],
+    pruneTokensSaved: 0,
     preview: {
       compactId: "c1",
       sourceLeafEntryId: null,

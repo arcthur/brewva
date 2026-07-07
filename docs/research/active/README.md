@@ -173,6 +173,17 @@ it; if gated, the model operates it and the tape accounts for it`.
   context-absent. Promotion is blocked only on a measured context-economy
   signal.
 
+- [RFC: Pre-Compaction Deterministic Prune — Dedupe, Informative Replace, And Image Strip Before LLM Summarization](./rfc-pre-compaction-deterministic-prune.md):
+  active RFC, Phase 1 + Phase 2 landed. A pure `pruneCompactionInput`
+  deterministically dedupes / informative-replaces / image-strips old tool
+  results out of the LLM compaction summarizer's input only — never the tape and
+  never the retained tail (the cut point re-derives `firstKeptEntryId` from
+  entries). It emits a `session.pre_compact_prune` advisory telemetry receipt,
+  joined to `session.compact` by `compactId` and durable plus replay-visible but
+  never re-materialized into context (same treatment as `tool.result.recorded`).
+  Gated by `compaction.pruneEnabled` (default true). Promotion is blocked only on
+  real-session effectiveness measurement (Phase 3).
+
 - [RFC: Recall Next-Turn Cache Warming (Latency, Not Delivery)](./rfc-recall-next-turn-cache-warming.md):
   active RFC taking only the latency half of `hermes`'s memory prefetch and
   axiom-rejecting the injection half: a background `RecallBroker.warm()` that runs

@@ -52,6 +52,8 @@ export const SESSION_COMPACT_REQUEST_FAILED_EVENT_TYPE = "session.compact.reques
 
 export const SESSION_COMPACT_REQUESTED_EVENT_TYPE = "session.compact.requested" as const;
 
+export const SESSION_PRE_COMPACT_PRUNE_EVENT_TYPE = "session.pre_compact_prune" as const;
+
 export const SESSION_LINEAGE_NODE_CREATED_EVENT_TYPE = "session.lineage.node.created" as const;
 
 export const SESSION_LINEAGE_OUTCOME_ADOPTED_EVENT_TYPE =
@@ -216,6 +218,49 @@ export interface SessionCompactionInputProvenance extends ProtocolRecord {
     readonly selectedStableIds: readonly string[];
   };
   readonly attention?: SessionCompactionAttentionRefs;
+}
+
+export const SESSION_PRE_COMPACT_PRUNE_SCHEMA_V1 = "brewva.pre-compaction-prune.v1" as const;
+
+export type SessionPruneOperationKind = "dedupe" | "inform_replace" | "image_strip";
+
+/**
+ * One deterministic pre-compaction transformation applied to the LLM
+ * summarizer's input (never to the tape). `index` is the position in the
+ * summarizer input array (messages carry no id); `toolCallId` is the stable
+ * per-result reference where the tool-result message carried one.
+ */
+export interface SessionPruneOperation extends ProtocolRecord {
+  readonly index: number;
+  readonly toolCallId?: string;
+  readonly toolName: string;
+  readonly operation: SessionPruneOperationKind;
+  readonly originalDigest: string;
+  readonly replacementSummary: string;
+}
+
+/**
+ * Receipt for the deterministic pre-compaction prune. It records what was
+ * deduped/replaced/stripped from the summarizer input; the original content is
+ * unchanged on the tape (the prune never mutates it). `compactId` is the shared
+ * join key to the subsequent `session.compact` receipt.
+ */
+export interface SessionPreCompactPrunePayload extends ProtocolRecord {
+  readonly schema: typeof SESSION_PRE_COMPACT_PRUNE_SCHEMA_V1;
+  readonly sessionId: string;
+  readonly compactId: string;
+  readonly operations: readonly SessionPruneOperation[];
+  readonly tokensSaved: number;
+}
+
+export function readSessionPreCompactPrunePayload(event: {
+  readonly payload?: ProtocolRecord;
+}): SessionPreCompactPrunePayload | null {
+  const payload = event.payload;
+  if (!payload || payload.schema !== SESSION_PRE_COMPACT_PRUNE_SCHEMA_V1) {
+    return null;
+  }
+  return payload as SessionPreCompactPrunePayload;
 }
 
 export type TapeHandoffResult =

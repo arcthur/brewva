@@ -3,10 +3,13 @@ import type { BrewvaAgentProtocolController } from "@brewva/brewva-substrate/age
 import {
   estimateBrewvaCompactedContextTokens,
   estimateBrewvaCompactionTokens,
+  pruneCompactionInput,
 } from "@brewva/brewva-substrate/compaction";
 import type { BrewvaHostContext, BrewvaHostPluginRunner } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaMutableModelCatalog } from "@brewva/brewva-substrate/provider";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
+import { SESSION_PRE_COMPACT_PRUNE_SCHEMA_V1 } from "@brewva/brewva-vocabulary/session";
+import type { SessionPreCompactPrunePayload } from "@brewva/brewva-vocabulary/session";
 import type { DeferredCompactionSalvageMode } from "../../compaction/deferred.js";
 import {
   buildCompactionSummaryGenerationMetadata,
@@ -147,14 +150,52 @@ export class ManagedSessionCompactionLifecycle {
     });
   }
 
+  /**
+   * Emit the pre-compaction prune receipt onto the runtime tape as advisory
+   * telemetry — durable and replayable, but NOT materialized into context (it
+   * rides the runtime tape, not the session branch that `buildSessionContext`
+   * projects). Joined to the compaction by `compactId`. Emitted from the commit
+   * path (finalize) so a rolled-back preview leaves no receipt; the rare salvage
+   * recovery path intentionally does not re-emit it. No-op when nothing pruned.
+   */
+  private recordPreCompactPrune(prepared: PreparedDeferredCompaction): void {
+    if (prepared.pruneOperations.length === 0) {
+      return;
+    }
+    const payload: SessionPreCompactPrunePayload = {
+      schema: SESSION_PRE_COMPACT_PRUNE_SCHEMA_V1,
+      sessionId: prepared.sessionId,
+      compactId: prepared.preview.compactId,
+      operations: prepared.pruneOperations,
+      tokensSaved: prepared.pruneTokensSaved,
+    };
+    this.#runtime.ops.context.telemetry.preCompactPrune({
+      sessionId: prepared.sessionId,
+      payload,
+    });
+  }
+
   async preview(request: PendingCompactionRequestState): Promise<PreparedDeferredCompaction> {
     const branchEntries = this.#sessionManager.getBranch();
     const originalContext = this.#sessionManager.buildSessionContext();
     const sessionId = this.#sessionManager.getSessionId();
     const sourceLeafEntryId = this.#sessionManager.getLeafId() ?? null;
+    // Deterministically prune redundancy out of the LLM summarizer's input before
+    // paying for it (dedupe / inform-replace / image-strip of old tool results).
+    // This never mutates the tape or the retained tail — only what the summarizer
+    // reads. The receipt is emitted at commit time (finalize), joined by compactId.
+    const compactionConfig = this.#runtime.config.infrastructure.contextBudget.compaction;
+    const prune = compactionConfig.pruneEnabled
+      ? pruneCompactionInput(originalContext.messages, {
+          protectedTools: compactionConfig.protectedTools,
+          ...(compactionConfig.tailProtectTokens != null
+            ? { tailProtectTokens: compactionConfig.tailProtectTokens }
+            : {}),
+        })
+      : null;
     const summaryResolution = await this.resolveCompactionSummary({
       sessionId,
-      messages: originalContext.messages,
+      messages: prune?.messages ?? originalContext.messages,
       customInstructions: request.customInstructions,
     });
     const summary = summaryResolution.summary;
@@ -176,6 +217,8 @@ export class ManagedSessionCompactionLifecycle {
       summary,
       summaryGeneration,
       preview,
+      pruneOperations: prune?.operations ?? [],
+      pruneTokensSaved: prune?.tokensSaved ?? 0,
     };
   }
 
@@ -218,6 +261,7 @@ export class ManagedSessionCompactionLifecycle {
       this.#createHostContext(),
     );
     this.#emitToListeners(built.beforeCompactEvent);
+    this.recordPreCompactPrune(prepared);
     await this.#replaceMessages(prepared.preview.context.messages);
     await this.#runner.emit("session_compact", built.compactEvent, this.#createHostContext());
     this.#emitToListeners(built.compactEvent);

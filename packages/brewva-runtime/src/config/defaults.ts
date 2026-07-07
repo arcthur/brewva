@@ -193,6 +193,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
       compactionInstructions:
         "Summarize stale tool outputs and keep only active objectives, unresolved failures, and latest verification evidence.",
       compaction: {
+        pruneEnabled: true,
         minTurnsBetween: 2,
         protectedTools: [
           "workbench_note",

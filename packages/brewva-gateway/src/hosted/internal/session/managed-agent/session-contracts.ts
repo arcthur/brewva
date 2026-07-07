@@ -41,7 +41,10 @@ import type {
   ExpectedProviderCacheBreak,
   ProviderCacheRenderState,
 } from "@brewva/brewva-vocabulary/context";
-import type { SessionCompactionGenerationMetadata } from "@brewva/brewva-vocabulary/session";
+import type {
+  SessionCompactionGenerationMetadata,
+  SessionPruneOperation,
+} from "@brewva/brewva-vocabulary/session";
 import type { SessionLifecycleSnapshot } from "@brewva/brewva-vocabulary/session";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
 import type { BrewvaCompactionSummaryGenerator } from "../../compaction/summary-generator.js";
@@ -188,6 +191,9 @@ export interface PreparedDeferredCompaction {
   summary: string;
   summaryGeneration: SessionCompactionGenerationMetadata;
   preview: ReturnType<ManagedAgentSessionStore["previewCompaction"]>;
+  /** Deterministic prune applied to the summarizer input (empty when disabled or a no-op). */
+  pruneOperations: readonly SessionPruneOperation[];
+  pruneTokensSaved: number;
 }
 
 export interface BuiltDeferredCompactionEvents {

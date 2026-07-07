@@ -239,6 +239,8 @@ export interface BrewvaConfig {
       consequenceDigestMaxChars: number;
       compactionInstructions: string;
       compaction: {
+        /** Master switch for the deterministic pre-compaction summarizer-input prune. */
+        pruneEnabled: boolean;
         minTurnsBetween: number;
         protectedTools: string[];
         tailProtectTokens: number | null;

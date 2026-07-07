@@ -115,6 +115,10 @@ export function normalizeInfrastructureConfig(
         defaultContextBudget.compactionInstructions,
       ),
       compaction: {
+        pruneEnabled: normalizeBoolean(
+          contextBudgetCompactionInput.pruneEnabled,
+          defaultContextCompaction.pruneEnabled,
+        ),
         minTurnsBetween: normalizeNonNegativeInteger(
           contextBudgetCompactionInput.minTurnsBetween,
           defaultContextCompaction.minTurnsBetween,

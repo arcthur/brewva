@@ -87,6 +87,7 @@ export type HostedRuntimeOpsExtensions = {
       criticalWithoutCompact: RuntimeInputRecorder;
       gateCleared: RuntimeInputRecorder;
       hardGateRequired: RuntimeInputRecorder;
+      preCompactPrune: RuntimeInputRecorder;
       sessionCompact: RuntimeInputRecorder;
     };
     readonly visibleRead: {
