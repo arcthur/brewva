@@ -24,13 +24,17 @@ function buildLifecycle(input: {
   messages: readonly unknown[];
   pruneEnabled: boolean;
   capture: Capture;
+  tailProtectTokens?: number | null;
+  tailProtectRatio?: number;
+  contextWindow?: number;
+  onEmit?: (eventType: string) => void;
 }): ManagedSessionCompactionLifecycle {
   const compaction = {
     pruneEnabled: input.pruneEnabled,
     minTurnsBetween: 2,
     protectedTools: ["workbench_note"],
-    tailProtectTokens: 1,
-    tailProtectRatio: 0.2,
+    tailProtectTokens: input.tailProtectTokens === undefined ? 1 : input.tailProtectTokens,
+    tailProtectRatio: input.tailProtectRatio ?? 0.2,
   };
   const options = {
     cwd: "/tmp/prune-lifecycle-test",
@@ -38,6 +42,9 @@ function buildLifecycle(input: {
       config: { infrastructure: { contextBudget: { compaction } } },
       ops: {
         context: {
+          usage: {
+            get: () => ({ contextWindow: input.contextWindow ?? 200_000 }),
+          },
           telemetry: {
             preCompactPrune: (value: { payload?: Capture["receipt"] }) => {
               input.capture.receiptCalls += 1;
@@ -69,7 +76,11 @@ function buildLifecycle(input: {
         cutPointReason: "token_budget",
       }),
     },
-    runner: { emit: async () => {} },
+    runner: {
+      emit: async (eventType: string) => {
+        input.onEmit?.(eventType);
+      },
+    },
     createHostContext: () => ({}),
     emitToListeners: () => {},
     replaceMessages: async () => {},
@@ -132,6 +143,87 @@ describe("compaction lifecycle pre-compaction prune wiring", () => {
 
     const built = lifecycle.build(prepared);
     await lifecycle.finalize(prepared, built);
+    expect(capture.receiptCalls).toBe(0);
+  });
+
+  test("resolves the tail-protect window from ratio x contextWindow when tailProtectTokens is null", async () => {
+    // Two DISTINCT large old results (no dedupe possible), so any prune must come
+    // from inform-replace, which fires only for entries OUTSIDE the tail window.
+    // With tailProtectTokens null, that window is ratio x contextWindow — the
+    // prune must not silently fall back to its own hard-coded 40k default.
+    const messages = [
+      toolResult("read", LARGE),
+      toolResult("bash", "y".repeat(400)),
+      { role: "user", content: "recent tail" },
+    ];
+
+    const wideCapture: Capture = {
+      summarizerMessages: undefined,
+      receipt: undefined,
+      receiptCalls: 0,
+    };
+    const wide = buildLifecycle({
+      messages,
+      pruneEnabled: true,
+      capture: wideCapture,
+      tailProtectTokens: null,
+      tailProtectRatio: 0.2,
+      contextWindow: 100_000_000, // 0.2 x 100M protects everything -> nothing pruned
+    });
+    const preparedWide = await wide.preview({} as PreviewRequest);
+    expect(preparedWide.pruneOperations).toHaveLength(0);
+
+    const narrowCapture: Capture = {
+      summarizerMessages: undefined,
+      receipt: undefined,
+      receiptCalls: 0,
+    };
+    const narrow = buildLifecycle({
+      messages,
+      pruneEnabled: true,
+      capture: narrowCapture,
+      tailProtectTokens: null,
+      tailProtectRatio: 0.2,
+      contextWindow: 10, // 0.2 x 10 ~= 2 tokens protected -> old results pruned
+    });
+    const preparedNarrow = await narrow.preview({} as PreviewRequest);
+    expect(preparedNarrow.pruneOperations.length).toBeGreaterThan(0);
+  });
+
+  test("emits no prune receipt when the compaction commit fails (no orphan receipt)", async () => {
+    const capture: Capture = {
+      summarizerMessages: undefined,
+      receipt: undefined,
+      receiptCalls: 0,
+    };
+    const messages = [
+      toolResult("read", LARGE),
+      toolResult("read", LARGE),
+      { role: "user", content: "recent tail" },
+    ];
+    const lifecycle = buildLifecycle({
+      messages,
+      pruneEnabled: true,
+      capture,
+      onEmit: (eventType) => {
+        if (eventType === "session_compact") {
+          throw new Error("commit failed");
+        }
+      },
+    });
+    const prepared = await lifecycle.preview({} as PreviewRequest);
+    expect(prepared.pruneOperations.length).toBeGreaterThan(0);
+
+    const built = lifecycle.build(prepared);
+    let caught: Error | undefined;
+    try {
+      await lifecycle.finalize(prepared, built);
+    } catch (error) {
+      caught = error as Error;
+    }
+    // finalize rejected AND — because the receipt now trails the session_compact
+    // commit — no prune receipt was emitted, so the tape has no orphan prune.
+    expect(caught?.message).toBe("commit failed");
     expect(capture.receiptCalls).toBe(0);
   });
 });

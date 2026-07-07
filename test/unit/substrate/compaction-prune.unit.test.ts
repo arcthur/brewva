@@ -63,6 +63,51 @@ describe("pre-compaction deterministic prune", () => {
     expect(contentOf(result.messages[0])[0]?.text).toContain("duplicate");
   });
 
+  test("does not dedupe text-identical results carrying different images", () => {
+    // Same caption, different images: hashing text alone would wrongly collapse
+    // the earlier one and silently drop its distinct image. A tail window larger
+    // than the transcript keeps every entry recent, so only position-independent
+    // dedupe could fire — and here it must not.
+    const withImage = (data: string): unknown => ({
+      role: "toolResult",
+      toolName: "read",
+      content: [
+        { type: "text", text: LARGE },
+        { type: "image", data, mimeType: "image/png" },
+      ],
+    });
+    const messages = [withImage("alpha"), withImage("beta"), { role: "user", content: "tail" }];
+    const result = pruneCompactionInput(messages, {
+      tailProtectTokens: 100_000,
+      informReplace: false,
+      stripImages: false,
+    });
+    expect(result.operations).toHaveLength(0);
+    expect(result.messages[0]).toBe(messages[0]);
+    expect(result.messages[1]).toBe(messages[1]);
+  });
+
+  test("still dedupes results matching in BOTH text and image", () => {
+    const withImage = (data: string): unknown => ({
+      role: "toolResult",
+      toolName: "read",
+      content: [
+        { type: "text", text: LARGE },
+        { type: "image", data, mimeType: "image/png" },
+      ],
+    });
+    const messages = [withImage("same"), withImage("same"), { role: "user", content: "tail" }];
+    const result = pruneCompactionInput(messages, {
+      tailProtectTokens: 100_000,
+      informReplace: false,
+      stripImages: false,
+    });
+    expect(result.operations).toHaveLength(1);
+    expect(result.operations[0]?.operation).toBe("dedupe");
+    expect(result.operations[0]?.index).toBe(0);
+    expect(contentOf(result.messages[0])[0]?.text).toContain("duplicate");
+  });
+
   test("inform-replaces an old, substantial text tool result", () => {
     const messages = [toolResult("read", LARGE), { role: "user", content: "recent tail" }];
     const result = pruneCompactionInput(messages, { tailProtectTokens: 1 });

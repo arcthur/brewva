@@ -5,6 +5,7 @@ import {
   estimateBrewvaCompactionTokens,
   pruneCompactionInput,
 } from "@brewva/brewva-substrate/compaction";
+import { resolveWindowScaledTokens } from "@brewva/brewva-substrate/context-budget";
 import type { BrewvaHostContext, BrewvaHostPluginRunner } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaMutableModelCatalog } from "@brewva/brewva-substrate/provider";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
@@ -27,7 +28,11 @@ import {
   type BrewvaCompactionSummaryGenerator,
 } from "../../compaction/summary-generator.js";
 import { selectStaleAwareWorkbenchEntriesForSession } from "../../context/workbench-staleness.js";
-import { recordRuntimeAssistantCost, type HostedRuntimeAdapterPort } from "../runtime-ports.js";
+import {
+  getRuntimeContextUsage,
+  recordRuntimeAssistantCost,
+  type HostedRuntimeAdapterPort,
+} from "../runtime-ports.js";
 import type {
   BuiltDeferredCompactionEvents,
   ManagedAgentSessionStore,
@@ -154,9 +159,10 @@ export class ManagedSessionCompactionLifecycle {
    * Emit the pre-compaction prune receipt onto the runtime tape as advisory
    * telemetry — durable and replayable, but NOT materialized into context (it
    * rides the runtime tape, not the session branch that `buildSessionContext`
-   * projects). Joined to the compaction by `compactId`. Emitted from the commit
-   * path (finalize) so a rolled-back preview leaves no receipt; the rare salvage
-   * recovery path intentionally does not re-emit it. No-op when nothing pruned.
+   * projects). Joined to the compaction by `compactId`. Emitted by finalize only
+   * AFTER the session_compact commit lands, so neither a rolled-back preview nor a
+   * failed commit leaves an orphan receipt; the rare salvage recovery path
+   * intentionally does not re-emit it. No-op when nothing pruned.
    */
   private recordPreCompactPrune(prepared: PreparedDeferredCompaction): void {
     if (prepared.pruneOperations.length === 0) {
@@ -185,11 +191,20 @@ export class ManagedSessionCompactionLifecycle {
     // This never mutates the tape or the retained tail — only what the summarizer
     // reads. The receipt is emitted at commit time (finalize), joined by compactId.
     const compactionConfig = this.#runtime.config.infrastructure.contextBudget.compaction;
+    // Resolve the tail-protect window the same way every other compaction/reduction
+    // consumer does: an absolute token override wins, else the ratio scales with the
+    // live context window. Reading tailProtectTokens alone ignored tailProtectRatio
+    // (defaults null / 0.2), so the prune silently fell back to its own 40k default.
+    const resolvedTailProtectTokens = resolveWindowScaledTokens(
+      compactionConfig.tailProtectTokens,
+      compactionConfig.tailProtectRatio,
+      getRuntimeContextUsage(this.#runtime, sessionId)?.contextWindow,
+    );
     const prune = compactionConfig.pruneEnabled
       ? pruneCompactionInput(originalContext.messages, {
           protectedTools: compactionConfig.protectedTools,
-          ...(compactionConfig.tailProtectTokens != null
-            ? { tailProtectTokens: compactionConfig.tailProtectTokens }
+          ...(resolvedTailProtectTokens !== null
+            ? { tailProtectTokens: resolvedTailProtectTokens }
             : {}),
         })
       : null;
@@ -261,9 +276,12 @@ export class ManagedSessionCompactionLifecycle {
       this.#createHostContext(),
     );
     this.#emitToListeners(built.beforeCompactEvent);
-    this.recordPreCompactPrune(prepared);
     await this.#replaceMessages(prepared.preview.context.messages);
     await this.#runner.emit("session_compact", built.compactEvent, this.#createHostContext());
+    // Emit the prune receipt only AFTER the session_compact commit lands, so a
+    // failed replace/commit can never leave a prune receipt with no compaction
+    // behind it (an orphan the tape would show as a prune-without-compact).
+    this.recordPreCompactPrune(prepared);
     this.#emitToListeners(built.compactEvent);
     await this.#markSessionCompacted();
     prepared.request.onComplete?.(built.compactEvent);

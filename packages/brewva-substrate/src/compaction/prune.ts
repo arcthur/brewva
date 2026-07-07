@@ -14,8 +14,10 @@ import {
  * each entry gets at most one, so they are complementary rather than
  * overlapping:
  *
- * - dedupe: identical tool-result bodies (>= `dedupeMinChars`) anywhere in the
- *   input collapse to a one-liner pointing at the most recent occurrence.
+ * - dedupe: identical tool-result bodies (>= `dedupeMinChars` of text) anywhere
+ *   in the input collapse to a one-liner pointing at the most recent occurrence.
+ *   Identity spans BOTH text and image blocks, so two results with matching
+ *   captions but different images are never treated as duplicates.
  * - image_strip: an old multimodal tool result drops its image blocks (keeping
  *   text) — images are large and low-signal for a text summary.
  * - inform_replace: an old, substantial text tool result collapses to a
@@ -117,6 +119,38 @@ function toolResultBodyText(content: unknown): string {
   return parts.join("");
 }
 
+/**
+ * Dedupe/identity key for a tool-result body. It covers text AND image blocks
+ * (mimeType + a digest of the base64 payload) so results with identical captions
+ * but different images do NOT collapse into one another — hashing text alone
+ * would silently drop a distinct image. A text-only body keys to exactly its
+ * joined text, so pure-text dedupe is unchanged. Deterministic and pure.
+ */
+function toolResultDedupeKey(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  const segments: string[] = [];
+  for (const part of content) {
+    if (!part || typeof part !== "object") {
+      continue;
+    }
+    const record = part as { type?: unknown; text?: unknown; data?: unknown; mimeType?: unknown };
+    if (record.type === "text" && typeof record.text === "string") {
+      segments.push(record.text);
+    } else if (typeof record.type === "string" && IMAGE_BLOCK_TYPES.has(record.type)) {
+      const mimeType = typeof record.mimeType === "string" ? record.mimeType : "";
+      const data = typeof record.data === "string" ? record.data : "";
+      const dataDigest = data.length > 0 ? shortSha256Hex(data, DIGEST_LENGTH) : "";
+      segments.push(`{image:${mimeType}:${dataDigest}}`);
+    }
+  }
+  return segments.join("");
+}
+
 function countImageBlocks(content: unknown): number {
   if (!Array.isArray(content)) {
     return 0;
@@ -188,7 +222,10 @@ export function pruneCompactionInput(
 
   // Pass 1: hash every substantial, prunable tool-result body and record the
   // newest occurrence per hash. Earlier occurrences of a repeated hash are
-  // duplicates. Protected tools are excluded from hashing (never pruned).
+  // duplicates. The hash spans text AND image blocks (see toolResultDedupeKey)
+  // so image-bearing results only collapse when their images match too; the
+  // substantiality gate stays on text length — dedupe targets textual bloat.
+  // Protected tools are excluded from hashing (never pruned).
   const hashByIndex = new Map<number, string>();
   const newestIndexByHash = new Map<string, number>();
   for (let index = 0; index < messages.length; index += 1) {
@@ -196,11 +233,10 @@ export function pruneCompactionInput(
     if (!toolResult || protectedTools.has(toolResult.toolName)) {
       continue;
     }
-    const body = toolResultBodyText(toolResult.content);
-    if (body.length < dedupeMinChars) {
+    if (toolResultBodyText(toolResult.content).length < dedupeMinChars) {
       continue;
     }
-    const hash = shortSha256Hex(body, DIGEST_LENGTH);
+    const hash = digestOf(toolResultDedupeKey(toolResult.content));
     hashByIndex.set(index, hash);
     newestIndexByHash.set(hash, index);
   }
@@ -215,7 +251,7 @@ export function pruneCompactionInput(
       return message;
     }
     const body = toolResultBodyText(toolResult.content);
-    const digest = digestOf(body);
+    const digest = digestOf(toolResultDedupeKey(toolResult.content));
     const base = {
       index,
       toolName: toolResult.toolName,
@@ -228,7 +264,7 @@ export function pruneCompactionInput(
       // Index-free text: positions mean nothing to the summarizer. The kept copy
       // is recoverable by matching `originalDigest` across the receipt operations.
       const replacement =
-        "[duplicate of an earlier identical tool result — omitted by pre-compaction prune]";
+        "[duplicate of a later identical tool result — omitted by pre-compaction prune]";
       operations.push({ ...base, operation: "dedupe", replacementSummary: replacement });
       return withReplacedContent(message, [{ type: "text", text: replacement }]);
     }

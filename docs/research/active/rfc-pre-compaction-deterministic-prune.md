@@ -251,8 +251,9 @@ Internal implementation anchors:
   the pure policy that triggers the prune)
 - `packages/brewva-gateway/src/hosted/internal/session/managed-agent/compaction-lifecycle.ts`
   (`ManagedSessionCompactionLifecycle.preview()` — the actual summarize-and-cut
-  sequence; the prune is wired here, transforming the message array once so both
-  the LLM summary input and the retained-tail projection see the pruned set.
+  sequence; the prune is wired here, shaping ONLY the LLM summarizer input. The
+  retained tail is re-derived from session-store entries by the cut point, not
+  from the pruned array, so pruning never changes what is kept.
   `hosted-compaction-controller.ts` owns only the commit side, not the prune seam)
 - `packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`
   (transient outbound reduction; the orthogonal per-request mechanism)
