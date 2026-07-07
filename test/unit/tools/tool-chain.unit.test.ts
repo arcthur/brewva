@@ -170,6 +170,40 @@ describe("tool_chain", () => {
     expect(textOf(result)).toContain("stopped"); // stop reason surfaced to the model
   });
 
+  test("falls back to the runtime sibling resolver for tools added outside the bundle", async () => {
+    // Reproduction for the bundle-only-resolver bug: `read`/`edit`/`write`/custom/
+    // MCP are registered on the session by the gateway, NOT in the bundle closure.
+    // Without the runtime fallback, `resolveSibling("read")` is undefined and the
+    // description's own `grep -> read` recommendation stops at "unknown tool 'read'".
+    const fixture = makeFixture({ grep: "workspace_read", read: "workspace_read" });
+    const bundleOnly = siblings(fakeTool("grep", { text: "grep hit" })); // no `read`
+    const runtimeWithResolver = {
+      ...fixture.runtime,
+      toolSiblingResolver: {
+        resolve: (name: string) =>
+          name === "read" ? fakeTool("read", { text: "file body" }) : undefined,
+      },
+    } as unknown as BrewvaBundledToolRuntime;
+
+    const tool = createToolChainTool({ runtime: runtimeWithResolver, resolveSibling: bundleOnly });
+    const result = await tool.execute(
+      "chain-1",
+      { steps: [{ tool: "grep" }, { tool: "read" }], returnSteps: "all" } as never,
+      new AbortController().signal,
+      undefined,
+      CTX,
+    );
+
+    expect(result.outcome.kind).toBe("ok");
+    expect(textOf(result)).toContain("file body"); // read resolved via runtime resolver + dispatched
+    expect(fixture.recordChainCalls[0]).toMatchObject({ stepsRun: 2, stopped: false });
+    // Each step receipt carries the per-step call id for cross-plane reference.
+    const chainSteps = fixture.recordChainCalls[0]!.steps as { toolCallId: string }[];
+    expect(chainSteps[0]!.toolCallId).toBe("chain-1:step:0");
+    expect(chainSteps[1]!.toolCallId).toBe("chain-1:step:1");
+    expect(fixture.recordResultCalls[1]).toMatchObject({ toolCallId: "chain-1:step:1" });
+  });
+
   test("rejects an unknown tool", async () => {
     const fixture = makeFixture({ grep: "workspace_read" });
     const result = await run(fixture, siblings(fakeTool("grep")), {

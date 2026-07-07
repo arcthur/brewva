@@ -124,6 +124,9 @@ function stepResultPreview(result: BrewvaToolResult): {
 export function createToolChainTool(options: ToolChainToolOptions): ToolDefinition {
   const { runtime, define } = createRuntimeBoundBrewvaToolFactory(options.runtime, "tool_chain");
   const resolveSibling = options.resolveSibling;
+  // Session-level fallback resolver (read/edit/write/custom/MCP added outside the
+  // bundle). Captured from the full runtime, not the capability-narrowed one.
+  const siblingResolver = options.runtime.toolSiblingResolver;
 
   return define({
     name: "tool_chain",
@@ -161,7 +164,11 @@ export function createToolChainTool(options: ToolChainToolOptions): ToolDefiniti
         }
         const step = steps[index]!;
 
-        const child = resolveSibling(step.tool);
+        // Resolve bundle siblings first, then the session-level read-only tools
+        // the gateway registered outside the bundle (read/custom/MCP). Both are
+        // RAW definitions dispatched directly below — no kernel re-entry, so the
+        // envelope stays one transaction; the read-only gate below still filters.
+        const child = resolveSibling(step.tool) ?? siblingResolver?.resolve(step.tool);
         if (!child) {
           stopped = true;
           stopReason = `unknown tool '${step.tool}' at step ${index}`;
@@ -191,19 +198,17 @@ export function createToolChainTool(options: ToolChainToolOptions): ToolDefiniti
           break;
         }
 
+        // Per-step call id: threaded into both the child dispatch and the two
+        // receipt planes (the advisory `tool.result.recorded` and the chain
+        // step receipt) so they hard-reference each other by id.
+        const stepCallId = `${toolCallId}:step:${index}`;
         let result: BrewvaToolResult;
         try {
           // prepareArguments is inside the try so a throwing preparer becomes a
           // clean step-level stop with a receipt, not an escape that skips the
           // chain receipt.
           const childArgs = child.prepareArguments ? child.prepareArguments(rawArgs) : rawArgs;
-          result = await child.execute(
-            `${toolCallId}:step:${index}`,
-            childArgs,
-            signal,
-            undefined,
-            ctx,
-          );
+          result = await child.execute(stepCallId, childArgs, signal, undefined, ctx);
         } catch (error) {
           result = {
             content: [{ type: "text", text: `step ${index} threw: ${String(error)}` }],
@@ -214,12 +219,14 @@ export function createToolChainTool(options: ToolChainToolOptions): ToolDefiniti
         const verdict = outcomeVerdict(result.outcome);
         runtime.capabilities.tools.invocation.recordResult({
           sessionId,
+          toolCallId: stepCallId,
           toolName: step.tool,
           verdict,
           failureClass: verdict === "fail" ? "chain_step_failed" : "none",
         });
         stepReceipts.push({
           index,
+          toolCallId: stepCallId,
           toolName: step.tool,
           verdict,
           ...stepResultPreview(result),

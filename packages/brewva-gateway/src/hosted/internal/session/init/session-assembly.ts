@@ -588,6 +588,11 @@ function createHostedCustomTools(input: {
       }),
       READ_EXECUTION_TRAITS,
     );
+    // Register the RAW (pre-wrap, lock-free) read so tool_chain can reach it; the
+    // wrapped copy below stays the model's own dispatch surface. Only `read` is
+    // registered here — edit/write are effectful and never valid chain steps, so
+    // their unwrapped executors are deliberately kept out of the chain resolver.
+    input.runtime.toolSiblingResolver.register([compactReadTool]);
     tools.push(
       wrapToolDefinitionWithHostedExecutionTraits(compactReadTool, input.toolExecutionCoordinator),
     );
@@ -688,19 +693,23 @@ export async function createHostedSession(
       directManagedTools,
       toolExecutionCoordinator,
     }) ?? [];
+  // Register the RAW (pre-wrap) custom + MCP tools so a chain can reach them; the
+  // read-only admission gate still rejects any effectful ones at dispatch. The
+  // wrapped copies below remain the model's own dispatch surface.
+  const rawProvidedCustomTools = [...(options.customTools ?? [])];
+  runtime.toolSiblingResolver.register(rawProvidedCustomTools);
   const providedCustomTools =
     wrapToolDefinitionsWithHostedExecutionTraits(
-      [...(options.customTools ?? [])],
+      rawProvidedCustomTools,
       toolExecutionCoordinator,
     ) ?? [];
   const mcpToolBundle = await createHostedMcpToolBundle(mcpToolSources, {
     recordEvent: (event) => mcpEventRecorder.record(event),
   });
+  const rawMcpTools = mcpToolBundle?.tools ?? [];
+  runtime.toolSiblingResolver.register(rawMcpTools);
   const mcpCustomTools =
-    wrapToolDefinitionsWithHostedExecutionTraits(
-      mcpToolBundle?.tools ?? [],
-      toolExecutionCoordinator,
-    ) ?? [];
+    wrapToolDefinitionsWithHostedExecutionTraits(rawMcpTools, toolExecutionCoordinator) ?? [];
   const customTools = [...builtinCustomTools, ...providedCustomTools, ...mcpCustomTools];
   const hostedToolDefinitionsByName = new Map<string, HostedSessionCustomTool>();
   for (const tool of customTools) {

@@ -1,5 +1,6 @@
 import type { BrewvaConfig, BrewvaRuntimeIdentity, DeepReadonly } from "@brewva/brewva-runtime";
 import type { ToolActionPolicy } from "@brewva/brewva-runtime/security";
+import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
 import type {
   ContextBudgetUsage,
   ContextCompactionGateStatus,
@@ -971,9 +972,23 @@ export type CapabilityScopedBrewvaToolRuntime<
       }
     : never;
 
+/**
+ * Late-bound resolver over read-only tools registered on the session outside the
+ * default bundle — `read`/`edit`/`write`, custom, and MCP tools the gateway adds
+ * at session assembly. `tool_chain` falls back to this when a step names a tool
+ * not in its bundle-sibling closure, so a `grep -> read` chain reaches the real
+ * `read`. Returns RAW (unwrapped, lock-free) definitions: the chain dispatches
+ * them directly without re-entering the kernel, keeping the envelope a single
+ * transaction. The read-only admission gate still rejects effectful entries.
+ */
+export interface ToolSiblingResolver {
+  resolve(name: string): BrewvaToolDefinition | undefined;
+}
+
 export type BrewvaBundledToolRuntime = BrewvaToolRuntime & {
   boxPlane?: BoxPlane;
   execProcessRegistry?: ManagedExecProcessRegistryRuntime;
+  readonly toolSiblingResolver?: ToolSiblingResolver;
 };
 
 export interface BrewvaToolOptions<TRuntime extends BrewvaToolRuntime = BrewvaToolRuntime> {

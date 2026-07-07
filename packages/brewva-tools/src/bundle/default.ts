@@ -76,6 +76,7 @@ import { validateBrewvaToolRequiredCapabilities } from "../registry/tool.js";
 
 export function buildDefaultBundledBrewvaTools(
   runtime: BrewvaBundledToolRuntime,
+  options: { readonly toolNames?: readonly string[] } = {},
 ): ToolDefinition[] {
   const tools = [
     ...createLspTools({ runtime }),
@@ -141,21 +142,35 @@ export function buildDefaultBundledBrewvaTools(
     ...createTaskLedgerTools({ runtime }),
   ];
 
-  // tool_chain dispatches sibling read-only tools by name. Give it a late-bound
-  // resolver over the just-built siblings — this is the only site with
-  // visibility into all tool definitions. The map is built before tool_chain is
-  // added, so a chain can never resolve (or nest) itself.
-  const siblingsByName = new Map(tools.map((tool) => [tool.name, tool] as const));
-  tools.push(
-    createToolChainTool({
-      runtime,
-      resolveSibling: (name) => siblingsByName.get(name),
-    }),
-  );
+  // Filter to the operator-selected surface (`managedToolNames`) BEFORE wiring
+  // tool_chain's sibling resolver, so a chain can never dispatch a bundle tool
+  // that was removed from the model's own surface (capability-scope parity).
+  const allowed =
+    options.toolNames && options.toolNames.length > 0 ? new Set(options.toolNames) : null;
+  const visibleTools = allowed ? tools.filter((tool) => allowed.has(tool.name)) : tools;
 
+  // tool_chain dispatches sibling read-only tools by name. Give it a resolver
+  // over the VISIBLE bundle siblings, built before tool_chain is added — so a
+  // chain can never resolve (or nest) itself, nor a tool hidden from this
+  // session. Read/edit/write/custom/MCP live on `runtime.toolSiblingResolver`,
+  // which the tool consults as a fallback (populated by the gateway).
+  const siblingsByName = new Map(visibleTools.map((tool) => [tool.name, tool] as const));
+  const toolChain = createToolChainTool({
+    runtime,
+    resolveSibling: (name) => siblingsByName.get(name),
+  });
+
+  const result = [...visibleTools];
+  if (!allowed || allowed.has("tool_chain")) {
+    result.push(toolChain);
+  }
+
+  // Validate the whole bundle (+ tool_chain) so a required-capability bug is
+  // caught even for a tool filtered out of this particular session.
   for (const tool of tools) {
     validateBrewvaToolRequiredCapabilities(tool);
   }
+  validateBrewvaToolRequiredCapabilities(toolChain);
 
-  return tools;
+  return result;
 }

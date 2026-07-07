@@ -182,6 +182,12 @@ export interface ToolResultRecordedEventPayload extends ProtocolRecord {
  */
 export interface ToolChainStepReceipt {
   readonly index: number;
+  /**
+   * `${chainId}:step:${index}` — shared with the step's own
+   * `tool.result.recorded` advisory so the two receipt planes hard-reference each
+   * other by id instead of positional (session, order) alignment.
+   */
+  readonly toolCallId: string;
   readonly toolName: string;
   readonly verdict: string;
   readonly resultText: string;

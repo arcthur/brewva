@@ -309,7 +309,11 @@ describe("runtime ops capability inventory fitness", () => {
     // growth. +13 lines on the tool-runtime contract.
     // +1 for tool_chain's `recordChainResult` tool-runtime contract method (the
     // compound-envelope chain-receipt emitter).
-    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_072);
+    // tool_chain sibling-resolution fix: the `ToolSiblingResolver` contract type +
+    // its `toolSiblingResolver` field on `BrewvaBundledToolRuntime` (the seam that
+    // lets a chain reach session-registered read-only tools like `read`) add +14
+    // real producer lines to the tool-runtime contract, not facade growth.
+    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_086);
     // Same feature, implementation side: the orient-injection `requirements.record`
     // builder plus its shared `emitRequirementAtoms` helper (one emit site guarding
     // spec.set/requirements.record against event-shape drift) grew
@@ -402,7 +406,9 @@ describe("runtime ops capability inventory fitness", () => {
     // carries +7 into the combined budget.
     // The pre-compaction prune's `preCompactPrune` telemetry recorder + its import
     // (+2 builder, no tool-runtime contract change) carry +2 into the combined budget.
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_843);
+    // tool_chain's sibling-resolution fix adds +14 tool-runtime contract lines (the
+    // ToolSiblingResolver seam), carrying +14 into the combined budget.
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_858);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {
