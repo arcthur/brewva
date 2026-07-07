@@ -68,6 +68,17 @@ discipline.
   self-attestation, compaction fidelity, repository governance), and stays a
   candidate until proven across a second ring. The implementation landed as
   [Decision: Requirement Fitness And Independent Review](../decisions/requirement-fitness-and-independent-review.md).
+- [RFC: Independence Debt — Surfacing The Authored-Review Blind Spot At Turn Close](./rfc-independence-debt-and-the-authored-review-blind-spot.md):
+  active RFC incrementing delegation activation: when a must-have, high-risk-class
+  atom reaches turn close with authored-only coverage and no independent read,
+  surface that `independence debt` as advisory information so the model can
+  discharge it (delegate a fresh-context reviewer, clear-context self-review, or
+  add behavioral evidence). Diagnoses the game_4→game_5 delegation 3→0 swing — and
+  the critical defects an authored-only close shipped — as a control-capability /
+  missing-sensor gap (the evidence gap is recorded but never looped back to the
+  decision point), not a weak signal; reuses graded evidence, drives no gate, and
+  hands the choice to the model (axioms 1, 3, 7, 18). The information-channel
+  companion to the authorship-taints-verification candidate axiom.
 - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md):
   active RFC for closing the last gap in typed, per-entry, promotion-grade
   attention-selection evidence: making attention selection an accountable effect

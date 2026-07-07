@@ -4,6 +4,7 @@ import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
   buildTapeRequirementDebtSummary,
   buildTapeReviewDebt,
+  type TapeRequirementDebtSummary,
 } from "@brewva/brewva-tools/runtime-port";
 import type {
   ContextBudgetUsage,
@@ -471,9 +472,25 @@ export function buildRuntimeBriefBlockForSession(
     input.turn > 0 ? buildConsequenceSection(runtime, input.sessionId, input.turn) : null;
   const cache = buildCacheBreakSection(runtime, input.sessionId);
   const recurrence = buildFailureRecurrenceSection(runtime, input.sessionId);
-  const requirements = buildRequirementDebtSection(runtime, input.sessionId);
+  // Single-home the whole-tape requirement fitness: derive it ONCE (short-circuit
+  // when no requirement atoms were recorded) and feed BOTH the requirement-debt
+  // section and the delegation advisory's independence-debt reason, so a turn never
+  // re-projects fitness twice.
+  const requirementEvents = listRuntimeEvents(runtime, input.sessionId);
+  const requirementDebtSummary = requirementEvents.some(
+    (event) => event.type === TASK_REQUIREMENT_RECORDED_EVENT_TYPE,
+  )
+    ? buildTapeRequirementDebtSummary(requirementEvents)
+    : null;
+  const requirements = buildRequirementDebtSection(requirementDebtSummary);
   const delegation = input.delegationAdvisory
-    ? buildDelegationAdvisorySection(runtime, input.sessionId, input.turn, input.delegationAdvisory)
+    ? buildDelegationAdvisorySection(
+        runtime,
+        input.sessionId,
+        input.turn,
+        input.delegationAdvisory,
+        requirementDebtSummary,
+      )
     : null;
   return buildRuntimeBriefBlock({
     sections: [pressure, cache, effects, recurrence, requirements, delegation],
@@ -490,20 +507,18 @@ export function buildRuntimeBriefBlockForSession(
  * presence-only high-risk atom.
  */
 function buildRequirementDebtSection(
-  runtime: HostedRuntimeAdapterPort,
-  sessionId: string,
+  summary: TapeRequirementDebtSummary | null,
 ): ReturnType<typeof renderRequirementDebtSection> {
-  const events = listRuntimeEvents(runtime, sessionId);
-  // Cheap short-circuit: with no requirement atoms there is no debt possible, so
-  // skip the whole-tape fitness projection on the (common) turns that recorded none.
-  if (!events.some((event) => event.type === TASK_REQUIREMENT_RECORDED_EVENT_TYPE)) {
+  // The whole-tape fitness is derived ONCE by the caller (single-home) and passed
+  // in — null on the (common) turns that recorded no requirement atoms (the cheap
+  // short-circuit now lives at the caller).
+  if (!summary) {
     return null;
   }
-  const { fitness, debt } = buildTapeRequirementDebtSummary(events);
   return renderRequirementDebtSection({
-    unverifiedMustCount: debt.unverifiedMustCount,
-    debtReason: debt.reason,
-    insufficientGradeCount: fitness.insufficientGradeAtoms.length,
+    unverifiedMustCount: summary.debt.unverifiedMustCount,
+    debtReason: summary.debt.reason,
+    insufficientGradeCount: summary.fitness.insufficientGradeAtoms.length,
   });
 }
 
@@ -557,6 +572,7 @@ function buildDelegationAdvisorySection(
   sessionId: string,
   turn: number,
   context: DelegationAdvisoryContext,
+  requirementDebtSummary: TapeRequirementDebtSummary | null,
 ): ReturnType<typeof renderDelegationAdvisorySection> {
   // Suppression 1: no store to serve the recommendation.
   if (!context.delegationEnabled) {
@@ -576,8 +592,12 @@ function buildDelegationAdvisorySection(
   // maintainer may gate this on `requirementDebtRendered` if the overlap outweighs
   // the framing — tracked in the RFC.
   const reviewDebtClosure = buildTapeReviewDebt(listRuntimeEvents(runtime, sessionId)).debt;
+  // Independence debt reuses the SAME single fitness derivation the requirement-debt
+  // section reads (passed in), never re-projecting: high-risk `must` atoms that
+  // reached close with no independent OR deterministic pass at the risk-floor grade.
+  const independenceDebt = (requirementDebtSummary?.fitness.independenceDebtAtoms.length ?? 0) > 0;
   // Nothing to say → silent before paying for any suppression checks.
-  if (!pressureRelief && !reviewDebtClosure) {
+  if (!pressureRelief && !reviewDebtClosure && !independenceDebt) {
     return null;
   }
   // Suppression 2: a delegation is already in flight — the model has already
@@ -594,11 +614,24 @@ function buildDelegationAdvisorySection(
   // Cadence: full-then-brief. The reason string picks the cadence bucket, so a
   // change of reason resets the window to full (a genuinely new actionable reason
   // deserves a fresh render); the tracker holds one state per session.
-  const reason = pressureRelief ? "delegation:pressure_relief" : "delegation:review_debt";
+  // Independence debt is the most specific reason (it names high-risk atoms), so it
+  // takes the cadence bucket over the coarser review-debt when both are live.
+  // KNOWN LIMITATION (low): the bucket key is the lead reason, so were independence
+  // and review-debt to alternate turn-by-turn the full-then-brief window would reset
+  // each turn and bypass the anti-nag cadence. Independence debt is near-monotone on
+  // the tape (it clears only when an at-grade pass binds an atom), so that alternation
+  // is not realistic — left keyed by reason rather than widened to a reason-agnostic
+  // bucket, which would lose the "a genuinely new actionable reason deserves a fresh
+  // render" semantics.
+  const reason = pressureRelief
+    ? "delegation:pressure_relief"
+    : independenceDebt
+      ? "delegation:independence_debt"
+      : "delegation:review_debt";
   if (!delegationAdvisoryCadenceAllows(context.cadenceTracker, sessionId, turn, reason)) {
     return null;
   }
-  return renderDelegationAdvisorySection({ pressureRelief, reviewDebtClosure });
+  return renderDelegationAdvisorySection({ pressureRelief, reviewDebtClosure, independenceDebt });
 }
 
 /**

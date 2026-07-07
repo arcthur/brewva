@@ -135,6 +135,27 @@ export interface FitnessProjection {
    * order. Empty when no atom's grade fell short of its risk floor.
    */
   readonly insufficientGradeAtoms: readonly InsufficientEvidenceGradeDebt[];
+  /**
+   * Ids of `must`-modality atoms on a HIGH-RISK class (runtime/security — a
+   * failure-mode floor a presence grep cannot clear) whose state is NOT
+   * `satisfied` (i.e. `unverified` or `likelySatisfied`): NO independent OR
+   * deterministic pass AT the atom's risk-floor grade bears on them. The atom may
+   * be entirely unchecked, author-claimed, OR checked only sub-floor — a presence
+   * re-grep, even an INDEPENDENT one, that cannot clear a runtime/security failure
+   * mode. In every case an independent read AT GRADE is still owed, so the render
+   * must say "no independent read AT GRADE", never "no independent receipt" (a
+   * sub-floor independent receipt may exist). This is the at-grade independence
+   * gap the delegation surface reads as independence debt (authorship taints
+   * verification). First-appearance order. A `violated` atom is excluded: a live
+   * fail is a discrepancy, a different signal, not an unmet independence need.
+   *
+   * ORTHOGONAL to {@link InsufficientEvidenceGradeDebt}: that is the GRADE axis
+   * (positive coverage exists but sub-floor), this is the at-grade INDEPENDENCE
+   * axis. A high-risk atom with a sub-floor pass legitimately co-appears in BOTH
+   * (grade debt AND independence debt); a consumer that renders both lists must
+   * not double-count the atom.
+   */
+  readonly independenceDebtAtoms: readonly string[];
 }
 
 /**
@@ -248,6 +269,13 @@ function compareEvidence(left: AtomFitnessEvidence, right: AtomFitnessEvidence):
  * `likelySatisfied` and raises {@link InsufficientEvidenceGradeDebt}. Classes
  * absent here (`ux`/`packaging`/`architecture`) and unclassified atoms accept
  * `presence`.
+ *
+ * This map is ALSO the single source of "high risk" for {@link
+ * FitnessProjection.independenceDebtAtoms}: a class with a floor ABOVE `presence`
+ * is exactly the class that owes an independent read at grade. When adding a
+ * class here, confirm "a sub-floor pass owes an at-grade independent perspective"
+ * holds for it — true for failure-mode classes; a class wanting only build
+ * determinism (not an independent review) would not want that framing.
  */
 const MIN_EVIDENCE_KIND_BY_RISK: Partial<Record<RequirementRiskClass, EvidenceKind>> = {
   runtime: "static_guard",
@@ -496,12 +524,30 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     )
     .map((entry) => entry.atomId);
 
+  // High-risk `must` atoms not reaching `satisfied` carry independence debt: only
+  // `satisfied` requires an independent OR deterministic-at-grade pass, so an atom
+  // stuck at `unverified`/`likelySatisfied` has none — an independent perspective
+  // is owed on it. `presence`-floor (non-high-risk) atoms are excluded: self-review
+  // clears those honestly, so demanding independence there would be noise.
+  const independenceDebtAtoms = atoms
+    .filter((entry) => {
+      const accumulator = accumulators.get(entry.atomId);
+      return (
+        accumulator !== undefined &&
+        accumulator.atom.modality === "must" &&
+        requiredEvidenceKind(accumulator.atom) !== "presence" &&
+        (entry.state === "unverified" || entry.state === "likelySatisfied")
+      );
+    })
+    .map((entry) => entry.atomId);
+
   return {
     atoms,
     counts,
     discrepancies: sortedDiscrepancies,
     unverifiedMustAtoms,
     insufficientGradeAtoms,
+    independenceDebtAtoms,
   };
 }
 

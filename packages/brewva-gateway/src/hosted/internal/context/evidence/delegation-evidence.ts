@@ -3,6 +3,7 @@ import {
   type SessionIndexDelegationRun,
 } from "@brewva/brewva-session-index";
 import { isRecord } from "@brewva/brewva-std/unknown";
+import { buildTapeRequirementFitness } from "@brewva/brewva-tools/runtime-port";
 import {
   SUBAGENT_FAILED_EVENT_TYPE,
   SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
@@ -76,6 +77,20 @@ export interface ContextEconomics {
   readonly childTotalTokens: number;
 }
 
+/**
+ * Independence-debt carried into turn close: high-risk `must` atoms that reached
+ * the session's end still owing an at-grade independent read
+ * (`FitnessProjection.independenceDebtAtoms`). This is the activation counter-signal
+ * for the independence-debt channel — a rising `open` across eval rounds means the
+ * render is NOT moving the model toward an independent read, the way a rising
+ * `failureRate` means activation is pushing into a wall. (A precise discharged-by
+ * split is a deliberate follow-up: it needs per-turn fitness history the per-session
+ * report does not retain — the projection is re-derived once at tape end.)
+ */
+export interface IndependenceDebtCounts {
+  readonly open: number;
+}
+
 export interface DelegationEvidenceSessionReport {
   readonly sessionId: string;
   readonly counts: DelegationCounts;
@@ -83,6 +98,7 @@ export interface DelegationEvidenceSessionReport {
   readonly failures: DelegationFailureCounts;
   readonly adoption: AdoptionOutcomeCounts;
   readonly contextEconomics: ContextEconomics;
+  readonly independenceDebt: IndependenceDebtCounts;
 }
 
 export interface DelegationEvidenceAggregate {
@@ -92,6 +108,7 @@ export interface DelegationEvidenceAggregate {
   readonly failures: DelegationFailureCounts;
   readonly adoption: AdoptionOutcomeCounts;
   readonly contextEconomics: ContextEconomics;
+  readonly independenceDebt: IndependenceDebtCounts;
   /**
    * Distinct failed runs / runs started — a true [0,1] rate (a run can raise
    * several failure EVENTS, so this dedupes by run before dividing). The
@@ -232,6 +249,7 @@ function aggregate(
   let rejected = 0;
   let childRunsWithTokens = 0;
   let childTotalTokens = 0;
+  let independenceDebtOpen = 0;
   for (const session of sessions) {
     total += session.counts.total;
     mergeCounts(byRole, session.counts.byRole);
@@ -248,6 +266,7 @@ function aggregate(
     rejected += session.adoption.rejected;
     childRunsWithTokens += session.contextEconomics.childRunsWithTokens;
     childTotalTokens += session.contextEconomics.childTotalTokens;
+    independenceDebtOpen += session.independenceDebt.open;
   }
   return {
     sessionCount: sessions.length,
@@ -256,6 +275,7 @@ function aggregate(
     failures: { total: dispatch + consult, dispatch, consult, failedRuns },
     adoption: { applied, applyFailed, rejected },
     contextEconomics: { childRunsWithTokens, childTotalTokens },
+    independenceDebt: { open: independenceDebtOpen },
     failureRate: total > 0 ? failedRuns / total : null,
   };
 }
@@ -282,6 +302,12 @@ export function buildDelegationEvidenceReport(
       failures: countFailures(records),
       adoption: countAdoption(records),
       contextEconomics: measureContextEconomics(delegation.runs),
+      // The report stores nothing new (axiom 6): re-derive the same tape-folded
+      // fitness projection the runtime brief reads and take its close-state open
+      // count, so operator and model views cannot diverge by construction.
+      independenceDebt: {
+        open: buildTapeRequirementFitness(records).independenceDebtAtoms.length,
+      },
     };
   });
   return { sessions, aggregate: aggregate(sessions) };

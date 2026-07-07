@@ -294,9 +294,13 @@ describe("renderRequirementDebtSection (R4)", () => {
 });
 
 describe("renderDelegationAdvisorySection (Lever 2)", () => {
-  test("silent when neither reason applies", () => {
+  test("silent when no reason applies", () => {
     expect(
-      renderDelegationAdvisorySection({ pressureRelief: false, reviewDebtClosure: false }),
+      renderDelegationAdvisorySection({
+        pressureRelief: false,
+        reviewDebtClosure: false,
+        independenceDebt: false,
+      }),
     ).toBeNull();
   });
 
@@ -304,6 +308,7 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
     const section = renderDelegationAdvisorySection({
       pressureRelief: true,
       reviewDebtClosure: false,
+      independenceDebt: false,
     });
     expect(section?.key).toBe("delegation");
     // Lowest salience: an instrument suggestion demotes before the postures it complements.
@@ -318,6 +323,7 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
     const section = renderDelegationAdvisorySection({
       pressureRelief: false,
       reviewDebtClosure: true,
+      independenceDebt: false,
     });
     expect(section?.line).toContain("`review_request`");
     expect(section?.line).toContain("independent-perspective receipt you cannot mint");
@@ -325,14 +331,42 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
     expect(section?.stub).toBe("delegation: `review_request` closes open review debt");
   });
 
-  test("both reasons compose into one line", () => {
+  test("independence-debt alone names an AT-GRADE independent read, never 'no independent receipt'", () => {
+    const section = renderDelegationAdvisorySection({
+      pressureRelief: false,
+      reviewDebtClosure: false,
+      independenceDebt: true,
+    });
+    expect(section?.line).toContain("high-risk must-atoms have no independent read at grade");
+    expect(section?.line).toContain("fresh-context review");
+    // Load-bearing honesty (HIGH-1): a sub-floor independent receipt MAY exist, so the
+    // line must never claim there is none.
+    expect(section?.line).not.toContain("no independent receipt");
+    expect(section?.stub).toBe("delegation: high-risk must-atoms owe an independent read at grade");
+  });
+
+  test("independence debt FOLDS the coarser review-debt line when both apply", () => {
+    const section = renderDelegationAdvisorySection({
+      pressureRelief: false,
+      reviewDebtClosure: true,
+      independenceDebt: true,
+    });
+    expect(section?.line).toContain("high-risk must-atoms have no independent read at grade");
+    // Fold (Open Question 3): the coarser review-debt line is subsumed, not shown as a
+    // second same-ask clause. Line and stub agree — no "two asks at full, one demoted".
+    expect(section?.line).not.toContain("`review_request`");
+    expect(section?.stub).toBe("delegation: high-risk must-atoms owe an independent read at grade");
+  });
+
+  test("pressure + independence + review: independence folds review, pressure stays", () => {
     const section = renderDelegationAdvisorySection({
       pressureRelief: true,
       reviewDebtClosure: true,
+      independenceDebt: true,
     });
-    expect(section?.line).toContain("cheaper in a child session");
-    expect(section?.line).toContain("`review_request`");
-    // The review-debt closure wins the stub when both apply.
-    expect(section?.stub).toBe("delegation: `review_request` closes open review debt");
+    expect(section?.line).toContain("cheaper in a child session"); // pressure is orthogonal, stays
+    expect(section?.line).toContain("high-risk must-atoms"); // independence
+    expect(section?.line).not.toContain("`review_request`"); // review-debt folded into independence
+    expect(section?.stub).toBe("delegation: high-risk must-atoms owe an independent read at grade");
   });
 });

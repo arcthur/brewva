@@ -15,7 +15,9 @@ function printUsage(): void {
       "Usage: bun run script/report-delegation-evidence.ts [workspace-root] [--session <session-id>...]",
       "       Measures delegation trigger economics from the tape: reach by role/status/",
       "       waitMode, parallel-gate rejections, FAILURE counts by cause (the reliability",
-      "       counter-signal), adoption outcomes, and child-token context economics.",
+      "       counter-signal), adoption outcomes, child-token context economics, and the",
+      "       independence-debt open count (high-risk must atoms carried into close still",
+      "       owing an at-grade independent read — the channel's activation counter-signal).",
     ].join("\n"),
   );
 }

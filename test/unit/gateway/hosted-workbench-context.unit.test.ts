@@ -551,4 +551,59 @@ describe("delegation advisory decision (Lever 2)", () => {
     });
     expect(rendered?.content ?? "").not.toContain("delegation:");
   });
+
+  test("independence-debt variant fires for a high-risk unmet must atom (end-to-end wiring)", () => {
+    const rendered = block({
+      // No pressure (gateStatus none) and no authored requirements pass (so review-debt
+      // cannot fire): the ONLY live reason is a high-risk (runtime) `must` atom with no
+      // evidence — it owes an at-grade independent read.
+      tapeEvents: [
+        {
+          type: "task.requirement.recorded",
+          timestamp: 1,
+          payload: {
+            atom: {
+              id: "req-1",
+              statement: "event tap must re-arm on disable",
+              modality: "must",
+              provenance: "trap",
+              riskClass: "runtime",
+            },
+          },
+        },
+      ],
+      advisory: delegationContext({
+        gateStatus: { status: {} as never } as ContextCompactionGateStatus,
+      }),
+    });
+    expect(rendered?.content).toContain("high-risk must-atoms have no independent read at grade");
+    // HIGH-1 honesty carried end-to-end: never claim there is NO independent receipt.
+    expect(rendered?.content ?? "").not.toContain("no independent receipt");
+  });
+
+  test("independence-debt variant stays silent for a NON-high-risk unmet must atom", () => {
+    const rendered = block({
+      // A presence-floor (no riskClass) `must` atom is unverified-must but NOT
+      // independence debt — proves the wiring reads `independenceDebtAtoms`, not the
+      // broader `unverifiedMustAtoms`. No pressure, no review-debt → silent.
+      tapeEvents: [
+        {
+          type: "task.requirement.recorded",
+          timestamp: 1,
+          payload: {
+            atom: {
+              id: "req-1",
+              statement: "menu bar shows a mic glyph",
+              modality: "must",
+              provenance: "prompt",
+            },
+          },
+        },
+      ],
+      advisory: delegationContext({
+        gateStatus: { status: {} as never } as ContextCompactionGateStatus,
+      }),
+    });
+    expect(rendered?.content ?? "").not.toContain("delegation:");
+  });
 });

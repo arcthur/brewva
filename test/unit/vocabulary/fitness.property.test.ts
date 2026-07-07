@@ -18,6 +18,10 @@ const atomArbitrary: Arbitrary<RequirementAtom> = fc.record({
   statement: fc.constantFrom("s-a", "s-b", "s-c", "s-d"),
   modality: fc.constantFrom<RequirementAtom["modality"]>("must", "should", "nice"),
   provenance: fc.constantFrom<RequirementAtom["provenance"]>("prompt", "trap", "review"),
+  // Exercise the high-risk (runtime/security) branch so independenceDebtAtoms is
+  // property-covered — `ux` and `undefined` are the presence-floor (non-high-risk)
+  // controls that must stay OUT of the debt set.
+  riskClass: fc.constantFrom<RequirementAtom["riskClass"]>(undefined, "runtime", "security", "ux"),
 });
 
 const targetRefArbitrary = fc.oneof(
@@ -127,6 +131,22 @@ propertyTest<[RequirementFitnessInput]>(
         .map((entry) => entry.atomId)
         .filter((id) => input.atoms.find((a) => a.id === id)?.modality === "must");
       expect([...base.unverifiedMustAtoms].toSorted()).toEqual(mustUnverified.toSorted());
+
+      // independenceDebtAtoms = exactly the high-risk (runtime/security) `must` atoms
+      // whose state never reached `satisfied` (independently re-derived from the RFC
+      // definition, not by copying the projection's internal predicate).
+      const highRisk = new Set<RequirementAtom["riskClass"]>(["runtime", "security"]);
+      const expectedDebt = base.atoms
+        .filter((entry) => {
+          const atom = input.atoms.find((candidate) => candidate.id === entry.atomId);
+          return (
+            atom?.modality === "must" &&
+            highRisk.has(atom.riskClass) &&
+            (entry.state === "unverified" || entry.state === "likelySatisfied")
+          );
+        })
+        .map((entry) => entry.atomId);
+      expect([...base.independenceDebtAtoms].toSorted()).toEqual(expectedDebt.toSorted());
     },
   },
 );

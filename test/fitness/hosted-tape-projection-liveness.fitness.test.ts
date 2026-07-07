@@ -278,12 +278,14 @@ describe("hosted-tape projection liveness (real gpt-5.5 session)", () => {
 
   // Lever 2 PRODUCER-WIRING invariant: the delegation advisory must actually
   // render on this canonical run, not merely be renderable in isolation. The real
-  // tape carries open review debt (asserted above) and zero active delegations,
-  // so the review-debt-closure reason MUST fire when the hosted tail composes the
-  // brief over this exact tape. If the section is ever unwired from
+  // tape carries open review debt (asserted above), 7 unverified must atoms —
+  // several at runtime risk class — and zero active delegations. So it owes BOTH
+  // coarse review debt AND independence debt (high-risk must atoms with no at-grade
+  // independent read); independence debt is the SHARPER signal, so the fold renders
+  // it and suppresses the review-debt line. If the section is ever unwired from
   // buildRuntimeBriefBlockForSession, or its suppression inverts, this goes red —
   // that is the whole point of the advisory.
-  test("the delegation advisory RENDERS on the real review-debt tape (Lever 2 wiring is live)", () => {
+  test("the delegation advisory RENDERS on the real tape — independence debt subsumes review debt (Lever 2 wiring is live)", () => {
     const unwrapped = unwrapOpsEnvelopes(events);
     const runtime = {
       config: {
@@ -332,7 +334,14 @@ describe("hosted-tape projection liveness (real gpt-5.5 session)", () => {
       },
     });
 
+    // The advisory fired with a delegation reason...
     expect(block?.content).toContain("delegation:");
-    expect(block?.content).toContain("`review_request`");
+    // ...specifically the independence-debt line — the sharper signal this real tape
+    // produces (7 unverified must atoms, several at runtime risk). It subsumes and
+    // folds the coarser review-debt line.
+    expect(block?.content).toContain("high-risk must-atoms have no independent read at grade");
+    // Fold proof + HIGH-1 honesty: the review-debt-specific `review_request` line is
+    // suppressed, and the render never claims there is NO independent receipt.
+    expect(block?.content).not.toContain("`review_request`");
   });
 });
