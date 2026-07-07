@@ -576,7 +576,11 @@ describe("delegation advisory decision (Lever 2)", () => {
         gateStatus: { status: {} as never } as ContextCompactionGateStatus,
       }),
     });
-    expect(rendered?.content).toContain("high-risk must-atoms have no independent read at grade");
+    // Count + atom carried end-to-end (RFC information thesis): one high-risk atom, named.
+    expect(rendered?.content).toContain(
+      "1 high-risk must-atom(s) have no independent read at grade",
+    );
+    expect(rendered?.content).toContain("(req-1)");
     // HIGH-1 honesty carried end-to-end: never claim there is NO independent receipt.
     expect(rendered?.content ?? "").not.toContain("no independent receipt");
   });

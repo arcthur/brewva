@@ -277,26 +277,40 @@ export interface DelegationAdvisoryInput {
    */
   readonly reviewDebtClosure: boolean;
   /**
-   * High-risk `must` atoms reached turn close with NO independent OR deterministic
-   * pass at the risk-floor grade (`FitnessProjection.independenceDebtAtoms`). They
-   * owe an independent read AT grade — the perspective the author cannot mint on
-   * its own work. A sub-floor independent receipt MAY exist, so the line says "at
-   * grade", never "no independent receipt".
+   * High-risk `must` atom IDs that reached turn close with NO independent OR
+   * deterministic pass at the risk-floor grade (`FitnessProjection.independenceDebtAtoms`).
+   * They owe an independent read AT grade — the perspective the author cannot mint
+   * on its own work. A sub-floor independent receipt MAY exist, so the surface says
+   * "at grade", never "no independent receipt".
+   *
+   * Carried as the atom-ID list (not a boolean) so the advisory can name the count
+   * AND enumerate the atoms, per the RFC's information-channel thesis: the model can
+   * only steer on a gap it can perceive, so the surface reads "N high-risk must-atoms
+   * ... (atom ids)". Empty ⇒ no independence debt (the reason is silent).
    */
-  readonly independenceDebt: boolean;
+  readonly independenceDebtAtoms: readonly string[];
 }
 
 /**
  * Delegation advisory posture (Lever 2, axiom 18): names delegation as an
  * instrument at turn tail when — and only when — it is the cheaper or the only
- * path forward. Two independent reasons, silent when NEITHER applies (an
- * advisory nobody can act on is noise):
+ * path forward. THREE independent reasons, silent when NONE applies (an advisory
+ * nobody can act on is noise):
  *
  *  - pressure-relief: at the ADVISORY pressure tier, broad remaining exploration
  *    or verification is cheaper in a child session than in a window already
- *    under advisory pressure.
+ *    under advisory pressure. An orthogonal economic ask — always its own clause.
+ *  - independence-debt: high-risk `must` atoms reached close with no independent
+ *    read at grade. The atom-named "an independent read is owed" ask; it names the
+ *    count and enumerates the atoms so the model can perceive (thus steer on) the gap.
  *  - review-debt-closure: with open review debt, a `review_request` is the one
  *    `independent`-perspective receipt the model cannot mint for itself.
+ *
+ * FOLD (RFC Open Question 3): independence-debt is the finer, atom-named form of
+ * the review-debt ask, so when it is live it SUBSUMES the coarser review-debt line
+ * — the two never render the same ask twice. Both the line and the stub lead with
+ * independence when it applies (and the caller's cadence key does too, so what the
+ * model reads and what telemetry keys agree). pressure-relief never folds.
  *
  * Inform-only — it derives NO gate (the sole gate stays the operator-promoted
  * verification-gate manifest). Lowest salience: an instrument suggestion sits
@@ -304,12 +318,14 @@ export interface DelegationAdvisoryInput {
  * under budget. Suppression that would make the advisory recommend an action the
  * parallel gate will refuse (pending delegation, exhausted budget, no store)
  * lives in the caller (`buildDelegationAdvisorySection`), not here — this
- * renderer is a pure function of its two reasons.
+ * renderer is a pure function of its three reasons.
  */
 export function renderDelegationAdvisorySection(
   input: DelegationAdvisoryInput,
 ): RuntimeBriefSection | null {
-  if (!input.pressureRelief && !input.reviewDebtClosure && !input.independenceDebt) {
+  const independenceDebtCount = input.independenceDebtAtoms.length;
+  const independenceDebt = independenceDebtCount > 0;
+  if (!input.pressureRelief && !input.reviewDebtClosure && !independenceDebt) {
     return null;
   }
   const parts: string[] = [];
@@ -318,9 +334,15 @@ export function renderDelegationAdvisorySection(
       "broad remaining exploration or verification is cheaper in a child session than in a window already under advisory pressure",
     );
   }
-  if (input.independenceDebt) {
+  if (independenceDebt) {
+    // Name the count AND enumerate the atoms (RFC information-channel thesis: the
+    // model steers only on a gap it can perceive). All atoms are listed — under
+    // budget the whole section demotes to its count-only stub, so the list is never
+    // truncated mid-structure.
     parts.push(
-      "high-risk must-atoms have no independent read at grade — a fresh-context review is the perspective you cannot mint on your own work",
+      `${independenceDebtCount} high-risk must-atom(s) have no independent read at grade ` +
+        `(${input.independenceDebtAtoms.join(", ")}) — a fresh-context review is the ` +
+        "perspective you cannot mint on your own work",
     );
   }
   // Fold (RFC Open Question 3, resolved by this feature's own independent review):
@@ -330,7 +352,7 @@ export function renderDelegationAdvisorySection(
   // leads with independence; folding the line too avoids the odd "two asks at full,
   // one ask when demoted" shape. pressure-relief stays independent (an orthogonal
   // economic reason, not the same ask).
-  if (input.reviewDebtClosure && !input.independenceDebt) {
+  if (input.reviewDebtClosure && !independenceDebt) {
     parts.push(
       "open review debt closes with a `review_request` — the one independent-perspective receipt you cannot mint for yourself",
     );
@@ -340,9 +362,11 @@ export function renderDelegationAdvisorySection(
     salience: "low",
     line: `delegation: ${parts.join("; ")}`,
     // Independence debt names specific high-risk atoms, so it leads the stub over
-    // the coarser review-debt / pressure fallbacks when it is the live reason.
-    stub: input.independenceDebt
-      ? "delegation: high-risk must-atoms owe an independent read at grade"
+    // the coarser review-debt / pressure fallbacks when it is the live reason. The
+    // stub carries the COUNT but not the atom list — it is the budget-demoted form,
+    // so it stays compact; the full line above enumerates the atoms.
+    stub: independenceDebt
+      ? `delegation: ${independenceDebtCount} high-risk must-atom(s) owe an independent read at grade`
       : input.reviewDebtClosure
         ? "delegation: `review_request` closes open review debt"
         : "delegation: a child session can relieve context pressure",

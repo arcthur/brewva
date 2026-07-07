@@ -472,15 +472,17 @@ export function buildRuntimeBriefBlockForSession(
     input.turn > 0 ? buildConsequenceSection(runtime, input.sessionId, input.turn) : null;
   const cache = buildCacheBreakSection(runtime, input.sessionId);
   const recurrence = buildFailureRecurrenceSection(runtime, input.sessionId);
-  // Single-home the whole-tape requirement fitness: derive it ONCE (short-circuit
-  // when no requirement atoms were recorded) and feed BOTH the requirement-debt
-  // section and the delegation advisory's independence-debt reason, so a turn never
-  // re-projects fitness twice.
-  const requirementEvents = listRuntimeEvents(runtime, input.sessionId);
-  const requirementDebtSummary = requirementEvents.some(
+  // Single-home the whole-tape reads: list the session's runtime events ONCE and
+  // derive the requirement fitness ONCE (short-circuit when no requirement atoms
+  // were recorded). Both the event list AND the fitness feed the requirement-debt
+  // section and the delegation advisory, so a turn never re-lists the tape or
+  // re-projects fitness (the advisory's review-debt / already-pending / gate-reject
+  // checks all read this one list).
+  const runtimeEvents = listRuntimeEvents(runtime, input.sessionId);
+  const requirementDebtSummary = runtimeEvents.some(
     (event) => event.type === TASK_REQUIREMENT_RECORDED_EVENT_TYPE,
   )
-    ? buildTapeRequirementDebtSummary(requirementEvents)
+    ? buildTapeRequirementDebtSummary(runtimeEvents)
     : null;
   const requirements = buildRequirementDebtSection(requirementDebtSummary);
   const delegation = input.delegationAdvisory
@@ -490,6 +492,7 @@ export function buildRuntimeBriefBlockForSession(
         input.turn,
         input.delegationAdvisory,
         requirementDebtSummary,
+        runtimeEvents,
       )
     : null;
   return buildRuntimeBriefBlock({
@@ -533,12 +536,15 @@ function buildRequirementDebtSection(
  * advisory the gate would refuse is worse than silence). No side effects, unlike
  * a probe `acquire`.
  */
-function parallelGateWouldReject(runtime: HostedRuntimeAdapterPort, sessionId: string): boolean {
+function parallelGateWouldReject(
+  runtime: HostedRuntimeAdapterPort,
+  runtimeEvents: ReturnType<typeof listRuntimeEvents>,
+): boolean {
   const config = runtime.config.parallel;
   if (!config.enabled) {
     return false;
   }
-  const budget = deriveParallelBudgetStateFromEvents(listRuntimeEvents(runtime, sessionId));
+  const budget = deriveParallelBudgetStateFromEvents(runtimeEvents);
   if (budget.totalStarted >= config.maxTotalPerSession) {
     return true;
   }
@@ -573,6 +579,7 @@ function buildDelegationAdvisorySection(
   turn: number,
   context: DelegationAdvisoryContext,
   requirementDebtSummary: TapeRequirementDebtSummary | null,
+  runtimeEvents: ReturnType<typeof listRuntimeEvents>,
 ): ReturnType<typeof renderDelegationAdvisorySection> {
   // Suppression 1: no store to serve the recommendation.
   if (!context.delegationEnabled) {
@@ -590,48 +597,59 @@ function buildDelegationAdvisorySection(
   // repeating it. Salience-ordered (this section is `low`, requirement debt is
   // `normal`), so under budget the delegation line demotes to its stub first. A
   // maintainer may gate this on `requirementDebtRendered` if the overlap outweighs
-  // the framing — tracked in the RFC.
-  const reviewDebtClosure = buildTapeReviewDebt(listRuntimeEvents(runtime, sessionId)).debt;
+  // the framing — tracked in the RFC. Reads the single-homed `runtimeEvents` (listed
+  // once by the caller) — never re-lists the tape.
+  const reviewDebtClosure = buildTapeReviewDebt(runtimeEvents).debt;
   // Independence debt reuses the SAME single fitness derivation the requirement-debt
   // section reads (passed in), never re-projecting: high-risk `must` atoms that
   // reached close with no independent OR deterministic pass at the risk-floor grade.
-  const independenceDebt = (requirementDebtSummary?.fitness.independenceDebtAtoms.length ?? 0) > 0;
+  // Carried as the atom-ID list (not a boolean) so the advisory names the count and
+  // enumerates the atoms downstream (RFC information-channel thesis).
+  const independenceDebtAtoms = requirementDebtSummary?.fitness.independenceDebtAtoms ?? [];
+  const independenceDebt = independenceDebtAtoms.length > 0;
   // Nothing to say → silent before paying for any suppression checks.
   if (!pressureRelief && !reviewDebtClosure && !independenceDebt) {
     return null;
   }
   // Suppression 2: a delegation is already in flight — the model has already
   // reached for the instrument; recommending it again is noise.
-  const alreadyPending =
-    deriveParallelBudgetStateFromEvents(listRuntimeEvents(runtime, sessionId)).activeCount > 0;
+  const alreadyPending = deriveParallelBudgetStateFromEvents(runtimeEvents).activeCount > 0;
   if (alreadyPending) {
     return null;
   }
   // Suppression 3: the gate would refuse a new delegation (no budget).
-  if (parallelGateWouldReject(runtime, sessionId)) {
+  if (parallelGateWouldReject(runtime, runtimeEvents)) {
     return null;
   }
   // Cadence: full-then-brief. The reason string picks the cadence bucket, so a
   // change of reason resets the window to full (a genuinely new actionable reason
   // deserves a fresh render); the tracker holds one state per session.
-  // Independence debt is the most specific reason (it names high-risk atoms), so it
-  // takes the cadence bucket over the coarser review-debt when both are live.
-  // KNOWN LIMITATION (low): the bucket key is the lead reason, so were independence
-  // and review-debt to alternate turn-by-turn the full-then-brief window would reset
-  // each turn and bypass the anti-nag cadence. Independence debt is near-monotone on
-  // the tape (it clears only when an at-grade pass binds an atom), so that alternation
-  // is not realistic — left keyed by reason rather than widened to a reason-agnostic
-  // bucket, which would lose the "a genuinely new actionable reason deserves a fresh
-  // render" semantics.
-  const reason = pressureRelief
-    ? "delegation:pressure_relief"
-    : independenceDebt
-      ? "delegation:independence_debt"
+  //
+  // Lead with independence, matching the rendered stub and line so "which reason is
+  // THE reason" is identical between what the model reads and what telemetry keys.
+  // Independence is both the most SPECIFIC reason (it names high-risk atoms) and the
+  // most STABLE — near-monotone on the tape (it clears only when an at-grade pass
+  // binds an atom), whereas pressure is transient/economic. Keying the anti-nag
+  // cadence to the stable signal means a pressure blip under a persistent
+  // independence debt does NOT flip the bucket and re-nag.
+  // KNOWN LIMITATION (low): were independence and review-debt to alternate
+  // turn-by-turn the window would reset each turn; independence debt's near-monotone
+  // clearing makes that unrealistic, so the bucket stays keyed by reason rather than
+  // widened to a reason-agnostic key (which would lose "a genuinely new actionable
+  // reason deserves a fresh render").
+  const reason = independenceDebt
+    ? "delegation:independence_debt"
+    : pressureRelief
+      ? "delegation:pressure_relief"
       : "delegation:review_debt";
   if (!delegationAdvisoryCadenceAllows(context.cadenceTracker, sessionId, turn, reason)) {
     return null;
   }
-  return renderDelegationAdvisorySection({ pressureRelief, reviewDebtClosure, independenceDebt });
+  return renderDelegationAdvisorySection({
+    pressureRelief,
+    reviewDebtClosure,
+    independenceDebtAtoms,
+  });
 }
 
 /**

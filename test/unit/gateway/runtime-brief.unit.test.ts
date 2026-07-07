@@ -299,7 +299,7 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
       renderDelegationAdvisorySection({
         pressureRelief: false,
         reviewDebtClosure: false,
-        independenceDebt: false,
+        independenceDebtAtoms: [],
       }),
     ).toBeNull();
   });
@@ -308,7 +308,7 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
     const section = renderDelegationAdvisorySection({
       pressureRelief: true,
       reviewDebtClosure: false,
-      independenceDebt: false,
+      independenceDebtAtoms: [],
     });
     expect(section?.key).toBe("delegation");
     // Lowest salience: an instrument suggestion demotes before the postures it complements.
@@ -323,7 +323,7 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
     const section = renderDelegationAdvisorySection({
       pressureRelief: false,
       reviewDebtClosure: true,
-      independenceDebt: false,
+      independenceDebtAtoms: [],
     });
     expect(section?.line).toContain("`review_request`");
     expect(section?.line).toContain("independent-perspective receipt you cannot mint");
@@ -331,42 +331,53 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
     expect(section?.stub).toBe("delegation: `review_request` closes open review debt");
   });
 
-  test("independence-debt alone names an AT-GRADE independent read, never 'no independent receipt'", () => {
+  test("independence-debt alone names the count + atoms and an AT-GRADE independent read, never 'no independent receipt'", () => {
     const section = renderDelegationAdvisorySection({
       pressureRelief: false,
       reviewDebtClosure: false,
-      independenceDebt: true,
+      independenceDebtAtoms: ["req-1", "req-2"],
     });
-    expect(section?.line).toContain("high-risk must-atoms have no independent read at grade");
+    // The channel names the COUNT and enumerates the atoms (RFC information thesis).
+    expect(section?.line).toContain("2 high-risk must-atom(s) have no independent read at grade");
+    expect(section?.line).toContain("(req-1, req-2)");
     expect(section?.line).toContain("fresh-context review");
     // Load-bearing honesty (HIGH-1): a sub-floor independent receipt MAY exist, so the
     // line must never claim there is none.
     expect(section?.line).not.toContain("no independent receipt");
-    expect(section?.stub).toBe("delegation: high-risk must-atoms owe an independent read at grade");
+    // Stub carries the count (budget-demoted form) but not the atom list.
+    expect(section?.stub).toBe(
+      "delegation: 2 high-risk must-atom(s) owe an independent read at grade",
+    );
   });
 
   test("independence debt FOLDS the coarser review-debt line when both apply", () => {
     const section = renderDelegationAdvisorySection({
       pressureRelief: false,
       reviewDebtClosure: true,
-      independenceDebt: true,
+      independenceDebtAtoms: ["req-1"],
     });
-    expect(section?.line).toContain("high-risk must-atoms have no independent read at grade");
+    expect(section?.line).toContain("1 high-risk must-atom(s) have no independent read at grade");
+    expect(section?.line).toContain("(req-1)");
     // Fold (Open Question 3): the coarser review-debt line is subsumed, not shown as a
     // second same-ask clause. Line and stub agree — no "two asks at full, one demoted".
     expect(section?.line).not.toContain("`review_request`");
-    expect(section?.stub).toBe("delegation: high-risk must-atoms owe an independent read at grade");
+    expect(section?.stub).toBe(
+      "delegation: 1 high-risk must-atom(s) owe an independent read at grade",
+    );
   });
 
   test("pressure + independence + review: independence folds review, pressure stays", () => {
     const section = renderDelegationAdvisorySection({
       pressureRelief: true,
       reviewDebtClosure: true,
-      independenceDebt: true,
+      independenceDebtAtoms: ["req-1"],
     });
     expect(section?.line).toContain("cheaper in a child session"); // pressure is orthogonal, stays
-    expect(section?.line).toContain("high-risk must-atoms"); // independence
+    expect(section?.line).toContain("1 high-risk must-atom(s)"); // independence names the count
+    expect(section?.line).toContain("(req-1)"); // ...and the atom
     expect(section?.line).not.toContain("`review_request`"); // review-debt folded into independence
-    expect(section?.stub).toBe("delegation: high-risk must-atoms owe an independent read at grade");
+    expect(section?.stub).toBe(
+      "delegation: 1 high-risk must-atom(s) owe an independent read at grade",
+    );
   });
 });
