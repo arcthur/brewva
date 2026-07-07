@@ -39,6 +39,7 @@ import {
   type ResolvedToolAuthority,
   type ToolActionAdmissionOverrides,
 } from "./policy/public-contract.js";
+import { capToolResultContentForTape } from "./tool-result-content-cap.js";
 
 export type KernelToolAuthorityResolver = RuntimeToolAuthorityResolver;
 
@@ -1250,6 +1251,7 @@ export function createKernelPort(
         }
         throw new Error(`tool_commitment_${blocked.reason}:${input.commitmentId}`);
       }
+      const result = capToolResultContentForTape(input.result);
       const event = tape.commit({
         sessionId: commitment.call.sessionId,
         ...(commitment.call.turnId ? { turnId: commitment.call.turnId } : {}),
@@ -1257,7 +1259,7 @@ export function createKernelPort(
         payload: {
           commitmentId: input.commitmentId,
           call: commitment.call,
-          result: input.result,
+          result,
         },
       });
       commitments.delete(input.commitmentId);

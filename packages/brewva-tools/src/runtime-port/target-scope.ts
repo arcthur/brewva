@@ -253,6 +253,15 @@ export interface ToolTargetScope {
   readableRoots: string[];
 }
 
+export type RuntimeArtifactReadRejectionReason = "runtime_artifact_read_denied";
+
+export interface RuntimeArtifactReadRejection {
+  reason: RuntimeArtifactReadRejectionReason;
+  artifact: "tape";
+  artifactRoot: string;
+  absolutePath: string;
+}
+
 interface ToolTargetDescriptor {
   primaryRoot?: string;
   roots?: string[];
@@ -321,6 +330,64 @@ export function isPathInsideRoots(path: string, roots: readonly string[]): boole
   return roots.some((root) => isPathInsideRoot(path, root));
 }
 
+const RUNTIME_ARTIFACT_READ_DENY_SUBPATHS: ReadonlyArray<{
+  readonly artifact: RuntimeArtifactReadRejection["artifact"];
+  readonly segments: readonly string[];
+}> = [{ artifact: "tape", segments: [".brewva", "tape"] }];
+
+function runtimeArtifactRoots(scope: ToolTargetScope): RuntimeArtifactReadRejection[] {
+  return scope.allowedRoots.flatMap((root) =>
+    RUNTIME_ARTIFACT_READ_DENY_SUBPATHS.map((entry) => {
+      const artifactRoot = resolve(root, ...entry.segments);
+      return {
+        reason: "runtime_artifact_read_denied" as const,
+        artifact: entry.artifact,
+        artifactRoot,
+        absolutePath: artifactRoot,
+      };
+    }),
+  );
+}
+
+export function resolveRuntimeArtifactReadRejection(
+  candidate: string,
+  scope: ToolTargetScope,
+  options: {
+    relativeTo?: string;
+  } = {},
+): RuntimeArtifactReadRejection | null {
+  const absolute = resolve(options.relativeTo ?? scope.baseCwd, candidate);
+  for (const artifact of runtimeArtifactRoots(scope)) {
+    if (isPathInsideRoot(absolute, artifact.artifactRoot)) {
+      return { ...artifact, absolutePath: absolute };
+    }
+  }
+  return null;
+}
+
+function slashPath(value: string): string {
+  return resolve(value).replaceAll("\\", "/");
+}
+
+export function resolveRuntimeArtifactCommandRejection(
+  command: string,
+  scope: ToolTargetScope,
+  options: {
+    relativeTo?: string;
+  } = {},
+): RuntimeArtifactReadRejection | null {
+  const normalized = command.replaceAll("\\", "/");
+  if (/(^|[\s"'`=;|&])(?:\.\/)?\.brewva(?:\/+\.?)*\/+tape(?:\/|$|[\s"'`;|&])/u.test(normalized)) {
+    return resolveRuntimeArtifactReadRejection(".brewva/tape", scope, options);
+  }
+  for (const artifact of runtimeArtifactRoots(scope)) {
+    if (normalized.includes(slashPath(artifact.artifactRoot))) {
+      return artifact;
+    }
+  }
+  return null;
+}
+
 export function resolveScopedPath(
   candidate: string,
   scope: ToolTargetScope,
@@ -346,6 +413,9 @@ export function resolveReadableScopedPath(
   } = {},
 ): string | null {
   const absolute = resolve(options.relativeTo ?? scope.baseCwd, candidate);
+  if (resolveRuntimeArtifactReadRejection(absolute, scope)) {
+    return null;
+  }
   return isPathInsideRoots(absolute, scope.readableRoots) ? absolute : null;
 }
 
@@ -371,4 +441,19 @@ export function describeTargetScopeRejection(input: TargetScopeRejection): strin
   const offendingLine =
     input.offending === undefined ? "" : `\nRejected ${input.subject}: ${input.offending}`;
   return `${header}${offendingLine}\n${TARGET_SCOPE_REJECTION_GUIDANCE}`;
+}
+
+export function describeRuntimeArtifactReadRejection(input: {
+  tool: string;
+  subject: TargetScopeRejection["subject"];
+  offending?: string;
+}): string {
+  const offendingLine =
+    input.offending === undefined ? "" : `\nRejected ${input.subject}: ${input.offending}`;
+  return (
+    `${input.tool} rejected: ${input.subject} targets runtime artifact storage.` +
+    `${offendingLine}\n` +
+    "Runtime artifacts such as .brewva/tape are replay authority, not workspace source. " +
+    "Use runtime inspection surfaces or narrower workspace paths instead."
+  );
 }

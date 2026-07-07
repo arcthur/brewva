@@ -1,9 +1,9 @@
-import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
-
-export const CLEARED_TOOL_RESULT_PLACEHOLDER = "[cleared_for_request]";
+export const CLEARED_TOOL_RESULT_PLACEHOLDER =
+  "[cleared_for_request: oversized tool output omitted; do not repeat the same broad read/search, use narrower workspace paths]";
 export const RECENT_TOOL_RESULT_RETAIN_COUNT = 4;
 export const MIN_CLEARABLE_TOOL_RESULT_CHARS = 512;
 export const DEFAULT_TAIL_PROTECT_TOKENS = 40_000;
+export const MIN_OVERSIZED_TOOL_RESULT_TOKENS = 8_000;
 export const DEFAULT_PROTECTED_TOOLS: readonly string[] = [
   "workbench_note",
   "workbench_evict",
@@ -325,9 +325,21 @@ function collectReductionCandidates(payload: Record<string, unknown>): Reduction
   return candidates;
 }
 
+function estimateCharsAsTokens(charLength: number): number {
+  return Math.max(0, Math.trunc(charLength / 4));
+}
+
+function estimateCandidateTokens(candidate: ReductionCandidate): number {
+  return estimateCharsAsTokens(candidate.charLength);
+}
+
+function estimateClearedTokenSavings(clearedChars: number, placeholderChars: number): number {
+  return Math.max(0, estimateCharsAsTokens(clearedChars) - estimateCharsAsTokens(placeholderChars));
+}
+
 export function applyTransientOutboundReductionToPayload(
   payload: unknown,
-  metadata?: {
+  _metadata?: {
     provider?: string;
     api?: string;
     modelId?: string;
@@ -353,42 +365,58 @@ export function applyTransientOutboundReductionToPayload(
   const cloned = structuredClone(record);
   const candidates = collectReductionCandidates(cloned);
   const protectedTools = new Set(options?.protectedTools ?? DEFAULT_PROTECTED_TOOLS);
-  const nonProtectedCandidates = candidates.filter(
+  const ageClearableCandidates = candidates.filter(
     (c) => !c.toolName || !protectedTools.has(c.toolName),
   );
+  const tailProtectTokens = options?.tailProtectTokens ?? DEFAULT_TAIL_PROTECT_TOKENS;
+  const oversizedTokenLimit = Math.max(
+    MIN_OVERSIZED_TOOL_RESULT_TOKENS,
+    Math.trunc(tailProtectTokens),
+  );
+  const oversizedCandidates = candidates.filter(
+    (candidate) => estimateCandidateTokens(candidate) > oversizedTokenLimit,
+  );
+  const eligibleCandidates = new Set([...ageClearableCandidates, ...oversizedCandidates]);
 
-  if (nonProtectedCandidates.length <= RECENT_TOOL_RESULT_RETAIN_COUNT) {
+  if (
+    ageClearableCandidates.length <= RECENT_TOOL_RESULT_RETAIN_COUNT &&
+    oversizedCandidates.length === 0
+  ) {
     return {
       payload,
       status: "skipped",
       detail: "provider payload does not contain enough older compactable tool results",
-      eligibleToolResults: nonProtectedCandidates.length,
+      eligibleToolResults: eligibleCandidates.size,
       clearedToolResults: 0,
       clearedChars: 0,
       estimatedTokenSavings: 0,
     };
   }
 
-  const tailProtectTokens = options?.tailProtectTokens ?? DEFAULT_TAIL_PROTECT_TOKENS;
-  const alwaysRetainedStart = nonProtectedCandidates.length - RECENT_TOOL_RESULT_RETAIN_COUNT;
-  let tailAccum = 0;
-  let firstClearableIndex = alwaysRetainedStart;
-  for (let i = alwaysRetainedStart - 1; i >= 0; i -= 1) {
-    tailAccum += Math.max(0, Math.trunc(nonProtectedCandidates[i]!.charLength / 4));
-    if (tailAccum > tailProtectTokens) {
-      firstClearableIndex = i + 1;
-      break;
+  let olderClearableCandidates: ReductionCandidate[] = [];
+  if (ageClearableCandidates.length > RECENT_TOOL_RESULT_RETAIN_COUNT) {
+    const alwaysRetainedStart = ageClearableCandidates.length - RECENT_TOOL_RESULT_RETAIN_COUNT;
+    let tailAccum = 0;
+    let firstClearableIndex = alwaysRetainedStart;
+    for (let i = alwaysRetainedStart - 1; i >= 0; i -= 1) {
+      tailAccum += estimateCandidateTokens(ageClearableCandidates[i]!);
+      if (tailAccum > tailProtectTokens) {
+        firstClearableIndex = i + 1;
+        break;
+      }
+      firstClearableIndex = i;
     }
-    firstClearableIndex = i;
+    olderClearableCandidates = ageClearableCandidates.slice(0, firstClearableIndex);
   }
 
-  const clearedCandidates = nonProtectedCandidates.slice(0, firstClearableIndex);
+  const clearable = new Set([...olderClearableCandidates, ...oversizedCandidates]);
+  const clearedCandidates = candidates.filter((candidate) => clearable.has(candidate));
   if (clearedCandidates.length === 0) {
     return {
       payload,
       status: "skipped",
       detail: "tail protect budget preserves all eligible candidates",
-      eligibleToolResults: nonProtectedCandidates.length,
+      eligibleToolResults: eligibleCandidates.size,
       clearedToolResults: 0,
       clearedChars: 0,
       estimatedTokenSavings: 0,
@@ -405,13 +433,9 @@ export function applyTransientOutboundReductionToPayload(
     payload: cloned,
     status: "completed",
     detail: null,
-    eligibleToolResults: nonProtectedCandidates.length,
+    eligibleToolResults: eligibleCandidates.size,
     clearedToolResults: clearedCandidates.length,
     clearedChars,
-    estimatedTokenSavings: Math.max(
-      0,
-      estimateStructuredTokenCount("x".repeat(clearedChars), metadata) -
-        estimateStructuredTokenCount("x".repeat(placeholderChars), metadata),
-    ),
+    estimatedTokenSavings: estimateClearedTokenSavings(clearedChars, placeholderChars),
   };
 }

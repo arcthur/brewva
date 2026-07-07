@@ -302,6 +302,8 @@ const LOW_SIGNAL_PROVIDER_PAYLOAD_STRING_KEYS = new Set([
   "role",
 ]);
 
+const PROVIDER_PAYLOAD_EXACT_STRING_TOKEN_CHAR_LIMIT = 16_000;
+
 interface PayloadStringContext {
   parent?: Record<string, unknown>;
   key?: string;
@@ -376,9 +378,13 @@ function estimateProviderPayloadTextTokensInner(
   hints: TokenEstimatorHints,
 ): number {
   if (typeof value === "string") {
-    return shouldCountProviderPayloadString(value, context)
-      ? estimateStructuredTokenCount(value, hints)
-      : 0;
+    if (!shouldCountProviderPayloadString(value, context)) {
+      return 0;
+    }
+    if (value.length > PROVIDER_PAYLOAD_EXACT_STRING_TOKEN_CHAR_LIMIT) {
+      return value.length;
+    }
+    return estimateStructuredTokenCount(value, hints);
   }
   if (Array.isArray(value)) {
     return value.reduce(

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildBrewvaTools } from "@brewva/brewva-tools";
@@ -66,6 +66,87 @@ describe("grep managed tool", () => {
     expect(text).not.toContain("notes.ts");
   });
 
+  test("rejects explicit runtime tape search paths before spawning grep", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-runtime-tape-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".brewva", "tape", "session.jsonl"),
+      `${JSON.stringify({
+        id: "evt-tape",
+        sessionId: "tc-grep-runtime-tape",
+        type: "turn.started",
+        timestamp: 1,
+        payload: {
+          prompt: "needle",
+          content: [{ type: "text", text: "needle" }],
+        },
+      })}\n`,
+      "utf8",
+    );
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = createGrepTool({ runtime });
+
+    const result = await tool.execute(
+      "tc-grep-runtime-tape",
+      {
+        query: "needle",
+        paths: [".brewva/tape"],
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-grep-runtime-tape"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("runtime artifact");
+    expect(toolOutcomePayload(result)).toMatchObject({
+      reason: "runtime_artifact_read_denied",
+      path: ".brewva/tape",
+    });
+  });
+
+  test("rejects explicit runtime tape glob filters before spawning grep", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-grep-runtime-tape-glob-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".brewva", "tape", "session.jsonl"),
+      `${JSON.stringify({
+        id: "evt-tape-glob",
+        sessionId: "tc-grep-runtime-tape-glob",
+        type: "turn.started",
+        timestamp: 1,
+        payload: {
+          prompt: "needle",
+          content: [{ type: "text", text: "needle" }],
+        },
+      })}\n`,
+      "utf8",
+    );
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = createGrepTool({ runtime });
+
+    const result = await tool.execute(
+      "tc-grep-runtime-tape-glob",
+      {
+        query: "needle",
+        paths: ["."],
+        glob: ".brewva/tape/**",
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-grep-runtime-tape-glob"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("runtime artifact");
+    expect(toolOutcomePayload(result)).toMatchObject({
+      reason: "runtime_artifact_read_denied",
+      glob: ".brewva/tape/**",
+    });
+  });
+
   test("bundles a bounded glob tool for file discovery", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-glob-"));
     writeFileSync(join(workspace, "approval-and-rollback.md"), "# plan\n", "utf8");
@@ -91,6 +172,65 @@ describe("grep managed tool", () => {
     const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
     expect(text).toContain("approval-and-rollback.md");
     expect(text).not.toContain("other.md");
+  });
+
+  test("glob rejects explicit runtime tape patterns before spawning search", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-glob-runtime-tape-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = requireDefined(
+      buildBrewvaTools({ runtime }).find((candidate) => candidate.name === "glob"),
+      "expected glob tool",
+    );
+
+    const result = await tool.execute(
+      "tc-glob-runtime-tape",
+      {
+        pattern: ".brewva/tape/**",
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-glob-runtime-tape"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    expect(
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("runtime artifact");
+    expect(toolOutcomePayload(result)).toMatchObject({
+      reason: "runtime_artifact_read_denied",
+      pattern: ".brewva/tape/**",
+    });
+  });
+
+  test("glob rejects explicit runtime tape paths before spawning search", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-glob-runtime-tape-path-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = requireDefined(
+      buildBrewvaTools({ runtime }).find((candidate) => candidate.name === "glob"),
+      "expected glob tool",
+    );
+
+    const result = await tool.execute(
+      "tc-glob-runtime-tape-path",
+      {
+        pattern: "**/*",
+        paths: [".brewva/tape"],
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-glob-runtime-tape-path"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    expect(
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("runtime artifact");
+    expect(toolOutcomePayload(result)).toMatchObject({
+      reason: "runtime_artifact_read_denied",
+      path: ".brewva/tape",
+    });
   });
 
   test("glob workdir rejection includes the rejected path and recovery guidance", async () => {

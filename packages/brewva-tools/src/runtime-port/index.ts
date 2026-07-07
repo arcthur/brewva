@@ -54,12 +54,17 @@ export {
   type ReadTextBatchOptions,
 } from "./parallel-read.js";
 export {
+  describeRuntimeArtifactReadRejection,
   describeTargetScopeRejection,
   isPathInsideRoots,
   resolveReadableScopedPath,
+  resolveRuntimeArtifactCommandRejection,
+  resolveRuntimeArtifactReadRejection,
   resolveScopedPath,
   resolveToolTargetScope,
   TARGET_SCOPE_REJECTION_GUIDANCE,
+  type RuntimeArtifactReadRejection,
+  type RuntimeArtifactReadRejectionReason,
   type TargetScopeRejection,
   type ToolTargetScope,
 } from "./target-scope.js";

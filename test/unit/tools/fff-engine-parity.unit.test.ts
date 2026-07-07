@@ -121,4 +121,18 @@ describe("fff/ripgrep grep parity", () => {
     const [rg, ff] = await Promise.all([ripgrep.grep(req), fff.grep(req)]);
     expect(normalize(ff.lines)).toEqual(normalize(rg.lines));
   });
+
+  test("runtime tape matches do not leak or hide source matches", async () => {
+    const ws = makeWorkspace();
+    mkdirSync(join(ws, ".brewva", "tape"), { recursive: true });
+    writeFileSync(join(ws, ".brewva", "tape", "session.jsonl"), "createWidget\n", "utf8");
+    const ripgrep = new RipgrepEngine();
+    const fff = new FffEngine(new RipgrepEngine());
+    const req = baseRequest(ws, { query: "createWidget", fixed: true });
+    const [rg, ff] = await Promise.all([ripgrep.grep(req), fff.grep(req)]);
+
+    expect(normalize(ff.lines)).toEqual(normalize(rg.lines));
+    expect(ff.lines.some((line) => line.includes(".brewva/tape"))).toBe(false);
+    expect(ff.lines.some((line) => line.includes("alpha.ts"))).toBe(true);
+  });
 });

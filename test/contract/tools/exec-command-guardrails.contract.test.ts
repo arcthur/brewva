@@ -1,4 +1,7 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createExecTool } from "@brewva/brewva-tools/execution";
 import { requireDefined, requireNonEmptyString, requireRecord } from "../../helpers/assertions.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
@@ -88,6 +91,86 @@ describe("exec command guardrails", () => {
       "Expected executionPreflight payload.",
     );
     expect(executionPreflight).toMatchObject({ decision: "block" });
+  });
+
+  test("exec rejects explicit runtime tape reads before shell execution", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-exec-runtime-tape-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    writeFileSync(join(workspace, ".brewva", "tape", "session.jsonl"), "needle\n", "utf8");
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "host",
+      cwd: workspace,
+    });
+    const execTool = createExecTool({ runtime });
+    const sessionId = "s13-exec-runtime-tape";
+
+    const result = await execTool.execute(
+      "tc-exec-runtime-tape",
+      {
+        command: "grep needle .brewva/tape/session.jsonl",
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    expect(extractTextContent(result)).toContain("runtime artifact");
+    expect(toolOutcomePayload(result)).toMatchObject({
+      status: "failed",
+      reason: "runtime_artifact_read_denied",
+    });
+    requireDefined(
+      events.find((event) => event.type === "exec.failed"),
+      "Expected exec.failed event.",
+    );
+  });
+
+  test("exec rejects runtime tape workdirs before shell execution", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-exec-runtime-tape-workdir-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".brewva", "tape", "session.jsonl"),
+      `${JSON.stringify({
+        id: "evt-exec-tape-workdir",
+        sessionId: "s13-exec-runtime-tape-workdir",
+        type: "turn.started",
+        timestamp: 1,
+        payload: {
+          prompt: "needle",
+          content: [{ type: "text", text: "needle" }],
+        },
+      })}\n`,
+      "utf8",
+    );
+    const { runtime, events } = createRuntimeForExecTests({
+      mode: "standard",
+      backend: "host",
+      cwd: workspace,
+    });
+    const execTool = createExecTool({ runtime });
+    const sessionId = "s13-exec-runtime-tape-workdir";
+
+    const result = await execTool.execute(
+      "tc-exec-runtime-tape-workdir",
+      {
+        command: "ls",
+        workdir: ".brewva/tape",
+      },
+      undefined,
+      undefined,
+      fakeContext(sessionId),
+    );
+
+    expect(extractTextContent(result)).toContain("runtime artifact");
+    expect(toolOutcomePayload(result)).toMatchObject({
+      status: "failed",
+      reason: "runtime_artifact_read_denied",
+    });
+    requireDefined(
+      events.find((event) => event.type === "exec.failed"),
+      "Expected exec.failed event.",
+    );
   });
 
   test("command deny list blocks shell wrapper inline scripts", async () => {

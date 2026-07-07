@@ -122,6 +122,16 @@ function buildEstimatedPayloadUsage(
   };
 }
 
+interface EffectiveReductionUsage {
+  readonly usage: ContextBudgetUsage;
+  readonly source: "runtime" | "provider_payload";
+}
+
+interface TransientOutboundReductionResolution {
+  readonly decision: ContextTransientReductionDecision;
+  readonly usage?: ContextBudgetUsage;
+}
+
 function hasUsableRuntimeUsage(runtimeUsage: ContextBudgetUsage | undefined): boolean {
   return (
     resolveUsageContextWindow(runtimeUsage) !== null &&
@@ -137,11 +147,28 @@ function buildEffectiveReductionUsage(
     api?: string;
     modelId?: string;
   },
-): ContextBudgetUsage | undefined {
-  if (hasUsableRuntimeUsage(runtimeUsage)) {
-    return runtimeUsage;
+): EffectiveReductionUsage | undefined {
+  const estimatedUsage = buildEstimatedPayloadUsage(payload, runtimeUsage, metadata);
+  if (!hasUsableRuntimeUsage(runtimeUsage)) {
+    return estimatedUsage ? { usage: estimatedUsage, source: "provider_payload" } : undefined;
   }
-  return buildEstimatedPayloadUsage(payload, runtimeUsage, metadata);
+  if (!estimatedUsage) {
+    return { usage: runtimeUsage!, source: "runtime" };
+  }
+
+  const runtimeTokens = resolveUsageTokens(runtimeUsage);
+  const estimatedTokens = resolveUsageTokens(estimatedUsage);
+  if (estimatedTokens !== null && (runtimeTokens === null || estimatedTokens > runtimeTokens)) {
+    return { usage: estimatedUsage, source: "provider_payload" };
+  }
+
+  const runtimeRatio = resolveUsageRatio(runtimeUsage);
+  const estimatedRatio = resolveUsageRatio(estimatedUsage);
+  if (estimatedRatio !== null && (runtimeRatio === null || estimatedRatio > runtimeRatio)) {
+    return { usage: estimatedUsage, source: "provider_payload" };
+  }
+
+  return { usage: runtimeUsage!, source: "runtime" };
 }
 
 function getProviderCacheStalenessMs(runtime: HostedRuntimeAdapterPort): number {
@@ -184,7 +211,7 @@ function resolveReductionPostureBlockReason(
   return null;
 }
 
-export function resolveTransientOutboundReductionEligibility(
+function resolveTransientOutboundReduction(
   runtime: HostedRuntimeAdapterPort,
   sessionId: string,
   payload?: unknown,
@@ -193,21 +220,23 @@ export function resolveTransientOutboundReductionEligibility(
     api?: string;
     modelId?: string;
   },
-): ContextTransientReductionDecision {
+): TransientOutboundReductionResolution {
   const contextBudgetEnabled = runtime.config.infrastructure.contextBudget.enabled;
   const postureBlockReason = contextBudgetEnabled
     ? resolveReductionPostureBlockReason(runtime, sessionId)
     : null;
 
-  const usage =
-    contextBudgetEnabled && !postureBlockReason
-      ? buildEffectiveReductionUsage(payload, getRuntimeContextUsage(runtime, sessionId), metadata)
-      : undefined;
+  const effectiveUsage = contextBudgetEnabled
+    ? buildEffectiveReductionUsage(payload, getRuntimeContextUsage(runtime, sessionId), metadata)
+    : undefined;
+  const usage = effectiveUsage?.usage;
 
   const gateStatus = usage ? getRuntimeCompactionGateStatus(runtime, sessionId, usage) : null;
   const pendingReason = usage ? getRuntimePendingCompactionReason(runtime, sessionId) : null;
   const eligibility = gateStatus
     ? resolveRuntimeContextCompactionEligibility(runtime, {
+        sessionId,
+        usage,
         status: gateStatus.status,
         pendingReason,
         recentCompaction: gateStatus.recentCompaction,
@@ -222,6 +251,7 @@ export function resolveTransientOutboundReductionEligibility(
   const transientReduction = {
     contextBudgetEnabled,
     usageAvailable: usage !== undefined,
+    usageSource: effectiveUsage?.source,
     postureBlockReason,
     gateStatus,
     pendingCompactionReason: pendingReason,
@@ -232,7 +262,23 @@ export function resolveTransientOutboundReductionEligibility(
     cacheCold: usage ? isProviderCacheLikelyCold(runtime, sessionId) : false,
   };
 
-  return decideTransientReductionEligibility(transientReduction);
+  return {
+    decision: decideTransientReductionEligibility(transientReduction),
+    usage,
+  };
+}
+
+export function resolveTransientOutboundReductionEligibility(
+  runtime: HostedRuntimeAdapterPort,
+  sessionId: string,
+  payload?: unknown,
+  metadata?: {
+    provider?: string;
+    api?: string;
+    modelId?: string;
+  },
+): ContextTransientReductionDecision {
+  return resolveTransientOutboundReduction(runtime, sessionId, payload, metadata).decision;
 }
 
 function observeAndRecordTransientReduction(
@@ -303,16 +349,12 @@ export function registerProviderRequestReduction(
       return undefined;
     }
 
-    const eligibility = resolveTransientOutboundReductionEligibility(
-      runtime,
-      sessionId,
-      event.payload,
-      {
-        provider: event.provider,
-        api: event.api,
-        modelId: event.modelId,
-      },
-    );
+    const reduction = resolveTransientOutboundReduction(runtime, sessionId, event.payload, {
+      provider: event.provider,
+      api: event.api,
+      modelId: event.modelId,
+    });
+    const eligibility = reduction.decision;
     if (!eligibility.allowed) {
       observeAndRecordTransientReduction(runtime, sessionId, {
         status: "skipped",
@@ -331,7 +373,7 @@ export function registerProviderRequestReduction(
     const resolvedTailProtectTokens = resolveWindowScaledTokens(
       compactionConfig.tailProtectTokens,
       compactionConfig.tailProtectRatio,
-      getRuntimeContextUsage(runtime, sessionId)?.contextWindow,
+      reduction.usage?.contextWindow,
     );
     const result = applyTransientOutboundReductionToPayload(
       event.payload,

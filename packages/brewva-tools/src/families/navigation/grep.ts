@@ -13,9 +13,11 @@ import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
+  describeRuntimeArtifactReadRejection,
   describeTargetScopeRejection,
   isPathInsideRoots,
   resolveReadableScopedPath,
+  resolveRuntimeArtifactReadRejection,
   resolveToolTargetScope,
 } from "../../runtime-port/target-scope.js";
 import { errTextResult, okTextResult, textResultForOutcome } from "../../utils/result.js";
@@ -28,7 +30,7 @@ import {
   resolveSuggestionMode,
 } from "./grep/advisor.js";
 import { frecencyForGrepResult, getSearchEngine } from "./grep/engine/index.js";
-import { runRipgrep } from "./grep/ripgrep.js";
+import { isRuntimeArtifactGrepPattern, runRipgrep } from "./grep/ripgrep.js";
 import type { GrepAdvisorDetails, GrepCase, GrepRunResult, GrepToolOptions } from "./grep/types.js";
 import {
   buildReadPathDiscoveryObservationPayload,
@@ -142,6 +144,23 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
           },
         );
       }
+      const workdirRuntimeArtifact = resolveRuntimeArtifactReadRejection(cwd, scope);
+      if (workdirRuntimeArtifact) {
+        return errTextResult(
+          describeRuntimeArtifactReadRejection({
+            tool: "grep",
+            subject: "workdir",
+            offending: params.workdir ?? cwd,
+          }),
+          {
+            ok: false,
+            reason: workdirRuntimeArtifact.reason,
+            workdir: cwd,
+            artifact: workdirRuntimeArtifact.artifact,
+            artifactRoot: workdirRuntimeArtifact.artifactRoot,
+          },
+        );
+      }
       const maxLines = clampInt(params.max_lines, 200, { min: 1, max: 500 });
       const timeoutMs = clampInt(params.timeout_ms, 30_000, { min: 100, max: 120_000 });
 
@@ -149,6 +168,25 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
       const requestedPaths = normalizeStringList(params.paths, ["."]);
       const paths: string[] = [];
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
+        const runtimeArtifact = resolveRuntimeArtifactReadRejection(entry, scope, {
+          relativeTo: cwd,
+        });
+        if (runtimeArtifact) {
+          return errTextResult(
+            describeRuntimeArtifactReadRejection({
+              tool: "grep",
+              subject: "path",
+              offending: entry,
+            }),
+            {
+              ok: false,
+              reason: runtimeArtifact.reason,
+              path: entry,
+              artifact: runtimeArtifact.artifact,
+              artifactRoot: runtimeArtifact.artifactRoot,
+            },
+          );
+        }
         const absolutePath = resolveReadableScopedPath(entry, scope, { relativeTo: cwd });
         if (!absolutePath) {
           return errTextResult(
@@ -172,6 +210,22 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
         );
       }
       const globs = normalizeStringList(params.glob, []);
+      const runtimeArtifactGlob = globs.find((glob) => isRuntimeArtifactGrepPattern(glob));
+      if (runtimeArtifactGlob) {
+        return errTextResult(
+          describeRuntimeArtifactReadRejection({
+            tool: "grep",
+            subject: "path",
+            offending: runtimeArtifactGlob,
+          }),
+          {
+            ok: false,
+            reason: "runtime_artifact_read_denied",
+            glob: runtimeArtifactGlob,
+            artifact: "tape",
+          },
+        );
+      }
       const caseMode = normalizeGrepCase(params.case);
       const sessionId = getToolSessionId(ctx);
       registerSearchIntent({
@@ -515,13 +569,64 @@ export function createGlobTool(options: GrepToolOptions): ToolDefinition {
           },
         );
       }
+      const workdirRuntimeArtifact = resolveRuntimeArtifactReadRejection(cwd, scope);
+      if (workdirRuntimeArtifact) {
+        return errTextResult(
+          describeRuntimeArtifactReadRejection({
+            tool: "glob",
+            subject: "workdir",
+            offending: params.workdir ?? cwd,
+          }),
+          {
+            ok: false,
+            reason: workdirRuntimeArtifact.reason,
+            workdir: cwd,
+            artifact: workdirRuntimeArtifact.artifact,
+            artifactRoot: workdirRuntimeArtifact.artifactRoot,
+          },
+        );
+      }
 
       const pattern = params.pattern.trim();
+      if (isRuntimeArtifactGrepPattern(pattern)) {
+        return errTextResult(
+          describeRuntimeArtifactReadRejection({
+            tool: "glob",
+            subject: "path",
+            offending: pattern,
+          }),
+          {
+            ok: false,
+            reason: "runtime_artifact_read_denied",
+            pattern,
+            artifact: "tape",
+          },
+        );
+      }
       const maxResults = clampInt(params.max_results, 200, { min: 1, max: 500 });
       const timeoutMs = clampInt(params.timeout_ms, 30_000, { min: 100, max: 120_000 });
       const requestedPaths = normalizeStringList(params.paths, ["."]);
       const paths: string[] = [];
       for (const entry of requestedPaths.length > 0 ? requestedPaths : ["."]) {
+        const runtimeArtifact = resolveRuntimeArtifactReadRejection(entry, scope, {
+          relativeTo: cwd,
+        });
+        if (runtimeArtifact) {
+          return errTextResult(
+            describeRuntimeArtifactReadRejection({
+              tool: "glob",
+              subject: "path",
+              offending: entry,
+            }),
+            {
+              ok: false,
+              reason: runtimeArtifact.reason,
+              path: entry,
+              artifact: runtimeArtifact.artifact,
+              artifactRoot: runtimeArtifact.artifactRoot,
+            },
+          );
+        }
         const absolutePath = resolveReadableScopedPath(entry, scope, { relativeTo: cwd });
         if (!absolutePath) {
           return errTextResult(

@@ -1,3 +1,4 @@
+import { createGrepOutputLimiter, isRuntimeArtifactGrepRelativePath } from "../ripgrep.js";
 import type { GrepRunResult } from "../types.js";
 import { acquireFinder } from "./fff-finder-cache.js";
 import type { FffGrepMode, FffGrepResult } from "./fff-types.js";
@@ -46,18 +47,25 @@ export function frecencyForGrepResult(
 }
 
 function toGrepRunResult(result: FffGrepResult, maxLines: number): GrepRunResult {
-  const lines: string[] = [];
+  const limiter = createGrepOutputLimiter({ maxLines });
   const frecency = new Map<string, number>();
+  let stoppedEarly = false;
   for (const match of result.items) {
-    if (lines.length >= maxLines) {
+    if (isRuntimeArtifactGrepRelativePath(match.relativePath)) {
+      continue;
+    }
+    if (
+      limiter.append(`${match.relativePath}:${match.lineNumber}:${match.lineContent}`) === "full"
+    ) {
+      stoppedEarly = true;
       break;
     }
-    lines.push(`${match.relativePath}:${match.lineNumber}:${match.lineContent}`);
     if (!frecency.has(match.relativePath)) {
       frecency.set(match.relativePath, match.totalFrecencyScore);
     }
   }
-  const truncated = result.nextCursor !== null || result.items.length > lines.length;
+  const lines = [...limiter.lines];
+  const truncated = limiter.truncated || result.nextCursor !== null || stoppedEarly;
   const runResult: GrepRunResult = {
     exitCode: lines.length > 0 ? 0 : 1,
     lines,
@@ -112,6 +120,11 @@ export class FffEngine implements SearchEngine {
       // fff silently degrades an uncompilable regex to literal matching; defer
       // to ripgrep as the authoritative regex engine in that case.
       if (result.value.regexFallbackError) {
+        return this.#fallback.grep(request);
+      }
+      if (
+        result.value.items.some((match) => isRuntimeArtifactGrepRelativePath(match.relativePath))
+      ) {
         return this.#fallback.grep(request);
       }
       return toGrepRunResult(result.value, request.maxLines);

@@ -1,5 +1,9 @@
 import type { spawn } from "node:child_process";
-import { buildRipgrepArgs, runRipgrep } from "../ripgrep.js";
+import {
+  buildRipgrepArgs,
+  DEFAULT_RUNTIME_ARTIFACT_EXCLUDE_GLOBS,
+  runRipgrep,
+} from "../ripgrep.js";
 import type { GrepRunResult } from "../types.js";
 import type { GlobEngineRequest, GrepEngineRequest, SearchEngine } from "./port.js";
 
@@ -41,7 +45,14 @@ export class RipgrepEngine implements SearchEngine {
     return runRipgrep(
       {
         cwd: request.cwd,
-        args: ["--files", "--hidden", "--glob", request.pattern, ...request.paths],
+        args: [
+          "--files",
+          "--hidden",
+          "--glob",
+          request.pattern,
+          ...DEFAULT_RUNTIME_ARTIFACT_EXCLUDE_GLOBS.flatMap((glob) => ["--glob", glob]),
+          ...request.paths,
+        ],
         maxLines: request.maxResults,
         timeoutMs: request.timeoutMs,
         signal: request.signal,

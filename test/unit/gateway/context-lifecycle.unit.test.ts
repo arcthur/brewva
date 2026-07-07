@@ -189,11 +189,77 @@ describe("context lifecycle decisions", () => {
         postureBlockReason: null,
         gateStatus: gate({ compactionAdvised: true }),
         pendingCompactionReason: null,
-        compactionEligibilityDecision: "advisory_only",
+        compactionEligibilityDecision: "execute",
         compactionEligibilityReason: "usage_threshold",
         cacheCold: false,
       }),
     ).toMatchObject({ allowed: true, detail: null, compactionAdvised: true });
+  });
+
+  test("allows transient reduction when the current provider payload predicts overflow", () => {
+    expect(
+      decideTransientReductionEligibility({
+        contextBudgetEnabled: true,
+        usageAvailable: true,
+        usageSource: "provider_payload",
+        postureBlockReason: null,
+        gateStatus: gate({ compactionAdvised: true, predictedOverflow: true }),
+        pendingCompactionReason: null,
+        compactionEligibilityDecision: "execute",
+        compactionEligibilityReason: "predicted_overflow",
+        cacheCold: false,
+      }),
+    ).toEqual({
+      allowed: true,
+      detail: null,
+      compactionAdvised: true,
+      forcedCompaction: false,
+      cacheCold: false,
+    });
+  });
+
+  test("allows transient reduction at hard limits when the current provider payload is the pressure source", () => {
+    expect(
+      decideTransientReductionEligibility({
+        contextBudgetEnabled: true,
+        usageAvailable: true,
+        usageSource: "provider_payload",
+        postureBlockReason: null,
+        gateStatus: gate({ forcedCompaction: true }),
+        pendingCompactionReason: null,
+        compactionEligibilityDecision: "execute",
+        compactionEligibilityReason: "hard_limit",
+        cacheCold: false,
+      }),
+    ).toEqual({
+      allowed: true,
+      detail: null,
+      compactionAdvised: false,
+      forcedCompaction: true,
+      cacheCold: false,
+    });
+  });
+
+  test("allows provider-payload reduction even when recovery posture is active", () => {
+    expect(
+      decideTransientReductionEligibility({
+        contextBudgetEnabled: true,
+        usageAvailable: true,
+        usageSource: "provider_payload",
+        postureBlockReason: "recovery posture is active",
+        gateStatus: gate({ forcedCompaction: true }),
+        pendingCompactionReason: "hard_limit",
+        compactionEligibilityDecision: "execute",
+        compactionEligibilityReason: "hard_limit",
+        cacheCold: false,
+      }),
+    ).toEqual({
+      allowed: true,
+      detail: null,
+      compactionAdvised: false,
+      forcedCompaction: true,
+      cacheCold: false,
+    });
   });
 
   test("returns transient reduction eligibility from the central lifecycle decision", () => {
@@ -210,7 +276,7 @@ describe("context lifecycle decisions", () => {
         postureBlockReason: null,
         gateStatus,
         pendingCompactionReason: null,
-        compactionEligibilityDecision: "advisory_only",
+        compactionEligibilityDecision: "execute",
         compactionEligibilityReason: "usage_threshold",
         cacheCold: false,
       },

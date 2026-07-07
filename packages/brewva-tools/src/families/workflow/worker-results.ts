@@ -27,7 +27,11 @@ import {
 } from "../../internal/source-patch-gate.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
-import { resolveScopedPath, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
+import {
+  resolveRuntimeArtifactReadRejection,
+  resolveScopedPath,
+  resolveToolTargetScope,
+} from "../../runtime-port/target-scope.js";
 import { mergeWorkerResults } from "../../runtime-port/worker-results.js";
 import { errTextResult, inconclusiveTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
@@ -179,6 +183,10 @@ function readArtifactContent(
   if (!artifactPath || !existsSync(artifactPath)) {
     return { ok: false, reason: "artifact_not_found" };
   }
+  const runtimeArtifact = resolveRuntimeArtifactReadRejection(artifactPath, scope);
+  if (runtimeArtifact) {
+    return { ok: false, reason: runtimeArtifact.reason };
+  }
   return { ok: true, content: readFileSync(artifactPath, "utf8") };
 }
 
@@ -192,6 +200,10 @@ function fullFileReplaceIntent(input: {
   const path = resolveScopedPath(input.change.path, input.scope);
   if (!path || !existsSync(path)) {
     return { error: "target_not_found", path: input.change.path };
+  }
+  const runtimeArtifact = resolveRuntimeArtifactReadRejection(path, input.scope);
+  if (runtimeArtifact) {
+    return { error: runtimeArtifact.reason, path: input.change.path };
   }
   const before = readFileSync(path, "utf8");
   const snapshot = recordSourceSnapshot({
@@ -230,6 +242,10 @@ function sourcePatchIntentsFromPatchSet(input: {
     if (!path) {
       return { ok: false, reason: "path_outside_target", path: change.path };
     }
+    const runtimeArtifact = resolveRuntimeArtifactReadRejection(path, input.scope);
+    if (runtimeArtifact) {
+      return { ok: false, reason: runtimeArtifact.reason, path: change.path };
+    }
     const uri = toSourceFileResourceUri(input.scope, path);
     if (change.action === "add") {
       const artifact = readArtifactContent(change.artifactRef, input.scope);
@@ -266,6 +282,15 @@ function sourcePatchIntentsFromPatchSet(input: {
       const newPath = resolveScopedPath(change.newPath, input.scope);
       if (!oldPath || !newPath) {
         return { ok: false, reason: "path_outside_target", path: change.path };
+      }
+      const oldRuntimeArtifact = resolveRuntimeArtifactReadRejection(oldPath, input.scope);
+      const newRuntimeArtifact = resolveRuntimeArtifactReadRejection(newPath, input.scope);
+      if (oldRuntimeArtifact || newRuntimeArtifact) {
+        return {
+          ok: false,
+          reason: (oldRuntimeArtifact ?? newRuntimeArtifact)!.reason,
+          path: change.path,
+        };
       }
       edits.push({
         kind: "rename_file",

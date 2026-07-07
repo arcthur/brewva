@@ -54,6 +54,112 @@ describe("canonical tape", () => {
     });
   });
 
+  test("caps model-visible tool result content before committing it to tape", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-canonical-tool-result-cap-")),
+      physics: { mode: "noop" },
+    });
+    const decision = await runtime.kernel.beginToolCall({
+      sessionId: "tool-result-cap-session",
+      toolCallId: "call-large",
+      toolName: "grep",
+      args: { query: "needle" },
+    });
+    if (decision.kind !== "allow") {
+      throw new Error("expected_allow");
+    }
+
+    const raw = `needle ${"x".repeat(180_000)}`;
+    await runtime.kernel.commitToolResult({
+      commitmentId: decision.commitment.id,
+      result: {
+        outcome: { kind: "ok", value: {} },
+        content: [
+          { type: "text", text: raw },
+          { type: "file", uri: "file:///tmp/evidence.txt", displayText: "evidence" },
+        ],
+      },
+    });
+
+    const committed = runtime.tape.list("tool-result-cap-session", {
+      type: "tool.committed",
+    })[0]!;
+    if (committed.type !== "tool.committed") {
+      throw new Error("expected_tool_committed");
+    }
+    const result = committed.payload?.result as {
+      content?: Array<{ type?: string; text?: string }>;
+      metadata?: Record<string, unknown>;
+    };
+    const text = result.content?.[0]?.text ?? "";
+
+    expect(result.content?.[0]?.type).toBe("text");
+    expect(result.content?.[1]).toMatchObject({
+      type: "file",
+      uri: "file:///tmp/evidence.txt",
+      displayText: "evidence",
+    });
+    expect(text.length).toBeLessThan(66_000);
+    expect(text).toContain("tool_result_truncated_for_tape");
+    expect(text).not.toContain("x".repeat(100_000));
+    expect(result.metadata?.toolResultContentTruncation).toMatchObject({
+      applied: true,
+      originalChars: raw.length,
+    });
+  });
+
+  test("replaces oversized structured content without mutating outcome payload", async () => {
+    const runtime = createBrewvaRuntime({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-json-tool-result-cap-")),
+      physics: { mode: "noop" },
+    });
+    const decision = await runtime.kernel.beginToolCall({
+      sessionId: "json-tool-result-cap-session",
+      toolCallId: "call-large-json",
+      toolName: "grep",
+      args: {},
+    });
+    if (decision.kind !== "allow") {
+      throw new Error("expected_allow");
+    }
+
+    const raw = "x".repeat(180_000);
+    await runtime.kernel.commitToolResult({
+      commitmentId: decision.commitment.id,
+      result: {
+        outcome: { kind: "ok", value: { raw } },
+        content: {
+          status: "ok",
+          output: raw,
+        },
+      },
+    });
+
+    const committed = runtime.tape.list("json-tool-result-cap-session", {
+      type: "tool.committed",
+    })[0]!;
+    const payload = committed.payload as unknown as {
+      result?: {
+        content?: unknown;
+        outcome?: { value?: { raw?: string } };
+        metadata?: Record<string, unknown>;
+      };
+    };
+    const result = payload.result as {
+      content?: unknown;
+      outcome?: { value?: { raw?: string } };
+      metadata?: Record<string, unknown>;
+    };
+
+    expect(typeof result.content).toBe("string");
+    expect(result.content).toContain("tool_result_truncated_for_tape");
+    expect(result.content).not.toContain("x".repeat(100_000));
+    expect(result.outcome?.value?.raw).toBe(raw);
+    expect(result.metadata?.toolResultContentTruncation).toMatchObject({
+      applied: true,
+    });
+  });
+
   test("rejects legacy tool committed results with top-level ok", async () => {
     const runtime = createBrewvaRuntime({
       cwd: mkdtempSync(join(tmpdir(), "brewva-legacy-tool-result-")),

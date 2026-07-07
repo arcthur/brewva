@@ -12,7 +12,13 @@ import {
 import { Type } from "@sinclair/typebox";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
 import { resolveToolRuntimeCredentialBindings } from "../../runtime-port/extensions.js";
-import { isPathInsideRoots, resolveToolTargetScope } from "../../runtime-port/target-scope.js";
+import {
+  describeRuntimeArtifactReadRejection,
+  isPathInsideRoots,
+  resolveRuntimeArtifactCommandRejection,
+  resolveRuntimeArtifactReadRejection,
+  resolveToolTargetScope,
+} from "../../runtime-port/target-scope.js";
 import { errTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
 import { resolveManagedExecProcessRegistryRuntime } from "./exec-process-registry/runtime.js";
@@ -142,6 +148,60 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
           command,
           detectedCommands: primaryTokens,
         });
+        const workdirRuntimeArtifactRejection = resolveRuntimeArtifactReadRejection(
+          hostCwd,
+          targetScope,
+        );
+        const commandRuntimeArtifactRejection = resolveRuntimeArtifactCommandRejection(
+          command,
+          targetScope,
+          { relativeTo: hostCwd },
+        );
+        const runtimeArtifactRejection =
+          workdirRuntimeArtifactRejection ?? commandRuntimeArtifactRejection;
+        if (runtimeArtifactRejection) {
+          const details = preflightDetails(executionPreflight);
+          const subject = workdirRuntimeArtifactRejection ? "workdir" : "path";
+          recordExecEvent(
+            runtime,
+            ownerSessionId,
+            EXEC_FAILED_EVENT_TYPE,
+            buildExecAuditPayload({
+              toolCallId,
+              policy,
+              command,
+              failureBasis: { kind: "policy_block", code: runtimeArtifactRejection.reason },
+              payload: {
+                detectedCommands: primaryTokens,
+                reason: runtimeArtifactRejection.reason,
+                runtimeArtifact: {
+                  artifact: runtimeArtifactRejection.artifact,
+                  artifactRoot: runtimeArtifactRejection.artifactRoot,
+                  absolutePath: runtimeArtifactRejection.absolutePath,
+                },
+                ...(details ? { executionPreflight: details } : {}),
+                ...buildCommandPolicyAuditPayload(commandPolicy),
+                ...buildVirtualReadonlyAuditPayload(virtualReadonly),
+              },
+            }),
+          );
+          return errTextResult(
+            `Exec rejected (${runtimeArtifactRejection.reason}). ${describeRuntimeArtifactReadRejection(
+              {
+                tool: "exec",
+                subject,
+                offending: runtimeArtifactRejection.absolutePath,
+              },
+            )}`,
+            {
+              status: "failed",
+              reason: runtimeArtifactRejection.reason,
+              artifact: runtimeArtifactRejection.artifact,
+              artifactRoot: runtimeArtifactRejection.artifactRoot,
+              ...(details ? { executionPreflight: details } : {}),
+            },
+          );
+        }
         if (executionPreflight.decision === "block") {
           const details = preflightDetails(executionPreflight);
           const reason =

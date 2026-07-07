@@ -164,6 +164,26 @@ describe("token estimation", () => {
     );
   });
 
+  test("uses a bounded conservative estimate for large provider payload strings", () => {
+    const largeToolOutput = "x".repeat(20_000);
+
+    const estimate = estimateProviderPayloadTextTokens(
+      {
+        input: [
+          { type: "function_call", call_id: "call-1", name: "grep" },
+          { type: "function_call_output", call_id: "call-1", output: largeToolOutput },
+        ],
+      },
+      {
+        provider: "openai-codex",
+        api: "openai-codex-responses",
+        modelId: "gpt-5.5",
+      },
+    );
+
+    expect(estimate).toBeGreaterThanOrEqual(largeToolOutput.length);
+  });
+
   test("normalizes provider cache posture without gateway policy", () => {
     expect(
       resolveCachePosture({

@@ -105,6 +105,7 @@ export interface ContextLifecycleDecisionInput {
 export interface ContextTransientReductionEligibilityInput {
   readonly contextBudgetEnabled: boolean;
   readonly usageAvailable: boolean;
+  readonly usageSource?: "runtime" | "provider_payload";
   readonly postureBlockReason: string | null;
   readonly gateStatus?: ContextCompactionGateStatus | null;
   readonly pendingCompactionReason?: string | null;
@@ -231,16 +232,6 @@ export function decideTransientReductionEligibility(
     };
   }
 
-  if (input.postureBlockReason) {
-    return {
-      allowed: false,
-      detail: input.postureBlockReason,
-      compactionAdvised: false,
-      forcedCompaction: false,
-      cacheCold: false,
-    };
-  }
-
   if (!input.usageAvailable) {
     return {
       allowed: false,
@@ -253,8 +244,12 @@ export function decideTransientReductionEligibility(
 
   const compactionAdvised = input.gateStatus?.status.compactionAdvised ?? false;
   const forcedCompaction = input.gateStatus?.status.forcedCompaction ?? false;
+  const providerPayloadPressure = input.usageSource === "provider_payload";
 
-  if (input.gateStatus?.required || input.gateStatus?.reason === "hard_limit" || forcedCompaction) {
+  if (
+    (input.gateStatus?.required || input.gateStatus?.reason === "hard_limit" || forcedCompaction) &&
+    !providerPayloadPressure
+  ) {
     return {
       allowed: false,
       detail: "hard-limit posture requires replay-visible compaction handling",
@@ -264,10 +259,30 @@ export function decideTransientReductionEligibility(
     };
   }
 
-  if (input.pendingCompactionReason === "hard_limit") {
+  if (input.pendingCompactionReason === "hard_limit" && !providerPayloadPressure) {
     return {
       allowed: false,
       detail: "hard-limit compaction is already pending",
+      compactionAdvised,
+      forcedCompaction,
+      cacheCold: input.cacheCold,
+    };
+  }
+
+  if (providerPayloadPressure && (forcedCompaction || compactionAdvised)) {
+    return {
+      allowed: true,
+      detail: null,
+      compactionAdvised,
+      forcedCompaction,
+      cacheCold: input.cacheCold,
+    };
+  }
+
+  if (input.postureBlockReason) {
+    return {
+      allowed: false,
+      detail: input.postureBlockReason,
       compactionAdvised,
       forcedCompaction,
       cacheCold: input.cacheCold,
@@ -287,7 +302,11 @@ export function decideTransientReductionEligibility(
     };
   }
 
-  if (input.compactionEligibilityDecision === "advisory_only" && compactionAdvised) {
+  if (
+    (input.compactionEligibilityDecision === "execute" ||
+      input.compactionEligibilityDecision === "advisory_only") &&
+    compactionAdvised
+  ) {
     return {
       allowed: true,
       detail: null,

@@ -117,6 +117,119 @@ describe("source_read and source_patch tools", () => {
     ).toContain("L1@");
   });
 
+  test("source_read rejects runtime tape resources before file read", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-source-read-runtime-tape-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".brewva", "tape", "session.jsonl"),
+      `${JSON.stringify({
+        id: "evt-source-read-tape",
+        sessionId: "tc-source-read-runtime-tape",
+        type: "turn.started",
+        timestamp: 1,
+        payload: {
+          prompt: "needle",
+          content: [{ type: "text", text: "needle" }],
+        },
+      })}\n`,
+      "utf8",
+    );
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = createSourceReadTool({ runtime });
+
+    const result = await tool.execute(
+      "tc-source-read-runtime-tape",
+      {
+        uri: ".brewva/tape/session.jsonl",
+        mode: "raw",
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-source-read-runtime-tape"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    expect(
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("runtime artifact");
+    expect(toolOutcomePayload(result)).toMatchObject({
+      reason: "runtime_artifact_read_denied",
+      artifact: "tape",
+    });
+  });
+
+  test("resource_read rejects runtime tape resources before router read", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-read-runtime-tape-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    writeFileSync(
+      join(workspace, ".brewva", "tape", "session.jsonl"),
+      `${JSON.stringify({
+        id: "evt-resource-read-tape",
+        sessionId: "tc-resource-read-runtime-tape",
+        type: "turn.started",
+        timestamp: 1,
+        payload: {
+          prompt: "needle",
+          content: [{ type: "text", text: "needle" }],
+        },
+      })}\n`,
+      "utf8",
+    );
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = createResourceReadTool({ runtime });
+
+    const result = await tool.execute(
+      "tc-resource-read-runtime-tape",
+      {
+        uri: ".brewva/tape/session.jsonl",
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-resource-read-runtime-tape"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    expect(
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("runtime artifact");
+    expect(toolOutcomePayload(result)).toMatchObject({
+      reason: "runtime_artifact_read_denied",
+      artifact: "tape",
+    });
+  });
+
+  test("source_patch_prepare rejects runtime tape mutation targets", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-source-patch-runtime-tape-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const [prepare] = createSourcePatchTools({ runtime });
+
+    const result = await prepare.execute(
+      "tc-source-patch-runtime-tape",
+      {
+        edits: [
+          {
+            kind: "create_file",
+            uri: ".brewva/tape/injected.jsonl",
+            content: "not canonical\n",
+          },
+        ],
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-source-patch-runtime-tape"),
+    );
+
+    const details = toolOutcomePayload(result) as {
+      status?: string;
+      conflicts?: Array<{ reason?: string }>;
+    };
+    expect(result.outcome.kind).toBe("err");
+    expect(details.status).toBe("conflict");
+    expect(details.conflicts?.[0]?.reason).toBe("runtime_artifact_read_denied");
+    expect(existsSync(join(workspace, ".brewva", "tape", "injected.jsonl"))).toBe(false);
+  });
+
   test("source_patch_prepare and source_patch_apply are the only source mutation path", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-source-patch-"));
     const filePath = join(workspace, "example.ts");
@@ -740,6 +853,48 @@ describe("source_read and source_patch tools", () => {
         }),
       }),
     ]);
+  });
+
+  test("worker_results_apply rejects runtime tape patch targets before prepare", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-worker-runtime-tape-"));
+    const artifactDir = join(workspace, ".orchestrator/subagent-patch-artifacts/patch-worker");
+    const artifactPath = join(artifactDir, "payload.jsonl");
+    mkdirSync(artifactDir, { recursive: true });
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    writeFileSync(artifactPath, "not canonical\n", "utf8");
+    const adapter = createRuntimeInstanceFixture({ cwd: workspace });
+    const runtime = createBundledToolRuntime(adapter);
+    adapter.ops.session.workerResults.record("tc-worker-runtime-tape", {
+      workerId: "worker-a",
+      status: "ok",
+      patches: {
+        id: "patch-worker",
+        changes: [
+          {
+            path: ".brewva/tape/injected.jsonl",
+            action: "add",
+            artifactRef: ".orchestrator/subagent-patch-artifacts/patch-worker/payload.jsonl",
+          },
+        ],
+      },
+    });
+    const tool = createWorkerResultsApplyTool({ runtime });
+
+    const prepared = await tool.execute(
+      "tc-worker-runtime-tape",
+      {},
+      undefined,
+      undefined,
+      fakeContext("tc-worker-runtime-tape"),
+    );
+
+    expect(prepared.outcome.kind).toBe("err");
+    expect(toolOutcomePayload(prepared)).toMatchObject({
+      status: "prepare_failed",
+      reason: "runtime_artifact_read_denied",
+      path: ".brewva/tape/injected.jsonl",
+    });
+    expect(existsSync(join(workspace, ".brewva", "tape", "injected.jsonl"))).toBe(false);
   });
 
   test("worker_results_reject records explicit rejection and clears selected workers", async () => {

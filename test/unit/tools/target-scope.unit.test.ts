@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   describeTargetScopeRejection,
+  describeRuntimeArtifactReadRejection,
+  resolveRuntimeArtifactCommandRejection,
+  resolveRuntimeArtifactReadRejection,
   resolveReadableScopedPath,
   resolveScopedPath,
   resolveToolTargetScope,
@@ -48,6 +51,53 @@ describe("resolveToolTargetScope readable skill roots", () => {
     });
     expect(scope.readableRoots).toEqual(scope.allowedRoots);
     expect(resolveReadableScopedPath(join(skillRoot, "SKILL.md"), scope)).toBe(null);
+  });
+
+  test("readable navigation rejects target-owned runtime tape artifacts", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-scope-runtime-artifact-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    mkdirSync(join(workspace, ".brewva", "subagents"), { recursive: true });
+    const scope = resolveToolTargetScope({ identity: { cwd: workspace } } as never, {
+      cwd: workspace,
+    });
+
+    const tapeFile = join(workspace, ".brewva", "tape", "session.jsonl");
+    const subagentFile = join(workspace, ".brewva", "subagents", "worker.md");
+
+    expect(resolveRuntimeArtifactReadRejection(tapeFile, scope)?.reason).toBe(
+      "runtime_artifact_read_denied",
+    );
+    expect(resolveReadableScopedPath(tapeFile, scope)).toBe(null);
+    expect(resolveRuntimeArtifactReadRejection(subagentFile, scope)).toBe(null);
+    expect(resolveReadableScopedPath(subagentFile, scope)).toBe(subagentFile);
+    expect(
+      describeRuntimeArtifactReadRejection({
+        tool: "grep",
+        subject: "path",
+        offending: ".brewva/tape",
+      }),
+    ).toContain("runtime artifact");
+  });
+
+  test("command guard recognizes common runtime tape path spellings", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-scope-runtime-command-"));
+    mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
+    const scope = resolveToolTargetScope({ identity: { cwd: workspace } } as never, {
+      cwd: workspace,
+    });
+
+    expect(
+      resolveRuntimeArtifactCommandRejection("grep needle .brewva/tape/a.jsonl", scope),
+    ).not.toBeNull();
+    expect(
+      resolveRuntimeArtifactCommandRejection("grep needle .brewva//tape/a.jsonl", scope),
+    ).not.toBeNull();
+    expect(
+      resolveRuntimeArtifactCommandRejection("grep needle .brewva/./tape/a.jsonl", scope),
+    ).not.toBeNull();
+    expect(
+      resolveRuntimeArtifactCommandRejection("grep needle .brewva/tape.bak/a.jsonl", scope),
+    ).toBeNull();
   });
 });
 

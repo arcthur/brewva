@@ -42,7 +42,9 @@ import { buildStringEnumSchema } from "../../registry/string-enum-contract.js";
 import { recordToolRuntimeEvent } from "../../runtime-port/extensions.js";
 import { getToolSessionId } from "../../runtime-port/parallel-read.js";
 import {
+  describeRuntimeArtifactReadRejection,
   describeTargetScopeRejection,
+  resolveRuntimeArtifactReadRejection,
   resolveScopedPath,
   resolveToolTargetScope,
   type ToolTargetScope,
@@ -306,6 +308,21 @@ function rejectGeneratedTarget(path: string): SourcePatchConflict | null {
         uri: path,
         reason: "generated_file_rejected",
         message: "Generated files cannot be mutated by source_patch_prepare.",
+      }
+    : null;
+}
+
+function rejectRuntimeArtifactTarget(
+  path: string,
+  scope: ToolTargetScope,
+  uri: string,
+): SourcePatchConflict | null {
+  const runtimeArtifact = resolveRuntimeArtifactReadRejection(path, scope);
+  return runtimeArtifact
+    ? {
+        uri,
+        reason: runtimeArtifact.reason,
+        message: "Runtime artifact storage is not a source patch target.",
       }
     : null;
 }
@@ -921,12 +938,31 @@ export function createSourceReadTool(options?: {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const scope = resolveToolTargetScope(runtime, ctx);
+      const preflightPath = pathFromResourceUri(params.uri, scope);
+      const preflightRuntimeArtifact = preflightPath
+        ? resolveRuntimeArtifactReadRejection(preflightPath, scope)
+        : null;
+      if (preflightRuntimeArtifact) {
+        return errTextResult(
+          describeRuntimeArtifactReadRejection({
+            tool: "source_read",
+            subject: "uri",
+            offending: params.uri,
+          }),
+          {
+            ok: false,
+            reason: preflightRuntimeArtifact.reason,
+            artifact: preflightRuntimeArtifact.artifact,
+            artifactRoot: preflightRuntimeArtifact.artifactRoot,
+          },
+        );
+      }
       const router = await resourceRouterForRoot({
         cwd: scope.baseCwd,
         roots: scope.allowedRoots,
       });
       const resource = await router.read(params.uri);
-      const absolutePath = resource.path ?? pathFromResourceUri(params.uri, scope);
+      const absolutePath = resource.path ?? preflightPath;
       if (!absolutePath) {
         return errTextResult(
           describeTargetScopeRejection({
@@ -936,6 +972,22 @@ export function createSourceReadTool(options?: {
             offending: params.uri,
           }),
           { ok: false, reason: "path_outside_target" },
+        );
+      }
+      const runtimeArtifact = resolveRuntimeArtifactReadRejection(absolutePath, scope);
+      if (runtimeArtifact) {
+        return errTextResult(
+          describeRuntimeArtifactReadRejection({
+            tool: "source_read",
+            subject: "uri",
+            offending: params.uri,
+          }),
+          {
+            ok: false,
+            reason: runtimeArtifact.reason,
+            artifact: runtimeArtifact.artifact,
+            artifactRoot: runtimeArtifact.artifactRoot,
+          },
         );
       }
       if (
@@ -1021,6 +1073,11 @@ function preparePlan(input: {
     const path = pathFromResourceUri(intent.uri, input.scope);
     if (!path) {
       conflicts.push({ uri: intent.uri, reason: "path_outside_target" });
+      continue;
+    }
+    const runtimeArtifactConflict = rejectRuntimeArtifactTarget(path, input.scope, intent.uri);
+    if (runtimeArtifactConflict) {
+      conflicts.push(runtimeArtifactConflict);
       continue;
     }
 
@@ -1144,6 +1201,15 @@ function preparePlan(input: {
       const newPath = pathFromResourceUri(intent.newUri, input.scope);
       if (!newPath) {
         conflicts.push({ uri: intent.newUri, reason: "path_outside_target" });
+        continue;
+      }
+      const newRuntimeArtifactConflict = rejectRuntimeArtifactTarget(
+        newPath,
+        input.scope,
+        intent.newUri,
+      );
+      if (newRuntimeArtifactConflict) {
+        conflicts.push(newRuntimeArtifactConflict);
         continue;
       }
       if (existsSync(newPath)) {
@@ -1803,6 +1869,25 @@ export function createResourceReadTool(options?: {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const scope = resolveToolTargetScope(runtime, ctx);
       const sessionId = getToolSessionId(ctx);
+      const preflightPath = pathFromResourceUri(params.uri, scope);
+      const preflightRuntimeArtifact = preflightPath
+        ? resolveRuntimeArtifactReadRejection(preflightPath, scope)
+        : null;
+      if (preflightRuntimeArtifact) {
+        return errTextResult(
+          describeRuntimeArtifactReadRejection({
+            tool: "resource_read",
+            subject: "uri",
+            offending: params.uri,
+          }),
+          {
+            ok: false,
+            reason: preflightRuntimeArtifact.reason,
+            artifact: preflightRuntimeArtifact.artifact,
+            artifactRoot: preflightRuntimeArtifact.artifactRoot,
+          },
+        );
+      }
       const router = await resourceRouterForRoot({
         cwd: scope.baseCwd,
         roots: scope.allowedRoots,
