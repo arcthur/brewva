@@ -15,7 +15,9 @@ import { HOSTED_RUNTIME_OPS_NAMESPACE_LABELS } from "../../packages/brewva-gatew
 const REPO_ROOT = process.cwd();
 const RUNTIME_OPS_BUILDER_DIR =
   "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders";
-const HOSTED_OPS_BUILDER_LINE_BUDGET = 230;
+// Bumped to 240 for tool_chain's `recordChainResult` builder (the compound
+// execution envelope's chain-receipt emitter); the tools builder is the widest.
+const HOSTED_OPS_BUILDER_LINE_BUDGET = 240;
 const RUNTIME_OPS_BUILDER_FILES = {
   channel: "channel.ts",
   claim: "claim.ts",
@@ -305,7 +307,9 @@ describe("runtime ops capability inventory fitness", () => {
     // that only adds atoms must not be forced to re-emit a `task.spec.set`
     // event) — a real new producer seam with its doc comment, not facade
     // growth. +13 lines on the tool-runtime contract.
-    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_070);
+    // +1 for tool_chain's `recordChainResult` tool-runtime contract method (the
+    // compound-envelope chain-receipt emitter).
+    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_072);
     // Same feature, implementation side: the orient-injection `requirements.record`
     // builder plus its shared `emitRequirementAtoms` helper (one emit site guarding
     // spec.set/requirements.record against event-shape drift) grew
@@ -327,7 +331,9 @@ describe("runtime ops capability inventory fitness", () => {
     // whole-payload readers — the R3 graded `evidenceItems` on the verify() write
     // side plus the R3.2 trap `riskClass` threading — +2 lines, real producer
     // wiring, not facade growth.
-    expect(hostedOpsLines).toBeLessThanOrEqual(2_845);
+    // tool_chain's `recordChainResult` builder (compound-envelope chain-receipt
+    // emitter) adds +6 real producer lines — not facade growth.
+    expect(hostedOpsLines).toBeLessThanOrEqual(2_851);
     // WS2 added tape-derived rebuild projections (workbench/task/resource-lease/
     // worker-results) that fix the invariant-9/12 restart-loses-state bug. A
     // follow-up review pass then completed the tape-authority migration on the
@@ -390,7 +396,9 @@ describe("runtime ops capability inventory fitness", () => {
     // threading, and assembly feed all live off this count).
     // This RFC's receipt producers (R3 graded evidenceItems, R3.2 riskClass
     // threading) carry the same +2 into the combined budget.
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_834);
+    // tool_chain's `recordChainResult` (+6 builder, +1 tool-runtime contract)
+    // carries +7 into the combined budget.
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_841);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

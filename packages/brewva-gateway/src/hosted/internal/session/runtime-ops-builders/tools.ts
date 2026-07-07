@@ -6,6 +6,7 @@ import {
   RUNTIME_OPS_TOOL_CALL_STARTED_KIND,
   RUNTIME_OPS_TOOL_INVOCATION_FINISHED_KIND,
   RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND,
+  RUNTIME_OPS_TOOL_CHAIN_RESULT_RECORDED_KIND,
   RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND,
 } from "@brewva/brewva-vocabulary/events";
 import {
@@ -88,6 +89,11 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
         const payload = ctx.readObjectPayload(inputValue);
         const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "default";
         return ctx.emit(sessionId, RUNTIME_OPS_TOOL_INVOCATION_FINISHED_KIND, payload);
+      },
+      recordChainResult(inputValue) {
+        const payload = ctx.readObjectPayload(inputValue);
+        const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "default";
+        return ctx.emit(sessionId, RUNTIME_OPS_TOOL_CHAIN_RESULT_RECORDED_KIND, payload);
       },
       recordResult(inputValue) {
         const payload = ctx.readObjectPayload(inputValue);

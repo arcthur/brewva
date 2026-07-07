@@ -12,7 +12,11 @@ import {
   createSubagentRunTool,
   createSubagentStatusTool,
 } from "../families/delegation/api.js";
-import { createExecTool, createProcessTool } from "../families/execution/api.js";
+import {
+  createExecTool,
+  createProcessTool,
+  createToolChainTool,
+} from "../families/execution/api.js";
 import {
   createAttentionOptionTools,
   createContextRouteTool,
@@ -136,6 +140,18 @@ export function buildDefaultBundledBrewvaTools(
     createSubagentCancelTool({ runtime }),
     ...createTaskLedgerTools({ runtime }),
   ];
+
+  // tool_chain dispatches sibling read-only tools by name. Give it a late-bound
+  // resolver over the just-built siblings — this is the only site with
+  // visibility into all tool definitions. The map is built before tool_chain is
+  // added, so a chain can never resolve (or nest) itself.
+  const siblingsByName = new Map(tools.map((tool) => [tool.name, tool] as const));
+  tools.push(
+    createToolChainTool({
+      runtime,
+      resolveSibling: (name) => siblingsByName.get(name),
+    }),
+  );
 
   for (const tool of tools) {
     validateBrewvaToolRequiredCapabilities(tool);

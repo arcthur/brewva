@@ -551,6 +551,7 @@ export interface BrewvaToolRuntimeCommandPort {
   readonly tools: {
     readonly invocation: {
       finish(input: unknown): void;
+      recordChainResult(input: unknown): unknown;
       recordResult(input: unknown): unknown;
       start(input: ToolInvocationStartInput): ToolInvocationStartReceipt;
     };

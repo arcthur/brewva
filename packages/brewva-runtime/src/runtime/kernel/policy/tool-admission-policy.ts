@@ -43,6 +43,7 @@ const ADMISSION_RANK: Record<ToolAdmissionBehavior, number> = {
 const TOOL_ACTION_CLASS_VALUES = [
   "workspace_read",
   "runtime_observe",
+  "observe_compound",
   "workspace_patch",
   "memory_write",
   "control_state_mutation",
@@ -133,6 +134,22 @@ function runtimeObserve(riskLevel: ToolRiskLevel = "low"): ToolActionPolicy {
   return buildPolicy({
     actionClass: "runtime_observe",
     riskLevel,
+    defaultAdmission: "allow",
+    maxAdmission: "allow",
+    receiptPolicy: { kind: "audit", required: false },
+    recoveryPolicy: { kind: "none" },
+    effectClasses: ["runtime_observe"],
+  });
+}
+
+function observeCompound(): ToolActionPolicy {
+  // The tool_chain envelope: one admitted transaction that dispatches a
+  // sequence of read-only child tools. Its own effect is observation; each
+  // child read is attributed to its own per-step advisory receipt. Safe and
+  // auto-allowed — the per-step read-only allowlist is what bounds it.
+  return buildPolicy({
+    actionClass: "observe_compound",
+    riskLevel: "low",
     defaultAdmission: "allow",
     maxAdmission: "allow",
     receiptPolicy: { kind: "audit", required: false },
@@ -314,6 +331,7 @@ function credentialAccess(): ToolActionPolicy {
 const TOOL_ACTION_POLICY_BY_CLASS: Record<ToolActionClass, ToolActionPolicy> = {
   workspace_read: workspaceRead(),
   runtime_observe: runtimeObserve(),
+  observe_compound: observeCompound(),
   workspace_patch: workspacePatch(),
   memory_write: memoryWrite(),
   control_state_mutation: controlStateMutation(),
@@ -364,6 +382,7 @@ const EXACT_TOOL_ACTION_POLICY_RESOLVERS_BY_NAME: Record<string, ToolActionPolic
 };
 
 export const TOOL_ACTION_POLICY_BY_NAME: Record<string, ToolActionPolicy> = {
+  tool_chain: observeCompound(),
   read: workspaceRead(),
   read_file: workspaceRead(),
   write: workspacePatch(),
