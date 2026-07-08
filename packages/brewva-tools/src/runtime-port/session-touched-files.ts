@@ -134,9 +134,9 @@ export function sessionAppliedTouchedFilePaths(
  * so the universe rule has ONE home (`assembleReviewDebtInput` keeps its own `.list`
  * twin — a different declared capability — acknowledged there).
  */
-function deriveSessionFreshTouchedUniverse(
+export function deriveSessionFreshTouchedUniverse(
   events: readonly BrewvaEventRecord[],
-  workspaceRoot: string,
+  workspaceRoot: string | null = null,
 ): {
   universe: FreshTouchedFileUniverse;
   patchSetAppliedPaths: ReturnType<typeof collectPatchSetAppliedPaths>;

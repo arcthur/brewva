@@ -185,6 +185,13 @@ export interface FitnessProjection {
    * read off the end-of-tape projection (no per-turn history needed), for
    * `report:delegation-evidence`. It buckets by STATE, NOT by evidence source:
    * - `open`: still owes an at-grade read (equals `independenceDebtAtoms.length`);
+   * - `reviewedSubGrade`: a SUBSET of `open` — a fresh-context reviewer DID read the
+   *   atom but could only presence-grade it, so the grade ceiling capped it at
+   *   `likelySatisfied`. This separates "an independent perspective looked, sub-floor"
+   *   from the rest of `open` (never read, or author-claimed only). A rising
+   *   `reviewedSubGrade` against a flat `dischargedAtGrade` means reviews are LOOKING
+   *   but not AT GRADE — the static-guard producer, not another presence review, is
+   *   what these atoms are waiting on;
    * - `violated`: a live fail named it as a known break — a review/independent FAIL
    *   OR a deterministic static-guard fail (both reach `violated`);
    * - `dischargedAtGrade`: reached `satisfied` via an at-grade pass — independent OR
@@ -193,10 +200,12 @@ export interface FitnessProjection {
    * A rising `violated` + `dischargedAtGrade` against a flat `open` means high-risk
    * atoms are reaching at-grade closure rather than being left owed — the review→atom
    * fold is ONE driver of that, not the only one, so the census does not attribute the
-   * movement to the review channel alone.
+   * movement to the review channel alone. `reviewedSubGrade` ⊆ `open`, so it is NOT a
+   * partition sibling of the other three (which DO sum to the high-risk `must` count).
    */
   readonly independenceDebtResolution: {
     readonly open: number;
+    readonly reviewedSubGrade: number;
     readonly violated: number;
     readonly dischargedAtGrade: number;
   };
@@ -364,6 +373,15 @@ interface AtomAccumulator {
   hasDeterministicPass: boolean;
   /** An independent pass AT OR ABOVE the atom's required grade — reaches `satisfied`. */
   hasIndependentPass: boolean;
+  /**
+   * An INDEPENDENT pass that landed BELOW the atom's required grade — a fresh-context
+   * reviewer that read the atom but could only presence-grade it, so it caps at
+   * `likelySatisfied` (the grade ceiling) rather than `satisfied`. Distinct from
+   * `bestSatisfyingKind !== null`, which a DETERMINISTIC sub-floor pass also sets: this
+   * flag is TRUE only when an independent PERSPECTIVE produced the sub-floor read, so the
+   * census can separate "a reviewer looked but was capped" from "only a grep/author touched it".
+   */
+  hasIndependentSubfloorPass: boolean;
   hasAuthored: boolean;
   /**
    * The highest grade among deterministic/independent PASSES seen. When no
@@ -424,6 +442,7 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
       evidence: [],
       hasDeterministicPass: false,
       hasIndependentPass: false,
+      hasIndependentSubfloorPass: false,
       hasAuthored: false,
       bestSatisfyingKind: null,
       deterministicFailRef: null,
@@ -490,6 +509,12 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
         accumulator.bestSatisfyingKind = higherGrade(accumulator.bestSatisfyingKind, evidenceKind);
         if (meetsRequiredGrade(accumulator.atom, evidenceKind)) {
           accumulator.hasIndependentPass = true;
+        } else {
+          // An independent perspective read this atom but only presence-graded it —
+          // it cannot clear a high-risk floor (grade ceiling), so it caps at
+          // `likelySatisfied`. Recorded so the independence census can tell "a
+          // reviewer looked, sub-floor" apart from "no independent read at all".
+          accumulator.hasIndependentSubfloorPass = true;
         }
       } else if (accumulator.findingFailRef === null || outcome.ref < accumulator.findingFailRef) {
         // An independent fail is a non-deterministic violation -> advisory grade,
@@ -606,6 +631,7 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
   // high-risk `must` set also censuses the discharge OUTCOME (violated / at-grade
   // satisfied) for the report — see {@link FitnessProjection.independenceDebtResolution}.
   const independenceDebtAtoms: string[] = [];
+  let independenceReviewedSubGrade = 0;
   let independenceViolated = 0;
   let independenceDischargedAtGrade = 0;
   for (const entry of atoms) {
@@ -619,6 +645,13 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     }
     if (entry.state === "unverified" || entry.state === "likelySatisfied") {
       independenceDebtAtoms.push(entry.atomId); // still owes an at-grade read
+      if (accumulator.hasIndependentSubfloorPass) {
+        // ⊆ open: a fresh-context reviewer DID read this atom, but only presence-graded
+        // it — the grade ceiling capped it at `likelySatisfied`. Separating this from the
+        // rest of `open` (unverified, or author-claimed only) tells "a review looked but
+        // could not clear the floor" apart from "no independent read happened at all".
+        independenceReviewedSubGrade += 1;
+      }
     } else if (entry.state === "violated") {
       independenceViolated += 1; // a live fail (review/independent OR deterministic) named it broken
     } else if (entry.state === "satisfied") {
@@ -638,7 +671,11 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     insufficientGradeAtoms,
     independenceDebtAtoms,
     independenceDebtResolution: {
+      // `open` stays the single count derived from the enumerated list (the list is the
+      // authority — it carries the atom IDs the render enumerates); `reviewedSubGrade` is
+      // counted in the SAME pass, so no parallel accounting can drift from it.
       open: independenceDebtAtoms.length,
+      reviewedSubGrade: independenceReviewedSubGrade,
       violated: independenceViolated,
       dischargedAtGrade: independenceDischargedAtGrade,
     },

@@ -675,6 +675,7 @@ describe("projectRequirementFitness: facet coverage (falsification asymmetry)", 
     expect(projection.independenceDebtAtoms).toEqual(["a"]);
     expect(projection.independenceDebtResolution).toEqual({
       open: 1,
+      reviewedSubGrade: 0, // likelySatisfied via AUTHOR coverage — no independent read
       violated: 0,
       dischargedAtGrade: 0,
     });
@@ -722,6 +723,7 @@ describe("projectRequirementFitness: facet coverage (falsification asymmetry)", 
     expect(projection.atoms[0]?.state).toBe("satisfied");
     expect(projection.independenceDebtResolution).toEqual({
       open: 0,
+      reviewedSubGrade: 0,
       violated: 0,
       dischargedAtGrade: 1,
     });

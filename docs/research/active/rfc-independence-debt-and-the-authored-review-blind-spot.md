@@ -215,6 +215,26 @@ a decision rather than merely surfacing (in game_7 the sensor stayed lit at
 not yet demonstrate a decision flip) — plus the review→atom attribution edge (the
 discharge path), tracked on branch `rfc/independence-debt-close`.
 
+**Census legibility refinement (2026-07-08).** A flat `open` was hiding _why_ it was
+flat, so two end-of-tape signals (no per-turn history — the same constraint item 4
+notes) now split the blind spot the game_7 case named:
+
+- `independenceDebtResolution.reviewedSubGrade` (⊆ `open`): high-risk atoms an
+  _independent_ perspective DID read but could only presence-grade — capped at
+  `likelySatisfied` by the grade ceiling. It separates "a reviewer looked, sub-floor"
+  from "no independent read at all", so `reviewedSubGrade` tracking `open` while
+  `dischargedAtGrade` stays flat reads as "reviews keep looking but nothing clears at
+  grade — these wait on the static-guard producer, not another presence review."
+- `report:delegation-evidence.coverageAttributionMiss`: independent-perspective FAIL
+  reviews that COVERED the fresh-touched universe yet named zero atoms — the review
+  found problems and failed but pinned nothing owed, so the census showed NO movement
+  (game_7's exact form: `open` did not fall, `violated` did not rise). This makes the
+  silent miss countable, distinct from `unaddressedReviewFindings` (still-live findings).
+
+Both are descriptive views (axiom 18), gate nothing, and re-derive from the tape.
+Neither is the per-turn discharged-by counter item 4 defers — they explain a flat
+`open` at close, not the intra-turn transitions.
+
 1. **Projection.** Add `independenceDebtAtoms` to the requirement-fitness projection
    (`FitnessProjection`): must-have, high-risk-class-floor atoms whose state never
    reached `satisfied` (no at-grade independent OR deterministic pass). The fitness

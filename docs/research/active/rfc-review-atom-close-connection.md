@@ -324,6 +324,10 @@ atoms whose code a narrow review never covered — a fabricated attestation (axi
   in `open` after any review — confirmed correct, not counted as a miss.
 - **No dishonest scope:** a narrow `files` review never gains an atom attestation it did not
   cover.
+- **Silent-miss visibility:** the residual case this edge cannot force — a covering review
+  that FAILS yet names no atom, so nothing lands and `open` stays flat — is now counted as
+  `report:delegation-evidence.coverageAttributionMiss` (see the independence-debt RFC), so a
+  wired-but-unattributed fail is no longer indistinguishable from "no review ran".
 
 ### Field Verification (game_8, 2026-07-08 — first replay after the merge)
 

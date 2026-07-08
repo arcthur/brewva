@@ -166,6 +166,7 @@ describe("independenceDebtResolution — the discharge census (report:delegation
     const projection = projectRequirementFitness(inputFor([mustAtom("a", "runtime")]));
     expect(projection.independenceDebtResolution).toEqual({
       open: 1,
+      reviewedSubGrade: 0, // unverified — nobody looked, so not "reviewed sub-grade"
       violated: 0,
       dischargedAtGrade: 0,
     });
@@ -183,6 +184,7 @@ describe("independenceDebtResolution — the discharge census (report:delegation
     });
     expect(projection.independenceDebtResolution).toEqual({
       open: 0,
+      reviewedSubGrade: 0,
       violated: 0,
       dischargedAtGrade: 1,
     });
@@ -195,20 +197,59 @@ describe("independenceDebtResolution — the discharge census (report:delegation
     });
     expect(projection.independenceDebtResolution).toEqual({
       open: 0,
+      reviewedSubGrade: 0,
       violated: 1,
       dischargedAtGrade: 0,
     });
   });
 
-  test("a presence-grade pass stays open — the grade ceiling holds in the census too", () => {
+  test("an independent presence-grade pass stays open but counts as reviewedSubGrade", () => {
     const projection = projectRequirementFitness({
       ...inputFor([mustAtom("a", "runtime")]),
       independentOutcomes: [
         { atomRefs: ["a"], verdict: "pass", ref: "i-1", evidenceKind: "presence" },
       ],
     });
+    // A fresh-context reviewer DID read the atom, but presence-grade cannot clear a
+    // runtime floor (grade ceiling) — so it stays `open`, yet is now visible as a
+    // review that LOOKED, distinct from an atom nobody touched.
     expect(projection.independenceDebtResolution).toEqual({
       open: 1,
+      reviewedSubGrade: 1,
+      violated: 0,
+      dischargedAtGrade: 0,
+    });
+    expect(projection.independenceDebtResolution.reviewedSubGrade).toBeLessThanOrEqual(
+      projection.independenceDebtResolution.open,
+    );
+  });
+
+  test("a DETERMINISTIC sub-floor pass is open but NOT reviewedSubGrade (a grep is not a perspective)", () => {
+    const projection = projectRequirementFitness({
+      ...inputFor([mustAtom("a", "runtime")]),
+      deterministicEvidence: [
+        { atomId: "a", verdict: "pass", ref: "g-1", evidenceKind: "presence" },
+      ],
+    });
+    // `reviewedSubGrade` is the INDEPENDENCE axis: a deterministic presence pass sets
+    // grade debt but no independent perspective looked, so it does NOT count here.
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 1,
+      reviewedSubGrade: 0,
+      violated: 0,
+      dischargedAtGrade: 0,
+    });
+    expect(projection.insufficientGradeAtoms.map((entry) => entry.atomId)).toEqual(["a"]);
+  });
+
+  test("an author-only claim is open but NOT reviewedSubGrade (author coverage is not independent)", () => {
+    const projection = projectRequirementFitness({
+      ...inputFor([mustAtom("a", "runtime")]),
+      authoredOutcomes: [{ atomRefs: ["a"], ref: "auth-1" }],
+    });
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 1,
+      reviewedSubGrade: 0,
       violated: 0,
       dischargedAtGrade: 0,
     });
@@ -229,6 +270,7 @@ describe("independenceDebtResolution — the discharge census (report:delegation
     });
     expect(projection.independenceDebtResolution).toEqual({
       open: 1,
+      reviewedSubGrade: 0, // the `open` atom is unverified — no reviewer looked
       violated: 1,
       dischargedAtGrade: 1,
     });
