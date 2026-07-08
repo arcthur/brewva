@@ -147,6 +147,28 @@ propertyTest<[RequirementFitnessInput]>(
         })
         .map((entry) => entry.atomId);
       expect([...base.independenceDebtAtoms].toSorted()).toEqual(expectedDebt.toSorted());
+
+      // independenceDebtResolution census: `open` is exactly the debt list length, and
+      // the three buckets PARTITION every high-risk `must` atom (independently
+      // re-derived, not copied). `notApplicable` is unreachable, so the partition sum
+      // must equal the full high-risk-must count — this locks that assumption.
+      const highRiskMustStates = base.atoms
+        .filter((entry) => {
+          const atom = input.atoms.find((candidate) => candidate.id === entry.atomId);
+          return atom?.modality === "must" && highRisk.has(atom.riskClass);
+        })
+        .map((entry) => entry.state);
+      const resolution = base.independenceDebtResolution;
+      expect(resolution.open).toBe(base.independenceDebtAtoms.length);
+      expect(resolution.violated).toBe(
+        highRiskMustStates.filter((state) => state === "violated").length,
+      );
+      expect(resolution.dischargedAtGrade).toBe(
+        highRiskMustStates.filter((state) => state === "satisfied").length,
+      );
+      expect(resolution.open + resolution.violated + resolution.dischargedAtGrade).toBe(
+        highRiskMustStates.length,
+      );
     },
   },
 );

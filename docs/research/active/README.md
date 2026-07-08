@@ -80,9 +80,23 @@ discipline.
   decision point), not a weak signal; reuses graded evidence, drives no gate, and
   hands the choice to the model (axioms 1, 3, 7, 18). The information-channel
   companion to the authorship-taints-verification candidate axiom. Landing-plan
-  items 1–4 landed on `main` (`dbeeaf3`, `fbb0f00`); what remains is empirical
-  promotion and the review→atom discharge edge on branch
-  `rfc/independence-debt-close`.
+  items 1–4 landed on `main` (`dbeeaf3`, `fbb0f00`), and Part 2 — the review→atom
+  discharge edge — landed too (see the next entry); what remains is empirical promotion.
+- [RFC: Review→Atom Attribution And The Grade Ceiling On Discharging Independence Debt](./rfc-review-atom-close-connection.md):
+  active RFC on the independence-debt close edges (Part 2), reshaped after an independent
+  code review caught the author's own blind spot. game_7's independent review (6 findings,
+  4 fixes incl. the recurring `req-1` keycode defect) still left `open: 2` for TWO reasons:
+  the review was a `files` review whose findings carried empty `atomRefs` (attribution
+  gap), AND — the deeper one — a presence-grade LLM review architecturally CANNOT drive a
+  high-risk atom to `satisfied` (Part 1's grade floor: independent outcomes are
+  presence-grade; only `static_guard`+ deterministic evidence clears high risk). Honest
+  thesis: coverage-scope the fold (target files ⊇ fresh-touched universe via
+  `universeCoveredBy`, NOT target kind — game_7 was a files-covering-all review) so a FAIL
+  marks the violated atom (`open` drops for genuinely-broken atoms; the model gets
+  atom-anchored findings); a CLEAR reaches only `likelySatisfied` and is NOT claimed as a
+  discharge; at-grade clearing is the static-guard producer's job (6 lenses only); and
+  unguarded high-risk debt (req-8/req-11) is irreducible headlessly — the sensor stays
+  correctly lit (axiom 7). One actuator per close-edge.
 - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md):
   active RFC for closing the last gap in typed, per-entry, promotion-grade
   attention-selection evidence: making attention selection an accountable effect

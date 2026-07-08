@@ -288,14 +288,16 @@ export function commitReviewReceipts(input: CommitReviewReceiptsInput): CommitRe
     contextId: input.runId,
     lenses: [...input.dispatch.lenses],
   };
-  // CLEAR-ONLY positive signal (the fitness loop's affirmative half). The
-  // outcome's atomRefs names the reviewed atoms ONLY when the disposition maps
-  // to `pass` (clear) AND the dispatch targeted atoms. NEVER on a fail: the
-  // projection treats an independent-fail outcome as violating ALL its atomRefs
-  // (fitness.ts), so a blanket list on a concern/blocked review would wrongly
-  // violate target atoms that have no specific finding — findings own
-  // violations; this list is exclusively "affirmatively verified". A
-  // files/session_diff clear review has no reviewedAtomIds, so it stays [].
+  // CLEAR-ONLY positive signal (the fitness loop's affirmative half). NEVER on a
+  // fail: the projection treats an independent-fail outcome as violating ALL its
+  // atomRefs (fitness.ts), so a blanket list on a concern/blocked review would
+  // wrongly violate target atoms that have no specific finding — findings own
+  // violations. The reviewedAtomIds are set for an atoms target AND for a
+  // files/session_diff review that COVERS the whole change (its outstanding debt
+  // atoms folded in at dispatch — the review→atom fold); a narrow review carries
+  // none, so its clear outcome stays []. This list is "affirmatively READ, clear" —
+  // for a high-risk folded atom a presence-grade clear only reaches `likelySatisfied`
+  // downstream (the grade ceiling), never `satisfied`.
   const outcomeAtomRefs = outcome === "pass" ? [...(input.dispatch.reviewedAtomIds ?? [])] : [];
   const committed = recordVerificationOutcome(input.runtime, input.sessionId, {
     outcome,

@@ -156,6 +156,26 @@ export interface FitnessProjection {
    * not double-count the atom.
    */
   readonly independenceDebtAtoms: readonly string[];
+  /**
+   * The terminal-state census of the high-risk `must` atoms — the discharge OUTCOME
+   * read off the end-of-tape projection (no per-turn history needed), for
+   * `report:delegation-evidence`. It buckets by STATE, NOT by evidence source:
+   * - `open`: still owes an at-grade read (equals `independenceDebtAtoms.length`);
+   * - `violated`: a live fail named it as a known break — a review/independent FAIL
+   *   OR a deterministic static-guard fail (both reach `violated`);
+   * - `dischargedAtGrade`: reached `satisfied` via an at-grade pass — independent OR
+   *   deterministic (a presence-grade check, review or grep, CANNOT clear a high-risk
+   *   atom: the grade ceiling).
+   * A rising `violated` + `dischargedAtGrade` against a flat `open` means high-risk
+   * atoms are reaching at-grade closure rather than being left owed — the review→atom
+   * fold is ONE driver of that, not the only one, so the census does not attribute the
+   * movement to the review channel alone.
+   */
+  readonly independenceDebtResolution: {
+    readonly open: number;
+    readonly violated: number;
+    readonly dischargedAtGrade: number;
+  };
 }
 
 /**
@@ -524,22 +544,37 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     )
     .map((entry) => entry.atomId);
 
-  // High-risk `must` atoms not reaching `satisfied` carry independence debt: only
-  // `satisfied` requires an independent OR deterministic-at-grade pass, so an atom
-  // stuck at `unverified`/`likelySatisfied` has none — an independent perspective
-  // is owed on it. `presence`-floor (non-high-risk) atoms are excluded: self-review
-  // clears those honestly, so demanding independence there would be noise.
-  const independenceDebtAtoms = atoms
-    .filter((entry) => {
-      const accumulator = accumulators.get(entry.atomId);
-      return (
-        accumulator !== undefined &&
-        accumulator.atom.modality === "must" &&
-        requiredEvidenceKind(accumulator.atom) !== "presence" &&
-        (entry.state === "unverified" || entry.state === "likelySatisfied")
-      );
-    })
-    .map((entry) => entry.atomId);
+  // High-risk `must` atoms carry independence debt until `satisfied`: only an
+  // independent OR deterministic-at-grade pass reaches `satisfied`, so an atom stuck
+  // at `unverified`/`likelySatisfied` has none — an independent perspective is owed.
+  // `presence`-floor (non-high-risk) atoms are excluded: self-review clears those
+  // honestly, so demanding independence there would be noise. ONE pass over the same
+  // high-risk `must` set also censuses the discharge OUTCOME (violated / at-grade
+  // satisfied) for the report — see {@link FitnessProjection.independenceDebtResolution}.
+  const independenceDebtAtoms: string[] = [];
+  let independenceViolated = 0;
+  let independenceDischargedAtGrade = 0;
+  for (const entry of atoms) {
+    const accumulator = accumulators.get(entry.atomId);
+    if (
+      accumulator === undefined ||
+      accumulator.atom.modality !== "must" ||
+      requiredEvidenceKind(accumulator.atom) === "presence"
+    ) {
+      continue;
+    }
+    if (entry.state === "unverified" || entry.state === "likelySatisfied") {
+      independenceDebtAtoms.push(entry.atomId); // still owes an at-grade read
+    } else if (entry.state === "violated") {
+      independenceViolated += 1; // a live fail (review/independent OR deterministic) named it broken
+    } else if (entry.state === "satisfied") {
+      independenceDischargedAtGrade += 1; // cleared by an at-grade pass (independent OR deterministic)
+    }
+    // `notApplicable` is intentionally uncounted: `resolveState` never reaches it (no
+    // atom marker selects it), so the four reachable states partition the high-risk
+    // `must` set. If an N/A marker is ever added, revisit this census's implicit
+    // `open + violated + dischargedAtGrade === high-risk-must count` sum.
+  }
 
   return {
     atoms,
@@ -548,6 +583,11 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
     unverifiedMustAtoms,
     insufficientGradeAtoms,
     independenceDebtAtoms,
+    independenceDebtResolution: {
+      open: independenceDebtAtoms.length,
+      violated: independenceViolated,
+      dischargedAtGrade: independenceDischargedAtGrade,
+    },
   };
 }
 

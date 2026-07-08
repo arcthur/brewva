@@ -68,7 +68,7 @@ describe("buildDelegationEvidenceReport (Lever 6 instrument)", () => {
     expect(aggregate.adoption).toEqual({ applied: 2, applyFailed: 0, rejected: 1 });
 
     // No requirement atoms on this tape -> nothing carried into close as independence debt.
-    expect(aggregate.independenceDebt).toEqual({ open: 0 });
+    expect(aggregate.independenceDebt).toEqual({ open: 0, violated: 0, dischargedAtGrade: 0 });
   });
 
   test("failureRate is null and counts are zero on a tape with no delegations", () => {
@@ -77,7 +77,11 @@ describe("buildDelegationEvidenceReport (Lever 6 instrument)", () => {
     expect(report.aggregate.counts.total).toBe(0);
     expect(report.aggregate.failures.total).toBe(0);
     expect(report.aggregate.failureRate).toBeNull();
-    expect(report.aggregate.independenceDebt).toEqual({ open: 0 });
+    expect(report.aggregate.independenceDebt).toEqual({
+      open: 0,
+      violated: 0,
+      dischargedAtGrade: 0,
+    });
     expect(report.sessions).toHaveLength(1);
   });
 
@@ -116,10 +120,45 @@ describe("buildDelegationEvidenceReport (Lever 6 instrument)", () => {
     const { aggregate, sessions } = buildDelegationEvidenceReport(runtimeFor(events));
 
     // One high-risk must atom unmet at close -> open 1; the presence-floor atom is excluded.
-    expect(aggregate.independenceDebt).toEqual({ open: 1 });
-    expect(sessions[0]?.independenceDebt).toEqual({ open: 1 });
+    expect(aggregate.independenceDebt).toEqual({ open: 1, violated: 0, dischargedAtGrade: 0 });
+    expect(sessions[0]?.independenceDebt).toEqual({ open: 1, violated: 0, dischargedAtGrade: 0 });
     // The debt coexists with normal delegation reach in the same session report.
     expect(aggregate.counts.total).toBe(1);
+  });
+
+  test("censuses an at-grade discharge: a static_guard evidence pass reports dischargedAtGrade, not open", () => {
+    seq = 0;
+    // A high-risk must atom + a receipt carrying a graded static_guard evidence-item
+    // pass on it -> the atom reaches `satisfied` at grade, so the census reports it
+    // under dischargedAtGrade — and the aggregate sum for that field runs end to end.
+    const events = [
+      ev("task.requirement.recorded", {
+        atom: {
+          id: "req-runtime",
+          statement: "event tap must re-arm on disable",
+          modality: "must",
+          provenance: "trap",
+          riskClass: "runtime",
+        },
+      }),
+      ev("verification.outcome.recorded", {
+        outcome: "pass",
+        level: "requirements",
+        perspective: "authored",
+        evidenceItems: [
+          {
+            id: "guard-1",
+            atomRefs: ["req-runtime"],
+            evidenceKind: "static_guard",
+            verdict: "pass",
+            anchors: ["FnKeyMonitor.swift: keyCode gate"],
+            statement: "tap suppression is keycode-scoped",
+          },
+        ],
+      }),
+    ];
+    const { aggregate } = buildDelegationEvidenceReport(runtimeFor(events));
+    expect(aggregate.independenceDebt).toEqual({ open: 0, violated: 0, dischargedAtGrade: 1 });
   });
 
   test("sums disjoint per-session independence debt into the aggregate open count", () => {

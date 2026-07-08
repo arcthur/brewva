@@ -160,3 +160,79 @@ describe("independenceDebtAtoms — high-risk must atoms owed an independent rea
     expect(projection.unverifiedMustAtoms).toEqual(["a"]);
   });
 });
+
+describe("independenceDebtResolution — the discharge census (report:delegation-evidence)", () => {
+  test("an unmet high-risk must atom is open, nothing resolved; open === independenceDebtAtoms.length", () => {
+    const projection = projectRequirementFitness(inputFor([mustAtom("a", "runtime")]));
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 1,
+      violated: 0,
+      dischargedAtGrade: 0,
+    });
+    expect(projection.independenceDebtResolution.open).toBe(
+      projection.independenceDebtAtoms.length,
+    );
+  });
+
+  test("an at-grade deterministic pass discharges the atom -> dischargedAtGrade, open drops", () => {
+    const projection = projectRequirementFitness({
+      ...inputFor([mustAtom("a", "runtime")]),
+      deterministicEvidence: [
+        { atomId: "a", verdict: "pass", ref: "g-1", evidenceKind: "static_guard" },
+      ],
+    });
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 0,
+      violated: 0,
+      dischargedAtGrade: 1,
+    });
+  });
+
+  test("an independent FAIL on the atom -> violated, NOT open (the review→atom close-edge)", () => {
+    const projection = projectRequirementFitness({
+      ...inputFor([mustAtom("a", "runtime")]),
+      independentOutcomes: [{ atomRefs: ["a"], verdict: "fail", ref: "i-1" }],
+    });
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 0,
+      violated: 1,
+      dischargedAtGrade: 0,
+    });
+  });
+
+  test("a presence-grade pass stays open — the grade ceiling holds in the census too", () => {
+    const projection = projectRequirementFitness({
+      ...inputFor([mustAtom("a", "runtime")]),
+      independentOutcomes: [
+        { atomRefs: ["a"], verdict: "pass", ref: "i-1", evidenceKind: "presence" },
+      ],
+    });
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 1,
+      violated: 0,
+      dischargedAtGrade: 0,
+    });
+  });
+
+  test("censuses ONLY high-risk must atoms: a mix of open/violated/discharged, low-risk excluded", () => {
+    const projection = projectRequirementFitness({
+      ...inputFor([
+        mustAtom("open", "runtime"),
+        mustAtom("broken", "security"),
+        mustAtom("clean", "runtime"),
+        mustAtom("low", "ux"),
+      ]),
+      independentOutcomes: [{ atomRefs: ["broken"], verdict: "fail", ref: "i-1" }],
+      deterministicEvidence: [
+        { atomId: "clean", verdict: "pass", ref: "g-1", evidenceKind: "static_guard" },
+      ],
+    });
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 1,
+      violated: 1,
+      dischargedAtGrade: 1,
+    });
+    // The low-risk `must` atom is unverified-must but never enters the high-risk census.
+    expect(projection.unverifiedMustAtoms).toContain("low");
+  });
+});

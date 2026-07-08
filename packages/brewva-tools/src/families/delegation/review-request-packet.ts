@@ -12,10 +12,12 @@ import type {
   ReviewLaneDisposition,
 } from "../../contracts/index.js";
 import {
+  freshTouchedCoverageForTargetRef,
   sessionAppliedPatchSetIds,
   sessionAppliedTouchedFilePaths,
   sessionFreshTouchedFilePaths,
 } from "../../runtime-port/session-touched-files.js";
+import { buildTapeRequirementFitness } from "../../runtime-port/verification.js";
 import { matchFileAgainstWriteVerifyTraps } from "../../shared/trap-library/index.js";
 import { normalizeReviewFindingSeverity } from "./review-receipts.js";
 
@@ -112,6 +114,46 @@ export function resolveAtomsForTarget(
   }
   const wanted = new Set(target.atomIds);
   return atoms.filter((atom) => wanted.has(atom.id));
+}
+
+/**
+ * The outstanding independence-debt atoms to FOLD into a covering `files` or
+ * `session_diff` review — the review→atom attribution close-edge. Returns them
+ * ONLY when the review's `targetRef` provably covers the whole fresh-touched
+ * universe: a {@link RequirementAtom} carries no file anchors, so all debt can be
+ * honestly attested only by a review that covers all touched files; a narrow
+ * subset stays atom-free. Empty when nothing is covered or no debt is owed. One
+ * `records.query` read feeds the coverage gate, the debt set, and the atom objects.
+ *
+ * Grade ceiling (per the review→atom RFC): the debt atoms are high-risk by
+ * construction, so a reviewer CLEAR only moves them to `likelySatisfied` — it does
+ * NOT discharge them. The fold pays off on a FAIL, which names the violated atom so
+ * it drops out of the debt set. Clearing to `satisfied` is the static-guard
+ * producer's job, not a presence-grade review's.
+ */
+export function resolveFoldedDebtAtoms(
+  runtime: BrewvaToolRuntime,
+  sessionId: string,
+  workspaceRoot: string,
+  targetRef: ReviewTargetRef,
+): readonly RequirementAtom[] {
+  const records = runtime.capabilities.events?.records;
+  const events = records?.query ? records.query(sessionId) : [];
+  const { universe, covered } = freshTouchedCoverageForTargetRef(events, workspaceRoot, targetRef);
+  // Honest scoping with a non-empty guard: fold only into a review that covers the
+  // session's FRESH code. An empty universe (no tool-written files this turn) is
+  // "trivially covered" yet has no fresh implementation to attest against — folding
+  // there would fabricate an attestation over code the reviewer was never asked to
+  // read, and a subsequent CLEAR would cheat the coarse requirement-debt down.
+  // Require a real (fully-known, non-empty) covered universe.
+  if (!covered || universe.files.size === 0) {
+    return [];
+  }
+  const debtIds = new Set(buildTapeRequirementFitness(events).independenceDebtAtoms);
+  if (debtIds.size === 0) {
+    return [];
+  }
+  return foldTaskLedgerEvents(events).requirements.filter((atom) => debtIds.has(atom.id));
 }
 
 /**
@@ -297,31 +339,55 @@ function describeAtoms(atoms: readonly RequirementAtom[]): string {
   return atoms.map((atom) => `- [${atom.id}] (${atom.modality}) ${atom.statement}`).join("\n");
 }
 
+/**
+ * The shared reviewer instruction for attesting requirement atoms and naming the
+ * atom id in each finding's `atomRefs` — the seam that lets a FAIL mark the
+ * SPECIFIC violated atom (so it leaves the debt set). Used verbatim both as an
+ * `atoms` target's whole objective and as the appendix folded onto a covering
+ * `files`/`session_diff` review, so the two can never phrase the ask differently.
+ */
+const ATOM_ATTESTATION_INSTRUCTION =
+  "For each atom below, check whether its statement is genuinely satisfied by the code — not " +
+  "just plausible-sounding, but actually true when you read the implementation. Report a finding " +
+  "whenever an atom is NOT realized, and name the atom's id in that finding's atomRefs so it can " +
+  "be traced back";
+
+/** What the reviewer is told to read for a diff-shaped targetRef. */
+function touchedFilesAnchor(targetRef: ReviewTargetRef): string {
+  return targetRef.kind === "patch_sets" ? targetRef.patchSetRefs.join(", ") : "the current diff";
+}
+
 /** Anchor text for a targetRef, so the reviewer knows what to read without file contents in the packet. */
 export function describeTargetForObjective(
   target: ReviewTarget,
   targetRef: ReviewTargetRef,
   atoms: readonly RequirementAtom[] = [],
 ): string {
-  if (target.kind === "files") {
-    return `Review these files (read them yourself):\n${target.paths.map((p) => `- ${p}`).join("\n")}`;
-  }
   if (target.kind === "atoms") {
     return (
       "Verify that the implementation actually REALIZES each of these requirement atoms " +
-      `against the session's touched files (${
-        targetRef.kind === "patch_sets" ? targetRef.patchSetRefs.join(", ") : "the current diff"
-      }). Read the touched files yourself. For each atom below, check whether its statement ` +
-      "is genuinely satisfied by the code — not just plausible-sounding, but actually true " +
-      "when you read the implementation. Report a finding whenever an atom is NOT realized, " +
-      `and name the atom's id in that finding's atomRefs so it can be traced back:\n\n${describeAtoms(
-        atoms,
-      )}`
+      `against the session's touched files (${touchedFilesAnchor(targetRef)}). Read the touched ` +
+      `files yourself. ${ATOM_ATTESTATION_INSTRUCTION}:\n\n${describeAtoms(atoms)}`
     );
   }
-  return `Review the change described by the session's applied patch sets: ${
-    targetRef.kind === "patch_sets" ? targetRef.patchSetRefs.join(", ") : "the current diff"
-  }. Read the touched files yourself.`;
+  const base =
+    target.kind === "files"
+      ? `Review these files (read them yourself):\n${target.paths.map((p) => `- ${p}`).join("\n")}`
+      : `Review the change described by the session's applied patch sets: ${touchedFilesAnchor(
+          targetRef,
+        )}. Read the touched files yourself.`;
+  // Coverage-scoped fold (review→atom attribution): when the dispatcher folded
+  // outstanding debt atoms into this covering review, append the SAME attestation
+  // ask an atoms target carries, so a FAIL finding can name the atom it violates.
+  // A narrow review folds no atoms and keeps its base objective unchanged.
+  if (atoms.length === 0) {
+    return base;
+  }
+  return (
+    `${base}\n\nAdditionally, confirm the implementation REALIZES each of these outstanding ` +
+    `requirement atoms against the change you are reviewing. ${ATOM_ATTESTATION_INSTRUCTION}:` +
+    `\n\n${describeAtoms(atoms)}`
+  );
 }
 
 /**

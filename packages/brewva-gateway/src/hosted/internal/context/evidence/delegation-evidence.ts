@@ -78,17 +78,25 @@ export interface ContextEconomics {
 }
 
 /**
- * Independence-debt carried into turn close: high-risk `must` atoms that reached
- * the session's end still owing an at-grade independent read
- * (`FitnessProjection.independenceDebtAtoms`). This is the activation counter-signal
- * for the independence-debt channel — a rising `open` across eval rounds means the
- * render is NOT moving the model toward an independent read, the way a rising
- * `failureRate` means activation is pushing into a wall. (A precise discharged-by
- * split is a deliberate follow-up: it needs per-turn fitness history the per-session
- * report does not retain — the projection is re-derived once at tape end.)
+ * Independence-debt census carried into turn close — the discharge OUTCOME the
+ * review→atom close-edge produced for the session's high-risk `must` atoms
+ * (`FitnessProjection.independenceDebtResolution`, re-derived once at tape end):
+ * - `open`: still owes an at-grade read. An `open` that never falls even as reviews
+ *   run is the debt's irreducible tail (no at-grade producer can reach those atoms),
+ *   the way a rising `failureRate` means activation hit a wall;
+ * - `violated`: a live fail named it as a known break — a review/independent FAIL OR a
+ *   deterministic static-guard fail (both reach `violated`);
+ * - `dischargedAtGrade`: reached `satisfied` via an at-grade pass, independent OR
+ *   deterministic (a presence-grade review CANNOT clear a high-risk atom — the grade
+ *   ceiling).
+ * A rising `violated` + `dischargedAtGrade` against a flat `open` means high-risk atoms
+ * are reaching at-grade closure rather than being left owed; the review→atom fold is
+ * ONE driver, not the sole one — read it as closure, not as a review-only signal.
  */
 export interface IndependenceDebtCounts {
   readonly open: number;
+  readonly violated: number;
+  readonly dischargedAtGrade: number;
 }
 
 export interface DelegationEvidenceSessionReport {
@@ -250,6 +258,8 @@ function aggregate(
   let childRunsWithTokens = 0;
   let childTotalTokens = 0;
   let independenceDebtOpen = 0;
+  let independenceDebtViolated = 0;
+  let independenceDebtDischargedAtGrade = 0;
   for (const session of sessions) {
     total += session.counts.total;
     mergeCounts(byRole, session.counts.byRole);
@@ -267,6 +277,8 @@ function aggregate(
     childRunsWithTokens += session.contextEconomics.childRunsWithTokens;
     childTotalTokens += session.contextEconomics.childTotalTokens;
     independenceDebtOpen += session.independenceDebt.open;
+    independenceDebtViolated += session.independenceDebt.violated;
+    independenceDebtDischargedAtGrade += session.independenceDebt.dischargedAtGrade;
   }
   return {
     sessionCount: sessions.length,
@@ -275,7 +287,11 @@ function aggregate(
     failures: { total: dispatch + consult, dispatch, consult, failedRuns },
     adoption: { applied, applyFailed, rejected },
     contextEconomics: { childRunsWithTokens, childTotalTokens },
-    independenceDebt: { open: independenceDebtOpen },
+    independenceDebt: {
+      open: independenceDebtOpen,
+      violated: independenceDebtViolated,
+      dischargedAtGrade: independenceDebtDischargedAtGrade,
+    },
     failureRate: total > 0 ? failedRuns / total : null,
   };
 }
@@ -303,11 +319,10 @@ export function buildDelegationEvidenceReport(
       adoption: countAdoption(records),
       contextEconomics: measureContextEconomics(delegation.runs),
       // The report stores nothing new (axiom 6): re-derive the same tape-folded
-      // fitness projection the runtime brief reads and take its close-state open
-      // count, so operator and model views cannot diverge by construction.
-      independenceDebt: {
-        open: buildTapeRequirementFitness(records).independenceDebtAtoms.length,
-      },
+      // fitness projection the runtime brief reads and take its independence-debt
+      // census (open / violated / dischargedAtGrade — the close-edge's discharge
+      // outcome), so operator and model views cannot diverge by construction.
+      independenceDebt: buildTapeRequirementFitness(records).independenceDebtResolution,
     };
   });
   return { sessions, aggregate: aggregate(sessions) };

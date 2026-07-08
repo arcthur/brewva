@@ -16,8 +16,11 @@ function printUsage(): void {
       "       Measures delegation trigger economics from the tape: reach by role/status/",
       "       waitMode, parallel-gate rejections, FAILURE counts by cause (the reliability",
       "       counter-signal), adoption outcomes, child-token context economics, and the",
-      "       independence-debt open count (high-risk must atoms carried into close still",
-      "       owing an at-grade independent read — the channel's activation counter-signal).",
+      "       independence-debt census for high-risk must atoms at close — open (still owes",
+      "       an at-grade read), violated (a live fail named it — review or deterministic),",
+      "       and dischargedAtGrade (satisfied via an at-grade pass — independent or",
+      "       deterministic): rising violated+dischargedAtGrade against a flat open means",
+      "       high-risk atoms reaching at-grade closure rather than left owed.",
     ].join("\n"),
   );
 }

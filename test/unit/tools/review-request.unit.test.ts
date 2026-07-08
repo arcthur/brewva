@@ -8,6 +8,8 @@ import type {
   SubagentRunResult,
 } from "@brewva/brewva-tools/contracts";
 import { createReviewRequestTool } from "@brewva/brewva-tools/delegation";
+import { buildTapeRequirementFitness } from "@brewva/brewva-tools/runtime-port";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   readVerificationOutcomeRecordedEventPayload,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
@@ -1915,5 +1917,182 @@ describe("review_request tool — independent outcome atomRefs (clear-only posit
     expect(outcome?.outcome).toBe("pass");
     // A files review clears review debt but attests to no specific atom.
     expect(outcome?.atomRefs).toEqual([]);
+  });
+});
+
+describe("review_request tool — review→atom fold (coverage-scoped attribution)", () => {
+  const highRiskAtomEvent = (id: string, timestamp: number) => ({
+    type: "task.requirement.recorded",
+    timestamp,
+    payload: {
+      atom: {
+        id,
+        statement: `${id} must hold`,
+        modality: "must",
+        provenance: "trap",
+        riskClass: "runtime",
+      },
+    },
+  });
+
+  test("a covering files review folds outstanding high-risk debt into reviewedAtomIds + the objective", async () => {
+    const runtime = createRuntimeFixture();
+    let dispatched: SubagentRunRequest | undefined;
+    const tool = createReviewRequestTool({
+      runtime: createBundledToolRuntime(
+        runtime,
+        stubReviewOrchestration({ onRun: (request) => (dispatched = request) }),
+      ),
+    });
+    const sessionId = "review-request-fold-covering-1";
+    const content = "final class FnKeyMonitor {}\n";
+    writeFileSync(join(runtime.identity.cwd, "FnKeyMonitor.swift"), content);
+    // A tool.committed write puts the file in the FRESH universe; a high-risk atom
+    // is recorded but unverified (independence debt). The files review lists exactly
+    // the touched file, so it COVERS the universe.
+    seedCommittedToolEvents(runtime, [
+      committedToolEvent({
+        toolName: "write",
+        args: { path: join(runtime.identity.cwd, "FnKeyMonitor.swift") },
+        timestamp: 1,
+      }),
+      highRiskAtomEvent("req-tap", 2),
+    ]);
+
+    const result = await tool.execute(
+      "tc-1",
+      { target: { kind: "files", paths: ["FnKeyMonitor.swift"] }, lenses: [] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+
+    expect(result.outcome.kind).toBe("ok");
+    // The debt atom rides the dispatch anchor (so a FAIL can name it) and the
+    // objective carries the attestation ask.
+    expect(dispatched?.reviewDispatch?.reviewedAtomIds).toEqual(["req-tap"]);
+    const objective = (dispatched?.packet as { objective?: string } | undefined)?.objective ?? "";
+    expect(objective).toContain("Additionally, confirm the implementation REALIZES");
+    expect(objective).toContain("[req-tap]");
+  });
+
+  test("a review with debt but NO fresh-written file folds nothing — empty universe is never attested", async () => {
+    const runtime = createRuntimeFixture();
+    let dispatched: SubagentRunRequest | undefined;
+    const tool = createReviewRequestTool({
+      runtime: createBundledToolRuntime(
+        runtime,
+        stubReviewOrchestration({ onRun: (request) => (dispatched = request) }),
+      ),
+    });
+    const sessionId = "review-request-fold-empty-1";
+    const content = "final class Prior {}\n";
+    writeFileSync(join(runtime.identity.cwd, "Prior.swift"), content);
+    // A high-risk debt atom is recorded, but NO tool.committed write happened this
+    // turn -> the fresh-touched universe is empty. The review of a pre-existing file
+    // must NOT fold atoms whose realizing code it was not asked to attest (M1).
+    seedCommittedToolEvents(runtime, [highRiskAtomEvent("req-tap", 1)]);
+
+    const result = await tool.execute(
+      "tc-1",
+      { target: { kind: "files", paths: ["Prior.swift"] }, lenses: [] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+
+    expect(result.outcome.kind).toBe("ok");
+    expect(dispatched?.reviewDispatch?.reviewedAtomIds).toEqual([]);
+    const objective = (dispatched?.packet as { objective?: string } | undefined)?.objective ?? "";
+    expect(objective).not.toContain("Additionally");
+  });
+});
+
+describe("review_request tool — review→atom fold liveness (fitness edges)", () => {
+  const highRiskAtomEvent = {
+    type: "task.requirement.recorded",
+    timestamp: 2,
+    payload: {
+      atom: {
+        id: "req-tap",
+        statement: "event tap must re-arm on disable",
+        modality: "must",
+        provenance: "trap",
+        riskClass: "runtime",
+      },
+    },
+  };
+
+  function independenceDebt(
+    runtime: HostedRuntimeAdapterPort,
+    sessionId: string,
+  ): readonly string[] {
+    const events = runtime.ops.events.records.query(sessionId) as unknown as BrewvaEventRecord[];
+    return buildTapeRequirementFitness(events).independenceDebtAtoms;
+  }
+
+  async function runCoveringReview(
+    disposition: string,
+    findings: readonly Record<string, unknown>[],
+  ): Promise<readonly string[]> {
+    const runtime = createRuntimeFixture();
+    const tool = createReviewRequestTool({
+      runtime: createBundledToolRuntime(
+        runtime,
+        stubReviewOrchestration({
+          data: {
+            kind: "consult",
+            consultKind: "review",
+            conclusion: "review complete",
+            disposition,
+            ...(findings.length > 0 ? { findings } : {}),
+          },
+        }),
+      ),
+    });
+    const sessionId = `review-request-fold-liveness-${disposition}`;
+    writeFileSync(
+      join(runtime.identity.cwd, "FnKeyMonitor.swift"),
+      "final class FnKeyMonitor {}\n",
+    );
+    seedCommittedToolEvents(runtime, [
+      committedToolEvent({
+        toolName: "write",
+        args: { path: join(runtime.identity.cwd, "FnKeyMonitor.swift") },
+        timestamp: 1,
+      }),
+      highRiskAtomEvent,
+    ]);
+    // Baseline: the high-risk `must` atom is unmet -> it carries independence debt.
+    expect(independenceDebt(runtime, sessionId)).toEqual(["req-tap"]);
+    await tool.execute(
+      "tc-1",
+      { target: { kind: "files", paths: ["FnKeyMonitor.swift"] }, lenses: [] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+    return independenceDebt(runtime, sessionId);
+  }
+
+  test("a FAIL naming the folded debt atom marks it violated → open drops (the whole point)", async () => {
+    const debt = await runCoveringReview("concern", [
+      {
+        summary: "event tap is not re-armed after tapDisabledByUserInput",
+        severity: "high",
+        atomRefs: ["req-tap"],
+      },
+    ]);
+    // The finding named req-tap -> `violated` -> it leaves the debt set. open 1 -> 0.
+    expect(debt).toEqual([]);
+  });
+
+  test("a presence-grade CLEAR does NOT discharge the high-risk atom (grade ceiling) → open holds", async () => {
+    const debt = await runCoveringReview("clear", []);
+    // The fold set reviewedAtomIds=[req-tap], so the clear outcome names it — but an
+    // independent pass is presence-grade, which for a runtime atom only reaches
+    // `likelySatisfied` (Part 1's static_guard floor), NOT `satisfied`. So it STAYS
+    // independence debt: open holds at 1. This is the RFC's grade ceiling, enforced.
+    expect(debt).toEqual(["req-tap"]);
   });
 });

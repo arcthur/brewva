@@ -1,6 +1,12 @@
 import { resolve } from "node:path";
 import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate/tools";
-import { deriveFreshTouchedFileUniverse } from "@brewva/brewva-vocabulary/review";
+import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import {
+  attestedFilesForRef,
+  deriveFreshTouchedFileUniverse,
+  universeCoveredBy,
+} from "@brewva/brewva-vocabulary/review";
+import type { FreshTouchedFileUniverse, ReviewTargetRef } from "@brewva/brewva-vocabulary/review";
 import {
   extractWriteInvocationPaths,
   projectToolInvocations,
@@ -117,23 +123,43 @@ export function sessionAppliedTouchedFilePaths(
 }
 
 /**
- * The session's FULL fresh-touched-file universe as a normalized path list:
- * the union of applied patch-set `appliedPaths` AND every bare-write (write/edit)
- * invocation's target path — the SAME notion the debt/fitness projections track
- * via the vocabulary's {@link deriveFreshTouchedFileUniverse}. Broader than
- * {@link sessionAppliedTouchedFilePaths} (which is patch-applied files only): an
- * atoms review of a session that finished via bare writes has no patch sets, so
- * its `file_digests` snapshot must cover those bare-write files (Finding P2).
- * Reuses the existing universe derivation — no new touched-files scan. Returns
- * paths in a stable order (patch paths first, then bare-write paths, both
- * first-seen-wins via the underlying Set insertion order).
- *
- * `workspaceRoot` relativizes the bare-write paths: commitment write args are
- * ABSOLUTE, but the resulting `file_digests` receipt must key files
- * workspace-relative so it matches the coverage universe
- * {@link assembleReviewDebtInput} builds (which also relativizes) — otherwise an
- * atoms review of exactly these files could never clear debt on a real hosted
- * tape (Finding P2, absolute-path regression).
+ * THE single derivation of the session's fresh-touched-file universe from an event
+ * list: the union of applied patch-set `appliedPaths` and every bare-write target
+ * path, via the vocabulary's {@link deriveFreshTouchedFileUniverse}. Returns the
+ * `patchSetAppliedPaths` map alongside the universe so a coverage caller can also
+ * resolve a `patch_sets` ref's attested files WITHOUT re-scanning the tape. Pure over
+ * the events; `workspaceRoot` relativizes the absolute commitment write paths so the
+ * universe keys match the workspace-relative review targetRef keys. Shared by
+ * {@link sessionFreshTouchedFilePaths} and {@link freshTouchedCoverageForTargetRef}
+ * so the universe rule has ONE home (`assembleReviewDebtInput` keeps its own `.list`
+ * twin — a different declared capability — acknowledged there).
+ */
+function deriveSessionFreshTouchedUniverse(
+  events: readonly BrewvaEventRecord[],
+  workspaceRoot: string,
+): {
+  universe: FreshTouchedFileUniverse;
+  patchSetAppliedPaths: ReturnType<typeof collectPatchSetAppliedPaths>;
+} {
+  const patchSetAppliedPaths = collectPatchSetAppliedPaths(events);
+  const universe = deriveFreshTouchedFileUniverse({
+    appliedPaths: Object.values(patchSetAppliedPaths).flat(),
+    // The read-model relativizes the absolute commitment paths against the session
+    // root, so the universe files match the review targetRef keys.
+    writeInvocationPaths: extractWriteInvocationPaths(
+      projectToolInvocations(events),
+      workspaceRoot,
+    ),
+  });
+  return { universe, patchSetAppliedPaths };
+}
+
+/**
+ * The session's full fresh-touched-file universe as a normalized path list — broader
+ * than {@link sessionAppliedTouchedFilePaths} (patch-applied files only) because it
+ * also folds in bare write/edit target paths, so an atoms review of a bare-write
+ * session can still snapshot and clear debt over exactly those files (Finding P2).
+ * A thin path-list view over {@link deriveSessionFreshTouchedUniverse}.
  */
 export function sessionFreshTouchedFilePaths(
   runtime: BrewvaToolRuntime,
@@ -142,15 +168,58 @@ export function sessionFreshTouchedFilePaths(
 ): readonly string[] {
   const records = runtime.capabilities.events?.records;
   const allEvents = records?.query ? records.query(sessionId) : [];
-  const patchSetAppliedPaths = collectPatchSetAppliedPaths(allEvents);
-  const universe = deriveFreshTouchedFileUniverse({
-    appliedPaths: Object.values(patchSetAppliedPaths).flat(),
-    // The read-model relativizes the absolute commitment paths against the
-    // session root, so the universe files match the review targetRef keys.
-    writeInvocationPaths: extractWriteInvocationPaths(
-      projectToolInvocations(allEvents),
-      workspaceRoot,
-    ),
-  });
-  return [...universe.files];
+  return [...deriveSessionFreshTouchedUniverse(allEvents, workspaceRoot).universe.files];
+}
+
+export interface FreshTouchedCoverage {
+  /** The session's fresh-touched-file universe: bare writes + applied patches. */
+  readonly universe: FreshTouchedFileUniverse;
+  /** True iff the targetRef's attested files ⊇ the (fully-known) universe. */
+  readonly covered: boolean;
+}
+
+/**
+ * The ONE coverage rule: does a review's `targetRef` attest a file set that COVERS the
+ * session's fresh-touched universe? A `file_digests` ref attests its digested paths; a
+ * `patch_sets` ref attests the union of its applied paths; coverage holds iff that
+ * attested set ⊇ the universe (bare writes included) AND the universe is fully known.
+ * Pure over precomputed inputs — the SINGLE covers definition shared by the review→atom
+ * fold's `.query` gate ({@link freshTouchedCoverageForTargetRef}) and the review-debt
+ * `.list` gate (`assembleReviewDebtInput.covers` in verification.ts), so the two can no
+ * longer drift. An empty universe is trivially covered; a caller that must reject an
+ * empty universe reads the universe directly (as the fold does).
+ */
+export function targetRefCoversFreshUniverse(
+  universe: FreshTouchedFileUniverse,
+  patchSetAppliedPaths: ReturnType<typeof collectPatchSetAppliedPaths>,
+  targetRef: ReviewTargetRef,
+): boolean {
+  return universeCoveredBy(
+    attestedFilesForRef(targetRef, (id) => patchSetAppliedPaths[id] ?? []),
+    universe,
+  );
+}
+
+/**
+ * The session's fresh-touched universe AND whether a review's `targetRef` covers it,
+ * for the review→atom fold's honest-scoping gate. Pure over the event list (the caller
+ * supplies the single `records.query` read); the coverage decision runs through the
+ * shared {@link targetRefCoversFreshUniverse}. The `universe` rides back out so callers
+ * can distinguish "covered because there is nothing to cover" (empty universe —
+ * trivially covered, no fresh implementation to attest against) from real coverage; the
+ * review→atom fold rejects an empty universe by reading it directly.
+ */
+export function freshTouchedCoverageForTargetRef(
+  events: readonly BrewvaEventRecord[],
+  workspaceRoot: string,
+  targetRef: ReviewTargetRef,
+): FreshTouchedCoverage {
+  const { universe, patchSetAppliedPaths } = deriveSessionFreshTouchedUniverse(
+    events,
+    workspaceRoot,
+  );
+  return {
+    universe,
+    covered: targetRefCoversFreshUniverse(universe, patchSetAppliedPaths, targetRef),
+  };
 }

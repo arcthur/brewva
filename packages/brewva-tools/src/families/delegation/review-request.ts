@@ -18,6 +18,7 @@ import {
   mergeLenses,
   preloadedTrapLenses,
   resolveAtomsForTarget,
+  resolveFoldedDebtAtoms,
   snapshotTargetRef,
   type ReviewParams,
   type ReviewTarget,
@@ -182,11 +183,11 @@ export function createReviewRequestTool(options: BrewvaToolOptions): ToolDefinit
         // nothing to review (no atoms recorded, or atomIds naming none that
         // exist), the tool fails closed with an actionable error and never
         // dispatches — mirroring the empty-files/empty-session_diff checks.
-        const atoms =
+        const atomsTargetAtoms =
           reviewParams.target.kind === "atoms"
             ? resolveAtomsForTarget(runtime, sessionId, reviewParams.target)
             : [];
-        if (reviewParams.target.kind === "atoms" && atoms.length === 0) {
+        if (reviewParams.target.kind === "atoms" && atomsTargetAtoms.length === 0) {
           return errTextResult(
             "review_request: atoms target has no requirement atoms to review. Record " +
               "requirement atoms first, or pass a different target.",
@@ -204,6 +205,17 @@ export function createReviewRequestTool(options: BrewvaToolOptions): ToolDefinit
           });
         }
         const { targetRef } = snapshot;
+
+        // The atoms this review ATTESTS: an explicit atoms target's set, or — for a
+        // files/session_diff review that provably COVERS the whole fresh-touched
+        // universe — the outstanding independence-debt atoms folded in (the
+        // review→atom attribution close-edge). A narrow review folds nothing and
+        // stays a pure code review. Resolved AFTER the snapshot: coverage is judged
+        // against the exact targetRef the reviewer will read.
+        const attestedAtoms =
+          reviewParams.target.kind === "atoms"
+            ? atomsTargetAtoms
+            : resolveFoldedDebtAtoms(runtime, sessionId, workspaceRoot, targetRef);
 
         // Preload write/verify trap lenses for the target's files (advisory
         // only — Task 9): a caller-supplied lens and a trap-derived lens
@@ -227,17 +239,18 @@ export function createReviewRequestTool(options: BrewvaToolOptions): ToolDefinit
           targetRef,
           lenses,
           stanceOverridden: reviewParams.stanceOverridden,
-          // The reviewed atom ids feed a clear outcome's atomRefs in BOTH commit
-          // paths (the anchor rides onto the run record for the observer). Only
-          // an atoms target has them; a files/session_diff review attests to no
-          // specific atom, so this stays empty and its clear outcome carries [].
-          reviewedAtomIds: reviewParams.target.kind === "atoms" ? atoms.map((a) => a.id) : [],
+          // Every attested atom's id rides onto the run record (for BOTH the
+          // in-tool and observer commit paths): it feeds a clear outcome's atomRefs
+          // and lets a FAIL finding name the atom it violates. Populated for an
+          // atoms target AND for a covering files/session_diff review with folded
+          // debt; empty for a narrow review that attests no specific atom.
+          reviewedAtomIds: attestedAtoms.map((atom) => atom.id),
         };
         const request: SubagentRunRequest = {
           agent: "explorer",
           consultKind: "review",
           mode: "single",
-          packet: buildReviewPacket(reviewParams, targetRef, lenses, atoms),
+          packet: buildReviewPacket(reviewParams, targetRef, lenses, attestedAtoms),
           reviewDispatch,
         };
 

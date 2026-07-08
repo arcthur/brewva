@@ -18,13 +18,11 @@ import {
   type VerificationRung,
 } from "@brewva/brewva-vocabulary/iteration";
 import {
-  attestedFilesForRef,
   deriveFreshTouchedFileUniverse,
   projectTapeReviewDebt,
   readReviewFindingRecordedEventPayload,
   REVIEW_FINDING_RECORDED_EVENT_TYPE,
   reviewTargetRefMatchesTree,
-  universeCoveredBy,
   type IndependenceBasis,
   type ReviewDebt,
   type ReviewDebtInput,
@@ -47,6 +45,7 @@ import {
   SOURCE_PATCH_APPLIED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/workbench";
 import type { BrewvaToolRuntime, RecordReviewFindingInput } from "../contracts/index.js";
+import { targetRefCoversFreshUniverse } from "./session-touched-files.js";
 
 /**
  * The minimal runtime slice verification recording needs. Named so the
@@ -172,17 +171,15 @@ export function assembleReviewDebtInput(
     // targetRef keys (otherwise coverage could never clear).
     writeInvocationPaths: extractWriteInvocationPaths(invocations, workspaceRoot),
   });
-  const appliedPathsForPatchSet = (patchSetId: string): readonly string[] =>
-    patchSetAppliedPaths[patchSetId] ?? [];
-
   return {
     freshCodeWritten,
     claim,
     independentReceipts,
     matchesTree: (ref) => reviewTargetRefMatchesTree(ref, { appliedPatchSetRefs, fileDigest }),
     freshTouchedUniverse,
-    covers: (ref) =>
-      universeCoveredBy(attestedFilesForRef(ref, appliedPathsForPatchSet), freshTouchedUniverse),
+    // The ONE shared coverage rule (session-touched-files.ts) so the `.list` review-debt
+    // gate and the `.query` review→atom fold gate can never drift.
+    covers: (ref) => targetRefCoversFreshUniverse(freshTouchedUniverse, patchSetAppliedPaths, ref),
   };
 }
 
