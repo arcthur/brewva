@@ -36,7 +36,6 @@ import {
 } from "../targets.js";
 import {
   capturePatchSetFromIsolatedWorkspace,
-  collectChangedPathsFromIsolatedWorkspace,
   copyDelegationContextManifestToIsolatedWorkspace,
   createIsolatedWorkspace,
   type IsolatedWorkspaceHandle,
@@ -338,20 +337,23 @@ async function main(): Promise<void> {
       childOwnsSkill,
       assistantText: output.assistantText,
     });
-    const patches = executionPlan.producesPatches
-      ? await capturePatchSetFromIsolatedWorkspace({
-          sourceRoot: spec.workspaceRoot,
-          isolatedRoot: isolatedWorkspace?.root ?? spec.workspaceRoot,
-          summary: completionSummary.summary,
-          candidatePaths:
-            isolatedWorkspace && childSessionId
-              ? collectChangedPathsFromIsolatedWorkspace({
-                  isolatedRoot: isolatedWorkspace.root,
-                  childSessionId,
-                })
-              : undefined,
-        })
-      : undefined;
+    const patches =
+      executionPlan.producesPatches && isolatedWorkspace
+        ? await capturePatchSetFromIsolatedWorkspace({
+            sourceRoot: spec.workspaceRoot,
+            handle: isolatedWorkspace,
+            summary: completionSummary.summary,
+          }).then((sealed) => {
+            if (!sealed.ok) {
+              // Fail LOUD: a completed run with silently dropped worker edits
+              // is worse than a failed run (the fork is disposed either way).
+              throw new Error(
+                `worker_patch_seal_failed:${sealed.reason}${sealed.detail ? `:${sealed.detail}` : ""}`,
+              );
+            }
+            return sealed.patchSet;
+          })
+        : undefined;
     const finishedAt = Date.now();
     const finalizationReceipt = buildDelegationFinalizationReceipt({
       parentSessionId: plan.parentSessionId,
@@ -384,20 +386,16 @@ async function main(): Promise<void> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const patches = executionPlan.producesPatches
-      ? await capturePatchSetFromIsolatedWorkspace({
-          sourceRoot: spec.workspaceRoot,
-          isolatedRoot: isolatedWorkspace?.root ?? spec.workspaceRoot,
-          summary: message,
-          candidatePaths:
-            isolatedWorkspace && childSessionId
-              ? collectChangedPathsFromIsolatedWorkspace({
-                  isolatedRoot: isolatedWorkspace.root,
-                  childSessionId,
-                })
-              : undefined,
-        }).catch(() => undefined)
-      : undefined;
+    const patches =
+      executionPlan.producesPatches && isolatedWorkspace
+        ? await capturePatchSetFromIsolatedWorkspace({
+            sourceRoot: spec.workspaceRoot,
+            handle: isolatedWorkspace,
+            summary: message,
+          })
+            .then((sealed) => (sealed.ok ? sealed.patchSet : undefined))
+            .catch(() => undefined)
+        : undefined;
     const terminalStatus: Extract<DelegationRunRecord["status"], "failed" | "cancelled"> =
       timeoutTriggered ? "failed" : cancellationReason ? "cancelled" : "failed";
     const terminalCostSummary =

@@ -76,7 +76,12 @@ export function projectRewindState(
         redone.delete(checkpointId);
       }
       latestRewind = toRewindRecord(event);
-      boundaryIndex = index;
+      // A code-only rewind is a pure workspace operation: it abandons nothing
+      // and must not move the conversation redo boundary, or a file restore
+      // would resurrect a redo stack that divergent checkpoints superseded.
+      if (str(event.payload?.mode, "") !== "code") {
+        boundaryIndex = index;
+      }
     } else if (event.type === SESSION_REDO_COMPLETED_EVENT_TYPE) {
       const checkpointId = str(event.payload?.checkpointId, "");
       if (checkpointId) {

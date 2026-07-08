@@ -61,6 +61,10 @@ function forceNamespaceConfig(baseConfig: BrewvaConfig, agentId: string): Brewva
       ...baseConfig.tape,
       dir: `${stateRoot}/tape`,
     },
+    worlds: {
+      ...baseConfig.worlds,
+      dir: `${stateRoot}/worlds`,
+    },
     schedule: {
       ...baseConfig.schedule,
       enabled: false,

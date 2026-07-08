@@ -37,6 +37,12 @@
       "import": "./dist/patch-lifecycle/index.js",
       "default": "./dist/patch-lifecycle/index.js"
     },
+    "./world-store": {
+      "types": "./dist/world-store/index.d.ts",
+      "bun": "./src/world-store/index.ts",
+      "import": "./dist/world-store/index.js",
+      "default": "./dist/world-store/index.js"
+    },
     "./navigation": {
       "types": "./dist/families/navigation/api.d.ts",
       "bun": "./src/families/navigation/api.ts",

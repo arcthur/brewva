@@ -188,7 +188,13 @@ describe("vocabulary boundary fitness", () => {
       if (source.includes("./internal/body.js")) {
         errors.push(`${sourcePath} imports the retired internal body`);
       }
-      if (exportCount > 100) {
+      // The coupled world rewind RFC added four real cross-package names to
+      // the session domain (the checkpoint event type constant replacing raw
+      // string literals at the emit/find sites, the `brewva.world.v1` block
+      // schema, its minimal parse, and the `SessionWorldRestoreRecord` receipt
+      // block the completion payload carries) — contract exports, not barrel
+      // growth.
+      if (exportCount > 104) {
         errors.push(`${sourcePath} exports ${exportCount} names`);
       }
       if (sourceLineCount > 140) {

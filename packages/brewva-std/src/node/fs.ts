@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -120,6 +121,43 @@ export function flushDirectoryDurable(directoryPath: string): void {
   } finally {
     closeSync(directoryDescriptor);
   }
+}
+
+/**
+ * Read and JSON-parse a file, returning `undefined` on any I/O or parse
+ * failure. The std home for untrusted-file JSON intake (several packages had
+ * grown private copies); callers own schema validation of the result.
+ */
+export function readJsonFileSync(filePath: string): unknown {
+  try {
+    return JSON.parse(readFileSync(resolve(filePath), "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Streaming SHA-256 over a file's bytes in constant memory (the std home for
+ * file-content hashing, so production packages don't grow bespoke `createHash`
+ * sites for large files that `@brewva/brewva-std/hash` string helpers would
+ * have to buffer whole).
+ */
+export function sha256HexOfFileSync(filePath: string): string {
+  const hash = createHash("sha256");
+  const fileDescriptor = openSync(resolve(filePath), "r");
+  try {
+    const chunk = Buffer.allocUnsafe(1024 * 1024);
+    while (true) {
+      const bytesRead = readSync(fileDescriptor, chunk, 0, chunk.length, null);
+      if (bytesRead === 0) {
+        break;
+      }
+      hash.update(chunk.subarray(0, bytesRead));
+    }
+  } finally {
+    closeSync(fileDescriptor);
+  }
+  return hash.digest("hex");
 }
 
 /**

@@ -312,7 +312,11 @@ describe("runtime ops capability inventory fitness", () => {
     // the vocabulary input imports — to the tool-runtime contract: a real new capability
     // namespace mirrored by a runtime-ops builder, not facade growth. (+2 for the
     // `ticket.unclaim` port method + its input import — the claim-liveness escape hatch.)
-    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_125);
+    // The coupled world rewind RFC then added the world-snapshot lane availability to
+    // `WorkspaceRewindReadiness` (`WorldRewindAvailability` + its honest four-status
+    // union) — a real read-model contract for the world lane, not facade growth. The
+    // exact merged ceiling is 1143 (planning-map + world lane, re-derived after rebase).
+    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_143);
     // Same feature, implementation side: the orient-injection `requirements.record`
     // builder plus its shared `emitRequirementAtoms` helper (one emit site guarding
     // spec.set/requirements.record against event-shape drift) grew
@@ -409,8 +413,12 @@ describe("runtime ops capability inventory fitness", () => {
     // growth (the planMap command+query port + result type + input imports) and its
     // hosted-ops builder growth (map/ticket/fog wiring) into the combined budget — a
     // real new capability namespace, not facade growth. (+3 for the `unclaim` port
-    // method, its input import, and its builder wiring.)
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_917);
+    // method, its input import, and its builder wiring.) The coupled world rewind RFC
+    // adds the `WorldRewindAvailability` read-model contract on
+    // `WorkspaceRewindReadiness`; the capture/verify implementation lives in the rewind
+    // engine and `@brewva/brewva-tools/world-store`, off this count. Exact merged
+    // ceiling is 3935 (planning-map + world lane, re-derived after rebase onto main).
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_935);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

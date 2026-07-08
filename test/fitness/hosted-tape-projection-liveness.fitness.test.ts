@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { resolveTapeFilePath } from "@brewva/brewva-runtime";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
+import {
+  parseWorldCheckpointBlock,
+  SESSION_REWIND_CHECKPOINT_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/session";
 import {
   deriveLatestTreeMutationAt,
   extractWriteInvocationPaths,
@@ -347,5 +353,53 @@ describe("hosted-tape projection liveness (real gpt-5.5 session)", () => {
     // Fold proof + HIGH-1 honesty: the review-debt-specific `review_request` line is
     // suppressed, and the render never claims there is NO independent receipt.
     expect(block?.content).not.toContain("`review_request`");
+  });
+});
+
+// World-lane liveness (coupled world rewind RFC, Phase 1). The frozen fixture
+// above predates the lane and `worlds` ships default-off, so no curated real
+// tape can carry a world block yet. For a default-off lane the honest liveness
+// proof is stronger than a frozen fixture: run the REAL hosted adapter (the
+// same `ops.session.rewind.recordCheckpoint` entry every checkpoint producer
+// routes through), then fold the DURABLE tape file it wrote from disk and
+// assert the world projection yields real output — producer, tape persistence,
+// envelope unwrap, block parse, and availability projection proven end-to-end
+// on every run instead of once at capture time.
+describe("hosted-tape projection liveness (world checkpoint lane, live-generated)", () => {
+  test("a worlds-enabled checkpoint writes a parseable world block to the durable tape", async () => {
+    const { createHostedRuntimeAdapter } =
+      await import("../../packages/brewva-gateway/src/hosted/internal/session/runtime-ports.js");
+    const { createRuntimeConfig } = await import("../helpers/runtime.js");
+
+    const cwd = mkdtempSync(join(tmpdir(), "brewva-world-liveness-"));
+    writeFileSync(join(cwd, "app.ts"), "export const live = true;\n", "utf8");
+    const config = createRuntimeConfig((draft) => {
+      draft.worlds.enabled = true;
+    });
+    const runtime = createHostedRuntimeAdapter({ cwd, config });
+    const sessionId = "world-liveness-session";
+    runtime.ops.session.rewind.recordCheckpoint(sessionId, { leafEntryId: "leaf-1" });
+
+    // Fold the durable tape from disk, exactly as a cold consumer would.
+    const tapeEvents = unwrapOpsEnvelopes(
+      readFileSync(resolveTapeFilePath(cwd, config.tape.dir, sessionId), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as TapeEvent),
+    );
+    const checkpoint = tapeEvents.find(
+      (event) => event.type === SESSION_REWIND_CHECKPOINT_EVENT_TYPE,
+    );
+    const payload = checkpoint?.payload as { world?: unknown } | undefined;
+    const block = parseWorldCheckpointBlock(payload?.world);
+    if (!block || !block.ok) {
+      throw new Error(`world block did not parse from the durable tape: ${JSON.stringify(block)}`);
+    }
+    expect(block.worldId.startsWith("sha256:")).toBe(true);
+
+    // And the availability projection over the real tape + real store is live.
+    const readiness = runtime.ops.session.rewind.workspaceReadiness(sessionId);
+    expect(readiness.world?.status).toBe("available");
+    expect(readiness.world?.worldId).toBe(block.worldId);
   });
 });

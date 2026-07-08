@@ -50,3 +50,31 @@ describe("rewind/redo lattice consistency (RFC WS4)", () => {
     expect(finalActive.map((c) => c.checkpointId)).toEqual([id1]);
   });
 });
+
+// Coupled world rewind RFC, Phase 2 regression: a code-only rewind is a pure
+// workspace operation and must not move the conversation redo boundary.
+describe("code-only rewind and the redo boundary", () => {
+  test("a code-only rewind does not resurrect a superseded redo stack", () => {
+    const rewind = createHostedRuntimeAdapter({
+      cwd: mkdtempSync(join(tmpdir(), "brewva-lattice-code-")),
+    }).ops.session.rewind;
+    const codeSessionId = "lattice-code-session";
+    rewind.recordCheckpoint(codeSessionId, { leafEntryId: "leaf-1" });
+    rewind.recordCheckpoint(codeSessionId, { leafEntryId: "leaf-2" });
+    const [first] = rewind.getState(codeSessionId).checkpoints;
+    const firstId = first?.checkpointId ?? "";
+
+    expect(rewind.rewind(codeSessionId, { mode: "conversation", checkpointId: firstId }).ok).toBe(
+      true,
+    );
+    expect(rewind.getState(codeSessionId).redoAvailable).toBe(true);
+
+    // Divergent work supersedes the redo window...
+    rewind.recordCheckpoint(codeSessionId, { leafEntryId: "leaf-3" });
+    expect(rewind.getState(codeSessionId).redoAvailable).toBe(false);
+
+    // ...and a workspace-only rewind must leave it superseded.
+    expect(rewind.rewind(codeSessionId, { mode: "code", checkpointId: firstId }).ok).toBe(true);
+    expect(rewind.getState(codeSessionId).redoAvailable).toBe(false);
+  });
+});

@@ -1,6 +1,10 @@
 export {
   buildSessionRewindProjection,
   listSessionRewindTargets,
+  parseWorldCheckpointBlock,
+  SESSION_REWIND_CHECKPOINT_EVENT_TYPE,
+  WORLD_CHECKPOINT_BLOCK_SCHEMA,
+  type WorldCheckpointBlockView,
 } from "./internal/session-rewind.js";
 
 export { DURABILITY_LEVELS, EFFECT_DELIVERY } from "./internal/durability.js";
@@ -97,6 +101,7 @@ export type {
   SessionRewindSummary,
   SessionRewindTargetView,
   SessionUncleanShutdownDiagnostic,
+  SessionWorldRestoreRecord,
   TapeHandoffResult,
   TapeLedgerRow,
   TapePressureLevel,

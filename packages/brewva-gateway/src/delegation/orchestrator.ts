@@ -98,7 +98,6 @@ import {
 } from "./targets.js";
 import {
   capturePatchSetFromIsolatedWorkspace,
-  collectChangedPathsFromIsolatedWorkspace,
   copyDelegationContextManifestToIsolatedWorkspace,
   createIsolatedWorkspace,
   type IsolatedWorkspaceHandle,
@@ -165,23 +164,25 @@ async function captureIsolatedPatchSet(
   sourceRoot: string,
   isolatedWorkspace: IsolatedWorkspaceHandle | undefined,
   summary: string,
-  childSessionId?: string,
 ): Promise<PatchSet | undefined> {
   if (!isolatedWorkspace) {
     return undefined;
   }
-  const candidatePaths = childSessionId
-    ? collectChangedPathsFromIsolatedWorkspace({
-        isolatedRoot: isolatedWorkspace.root,
-        childSessionId,
-      })
-    : undefined;
-  return await capturePatchSetFromIsolatedWorkspace({
+  // Basis-anchored seal: a seal failure means the worker's delta cannot be
+  // proven against what it saw. Fail LOUD — flattening it to "no patches"
+  // would report a completed run while silently destroying the worker's
+  // edits with the fork.
+  const sealed = await capturePatchSetFromIsolatedWorkspace({
     sourceRoot,
-    isolatedRoot: isolatedWorkspace.root,
+    handle: isolatedWorkspace,
     summary,
-    candidatePaths,
   });
+  if (!sealed.ok) {
+    throw new Error(
+      `worker_patch_seal_failed:${sealed.reason}${sealed.detail ? `:${sealed.detail}` : ""}`,
+    );
+  }
+  return sealed.patchSet;
 }
 
 interface LiveHostedDelegationRun {
@@ -798,7 +799,6 @@ export function createHostedSubagentAdapter(
               options.runtime.identity.workspaceRoot,
               isolatedWorkspace,
               completionSummary.summary,
-              childSessionId,
             )
           : undefined;
         const finishedAt = Date.now();
@@ -847,7 +847,6 @@ export function createHostedSubagentAdapter(
               options.runtime.identity.workspaceRoot,
               isolatedWorkspace,
               message,
-              childSessionId,
             ).catch(() => undefined)
           : undefined;
         const finishedAt = Date.now();

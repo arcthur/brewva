@@ -80,6 +80,23 @@ function truncateAvailabilityReason(message: string): string {
     : flattened;
 }
 
+// Rewind success copy must say which workspace lane ran: a world restore can
+// rewrite files while zero patch sets exist, and "reverted 0 patch set(s)"
+// would read as "workspace untouched" over a tree that just changed.
+function describeWorkspaceRewind(result: {
+  readonly patchSetIds: readonly string[];
+  readonly worldRestore?: {
+    readonly wroteFileCount: number;
+    readonly deletedFileCount: number;
+  };
+}): string {
+  if (result.worldRestore) {
+    const { wroteFileCount, deletedFileCount } = result.worldRestore;
+    return `restored the workspace to the checkpoint world (${wroteFileCount} file(s) written, ${deletedFileCount} deleted; ${result.patchSetIds.length} patch set(s) superseded)`;
+  }
+  return `reverted ${result.patchSetIds.length} patch set(s)`;
+}
+
 export interface ShellSessionHandlerContext {
   cwd: string;
   getState(): CliShellViewState;
@@ -449,12 +466,21 @@ export class ShellSessionHandler {
     if (!result.ok) {
       // One recovery owner: /undo IS the session rewind transaction (conversation
       // plus workspace through one engine). There is no separate workspace-only
-      // plane to compose, so report why the transaction could not run.
-      this.context.getUi().notify(`Undo unavailable: ${result.reason}.`, "warning");
+      // plane to compose, so report why the transaction could not run — and a
+      // mid-flight world-restore failure means the workspace is visibly
+      // partial, which must never read as "nothing happened".
+      const detail = result.error ? ` (${result.error})` : "";
+      const partial =
+        result.error === "restore_io_error"
+          ? " The workspace may be partially restored; re-run the rewind."
+          : "";
+      this.context
+        .getUi()
+        .notify(`Undo unavailable: ${result.reason}${detail}.${partial}`, "warning");
       return;
     }
     this.context.transcriptProjector.setRewindMarker(
-      `Session undo applied: reverted ${result.patchSetIds.length} patch set(s) and restored the submitted prompt. Use /redo to restore the undone turn.`,
+      `Session undo applied: ${describeWorkspaceRewind(result)} and restored the submitted prompt. Use /redo to restore the undone turn.`,
     );
     this.context.transcriptProjector.refreshFromSession();
     if (result.restoredPrompt) {
@@ -473,10 +499,7 @@ export class ShellSessionHandler {
     }
     this.context
       .getUi()
-      .notify(
-        `Undid ${result.patchSetIds.length} patch set(s); prompt restored for session rewind.`,
-        "info",
-      );
+      .notify(`Undo: ${describeWorkspaceRewind(result)}; prompt restored.`, "info");
     this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });
   }
 
@@ -529,12 +552,19 @@ export class ShellSessionHandler {
       summary: parsedCommand?.summary ?? "none",
     });
     if (!result.ok) {
-      this.context.getUi().notify(`Rewind unavailable (${result.reason}).`, "warning");
+      const detail = result.error ? ` (${result.error})` : "";
+      const partial =
+        result.error === "restore_io_error"
+          ? " The workspace may be partially restored; re-run the rewind."
+          : "";
+      this.context
+        .getUi()
+        .notify(`Rewind unavailable: ${result.reason}${detail}.${partial}`, "warning");
       return;
     }
 
     this.context.transcriptProjector.setRewindMarker(
-      `Session rewind applied: rewound to turn ${result.checkpoint.turn} and reverted ${result.patchSetIds.length} patch set(s). Use /redo to restore the abandoned branch tip.`,
+      `Session rewind applied: rewound to turn ${result.checkpoint.turn}; ${describeWorkspaceRewind(result)}. Use /redo to restore the abandoned branch tip.`,
     );
     this.context.transcriptProjector.refreshFromSession();
     if (result.restoredPrompt) {
@@ -554,7 +584,7 @@ export class ShellSessionHandler {
     this.context
       .getUi()
       .notify(
-        `Rewound to turn ${result.checkpoint.turn}; reverted ${result.patchSetIds.length} patch set(s).`,
+        `Rewound to turn ${result.checkpoint.turn}; ${describeWorkspaceRewind(result)}.`,
         "info",
       );
     this.context.commit(this.context.buildSessionStatusActions(), { debounceStatus: false });

@@ -135,6 +135,24 @@ export interface PendingEffectCommitmentRequest {
   readonly turnId?: string;
   readonly createdAt?: number;
   readonly defaultRisk?: string;
+  /**
+   * The kernel's derived effect recoverability tier (`observe_only`,
+   * `reversible`, `compensatable`, `manual_recovery`, `irreversible`) projected
+   * onto the operator's approval decision — answering "can this be undone", not
+   * just "may this happen". Descriptive only: no admission path reads it. Typed
+   * as a string to keep the vocabulary card free of a runtime-kernel dependency;
+   * the kernel owns the closed set.
+   */
+  readonly recoverability?: string;
+  /**
+   * Coarse, workspace-level advisory (coupled world rewind RFC): with world
+   * snapshots enabled and a covering checkpoint world available, a `/rewind
+   * code` can restore the whole workspace to the last checkpoint — so even an
+   * effect the kernel tier marks `manual_recovery` (e.g. an `exec` write) is
+   * recoverable at the workspace granularity. Distinct from per-effect
+   * reversibility; absent unless the world lane covers this turn.
+   */
+  readonly workspaceRewindable?: boolean;
   readonly argsSummary?: string;
   readonly argsDigest?: string;
   readonly expiresAt?: number;

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +12,10 @@ import {
 } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
+
+// Real search-engine warmup over a real workspace: the bare `bun test` 5s
+// default flakes this suite under machine load.
+setDefaultTimeout(60_000);
 
 describe("grep managed tool", () => {
   test("records source snapshots for matched lines under scoped runtime capabilities", async () => {

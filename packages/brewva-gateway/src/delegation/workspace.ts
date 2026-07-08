@@ -1,35 +1,48 @@
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { constants, lstatSync } from "node:fs";
+import { cp, copyFile, mkdir, mkdtemp, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
-import type { PatchFileAction, PatchSet } from "@brewva/brewva-vocabulary/workbench";
+import { shortSha256Hex } from "@brewva/brewva-std/hash";
 import {
-  collectPersistedPatchPaths,
-  listPersistedPatchSets,
-  PATCH_HISTORY_FILE,
-} from "@brewva/brewva-vocabulary/workbench";
+  createWorkspaceWorldStore,
+  listGitScopedPaths,
+  RUNTIME_DATA_ROOT_NAMES,
+  WORLD_BLOB_HASH_PREFIX,
+  type WorkspaceWorldStore,
+  type WorldEnumerationSource,
+  type WorldManifest,
+} from "@brewva/brewva-tools/world-store";
+import type { PatchFileAction, PatchSet } from "@brewva/brewva-vocabulary/workbench";
 import { resolveDelegationContextBundleManifestPath } from "./context-manifest.js";
 
-const IGNORED_ROOT_SEGMENTS = new Set([".git", "node_modules", ".orchestrator"]);
-const IGNORED_RELATIVE_PATHS = new Set([".brewva/skills_index.json"]);
-const IGNORED_RELATIVE_PREFIXES = [".brewva/tape/"] as const;
+/**
+ * Isolated-workspace physics for effectful delegation (the `patch-snapshot`
+ * archetype and the `exec-ephemeral` verifier lane): fork a copy-on-write
+ * workspace, run the worker inside it, and seal its delta as a basis-anchored
+ * `PatchSet` the parent must explicitly adopt.
+ *
+ * Basis anchoring (coupled world rewind RFC, Phase 3): immediately after the
+ * fork copy, the isolated tree is captured into the parent's world store —
+ * `basisWorldId` is exactly what the worker saw. Sealing captures the fork
+ * again (`resultWorldId`) and diffs the two content-addressed manifests, so
+ * change detection cannot miss same-size/same-mtime rewrites, and every
+ * change's `beforeHash` is BASIS content rather than whatever the parent
+ * happens to contain at seal time. Adoption then detects parent divergence
+ * per path instead of last-writer-wins.
+ */
+
+// The worker fork must not clone the parent's runtime state at all: tapes and
+// steering are session truth the child must own fresh, the session-index clone
+// would be a torn SQLite snapshot carrying the parent's live write lease, and
+// the world store would recurse. `.git` is handled separately (git-scoped
+// forks clone it; the filter governs the git-less fallback copy).
+// The fork copy excludes the shared runtime-data roots (one source of truth
+// with capture enumeration) plus `node_modules` as a copy-cost optimization
+// (git ls-files already drops ignored deps; this covers the walk fallback).
+const IGNORED_ROOT_SEGMENTS = new Set([...RUNTIME_DATA_ROOT_NAMES, "node_modules"]);
 const PATCH_ARTIFACT_ROOT = ".orchestrator/subagent-patch-artifacts";
 const PATCH_MANIFEST_FILE_NAME = "patchset.json";
-const ISOLATED_WORKSPACE_BASELINE_FILE = ".orchestrator/isolated-workspace-baseline.json";
-
-interface WorkspaceFileMetadata {
-  size: number;
-  mtimeMs: string;
-}
-
-interface IsolatedWorkspaceBaselineManifest {
-  schema: "brewva.isolated-workspace-baseline.v1";
-  capturedAt: number;
-  files: Record<string, WorkspaceFileMetadata>;
-}
 
 function normalizeRelativePath(path: string): string {
   return path.replaceAll("\\", "/");
@@ -40,18 +53,8 @@ function shouldIgnorePath(relativePath: string): boolean {
   if (!normalized) {
     return false;
   }
-  if (IGNORED_RELATIVE_PATHS.has(normalized)) {
-    return true;
-  }
-  if (IGNORED_RELATIVE_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
-    return true;
-  }
   const [firstSegment] = normalized.split("/");
   return firstSegment ? IGNORED_ROOT_SEGMENTS.has(firstSegment) : false;
-}
-
-function hashBuffer(buffer: Buffer): string {
-  return sha256Hex(buffer);
 }
 
 function buildPatchArtifactFileName(relativePath: string): string {
@@ -60,177 +63,46 @@ function buildPatchArtifactFileName(relativePath: string): string {
   return `${digest}-${name || "artifact"}`;
 }
 
-function sanitizeSessionId(sessionId: string): string {
-  return sessionId.replaceAll(/[^\w.-]+/g, "_");
+/** Blob ref → the raw-hex form PatchSet changes carry. */
+function blobRefToChangeHash(blobRef: string): string {
+  return blobRef.startsWith(WORLD_BLOB_HASH_PREFIX)
+    ? blobRef.slice(WORLD_BLOB_HASH_PREFIX.length)
+    : blobRef;
 }
 
-function resolvePatchHistoryPath(isolatedRoot: string, childSessionId: string): string {
-  return resolve(
-    isolatedRoot,
-    ".orchestrator",
-    "snapshots",
-    sanitizeSessionId(childSessionId),
-    PATCH_HISTORY_FILE,
-  );
-}
-
-async function collectWorkspaceFiles(
-  root: string,
-  candidatePaths?: readonly string[],
-): Promise<Map<string, string>> {
-  const files = new Map<string, string>();
-
-  if (candidatePaths && candidatePaths.length > 0) {
-    for (const candidatePath of candidatePaths) {
-      const normalizedPath = normalizeRelativePath(candidatePath);
-      if (!normalizedPath || shouldIgnorePath(normalizedPath)) {
-        continue;
-      }
-      try {
-        const content = await readFile(resolve(root, normalizedPath));
-        files.set(normalizedPath, hashBuffer(content));
-      } catch {
-        // Missing candidate paths are expected for deleted files.
-      }
-    }
-    return files;
-  }
-
-  async function walk(currentDir: string): Promise<void> {
-    const entries = await readdir(currentDir, { withFileTypes: true });
-    await Promise.all(
-      entries.map(async (entry) => {
-        const absolutePath = resolve(currentDir, entry.name);
-        const relativePath = normalizeRelativePath(relative(root, absolutePath));
-        if (shouldIgnorePath(relativePath)) {
-          return;
-        }
-        if (entry.isDirectory()) {
-          await walk(absolutePath);
-          return;
-        }
-        if (!entry.isFile()) {
-          return;
-        }
-        const content = await readFile(absolutePath);
-        files.set(relativePath, hashBuffer(content));
-      }),
-    );
-  }
-
-  await walk(root);
-  return files;
-}
-
-function collectWorkspaceMetadata(root: string): Map<string, WorkspaceFileMetadata> {
-  const files = new Map<string, WorkspaceFileMetadata>();
-
-  function walk(currentDir: string): void {
-    const entries = readdirSync(currentDir, { withFileTypes: true });
-    for (const entry of entries) {
-      const absolutePath = resolve(currentDir, entry.name);
-      const relativePath = normalizeRelativePath(relative(root, absolutePath));
-      if (shouldIgnorePath(relativePath)) {
-        continue;
-      }
-      if (entry.isDirectory()) {
-        walk(absolutePath);
-        continue;
-      }
-      if (!entry.isFile()) {
-        continue;
-      }
-      const stats = statSync(absolutePath);
-      files.set(relativePath, {
-        size: stats.size,
-        mtimeMs: stats.mtimeMs.toFixed(3),
-      });
-    }
-  }
-
-  walk(root);
-  return files;
-}
-
-function buildWorkspaceBaselineManifest(root: string): IsolatedWorkspaceBaselineManifest {
-  return {
-    schema: "brewva.isolated-workspace-baseline.v1",
-    capturedAt: Date.now(),
-    files: Object.fromEntries(collectWorkspaceMetadata(root)),
-  };
-}
-
-function readWorkspaceBaselineManifest(
-  isolatedRoot: string,
-): IsolatedWorkspaceBaselineManifest | undefined {
-  try {
-    const raw = JSON.parse(
-      readFileSync(resolve(isolatedRoot, ISOLATED_WORKSPACE_BASELINE_FILE), "utf8"),
-    ) as Partial<IsolatedWorkspaceBaselineManifest>;
-    if (raw?.schema !== "brewva.isolated-workspace-baseline.v1") {
-      return undefined;
-    }
-    if (!raw.files || typeof raw.files !== "object") {
-      return undefined;
-    }
-    const files = Object.fromEntries(
-      Object.entries(raw.files).flatMap(([path, metadata]) => {
-        if (
-          typeof path !== "string" ||
-          shouldIgnorePath(path) ||
-          !metadata ||
-          typeof metadata !== "object" ||
-          typeof metadata.size !== "number" ||
-          typeof metadata.mtimeMs !== "string"
-        ) {
-          return [];
-        }
-        return [
-          [
-            path,
-            { size: metadata.size, mtimeMs: metadata.mtimeMs } satisfies WorkspaceFileMetadata,
-          ],
-        ];
-      }),
-    );
-    return {
-      schema: "brewva.isolated-workspace-baseline.v1",
-      capturedAt: typeof raw.capturedAt === "number" ? raw.capturedAt : 0,
-      files,
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function collectChangedPathsFromBaselineManifest(isolatedRoot: string): string[] | undefined {
-  const baseline = readWorkspaceBaselineManifest(isolatedRoot);
-  if (!baseline) {
-    return undefined;
-  }
-  const current = collectWorkspaceMetadata(isolatedRoot);
-  const changed = new Set<string>();
-  const allPaths = new Set<string>([...Object.keys(baseline.files), ...current.keys()]);
-  for (const path of allPaths) {
-    if (shouldIgnorePath(path)) {
-      continue;
-    }
-    const before = baseline.files[path];
-    const after = current.get(path);
-    if (!before || !after) {
-      changed.add(path);
-      continue;
-    }
-    if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
-      changed.add(path);
-    }
-  }
-  return changed.size > 0 ? [...changed].toSorted() : undefined;
-}
+// The fork's world store is FORK-LOCAL and ephemeral: it lives beside the
+// isolated copy under the same tmpdir and dies with it on dispose. It never
+// touches the parent's `.brewva/worlds`, so a delegation run neither pollutes
+// the checkpoint lane's store (which is gated on `worlds.enabled`; delegation
+// is not) nor shares its stat cache / GC lock / blobs. Basis and result worlds
+// are transient diff scratch — nothing reads them after seal (adoption reads
+// the artifact bytes copied to `.orchestrator/subagent-patch-artifacts`), so a
+// fork-local store loses no durable capability while removing every shared-
+// state hazard. Retention is irrelevant (the store holds one run's ≤2 worlds
+// and is disposed whole), so a tiny bound suffices.
+const FORK_STORE_DIR_NAME = "worlds";
+const FORK_STORE_RETAIN = 4;
+const FORK_STORE_SESSION_ID = "fork";
 
 export interface IsolatedWorkspaceHandle {
   root: string;
+  /** Content-addressed world of the fork at fork time — what the worker saw. */
+  readonly basisWorldId: string;
+  /** Enumeration backend the basis used; the seal must match it. */
+  readonly basisSource: WorldEnumerationSource;
+  readonly store: WorkspaceWorldStore;
+  readonly runSessionId: string;
   dispose(): Promise<void>;
+}
+
+export class IsolatedWorkspaceForkError extends Error {
+  constructor(
+    readonly reason: string,
+    detail?: string,
+  ) {
+    super(`isolated_workspace_fork_failed:${reason}${detail ? `:${detail}` : ""}`);
+    this.name = "IsolatedWorkspaceForkError";
+  }
 }
 
 export async function createIsolatedWorkspace(
@@ -240,56 +112,128 @@ export async function createIsolatedWorkspace(
   const resolvedSourceRoot = resolve(sourceRoot);
   const tempRoot = await mkdtemp(join(tmpdir(), prefix));
   const isolatedRoot = resolve(tempRoot, "workspace");
-  const copyOptions = {
-    recursive: true,
-    force: true,
-    filter: (sourcePath: string) => {
-      const relativePath = normalizeRelativePath(relative(resolvedSourceRoot, sourcePath));
-      return !shouldIgnorePath(relativePath);
-    },
-  } satisfies Parameters<typeof cp>[2];
-  try {
-    await cp(resolvedSourceRoot, isolatedRoot, {
-      ...copyOptions,
-      mode: constants.COPYFILE_FICLONE,
-    });
-  } catch {
-    await cp(resolvedSourceRoot, isolatedRoot, copyOptions);
-  }
-  await mkdir(resolve(isolatedRoot, ".orchestrator"), { recursive: true });
-  await writeFile(
-    resolve(isolatedRoot, ISOLATED_WORKSPACE_BASELINE_FILE),
-    JSON.stringify(buildWorkspaceBaselineManifest(isolatedRoot), null, 2),
-    "utf8",
+  // Git workspaces fork by SCOPE, not by tree: clone exactly the parent's
+  // tracked + untracked-unignored files plus `.git` itself. The fork then
+  // enumerates with git semantics (basis and seal stay gitignore-scoped and
+  // dedup against the parent's own worlds), gitignored build payloads never
+  // bloat the store or trip the size caps, and the worker keeps git tooling.
+  const gitScope = listGitScopedPaths(resolvedSourceRoot)?.filter(
+    (path) => !shouldIgnorePath(path),
   );
-  return {
-    root: isolatedRoot,
-    dispose: async () => {
-      await rm(tempRoot, { recursive: true, force: true });
-    },
-  };
-}
-
-export function collectChangedPathsFromIsolatedWorkspace(input: {
-  isolatedRoot: string;
-  childSessionId?: string;
-}): string[] | undefined {
-  const changedPaths = new Set<string>();
-  if (input.childSessionId) {
-    const patchSets = listPersistedPatchSets({
-      path: resolvePatchHistoryPath(input.isolatedRoot, input.childSessionId),
-      sessionId: input.childSessionId,
-    });
-    for (const path of collectPersistedPatchPaths(patchSets)) {
-      if (!shouldIgnorePath(path)) {
-        changedPaths.add(path);
+  if (gitScope) {
+    await mkdir(isolatedRoot, { recursive: true });
+    for (const relativePath of gitScope) {
+      const from = resolve(resolvedSourceRoot, relativePath);
+      let stats;
+      try {
+        stats = lstatSync(from);
+      } catch {
+        continue;
+      }
+      const to = resolve(isolatedRoot, relativePath);
+      await mkdir(dirname(to), { recursive: true });
+      if (stats.isSymbolicLink()) {
+        // Tracked symlinks stay symlinks (relative targets stay coherent
+        // inside the fork; absolute targets behave as they did in place).
+        try {
+          await symlink(await readlink(from), to);
+        } catch {
+          // A broken or duplicate link is outside the capture promise anyway.
+        }
+        continue;
+      }
+      if (stats.isDirectory()) {
+        // A gitlink (checked-out submodule): clone its whole tree so the
+        // worker sees the same workspace the whole-tree copy used to give it.
+        const copySubmodule = { recursive: true, force: true } satisfies Parameters<typeof cp>[2];
+        try {
+          await cp(from, to, { ...copySubmodule, mode: constants.COPYFILE_FICLONE });
+        } catch {
+          await cp(from, to, copySubmodule).catch(() => undefined);
+        }
+        continue;
+      }
+      if (!stats.isFile()) {
+        continue;
+      }
+      try {
+        await copyFile(from, to, constants.COPYFILE_FICLONE);
+      } catch {
+        await copyFile(from, to);
       }
     }
+    // Clone `.git` ONLY when it is the real metadata directory. A linked
+    // worktree's `.git` is a pointer FILE into the primary checkout's shared
+    // metadata — copying it would let worker git commands mutate the PARENT's
+    // index/HEAD through the fork. Such forks stay git-less on purpose; their
+    // scope was already narrowed by the ls-files copy above, so walk-backed
+    // basis/seal enumeration sees exactly the same files.
+    let gitStats;
+    try {
+      gitStats = lstatSync(resolve(resolvedSourceRoot, ".git"));
+    } catch {
+      gitStats = undefined;
+    }
+    if (gitStats?.isDirectory()) {
+      const gitDir = resolve(resolvedSourceRoot, ".git");
+      const copyGit = { recursive: true, force: true } satisfies Parameters<typeof cp>[2];
+      try {
+        await cp(gitDir, resolve(isolatedRoot, ".git"), {
+          ...copyGit,
+          mode: constants.COPYFILE_FICLONE,
+        });
+      } catch {
+        await cp(gitDir, resolve(isolatedRoot, ".git"), copyGit);
+      }
+    }
+  } else {
+    const copyOptions = {
+      recursive: true,
+      force: true,
+      filter: (sourcePath: string) => {
+        const relativePath = normalizeRelativePath(relative(resolvedSourceRoot, sourcePath));
+        return !shouldIgnorePath(relativePath);
+      },
+    } satisfies Parameters<typeof cp>[2];
+    try {
+      await cp(resolvedSourceRoot, isolatedRoot, {
+        ...copyOptions,
+        mode: constants.COPYFILE_FICLONE,
+      });
+    } catch {
+      await cp(resolvedSourceRoot, isolatedRoot, copyOptions);
+    }
   }
-  for (const path of collectChangedPathsFromBaselineManifest(input.isolatedRoot) ?? []) {
-    changedPaths.add(path);
+  await mkdir(resolve(isolatedRoot, ".orchestrator"), { recursive: true });
+  // Disposing the tmpdir reclaims the workspace copy AND the fork-local world
+  // store (manifests, blobs, refs, stat cache) atomically — no lifecycle hook
+  // into a shared store is needed.
+  const dispose = async () => {
+    await rm(tempRoot, { recursive: true, force: true });
+  };
+  // The basis capture IS the fork contract: without it the seal cannot anchor
+  // `beforeHash` to what the worker saw, so a failed capture fails the fork
+  // closed instead of degrading to last-writer-wins adoption. The store roots
+  // at `tempRoot/worlds` — a sibling of the captured `isolatedRoot`, so it is
+  // never itself enumerated — and dies with the tmpdir.
+  const store = createWorkspaceWorldStore({
+    workspaceRoot: isolatedRoot,
+    dir: relative(isolatedRoot, resolve(tempRoot, FORK_STORE_DIR_NAME)),
+    retainPerSession: FORK_STORE_RETAIN,
+  });
+  const basis = store.capture({ sessionId: FORK_STORE_SESSION_ID });
+  if (!basis.ok) {
+    await dispose();
+    throw new IsolatedWorkspaceForkError(basis.reason, basis.detail);
   }
-  return changedPaths.size > 0 ? [...changedPaths].toSorted() : undefined;
+  return {
+    root: isolatedRoot,
+    basisWorldId: basis.worldId,
+    basisSource: basis.source,
+    store,
+    runSessionId: FORK_STORE_SESSION_ID,
+    dispose,
+  };
 }
 
 export async function copyDelegationContextManifestToIsolatedWorkspace(input: {
@@ -308,75 +252,91 @@ export async function copyDelegationContextManifestToIsolatedWorkspace(input: {
   }
 }
 
+function manifestByPath(manifest: WorldManifest | undefined): Map<string, string> {
+  const byPath = new Map<string, string>();
+  for (const entry of manifest?.files ?? []) {
+    byPath.set(entry.path, entry.blob);
+  }
+  return byPath;
+}
+
+export type IsolatedPatchSealResult =
+  | { readonly ok: true; readonly patchSet: PatchSet | undefined }
+  | { readonly ok: false; readonly reason: string; readonly detail?: string };
+
 export async function capturePatchSetFromIsolatedWorkspace(input: {
   sourceRoot: string;
-  isolatedRoot: string;
+  handle: IsolatedWorkspaceHandle;
   summary?: string;
-  candidatePaths?: readonly string[];
-}): Promise<PatchSet | undefined> {
-  const candidatePaths = [
-    ...(input.candidatePaths ?? []),
-    ...(collectChangedPathsFromBaselineManifest(input.isolatedRoot) ?? []),
-  ]
-    .map((path) => normalizeRelativePath(path))
-    .filter(
-      (path, index, array) =>
-        path.length > 0 && !shouldIgnorePath(path) && array.indexOf(path) === index,
-    );
-  const normalizedCandidatePaths =
-    candidatePaths
-      ?.map((path) => normalizeRelativePath(path))
-      .filter((path) => path.length > 0 && !shouldIgnorePath(path)) ?? [];
-  const before = await collectWorkspaceFiles(
-    input.sourceRoot,
-    normalizedCandidatePaths.length > 0 ? normalizedCandidatePaths : undefined,
-  );
-  const after = await collectWorkspaceFiles(
-    input.isolatedRoot,
-    normalizedCandidatePaths.length > 0 ? normalizedCandidatePaths : undefined,
-  );
-  const patchSetId = `patch_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
-  const paths =
-    normalizedCandidatePaths.length > 0
-      ? [...new Set(normalizedCandidatePaths)].toSorted()
-      : [...new Set([...before.keys(), ...after.keys()])].toSorted();
-  const changes: PatchSet["changes"] = [];
+}): Promise<IsolatedPatchSealResult> {
+  const { handle } = input;
+  const result = handle.store.capture({ sessionId: handle.runSessionId });
+  if (!result.ok) {
+    return {
+      ok: false,
+      reason: result.reason,
+      ...(result.detail ? { detail: result.detail } : {}),
+    };
+  }
+  if (result.source !== handle.basisSource) {
+    // A worker that created or destroyed `.git` inside the fork flipped the
+    // enumeration backend; the two manifests would no longer share a scope
+    // and the diff would fabricate deletes for every newly-out-of-scope file.
+    return {
+      ok: false,
+      reason: "enumeration_backend_changed",
+      detail: `basis=${handle.basisSource} seal=${result.source}`,
+    };
+  }
+  const basisManifest = handle.store.readManifest(handle.basisWorldId);
+  if (!basisManifest) {
+    return { ok: false, reason: "basis_world_missing", detail: handle.basisWorldId };
+  }
+  const before = manifestByPath(basisManifest);
+  const after = manifestByPath(handle.store.readManifest(result.worldId));
 
+  const patchSetId = `patch_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
+  const paths = [...new Set([...before.keys(), ...after.keys()])].toSorted();
+  const changes: PatchSet["changes"] = [];
   for (const path of paths) {
-    const beforeHash = before.get(path);
-    const afterHash = after.get(path);
+    const beforeBlob = before.get(path);
+    const afterBlob = after.get(path);
     let action: PatchFileAction | undefined;
-    if (beforeHash && !afterHash) {
+    if (beforeBlob && !afterBlob) {
       action = "delete";
-    } else if (!beforeHash && afterHash) {
+    } else if (!beforeBlob && afterBlob) {
       action = "add";
-    } else if (beforeHash && afterHash && beforeHash !== afterHash) {
+    } else if (beforeBlob && afterBlob && beforeBlob !== afterBlob) {
       action = "modify";
     }
     if (!action) {
       continue;
     }
     let artifactRef: string | undefined;
-    if (action !== "delete") {
+    if (action !== "delete" && afterBlob) {
+      // Artifact bytes come from the sealed world's blob, not a re-read of
+      // the live fork file — the artifact is exactly what was sealed.
+      const content = handle.store.readBlob(afterBlob);
+      if (content === undefined) {
+        return { ok: false, reason: "sealed_blob_missing", detail: path };
+      }
       const artifactDir = resolve(input.sourceRoot, PATCH_ARTIFACT_ROOT, patchSetId);
       await mkdir(artifactDir, { recursive: true });
-      const artifactFileName = buildPatchArtifactFileName(path);
-      const artifactAbsolutePath = resolve(artifactDir, artifactFileName);
-      const artifactContent = await readFile(resolve(input.isolatedRoot, path));
-      await writeFile(artifactAbsolutePath, artifactContent);
+      const artifactAbsolutePath = resolve(artifactDir, buildPatchArtifactFileName(path));
+      await writeFile(artifactAbsolutePath, content);
       artifactRef = normalizeRelativePath(relative(input.sourceRoot, artifactAbsolutePath));
     }
     changes.push({
       path,
       action,
-      beforeHash,
-      afterHash,
+      beforeHash: beforeBlob ? blobRefToChangeHash(beforeBlob) : undefined,
+      afterHash: afterBlob ? blobRefToChangeHash(afterBlob) : undefined,
       artifactRef,
     });
   }
 
   if (changes.length === 0) {
-    return undefined;
+    return { ok: true, patchSet: undefined };
   }
 
   const patchSet: PatchSet = {
@@ -392,5 +352,5 @@ export async function capturePatchSetFromIsolatedWorkspace(input: {
     JSON.stringify(patchSet, null, 2),
     "utf8",
   );
-  return patchSet;
+  return { ok: true, patchSet };
 }

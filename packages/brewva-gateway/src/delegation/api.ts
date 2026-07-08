@@ -60,6 +60,5 @@ export {
 export {
   createIsolatedWorkspace,
   capturePatchSetFromIsolatedWorkspace,
-  collectChangedPathsFromIsolatedWorkspace,
   type IsolatedWorkspaceHandle,
 } from "./workspace.js";

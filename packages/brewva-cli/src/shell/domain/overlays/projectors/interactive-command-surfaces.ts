@@ -233,8 +233,14 @@ export function buildAuthorityOverlayPayload(input: {
     `Tool access: ${toolAccessSummary}`,
   ];
   for (const ask of input.snapshot.approvals.slice(0, 3)) {
+    // Recoverability answers "can this be undone" at the approval point; the
+    // world-rewindable suffix flags that a `/rewind code` can restore the
+    // workspace even when the per-effect tier cannot.
+    const recovery = ask.recoverability
+      ? ` recovery=${ask.recoverability}${ask.workspaceRewindable ? "+rewindable" : ""}`
+      : "";
     lines.push(
-      `- Ask ${ask.requestId} tool=${ask.toolName} boundary=${ask.boundary} effects=${formatList(ask.effects ?? [], 4)} evidence=${formatList(
+      `- Ask ${ask.requestId} tool=${ask.toolName} boundary=${ask.boundary} effects=${formatList(ask.effects ?? [], 4)}${recovery} evidence=${formatList(
         (ask.evidenceRefs ?? []).map((ref) => ref.id),
         4,
       )}`,

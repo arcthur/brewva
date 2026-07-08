@@ -216,6 +216,22 @@ export type RuntimeSessionIntegrity =
   | RuntimeSessionIntegrityProven
   | RuntimeSessionIntegrityUnproven;
 
+// World-snapshot lane availability for a rewind checkpoint, projected honestly:
+// `available` (manifest + every blob verified), `missing_artifacts` (captured
+// but retention or damage removed material), `capture_failed` (the checkpoint
+// durably recorded a failed capture), `not_captured` (checkpoint predates the
+// world lane or carries no block).
+export type WorldRewindAvailabilityStatus =
+  | "available"
+  | "missing_artifacts"
+  | "capture_failed"
+  | "not_captured";
+
+export interface WorldRewindAvailability {
+  readonly status: WorldRewindAvailabilityStatus;
+  readonly worldId?: string;
+}
+
 // Readonly preview of whether a workspace (`code`/`both`) rewind can reverse its
 // patch window without executing — every window patch must still have valid
 // rollback material. Lets inspect report capability honestly instead of promising
@@ -226,6 +242,8 @@ export interface WorkspaceRewindReadiness {
   readonly windowSize: number;
   /** Why the window cannot be reversed (null when ready or the window is empty). */
   readonly blockedReason: string | null;
+  /** World-snapshot lane availability; absent while the worlds store is disabled. */
+  readonly world?: WorldRewindAvailability;
 }
 
 export type RuntimeRecoveryPendingRecord = {

@@ -19,6 +19,7 @@ export type {
   SessionRewindState,
   SessionRewindSummary,
   SessionRewindTargetView,
+  SessionWorldRestoreRecord,
 } from "./types/session-rewind.js";
 
 export interface BrewvaReplaySession {

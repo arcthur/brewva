@@ -787,6 +787,21 @@
               "$ref": "#/definitions/VerificationLevel"
             }
           }
+        },
+        "worlds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dir": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "retainPerSession": {
+              "type": "number"
+            }
+          }
         }
       }
     },

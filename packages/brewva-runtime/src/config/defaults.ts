@@ -41,6 +41,16 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     dir: ".brewva/tape",
     checkpointIntervalEntries: 120,
   },
+  // Workspace world snapshots (coupled world rewind RFC). On by default: the
+  // world-restore rewind lane covers exec-written damage the patch lane cannot,
+  // and a clean capture is engineered to zero writes (~135 ms warm on a
+  // 2.5k-file repo, once per provider round). The size caps fail closed rather
+  // than hang on a very large workspace.
+  worlds: {
+    enabled: true,
+    dir: ".brewva/worlds",
+    retainPerSession: 64,
+  },
   projection: {
     enabled: true,
     dir: ".orchestrator/projection",

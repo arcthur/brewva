@@ -3,6 +3,7 @@ import {
   normalizeBoolean,
   normalizeNonEmptyString,
   normalizeNonNegativeInteger,
+  normalizePositiveInteger,
 } from "./normalization-shared.js";
 import { normalizeChannelsConfig } from "./normalize-channels.js";
 import { normalizeInfrastructureConfig } from "./normalize-infrastructure.js";
@@ -25,6 +26,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const verificationInput = isRecord(input.verification) ? input.verification : {};
   const ledgerInput = isRecord(input.ledger) ? input.ledger : {};
   const tapeInput = isRecord(input.tape) ? input.tape : {};
+  const worldsInput = isRecord(input.worlds) ? input.worlds : {};
   const projectionInput = isRecord(input.projection) ? input.projection : {};
   const planningInput = isRecord(input.planning) ? input.planning : {};
   const securityInput = isRecord(input.security) ? input.security : {};
@@ -52,6 +54,14 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
       checkpointIntervalEntries: normalizeNonNegativeInteger(
         tapeInput.checkpointIntervalEntries,
         defaults.tape.checkpointIntervalEntries,
+      ),
+    },
+    worlds: {
+      enabled: normalizeBoolean(worldsInput.enabled, defaults.worlds.enabled),
+      dir: normalizeNonEmptyString(worldsInput.dir, defaults.worlds.dir),
+      retainPerSession: normalizePositiveInteger(
+        worldsInput.retainPerSession,
+        defaults.worlds.retainPerSession,
       ),
     },
     projection: normalizeProjectionConfig(projectionInput, defaults.projection),

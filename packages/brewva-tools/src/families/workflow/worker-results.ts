@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { sha256Hex } from "@brewva/brewva-std/hash";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type {
   WorkerApplyReport,
@@ -187,7 +188,14 @@ function readArtifactContent(
   if (runtimeArtifact) {
     return { ok: false, reason: runtimeArtifact.reason };
   }
-  return { ok: true, content: readFileSync(artifactPath, "utf8") };
+  // The apply path writes string content, so a non-UTF-8 artifact would be
+  // silently corrupted by the round-trip; refuse it honestly instead.
+  const bytes = readFileSync(artifactPath);
+  const content = bytes.toString("utf8");
+  if (!Buffer.from(content, "utf8").equals(bytes)) {
+    return { ok: false, reason: "binary_artifact_unsupported" };
+  }
+  return { ok: true, content };
 }
 
 function fullFileReplaceIntent(input: {
@@ -226,6 +234,91 @@ function fullFileReplaceIntent(input: {
     endAnchor: formatSourceAnchor(last),
     replacement: input.content,
   };
+}
+
+interface BasisConflict {
+  readonly path: string;
+  readonly reason: string;
+}
+
+interface BasisSettlement {
+  readonly applyChanges: PatchFileChange[];
+  readonly conflicts: BasisConflict[];
+}
+
+// Per-path fast-forward settlement against the fork basis. `beforeHash` and
+// `afterHash` are raw sha256 hex over file bytes (the PatchSet convention;
+// the basis-anchored seal guarantees beforeHash is what the worker forked
+// from). A parent already carrying the change is a no-op, a parent that
+// diverged on the same path is a conflict, and untouched paths fast-forward —
+// per-path, so disjoint parent movement never blocks adoption.
+function settlePatchSetAgainstBasis(input: {
+  readonly patchSet: PatchSet;
+  readonly scope: ReturnType<typeof resolveToolTargetScope>;
+}): BasisSettlement {
+  const applyChanges: PatchFileChange[] = [];
+  const conflicts: BasisConflict[] = [];
+  for (const change of input.patchSet.changes) {
+    if (change.path.length === 0) {
+      conflicts.push({ path: "<missing>", reason: "invalid_change_path" });
+      continue;
+    }
+    const path = resolveScopedPath(change.path, input.scope);
+    if (!path) {
+      conflicts.push({ path: change.path, reason: "path_outside_target" });
+      continue;
+    }
+    let currentHash: string | undefined;
+    if (existsSync(path)) {
+      try {
+        currentHash = sha256Hex(readFileSync(path));
+      } catch {
+        conflicts.push({ path: change.path, reason: "unreadable_parent_file" });
+        continue;
+      }
+    }
+    if (change.action === "add") {
+      if (currentHash === undefined) {
+        applyChanges.push(change);
+      } else if (currentHash !== change.afterHash) {
+        conflicts.push({ path: change.path, reason: "occupied_by_parent" });
+      }
+      continue;
+    }
+    if (change.action === "rename") {
+      // The basis-anchored seal never emits renames (a rename is an
+      // add+delete pair); a foreign producer's rename has no basis to settle
+      // against, so it fails closed with its real cause named.
+      conflicts.push({ path: change.path, reason: "rename_unsupported" });
+      continue;
+    }
+    if (change.beforeHash === undefined) {
+      conflicts.push({ path: change.path, reason: "basis_unknown" });
+      continue;
+    }
+    if (change.action === "modify") {
+      if (currentHash === change.afterHash) {
+        continue;
+      }
+      if (currentHash === undefined) {
+        conflicts.push({ path: change.path, reason: "deleted_by_parent" });
+      } else if (currentHash === change.beforeHash) {
+        applyChanges.push(change);
+      } else {
+        conflicts.push({ path: change.path, reason: "parent_diverged" });
+      }
+      continue;
+    }
+    if (currentHash === undefined) {
+      continue;
+    }
+    if (currentHash === change.beforeHash) {
+      applyChanges.push(change);
+    } else {
+      conflicts.push({ path: change.path, reason: "parent_diverged" });
+    }
+  }
+  return { applyChanges, conflicts };
 }
 
 function sourcePatchIntentsFromPatchSet(input: {
@@ -277,28 +370,9 @@ function sourcePatchIntentsFromPatchSet(input: {
       edits.push({ kind: "delete_file", uri });
       continue;
     }
-    if (change.oldPath && change.newPath) {
-      const oldPath = resolveScopedPath(change.oldPath, input.scope);
-      const newPath = resolveScopedPath(change.newPath, input.scope);
-      if (!oldPath || !newPath) {
-        return { ok: false, reason: "path_outside_target", path: change.path };
-      }
-      const oldRuntimeArtifact = resolveRuntimeArtifactReadRejection(oldPath, input.scope);
-      const newRuntimeArtifact = resolveRuntimeArtifactReadRejection(newPath, input.scope);
-      if (oldRuntimeArtifact || newRuntimeArtifact) {
-        return {
-          ok: false,
-          reason: (oldRuntimeArtifact ?? newRuntimeArtifact)!.reason,
-          path: change.path,
-        };
-      }
-      edits.push({
-        kind: "rename_file",
-        uri: toSourceFileResourceUri(input.scope, oldPath),
-        newUri: toSourceFileResourceUri(input.scope, newPath),
-      });
-      continue;
-    }
+    // Renames never reach here: the basis-anchored seal emits add+delete
+    // pairs, and the settlement gate fails foreign rename changes closed
+    // before intent conversion.
     return { ok: false, reason: "unsupported_patch_action", path: change.path };
   }
   return { ok: true, edits };
@@ -464,8 +538,81 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
           );
         }
         const scope = resolveToolTargetScope(runtime, ctx);
-        const converted = sourcePatchIntentsFromPatchSet({
+        // Basis settlement (coupled world rewind RFC, Phase 3): every change's
+        // beforeHash is the fork-basis content, so parent divergence on the
+        // SAME path is detectable here instead of silently last-writer-wins.
+        // Divergence fails closed per path (re-merging is the model's job);
+        // changes the parent already carries are dropped as no-ops.
+        const settlement = settlePatchSetAgainstBasis({
           patchSet: report.mergedPatchSet,
+          scope,
+        });
+        if (settlement.conflicts.length > 0) {
+          recordToolRuntimeEvent(runtime, {
+            sessionId,
+            type: WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
+            payload: {
+              workerIds: report.workerIds,
+              planId: null,
+              appliedPatchSetId: null,
+              failedPaths: settlement.conflicts.map((conflict) => conflict.path),
+              reason: "basis_conflict",
+            },
+          });
+          return errTextResult(
+            [
+              "# Worker Results Apply",
+              "Basis conflict: the parent workspace diverged from the worker's fork basis on these paths.",
+              ...settlement.conflicts.map((conflict) => `- ${conflict.path}: ${conflict.reason}`),
+              "",
+              "Nothing was applied. Re-run the worker against the current workspace, or merge the conflicting paths manually.",
+            ].join("\n"),
+            {
+              ok: false,
+              status: "basis_conflict",
+              workerIds: report.workerIds,
+              conflicts: settlement.conflicts,
+            },
+          );
+        }
+        if (settlement.applyChanges.length === 0) {
+          // Every change is already present on the parent: adoption is a
+          // provable no-op, so settle the worker set without a plan.
+          recordToolRuntimeEvent(runtime, {
+            sessionId,
+            type: WORKER_RESULTS_APPLIED_EVENT_TYPE,
+            payload: {
+              workerIds: report.workerIds,
+              planId: null,
+              appliedPatchSetId: report.mergedPatchSet.id,
+              failedPaths: [],
+              reason: "already_applied",
+            },
+          });
+          if (report.workerIds.length > 0) {
+            runtime.capabilities.session.workerResults.clear(sessionId, {
+              workerIds: report.workerIds,
+              decision: "applied",
+              reason: "worker_results_apply_noop",
+            });
+          }
+          return okTextResult(
+            "# Worker Results Apply\nEvery worker change is already present on the parent workspace; nothing to apply.",
+            {
+              ok: true,
+              status: "applied",
+              workerIds: report.workerIds,
+              appliedPatchSetId: report.mergedPatchSet.id,
+              appliedPaths: [],
+            },
+          );
+        }
+        const settledPatchSet: PatchSet = {
+          ...report.mergedPatchSet,
+          changes: settlement.applyChanges,
+        };
+        const converted = sourcePatchIntentsFromPatchSet({
+          patchSet: settledPatchSet,
           scope,
           runtime,
           sessionId,

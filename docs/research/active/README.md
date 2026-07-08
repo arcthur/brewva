@@ -258,6 +258,26 @@ what it pinned, physics keeps; what failed twice, the brief says so.`
   map, with the projection + concurrency machinery earning its weight only if real
   efforts contend across sessions. Under the line `Compaction keeps the tail; the
 goal holds the intent; the map externalizes the plan.`
+- [RFC: Coupled World Rewind, Delegation Changeset Physics, Reversibility Tiers, And The Supervision Surface](./rfc-coupled-world-rewind-delegation-changesets-and-reversibility-tiers.md):
+  active RFC distilling the residue of the Shepherd substrate study (arXiv
+  2605.10913 + repo, evaluated 2026-07-08) after the honest comparative finding
+  — Brewva's tape tree is stronger on the conversation axis (Shepherd has no
+  durable mid-run fork), Shepherd is stronger on the environment axis — and
+  after rejecting Shepherd itself as a dependency (Python-only, no wire
+  protocol, batch task model, three in-flight kernels). Four loops: a durable
+  **world snapshot** per mutating `checkpoint.committed` in a private git-object
+  store with a world-restore lane in the rewind transaction engine (covers
+  `exec`-written files for the first time; missing rollback artifacts degrade
+  instead of failing the window), **changeset physics** for the declared-but-
+  hollow `patch-snapshot` delegation archetype (clonefile/copy carrier fork →
+  seal `PatchSet` → ff/path-disjoint fail-closed settlement onto the existing
+  adoption dispositions), derived **reversibility tiers** projected into
+  approval and rewind preview (views only — a fitness pins that no authority
+  path reads them), and a gated opt-in **supervision surface** mapping
+  Shepherd's inject/handoff/discard onto steering-inbox append, tape-leaf fork,
+  and coupled rewind. Under the line `A checkpoint names a world, not just a
+conversation; a delegated edit lands only when adopted; every effect knows its
+way back — or says it has none.`
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

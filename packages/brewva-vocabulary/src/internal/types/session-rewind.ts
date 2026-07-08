@@ -115,12 +115,27 @@ export type SessionRedoFailureReason =
   | "redo_failed"
   | "reasoning_checkpoint_failed";
 
+/**
+ * Receipt block for a workspace rewind that ran through the world-restore
+ * lane (coupled world rewind RFC): the checkpoint's captured world was
+ * materialized instead of unwinding the patch window, and `fromWorldId` names
+ * the pre-restore capture — a restore is a new edge, never a rewrite.
+ */
+export interface SessionWorldRestoreRecord {
+  readonly worldId: string;
+  readonly fromWorldId?: string;
+  readonly wroteFileCount: number;
+  readonly deletedFileCount: number;
+  readonly unchangedFileCount: number;
+}
+
 export type SessionRewindResult =
   | {
       readonly ok: true;
       readonly checkpoint: SessionRewindCheckpointRecord;
       readonly reasoningRevert?: ReasoningRevertRecord;
       readonly divergenceNote?: SessionRewindDivergenceNote;
+      readonly worldRestore?: SessionWorldRestoreRecord;
       readonly abandonedCheckpointIds: readonly string[];
       readonly patchSetIds: readonly string[];
       readonly rollbackResults: readonly RollbackResult[];

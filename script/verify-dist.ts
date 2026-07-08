@@ -291,6 +291,7 @@ function main(): void {
       "@brewva/brewva-tools/memory",
       "@brewva/brewva-tools/delegation",
       "@brewva/brewva-tools/workflow",
+      "@brewva/brewva-tools/world-store",
       "@brewva/brewva-runtime/config",
       "@brewva/brewva-runtime/core",
       "@brewva/brewva-vocabulary/context",

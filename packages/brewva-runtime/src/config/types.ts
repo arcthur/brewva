@@ -130,6 +130,11 @@ export interface BrewvaConfig {
     dir: string;
     checkpointIntervalEntries: number;
   };
+  worlds: {
+    enabled: boolean;
+    dir: string;
+    retainPerSession: number;
+  };
   projection: {
     enabled: boolean;
     dir: string;
@@ -310,6 +315,7 @@ export interface BrewvaConfigFile {
   };
   ledger?: Partial<BrewvaConfig["ledger"]>;
   tape?: Partial<BrewvaConfig["tape"]>;
+  worlds?: Partial<BrewvaConfig["worlds"]>;
   projection?: DeepPartial<BrewvaConfig["projection"]>;
   planning?: Partial<BrewvaConfig["planning"]>;
   security?: Partial<

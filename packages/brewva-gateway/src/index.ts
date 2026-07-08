@@ -41,7 +41,6 @@ export {
   buildDelegationPrompt,
   buildHostedDelegationTargetFromAgentSpec,
   capturePatchSetFromIsolatedWorkspace,
-  collectChangedPathsFromIsolatedWorkspace,
   createDetachedSubagentBackgroundController,
   createHostedSubagentAdapter,
   createIsolatedWorkspace,

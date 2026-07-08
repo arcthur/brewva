@@ -2,7 +2,39 @@ import type {
   EffectCommitmentRequestRecord,
   PendingEffectCommitmentRequest,
 } from "@brewva/brewva-vocabulary/iteration";
+import { previewWorkspaceRewind } from "../../recovery/rewind-engine.js";
 import type { HostedRuntimeOpsContext } from "../../runtime-ops-context.js";
+
+// Effect classes (from the kernel's ToolEffectClass union) whose mutation a
+// whole-workspace rewind can restore. A world-restore reverses the workspace to
+// the last checkpoint, so a workspace-mutating effect is workspace-rewindable
+// even when the per-effect tier marks it manual_recovery — the coarse advisory
+// the world lane enables. Non-filesystem effects (external_network,
+// credential_access, schedule/memory/budget mutation, …) stay outside any
+// workspace rewind and never get the advisory.
+const WORKSPACE_MUTATING_EFFECTS = new Set(["workspace_write", "local_exec"]);
+
+/**
+ * Whether a `/rewind code` could restore the workspace to a recent checkpoint:
+ * world snapshots enabled AND the latest rewindable checkpoint carries an
+ * available world. A world restore reverses the WHOLE workspace to that
+ * checkpoint, so it undoes any effect committed after it — including a pending
+ * effect once it runs — without needing per-effect patch material (the exact
+ * gap the world lane closed). This is a coarse workspace-level fact, not a
+ * per-effect guarantee, which is why the card field is named
+ * `workspaceRewindable`, not `reversible`.
+ *
+ * Cost: one `previewWorkspaceRewind` (a rewind-state fold + a shallow world
+ * check) per session per approval-list build, and zero when the world store is
+ * disabled (the default). If the store defaults on, memoize by
+ * `(sessionId, tape length)` before this fans across many sessions per sync.
+ */
+function resolveWorkspaceRewindable(ctx: HostedRuntimeOpsContext, sessionId: string): boolean {
+  if (!ctx.runtime.config.worlds.enabled) {
+    return false;
+  }
+  return previewWorkspaceRewind(ctx, sessionId).world?.status === "available";
+}
 
 export type ApprovalRequestRow = EffectCommitmentRequestRecord &
   PendingEffectCommitmentRequest & {
@@ -146,6 +178,29 @@ function applyRequestListQuery(rows: ApprovalRequestRow[], query: unknown): Appr
   return state ? rows.filter((row) => row.state === state) : rows;
 }
 
+/**
+ * The Phase 4 projection: lift the kernel's already-derived recoverability tier
+ * off the authority payload onto the operator card, and add the coarse
+ * workspace-rewindability advisory when the world lane covers this turn and the
+ * effect is workspace-mutating. Pure over the authority record so the exact
+ * behavior is unit-testable without synthesizing a kernel approval.
+ */
+export function deriveApprovalReversibility(
+  authority: Record<string, unknown>,
+  workspaceRewindable: boolean,
+): { readonly recoverability?: string; readonly workspaceRewindable?: true } {
+  const manifestBasis = readObject(authority.manifestBasis);
+  const posture = readObject(manifestBasis.commitmentPosture);
+  const recoverability = readString(posture.recoverability);
+  const mutatesWorkspace = readStringArray(authority.effects).some((effect) =>
+    WORKSPACE_MUTATING_EFFECTS.has(effect),
+  );
+  return {
+    ...(recoverability ? { recoverability } : {}),
+    ...(workspaceRewindable && mutatesWorkspace ? { workspaceRewindable: true } : {}),
+  };
+}
+
 function buildApprovalRequests(
   ctx: HostedRuntimeOpsContext,
   sessionId: string,
@@ -153,6 +208,8 @@ function buildApprovalRequests(
   const proposedByToolCallId = new Map<string, string>();
   const proposedCallsByToolCallId = new Map<string, Record<string, unknown>>();
   const rows = new Map<string, ApprovalRequestRow>();
+  // Workspace-level rewindability is a per-session fact; resolve it once.
+  const workspaceRewindable = resolveWorkspaceRewindable(ctx, sessionId);
   for (const event of ctx.listEvents(sessionId)) {
     if (event.source === "advisory") {
       // Advisory ops events never bear approval authority, even when their
@@ -206,6 +263,9 @@ function buildApprovalRequests(
         evidenceRefs: [],
         ...(typeof event.turn === "number" ? { turn: event.turn } : {}),
         defaultRisk: readString(authority.riskLevel),
+        // Stop dropping the kernel's derived recoverability tier at the operator
+        // boundary, and add the world-lane rewindability advisory.
+        ...deriveApprovalReversibility(authority, workspaceRewindable),
         ...(argsSummary ? { argsSummary } : {}),
         // Canonical argument digest recorded by the kernel on the approval
         // request. Request ids identify requests; this identifies the exact
