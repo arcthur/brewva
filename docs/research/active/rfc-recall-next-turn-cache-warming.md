@@ -4,7 +4,7 @@
 
 - Status: active
 - Owner: Recall and substrate maintainers
-- Last reviewed: `2026-06-26`
+- Last reviewed: `2026-07-08`
 - Depends on:
   - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md)
   - [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](./rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md)
@@ -128,6 +128,14 @@ local read-model fold, not a long-lived fiber.
 
 ## Landing Plan
 
+**Implementation state (2026-07-08):** both phases landed on `main` (`9f583ae
+feat(recall): next-turn cache warming via broker self-warm`). `RecallBroker.warm()`
+and the single-flight `sync()` guard live in
+`packages/brewva-recall/src/broker/broker.ts`; the broker self-warms on the
+`turn.ended` advisory ops event via the same records subscription that drives the
+dirty flag. The remaining promotion gate is the cold-vs-warm latency measurement
+on a real fixture session — the value magnitude, not the mechanism.
+
 Two phases:
 
 1. **`warm()` + single-flight, no trigger wiring.** Add `RecallBroker.warm()` and
@@ -224,11 +232,17 @@ On acceptance, convert this note to a single-decision record under
   next query (e.g. seeding the FTS query cache with terms from the just-finished
   turn) without it becoming speculative pre-selection? Deferred until the general
   warm proves its latency win.
-- Trigger cadence: warm after every turn, or only after turns that touched recall
-  or grew the index past a threshold? Over-warming a rarely-recalled session wastes
-  local CPU for no pull.
-- Invalidation interaction: confirm a warm in flight when an invalidating event
-  lands re-marks dirty and re-warms, rather than caching a soon-stale state.
+- Trigger cadence: v1 warms after every `turn.ended`, dirty-gated (a quiet turn
+  folds to a no-op, so a rarely-changed session does not rebuild). Whether to
+  further restrict to turns that touched recall or grew the index past a threshold
+  — to avoid warming a dirty-but-never-recalled session — stays open.
+- Invalidation interaction (RESOLVED in implementation): a warm in flight when an
+  invalidating event lands re-marks dirty and re-warms rather than caching a
+  soon-stale state. `broker.ts` bumps a `revision` counter on every invalidating
+  event; `performSync` clears `dirty` only when the revision is unchanged at
+  completion, and both the single-flight owner and any joiner re-`sync()` on
+  observing `dirty` after a build — so a mid-build invalidation can never publish
+  stale state.
 
 ## Related Work
 

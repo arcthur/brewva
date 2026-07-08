@@ -42,7 +42,8 @@ discipline.
   `allowH2:false`, idle body/headers timeout, proxy) injected per OpenAI client
   to dodge the Feilian gateway's intermittent h2 RST. Consolidates the two
   scattered `new OpenAI({...})` sites; per client (not process-global) because
-  bun's SDK bypasses the global undici dispatcher.
+  bun's SDK bypasses the global undici dispatcher. Landed on `main` (`ca2c984`,
+  8 unit tests green); only the live feilian-window dogfood remains before promotion.
 
 - [RFC: Inspect, Replay, And Recovery Optimization](./rfc-inspect-replay-and-recovery-optimization.md):
   active RFC for replacing optimistic recovery status with cursor-bound
@@ -78,7 +79,10 @@ discipline.
   missing-sensor gap (the evidence gap is recorded but never looped back to the
   decision point), not a weak signal; reuses graded evidence, drives no gate, and
   hands the choice to the model (axioms 1, 3, 7, 18). The information-channel
-  companion to the authorship-taints-verification candidate axiom.
+  companion to the authorship-taints-verification candidate axiom. Landing-plan
+  items 1–4 landed on `main` (`dbeeaf3`, `fbb0f00`); what remains is empirical
+  promotion and the review→atom discharge edge on branch
+  `rfc/independence-debt-close`.
 - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md):
   active RFC for closing the last gap in typed, per-entry, promotion-grade
   attention-selection evidence: making attention selection an accountable effect
@@ -103,7 +107,9 @@ discipline.
   `report:context-evidence --recommend` posture while the policy stays pure, and
   one unified explicit-pull context-ledger line in the shared inspect host's
   compaction surface. Under the grammar `Compaction must prove it shrank; a
-reference must prove it still resolves`.
+reference must prove it still resolves`. All five loops landed v1 on `main`
+  (`0485dc7` + the Loop 1 receipt closure); only Loop 3's happy-path summary swap
+  (benchmark-gated) and Loop 4's per-model target stay deferred.
 
 - [RFC: Quantified Compaction Economics And Graded Evidence Honesty](./rfc-quantified-compaction-economics-and-evidence-honesty.md):
   active RFC taking a third pass at `headroom` — its current `#856` net-cost arc
@@ -183,7 +189,8 @@ it; if gated, the model operates it and the tape accounts for it`.
   a racing live search, and result-neutral — it changes latency only, never what
   `recall_search` returns and never any model-visible byte. Lands below the
   visibility line as performance-only state under `Warm the cache, never the
-context.`
+context.` Both phases landed on `main` (`9f583ae`); the remaining promotion gate
+  is the cold-vs-warm latency measurement, not the mechanism.
 
 - [RFC: Model-Facing Runtime Intelligence Digests](./rfc-model-facing-runtime-intelligence-digests.md):
   active RFC generalizing the proven `[TurnConsequenceDigest]` pattern into a small

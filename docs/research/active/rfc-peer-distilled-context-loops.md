@@ -4,7 +4,7 @@
 
 - Status: active
 - Owner: Runtime, gateway, and CLI-inspect maintainers
-- Last reviewed: `2026-06-25`
+- Last reviewed: `2026-07-08`
 - Depends on:
   - [Decision: Context Operating System And Compaction Physics](../decisions/context-operating-system-and-compaction-physics.md)
   - [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](./rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md)
@@ -107,6 +107,20 @@ other four are render-time (Loop 2), a canonical-artifact decision closure
 of this entire RFC is one bit; that is the "minimal residue" claim made literal,
 and it is what keeps the review surface small.
 
+**Implementation state (2026-07-08):** all five loops landed v1 on `main`
+(`0485dc7`, plus the Loop 1 receipt closure). Loop 1 — the `compaction_ineffective`
+skip is wired in `decideCompaction` (`context-budget/api.ts`), fed by
+`readAutoCompactionIneffective`, with the auto-path receipt closure done
+(`hosted-compaction-controller.ts` threads `tokensBefore`→`fromTokens` and commits
+`toTokens`; `compaction-totokens` test). Loop 2 — render-time staleness in
+`context/workbench-staleness.ts`. Loop 3 — the workbench-primary compaction
+_fallback_ in `compaction/summary-generator.ts` (the happy-path summary swap stays
+benchmark-gated). Loop 4 — the `report:context-evidence --recommend` aggregate
+posture in `context/evidence/context-evidence.ts` + `script/report-context-evidence.ts`
+(its per-model target still deferred). Loop 5 — the context-ledger inspect line in
+`operator/inspect/context-cockpit.ts` (`formatContextLedgerLine`, `context-ledger`
+test). What remains is promotion (real-trace validation), not mechanism.
+
 ### Loop 1 — Compaction effectiveness guard (the hermes borrow)
 
 Hypothesis: a compaction that completes but frees too little context is a thrash
@@ -157,6 +171,12 @@ commit-time usage read that could be null); (2) receipts lacking a usable
 guard fires only on positive evidence of ineffectiveness and missing data never
 blocks a compaction. This is additive and projection-tolerant — a small contract
 closure, not an open question.
+
+**Landed (`0485dc7` + receipt closure):** both closures shipped. The auto path
+threads `tokensBefore`→`fromTokens` and commits `toTokens`
+(`hosted-compaction-controller.ts`; asserted by `compaction-totokens` test), and the
+`compaction_ineffective` skip is wired in `decideCompaction` (`context-budget/api.ts`),
+fed by `readAutoCompactionIneffective`.
 
 Layering: this guard sits _after_ the existing `recent_compaction` skip, not before
 it. Within the `minTurnsBetween` cooldown, `recent_compaction` already defers;
@@ -287,7 +307,7 @@ reads evidence and self-tunes mid-session). That would make the policy a statefu
 owner and re-introduce a hidden memory editor. The loop is closed at config time,
 under review, by design.
 
-### Loop 5 — The context ledger (unifying scattered inspect surfaces)
+### Loop 5 — The context ledger (unifying scattered inspect surfaces) — v1 landed
 
 The derivation that produces a gate decision is spread across the Work Card,
 context-evidence reports, and `decideCompaction` inputs. No single surface shows

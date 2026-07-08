@@ -5,7 +5,7 @@
 - Status: active
 - Kind: RFC (a delegation-activation increment, not a new plane)
 - Owner: Runtime, gateway, and delegation maintainers
-- Last reviewed: `2026-07-07`
+- Last reviewed: `2026-07-08`
 - Depends on:
   - [Candidate Axiom: Authorship Taints Verification](./candidate-axiom-authorship-taints-verification.md)
     (the theory: a producer cannot see what it got wrong; `perspective` is already
@@ -202,6 +202,18 @@ Rejected on axioms 1 and 3 (it is a hand on the wheel and a switch) and on axiom
 verification-gate manifest remains the _only_ place that may block, by design.
 
 ## Landing Plan (Sketch, Not A Commitment)
+
+**Implementation state (2026-07-08):** items 1–4 landed on `main` (`dbeeaf3`,
+refined by `fbb0f00`). Anchors: `independenceDebtAtoms` in the requirement-fitness
+projection (`brewva-vocabulary/src/internal/fitness.ts`), the `independence_debt`
+render reason (`brewva-gateway/src/hosted/internal/context/runtime-brief.ts`), and
+the `open` counter in `report:delegation-evidence`
+(`.../context/evidence/delegation-evidence.ts`). No mechanism remains to build;
+what remains is **empirical promotion** — an eval round proving the channel changed
+a decision rather than merely surfacing (in game_7 the sensor stayed lit at
+`open=2` after the model discharged its other debt, so the counter moved but did
+not yet demonstrate a decision flip) — plus the review→atom attribution edge (the
+discharge path), tracked on branch `rfc/independence-debt-close`.
 
 1. **Projection.** Add `independenceDebtAtoms` to the requirement-fitness projection
    (`FitnessProjection`): must-have, high-risk-class-floor atoms whose state never

@@ -5,7 +5,7 @@
 - Status: active
 - Kind: implementation RFC (provider-core transport abstraction)
 - Owner: Runtime and provider maintainers
-- Last reviewed: `2026-07-01`
+- Last reviewed: `2026-07-08`
 - Depends on:
   - pi-mono `~/new_py/pi-mono/packages/coding-agent/src/core/http-dispatcher.ts` (the borrowed shape)
   - `packages/brewva-provider-core/src/providers/openai-completions/adapter.ts` (injection site)
@@ -87,6 +87,15 @@ lands from the injection alone.
   flag rather than hide).
 
 ## Promotion Criteria And Destination
+
+**Implementation state (2026-07-08):** landed on `main` (`ca2c984`). The module is
+`_shared/http-transport.ts` (Option A — `EnvHttpProxyAgent({ allowH2: false, ... })`
+via injected `undici.fetch`), both adapters inject `getProviderFetch()`, and the
+unit tests are green (`http-transport.unit.test.ts`, 8 tests). The step-1 streaming
+concern resolved in practice — the SDK round-trips the injected `undici.fetch`
+stream, so no fallback to bun-native `fetch` was needed. The only remaining
+promotion gate is the live one — a dogfood turn through a feilian strict window
+succeeding over h1.1 — which cannot run in an autonomous pass.
 
 Promote to `docs/research/decisions/` when: the module lands under `_shared`,
 both adapters inject it, unit tests are green (parse/format/proxy + reconfigure
