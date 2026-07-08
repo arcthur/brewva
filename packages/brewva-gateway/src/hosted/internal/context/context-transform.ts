@@ -116,6 +116,11 @@ export function createContextTransformLifecycle(
         sessionId: lifecycleContext.sessionManager.getSessionId(),
         usage: resolveUsage(lifecycleContext),
         hasUI: lifecycleContext.hasUI === true,
+        // Eval-only opt-in: BREWVA_EVAL_FORCE_COMPACTION lets a headless run exercise
+        // the real session-compaction path (which the non_interactive_mode skip
+        // otherwise reserves for interactive sessions), so validation runs can
+        // produce genuine session.compact / pre_compact_prune / economics receipts.
+        allowNonInteractive: process.env.BREWVA_EVAL_FORCE_COMPACTION === "1",
         idle: typeof lifecycleContext.isIdle === "function" ? lifecycleContext.isIdle() : false,
         compact: lifecycleContext.compact,
       });

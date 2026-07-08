@@ -304,6 +304,57 @@ describe("deriveContextBudgetState", () => {
   });
 });
 
+describe("decideCompaction headless auto-compaction eval affordance", () => {
+  const advisoryGate = () =>
+    deriveContextBudgetState({ usage: usage(7_500), config: baseConfig }).gateStatus;
+
+  test("skips non_interactive_mode when hasUI is false and the eval opt-in is absent", () => {
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: advisoryGate(),
+        hasUI: false,
+        idle: true,
+      }),
+    ).toEqual({
+      decision: "skip",
+      caller: "auto",
+      reason: "non_interactive_mode",
+    });
+  });
+
+  test("allowNonInteractive lets the auto path execute headlessly under advisory pressure", () => {
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: advisoryGate(),
+        hasUI: false,
+        allowNonInteractive: true,
+        idle: true,
+      }),
+    ).toMatchObject({
+      decision: "execute",
+      caller: "auto",
+    });
+  });
+
+  test("allowNonInteractive is narrow: it does not bypass the active-agent safety skip", () => {
+    expect(
+      decideCompaction({
+        caller: "auto",
+        gateStatus: advisoryGate(),
+        hasUI: false,
+        allowNonInteractive: true,
+        idle: false,
+      }),
+    ).toEqual({
+      decision: "skip",
+      caller: "auto",
+      reason: "agent_active_manual_compaction_unsafe",
+    });
+  });
+});
+
 describe("readAutoCompactionBreakerOpen", () => {
   test("opens only after the latest run has consecutive auto failures past the threshold", () => {
     expect(

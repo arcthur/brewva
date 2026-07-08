@@ -104,6 +104,14 @@ export interface CompactionPolicyInputs {
   readonly gateStatus: ContextCompactionGateStatus;
   readonly pendingReason?: ContextCompactionReason | null;
   readonly hasUI?: boolean;
+  /**
+   * Eval-only opt-in: allow the auto path to compact even when `hasUI` is false.
+   * Threaded from `BREWVA_EVAL_FORCE_COMPACTION` so headless validation runs can
+   * exercise the real session-compaction path (receipts, economics, prune) that
+   * the interactive path normally owns. Undefined/false → the non-interactive
+   * skip stands, so default behavior is unchanged.
+   */
+  readonly allowNonInteractive?: boolean;
   readonly idle?: boolean;
   readonly recoveryPosture?: "idle" | "active";
   readonly autoCompactionInFlight?: boolean;
@@ -503,7 +511,7 @@ export function decideCompaction(input: CompactionPolicyInputs): CompactionPolic
   if (input.recoveryPosture === "active") {
     return { decision: "skip", caller: input.caller, reason: "recovery_active" };
   }
-  if (input.hasUI === false) {
+  if (input.hasUI === false && input.allowNonInteractive !== true) {
     return { decision: "skip", caller: input.caller, reason: "non_interactive_mode" };
   }
   if (input.idle === false && reason !== "hard_limit") {

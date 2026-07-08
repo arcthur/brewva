@@ -86,6 +86,7 @@ export interface HostedCompactionController extends HostedContextGateStatePort {
     sessionId: string;
     usage?: ContextBudgetUsage;
     hasUI: boolean;
+    allowNonInteractive?: boolean;
     idle: boolean;
     compact: HostedManualCompact;
   }) => void;
@@ -420,6 +421,7 @@ export function createHostedCompactionController(
         gateStatus,
         pendingCompactionReason: pendingReason,
         hasUI: input.hasUI,
+        allowNonInteractive: input.allowNonInteractive,
         idle: input.idle,
         recoveryPosture: "idle",
         autoCompactionInFlight: state.autoCompactionInFlight,

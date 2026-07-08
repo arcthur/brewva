@@ -66,6 +66,7 @@ export interface ContextAutoCompactionEligibilityInput {
   readonly gateStatus: ContextCompactionGateStatus;
   readonly pendingCompactionReason?: ContextCompactionReason | null;
   readonly hasUI?: boolean;
+  readonly allowNonInteractive?: boolean;
   readonly idle?: boolean;
   readonly recoveryPosture?: "idle" | "active";
   readonly autoCompactionInFlight?: boolean;
@@ -343,6 +344,7 @@ export function decideAutoCompactionEligibility(
     gateStatus: input.gateStatus,
     pendingReason: input.pendingCompactionReason,
     hasUI: input.hasUI,
+    allowNonInteractive: input.allowNonInteractive,
     idle: input.idle,
     recoveryPosture: input.recoveryPosture,
     autoCompactionInFlight: input.autoCompactionInFlight,
