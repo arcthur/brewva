@@ -194,6 +194,34 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.goal.lifecycle.complete",
     "capabilities.goal.lifecycle.block",
   ]),
+  create_plan_map: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.map.create",
+  ]),
+  get_plan_map: metadata("control_plane", "runtime_observe", ["capabilities.planMap.state.get"]),
+  open_plan_ticket: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.ticket.open",
+  ]),
+  claim_plan_ticket: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.ticket.claim",
+  ]),
+  unclaim_plan_ticket: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.ticket.unclaim",
+  ]),
+  resolve_plan_ticket: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.ticket.resolve",
+  ]),
+  close_plan_ticket: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.ticket.close",
+  ]),
+  rescope_plan_ticket: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.ticket.rescope",
+  ]),
+  record_fog: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.fog.record",
+  ]),
+  graduate_fog: metadata("control_plane", "control_state_mutation", [
+    "capabilities.planMap.fog.graduate",
+  ]),
   workbench_compact: metadata("base", "memory_write", [
     "capabilities.context.compaction.getInstructions",
     "capabilities.context.usage.getRatio",

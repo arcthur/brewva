@@ -54,6 +54,7 @@ import {
   createObsQueryTool,
   createObsSloAssertTool,
   createObsSnapshotTool,
+  createPlanMapTools,
   createReasoningCheckpointTool,
   createReasoningRevertTool,
   createResourceLeaseTool,
@@ -114,6 +115,12 @@ export function buildDefaultBundledBrewvaTools(
     createWorkflowStatusTool({ runtime }),
     createFollowUpTool({ runtime }),
     ...createGoalTools({ runtime }),
+    // The durable planning map is opt-in (RFC: durable-cross-session-planning-map):
+    // its tools stay out of a session's prompt budget until the workspace enables the
+    // feature. Real runtimes carry the default config (`planning.mapEnabled` false) so
+    // they exclude the tools; a config-less context (e.g. the registry-alignment
+    // contract test) has no flag and falls back to the full surface via `?? true`.
+    ...((runtime.config?.planning?.mapEnabled ?? true) ? createPlanMapTools({ runtime }) : []),
     createScheduleIntentTool({ runtime }),
     ...createTapeTools({ runtime }),
     createReasoningCheckpointTool({ runtime }),

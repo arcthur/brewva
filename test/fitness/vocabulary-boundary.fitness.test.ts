@@ -20,6 +20,7 @@ const requiredVocabularySubpaths = [
   "./harness",
   "./iteration",
   "./outcome",
+  "./plan-map",
   "./rcr",
   "./reduction",
   "./review",

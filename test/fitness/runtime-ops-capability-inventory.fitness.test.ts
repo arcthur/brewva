@@ -26,6 +26,7 @@ const RUNTIME_OPS_BUILDER_FILES = {
   goal: "goal.ts",
   ledger: "ledger.ts",
   lifecycle: "lifecycle.ts",
+  planMap: "plan-map.ts",
   proposals: "proposals.ts",
   reasoning: "reasoning.ts",
   recovery: "recovery.ts",
@@ -305,7 +306,13 @@ describe("runtime ops capability inventory fitness", () => {
     // that only adds atoms must not be forced to re-emit a `task.spec.set`
     // event) — a real new producer seam with its doc comment, not facade
     // growth. +13 lines on the tool-runtime contract.
-    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_070);
+    // The durable planning-map capability (RFC: durable-cross-session-planning-map)
+    // adds the `planMap` command+query port — map/ticket (open/claim/unclaim/resolve/
+    // close/rescope)/fog (record/graduate), the `PlanMapRuntimeMutationResult` type, and
+    // the vocabulary input imports — to the tool-runtime contract: a real new capability
+    // namespace mirrored by a runtime-ops builder, not facade growth. (+2 for the
+    // `ticket.unclaim` port method + its input import — the claim-liveness escape hatch.)
+    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_125);
     // Same feature, implementation side: the orient-injection `requirements.record`
     // builder plus its shared `emitRequirementAtoms` helper (one emit site guarding
     // spec.set/requirements.record against event-shape drift) grew
@@ -329,7 +336,11 @@ describe("runtime ops capability inventory fitness", () => {
     // wiring, not facade growth.
     // The pre-compaction prune's `preCompactPrune` telemetry recorder (its tape
     // receipt) plus the vocabulary event-type import add +2 real producer lines.
-    expect(hostedOpsLines).toBeLessThanOrEqual(2_847);
+    // The durable planning-map builder (`runtime-ops-builders/plan-map.ts`) plus its
+    // `planMap` wiring in `runtime-ops.ts` add real hosted-ops producer lines for the
+    // new capability namespace (map/ticket/fog); its controller and sidecar store live
+    // off this count. (+1 for the `ticket.unclaim` builder wiring.)
+    expect(hostedOpsLines).toBeLessThanOrEqual(2_876);
     // WS2 added tape-derived rebuild projections (workbench/task/resource-lease/
     // worker-results) that fix the invariant-9/12 restart-loses-state bug. A
     // follow-up review pass then completed the tape-authority migration on the
@@ -394,7 +405,12 @@ describe("runtime ops capability inventory fitness", () => {
     // threading) carry the same +2 into the combined budget.
     // The pre-compaction prune's `preCompactPrune` telemetry recorder + its import
     // (+2 builder, no tool-runtime contract change) carry +2 into the combined budget.
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_836);
+    // The durable planning-map capability carries both its tool-runtime contract
+    // growth (the planMap command+query port + result type + input imports) and its
+    // hosted-ops builder growth (map/ticket/fog wiring) into the combined budget — a
+    // real new capability namespace, not facade growth. (+3 for the `unclaim` port
+    // method, its input import, and its builder wiring.)
+    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_917);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {

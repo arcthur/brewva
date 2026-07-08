@@ -133,6 +133,14 @@ const builtInShellCommands: readonly ShellCommand[] = [
     suggested: true,
   },
   {
+    id: "session.map",
+    title: "Map",
+    description: "Chart, show, take, or resolve a durable cross-session planning map.",
+    category: "Session",
+    slash: { name: "map", argumentMode: "optional" },
+    suggested: true,
+  },
+  {
     id: "session.continuationAnchor",
     title: "Record continuation anchor",
     description:

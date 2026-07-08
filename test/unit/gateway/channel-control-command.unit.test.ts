@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { CommandRouter } from "../../../packages/brewva-gateway/src/channels/command/parser.js";
-import { resolveChannelControlCommand } from "../../../packages/brewva-gateway/src/channels/control-command.js";
+import {
+  isPublicChannelControlCommand,
+  resolveChannelControlCommand,
+} from "../../../packages/brewva-gateway/src/channels/control-command.js";
 
 describe("channel control command seam", () => {
   test("parses channel goal commands with optional target agent", () => {
@@ -90,6 +93,32 @@ describe("channel control command seam", () => {
         tokenBudget: 20_000,
       },
     });
+  });
+
+  test("parses channel map commands and maps them into a typed, owner-gated control command", () => {
+    const router = new CommandRouter();
+    expect(router.match("/map @agent-b chart auth Redesign the auth flow")).toEqual({
+      kind: "map",
+      agentId: "agent-b",
+      command: { kind: "chart", mapId: "auth", destination: "Redesign the auth flow" },
+    });
+    expect(router.match("/map show auth")).toEqual({
+      kind: "map",
+      command: { kind: "show", mapId: "auth" },
+    });
+
+    const control = resolveChannelControlCommand(
+      { kind: "map", agentId: "agent-b", command: { kind: "show", mapId: "auth" } },
+      "scope-map",
+    );
+    expect(control).toEqual({
+      kind: "map",
+      scopeKey: "scope-map",
+      targetAgentId: "agent-b",
+      command: { kind: "show", mapId: "auth" },
+    });
+    // The map surface is owner-gated (non-public), like /goal — not a public command.
+    expect(control && isPublicChannelControlCommand(control)).toBe(false);
   });
 
   test("ignores non-control matches", () => {

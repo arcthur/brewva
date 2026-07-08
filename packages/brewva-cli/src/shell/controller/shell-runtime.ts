@@ -17,6 +17,7 @@ import type {
 } from "@brewva/brewva-substrate/session";
 import { formatGoalUsage, type GoalCommand } from "@brewva/brewva-vocabulary/goal";
 import type { PendingEffectCommitmentRequest } from "@brewva/brewva-vocabulary/iteration";
+import { planMapFrontier, type PlanMapCommand } from "@brewva/brewva-vocabulary/plan-map";
 import { decideContinuationAnchorRelevance } from "@brewva/brewva-vocabulary/session";
 import {
   listPersistedPatchSets,
@@ -1673,6 +1674,7 @@ export class CliShellRuntime {
       exportSessionBundle: () => this.exportSessionBundle(),
       exportInspectBundle: () => this.exportInspectBundle(),
       handleGoalCommand: (command) => this.handleGoalCommand(command),
+      handleMapCommand: (command) => this.handleMapCommand(command),
       recordContinuationAnchor: (continuationAnchor) =>
         this.recordContinuationAnchor(continuationAnchor),
       steerSession: async (steerEffect) => {
@@ -2376,6 +2378,62 @@ export class CliShellRuntime {
       },
     });
     this.ui.notify("Goal started.", "info");
+  }
+
+  private async handleMapCommand(command: PlanMapCommand): Promise<void> {
+    const sessionId = this.#sessionPort.getSessionId();
+    if (command.kind === "show") {
+      const map = this.#bundle.inspect.planMap.state(command.mapId);
+      if (!map) {
+        this.ui.notify(`No plan map ${command.mapId}.`, "info");
+        return;
+      }
+      const frontier = planMapFrontier(map);
+      const frontierText =
+        frontier.length > 0 ? ` (${frontier.map((ticket) => ticket.title).join(", ")})` : "";
+      this.ui.notify(
+        `Map ${map.mapId}: ${map.destination} · frontier ${frontier.length}${frontierText}`,
+        "info",
+      );
+      return;
+    }
+    if (command.kind === "chart") {
+      const result = this.#bundle.operator.planMap.create(command.mapId, {
+        sessionId,
+        destination: command.destination,
+      });
+      this.ui.notify(
+        result.ok ? `Map ${command.mapId} charted.` : `Map chart rejected: ${result.reason}`,
+        result.ok ? "info" : "warning",
+      );
+      return;
+    }
+    if (command.kind === "take") {
+      // ticketId is optional: the controller takes the first frontier ticket when it
+      // is omitted (the "take next" policy is single-sourced there).
+      const result = this.#bundle.operator.planMap.claim(command.mapId, {
+        sessionId,
+        ticketId: command.ticketId,
+      });
+      this.ui.notify(
+        result.ok
+          ? `Claimed ${result.ticketId ?? "ticket"} on ${command.mapId}.`
+          : `Map take rejected: ${result.reason}`,
+        result.ok ? "info" : "warning",
+      );
+      return;
+    }
+    const result = this.#bundle.operator.planMap.resolve(command.mapId, {
+      sessionId,
+      ticketId: command.ticketId,
+      answer: command.answer,
+    });
+    this.ui.notify(
+      result.ok
+        ? `Resolved ${command.ticketId} on ${command.mapId}.`
+        : `Map resolve rejected: ${result.reason}`,
+      result.ok ? "info" : "warning",
+    );
   }
 
   private async exportInspectBundle(): Promise<void> {

@@ -1,4 +1,5 @@
 import { parseGoalCommand } from "@brewva/brewva-vocabulary/goal";
+import { parsePlanMapCommand } from "@brewva/brewva-vocabulary/plan-map";
 import type { ShellAction, ShellRuntimeResult } from "./actions.js";
 import type { ContinuationAnchorDraft, ShellEffect } from "./effects.js";
 import type { ShellIntent } from "./intent.js";
@@ -142,6 +143,20 @@ function updateCommandIntent(
       const result = parseGoalCommand(intent.args);
       return result.ok
         ? handled({ effects: [{ type: "session.goal", command: result.command }] })
+        : handled({
+            effects: [
+              {
+                type: "notification.show",
+                message: result.error,
+                level: "warning",
+              },
+            ],
+          });
+    }
+    case "session.map": {
+      const result = parsePlanMapCommand(intent.args);
+      return result.ok
+        ? handled({ effects: [{ type: "session.map", command: result.command }] })
         : handled({
             effects: [
               {

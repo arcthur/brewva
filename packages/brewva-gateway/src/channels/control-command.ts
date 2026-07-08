@@ -27,6 +27,13 @@ export function resolveChannelControlCommand(
         targetAgentId: match.agentId,
         command: match.command,
       };
+    case "map":
+      return {
+        kind: "map",
+        scopeKey,
+        targetAgentId: match.agentId,
+        command: match.command,
+      };
     case "steer":
       return {
         kind: "steer",
@@ -102,6 +109,7 @@ export function isPublicChannelControlCommand(command: ChannelControlCommand): b
       return true;
     case "status":
     case "goal":
+    case "map":
     case "steer":
     case "answer":
     case "update":

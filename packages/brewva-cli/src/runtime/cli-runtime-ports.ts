@@ -98,6 +98,10 @@ export function createCliInspectPort(adapter: CliInspectAdapter) {
       state: (sessionId: string): ReturnType<Ops["goal"]["state"]["get"]> =>
         ops.goal.state.get(sessionId),
     },
+    planMap: {
+      state: (mapId: string): ReturnType<Ops["planMap"]["state"]["get"]> =>
+        ops.planMap.state.get(mapId),
+    },
     session: {
       lifecycleHydration: (
         sessionId: string,
@@ -233,6 +237,21 @@ export function createCliOperatorPort(adapter: CliOperatorAdapter) {
         input: Parameters<Ops["goal"]["lifecycle"]["clear"]>[1],
       ): ReturnType<Ops["goal"]["lifecycle"]["clear"]> =>
         ops.goal.lifecycle.clear(sessionId, input),
+    },
+    planMap: {
+      create: (
+        mapId: string,
+        input: Parameters<Ops["planMap"]["map"]["create"]>[1],
+      ): ReturnType<Ops["planMap"]["map"]["create"]> => ops.planMap.map.create(mapId, input),
+      claim: (
+        mapId: string,
+        input: Parameters<Ops["planMap"]["ticket"]["claim"]>[1],
+      ): ReturnType<Ops["planMap"]["ticket"]["claim"]> => ops.planMap.ticket.claim(mapId, input),
+      resolve: (
+        mapId: string,
+        input: Parameters<Ops["planMap"]["ticket"]["resolve"]>[1],
+      ): ReturnType<Ops["planMap"]["ticket"]["resolve"]> =>
+        ops.planMap.ticket.resolve(mapId, input),
     },
     context: {
       requestCompaction: (

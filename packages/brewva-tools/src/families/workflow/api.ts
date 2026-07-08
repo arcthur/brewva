@@ -6,6 +6,7 @@ export { createLedgerQueryTool } from "./ledger-query.js";
 export { createObsQueryTool } from "./observability/obs-query.js";
 export { createObsSloAssertTool } from "./observability/obs-slo-assert.js";
 export { createObsSnapshotTool } from "./observability/obs-snapshot.js";
+export { createPlanMapTools } from "./plan-map.js";
 export { createReasoningCheckpointTool } from "./reasoning-checkpoint.js";
 export { createReasoningRevertTool } from "./reasoning-revert.js";
 export { createResourceLeaseTool } from "./resource-lease.js";

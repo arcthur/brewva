@@ -1,4 +1,5 @@
 import { parseGoalCommand, type GoalCommand } from "@brewva/brewva-vocabulary/goal";
+import { parsePlanMapCommand, type PlanMapCommand } from "@brewva/brewva-vocabulary/plan-map";
 import { normalizeAgentId } from "@brewva/brewva-vocabulary/session";
 
 export type ChannelCommandMatch =
@@ -7,6 +8,7 @@ export type ChannelCommandMatch =
   | { kind: "agents" }
   | { kind: "status"; agentId?: string; directory?: string; top?: number; details?: boolean }
   | { kind: "goal"; agentId?: string; command: GoalCommand }
+  | { kind: "map"; agentId?: string; command: PlanMapCommand }
   | { kind: "steer"; agentId?: string; text: string }
   | { kind: "answer"; agentId?: string; questionId: string; answerText: string }
   | { kind: "update"; instructions?: string }
@@ -168,6 +170,27 @@ export class CommandRouter {
       const parsed = parseGoalCommand(commandBody);
       return parsed.ok
         ? { kind: "goal", agentId, command: parsed.command }
+        : { kind: "error", message: parsed.error };
+    }
+
+    if (command === "/map") {
+      const tokens = body.split(/\s+/u).filter((token) => token.length > 0);
+      let agentId: string | undefined;
+      let commandBody = body;
+      if ((tokens[0] ?? "").startsWith("@")) {
+        agentId = parseAgentRef(tokens[0] ?? "");
+        if (!agentId) {
+          return {
+            kind: "error",
+            message:
+              "Usage: /map [@agent] chart <mapId> <destination> | show <mapId> | take <mapId> [ticketId] | resolve <mapId> <ticketId> <answer>",
+          };
+        }
+        commandBody = tokens.slice(1).join(" ").trim();
+      }
+      const parsed = parsePlanMapCommand(commandBody);
+      return parsed.ok
+        ? { kind: "map", agentId, command: parsed.command }
         : { kind: "error", message: parsed.error };
     }
 

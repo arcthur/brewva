@@ -327,6 +327,16 @@
             }
           }
         },
+        "planning": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mapEnabled": {
+              "description": "Opt-in switch for the durable planning-map managed tools (default off).",
+              "type": "boolean"
+            }
+          }
+        },
         "projection": {
           "type": "object",
           "additionalProperties": false,

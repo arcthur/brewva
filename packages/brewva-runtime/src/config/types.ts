@@ -136,6 +136,10 @@ export interface BrewvaConfig {
     workingFile: string;
     maxWorkingChars: number;
   };
+  planning: {
+    /** Opt-in switch for the durable planning-map managed tools (default off). */
+    mapEnabled: boolean;
+  };
   security: {
     mode: "permissive" | "standard" | "strict";
     sanitizeContext: boolean;
@@ -307,6 +311,7 @@ export interface BrewvaConfigFile {
   ledger?: Partial<BrewvaConfig["ledger"]>;
   tape?: Partial<BrewvaConfig["tape"]>;
   projection?: DeepPartial<BrewvaConfig["projection"]>;
+  planning?: Partial<BrewvaConfig["planning"]>;
   security?: Partial<
     Omit<BrewvaConfig["security"], "execution" | "boundaryPolicy" | "loopDetection" | "credentials">
   > & {

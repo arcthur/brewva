@@ -53,6 +53,12 @@
       "import": "./dist/iteration.js",
       "default": "./dist/iteration.js"
     },
+    "./plan-map": {
+      "types": "./dist/plan-map.d.ts",
+      "bun": "./src/plan-map.ts",
+      "import": "./dist/plan-map.js",
+      "default": "./dist/plan-map.js"
+    },
     "./rcr": {
       "types": "./dist/rcr.d.ts",
       "bun": "./src/rcr.ts",

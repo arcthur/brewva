@@ -3,6 +3,7 @@ import type {
   DecideEffectCommitmentInput,
   DecideEffectCommitmentResult,
 } from "@brewva/brewva-vocabulary/iteration";
+import type { PlanMapCommand } from "@brewva/brewva-vocabulary/plan-map";
 import type { ContinuationAnchorDraft, ShellEffect } from "../domain/effects.js";
 import type { CliShellInput } from "../domain/input.js";
 import { buildTextTranscriptMessage } from "../domain/transcript.js";
@@ -68,6 +69,7 @@ export interface ShellEffectDispatcherContext {
   exportSessionBundle(): Promise<void>;
   exportInspectBundle(): Promise<void>;
   handleGoalCommand(command: GoalCommand): Promise<void>;
+  handleMapCommand(command: PlanMapCommand): Promise<void>;
   recordContinuationAnchor(continuationAnchor?: ContinuationAnchorDraft): Promise<void>;
   steerSession(effect: Extract<ShellEffect, { type: "session.steer" }>): Promise<void>;
   undoSession(): Promise<void>;
@@ -299,6 +301,9 @@ export async function dispatchShellEffect(
       return;
     case "session.goal":
       await context.handleGoalCommand(effect.command);
+      return;
+    case "session.map":
+      await context.handleMapCommand(effect.command);
       return;
     case "session.steer":
       await context.steerSession(effect);

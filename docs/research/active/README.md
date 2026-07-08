@@ -236,6 +236,29 @@ the telling legible.`
   anchoring). Under the line `What the model cannot see it cannot choose;
 what it pinned, physics keeps; what failed twice, the brief says so.`
 
+- [RFC: Durable Cross-Session Planning Map — The Third Leg Beside Lossy Continuation And Single Persistent Intent](./rfc-durable-cross-session-planning-map.md):
+  active RFC (Phase 1 + 2 landed and green; not yet promoted — Phase 3 demand
+  telemetry pending) positioning a durable, externalized, decomposed planning
+  map as the third answer to "the work does not fit in one context," beside
+  compaction (leg 1, lossy in-band continuation of the retained tail) and the
+  `goal` control plane (leg 2, one lossless-but-singular persistent intent). For
+  work that is both **larger than one context window** and still in **fog** — where
+  the destination is knowable but the route is not — the map holds a frontier of
+  open decisions as tape receipts a `plan.map.state.get` projection rebuilds, so a
+  resuming session loads a low-res page plus one claimed ticket instead of a
+  compacted transcript. Adapts the external `wayfinder` methodology (tickets, one
+  per session, fog-of-war graduation) but replaces its issue tracker with brewva's
+  own substrate (the `goal.*` tape-folded-projection pattern, the steering-inbox
+  durable sidecar, the session-index read model). Strictly planning, not execution:
+  resolving a ticket is a receipt that derives no authority (axiom 18), the map is
+  explicit-pull and never auto-injected (axiom 1), concurrent sessions coordinate
+  optimistically through append-only receipts and a claim primitive rather than a
+  saga (axiom 17), and the frontier is a projection, never a runtime planner (axiom
+  12). Gated on measured cross-session demand — the MVP may be a durable markdown
+  map, with the projection + concurrency machinery earning its weight only if real
+  efforts contend across sessions. Under the line `Compaction keeps the tail; the
+goal holds the intent; the map externalizes the plan.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

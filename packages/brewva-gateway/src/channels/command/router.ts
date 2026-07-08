@@ -30,6 +30,7 @@ import type {
 } from "./contracts.js";
 import type { ChannelCommandDispatchResult, ChannelPreparedCommand } from "./dispatch.js";
 import { handleChannelGoalCommand } from "./goal.js";
+import { handleChannelMapCommand } from "./map.js";
 import { type ChannelCommandMatch } from "./parser.js";
 import { handleChannelStatusCommand } from "./status.js";
 import { handleChannelSteerCommand } from "./steer.js";
@@ -106,6 +107,17 @@ export function createChannelControlRouter(input: {
     goal: (command, turn) => {
       const targetAgentId = command.targetAgentId ?? input.registry.resolveFocus(command.scopeKey);
       return handleChannelGoalCommand({
+        command,
+        turn,
+        replyWriter: input.replyWriter,
+        targetAgentId,
+        isTargetActive: input.registry.isActive(targetAgentId),
+        openLiveSession,
+      });
+    },
+    map: (command, turn) => {
+      const targetAgentId = command.targetAgentId ?? input.registry.resolveFocus(command.scopeKey);
+      return handleChannelMapCommand({
         command,
         turn,
         replyWriter: input.replyWriter,

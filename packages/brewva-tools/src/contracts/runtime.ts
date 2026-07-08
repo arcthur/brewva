@@ -50,6 +50,18 @@ import type {
   ToolInvocationStartReceipt,
   TurnEffectCommitmentProjection,
 } from "@brewva/brewva-vocabulary/iteration";
+import type {
+  PlanFogGraduateInput,
+  PlanFogRecordInput,
+  PlanMapCreateInput,
+  PlanMapState,
+  PlanTicketClaimInput,
+  PlanTicketCloseInput,
+  PlanTicketOpenInput,
+  PlanTicketRescopeInput,
+  PlanTicketResolveInput,
+  PlanTicketUnclaimInput,
+} from "@brewva/brewva-vocabulary/plan-map";
 import type { RcrReference } from "@brewva/brewva-vocabulary/rcr";
 import type {
   ReviewFindingCategory,
@@ -233,6 +245,7 @@ export const BREWVA_TOOL_RUNTIME_COMMAND_NAMESPACES = [
   "delegation",
   "events",
   "goal",
+  "planMap",
   "proposals",
   "reasoning",
   "schedule",
@@ -252,6 +265,7 @@ export const BREWVA_TOOL_RUNTIME_QUERY_NAMESPACES = [
   "goal",
   "ledger",
   "lifecycle",
+  "planMap",
   "proposals",
   "reasoning",
   "recovery",
@@ -274,6 +288,7 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_NAMESPACES = [
   "goal",
   "ledger",
   "lifecycle",
+  "planMap",
   "proposals",
   "reasoning",
   "recovery",
@@ -369,6 +384,21 @@ export type GoalRuntimeMutationResult =
       readonly requiredCount?: number;
     };
 
+export type PlanMapRuntimeMutationResult =
+  | {
+      readonly ok: true;
+      readonly map: PlanMapState;
+      readonly eventType: string;
+      readonly eventId: string;
+      readonly ticketId?: string;
+      readonly patchId?: string;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly map?: PlanMapState | null;
+    };
+
 export interface BrewvaToolRuntimeCommandPort {
   readonly claim: {
     readonly facts: {
@@ -416,6 +446,23 @@ export interface BrewvaToolRuntimeCommandPort {
     };
     readonly continuation: {
       recordQueued(sessionId: string, input: GoalContinuationPayload): GoalRuntimeMutationResult;
+    };
+  };
+  readonly planMap: {
+    readonly map: {
+      create(mapId: string, input: PlanMapCreateInput): PlanMapRuntimeMutationResult;
+    };
+    readonly ticket: {
+      open(mapId: string, input: PlanTicketOpenInput): PlanMapRuntimeMutationResult;
+      claim(mapId: string, input: PlanTicketClaimInput): PlanMapRuntimeMutationResult;
+      unclaim(mapId: string, input: PlanTicketUnclaimInput): PlanMapRuntimeMutationResult;
+      resolve(mapId: string, input: PlanTicketResolveInput): PlanMapRuntimeMutationResult;
+      close(mapId: string, input: PlanTicketCloseInput): PlanMapRuntimeMutationResult;
+      rescope(mapId: string, input: PlanTicketRescopeInput): PlanMapRuntimeMutationResult;
+    };
+    readonly fog: {
+      record(mapId: string, input: PlanFogRecordInput): PlanMapRuntimeMutationResult;
+      graduate(mapId: string, input: PlanFogGraduateInput): PlanMapRuntimeMutationResult;
     };
   };
   readonly proposals: {
@@ -769,6 +816,11 @@ export interface BrewvaToolRuntimeQueryPort {
   readonly goal: {
     readonly state: {
       get(sessionId: string): GoalState | null;
+    };
+  };
+  readonly planMap: {
+    readonly state: {
+      get(mapId: string): PlanMapState | null;
     };
   };
   readonly ledger: {

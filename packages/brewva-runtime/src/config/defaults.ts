@@ -47,6 +47,12 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     workingFile: "working.md",
     maxWorkingChars: 2400,
   },
+  planning: {
+    // The durable planning map (RFC: durable-cross-session-planning-map) is opt-in
+    // while its cross-session demand is unproven: off by default so its managed tools
+    // do not occupy every session's prompt budget until a workspace enables it.
+    mapEnabled: false,
+  },
   security: {
     mode: "standard",
     sanitizeContext: true,

@@ -348,6 +348,45 @@ describe("shell runtime architecture", () => {
     });
   });
 
+  test("shell update routes map slash commands to typed runtime effects", () => {
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "session.map",
+        args: "chart auth Redesign the auth flow",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [
+        {
+          type: "session.map",
+          command: { kind: "chart", mapId: "auth", destination: "Redesign the auth flow" },
+        },
+      ],
+    });
+
+    expect(
+      updateShellIntent(createUpdateContext(), {
+        type: "command.invoke",
+        commandId: "session.map",
+        args: "show",
+        source: "slash",
+      }),
+    ).toEqual({
+      handled: true,
+      actions: [],
+      effects: [
+        {
+          type: "notification.show",
+          message: "Usage: /map show <mapId>",
+          level: "warning",
+        },
+      ],
+    });
+  });
+
   test("shell update opens operator overlays through data actions", () => {
     const context = createUpdateContext({
       operatorSnapshot: {

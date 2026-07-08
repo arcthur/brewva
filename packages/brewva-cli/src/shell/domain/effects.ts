@@ -5,6 +5,7 @@ import type {
 } from "@brewva/brewva-substrate/session";
 import type { GoalCommand } from "@brewva/brewva-vocabulary/goal";
 import type { DecideEffectCommitmentInput } from "@brewva/brewva-vocabulary/iteration";
+import type { PlanMapCommand } from "@brewva/brewva-vocabulary/plan-map";
 import type { CliShellInput } from "./input.js";
 
 export interface ContinuationAnchorDraft {
@@ -70,6 +71,7 @@ export type ShellEffect =
   | { type: "session.exportBundle" }
   | { type: "session.exportInspectBundle" }
   | { type: "session.goal"; command: GoalCommand }
+  | { type: "session.map"; command: PlanMapCommand }
   | { type: "session.continuationAnchor"; continuationAnchor?: ContinuationAnchorDraft }
   | { type: "session.steer"; sessionGeneration: number; text: string }
   | { type: "session.undo" }
