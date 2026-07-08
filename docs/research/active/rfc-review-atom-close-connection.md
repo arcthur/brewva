@@ -302,8 +302,12 @@ atoms whose code a narrow review never covered — a fabricated attestation (axi
   301-325 — `reviewTargetFilePaths`; the atom-attestation objective gated on `atoms`.
 - `packages/brewva-tools/src/families/delegation/review-receipts.ts` lines 299, 347 —
   outcome `atomRefs` CLEAR-only; per-finding `atomRefs` from the reviewer.
-- `packages/brewva-tools/src/shared/static-guard/predicates.ts` lines 30-37, 149-173 — the
-  fixed 6-lens set and keyword routing (the discharge edge's coverage bound).
+- `packages/brewva-tools/src/shared/static-guard/predicates.ts` (`STATIC_GUARD_LENSES`,
+  `STATIC_GUARD_DOMAINS`) and `packages/brewva-tools/src/shared/static-guard/producer.ts`
+  (`resolveStaticGuardBindings`) — the fixed 6-lens set and the DECLARED attribution join
+  (trap `staticGuards` at `property` coverage; `observableSignals` construct join at `facet`
+  coverage). Statement-keyword routing (`routeAtomToStaticGuardLens`) was deleted after
+  game_8 proved it mis-attributes (see Field Verification below).
 - `packages/brewva-tools/src/runtime-port/session-touched-files.ts` (`sessionFreshTouchedFilePaths`)
   and `packages/brewva-vocabulary/src/internal/review.ts` line 390 (`universeCoveredBy`) —
   the coverage predicate.
@@ -320,6 +324,39 @@ atoms whose code a narrow review never covered — a fabricated attestation (axi
   in `open` after any review — confirmed correct, not counted as a miss.
 - **No dishonest scope:** a narrow `files` review never gains an atom attestation it did not
   cover.
+
+### Field Verification (game_8, 2026-07-08 — first replay after the merge)
+
+Replaying game_8's tape through the merged census gave
+`independenceDebtResolution {open: 0, violated: 3, dischargedAtGrade: 2}` — the census
+MOVED, but the driver was the static-guard producer, not the fold (the fold was correctly
+idle: with every high-risk atom deterministically decided at dispatch time there was no
+residual debt to fold, so its own promotion gate remains structurally unmet on this run).
+Two results matter:
+
+1. **The deterministic lens caught the recurring defect independently of the model.**
+   `event_tap_keycode_scoped` failed `req-1` (shipped without a keyCode gate) while the
+   model's own authored PASS claimed it fine — the census overwrote the self-claim with
+   `violated`. This is the discharge edge's value proposition working: deterministic
+   evidence needs no delegation and no model cooperation.
+2. **Attribution was the weak layer.** Statement-keyword routing false-attributed the
+   keycode FAIL to `req-8` (an LLM-submenu UX atom whose prose mentioned "On Fn release"),
+   and first-match-wins shadowed `pasteboard_restore` behind `input_source_selectable` for
+   `req-6`; the two `dischargedAtGrade` were single-facet passes credited to multi-clause
+   atoms (`req-4`, `req-7`). An evidence item's effective grade is
+   **min(verdict grade, attribution grade)** — keyword attribution was presence-grade
+   guessing under a `static_guard` stamp. Fixed by the declared-binding slice: attribution
+   now flows only from a trap entry's `staticGuards` (`property` coverage — pass discharges,
+   fail convicts) or the atom's own `observableSignals` construct join (`facet` coverage —
+   fail convicts, pass is trail-only), unbound FAILs ride the receipt with empty `atomRefs`,
+   and statement routing is deleted. CONFIRMED by forward simulation — game_8's real
+   recorded atoms (provenance + `observableSignals` from the tape) plus its shipped
+   sources through the new producer and join give exactly
+   `{open: 2, violated: 3, dischargedAtGrade: 0}`: `req-1` violated at `property` (the
+   trap join fired on the verbatim statement), `req-3`/`req-6` violated at `facet`,
+   `req-4`/`req-7` facet passes trail-only (open), `req-8` unbound (the false positive
+   gone), zero `insufficientGradeAtoms` pollution. Numerically "worse" than the routed
+   census, epistemically right — same honesty line as the grade ceiling.
 
 ## Promotion Criteria And Destination Docs
 
@@ -360,7 +397,13 @@ Promote to `docs/research/decisions/` (and thread into
 4. **The discharge edge is a separate lever.** Extending the static-guard producer's lens
    coverage (beyond the 6 macOS-Fn lenses) is the real way to make more high-risk atoms
    _dischargeable_ at grade; unguarded atoms stay irreducible. Worth its own RFC — this one
-   deliberately does not attempt it.
+   deliberately does not attempt it. **Precision precondition (RESOLVED post-game_8):**
+   before coverage grows, attribution had to stop being statement-keyword inference — more
+   lenses under prose routing would have meant more `req-8`-class false bindings. Done via
+   declared bindings (trap `staticGuards` = `property`; `observableSignals` construct join =
+   `facet`; falsification asymmetry: facet FAIL convicts, facet PASS is trail-only; unbound
+   FAILs surface with empty `atomRefs`). New lenses now land as (predicate, domain, optional
+   trap `staticGuards`) triples, and only `property`-bound passes discharge.
 
 ## Related Work
 

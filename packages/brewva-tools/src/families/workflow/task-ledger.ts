@@ -64,6 +64,9 @@ function toRuntimeTaskAcceptanceStatus(
 const taskSetSpecVerificationGuideline =
   "TaskSpec no longer carries a verification profile. Use verification.commands only when the task needs explicit command checks; otherwise verification is derived from task acceptance and recorded evidence.";
 
+const taskSetSpecObservableSignalsGuideline =
+  "In requirements[].observableSignals, name the concrete API constructs that would evidence the requirement (e.g. CGEvent.tapCreate, NSPasteboard, TISSelectInputSource) — deterministic static-guard checks attribute their verdicts through declared bindings only (these constructs, or a known trap's declared adapter), never by guessing from the statement's prose.";
+
 const taskItemStatusGuideline =
   "Status values are pending, in_progress, blocked, or done; use pending for not-started work and in_progress for active work.";
 
@@ -252,6 +255,7 @@ export function createTaskLedgerTools(options: BrewvaToolOptions): ToolDefinitio
       promptGuidelines: [
         "Use this early when the objective, constraints, or verification plan need to be made explicit.",
         taskSetSpecVerificationGuideline,
+        taskSetSpecObservableSignalsGuideline,
       ],
       parameters: Type.Object({
         goal: Type.String(),

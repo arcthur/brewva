@@ -28,9 +28,14 @@ const EVENT_TAP_ATOM_CORE = {
   // dropped dictation on cancel-before-final — the up4 regression), so the atom
   // requires `static_guard`-grade evidence: a presence re-grep cannot see a
   // missing keyCode gate, and this is the class that makes the fitness join say
-  // so (MIN_EVIDENCE_KIND_BY_RISK.runtime). The matching static-guard lens
-  // (event_tap_keycode_scoped) is exactly the producer that earns that grade.
+  // so (MIN_EVIDENCE_KIND_BY_RISK.runtime).
   riskClass: "runtime",
+  // The declared adapter binding: this statement IS the property
+  // `event_tap_keycode_scoped` checks, so its verdict attributes at `property`
+  // coverage (a pass discharges, a fail convicts). Exactly the keycode lens —
+  // the tap's OTHER lens (event_tap_reenable) guards a different property this
+  // statement does not claim.
+  staticGuards: ["event_tap_keycode_scoped"],
 } as const;
 
 // Coordinated pair 2 of 2: write/verify-phase, changed-content input. Surfaces

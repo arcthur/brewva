@@ -53,7 +53,13 @@ are orthogonal. Three grades, weakest to strongest:
   At the `requirements` rung, `verification_record` runs these static-guard
   adapters itself over the fresh-touched source and records the results as
   `evidenceItems` on the receipt — the grade is earned by the predicate RUNNING,
-  so a model cannot fabricate it.
+  so a model cannot fabricate it. A verdict attaches to a requirement only
+  through a DECLARED binding — a trap entry's `staticGuards` (whole-property:
+  a pass can discharge) or the constructs the requirement names in its own
+  `observableSignals` (facet: a fail convicts, a pass rides the trail without
+  discharging) — never by keyword-guessing from the statement's prose, so
+  declaring concrete API constructs in `observableSignals` is what makes a
+  requirement deterministically checkable.
 - `behavioral` — the property was observed at runtime (the `runtime_smoke` rung).
 
 A requirement whose risk class is `runtime` or `security` cannot reach `satisfied`

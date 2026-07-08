@@ -141,33 +141,50 @@ export function runStaticGuard(lens: StaticGuardLens, source: string): StaticGua
   return PREDICATES[lens](source);
 }
 
+// The construct family the two tap lenses share: tap-SPECIFIC constructs only.
+// Deliberately NOT bare `CGEvent` (event SYNTHESIS — e.g. a Cmd+V keystroke —
+// also uses CGEvent, and a text-injection atom declaring it must not bind the
+// tap lenses) and NOT bare `keyCode` (synthesized keystrokes carry virtual
+// keycodes too). `\bevent tap` is word-bound: "prEVENT TAP spam" contains the
+// bare substring. DECISION — binding is FAMILY-level by design: an atom that
+// declares the tap construct binds BOTH tap lenses, because declaring the tap
+// as your evidence basis claims its lifecycle (a tap that dies or over-swallows
+// breaks the declared basis either way); per-lens precision belongs to the
+// `property` channel (trap `staticGuards`), which names exactly one adapter.
+const TAP_DOMAIN = /tapcreate|cgeventtap|\bevent tap|flagschanged|masksecondaryfn|kvk_function/iu;
+
 /**
- * Route a requirement atom to a static-guard lens by its statement keywords, or
- * null when no adapter covers it. Lens != verdict: routing only says WHICH guard
- * to run, never whether it passes. First match wins (ordered by specificity).
+ * The construct family each lens guards, as a declared, machine-legible domain
+ * — the binding side of the attribution join. An atom binds a lens iff one of
+ * the atom's OWN declared `observableSignals` names a construct in the lens's
+ * domain (`facet` coverage), or a trap entry declares the lens outright
+ * (`property` coverage — see the trap library's `atomCore.staticGuards`).
+ *
+ * WHY domains, not statement keywords: an evidence item's effective grade is
+ * min(verdict grade, attribution grade). The verdict side is deterministic
+ * (per-file predicate); attribution inferred from statement PROSE is
+ * presence-grade guessing that inflates the item to `static_guard` (game_8: an
+ * LLM-submenu atom whose prose mentioned "On Fn release" inherited a keycode
+ * FAIL). Joining two DECLARED fields — the model's own observable-signal
+ * constructs against these domains — keeps attribution at the grade the
+ * verdict earns. There is deliberately NO statement-based routing fallback: an
+ * atom that declares no matching construct gets no deterministic attribution
+ * (axiom 7 — honest unbound beats guessed binding).
  */
-export function routeAtomToStaticGuardLens(statement: string): StaticGuardLens | null {
-  const s = statement.toLowerCase();
-  if (
-    /(fn|flagschanged|keycode|emoji|suppress)/u.test(s) &&
-    /(scope|keycode|keycode-scoped|fn)/u.test(s)
-  ) {
-    return "event_tap_keycode_scoped";
-  }
-  if (/(re-?enable|timeout|disabled|self-heal)/u.test(s) && /(tap|event)/u.test(s)) {
-    return "event_tap_reenable";
-  }
-  if (/(input source|ascii|abc keyboard|keyboard layout|tisselect|selectable)/u.test(s)) {
-    return "input_source_selectable";
-  }
-  if (/(speech|transcri|recognition|dictation|final result|isfinal)/u.test(s)) {
-    return "speech_finalization";
-  }
-  if (/(pasteboard|clipboard|paste|cmd\+v)/u.test(s)) {
-    return "pasteboard_restore";
-  }
-  if (/(api key|apikey|secret|token|credential|privacy)/u.test(s)) {
-    return "llm_key_privacy";
-  }
-  return null;
-}
+export const STATIC_GUARD_DOMAINS: Readonly<Record<StaticGuardLens, RegExp>> = {
+  event_tap_keycode_scoped: TAP_DOMAIN,
+  event_tap_reenable: TAP_DOMAIN,
+  input_source_selectable: /tisselect|tiscopy|input source|keyboard layout/iu,
+  // Speech-SPECIFIC recognizer constructs only — bare `recognizer` would bind
+  // gesture recognizers (NSClickGestureRecognizer) and Vision text recognizers.
+  speech_finalization:
+    /sfspeech|speechrecognizer|recognitiontask|recognitionrequest|speech recognition/iu,
+  pasteboard_restore: /nspasteboard|pasteboard|clipboard/iu,
+  // Credential-material constructs only. Deliberately NOT bare `token` (LLM
+  // atoms say "max_tokens", UI atoms say "token-by-token") and NOT bare
+  // `authorization` (TCC permission constructs like
+  // `SFSpeechRecognizer.requestAuthorization` are permissions, not credentials
+  // — and this lens is always-applicable, so an over-broad bind would let one
+  // real key-in-log defect convict every permission atom).
+  llm_key_privacy: /api.?key|secret|credential|bearer|access.?token|auth(?:orization)?[ -]?token/iu,
+};

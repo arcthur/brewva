@@ -623,3 +623,150 @@ describe("projectRequirementFitness: evidence grade + risk-class floor (R3)", ()
     expect(forward.insufficientGradeAtoms.map((entry) => entry.atomId)).toEqual(["a", "b"]);
   });
 });
+
+describe("projectRequirementFitness: facet coverage (falsification asymmetry)", () => {
+  // game_8's req-4 shape: a multi-clause runtime atom whose declared construct
+  // facet passed its lens. One facet can never satisfy the whole statement.
+  test("a facet pass is trail-only: no satisfied, no likelySatisfied, no grade debt", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("a", { riskClass: "runtime" })]),
+      deterministicEvidence: [
+        {
+          atomId: "a",
+          verdict: "pass",
+          ref: "static-guard:speech_finalization:a",
+          evidenceKind: "static_guard",
+          coverage: "facet",
+        },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("unverified");
+    expect(projection.atoms[0]?.evidence).toEqual([
+      {
+        kind: "deterministic",
+        evidenceKind: "static_guard",
+        ref: "static-guard:speech_finalization:a",
+        verdict: "pass",
+        coverage: "facet",
+      },
+    ]);
+    // The deficit is coverage, not grade — it must NOT read as grade debt.
+    expect(projection.insufficientGradeAtoms).toEqual([]);
+    // The atom still owes verification: prompt + independence census both see it.
+    expect(projection.unverifiedMustAtoms).toEqual(["a"]);
+    expect(projection.independenceDebtAtoms).toEqual(["a"]);
+  });
+
+  test("a facet pass plus authored coverage caps at likelySatisfied (open debt)", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("a", { riskClass: "runtime" })]),
+      authoredOutcomes: [{ atomRefs: ["a"], ref: "authored-1" }],
+      deterministicEvidence: [
+        {
+          atomId: "a",
+          verdict: "pass",
+          ref: "static-guard:llm_key_privacy:a",
+          evidenceKind: "static_guard",
+          coverage: "facet",
+        },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("likelySatisfied");
+    expect(projection.independenceDebtAtoms).toEqual(["a"]);
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 1,
+      violated: 0,
+      dischargedAtGrade: 0,
+    });
+  });
+
+  // game_8's req-6 shape: the atom's OWN declared construct is deterministically
+  // misused — a facet fail convicts like any deterministic fail.
+  test("a facet fail convicts: violated with a deterministic_conflict", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("a", { riskClass: "runtime" })]),
+      deterministicEvidence: [
+        {
+          atomId: "a",
+          verdict: "fail",
+          ref: "static-guard:input_source_selectable:a",
+          evidenceKind: "static_guard",
+          coverage: "facet",
+        },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("violated");
+    expect(projection.discrepancies).toEqual([
+      {
+        atomId: "a",
+        grade: "deterministic_conflict",
+        statement: "statement for a",
+        evidenceRef: "static-guard:input_source_selectable:a",
+      },
+    ]);
+  });
+
+  test("a property pass at grade still discharges (trap-declared adapter binding)", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("a", { riskClass: "runtime" })]),
+      deterministicEvidence: [
+        {
+          atomId: "a",
+          verdict: "pass",
+          ref: "static-guard:event_tap_keycode_scoped:a",
+          evidenceKind: "static_guard",
+          coverage: "property",
+        },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("satisfied");
+    expect(projection.independenceDebtResolution).toEqual({
+      open: 0,
+      violated: 0,
+      dischargedAtGrade: 1,
+    });
+  });
+
+  test("a facet pass never discharges even a presence-floor (low-risk) atom", () => {
+    const projection = projectRequirementFitness({
+      ...baseInput([atom("a", { riskClass: "ux" })]),
+      deterministicEvidence: [
+        {
+          atomId: "a",
+          verdict: "pass",
+          ref: "static-guard:pasteboard_restore:a",
+          evidenceKind: "static_guard",
+          coverage: "facet",
+        },
+      ],
+    });
+    expect(projection.atoms[0]?.state).toBe("unverified");
+  });
+
+  test("evidence order stays total when entries differ only in coverage (review m1)", () => {
+    // A pre-coverage tape entry (defaults to property) replayed next to a
+    // re-recorded facet item with the SAME (kind, ref, verdict) must sort
+    // identically whichever order the receipts arrive in.
+    const entries = [
+      { atomId: "a", verdict: "pass", ref: "gate-1", evidenceKind: "static_guard" },
+      {
+        atomId: "a",
+        verdict: "pass",
+        ref: "gate-1",
+        evidenceKind: "static_guard",
+        coverage: "facet",
+      },
+    ] as const;
+    const forward = projectRequirementFitness({
+      ...baseInput([atom("a", { riskClass: "runtime" })]),
+      deterministicEvidence: [...entries],
+    });
+    const reversed = projectRequirementFitness({
+      ...baseInput([atom("a", { riskClass: "runtime" })]),
+      deterministicEvidence: entries.toReversed(),
+    });
+    expect(forward.atoms[0]?.evidence).toEqual(reversed.atoms[0]?.evidence);
+    // The property-coverage pass still discharges regardless of the facet twin.
+    expect(forward.atoms[0]?.state).toBe("satisfied");
+  });
+});

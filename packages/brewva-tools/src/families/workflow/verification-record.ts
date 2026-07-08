@@ -130,12 +130,15 @@ function readWorkspaceSource(workspaceRoot: string, path: string): string | null
 
 /**
  * R3c: the RUNTIME runs the static-guard adapters over the session's fresh-touched
- * source for each requirement atom that routes to a lens, recording their
- * deterministic, `static_guard`-grade results on the receipt. A producer the model
- * cannot fabricate — the predicate runs on the real file; a PASS can satisfy a
- * high-risk atom presence-only evidence leaves capped, a FAIL is a real
- * `deterministic_conflict`. Inert (`[]`) with no atoms, no fresh writes, or no
- * routed lens.
+ * source, attributing each verdict through the atoms' DECLARED bindings (a trap
+ * entry's `staticGuards` at `property` coverage; the atom's own
+ * `observableSignals` construct join at `facet` coverage — see the producer),
+ * recording deterministic, `static_guard`-grade results on the receipt. A
+ * producer the model cannot fabricate — the predicate runs on the real file; a
+ * property PASS can satisfy a high-risk atom presence-only evidence leaves
+ * capped, any FAIL is a real `deterministic_conflict`, and an applicable FAIL
+ * no atom declares still rides the receipt unbound (empty `atomRefs`). Inert
+ * (`[]`) with no atoms, no fresh writes, or no applicable lens.
  */
 function collectStaticGuardEvidenceForSession(
   runtime: BrewvaToolRuntime,
@@ -147,6 +150,8 @@ function collectStaticGuardEvidenceForSession(
   const atoms = foldTaskLedgerEvents(events).requirements.map((atom) => ({
     id: atom.id,
     statement: atom.statement,
+    provenance: atom.provenance,
+    observableSignals: atom.observableSignals,
   }));
   const workspaceRoot = resolveWorkspaceRoot(runtime, ctx);
   const invocations = projectToolInvocations(events);
@@ -288,6 +293,21 @@ export function createVerificationRecordTool(options: BrewvaBundledToolOptions):
         // RESULT TEXT only — never the outcome and never the recorded receipt). A
         // fail/skipped outcome runs neither scan and touches no filesystem.
         const markers: string[] = [];
+        // UNBOUND deterministic FAILs (empty atomRefs): real static-guard
+        // conflicts no requirement atom declares. They move no atom state by
+        // design (attribution unknown is said, not guessed — axiom 7), so the
+        // receipt is their ONLY surface; without this marker the signal would be
+        // write-only. Text-only, like every marker here.
+        const unboundFails = evidenceItems.filter(
+          (item) => item.atomRefs.length === 0 && item.verdict === "fail",
+        );
+        if (unboundFails.length > 0) {
+          markers.push(
+            `UNBOUND DETERMINISTIC CONFLICTS (no requirement atom declares these constructs — fix or claim them via observableSignals):\n${unboundFails
+              .map((item) => `- ${item.id}: ${item.anchors[0] ?? item.statement}`)
+              .join("\n")}`,
+          );
+        }
         if (outcome === "pass") {
           const workspaceRoot = resolveWorkspaceRoot(runtime, ctx);
           const debtInput = assembleReviewDebtInput(

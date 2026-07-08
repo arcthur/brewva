@@ -1,5 +1,6 @@
 export {
   ATOM_FITNESS_STATES,
+  EVIDENCE_COVERAGES,
   EVIDENCE_KINDS,
   FITNESS_DISCREPANCY_GRADES,
   projectRequirementFitness,
@@ -11,6 +12,7 @@ export type {
   AtomFitnessEvidence,
   AtomFitnessState,
   DeterministicFitnessEvidence,
+  EvidenceCoverage,
   EvidenceKind,
   FitnessAuthoredOutcome,
   FitnessDiscrepancy,

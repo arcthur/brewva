@@ -1,4 +1,8 @@
 import type { RequirementModality, RequirementRiskClass } from "@brewva/brewva-vocabulary/task";
+// Type-only: names the deterministic adapters an atomCore may declare. No
+// runtime cycle — the static-guard PRODUCER imports this module's entries,
+// while this module needs only the lens-id type.
+import type { StaticGuardLens } from "../static-guard/predicates.js";
 import { TRAP_ENTRIES } from "./entries.js";
 
 /**
@@ -69,6 +73,16 @@ export interface TrapEntry {
     readonly statement: string;
     readonly modality: RequirementModality;
     readonly riskClass?: RequirementRiskClass;
+    /**
+     * The deterministic adapter(s) whose checked property IS this atom's
+     * statement — the trap's compiled hindsight promoted to code. The
+     * static-guard producer joins a trap-minted ledger atom (`provenance:
+     * "trap"`, verbatim statement) back to this declaration and attributes the
+     * lens verdict at `property` coverage: a pass at grade discharges the atom,
+     * a fail convicts it. Declared here (the curation home) so attribution is
+     * a declaration, never statement-keyword inference.
+     */
+    readonly staticGuards?: readonly StaticGuardLens[];
   };
   /** Tape/run reference this entry was distilled from. */
   readonly provenance: string;

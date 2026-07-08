@@ -175,6 +175,9 @@ describe("trap library schema and engine", () => {
       // The trap carries the risk class (runtime) so the min-grade cap engages on
       // the auto-injected atom — presence-only evidence cannot satisfy it.
       riskClass: "runtime",
+      // ... and declares its deterministic adapter, so the static-guard producer
+      // attributes the keycode verdict at `property` coverage by declaration.
+      staticGuards: ["event_tap_keycode_scoped"],
     });
   });
 

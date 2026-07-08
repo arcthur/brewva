@@ -50,6 +50,23 @@ const EVIDENCE_KIND_RANK: Readonly<Record<EvidenceKind, number>> = {
 };
 
 /**
+ * How MUCH of the atom an evidence item's attribution covers — the THIRD axis,
+ * orthogonal to source (`kind`) and grade (`evidenceKind`). `property`: the
+ * checked property IS the atom's statement (a trap-declared adapter binding),
+ * so a pass at grade discharges the atom. `facet`: the atom merely DECLARED the
+ * checked construct among its observable signals — the check covers one facet
+ * of a broader statement. Falsification is asymmetric (axiom 7): a facet FAIL
+ * convicts the atom (its own declared evidence basis is deterministically
+ * broken), but a facet PASS proves only that one facet and can never satisfy —
+ * or even "likely" — the whole atom. An item that omits coverage is `property`
+ * (every item before this axis existed was routed as whole-property evidence,
+ * and replayed tapes keep their recorded meaning).
+ */
+export const EVIDENCE_COVERAGES = ["property", "facet"] as const;
+
+export type EvidenceCoverage = (typeof EVIDENCE_COVERAGES)[number];
+
+/**
  * One piece of evidence that contributed to an atom's fitness state. `kind`
  * names WHERE it came from (source); `evidenceKind` names HOW WELL it knows the
  * atom (grade) — the two axes are orthogonal. `ref` is the evidence's stable id
@@ -66,6 +83,13 @@ export interface AtomFitnessEvidence {
   readonly evidenceKind: EvidenceKind;
   readonly ref: string;
   readonly verdict?: "pass" | "fail";
+  /**
+   * Present (as `facet`) only on deterministic entries whose attribution covers
+   * one declared construct facet, not the whole property — so a reader can see
+   * WHY a deterministic pass in the trail did not discharge the atom. Absent
+   * means `property`.
+   */
+  readonly coverage?: EvidenceCoverage;
 }
 
 export interface AtomFitness {
@@ -230,6 +254,13 @@ export interface DeterministicFitnessEvidence {
   readonly ref: string;
   /** Grade of the deterministic check; defaults to `presence` when unset. */
   readonly evidenceKind?: EvidenceKind;
+  /**
+   * Attribution coverage of the check; defaults to `property` when unset. A
+   * `facet` FAIL still convicts (deterministic_conflict); a `facet` PASS is
+   * trail-only — it can neither satisfy the atom nor count as a satisfying
+   * pass at any grade (see {@link EVIDENCE_COVERAGES}).
+   */
+  readonly coverage?: EvidenceCoverage;
 }
 
 /**
@@ -278,7 +309,15 @@ function compareEvidence(left: AtomFitnessEvidence, right: AtomFitnessEvidence):
   // input order would leak into the result.
   const leftVerdict = left.verdict ?? "";
   const rightVerdict = right.verdict ?? "";
-  return leftVerdict < rightVerdict ? -1 : leftVerdict > rightVerdict ? 1 : 0;
+  if (leftVerdict !== rightVerdict) {
+    return leftVerdict < rightVerdict ? -1 : 1;
+  }
+  // ... and finally on coverage: the same (kind, ref, verdict) can appear once
+  // attributed as whole-property and once as facet (e.g. a pre-coverage tape
+  // entry replayed next to a re-recorded facet item) — totality again.
+  const leftCoverage = left.coverage ?? "";
+  const rightCoverage = right.coverage ?? "";
+  return leftCoverage < rightCoverage ? -1 : leftCoverage > rightCoverage ? 1 : 0;
 }
 
 /**
@@ -399,22 +438,37 @@ export function projectRequirementFitness(input: RequirementFitnessInput): Fitne
       continue;
     }
     const evidenceKind = entry.evidenceKind ?? "presence";
-    accumulator.evidence.push({
-      kind: "deterministic",
-      evidenceKind,
-      ref: entry.ref,
-      verdict: entry.verdict,
-    });
+    const facet = entry.coverage === "facet";
+    accumulator.evidence.push(
+      facet
+        ? {
+            kind: "deterministic",
+            evidenceKind,
+            ref: entry.ref,
+            verdict: entry.verdict,
+            coverage: "facet",
+          }
+        : { kind: "deterministic", evidenceKind, ref: entry.ref, verdict: entry.verdict },
+    );
     if (entry.verdict === "pass") {
-      accumulator.bestSatisfyingKind = higherGrade(accumulator.bestSatisfyingKind, evidenceKind);
-      if (meetsRequiredGrade(accumulator.atom, evidenceKind)) {
-        accumulator.hasDeterministicPass = true;
+      // Falsification asymmetry (axiom 7): a facet pass proves ONE declared
+      // construct facet, never the whole statement — it stays in the trail but
+      // is NOT a satisfying pass at any grade (it neither discharges nor
+      // "likely"-satisfies, and it must not read as grade debt either — the
+      // deficit is coverage, not grade).
+      if (!facet) {
+        accumulator.bestSatisfyingKind = higherGrade(accumulator.bestSatisfyingKind, evidenceKind);
+        if (meetsRequiredGrade(accumulator.atom, evidenceKind)) {
+          accumulator.hasDeterministicPass = true;
+        }
       }
     } else if (
       accumulator.deterministicFailRef === null ||
       entry.ref < accumulator.deterministicFailRef
     ) {
-      // Lowest ref wins so the chosen discrepancy is order-independent.
+      // Lowest ref wins so the chosen discrepancy is order-independent. A facet
+      // fail convicts like any deterministic fail: the atom's OWN declared
+      // evidence basis is deterministically broken.
       accumulator.deterministicFailRef = entry.ref;
     }
   }

@@ -632,6 +632,52 @@ describe("verification_record tool — claim-time fitness discrepancy annotation
     expect(fitness.insufficientGradeAtoms).toEqual([]);
   });
 
+  test("a deterministic FAIL no atom declares rides the receipt UNBOUND and the result text says so (review M2)", async () => {
+    // game_8's req-8 shape: the only ledger atom declares menu constructs, none
+    // of which bind the tap lenses — so the overbroad-tap keycode FAIL cannot be
+    // pinned on it. The signal must neither vanish (write-only channel) nor be
+    // guessed onto the wrong atom: it lands with empty atomRefs, moves no atom
+    // state, and the claim-time result text surfaces it.
+    const runtime = createRuntimeFixture();
+    const bundled = createBundledToolRuntime(runtime);
+    const verificationRecord = createVerificationRecordTool({ runtime: bundled });
+    const sessionId = "fitness-unbound-1";
+    seedAtom(runtime, sessionId, {
+      id: "req-8",
+      statement: "Menu bar must show Refining... on Fn release with LLM enabled",
+      modality: "must",
+      provenance: "prompt",
+      riskClass: "ux",
+      observableSignals: ["NSMenu submenu", "SettingsWindowController"],
+    });
+    writeFileSync(
+      join(runtime.identity.cwd, "FnKeyMonitor.swift"),
+      readFileSync(join(FIXTURE_DIR, "overbroad-tap.swift")),
+    );
+    seedCommittedWrite(runtime, sessionId, "FnKeyMonitor.swift");
+
+    const result = await verificationRecord.execute(
+      "tool-1",
+      { outcome: "pass", level: "requirements", checks: ["requirement re-derivation"] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+
+    expect(result.outcome.kind).toBe("ok");
+    const receipt = committedReceipt(runtime, sessionId);
+    const unbound = receipt.evidenceItems.filter((item) => item.atomRefs.length === 0);
+    expect(unbound.length).toBeGreaterThan(0);
+    expect(unbound.every((item) => item.verdict === "fail")).toBe(true);
+    // No atom state moved: the menu atom is untouched by the tap conflict.
+    const fitness = projectRequirementFitness(assembleRequirementFitnessInput(bundled, sessionId));
+    expect(fitness.atoms[0]?.state).toBe("unverified");
+    expect(receipt.discrepancies).toEqual([]);
+    // The claim-time surface names the orphaned conflicts (axiom 18, text-only).
+    expect(resultText(result)).toContain("UNBOUND DETERMINISTIC CONFLICTS");
+    expect(resultText(result)).toContain("static-guard:event_tap_keycode_scoped:unbound");
+  });
+
   test("correct-tap.swift: no violating finding → ZERO discrepancies (the precision guard), outcome pass", async () => {
     const runtime = createRuntimeFixture();
     const verificationRecord = createVerificationRecordTool({

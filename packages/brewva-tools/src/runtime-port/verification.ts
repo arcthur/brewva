@@ -192,13 +192,22 @@ export function assembleReviewDebtInput(
 export function evidenceItemsToDeterministicEvidence(
   items: readonly EvidenceItem[],
 ): DeterministicFitnessEvidence[] {
+  // An unbound item (empty atomRefs — a deterministic FAIL no atom declares)
+  // maps to nothing here by construction: it stays a receipt-level signal and
+  // moves no atom's state. `coverage` rides through so the join can tell a
+  // whole-property pass (dischargeable) from a facet pass (trail-only).
   return items.flatMap((item) =>
-    item.atomRefs.map((atomId) => ({
-      atomId,
-      verdict: item.verdict,
-      ref: item.id,
-      evidenceKind: item.evidenceKind,
-    })),
+    item.atomRefs.map((atomId) =>
+      item.coverage
+        ? {
+            atomId,
+            verdict: item.verdict,
+            ref: item.id,
+            evidenceKind: item.evidenceKind,
+            coverage: item.coverage,
+          }
+        : { atomId, verdict: item.verdict, ref: item.id, evidenceKind: item.evidenceKind },
+    ),
   );
 }
 

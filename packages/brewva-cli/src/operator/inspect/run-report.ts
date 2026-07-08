@@ -5,6 +5,7 @@ import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { FITNESS_DISCREPANCY_GRADES } from "@brewva/brewva-vocabulary/fitness";
 import type {
   AtomFitnessState,
+  EvidenceCoverage,
   EvidenceKind,
   FitnessDiscrepancy,
   FitnessDiscrepancyGrade,
@@ -139,6 +140,12 @@ export interface RunReportFitness {
 export interface RunReportAtomEvidence {
   readonly evidenceKind: EvidenceKind;
   readonly verdict: "pass" | "fail";
+  /**
+   * Attribution coverage, when the item carried one: without it a reader sees a
+   * `static_guard` PASS listed under an atom stuck `unverified` and cannot tell
+   * that the pass was facet-scoped (trail-only) rather than dischargeable.
+   */
+  readonly coverage?: EvidenceCoverage;
   readonly anchors: readonly string[];
 }
 
@@ -455,11 +462,16 @@ export function buildRunReportProjection(
         for (const item of parsed.evidenceItems) {
           for (const atomId of item.atomRefs) {
             const list = atomEvidence.get(atomId) ?? [];
-            list.push({
-              evidenceKind: item.evidenceKind,
-              verdict: item.verdict,
-              anchors: item.anchors,
-            });
+            list.push(
+              item.coverage
+                ? {
+                    evidenceKind: item.evidenceKind,
+                    verdict: item.verdict,
+                    coverage: item.coverage,
+                    anchors: item.anchors,
+                  }
+                : { evidenceKind: item.evidenceKind, verdict: item.verdict, anchors: item.anchors },
+            );
             atomEvidence.set(atomId, list);
           }
         }

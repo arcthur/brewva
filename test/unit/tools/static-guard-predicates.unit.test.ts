@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
-  routeAtomToStaticGuardLens,
   runStaticGuard,
   STATIC_GUARD_EVIDENCE_KIND,
 } from "../../../packages/brewva-tools/src/shared/static-guard/predicates.js";
 import {
   buildStaticGuardEvidenceItems,
   collectStaticGuardEvidence,
+  resolveStaticGuardBindings,
 } from "../../../packages/brewva-tools/src/shared/static-guard/producer.js";
+import type { TrapEntry } from "../../../packages/brewva-tools/src/shared/trap-library/index.js";
 
 describe("static-guard: event_tap_keycode_scoped (req-1)", () => {
   test("PASS: suppression gated on the Fn keyCode (the up4 fix)", () => {
@@ -106,115 +107,267 @@ describe("static-guard: pasteboard_restore + llm_key_privacy", () => {
       "pass",
     );
   });
-});
-
-describe("static-guard: atom routing + evidence kind", () => {
-  test("routes statements to lenses by keyword", () => {
-    expect(routeAtomToStaticGuardLens("Fn suppression must be keycode-scoped")).toBe(
-      "event_tap_keycode_scoped",
-    );
-    expect(routeAtomToStaticGuardLens("the CGEvent tap must re-enable after a timeout")).toBe(
-      "event_tap_reenable",
-    );
-    expect(routeAtomToStaticGuardLens("switch to an ASCII input source before pasting")).toBe(
-      "input_source_selectable",
-    );
-    expect(routeAtomToStaticGuardLens("prefer streaming speech recognition")).toBe(
-      "speech_finalization",
-    );
-    expect(routeAtomToStaticGuardLens("restore the clipboard after Cmd+V")).toBe(
-      "pasteboard_restore",
-    );
-    expect(routeAtomToStaticGuardLens("the API key must be configurable")).toBe("llm_key_privacy");
-    expect(routeAtomToStaticGuardLens("default language must be zh-CN")).toBe(null);
-  });
   test("the evidence kind is static_guard", () => {
     expect(STATIC_GUARD_EVIDENCE_KIND).toBe("static_guard");
   });
 });
 
-describe("static-guard producer: evidence items from atoms + files", () => {
-  const upThreeSource = `
+// The attribution join (rfc-review-atom-close-connection follow-up): bindings
+// come from DECLARATIONS — a trap entry's `atomCore.staticGuards` (property) or
+// the atom's own `observableSignals` construct join (facet) — never from
+// statement-prose keywords. The shapes below mirror game_8's real atoms, where
+// prose routing false-attributed a keycode FAIL to the LLM-submenu atom and
+// first-match shadowing hid the pasteboard lens from the text-injection atom.
+
+const TRAP_STATEMENT = "Fn suppression must be keycode-scoped, not all .flagsChanged";
+
+const TRAP_ENTRY: TrapEntry = {
+  id: "event-tap-orient-prompt",
+  phase: "orient",
+  input: "prompt",
+  trigger: { kind: "substring_any", needles: ["event tap"] },
+  atomCore: {
+    statement: TRAP_STATEMENT,
+    modality: "must",
+    riskClass: "runtime",
+    staticGuards: ["event_tap_keycode_scoped"],
+  },
+  provenance: "test",
+  retirement: "test",
+};
+
+/** game_8's req-1 shape: the trap mint (verbatim statement, no signals). */
+const TRAP_ATOM = { id: "req-1", statement: TRAP_STATEMENT, provenance: "trap" };
+
+/** game_8's req-6 shape: text injection declaring BOTH construct families. */
+const INJECTION_ATOM = {
+  id: "req-6",
+  statement: "Text injection must use clipboard plus simulated Cmd+V with input source switching",
+  provenance: "prompt",
+  observableSignals: [
+    "NSPasteboard snapshot/restore",
+    "CGEvent keyboard V with command flag",
+    "TISSelectInputSource",
+  ],
+};
+
+/** game_8's req-8 shape: UX prose mentions "Fn release" but declares NO tap construct. */
+const MENU_ATOM = {
+  id: "req-8",
+  statement: "Menu bar must show Refining... on Fn release with LLM enabled",
+  provenance: "prompt",
+  observableSignals: ["NSMenu submenu", "SettingsWindowController", "overlay setText Refining"],
+};
+
+describe("static-guard bindings: declared, never inferred from prose", () => {
+  test("a trap mint binds its declared adapter at property coverage", () => {
+    expect(Object.fromEntries(resolveStaticGuardBindings(TRAP_ATOM, [TRAP_ENTRY]))).toEqual({
+      event_tap_keycode_scoped: "property",
+    });
+  });
+
+  test("a paraphrased statement gets NO property binding (verbatim identity only)", () => {
+    expect(
+      resolveStaticGuardBindings(
+        { id: "req-x", statement: "Fn suppression must be keycode-scoped", provenance: "trap" },
+        [TRAP_ENTRY],
+      ).size,
+    ).toBe(0);
+  });
+
+  test("the verbatim trap statement binds at property WHATEVER the provenance (the orient amend keeps an existing atom's provenance)", () => {
+    expect(
+      Object.fromEntries(
+        resolveStaticGuardBindings(
+          { id: "req-y", statement: TRAP_STATEMENT, provenance: "prompt" },
+          [TRAP_ENTRY],
+        ),
+      ),
+    ).toEqual({ event_tap_keycode_scoped: "property" });
+  });
+
+  test("domains are construct-anchored: near-miss signals do not bind (review M1)", () => {
+    const nearMisses = {
+      id: "req-z",
+      statement: "UI affordances",
+      provenance: "prompt",
+      observableSignals: [
+        "debounce to prevent tap spam", // contains the bare substring "event tap"
+        "SFSpeechRecognizer.requestAuthorization status", // TCC permission, not credentials
+        "NSClickGestureRecognizer", // gesture recognizer, not speech
+        "max_tokens config", // LLM sizing, not key material
+        "token-by-token streaming display",
+      ],
+    };
+    const bindings = resolveStaticGuardBindings(nearMisses, [TRAP_ENTRY]);
+    expect(bindings.has("event_tap_keycode_scoped")).toBe(false);
+    expect(bindings.has("event_tap_reenable")).toBe(false);
+    expect(bindings.has("llm_key_privacy")).toBe(false);
+    // requestAuthorization on SFSpeechRecognizer IS a speech construct — the
+    // speech lens correctly binds via `speechrecognizer`, and only it.
+    expect(Object.fromEntries(bindings)).toEqual({ speech_finalization: "facet" });
+    // The credential domain still binds real key-material constructs.
+    expect(
+      resolveStaticGuardBindings(
+        {
+          id: "req-k",
+          statement: "LLM",
+          provenance: "prompt",
+          observableSignals: ["Authorization Bearer"],
+        },
+        [TRAP_ENTRY],
+      ).has("llm_key_privacy"),
+    ).toBe(true);
+  });
+
+  test("observableSignals bind EVERY matching lens as facets (no first-match shadowing)", () => {
+    expect(Object.fromEntries(resolveStaticGuardBindings(INJECTION_ATOM, [TRAP_ENTRY]))).toEqual({
+      input_source_selectable: "facet",
+      pasteboard_restore: "facet",
+    });
+  });
+
+  test("bare CGEvent synthesis does NOT bind the tap lenses (domain is tap-specific)", () => {
+    // INJECTION_ATOM declares "CGEvent keyboard V" (synthesis) — no tapCreate,
+    // no flagsChanged — so neither tap lens binds.
+    const bindings = resolveStaticGuardBindings(INJECTION_ATOM, [TRAP_ENTRY]);
+    expect(bindings.has("event_tap_keycode_scoped")).toBe(false);
+    expect(bindings.has("event_tap_reenable")).toBe(false);
+  });
+
+  test("prose-only Fn mentions bind nothing (game_8's false positive, gone)", () => {
+    expect(resolveStaticGuardBindings(MENU_ATOM, [TRAP_ENTRY]).size).toBe(0);
+  });
+});
+
+describe("static-guard producer: declared attribution over per-file discovery", () => {
+  const flagOnlyTap = `
     let tap = CGEvent.tapCreate(...)
     let hasFn = event.flags.contains(.maskSecondaryFn)
     return hasFn ? nil : Unmanaged.passUnretained(event)
   `;
-  const upFourSource = `
+  const scopedTap = `
     let tap = CGEvent.tapCreate(...)
     let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
     guard keyCode == 63 else { return Unmanaged.passUnretained(event) }
     return nil
   `;
-  const atoms = [{ id: "req-1", statement: "Fn suppression must be keycode-scoped" }];
+  const injector = `
+    let saved = pasteboard.pasteboardItems
+    pasteboard.clearContents()
+    pasteboard.writeObjects(saved)
+    TISSelectInputSource(ascii)
+  `;
 
-  test("produces a deterministic static_guard PASS item, anchored to the deciding file (up4)", () => {
+  test("a trap-bound FAIL convicts at property coverage, anchored to the deciding file", () => {
+    const items = buildStaticGuardEvidenceItems({
+      atoms: [TRAP_ATOM],
+      files: [{ path: "FnKeyMonitor.swift", content: flagOnlyTap }],
+      trapEntries: [TRAP_ENTRY],
+    });
+    expect(items[0]).toEqual({
+      id: "static-guard:event_tap_keycode_scoped:req-1",
+      atomRefs: ["req-1"],
+      evidenceKind: "static_guard",
+      verdict: "fail",
+      coverage: "property",
+      anchors: ["FnKeyMonitor.swift: suppresses on maskSecondaryFn with no keyCode gate"],
+      statement: `static-guard event_tap_keycode_scoped: ${TRAP_STATEMENT}`,
+    });
+    // The same file also fails the OTHER tap lens (no re-arm), which this atom
+    // does not claim — it surfaces unbound rather than being pinned on req-1.
+    expect(items.map((item) => item.id).slice(1)).toEqual([
+      "static-guard:event_tap_reenable:unbound",
+    ]);
+  });
+
+  test("a signals-bound atom gets ALL its facets — fail convicts, pass rides as facet", () => {
+    const items = buildStaticGuardEvidenceItems({
+      atoms: [INJECTION_ATOM],
+      files: [{ path: "TextInjector.swift", content: injector }],
+      trapEntries: [TRAP_ENTRY],
+    });
     expect(
-      buildStaticGuardEvidenceItems({
-        atoms,
-        files: [{ path: "FnKeyMonitor.swift", content: upFourSource }],
-      }),
+      items
+        .map((item) => [item.id, item.verdict, item.coverage] as const)
+        .toSorted((left, right) => left[0].localeCompare(right[0])),
     ).toEqual([
+      ["static-guard:input_source_selectable:req-6", "fail", "facet"],
+      ["static-guard:pasteboard_restore:req-6", "pass", "facet"],
+    ]);
+  });
+
+  test("an atom declaring no matching construct contributes nothing (no prose routing)", () => {
+    const items = buildStaticGuardEvidenceItems({
+      atoms: [MENU_ATOM],
+      files: [{ path: "FnKeyMonitor.swift", content: flagOnlyTap }],
+      trapEntries: [TRAP_ENTRY],
+    });
+    // The keycode FAIL is real but unowned: it surfaces UNBOUND, never pinned
+    // onto the menu atom.
+    expect(items).toEqual([
       {
-        id: "static-guard:event_tap_keycode_scoped:req-1",
-        atomRefs: ["req-1"],
+        id: "static-guard:event_tap_keycode_scoped:unbound",
+        atomRefs: [],
         evidenceKind: "static_guard",
-        verdict: "pass",
-        anchors: ["FnKeyMonitor.swift: Fn suppression gated on the Fn keyCode"],
-        statement: "static-guard event_tap_keycode_scoped: Fn suppression must be keycode-scoped",
+        verdict: "fail",
+        anchors: ["FnKeyMonitor.swift: suppresses on maskSecondaryFn with no keyCode gate"],
+        statement:
+          "static-guard event_tap_keycode_scoped: deterministic conflict; no requirement atom declares this construct",
+      },
+      {
+        id: "static-guard:event_tap_reenable:unbound",
+        atomRefs: [],
+        evidenceKind: "static_guard",
+        verdict: "fail",
+        anchors: ["FnKeyMonitor.swift: tap never re-enables after a system disable"],
+        statement:
+          "static-guard event_tap_reenable: deterministic conflict; no requirement atom declares this construct",
       },
     ]);
   });
 
-  test("produces a FAIL item for flag-only source (up3)", () => {
-    expect(
-      buildStaticGuardEvidenceItems({
-        atoms,
-        files: [{ path: "F.swift", content: upThreeSource }],
-      })[0]?.verdict,
-    ).toBe("fail");
+  test("unbound PASSES are not emitted (signal, not noise)", () => {
+    const items = buildStaticGuardEvidenceItems({
+      atoms: [MENU_ATOM],
+      files: [{ path: "FnKeyMonitor.swift", content: scopedTap }],
+      trapEntries: [TRAP_ENTRY],
+    });
+    // keycode passes (scoped) -> dropped; reenable fails -> surfaces unbound.
+    expect(items.map((item) => item.id)).toEqual(["static-guard:event_tap_reenable:unbound"]);
   });
 
   test("PER-FILE: a guard token in one file cannot satisfy a defect in another", () => {
-    // File A has the tap but is flag-only (the defect); file B has an unrelated
-    // `keyCode == 63` but NO tap — B is not applicable and cannot rescue A.
     const items = buildStaticGuardEvidenceItems({
-      atoms,
+      atoms: [TRAP_ATOM],
       files: [
-        { path: "A.swift", content: upThreeSource },
+        { path: "A.swift", content: flagOnlyTap },
         { path: "B.swift", content: "let x = keyCode == 63 // unrelated, no tap here" },
       ],
+      trapEntries: [TRAP_ENTRY],
     });
     expect(items[0]?.verdict).toBe("fail");
     expect(items[0]?.anchors[0]).toContain("A.swift");
   });
 
-  test("no routed lens, or no file holding the subject, contributes nothing", () => {
-    expect(
-      buildStaticGuardEvidenceItems({
-        atoms: [{ id: "req-2", statement: "default language must be zh-CN" }],
-        files: [{ path: "x", content: upFourSource }],
-      }),
-    ).toEqual([]);
-    expect(
-      buildStaticGuardEvidenceItems({
-        atoms,
-        files: [{ path: "x", content: "let language = zhCN" }],
-      }),
-    ).toEqual([]);
-  });
-
   test("collectStaticGuardEvidence reads paths via the injected reader", () => {
     const items = collectStaticGuardEvidence({
-      atoms,
-      sourcePaths: ["FnKeyMonitor.swift", "Other.swift"],
-      readSource: (path) => (path === "FnKeyMonitor.swift" ? upFourSource : null),
+      atoms: [INJECTION_ATOM],
+      sourcePaths: ["TextInjector.swift", "Other.swift"],
+      readSource: (path) => (path === "TextInjector.swift" ? injector : null),
     });
-    expect(items[0]?.verdict).toBe("pass");
+    expect(items.some((item) => item.id === "static-guard:input_source_selectable:req-6")).toBe(
+      true,
+    );
   });
 
   test("collectStaticGuardEvidence returns [] when no source is readable", () => {
     expect(
-      collectStaticGuardEvidence({ atoms, sourcePaths: ["x"], readSource: () => null }),
+      collectStaticGuardEvidence({
+        atoms: [INJECTION_ATOM],
+        sourcePaths: ["x"],
+        readSource: () => null,
+      }),
     ).toEqual([]);
   });
 });
