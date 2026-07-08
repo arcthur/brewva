@@ -33,6 +33,7 @@ export {
   buildTapeRequirementDebtSummary,
   buildTapeRequirementFitness,
   buildTapeReviewDebt,
+  buildTapeUnaddressedReviewFindings,
   buildTapeUnverifiedRequirementDebt,
   type TapeRequirementDebtSummary,
 } from "./verification.js";

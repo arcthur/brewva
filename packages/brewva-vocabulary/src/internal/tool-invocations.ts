@@ -225,6 +225,52 @@ export function deriveFirstWriteInvocationAt(
   return earliest;
 }
 
+/** One path the tree mutated at a given tape timestamp (a caller-extracted patch appliedPath). */
+export interface PathMutation {
+  readonly path: string;
+  readonly timestamp: number;
+}
+
+/**
+ * The LATEST tape timestamp at which each file was mutated — a per-path refinement
+ * of {@link deriveLatestTreeMutationAt} (which collapses to one global maximum).
+ * Folds bare-write (write/edit) commitments and the caller-extracted patch
+ * `appliedPaths`, keying by the injected `normalizePath` (callers pass
+ * `normalizeReviewPath(raw, workspaceRoot)` so absolute write args and
+ * workspace-relative patch/anchor paths share one key space; the normalizer is
+ * injected rather than imported to keep this module free of a review-layer cycle).
+ * A write that did not error counts (same {@link BARE_WRITE_TOOL_NAMES} +
+ * `ranSuccessfully` rule the other folds use). Used to scope review-finding
+ * freshness to the files a finding actually flagged.
+ */
+export function deriveFileMutationTimeline(input: {
+  readonly writeInvocations: readonly ToolInvocation[];
+  readonly patchMutations: readonly PathMutation[];
+  readonly normalizePath: (rawPath: string) => string;
+}): Map<string, number> {
+  const timeline = new Map<string, number>();
+  const advance = (rawPath: string, timestamp: number): void => {
+    const key = input.normalizePath(rawPath);
+    if (key.length === 0) {
+      return;
+    }
+    timeline.set(key, Math.max(timeline.get(key) ?? 0, timestamp));
+  };
+  for (const invocation of input.writeInvocations) {
+    if (!BARE_WRITE_TOOL_NAMES.has(invocation.toolName) || !ranSuccessfully(invocation)) {
+      continue;
+    }
+    const rawPath = readToolArgPath(invocation.args);
+    if (rawPath !== null) {
+      advance(rawPath, invocation.timestamp);
+    }
+  }
+  for (const mutation of input.patchMutations) {
+    advance(mutation.path, mutation.timestamp);
+  }
+  return timeline;
+}
+
 /**
  * The latest timestamp at which the working tree was mutated, or null. A tree
  * mutation is a successful `source_patch_applied`/`rollback.recorded` receipt,

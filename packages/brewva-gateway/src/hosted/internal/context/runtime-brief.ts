@@ -373,6 +373,54 @@ export function renderDelegationAdvisorySection(
   };
 }
 
+export interface ReviewClosureInput {
+  /** Total review findings still LIVE at render time (flagged code untouched since). */
+  readonly unaddressedCount: number;
+  /** How many of those are `high` or `critical` — the actionable head the line leads with. */
+  readonly highOrCriticalCount: number;
+  /** Atom ids the live findings name (attributed subset), so the model can steer on the gap. */
+  readonly atomRefs: readonly string[];
+}
+
+/**
+ * Act-on-review closure posture (axiom 18): a review that RAN left findings the
+ * flagged code has not answered. The COMPLEMENT of the delegation advisory's
+ * review-debt reason — that says "get an independent read"; this says "the read
+ * happened, its ask is open". States are disjoint (open review debt = no matching
+ * independent receipt; review closure = a recorded finding still fresh), so the two
+ * never name the same thing.
+ *
+ * Self-clearing negative feedback: changing the flagged code ages the finding to
+ * stale, so the line falls silent the moment the model acts — and DELIBERATELY has
+ * NO anti-nag cadence (unlike the delegation advisory). The delegation line suggests
+ * an OPTIONAL instrument, so it nags gently; this names a CONCRETE unanswered finding
+ * from a review the model itself requested — an open defect SHOULD persist every turn
+ * until closed (the game_8 failure was exactly a found-but-unfixed defect shipping
+ * because nothing kept the gap in view). It never forces a fix: the model may refute
+ * a false positive, which (by editing or dismissing) also clears the signal. Salience
+ * `normal` — a named defect outranks an instrument suggestion (`low`) but sits below
+ * hard pressure/gate postures (`high`). Silent when nothing is live.
+ */
+export function renderReviewClosureSection(input: ReviewClosureInput): RuntimeBriefSection | null {
+  if (input.unaddressedCount <= 0) {
+    return null;
+  }
+  const head =
+    input.highOrCriticalCount > 0
+      ? `${input.unaddressedCount} unaddressed review finding(s) (${input.highOrCriticalCount} high/critical)`
+      : `${input.unaddressedCount} unaddressed review finding(s)`;
+  const atoms = input.atomRefs.length > 0 ? ` on atom(s) ${input.atomRefs.join(", ")}` : "";
+  return {
+    key: "review_closure",
+    salience: "normal",
+    line:
+      `review closure: ${head}${atoms} remain on code a prior review flagged and you have not ` +
+      "changed — fix each or explicitly refute it before finalizing; the review already ran, " +
+      "closing it is the open step",
+    stub: `review closure: ${head}`,
+  };
+}
+
 export function formatTokens(count: number): string {
   if (!Number.isFinite(count) || count < 0) {
     return "0";

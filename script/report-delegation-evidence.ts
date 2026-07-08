@@ -20,7 +20,11 @@ function printUsage(): void {
       "       an at-grade read), violated (a live fail named it — review or deterministic),",
       "       and dischargedAtGrade (satisfied via an at-grade pass — independent or",
       "       deterministic): rising violated+dischargedAtGrade against a flat open means",
-      "       high-risk atoms reaching at-grade closure rather than left owed.",
+      "       high-risk atoms reaching at-grade closure rather than left owed. Plus the",
+      "       act-on-review closure census (unaddressedReviewFindings): live findings a",
+      "       review recorded that the flagged code has not answered — a FALLING total",
+      "       across turns is the found-then-fixed loop closing, a flat total the game_8",
+      "       found-but-shipped failure.",
     ].join("\n"),
   );
 }
@@ -79,6 +83,7 @@ function main(): void {
   const runtime = createHostedRuntimeAdapter({ cwd: options.workspaceRoot });
   const report = buildDelegationEvidenceReport(runtime, {
     sessionIds: options.sessionIds.length > 0 ? options.sessionIds : undefined,
+    workspaceRoot: options.workspaceRoot,
   });
   console.log(JSON.stringify(report, null, 2));
 }

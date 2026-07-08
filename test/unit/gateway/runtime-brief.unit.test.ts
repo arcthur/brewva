@@ -7,6 +7,7 @@ import {
   renderContextPressureSection,
   renderDelegationAdvisorySection,
   renderRequirementDebtSection,
+  renderReviewClosureSection,
   type RuntimeBriefSection,
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/runtime-brief.js";
 
@@ -379,5 +380,39 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
     expect(section?.stub).toBe(
       "delegation: 1 high-risk must-atom(s) owe an independent read at grade",
     );
+  });
+});
+
+describe("renderReviewClosureSection (act-on-review)", () => {
+  test("silent when nothing is live", () => {
+    expect(
+      renderReviewClosureSection({ unaddressedCount: 0, highOrCriticalCount: 0, atomRefs: [] }),
+    ).toBeNull();
+  });
+
+  test("names the count, the high/critical head, and the atoms; salience normal", () => {
+    const section = renderReviewClosureSection({
+      unaddressedCount: 3,
+      highOrCriticalCount: 2,
+      atomRefs: ["req-1", "req-6"],
+    });
+    expect(section?.key).toBe("review_closure");
+    expect(section?.salience).toBe("normal"); // above the `low` delegation instrument
+    expect(section?.line).toContain("3 unaddressed review finding(s) (2 high/critical)");
+    expect(section?.line).toContain("on atom(s) req-1, req-6");
+    expect(section?.line).toContain("fix each or explicitly refute");
+    // The stub carries the count head but drops the atom list (budget-demoted form).
+    expect(section?.stub).toBe("review closure: 3 unaddressed review finding(s) (2 high/critical)");
+  });
+
+  test("omits the high/critical clause and the atom clause when neither applies", () => {
+    const section = renderReviewClosureSection({
+      unaddressedCount: 1,
+      highOrCriticalCount: 0,
+      atomRefs: [],
+    });
+    expect(section?.line).toContain("1 unaddressed review finding(s)");
+    expect(section?.line).not.toContain("high/critical");
+    expect(section?.line).not.toContain("on atom(s)");
   });
 });

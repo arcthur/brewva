@@ -596,3 +596,152 @@ export function projectTapeReviewDebt(input: TapeReviewDebtInput): ReviewDebt {
       ),
   });
 }
+
+/**
+ * One review finding paired with its OWN receipt timestamp — the per-finding
+ * freshness key (Finding P1-A): a finding recorded at t1 is judged fresh against
+ * the tree as of t1, never against a later render time, so a tree mutation at t2
+ * correctly ages it out even when the render happens at t3.
+ */
+export interface TapeReviewFinding {
+  readonly finding: ReviewFindingRecordedEventPayload;
+  readonly receiptTimestamp: number;
+}
+
+/** One review finding still live (unaddressed) at render time. */
+export interface UnaddressedReviewFinding {
+  readonly findingId: string;
+  readonly severity: ReviewFindingSeverity;
+  readonly statement: string;
+  /** Atoms the finding names; empty when the reviewer left it unattributed. */
+  readonly atomRefs: readonly string[];
+}
+
+export interface UnaddressedReviewFindingsInput {
+  readonly findings: readonly TapeReviewFinding[];
+  /**
+   * Normalized workspace-relative path → the LATEST tape timestamp at which that
+   * file was mutated (a bare write/edit commitment or an applied patch touching it).
+   * The caller builds this from the tape (relativizing absolute write args against
+   * the workspace root so the keys match anchor paths). This is what makes freshness
+   * ANCHOR-scoped rather than whole-tree: a finding is addressed only when a file IT
+   * flagged changed, not when any unrelated file did.
+   */
+  readonly fileMutationTimeline: ReadonlyMap<string, number>;
+  /** Fallback (anchorless findings only): the coarse whole-tree tape-only inputs. */
+  readonly appliedPatchSetRefs: readonly string[];
+  readonly latestTreeMutationAt: number | null;
+}
+
+/**
+ * The workspace-relative file path an anchor points at, or null when the anchor
+ * carries no parseable path. Anchors are `path:line`, `path:start-end`, or
+ * `path:line:col` (e.g. `Sources/VoiceBar/FnKeyMonitor.swift:50-53`) or a bare
+ * path; the trailing line/col span is stripped and the path normalized to the same
+ * convention the mutation timeline keys use. An empty/whitespace anchor yields null.
+ * A descriptor anchor with no file shape still returns its normalized text (it
+ * simply never matches a timeline key, so its finding conservatively stays live —
+ * the safe direction for an advisory).
+ */
+export function reviewAnchorFilePath(anchor: string): string | null {
+  const withoutLineSpan = anchor.replace(/:\d+(?:[:-]\d+)?$/u, "");
+  const normalized = normalizeReviewPath(withoutLineSpan);
+  return normalized.length > 0 ? normalized : null;
+}
+
+/**
+ * The act-on-review closure signal: which recorded review findings remain LIVE —
+ * the flagged code was not changed since the finding, so the review's ask is still
+ * open. The complement of {@link projectTapeReviewDebt} (which asks "was a review
+ * OWED"): this asks "did a review that HAPPENED get acted on."
+ */
+export interface UnaddressedReviewFindings {
+  /** Live findings, in input (tape) order — the flagged code is untouched since each. */
+  readonly findings: readonly UnaddressedReviewFinding[];
+  /** Count per severity over {@link findings}. */
+  readonly countBySeverity: Readonly<Record<ReviewFindingSeverity, number>>;
+  /** Union of atom ids the live findings name (the attributed subset). */
+  readonly atomRefs: readonly string[];
+  /**
+   * How many live findings name NO atom — the attribution gap that makes them
+   * INVISIBLE to the fitness projection's `discrepancies` (which key on ledger
+   * atoms), so reading findings directly is the only way to surface them.
+   */
+  readonly unattributedCount: number;
+}
+
+/**
+ * Project the unaddressed (still-live) review findings from the tape's recorded
+ * findings. A finding is ADDRESSED — and dropped — when the code IT flagged was
+ * touched since it was recorded: any file named in the finding's `anchors` whose
+ * latest mutation timestamp is AFTER the finding's own timestamp (Finding P1-A).
+ *
+ * ANCHOR-scoped, deliberately NOT whole-`targetRef`-scoped: a review commonly
+ * records a whole-repo `file_digests` snapshot, so a whole-tree freshness rule
+ * would age EVERY finding out the moment the model touches ANY file — letting a
+ * defect ship by editing something unrelated (observed: game_8's `req-1` keycode
+ * finding cleared when the model edited `Package.swift`, though `FnKeyMonitor.swift`
+ * was never fixed). Scoping to the anchored files fixes that: the `req-1` finding
+ * stays live because its anchor file was not touched.
+ *
+ * A finding with NO parseable anchor path falls back to the coarse whole-tree
+ * {@link reviewTargetRefMatchesTapeOnly} rule (the only signal available without a
+ * file to scope to). Reads findings DIRECTLY (not via fitness `discrepancies`), so
+ * an unattributed finding (`atomRefs: []`) — invisible to the atom-keyed projection
+ * — is still counted. Pure: no filesystem, no clock; the caller supplies the
+ * tape-derived {@link UnaddressedReviewFindingsInput.fileMutationTimeline}.
+ */
+export function projectUnaddressedReviewFindings(
+  input: UnaddressedReviewFindingsInput,
+): UnaddressedReviewFindings {
+  const findings: UnaddressedReviewFinding[] = [];
+  const countBySeverity: Record<ReviewFindingSeverity, number> = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+  };
+  const atomRefs = new Set<string>();
+  let unattributedCount = 0;
+  for (const { finding, receiptTimestamp } of input.findings) {
+    const anchorFiles = new Set<string>();
+    for (const anchor of finding.anchors) {
+      const path = reviewAnchorFilePath(anchor);
+      if (path !== null) {
+        anchorFiles.add(path);
+      }
+    }
+    let fresh: boolean;
+    if (anchorFiles.size > 0) {
+      // ADDRESSED iff an anchored file was mutated AFTER this finding.
+      fresh = ![...anchorFiles].some(
+        (path) => (input.fileMutationTimeline.get(path) ?? 0) > receiptTimestamp,
+      );
+    } else {
+      // No file to scope to — fall back to the coarse whole-tree rule.
+      fresh = reviewTargetRefMatchesTapeOnly(finding.targetRef, {
+        appliedPatchSetRefs: input.appliedPatchSetRefs,
+        receiptTimestamp,
+        latestTreeMutationAt: input.latestTreeMutationAt,
+      });
+    }
+    if (!fresh) {
+      continue;
+    }
+    findings.push({
+      findingId: finding.findingId,
+      severity: finding.severity,
+      statement: finding.statement,
+      atomRefs: finding.atomRefs,
+    });
+    countBySeverity[finding.severity] += 1;
+    if (finding.atomRefs.length === 0) {
+      unattributedCount += 1;
+    } else {
+      for (const atomId of finding.atomRefs) {
+        atomRefs.add(atomId);
+      }
+    }
+  }
+  return { findings, countBySeverity, atomRefs: [...atomRefs], unattributedCount };
+}

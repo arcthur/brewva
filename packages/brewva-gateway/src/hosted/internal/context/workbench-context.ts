@@ -4,6 +4,7 @@ import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import {
   buildTapeRequirementDebtSummary,
   buildTapeReviewDebt,
+  buildTapeUnaddressedReviewFindings,
   type TapeRequirementDebtSummary,
 } from "@brewva/brewva-tools/runtime-port";
 import type {
@@ -65,6 +66,7 @@ import {
   renderContextPressureSection,
   renderDelegationAdvisorySection,
   renderRequirementDebtSection,
+  renderReviewClosureSection,
   RUNTIME_BRIEF_MAX_CHARS,
 } from "./runtime-brief.js";
 import {
@@ -495,9 +497,41 @@ export function buildRuntimeBriefBlockForSession(
         runtimeEvents,
       )
     : null;
+  // Act-on-review closure: findings a prior review recorded that the flagged code
+  // has not answered. Reads the single-homed `runtimeEvents` (never re-lists the
+  // tape); no delegation-store / cadence gating — a concrete open finding SHOULD
+  // persist until closed (see `renderReviewClosureSection`).
+  const reviewClosure = buildReviewClosureSection(runtime, runtimeEvents);
   return buildRuntimeBriefBlock({
-    sections: [pressure, cache, effects, recurrence, requirements, delegation],
+    sections: [pressure, cache, effects, recurrence, requirements, reviewClosure, delegation],
     maxChars: RUNTIME_BRIEF_MAX_CHARS,
+  });
+}
+
+/**
+ * Act-on-review closure section: surface review findings still LIVE on the tape
+ * (the flagged code was not changed since) to the PRODUCING model at turn tail, so
+ * a review it requested does not get silently ignored (the game_8 failure). Reuses
+ * the single shared tape read (`buildTapeUnaddressedReviewFindings`) so the model
+ * view and any operator/report view can never diverge. Relevance-gated inside the
+ * renderer: silent when nothing is live. Advisory only (axiom 18) — derives no gate.
+ */
+function buildReviewClosureSection(
+  runtime: HostedRuntimeAdapterPort,
+  runtimeEvents: ReturnType<typeof listRuntimeEvents>,
+): ReturnType<typeof renderReviewClosureSection> {
+  // The session root relativizes absolute write args so the per-file mutation
+  // timeline keys match the workspace-relative finding anchors (else every finding
+  // would read live). Null when unset — anchors then match only patch/relative
+  // paths, conservatively over-showing (never falsely clearing).
+  const unaddressed = buildTapeUnaddressedReviewFindings(
+    runtimeEvents,
+    runtime.identity?.workspaceRoot ?? null,
+  );
+  return renderReviewClosureSection({
+    unaddressedCount: unaddressed.findings.length,
+    highOrCriticalCount: unaddressed.countBySeverity.high + unaddressed.countBySeverity.critical,
+    atomRefs: unaddressed.atomRefs,
   });
 }
 

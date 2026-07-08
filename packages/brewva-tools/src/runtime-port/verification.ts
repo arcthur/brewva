@@ -19,7 +19,9 @@ import {
 } from "@brewva/brewva-vocabulary/iteration";
 import {
   deriveFreshTouchedFileUniverse,
+  normalizeReviewPath,
   projectTapeReviewDebt,
+  projectUnaddressedReviewFindings,
   readReviewFindingRecordedEventPayload,
   REVIEW_FINDING_RECORDED_EVENT_TYPE,
   reviewTargetRefMatchesTree,
@@ -28,15 +30,19 @@ import {
   type ReviewDebtInput,
   type ReviewerContext,
   type ReviewTargetRef,
+  type TapeReviewFinding,
   type TapeVerificationReceipt,
+  type UnaddressedReviewFindings,
   type VerificationPerspective,
 } from "@brewva/brewva-vocabulary/review";
 import { foldTaskLedgerEvents, type RequirementAtom } from "@brewva/brewva-vocabulary/task";
 import {
+  deriveFileMutationTimeline,
   deriveLatestTreeMutationAt,
   extractWriteInvocationPaths,
   projectFreshCodeWritten,
   projectToolInvocations,
+  type PathMutation,
 } from "@brewva/brewva-vocabulary/tool-invocations";
 import {
   collectPatchSetAppliedPaths,
@@ -494,5 +500,74 @@ export function buildTapeReviewDebt(events: readonly BrewvaEventRecord[]): Revie
     latestTreeMutationAt,
     freshTouchedUniverse,
     patchSetAppliedPaths,
+  });
+}
+
+/**
+ * The act-on-review complement of {@link buildTapeReviewDebt}: which recorded
+ * review findings are still LIVE (the code they FLAGGED — the anchor files — was
+ * not changed since), so a review that HAPPENED has an open ask. Freshness is
+ * ANCHOR-scoped via a per-file mutation timeline (`deriveFileMutationTimeline`),
+ * NOT the whole-tree rule the debt read uses: a review's `file_digests` snapshot
+ * usually covers the whole repo, so a whole-tree rule would clear every finding the
+ * moment any file changed (letting a flagged defect ship past an unrelated edit).
+ * `workspaceRoot` relativizes the absolute write args so the timeline keys match
+ * the workspace-relative anchor paths; pass the session root. Judges each finding
+ * against its OWN timestamp (Finding P1-A). Pure over the tape (the caller supplies
+ * the root; no filesystem read).
+ */
+export function buildTapeUnaddressedReviewFindings(
+  events: readonly BrewvaEventRecord[],
+  workspaceRoot: string | null = null,
+): UnaddressedReviewFindings {
+  const findings: TapeReviewFinding[] = [];
+  const patchMutations: PathMutation[] = [];
+  for (const event of events) {
+    if (event.type === REVIEW_FINDING_RECORDED_EVENT_TYPE) {
+      const finding = readReviewFindingRecordedEventPayload(event);
+      if (finding) {
+        findings.push({ finding, receiptTimestamp: event.timestamp });
+      }
+      continue;
+    }
+    // Only FORWARD mutations count as "acting on" a flagged file: a successful
+    // patch's appliedPaths and (below) bare writes. A ROLLBACK is deliberately
+    // excluded — it UNDOES a change and can re-introduce the very code a finding
+    // flagged, so letting it age the finding out would clear the pressure while the
+    // defect returns (the dangerous direction). Leaving rollbacks out keeps such a
+    // finding live (the safe direction). KNOWN LIMITATION: a fix-then-rollback-the-fix
+    // sequence still reads as addressed (the fix write already advanced the file's
+    // timestamp); catching that needs a per-anchor DIGEST check (does the file's
+    // current content still match what the reviewer saw), a filesystem read this pure
+    // tape fold does not do — an acceptable gap for an advisory, noted for a future
+    // precise-digest upgrade.
+    if (event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE) {
+      const payload = event.payload as { ok?: unknown; appliedPaths?: unknown } | undefined;
+      if (payload?.ok === true && Array.isArray(payload.appliedPaths)) {
+        for (const path of payload.appliedPaths) {
+          if (typeof path === "string" && path.length > 0) {
+            patchMutations.push({ path, timestamp: event.timestamp });
+          }
+        }
+      }
+    }
+  }
+  const patchTapeEvents = events.filter(
+    (event) => event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE || event.type === ROLLBACK_EVENT_TYPE,
+  );
+  const invocations = projectToolInvocations(events);
+  const fileMutationTimeline = deriveFileMutationTimeline({
+    writeInvocations: invocations,
+    patchMutations,
+    normalizePath: (rawPath) => normalizeReviewPath(rawPath, workspaceRoot),
+  });
+  return projectUnaddressedReviewFindings({
+    findings,
+    fileMutationTimeline,
+    appliedPatchSetRefs: deriveAppliedPatchSetIds(patchTapeEvents),
+    latestTreeMutationAt: deriveLatestTreeMutationAt({
+      patchRollbackEvents: patchTapeEvents,
+      writeInvocations: invocations,
+    }),
   });
 }

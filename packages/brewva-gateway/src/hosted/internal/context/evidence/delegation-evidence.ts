@@ -3,7 +3,10 @@ import {
   type SessionIndexDelegationRun,
 } from "@brewva/brewva-session-index";
 import { isRecord } from "@brewva/brewva-std/unknown";
-import { buildTapeRequirementFitness } from "@brewva/brewva-tools/runtime-port";
+import {
+  buildTapeRequirementFitness,
+  buildTapeUnaddressedReviewFindings,
+} from "@brewva/brewva-tools/runtime-port";
 import {
   SUBAGENT_FAILED_EVENT_TYPE,
   SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
@@ -39,6 +42,14 @@ const DELEGATION_ROLES = ["navigator", "explorer", "worker", "verifier", "librar
 
 export interface DelegationEvidenceReportOptions {
   readonly sessionIds?: readonly string[];
+  /**
+   * Session workspace root, for anchor-scoped review-finding freshness (relativizes
+   * absolute write args so the mutation timeline keys match anchor paths). The
+   * report script passes the same root it builds the runtime adapter with, so the
+   * offline census matches the live render surface; null leaves anchors matched
+   * against relative paths only (conservatively over-showing, never false-clearing).
+   */
+  readonly workspaceRoot?: string | null;
 }
 
 export interface DelegationCounts {
@@ -99,6 +110,21 @@ export interface IndependenceDebtCounts {
   readonly dischargedAtGrade: number;
 }
 
+/**
+ * Act-on-review closure census at tape end (`buildTapeUnaddressedReviewFindings`):
+ * review findings still LIVE (the flagged code was not changed since), so a review
+ * that HAPPENED has an open ask. The loop-close signal — `total` FALLING across an
+ * eval's turns means findings are being acted on (fixed or refuted); a `total` that
+ * stays flat while reviews record findings is the game_8 failure (found, not fixed,
+ * shipped). `highOrCritical` is the actionable head; `unattributed` is the subset the
+ * fitness discrepancies cannot see (findings naming no atom).
+ */
+export interface UnaddressedReviewFindingsCounts {
+  readonly total: number;
+  readonly highOrCritical: number;
+  readonly unattributed: number;
+}
+
 export interface DelegationEvidenceSessionReport {
   readonly sessionId: string;
   readonly counts: DelegationCounts;
@@ -107,6 +133,7 @@ export interface DelegationEvidenceSessionReport {
   readonly adoption: AdoptionOutcomeCounts;
   readonly contextEconomics: ContextEconomics;
   readonly independenceDebt: IndependenceDebtCounts;
+  readonly unaddressedReviewFindings: UnaddressedReviewFindingsCounts;
 }
 
 export interface DelegationEvidenceAggregate {
@@ -117,6 +144,7 @@ export interface DelegationEvidenceAggregate {
   readonly adoption: AdoptionOutcomeCounts;
   readonly contextEconomics: ContextEconomics;
   readonly independenceDebt: IndependenceDebtCounts;
+  readonly unaddressedReviewFindings: UnaddressedReviewFindingsCounts;
   /**
    * Distinct failed runs / runs started — a true [0,1] rate (a run can raise
    * several failure EVENTS, so this dedupes by run before dividing). The
@@ -207,6 +235,23 @@ function countFailures(events: readonly TapeEvent[]): DelegationFailureCounts {
   return { total: dispatch + consult, dispatch, consult, failedRuns: failedRunIds.size };
 }
 
+/**
+ * Fold the tape's LIVE review findings into the report's closure census. `total`
+ * FALLING across an eval's turns is the loop closing (findings acted on); a flat
+ * `total` while reviews keep recording findings is the found-but-unfixed failure.
+ */
+function summarizeUnaddressedReviewFindings(
+  records: ReturnType<typeof listRuntimeEvents>,
+  workspaceRoot: string | null,
+): UnaddressedReviewFindingsCounts {
+  const unaddressed = buildTapeUnaddressedReviewFindings(records, workspaceRoot);
+  return {
+    total: unaddressed.findings.length,
+    highOrCritical: unaddressed.countBySeverity.high + unaddressed.countBySeverity.critical,
+    unattributed: unaddressed.unattributedCount,
+  };
+}
+
 function countAdoption(events: readonly TapeEvent[]): AdoptionOutcomeCounts {
   let applied = 0;
   let applyFailed = 0;
@@ -260,6 +305,9 @@ function aggregate(
   let independenceDebtOpen = 0;
   let independenceDebtViolated = 0;
   let independenceDebtDischargedAtGrade = 0;
+  let unaddressedTotal = 0;
+  let unaddressedHighOrCritical = 0;
+  let unaddressedUnattributed = 0;
   for (const session of sessions) {
     total += session.counts.total;
     mergeCounts(byRole, session.counts.byRole);
@@ -279,6 +327,9 @@ function aggregate(
     independenceDebtOpen += session.independenceDebt.open;
     independenceDebtViolated += session.independenceDebt.violated;
     independenceDebtDischargedAtGrade += session.independenceDebt.dischargedAtGrade;
+    unaddressedTotal += session.unaddressedReviewFindings.total;
+    unaddressedHighOrCritical += session.unaddressedReviewFindings.highOrCritical;
+    unaddressedUnattributed += session.unaddressedReviewFindings.unattributed;
   }
   return {
     sessionCount: sessions.length,
@@ -291,6 +342,11 @@ function aggregate(
       open: independenceDebtOpen,
       violated: independenceDebtViolated,
       dischargedAtGrade: independenceDebtDischargedAtGrade,
+    },
+    unaddressedReviewFindings: {
+      total: unaddressedTotal,
+      highOrCritical: unaddressedHighOrCritical,
+      unattributed: unaddressedUnattributed,
     },
     failureRate: total > 0 ? failedRuns / total : null,
   };
@@ -323,6 +379,14 @@ export function buildDelegationEvidenceReport(
       // census (open / violated / dischargedAtGrade — the close-edge's discharge
       // outcome), so operator and model views cannot diverge by construction.
       independenceDebt: buildTapeRequirementFitness(records).independenceDebtResolution,
+      // The act-on-review closure census — the SAME tape read the runtime brief's
+      // review-closure section renders, so the measured loop-close and what the
+      // model saw cannot diverge. Passes the session root so anchor-scoped freshness
+      // matches the render surface.
+      unaddressedReviewFindings: summarizeUnaddressedReviewFindings(
+        records,
+        options.workspaceRoot ?? null,
+      ),
     };
   });
   return { sessions, aggregate: aggregate(sessions) };

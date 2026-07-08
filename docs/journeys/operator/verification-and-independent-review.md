@@ -120,6 +120,24 @@ flowchart TD
   visible debt; the surfaces are honest rather than a fake pass/fail (axiom 7)
 - a lens surfaces a stance, never asserts a defect; the precision guard lives in the
   fitness join, not in trap surfacing, and the trap library gates nothing
+- act-on-review closure is the complement of review debt: review debt asks "was an
+  independent read OWED"; the act-on-review advisory asks "did a review that HAPPENED
+  get acted on". A `review.finding.recorded` is UNADDRESSED when the code IT flagged
+  still stands — none of the files named in its `anchors` was mutated after the
+  finding's own timestamp (Finding P1-A). It is ANCHOR-scoped, deliberately NOT
+  whole-`targetRef`-scoped: a review usually records a whole-repo `file_digests`
+  snapshot, so a whole-tree rule would clear every finding the moment the model
+  touched ANY file — letting a defect ship past an unrelated edit (observed: game_8's
+  keycode finding would clear when the model edited `Package.swift`, though
+  `FnKeyMonitor.swift` was never fixed). An anchorless finding falls back to the coarse
+  whole-tree rule. It renders at turn tail as the `review_closure` runtime-brief
+  section, advisory (axiom 18, derives no gate) and self-clearing negative feedback —
+  editing an anchored file ages the finding out, so the line falls silent the moment
+  the model acts; it never forces a fix (a false positive is cleared by refuting or
+  editing). Reads findings directly, so an unattributed finding (`atomRefs: []`) —
+  invisible to the atom-keyed fitness `discrepancies` — is still counted. Deliberately
+  has NO anti-nag cadence (unlike the delegation advisory): a concrete open finding
+  SHOULD persist every turn until closed
 - receipts, atoms, and outcomes are the durable source of truth; every read surface
   rebuilds from them and reads no filesystem (axioms 5, 6)
 
@@ -155,6 +173,11 @@ flowchart TD
   matches the tree); requirement-verification-debt reasons are
   `ladder_below_requirements` and `unverified_after_requirements` (a `must` atom is
   unverified below or after the `requirements` rung)
+- act-on-review closure census: `report:delegation-evidence`'s
+  `unaddressedReviewFindings` (`total` / `highOrCritical` / `unattributed`) folds the
+  same live-finding read the `review_closure` brief renders. A `total` FALLING across
+  an eval's turns is the found-then-fixed loop closing; a flat `total` while reviews
+  keep recording findings is the found-but-shipped failure the signal exists to catch
 
 ## Code Pointers
 

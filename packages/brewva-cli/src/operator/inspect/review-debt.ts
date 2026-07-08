@@ -13,3 +13,11 @@
  * live in exactly one place inside the shared home.
  */
 export { buildTapeReviewDebt } from "@brewva/brewva-tools/runtime-port";
+
+/**
+ * The act-on-review complement, likewise single-homed in the shared runtime-port:
+ * which recorded review findings are still LIVE (the flagged code was not changed
+ * since), so a review that HAPPENED has an open ask. Re-exported here for the same
+ * inspect surfaces, reusing the identical freshness rule as the debt read above.
+ */
+export { buildTapeUnaddressedReviewFindings } from "@brewva/brewva-tools/runtime-port";

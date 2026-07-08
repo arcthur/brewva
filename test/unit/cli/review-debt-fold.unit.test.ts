@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { makeEvent } from "@brewva/brewva-vocabulary/events";
 import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
-import type { ReviewTargetRef } from "@brewva/brewva-vocabulary/review";
+import {
+  REVIEW_FINDING_RECORDED_EVENT_TYPE,
+  type ReviewFindingSeverity,
+  type ReviewTargetRef,
+} from "@brewva/brewva-vocabulary/review";
 import { TOOL_COMMITTED_EVENT_TYPE } from "@brewva/brewva-vocabulary/tool-invocations";
 import { SOURCE_PATCH_APPLIED_EVENT_TYPE } from "@brewva/brewva-vocabulary/workbench";
-import { buildTapeReviewDebt } from "../../../packages/brewva-cli/src/operator/inspect/review-debt.js";
+import {
+  buildTapeReviewDebt,
+  buildTapeUnaddressedReviewFindings,
+} from "../../../packages/brewva-cli/src/operator/inspect/review-debt.js";
 
 // The CLI tape-fold (`buildTapeReviewDebt`) is the one place Work Card,
 // inspect, and run-report all read review debt from. These tests exercise the
@@ -254,5 +261,107 @@ describe("buildTapeReviewDebt — a bare write/edit ages the tree (Finding P1)",
     // the reviewer looked, so the receipt is fresh and clears debt.
     expect(debt.debt).toBe(false);
     expect(debt.reason).toBeNull();
+  });
+});
+
+const WHOLE_REPO_REF: ReviewTargetRef = {
+  kind: "file_digests",
+  digests: { "a.swift": "sha-a", "b.swift": "sha-b" },
+};
+
+function findingEvent(
+  sessionId: string,
+  opts: {
+    findingId: string;
+    timestamp: number;
+    anchors?: readonly string[];
+    targetRef?: ReviewTargetRef;
+    severity?: ReviewFindingSeverity;
+    atomRefs?: readonly string[];
+  },
+) {
+  return makeEvent(
+    REVIEW_FINDING_RECORDED_EVENT_TYPE,
+    {
+      sessionId,
+      findingId: opts.findingId,
+      severity: opts.severity ?? "high",
+      category: "correctness",
+      statement: `statement ${opts.findingId}`,
+      anchors: opts.anchors ?? [],
+      lens: null,
+      // Reviews record a whole-repo digest snapshot; anchors isolate the flagged file.
+      targetRef: opts.targetRef ?? WHOLE_REPO_REF,
+      atomRefs: opts.atomRefs ?? [],
+    },
+    { timestamp: opts.timestamp, id: `finding-${opts.findingId}-${opts.timestamp}` },
+  );
+}
+
+describe("buildTapeUnaddressedReviewFindings — the act-on-review tape read", () => {
+  const sessionId = "unaddressed-findings-fold";
+
+  test("ANCHOR-scoped over a whole-repo snapshot: a finding clears only when ITS anchor file is edited", () => {
+    // Both findings carry the SAME whole-repo targetRef (12-file snapshot shape).
+    // The model edits a.swift after both. Anchor scoping keeps the b.swift finding
+    // live — the whole-tree rule would have cleared both (the game_8 dodge).
+    const events = [
+      findingEvent(sessionId, {
+        findingId: "f-a",
+        timestamp: 100,
+        anchors: ["a.swift:50-53"],
+        atomRefs: ["req-1"],
+      }),
+      findingEvent(sessionId, {
+        findingId: "f-b",
+        timestamp: 100,
+        severity: "critical",
+        anchors: ["b.swift:1-4"],
+        atomRefs: ["req-3"],
+      }),
+      writeInvocation(sessionId, "a.swift", 200), // fixes a.swift only
+    ];
+    const result = buildTapeUnaddressedReviewFindings(events);
+    expect(result.findings.map((entry) => entry.findingId)).toEqual(["f-b"]);
+    expect(result.countBySeverity).toEqual({ critical: 1, high: 0, medium: 0, low: 0 });
+    expect(result.atomRefs).toEqual(["req-3"]);
+    expect(result.unattributedCount).toBe(0);
+  });
+
+  test("a patch to the anchor file ages the finding (patch appliedPaths feed the timeline)", () => {
+    const live = buildTapeUnaddressedReviewFindings([
+      findingEvent(sessionId, { findingId: "f-1", timestamp: 100, anchors: ["a.swift:1"] }),
+      patchApplied(sessionId, "ps-2", ["b.swift"], 300), // unrelated file -> stays live
+    ]);
+    expect(live.findings.map((entry) => entry.findingId)).toEqual(["f-1"]);
+    const aged = buildTapeUnaddressedReviewFindings([
+      findingEvent(sessionId, { findingId: "f-1", timestamp: 100, anchors: ["a.swift:1"] }),
+      patchApplied(sessionId, "ps-2", ["a.swift"], 300), // the anchored file -> addressed
+    ]);
+    expect(aged.findings).toEqual([]);
+  });
+
+  test("an anchorless finding falls back to the whole-tree patch_sets rule", () => {
+    const ref: ReviewTargetRef = { kind: "patch_sets", patchSetRefs: ["ps-1"] };
+    const aged = buildTapeUnaddressedReviewFindings([
+      patchApplied(sessionId, "ps-1", ["a.swift"], 100),
+      findingEvent(sessionId, { findingId: "f-1", timestamp: 200, anchors: [], targetRef: ref }),
+      patchApplied(sessionId, "ps-2", ["b.swift"], 300), // applied set changed -> stale
+    ]);
+    expect(aged.findings).toEqual([]);
+  });
+
+  test("an unattributed live finding is counted (the gap the fitness discrepancies cannot see)", () => {
+    const result = buildTapeUnaddressedReviewFindings([
+      findingEvent(sessionId, {
+        findingId: "f-unattr",
+        timestamp: 100,
+        anchors: ["a.swift:1"],
+        atomRefs: [],
+      }),
+    ]);
+    expect(result.findings.map((entry) => entry.findingId)).toEqual(["f-unattr"]);
+    expect(result.atomRefs).toEqual([]);
+    expect(result.unattributedCount).toBe(1);
   });
 });

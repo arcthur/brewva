@@ -5,9 +5,11 @@ import {
   INDEPENDENCE_BASES,
   projectReviewDebt,
   projectTapeReviewDebt,
+  projectUnaddressedReviewFindings,
   readReviewFindingRecordedEventPayload,
   REVIEW_FINDING_CATEGORIES,
   REVIEW_FINDING_RECORDED_EVENT_TYPE,
+  reviewAnchorFilePath,
   reviewTargetRefMatchesTapeOnly,
   reviewTargetRefMatchesTree,
   universeCoveredBy,
@@ -18,6 +20,7 @@ import {
   type ReviewFindingRecordedEventPayload,
   type ReviewTargetRef,
   type TapeReviewDebtInput,
+  type TapeReviewFinding,
   type TapeVerificationReceipt,
 } from "@brewva/brewva-vocabulary/review";
 
@@ -979,5 +982,175 @@ describe("universeCoveredBy (P1-C)", () => {
     expect(
       universeCoveredBy(new Set(["src/a.ts", "src/b.ts"]), { ...knownAB, fullyKnown: false }),
     ).toBe(false);
+  });
+});
+
+describe("projectUnaddressedReviewFindings — the act-on-review closure signal", () => {
+  function finding(
+    overrides: Partial<ReviewFindingRecordedEventPayload> & { findingId: string },
+  ): ReviewFindingRecordedEventPayload {
+    return {
+      findingId: overrides.findingId,
+      severity: overrides.severity ?? "high",
+      category: overrides.category ?? "correctness",
+      statement: overrides.statement ?? `statement ${overrides.findingId}`,
+      anchors: overrides.anchors ?? [],
+      lens: overrides.lens ?? null,
+      targetRef: overrides.targetRef ?? { kind: "file_digests", digests: { "a.swift": "sha-a" } },
+      atomRefs: overrides.atomRefs ?? [],
+    };
+  }
+  const at = (
+    payload: ReviewFindingRecordedEventPayload,
+    receiptTimestamp: number,
+  ): TapeReviewFinding => ({
+    finding: payload,
+    receiptTimestamp,
+  });
+  const empty = new Map<string, number>();
+
+  test("reviewAnchorFilePath strips line/col spans and normalizes; empty yields null", () => {
+    expect(reviewAnchorFilePath("Sources/VoiceBar/FnKeyMonitor.swift:50-53")).toBe(
+      "Sources/VoiceBar/FnKeyMonitor.swift",
+    );
+    expect(reviewAnchorFilePath("Makefile:10")).toBe("Makefile");
+    expect(reviewAnchorFilePath("src/a.ts:10:5")).toBe("src/a.ts"); // line:col
+    expect(reviewAnchorFilePath("bare.swift")).toBe("bare.swift"); // no span
+    expect(reviewAnchorFilePath("./a.swift")).toBe("a.swift");
+    expect(reviewAnchorFilePath("")).toBeNull();
+    expect(reviewAnchorFilePath("   ")).toBeNull();
+  });
+
+  test("a fresh finding whose anchor file was NOT touched since is unaddressed and surfaces", () => {
+    const result = projectUnaddressedReviewFindings({
+      findings: [
+        at(finding({ findingId: "f-1", anchors: ["a.swift:1-5"], atomRefs: ["req-1"] }), 100),
+      ],
+      // a.swift last mutated BEFORE the finding (the reviewed version) -> still live.
+      fileMutationTimeline: new Map([["a.swift", 50]]),
+      appliedPatchSetRefs: [],
+      latestTreeMutationAt: 50,
+    });
+    expect(result.findings).toEqual([
+      { findingId: "f-1", severity: "high", statement: "statement f-1", atomRefs: ["req-1"] },
+    ]);
+    expect(result.countBySeverity).toEqual({ critical: 0, high: 1, medium: 0, low: 0 });
+    expect(result.atomRefs).toEqual(["req-1"]);
+  });
+
+  test("ANCHOR-scoped: an unrelated file changing does NOT clear a finding (the game_8 dodge, fixed)", () => {
+    // Finding flags a.swift; the model edits b.swift after. Whole-tree freshness
+    // would wrongly clear it; anchor-scoped keeps it live because a.swift stands.
+    const result = projectUnaddressedReviewFindings({
+      findings: [at(finding({ findingId: "f-open", anchors: ["a.swift:1"] }), 100)],
+      fileMutationTimeline: new Map([["b.swift", 200]]),
+      appliedPatchSetRefs: [],
+      latestTreeMutationAt: 200,
+    });
+    expect(result.findings.map((entry) => entry.findingId)).toEqual(["f-open"]);
+  });
+
+  test("a finding whose OWN anchor file changed after it is ADDRESSED and dropped", () => {
+    const result = projectUnaddressedReviewFindings({
+      findings: [at(finding({ findingId: "f-fixed", anchors: ["a.swift:1"] }), 100)],
+      fileMutationTimeline: new Map([["a.swift", 200]]), // touched after -> acted on
+      appliedPatchSetRefs: [],
+      latestTreeMutationAt: 200,
+    });
+    expect(result.findings).toEqual([]);
+  });
+
+  test("per-finding timestamp (P1-A): the anchor's mutation ages only the finding recorded before it", () => {
+    const result = projectUnaddressedReviewFindings({
+      findings: [
+        at(finding({ findingId: "old", anchors: ["a.swift:1"], atomRefs: ["req-1"] }), 100), // <200 -> addressed
+        at(finding({ findingId: "new", anchors: ["a.swift:9"], atomRefs: ["req-2"] }), 300), // >200 -> live
+      ],
+      fileMutationTimeline: new Map([["a.swift", 200]]),
+      appliedPatchSetRefs: [],
+      latestTreeMutationAt: 200,
+    });
+    expect(result.findings.map((entry) => entry.findingId)).toEqual(["new"]);
+    expect(result.atomRefs).toEqual(["req-2"]);
+  });
+
+  test("a multi-anchor finding is addressed if ANY anchor file was touched", () => {
+    expect(
+      projectUnaddressedReviewFindings({
+        findings: [at(finding({ findingId: "f", anchors: ["a.swift:1", "b.swift:2"] }), 100)],
+        fileMutationTimeline: new Map([["b.swift", 200]]), // one of two touched -> addressed
+        appliedPatchSetRefs: [],
+        latestTreeMutationAt: 200,
+      }).findings,
+    ).toEqual([]);
+  });
+
+  test("an ANCHORLESS finding falls back to the coarse whole-tree rule", () => {
+    // No anchor to scope to: any mutation after the finding ages it (fallback).
+    const addressed = projectUnaddressedReviewFindings({
+      findings: [at(finding({ findingId: "f", anchors: [] }), 100)],
+      fileMutationTimeline: empty,
+      appliedPatchSetRefs: [],
+      latestTreeMutationAt: 200,
+    });
+    expect(addressed.findings).toEqual([]);
+    const live = projectUnaddressedReviewFindings({
+      findings: [at(finding({ findingId: "f", anchors: [] }), 100)],
+      fileMutationTimeline: empty,
+      appliedPatchSetRefs: [],
+      latestTreeMutationAt: null,
+    });
+    expect(live.findings.map((entry) => entry.findingId)).toEqual(["f"]);
+  });
+
+  test("unattributed live findings (atomRefs: []) are counted — the gap the fitness discrepancies cannot see", () => {
+    const result = projectUnaddressedReviewFindings({
+      findings: [
+        at(
+          finding({
+            findingId: "f-crit",
+            severity: "critical",
+            anchors: ["a.swift:1"],
+            atomRefs: [],
+          }),
+          100,
+        ),
+        at(
+          finding({
+            findingId: "f-attr",
+            severity: "high",
+            anchors: ["b.swift:1"],
+            atomRefs: ["req-1"],
+          }),
+          100,
+        ),
+        at(
+          finding({ findingId: "f-low", severity: "low", anchors: ["c.swift:1"], atomRefs: [] }),
+          100,
+        ),
+      ],
+      fileMutationTimeline: empty, // nothing touched -> all live
+      appliedPatchSetRefs: [],
+      latestTreeMutationAt: null,
+    });
+    expect(result.countBySeverity).toEqual({ critical: 1, high: 1, medium: 0, low: 1 });
+    expect(result.atomRefs).toEqual(["req-1"]);
+    expect(result.unattributedCount).toBe(2);
+  });
+
+  test("no findings -> an empty, silent signal", () => {
+    expect(
+      projectUnaddressedReviewFindings({
+        findings: [],
+        fileMutationTimeline: empty,
+        appliedPatchSetRefs: [],
+        latestTreeMutationAt: null,
+      }),
+    ).toEqual({
+      findings: [],
+      countBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
+      atomRefs: [],
+      unattributedCount: 0,
+    });
   });
 });

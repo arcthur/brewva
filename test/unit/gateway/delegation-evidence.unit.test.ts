@@ -217,4 +217,42 @@ describe("buildDelegationEvidenceReport (Lever 6 instrument)", () => {
     expect(openById).toEqual({ s1: 1, s2: 2 });
     expect(aggregate.independenceDebt.open).toBe(3);
   });
+
+  test("counts unaddressed (still-live) review findings — the act-on-review loop-close signal", () => {
+    seq = 0;
+    const events = [
+      ev("review.finding.recorded", {
+        findingId: "f-1",
+        severity: "high",
+        category: "correctness",
+        statement: "Fn suppression not keycode-scoped",
+        anchors: [],
+        lens: null,
+        targetRef: { kind: "file_digests", digests: { "a.swift": "sha-a" } },
+        atomRefs: ["req-1"],
+      }),
+      ev("review.finding.recorded", {
+        findingId: "f-2",
+        severity: "low",
+        category: "style",
+        statement: "nit",
+        anchors: [],
+        lens: null,
+        targetRef: { kind: "file_digests", digests: { "b.swift": "sha-b" } },
+        atomRefs: [],
+      }),
+    ];
+    // No tree mutation after either finding -> both stay live (unaddressed).
+    const { aggregate, sessions } = buildDelegationEvidenceReport(runtimeFor(events));
+    expect(sessions[0]?.unaddressedReviewFindings).toEqual({
+      total: 2,
+      highOrCritical: 1,
+      unattributed: 1,
+    });
+    expect(aggregate.unaddressedReviewFindings).toEqual({
+      total: 2,
+      highOrCritical: 1,
+      unattributed: 1,
+    });
+  });
 });

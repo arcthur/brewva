@@ -1,5 +1,6 @@
 export {
   BARE_WRITE_TOOL_NAMES,
+  deriveFileMutationTimeline,
   deriveFirstWriteInvocationAt,
   deriveLatestTreeMutationAt,
   extractWriteInvocationPaths,
@@ -12,6 +13,7 @@ export {
 } from "./internal/tool-invocations.js";
 export type {
   CommitmentScanEvent,
+  PathMutation,
   ToolInvocation,
   ToolInvocationOutcome,
   WriteInvocationPath,
