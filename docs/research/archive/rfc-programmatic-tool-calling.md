@@ -2,14 +2,15 @@
 
 ## Metadata
 
-- Status: active
-- Implementation state: Phase 1 landed against a green `bun run check` and full
-  test suite — read-only `tool_chain` in the execution family, the
-  `observe_compound` action class, the `tool_chain.result.recorded` receipt
-  (schema `brewva.tool-chain.v1`) carrying bounded per-step result previews, and the
-  transaction-boundary fitness. Phase 2 (effectful steps, per-step kernel
-  admission) and Phase 3 (conditional steps) remain gated. Promotion is blocked
-  only on the measurable context-economy signal, which needs real adoption data.
+- Status: `archived`
+- Archived on: `2026-07-07`
+- Superseded by: native provider parallel tool calls (batching) + the transient
+  outbound reducer (`packages/brewva-gateway/src/hosted/internal/provider/request/provider-request-reduction.ts`,
+  automatic age/tail-based context economy). See "Archived — Why" below.
+- Implementation state: Phase 1 was implemented and green, then REMOVED — the
+  `tool_chain` tool, the `observe_compound` action class, and the
+  `tool_chain.result.recorded` receipt were all subtracted (recover from git
+  history).
 - Owner: Runtime, tools, and gateway maintainers
 - Last reviewed: `2026-07-07`
 - Depends on:
@@ -26,6 +27,30 @@
   - `docs/reference/tools/execution.md` (execution family)
   - `docs/journeys/internal/context-and-compaction.md` (context economy impact)
   - `docs/architecture/system-architecture.md` (transaction boundary note)
+
+## Archived — Why
+
+A real-session eval (`~/new_py/game_7`, gpt-5.5 via openai-codex) surfaced ~0
+adoption: `tool_chain` was in the model's tool surface across both sessions (one
+with 18 back-to-back reads) but never once proposed. The diagnosis is
+structural, not a prompting gap:
+
+- The model already batches reads via native provider PARALLEL tool calls
+  (observed: 4-read parallel bursts), so `tool_chain` adds no batching value.
+- Context economy is already delivered automatically by the transient outbound
+  reducer (age/tail clearing of stale tool results) at zero model cost.
+- `tool_chain`'s only residual value — PROACTIVE attention economy (never even
+  reading the discardable intermediates) — requires foresight the model lacks in
+  genuine exploration. That ceiling is structural: no mechanism supplies the
+  missing foresight.
+
+Against the design axioms, `tool_chain` was a model tool doing runtime physics
+(`Runtime owns physics`): it asked the model to manage which bytes stay in the
+payload, which the reducer already owns automatically. Per subtraction (axiom 3)
+the surface did not earn its keep. Context/attention economy stays with the
+runtime reducer; a future feather-weight model signal (e.g. a `transient` hint on
+ordinary reads) can be revisited only if usage-based reducer clearing proves
+insufficient.
 
 ## Problem Statement
 

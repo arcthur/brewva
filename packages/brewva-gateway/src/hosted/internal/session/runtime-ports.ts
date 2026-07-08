@@ -15,11 +15,7 @@ import {
   createActionPolicyRegistry,
   resolveToolAuthority as resolveActionPolicyAuthority,
 } from "@brewva/brewva-runtime/security";
-import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
-import type {
-  BrewvaToolRuntimeCapabilitiesPort,
-  ToolSiblingResolver,
-} from "@brewva/brewva-tools/contracts";
+import type { BrewvaToolRuntimeCapabilitiesPort } from "@brewva/brewva-tools/contracts";
 import type { ContextEvidenceKind } from "@brewva/brewva-vocabulary/context";
 import {
   RECOVERY_WAL_APPENDED_EVENT_TYPE,
@@ -128,43 +124,11 @@ export interface HostedRuntimeAdapterPort {
   readonly ops: RuntimeAdapterOpsPort;
   readonly extensions: HostedRuntimeExtensionsPort;
   /**
-   * Registry of RAW read-only tools added to the session outside the default
-   * bundle (read/edit/write/custom/MCP). The gateway seeds it at assembly; the
-   * bundle's `tool_chain` resolves against it (via `toToolRuntimeAdapterPort`) so
-   * a chain can reach the real `read`.
-   */
-  readonly toolSiblingResolver: ToolSiblingRegistry;
-  /**
    * Register a hosted session under its sessionId so the adapter's single
    * router runtime resolves provider/tool/authority physics for that session's
    * turns. Replaces the old per-session runtime instance + createRuntime swap.
    */
   registerTurnSession(sessionId: string, session: CollectSessionPromptOutputSession): void;
-}
-
-export interface ToolSiblingRegistry extends ToolSiblingResolver {
-  register(tools: readonly BrewvaToolDefinition[]): void;
-}
-
-/**
- * Mutable registry the gateway seeds with the RAW read-only tools it adds to a
- * session outside the default bundle. `tool_chain` (in the bundle) resolves
- * against it as a fallback so a chain reaches the real `read`/custom/MCP tools.
- * First registration per name wins; the read-only admission gate still decides
- * which resolved tools a chain may actually dispatch.
- */
-export function createToolSiblingRegistry(): ToolSiblingRegistry {
-  const byName = new Map<string, BrewvaToolDefinition>();
-  return {
-    resolve: (name) => byName.get(name),
-    register(tools) {
-      for (const tool of tools) {
-        if (!byName.has(tool.name)) {
-          byName.set(tool.name, tool);
-        }
-      }
-    },
-  };
 }
 
 // The tools-facing port. `capabilities` is the capability-scoped projection of
@@ -175,7 +139,6 @@ export interface ToolRuntimeAdapterPort {
   readonly identity: BrewvaRuntimeIdentity;
   readonly config: DeepReadonly<BrewvaConfig>;
   readonly capabilities: RuntimeAdapterCapabilitiesPort;
-  readonly toolSiblingResolver?: ToolSiblingResolver;
   readonly extensions: {
     readonly tools: HostedRuntimeExtensionsPort["tools"];
   };
@@ -367,7 +330,6 @@ export function createHostedRuntimeAdapter(
     runtime,
     ops,
     extensions,
-    toolSiblingResolver: createToolSiblingRegistry(),
     registerTurnSession,
   };
   return freezePort(adapter);
@@ -380,7 +342,6 @@ export function toToolRuntimeAdapterPort(
     identity: runtime.identity,
     config: runtime.config,
     capabilities: runtime.ops,
-    toolSiblingResolver: runtime.toolSiblingResolver,
     extensions: Object.freeze({
       tools: runtime.extensions.tools,
     }),

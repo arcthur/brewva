@@ -39,7 +39,12 @@ function extendBundledToolRuntime(
 
 export function buildBrewvaTools(options: BuildBrewvaToolsOptions): BuildBrewvaToolsResult {
   const runtime = extendBundledToolRuntime(options.runtime, options);
-  // The bundle applies the `toolNames` filter internally so tool_chain's sibling
-  // resolver spans exactly the visible surface (capability-scope parity).
-  return buildDefaultBundledBrewvaTools(runtime, { toolNames: options.toolNames });
+  const tools = buildDefaultBundledBrewvaTools(runtime);
+
+  if (!options.toolNames || options.toolNames.length === 0) {
+    return tools;
+  }
+
+  const allowed = new Set(options.toolNames);
+  return tools.filter((tool) => allowed.has(tool.name));
 }

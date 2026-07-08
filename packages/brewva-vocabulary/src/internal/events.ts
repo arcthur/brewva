@@ -46,7 +46,6 @@ export const RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND = "tool.result.recorded" as c
 export const RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND = "tool_call_observed" as const;
 export const RUNTIME_OPS_TOOL_CALL_STARTED_KIND = "tool_call_started" as const;
 export const RUNTIME_OPS_TOOL_CALL_ENDED_KIND = "tool_call_ended" as const;
-export const RUNTIME_OPS_TOOL_CHAIN_RESULT_RECORDED_KIND = "tool_chain.result.recorded" as const;
 
 /**
  * Durable receipt of a real-vs-shadow tool-authority divergence, drained from
@@ -61,7 +60,6 @@ export const RUNTIME_OPS_TO_TAPE_EVENT_TYPE = {
   [RUNTIME_OPS_REASONING_REVERT_RECORDED_KIND]: "reasoning.revert",
   [RUNTIME_OPS_SESSION_COMPACTION_COMMITTED_KIND]: "session.compact",
   [RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND]: "tool.result.recorded",
-  [RUNTIME_OPS_TOOL_CHAIN_RESULT_RECORDED_KIND]: "tool_chain.result.recorded",
 } as const;
 
 export type RuntimeOpsEventKind =
@@ -74,8 +72,7 @@ export type RuntimeOpsEventKind =
   | typeof RUNTIME_OPS_TOOL_RESULT_RECORDED_KIND
   | typeof RUNTIME_OPS_TOOL_CALL_OBSERVED_KIND
   | typeof RUNTIME_OPS_TOOL_CALL_STARTED_KIND
-  | typeof RUNTIME_OPS_TOOL_CALL_ENDED_KIND
-  | typeof RUNTIME_OPS_TOOL_CHAIN_RESULT_RECORDED_KIND;
+  | typeof RUNTIME_OPS_TOOL_CALL_ENDED_KIND;
 
 export type RuntimeOpsMappedTapeEventType =
   (typeof RUNTIME_OPS_TO_TAPE_EVENT_TYPE)[keyof typeof RUNTIME_OPS_TO_TAPE_EVENT_TYPE];

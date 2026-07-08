@@ -163,16 +163,6 @@ must grade itself.`
   orthogonal to permission. Under the line `Measure schema cost before gating
 it; if gated, the model operates it and the tape accounts for it`.
 
-- [RFC: Programmatic Tool Calling — Declarative Tool Chains With Out-Of-Context Intermediate Results](./rfc-programmatic-tool-calling.md):
-  active RFC, Phase 1 landed. A `tool_chain` managed tool runs a bounded,
-  declarative sequence of read-only tools in one kernel transaction, dispatching
-  each step's implementation directly (no per-step re-entrancy) and emitting
-  per-step advisory `tool.result.recorded` receipts plus one
-  `tool_chain.result.recorded` chain receipt, while only the selected step
-  results enter context — intermediate results are tape-evident but
-  context-absent. Promotion is blocked only on a measured context-economy
-  signal.
-
 - [RFC: Pre-Compaction Deterministic Prune — Dedupe, Informative Replace, And Image Strip Before LLM Summarization](./rfc-pre-compaction-deterministic-prune.md):
   active RFC, Phase 1 + Phase 2 landed. A pure `pruneCompactionInput`
   deterministically dedupes / informative-replaces / image-strips old tool

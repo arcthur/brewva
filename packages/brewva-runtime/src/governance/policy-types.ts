@@ -20,7 +20,6 @@ export type ToolExecutionBoundary = "safe" | "effectful";
 export type ToolActionClass =
   | "workspace_read"
   | "runtime_observe"
-  | "observe_compound"
   | "workspace_patch"
   | "memory_write"
   | "control_state_mutation"

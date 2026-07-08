@@ -125,7 +125,6 @@ const SHORT_LABEL_BY_PHASE: Record<OperatorSafetyShellPhase, string> = {
 const READ_ONLY_ACTION_CLASSES = new Set<ToolActionClass>([
   "workspace_read",
   "runtime_observe",
-  "observe_compound",
   "local_exec_readonly",
 ]);
 

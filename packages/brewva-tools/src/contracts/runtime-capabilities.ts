@@ -129,7 +129,6 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "capabilities.tools.access.getActionPolicy",
   "capabilities.tools.execution.recordAudit",
   "capabilities.tools.invocation.finish",
-  "capabilities.tools.invocation.recordChainResult",
   "capabilities.tools.invocation.recordResult",
   "capabilities.tools.invocation.start",
   "capabilities.tools.lifecycle.boxReleased",

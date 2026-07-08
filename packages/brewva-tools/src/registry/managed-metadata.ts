@@ -230,11 +230,6 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.lifecycle.boxReleased",
     "capabilities.tools.outputs.observed",
   ]),
-  tool_chain: metadata("base", "observe_compound", [
-    "capabilities.tools.access.getActionPolicy",
-    "capabilities.tools.invocation.recordChainResult",
-    "capabilities.tools.invocation.recordResult",
-  ]),
   user_fact: metadata("base", "memory_write", ["capabilities.workbench.recordUserFact"]),
   user_model: metadata("base", "runtime_observe", [
     // The cross-session fold runs through the recall broker + session index: the broker

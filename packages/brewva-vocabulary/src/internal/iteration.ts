@@ -119,10 +119,6 @@ export const TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE = "tool.read_path.gate.armed" 
 
 export const TOOL_RESULT_RECORDED_EVENT_TYPE = "tool.result.recorded" as const;
 
-export const TOOL_CHAIN_RESULT_SCHEMA = "brewva.tool-chain.v1" as const;
-
-export const TOOL_CHAIN_RESULT_RECORDED_EVENT_TYPE = "tool_chain.result.recorded" as const;
-
 export const VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE = "verification.outcome.recorded" as const;
 
 export const VERIFICATION_WRITE_MARKED_EVENT_TYPE = "verification.write.marked" as const;
@@ -170,45 +166,6 @@ export interface ToolResultRecordedEventPayload extends ProtocolRecord {
   readonly ledgerId?: string;
   readonly verdict?: string;
   readonly failureContext?: ToolOutputDistilledEventPayload | null;
-}
-
-/**
- * Per-step entry in the `tool_chain` envelope receipt. `resultText` carries a
- * bounded preview of the step's text result so replay can inspect every step
- * (through existing tape inspection) even though only the selected steps entered
- * the model's context; `truncated`/`fullChars` record when the preview was cut
- * so the record stays honest about size. The lightweight per-step
- * `tool.result.recorded` receipt records the same verdict as a queryable marker.
- */
-export interface ToolChainStepReceipt {
-  readonly index: number;
-  /**
-   * `${chainId}:step:${index}` — shared with the step's own
-   * `tool.result.recorded` advisory so the two receipt planes hard-reference each
-   * other by id instead of positional (session, order) alignment.
-   */
-  readonly toolCallId: string;
-  readonly toolName: string;
-  readonly verdict: string;
-  readonly resultText: string;
-  readonly truncated: boolean;
-  readonly fullChars: number;
-}
-
-/**
- * Envelope receipt for a `tool_chain` call: the step list, per-step verdicts,
- * and which steps' results were returned to context. Replay pairs this with the
- * per-step `tool.result.recorded` events to show what the chain did internally
- * even though the model only saw the returned selection.
- */
-export interface ToolChainResultRecordedEventPayload extends ProtocolRecord {
-  readonly schema: typeof TOOL_CHAIN_RESULT_SCHEMA;
-  readonly chainId: string;
-  readonly stepCount: number;
-  readonly stepsRun: number;
-  readonly steps: readonly ToolChainStepReceipt[];
-  readonly returnSelection: string;
-  readonly stopped: boolean;
 }
 
 export type ReasoningCheckpointBoundary = string;

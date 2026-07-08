@@ -63,6 +63,16 @@ lane.
 - [`gateway-hosted-lane-consolidation-rfc.md`](./gateway-hosted-lane-consolidation-rfc.md)
 - [`rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md`](./rfc-hosted-implementation-subtraction-and-ops-facade-collapse.md)
 
+## Tools And Context Economy
+
+- [`rfc-programmatic-tool-calling.md`](./rfc-programmatic-tool-calling.md) —
+  `tool_chain` (read-only compound envelope). Phase 1 landed then subtracted: a
+  real-session eval showed ~0 adoption because native parallel tool calls already
+  batch reads and the transient outbound reducer already delivers context economy
+  automatically. Its residual value (proactive attention economy) needs foresight
+  the model lacks in exploration — a structural ceiling. Context economy stays
+  runtime physics (the reducer). See the note's "Archived — Why".
+
 ## Reading Rule
 
 When an archived note conflicts with an accepted decision, stable docs, or

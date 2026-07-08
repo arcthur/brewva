@@ -6,7 +6,6 @@ export {
 } from "./box-plane-runtime.js";
 export { createExecTool } from "./exec.js";
 export { createProcessTool } from "./process.js";
-export { createToolChainTool } from "./tool-chain.js";
 export {
   createManagedExecProcessRegistryRuntime,
   type ManagedExecProcessRegistryRuntime,

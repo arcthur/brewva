@@ -980,9 +980,6 @@
         "memory_write": {
           "$ref": "#/definitions/ToolAdmissionBehavior"
         },
-        "observe_compound": {
-          "$ref": "#/definitions/ToolAdmissionBehavior"
-        },
         "runtime_observe": {
           "$ref": "#/definitions/ToolAdmissionBehavior"
         },
@@ -1002,7 +999,6 @@
       "enum": [
         "workspace_read",
         "runtime_observe",
-        "observe_compound",
         "workspace_patch",
         "memory_write",
         "control_state_mutation",
