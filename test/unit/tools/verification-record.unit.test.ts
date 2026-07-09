@@ -745,7 +745,10 @@ describe("verification_record tool — claim-time fitness discrepancy annotation
       perspective: "independent",
       independenceBasis: ["fresh_context"],
       reviewerContext: null,
-      targetRef: null,
+      // A tape-fresh targetRef (no tree mutation follows), so the outcome
+      // survives the assembler's mirror rule (STALENESS NEVER SATISFIES) and
+      // the clear-only strip below is what this test actually exercises.
+      targetRef: { kind: "file_digests", digests: { "reviewed.ts": "sha-reviewed" } },
       discrepancies: [],
       unverifiedMustAtoms: [],
       atomRefs: [EVENT_TAP_ATOM.id],
@@ -806,7 +809,11 @@ describe("assembleRequirementFitnessInput — independent outcome → satisfied 
       perspective: "independent",
       independenceBasis: ["fresh_context"],
       reviewerContext: { model: null, contextId, lenses: [] },
-      targetRef: { kind: "patch_sets", patchSetRefs: ["patch-1"] },
+      // A targetRef the tape corroborates as FRESH (these sessions never mutate
+      // the tree after the receipt), so the outcome survives the assembler's
+      // mirror rule (STALENESS NEVER SATISFIES). A patch_sets ref naming a
+      // patch the tape never applied would be honestly dropped as stale.
+      targetRef: { kind: "file_digests", digests: { "reviewed.ts": "sha-reviewed" } },
       atomRefs: [...atomRefs],
       discrepancies: [],
       unverifiedMustAtoms: [],

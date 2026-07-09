@@ -251,7 +251,12 @@ interface AtomAccumulator {
  *   finding's OWN `receiptTimestamp`) is dropped entirely: it contributes
  *   nothing to `violated` and no discrepancy. Independent/deterministic
  *   outcomes are keyed to atoms, not to a tree snapshot, so they are not
- *   staleness-checked here (the caller decides which to feed in).
+ *   staleness-checked here — the caller decides which to feed in, and the
+ *   assembler applies the mirror rule (STALENESS NEVER SATISFIES,
+ *   rfc-independence-trust-conditions): a stale independent outcome is dropped
+ *   before it reaches this input, so a CLEAR cannot keep an atom `satisfied`
+ *   after the attested code changed. Deterministic items carry their
+ *   producer's own freshness contract.
  * - A live fail DOMINATES a coexisting pass. If an atom has both satisfying and
  *   violating evidence, the atom is `violated` and the conflict surfaces — a
  *   pass never masks a real fail.

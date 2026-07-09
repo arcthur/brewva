@@ -1,5 +1,12 @@
 # RFC: Independence Trust Conditions After The Grade-Ceiling Subtraction
 
+> **S1 (the mirror rule) and S2 (docs) LANDED on this branch** (see Landing Plan).
+> The present-tense "gap" in Problem Statement / The Gap below is the PRE-landing
+> state this RFC's design closes; it is retained as the design rationale. What
+> stays open is S3 — the eval gate that shows a real CLEAR aging out — plus the
+> deterministic-evidence reintroduction bar, which governs future work, not this
+> branch.
+
 ## Metadata
 
 - Status: active
@@ -117,11 +124,12 @@ enforced by producers and consumers the model does not control:
 **The one missing guard.** Freshness is asymmetric. A finding whose `targetRef`
 no longer matches the tree is dropped whole — STALENESS NEVER VIOLATES
 (`fitness.ts` lines 342-353, judged per-finding against its own receipt
-timestamp). Independent outcomes are exempt by declared design: "outcomes are
-keyed to atoms, not to a tree snapshot, so they are not staleness-checked here
-(the caller decides which to feed in)" (`fitness.ts` lines 252-254) — and the
-caller feeds every independent receipt unconditionally
-(`packages/brewva-tools/src/runtime-port/verification.ts` lines 286-315).
+timestamp). Independent outcomes are exempt by declared design in the projection:
+"outcomes are keyed to atoms, not to a tree snapshot, so they are not
+staleness-checked here — the caller decides which to feed in" (`fitness.ts` join
+rules) — and PRE-S1 the caller (the assembler) fed every independent receipt
+unconditionally, so the freshness responsibility the projection delegated had no
+owner. S1 gives it one at the assembler (see The Gap → Implementation shape).
 
 ## The Gap: Staleness Never Satisfies
 
@@ -154,11 +162,13 @@ matcher is acceptable and per-atom refinement is deferred (Open Question 1).
 
 Implementation shape (deliberately the smallest correct cut): the assembler
 already holds `payload.targetRef`, the event timestamp, `appliedPatchSetRefs`,
-and `latestTreeMutationAt` in the same scope
-(`packages/brewva-tools/src/runtime-port/verification.ts` lines 286-349); the
-change is a per-receipt freshness check before pushing to
-`independentOutcomes`, mirroring the findings loop. No vocabulary change, no
-new event, no model-facing surface.
+and `latestTreeMutationAt` in the same scope; the change is a per-receipt
+freshness check before pushing to `independentOutcomes`, mirroring the findings
+loop. No vocabulary change, no new event, no model-facing surface. As landed in
+S1 the freshness inputs are hoisted above the receipt loop (pure folds, values
+unchanged) and the gate sits in
+`assembleRequirementFitnessInputFromEvents`
+(`packages/brewva-tools/src/runtime-port/verification.ts`).
 
 ## The Reintroduction Bar For Deterministic Evidence
 
@@ -245,14 +255,19 @@ residue this RFC pins as doctrine:
 
 ## Landing Plan (Sketch, Not A Commitment)
 
-1. S1 — the mirror rule: freshness-gate independent outcomes at the assembler
-   (per-receipt own-timestamp, shared matcher); unit tests for
-   fresh-pass-discharges / stale-pass-drops / P1-A ordering; replay game_7 and
-   game_8 tapes to confirm no regression (both reviews ended FAIL, so no
-   existing discharge changes).
-2. S2 — docs: promote the reintroduction bar and the trust-conditions inventory
-   into `docs/journeys/operator/verification-and-independent-review.md`; cross-note
-   the subtraction ADR; keep this RFC active until the eval gate.
+1. S1 — **LANDED (this branch)**: the mirror rule freshness-gates independent
+   outcomes at the assembler (per-receipt own-timestamp, shared matcher; a
+   receipt with no `targetRef` drops). Unit matrix in
+   `test/unit/tools/staleness-never-satisfies.unit.test.ts`
+   (fresh-CLEAR-discharges, stale-CLEAR-drops + debt re-lights, P1-A ordering,
+   patch_sets drift, null-targetRef, deterministic items untouched). Replays of
+   the game_7, game_8, AND game_9_1 tapes are byte-identical to the pre-change
+   baseline (their independent outcomes were FAIL/absent — `atomRefs` empty by
+   CLEAR-only — so nothing existed to age), confirming zero regression.
+2. S2 — **LANDED (this branch)**: the trust-conditions inventory, the mirror
+   rule, and the reintroduction bar promoted into
+   `docs/journeys/operator/verification-and-independent-review.md`; this RFC
+   stays active until the eval gate.
 3. S3 — eval gate: a future game-series run in which an independent CLEAR lands
    and later edits occur shows the discharge aging out (debt re-lights) instead
    of a frozen `satisfied` — validated by tape replay, not live-run luck.
@@ -274,9 +289,10 @@ residue this RFC pins as doctrine:
   staleness exemption at 252-254), 308-327 (independent feed → `satisfied`),
   342-353 (STALENESS NEVER VIOLATES for findings), 412-427 (re-anchored
   `independenceDebtAtoms`).
-- `packages/brewva-tools/src/runtime-port/verification.ts` lines 286-349 (the
-  assembler: unconditional independent feed beside already-derived freshness
-  inputs — the change site).
+- `packages/brewva-tools/src/runtime-port/verification.ts`
+  `assembleRequirementFitnessInputFromEvents` (the change site): freshness inputs
+  hoisted above the receipt loop, then the per-receipt independent-outcome
+  freshness gate (STALENESS NEVER SATISFIES) — S1's landed shape.
 - `packages/brewva-tools/src/families/delegation/review-receipts.ts`
   lines 286-322 (producer-keyed independent perspective, CLEAR-only,
   asked-set `atomRefs`).

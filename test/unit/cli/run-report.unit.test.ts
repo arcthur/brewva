@@ -439,10 +439,13 @@ describe("buildRunReportProjection — fitness section", () => {
       }),
       // req-2 is cleared by an INDEPENDENT atoms-review pass naming it -> satisfied.
       // This is the positive channel the old receipt-read surface never showed.
+      // Carries a tape-fresh targetRef (nothing mutates the tree after it) so it
+      // survives the assembler's mirror rule (STALENESS NEVER SATISFIES).
       record("verification.outcome.recorded", 100, {
         outcome: "pass",
         level: "requirements",
         perspective: "independent",
+        targetRef: { kind: "file_digests", digests: { "b.ts": "digest-b" } },
         atomRefs: ["req-2"],
       }),
       // req-3 has no evidence at all -> unverified (and it is a `must`).
@@ -529,6 +532,9 @@ describe("buildRunReportProjection — fitness section", () => {
         outcome: "pass",
         level: "requirements",
         perspective: "independent",
+        // Tape-fresh targetRef (no tree mutation follows) — survives the
+        // assembler's mirror rule (STALENESS NEVER SATISFIES).
+        targetRef: { kind: "file_digests", digests: { "a.ts": "digest-a" } },
         atomRefs: ["req-clear"],
         discrepancies: [],
         unverifiedMustAtoms: [],
@@ -704,6 +710,9 @@ describe("buildRunReportProjection — requirement lifecycle (R5a)", () => {
         outcome: "pass",
         level: "requirements",
         perspective: "independent",
+        // Tape-fresh targetRef (no tree mutation follows) — survives the
+        // assembler's mirror rule (STALENESS NEVER SATISFIES).
+        targetRef: { kind: "file_digests", digests: { "a.ts": "digest-a" } },
         atomRefs: ["req-1"],
       }),
     ];

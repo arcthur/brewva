@@ -180,11 +180,15 @@ describe("Work Card evidence — fitness line", () => {
       targetRef: { kind: "file_digests", digests: { "a.ts": "digest-a" } },
       atomRefs: ["req-1"],
     });
-    // req-2: an independent atoms-review pass naming it -> satisfied.
+    // req-2: an independent atoms-review pass naming it -> satisfied. The receipt
+    // carries a tape-fresh targetRef (nothing mutates the tree after it) so it
+    // survives the assembler's mirror rule (STALENESS NEVER SATISFIES) — a
+    // targetRef-less pass cannot demonstrate freshness and would be dropped.
     void runtime.ops.verification.checks.verify(sessionId, {
       outcome: "pass",
       level: "requirements",
       perspective: "independent",
+      targetRef: { kind: "file_digests", digests: { "b.ts": "digest-b" } },
       atomRefs: ["req-2"],
     });
 

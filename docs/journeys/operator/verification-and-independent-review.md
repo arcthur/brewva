@@ -115,6 +115,28 @@ flowchart TD
   they add no new blocking path (design axiom 18)
 - a stale or unbacked atom reads `unverified` and a contradicted pass reads as
   visible debt; the surfaces are honest rather than a fake pass/fail (axiom 7)
+- the trust an independent CLEAR carries is earned structurally, not claimed:
+  perspective is producer-keyed (only the review-receipt path mints
+  `independent`); a non-pass outcome carries no `atomRefs` (CLEAR-only, enforced
+  at producer AND consumer); and the CLEAR's `atomRefs` are copied from the
+  DISPATCH's `reviewedAtomIds` (the coverage-scoped fold), so a reviewer cannot
+  inflate its own attestation list
+- STALENESS NEVER SATISFIES, the mirror of "staleness never violates": an
+  independent outcome feeds the fitness join only while its `targetRef` still
+  matches the tree, judged by the same conservative tape-only matcher against the
+  receipt's OWN timestamp. A CLEAR recorded at `t1` stops discharging once the
+  attested code changes at `t2` — the atom falls back to other live evidence and
+  independence debt re-lights. Over-aging errs safe (debt re-opens; re-verify),
+  never toward a false `satisfied`. A receipt with no `targetRef` cannot
+  demonstrate freshness and is dropped for the same reason
+- deterministic evidence (`EvidenceItem`) is producerless plumbing; any future
+  producer must clear four bars: domain-general and boundary-anchored (build/test
+  gates, LSP diagnostics — never a domain source matcher; recurring domain
+  defects belong in eval fixtures, not runtime matchers), deterministic by
+  construction (the runtime runs it), attribution declared never inferred (an
+  item's effective strength is min(verdict, attribution)), and additive never a
+  gate (it may accelerate `satisfied` or convict, but must not cap what an
+  independent review can discharge)
 - act-on-review closure is the complement of review debt: review debt asks "was an
   independent read OWED"; the act-on-review advisory asks "did a review that HAPPENED
   get acted on". A `review.finding.recorded` is UNADDRESSED when the code IT flagged

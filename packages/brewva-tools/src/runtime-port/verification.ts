@@ -24,6 +24,7 @@ import {
   projectUnaddressedReviewFindings,
   readReviewFindingRecordedEventPayload,
   REVIEW_FINDING_RECORDED_EVENT_TYPE,
+  reviewTargetRefMatchesTapeOnly,
   reviewTargetRefMatchesTree,
   type IndependenceBasis,
   type ReviewDebt,
@@ -267,6 +268,32 @@ export function assembleRequirementFitnessInputFromEvents(
 ): RequirementFitnessInput {
   const atoms: readonly RequirementAtom[] = foldTaskLedgerEvents(allEvents).requirements;
 
+  // Freshness inputs FIRST: the projection's finding-staleness rule and the
+  // independent-outcome mirror rule below both judge against these. Pure folds
+  // over the same event list, so deriving them before the receipt loop changes
+  // nothing about their values.
+  //
+  // Tape-order-sensitive apply/rollback fold (see assembleReviewDebtInput): read
+  // the whole tape and filter client-side so a same-millisecond apply/rollback
+  // pair is never misordered by a timestamp merge.
+  const appliedEvents = allEvents.filter(
+    (event) => event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE || event.type === ROLLBACK_EVENT_TYPE,
+  );
+  const appliedPatchSetRefs = deriveAppliedPatchSetIds(appliedEvents);
+  // A successful patch/rollback OR a bare write/edit commitment ages the tree
+  // (Finding P1): all three rewrite files, so any must stale a file_digests
+  // finding. Single-homed in `deriveLatestTreeMutationAt` — the SAME mutation
+  // set the tape-only review-debt read uses. A bare edit that finished the
+  // session (no patches) must age the tree, or a stale file_digests finding
+  // would wrongly count as live reviewer counter-evidence. Same
+  // `projectToolInvocations(<full tape>)` fold as assembleReviewDebtInput and
+  // buildTapeReviewDebt — one shape everywhere.
+  const invocations = projectToolInvocations(allEvents);
+  const latestTreeMutationAt = deriveLatestTreeMutationAt({
+    patchRollbackEvents: appliedEvents,
+    writeInvocations: invocations,
+  });
+
   const findings: FitnessReviewFinding[] = [];
   const independentOutcomes: FitnessIndependentOutcome[] = [];
   // Deterministic evidence: each item joins the deterministic side of the fitness
@@ -292,49 +319,49 @@ export function assembleRequirementFitnessInputFromEvents(
       // (the reviewer contextId, falling back to the tape position) so the
       // projection's evidence is order-independent.
       if (payload.perspective === "independent") {
-        const verdict = payload.outcome === "pass" ? "pass" : "fail";
-        independentOutcomes.push({
-          // Clear-only enforced HERE too, not just at the producer: the
-          // projection blanket-violates every atomRef on a fail outcome
-          // (fitness.ts), so a non-pass verdict must carry no atomRefs. The
-          // producer already guarantees this; dropping them again at the
-          // consumption point makes the invariant locally checked rather than
-          // globally trusted, so a future producer regression cannot reach
-          // blanket-violation through this seam.
-          atomRefs: verdict === "pass" ? payload.atomRefs : [],
-          verdict,
-          ref: payload.reviewerContext?.contextId ?? `independent-outcome-${index}`,
-        });
+        // STALENESS NEVER SATISFIES (rfc-independence-trust-conditions): the
+        // mirror of the projection's finding rule. An independent outcome feeds
+        // the join only while its `targetRef` still matches the tree, judged by
+        // the SAME conservative tape-only matcher against the receipt's OWN
+        // timestamp (Finding P1-A) — otherwise a CLEAR recorded at t1 would keep
+        // an atom `satisfied` after the model rewrites the attested code at t2
+        // (a false green the grade ceiling used to mask). A stale outcome is
+        // dropped whole; its atoms fall back to other live evidence, re-lighting
+        // independence debt — the safe error direction (over-aging re-opens
+        // debt, never fabricates a pass). A receipt with no `targetRef` cannot
+        // demonstrate freshness and is dropped for the same reason.
+        const fresh =
+          payload.targetRef !== null &&
+          reviewTargetRefMatchesTapeOnly(payload.targetRef, {
+            appliedPatchSetRefs,
+            receiptTimestamp: event.timestamp,
+            latestTreeMutationAt,
+          });
+        if (fresh) {
+          const verdict = payload.outcome === "pass" ? "pass" : "fail";
+          independentOutcomes.push({
+            // Clear-only enforced HERE too, not just at the producer: the
+            // projection blanket-violates every atomRef on a fail outcome
+            // (fitness.ts), so a non-pass verdict must carry no atomRefs. The
+            // producer already guarantees this; dropping them again at the
+            // consumption point makes the invariant locally checked rather than
+            // globally trusted, so a future producer regression cannot reach
+            // blanket-violation through this seam.
+            atomRefs: verdict === "pass" ? payload.atomRefs : [],
+            verdict,
+            ref: payload.reviewerContext?.contextId ?? `independent-outcome-${index}`,
+          });
+        }
       }
       // Structured evidence items are DETERMINISTIC by construction (a runtime-run
       // producer, not a model claim), so each feeds the deterministic side of the
       // join regardless of the receipt's perspective: a pass clears the atom, a fail
       // is a real `deterministic_conflict`. Independent evidence rides the top-level
       // `atomRefs` above, not items — one home per source, nothing to double-count.
+      // Their freshness contract belongs to their (future) producer, not this gate.
       deterministicEvidence.push(...evidenceItemsToDeterministicEvidence(payload.evidenceItems));
     }
   }
-
-  // Tape-order-sensitive apply/rollback fold (see assembleReviewDebtInput): read
-  // the whole tape and filter client-side so a same-millisecond apply/rollback
-  // pair is never misordered by a timestamp merge.
-  const appliedEvents = allEvents.filter(
-    (event) => event.type === SOURCE_PATCH_APPLIED_EVENT_TYPE || event.type === ROLLBACK_EVENT_TYPE,
-  );
-  const appliedPatchSetRefs = deriveAppliedPatchSetIds(appliedEvents);
-  // A successful patch/rollback OR a bare write/edit commitment ages the tree
-  // (Finding P1): all three rewrite files, so any must stale a file_digests
-  // finding. Single-homed in `deriveLatestTreeMutationAt` — the SAME mutation
-  // set the tape-only review-debt read uses. A bare edit that finished the
-  // session (no patches) must age the tree, or a stale file_digests finding
-  // would wrongly count as live reviewer counter-evidence. Same
-  // `projectToolInvocations(<full tape>)` fold as assembleReviewDebtInput and
-  // buildTapeReviewDebt — one shape everywhere.
-  const invocations = projectToolInvocations(allEvents);
-  const latestTreeMutationAt = deriveLatestTreeMutationAt({
-    patchRollbackEvents: appliedEvents,
-    writeInvocations: invocations,
-  });
 
   return {
     atoms,
