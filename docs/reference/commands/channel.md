@@ -36,8 +36,9 @@ agent list/status, steer, answer, update, create/delete/focus, run, discuss,
 goal lifecycle, and direct `@agent` task routing.
 
 `/goal [@agent] ...` uses the same shared parser as the interactive shell:
-`/goal [@agent] [--tokens <count>] <objective>`, `/goal [@agent] status`,
-`pause`, `resume`, and `clear`. The target agent defaults to the current focus.
+`/goal [@agent] [--tokens <count>] [--max-turns <count>] <objective>`,
+`/goal [@agent] status`, `pause`, `resume`, `continue`, and `clear`. The target
+agent defaults to the current focus.
 Like all non-public orchestration commands (everything except `/agents` and
 `@agent` routing), `/goal` requires owner authorization. The command mutates the
 target live session's

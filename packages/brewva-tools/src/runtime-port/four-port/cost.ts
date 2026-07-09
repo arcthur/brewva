@@ -74,7 +74,9 @@ function readSelectionSkillNames(payload: ProtocolRecord): readonly string[] {
   const names = new Set<string>();
   for (const entry of rendered) {
     const record = readRecord(entry);
-    const name = typeof record.skillName === "string" ? record.skillName.trim() : "";
+    // Each entry is a RenderedSkillReason; the skill name lives on `name`
+    // (matching the skill-adoption consumer), not `skillName`.
+    const name = typeof record.name === "string" ? record.name.trim() : "";
     if (name) {
       names.add(name);
     }
@@ -318,9 +320,12 @@ function costSummaryFromEvents(
       }
     }
 
-    // Attribute each per-turn cost.observed (equal split) to the skills surfaced by
-    // the most recent skill.selection.recorded at or before it. Both lists arrive
-    // timestamp-sorted, so one forward cursor is O(costs + selections).
+    // Attribute each per-turn cost.observed to the skills surfaced by the most recent
+    // skill.selection.recorded at or before it, split equally across those skills.
+    // NOTE: this is a DIFFERENT estimate basis than the per-tool split above (which
+    // divides the pool by result-token share). Both are graded `estimated` and are not
+    // reconcilable — do not sum tool rows and skill rows into a single total.
+    // Both lists arrive timestamp-sorted, so one forward cursor is O(costs + selections).
     const selections = listFourPortRuntimeEvents(runtime, sessionId, {
       type: "skill.selection.recorded",
     })

@@ -90,6 +90,37 @@ describe("goal continuation lifecycle", () => {
     ).toBe(200);
   });
 
+  test("enqueue path renders the max-turns wrap-up, not the budget fallback", async () => {
+    const runtime = createRuntimeFixture();
+    const sessionId = "goal-enqueue-max-turns-session";
+    const prompts: string[] = [];
+
+    runtime.ops.goal.lifecycle.start(sessionId, {
+      objective: "Wrap up at the cap",
+      maxTurns: 1,
+      now: 100,
+    });
+    const goal = runtime.ops.goal.state.get(sessionId);
+    expect(goal).not.toBeNull();
+
+    await enqueueGoalContinuation({
+      sessionId,
+      goal: goal!,
+      kind: "max_turns_wrap_up",
+      now: 200,
+      recordQueued: (targetSessionId, payload) =>
+        runtime.ops.goal.continuation.recordQueued(targetSessionId, payload),
+      prompt: async (parts) => {
+        prompts.push(parts.map((part) => (part.type === "text" ? part.text : "")).join("\n"));
+      },
+    });
+
+    expect(prompts).toHaveLength(1);
+    // Must render the max-turns wrap-up message, not fall back to the budget message.
+    expect(prompts[0]).toContain("[GoalMaxTurns]");
+    expect(prompts[0]).not.toContain("[GoalBudgetLimit]");
+  });
+
   test("pauses active goals on session start instead of auto-resuming", async () => {
     const { runtime, lifecycle, ctx } = createLifecycleFixture();
 

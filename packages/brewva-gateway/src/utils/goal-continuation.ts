@@ -4,6 +4,7 @@ import {
   buildGoalBudgetLimitMessage,
   buildGoalContinuationMessage,
   buildGoalContinuationPayload,
+  buildGoalMaxTurnsMessage,
   type GoalContinuationPayload,
   type GoalState,
 } from "@brewva/brewva-vocabulary/goal";
@@ -34,15 +35,13 @@ function buildGoalContinuationPromptParts(
   goal: GoalState,
   kind: GoalContinuationKind,
 ): readonly BrewvaPromptContentPart[] {
-  return [
-    {
-      type: "text",
-      text:
-        kind === "continue"
-          ? buildGoalContinuationMessage(goal)
-          : buildGoalBudgetLimitMessage(goal),
-    },
-  ];
+  const text =
+    kind === "continue"
+      ? buildGoalContinuationMessage(goal)
+      : kind === "max_turns_wrap_up"
+        ? buildGoalMaxTurnsMessage(goal)
+        : buildGoalBudgetLimitMessage(goal);
+  return [{ type: "text", text }];
 }
 
 export async function enqueueGoalContinuation(
