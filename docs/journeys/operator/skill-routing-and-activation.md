@@ -58,7 +58,7 @@ there it grants no authority (see Execution Semantics).
 flowchart TD
   A["Turn start (beforeAgentStart)"] --> B["Load skill catalog (base + .brewva overlay)"]
   B --> C["Filter hidden categories; score each skill vs prompt"]
-  C --> D["Reasons: explicit_mention > path_glob > name_match > text_match"]
+  C --> D["Reasons: explicit_mention > path_glob > recent_path > name_match"]
   D --> E["Sort, apply render cap, derive selectionMode"]
   E --> F["Render advisory SkillCard section into system prompt"]
   F --> G["Record skill-selection receipt"]
@@ -80,11 +80,14 @@ flowchart TD
    `references`, `scripts`, `invariants`, `argument_hints`, and
    `output_artifacts`. Removed authority-era fields (and `selection.triggers` /
    camelCase / `intent`) are rejected at load.
-3. Each visible skill is scored by four selection reasons in priority order:
-   `explicit_mention` (a whole-word `$skill-name`), `path_glob` (against prompt
-   paths), `name_match`, and `text_match` (tokenized overlap of description and
-   when-to-use). A CJK keyword bridge injects English keywords before text
-   matching so Chinese prompts match English cards.
+3. Each visible skill is scored by four DETERMINISTIC selection reasons in
+   priority order: `explicit_mention` (a whole-word `$skill-name`), `path_glob`
+   (prompt paths), `recent_path` (`selection.path_globs` against recently touched
+   tool paths), and `name_match` (a whole-word skill name). There is no fuzzy
+   prose matching — the former tokenized `text_match` and the CJK keyword bridge
+   were removed; surfacing a card by description/when-to-use overlap is now
+   `discover_skills`' explicit job, and the always-visible catalog keeps every
+   card legible regardless.
 4. The shortlist sorts by score, applies a render cap (default 8), and computes
    a `selectionMode`. If explicit mentions exceed the cap, all explicit
    candidates are retained and an over-budget reason is recorded.

@@ -1,9 +1,6 @@
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
-import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
-  projectFreshCodeWritten,
-  projectToolInvocations,
   relativizeToWorkspace,
   TOOL_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/tool-invocations";
@@ -30,9 +27,6 @@ export interface SkillProjectionEvent {
 // createHostedCustomTools — read/edit/write take `path`/`file_path`).
 
 const READ_TOOL_NAMES = new Set(["source_read", "resource_read", "look_at", "read"]);
-// The fresh-code scan is shared with the tools-side review-debt projection via
-// projectFreshCodeWritten (@brewva/brewva-vocabulary/tool-invocations) — one
-// definition over the commitment boundary, two consumers.
 
 export interface SkillAdoptionSample {
   readonly selectionId: string;
@@ -43,7 +37,6 @@ export interface SkillAdoptionSample {
 interface RenderedSkillRef {
   readonly name: string;
   readonly filePath: string;
-  readonly reasons: readonly string[];
 }
 
 function normalizePath(value: string): string {
@@ -97,15 +90,8 @@ function readRenderedSkillRefs(payload: unknown): RenderedSkillRef[] {
     if (!entry || typeof entry !== "object") continue;
     const name = (entry as { name?: unknown }).name;
     const filePath = (entry as { filePath?: unknown }).filePath;
-    const entryReasons = (entry as { reasons?: unknown }).reasons;
     if (typeof name === "string" && typeof filePath === "string" && filePath.length > 0) {
-      refs.push({
-        name,
-        filePath,
-        reasons: Array.isArray(entryReasons)
-          ? entryReasons.filter((reason): reason is string => typeof reason === "string")
-          : [],
-      });
+      refs.push({ name, filePath });
     }
   }
   return refs;
@@ -307,135 +293,6 @@ export function projectRecentToolTargetPaths(
   return paths;
 }
 
-/**
- * The post-green review nudge trigger, projected deterministically from tape
- * evidence: fresh code landed this session, a verification signal went green,
- * and the review skill has not been opened. The selection layer turns this
- * into a forced `review` shortlist entry — advisory attention shaping, not
- * authority. Green means exactly one thing: the latest committed
- * `verification.outcome.recorded` receipt is a pass.
- */
-export interface PostGreenReviewSignal {
-  readonly freshCodeWritten: boolean;
-  readonly verificationGreen: boolean;
-  readonly reviewAdopted: boolean;
-  readonly active: boolean;
-}
-
-function readEventPayloadString(payload: unknown, key: string): string | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-  return readNonEmptyString((payload as Record<string, unknown>)[key]) ?? null;
-}
-
-export function projectPostGreenReviewSignal(input: {
-  invocationEvents: readonly SkillProjectionEvent[];
-  verificationEvents: readonly SkillProjectionEvent[];
-  reviewSkillFilePath: string | null;
-}): PostGreenReviewSignal {
-  // Fresh-code detection is the one definition shared with the tools-side
-  // review-debt projection (internal/iteration.ts's projectFreshCodeWritten) —
-  // a second pass over the same bounded per-session invocation list, not a
-  // second copy of the write-tool scan.
-  const freshCodeWritten = projectFreshCodeWritten(projectToolInvocations(input.invocationEvents));
-  let reviewAdopted = false;
-  for (const event of input.invocationEvents) {
-    if (event.type !== TOOL_COMMITTED_EVENT_TYPE) continue;
-    if (input.reviewSkillFilePath && !reviewAdopted) {
-      const target = readInvocationReadTarget(event.payload);
-      if (target && readTargetMatchesSkillFile(target, input.reviewSkillFilePath)) {
-        reviewAdopted = true;
-      }
-    }
-  }
-
-  // Green means exactly one thing: the LATEST committed verification receipt
-  // is a pass. Exec-derived heuristics are deliberately excluded — exec audit
-  // events carry a different stored kind, background exits emit no failure
-  // event, and an older pass must never outweigh a newer fail. The receipt is
-  // the only honest green (axiom: every commitment has a receipt).
-  //
-  // Intentionally rung-AGNOSTIC (any pass, no requirements-level floor): this is
-  // the softer of the two post-green surfaces — it merely makes the `review`
-  // SkillCard visible. The stronger "you owe an independent review" claim (the
-  // tools-side review-debt marker) keeps its requirements+ floor; surfacing the
-  // affordance a rung earlier costs nothing and never asserts debt.
-  const latestReceipt = input.verificationEvents
-    .filter((event) => event.type === VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE)
-    .toSorted((left, right) => left.timestamp - right.timestamp)
-    .at(-1);
-  const verificationGreen = latestReceipt
-    ? readEventPayloadString(latestReceipt.payload, "outcome") === "pass"
-    : false;
-
-  const active =
-    freshCodeWritten && verificationGreen && !reviewAdopted && input.reviewSkillFilePath !== null;
-  return { freshCodeWritten, verificationGreen, reviewAdopted, active };
-}
-
-/**
- * Skills repeatedly offered on `text_match` alone and never opened. The
- * selection layer drops these from pure-text-match candidacy — a deterministic,
- * session-scoped demotion computed from committed receipts, never a learned
- * weight. Any stronger signal (explicit mention, path glob, name match)
- * bypasses the demotion entirely.
- */
-export function projectNeglectedTextMatchOffers(
-  events: readonly SkillProjectionEvent[],
-  options?: { minOffers?: number; windowTruncated?: boolean },
-): ReadonlySet<string> {
-  // Demotion is the destructive act here: on a clipped read window we cannot
-  // prove non-adoption, so a truncated window demotes nothing (fail closed).
-  if (options?.windowTruncated === true) {
-    return new Set();
-  }
-  const minOffers = options?.minOffers ?? 2;
-  const selections: VisibleSelection[] = [];
-  for (const event of events) {
-    if (event.type !== SKILL_SELECTION_RECORDED_EVENT_TYPE) continue;
-    const refs = readRenderedSkillRefs(event.payload);
-    if (refs.length > 0) {
-      selections.push({ event, refs });
-    }
-  }
-  if (selections.length === 0) {
-    return new Set();
-  }
-  const reads: Array<{ timestamp: number; target: string }> = [];
-  for (const event of events) {
-    if (event.type !== TOOL_COMMITTED_EVENT_TYPE) continue;
-    const target = readInvocationReadTarget(event.payload);
-    if (target) {
-      reads.push({ timestamp: event.timestamp, target });
-    }
-  }
-  const offers = new Map<string, { count: number; adopted: boolean }>();
-  for (const selection of selections) {
-    for (const ref of selection.refs) {
-      const textMatchOnly = ref.reasons.length === 1 && ref.reasons[0] === "text_match";
-      if (!textMatchOnly) continue;
-      const entry = offers.get(ref.name) ?? { count: 0, adopted: false };
-      entry.count += 1;
-      if (!entry.adopted) {
-        entry.adopted = reads.some(
-          (read) =>
-            read.timestamp >= selection.event.timestamp &&
-            readTargetMatchesSkillFile(read.target, ref.filePath),
-        );
-      }
-      offers.set(ref.name, entry);
-    }
-  }
-  const neglected = new Set<string>();
-  for (const [name, entry] of offers) {
-    if (entry.count >= minOffers && !entry.adopted) {
-      neglected.add(name);
-    }
-  }
-  return neglected;
-}
-
 export function formatSkillAdoptionLine(sample: SkillAdoptionSample | null): string {
   if (!sample) {
     return "Previous Selection Adoption: none recorded";
@@ -464,23 +321,11 @@ export interface RecentSkillProjectionInputs {
   readonly recentInvocations: readonly SkillProjectionEvent[];
   /** Selection receipts plus invocations SINCE the latest visible one. */
   readonly adoptionEvents: readonly SkillProjectionEvent[];
-  /** Selection receipts plus invocations SINCE the oldest visible one. */
-  readonly neglectEvents: readonly SkillProjectionEvent[];
-  /**
-   * True when the neglect window hit its query cap: adoption reads beyond the
-   * cap are invisible, so demotion must not act on this window.
-   */
-  readonly neglectWindowTruncated: boolean;
-  /** Latest verification.outcome.recorded receipt (post-green review signal). */
-  readonly verificationEvents: readonly SkillProjectionEvent[];
 }
 
 const EMPTY_PROJECTION_INPUTS: RecentSkillProjectionInputs = {
   recentInvocations: [],
   adoptionEvents: [],
-  neglectEvents: [],
-  neglectWindowTruncated: false,
-  verificationEvents: [],
 };
 
 // Selection receipts scanned back for the previous-adoption trace line.
@@ -489,22 +334,16 @@ const RECENT_SELECTION_WINDOW = 8;
 // side; the deduplicated output is capped separately by the selection-side
 // RECENT_TOOL_PATH_LIMIT.
 const RECENT_INVOCATION_QUERY_WINDOW = 60;
-// Invocations examined after a visible selection when measuring adoption and
-// neglect; skill reads happen early in a turn, so a generous cap suffices.
+// Invocations examined after a visible selection when measuring adoption;
+// skill reads happen early in a turn, so a generous cap suffices.
 const ADOPTION_INVOCATION_SCAN_LIMIT = 240;
 
 /**
- * Bounded tape queries instead of one unbounded scan: per-turn projection
- * cost must stay flat as the session tape grows.
- *
- * Two windows, two guarantees. Adoption reads come from a NARROW query since
- * the latest visible selection — `after`+`limit` returns the FIRST N matches,
- * so a wide window could exhaust its budget on old events and falsely report
- * "0/N read" for the current turn. Neglect additionally needs the WIDE window
- * since the oldest in-window selection; it is only paid when more than one
- * visible selection exists (a single offer can never reach the demotion
- * threshold), and a cap-saturated wide window is flagged truncated so the
- * demotion projection can refuse to act on incomplete evidence.
+ * Bounded tape queries instead of one unbounded scan: per-turn projection cost
+ * must stay flat as the session tape grows. Adoption reads come from a NARROW
+ * query since the latest visible selection — `after`+`limit` returns the FIRST N
+ * matches, so a wide window could exhaust its budget on old events and falsely
+ * report "0/N read" for the current turn.
  */
 export function queryRecentSkillProjectionInputs(
   records: SkillProjectionQueryPort | undefined,
@@ -525,23 +364,14 @@ export function queryRecentSkillProjectionInputs(
         last: RECENT_INVOCATION_QUERY_WINDOW,
       }) ?? [];
     let latestVisibleSelectionTimestamp: number | null = null;
-    let oldestVisibleSelectionTimestamp: number | null = null;
-    let visibleSelectionCount = 0;
     for (const event of selections) {
       if (event.type !== SKILL_SELECTION_RECORDED_EVENT_TYPE) continue;
       if (readRenderedSkillRefs(event.payload).length === 0) continue;
-      visibleSelectionCount += 1;
       if (
         latestVisibleSelectionTimestamp === null ||
         event.timestamp > latestVisibleSelectionTimestamp
       ) {
         latestVisibleSelectionTimestamp = event.timestamp;
-      }
-      if (
-        oldestVisibleSelectionTimestamp === null ||
-        event.timestamp < oldestVisibleSelectionTimestamp
-      ) {
-        oldestVisibleSelectionTimestamp = event.timestamp;
       }
     }
     const sinceLatest =
@@ -552,26 +382,9 @@ export function queryRecentSkillProjectionInputs(
             after: latestVisibleSelectionTimestamp - 1,
             limit: ADOPTION_INVOCATION_SCAN_LIMIT,
           }) ?? []);
-    const wantsNeglectWindow =
-      visibleSelectionCount > 1 && oldestVisibleSelectionTimestamp !== null;
-    const sinceOldest = wantsNeglectWindow
-      ? (records.query(sessionId, {
-          type: TOOL_COMMITTED_EVENT_TYPE,
-          after: (oldestVisibleSelectionTimestamp ?? 0) - 1,
-          limit: ADOPTION_INVOCATION_SCAN_LIMIT,
-        }) ?? [])
-      : [];
-    const verificationEvents =
-      records.query(sessionId, {
-        type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-        last: 1,
-      }) ?? [];
     return {
       recentInvocations,
       adoptionEvents: [...selections, ...sinceLatest],
-      neglectEvents: wantsNeglectWindow ? [...selections, ...sinceOldest] : [],
-      neglectWindowTruncated: sinceOldest.length >= ADOPTION_INVOCATION_SCAN_LIMIT,
-      verificationEvents,
     };
   } catch {
     // Selection must never fail because a projection surface is unavailable.

@@ -1,5 +1,5 @@
 import { classifyCommandClass } from "@brewva/brewva-std/command-class";
-import { readNonEmptyString, readStringList } from "@brewva/brewva-std/text";
+import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { FITNESS_DISCREPANCY_GRADES } from "@brewva/brewva-vocabulary/fitness";
@@ -205,8 +205,6 @@ export interface RunReportProjection {
   readonly skills: {
     readonly selections: number;
     readonly renderedSkillNames: readonly string[];
-    readonly demotedSkillNames: readonly string[];
-    readonly forcedCandidates: number;
   };
   readonly cost: {
     readonly totalTokens: number | null;
@@ -299,8 +297,6 @@ export function buildRunReportProjection(
 
   let skillSelections = 0;
   const renderedSkillNames = new Set<string>();
-  const demotedSkillNames = new Set<string>();
-  let forcedCandidates = 0;
 
   let totalTokens = 0;
   let sawTokens = false;
@@ -489,12 +485,6 @@ export function buildRunReportProjection(
             if (name) renderedSkillNames.add(name);
           }
         }
-        for (const name of readStringList(payload.demotedSkillNames)) {
-          demotedSkillNames.add(name);
-        }
-        if (Array.isArray(payload.forcedCandidates)) {
-          forcedCandidates += payload.forcedCandidates.length;
-        }
         continue;
       }
       case "cost.observed": {
@@ -644,10 +634,6 @@ export function buildRunReportProjection(
       renderedSkillNames: [...renderedSkillNames].toSorted((left, right) =>
         left.localeCompare(right),
       ),
-      demotedSkillNames: [...demotedSkillNames].toSorted((left, right) =>
-        left.localeCompare(right),
-      ),
-      forcedCandidates,
     },
     cost: {
       totalTokens: sawTokens ? round(totalTokens) : null,
@@ -790,11 +776,7 @@ export function formatRunReportText(report: RunReportProjection): string {
       report.skills.renderedSkillNames.length > 0
         ? report.skills.renderedSkillNames.join(", ")
         : "none"
-    } demoted=${
-      report.skills.demotedSkillNames.length > 0
-        ? report.skills.demotedSkillNames.join(", ")
-        : "none"
-    } forcedCandidates=${report.skills.forcedCandidates}`,
+    }`,
   );
   lines.push(
     `Cost: totalTokens=${report.cost.totalTokens ?? "unavailable"}${

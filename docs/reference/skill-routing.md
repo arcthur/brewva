@@ -53,22 +53,17 @@ consequences.
 
 Skill routing is model-native and bounded by prompt context:
 
-- prompt-visible SkillCards are pre-filtered by explicit `$skill` mention,
-  `selection.path_globs` against paths named in the prompt, `selection.path_globs`
-  against recently touched tool paths (`recent_path`, from committed
-  `tool.invocation.started` receipts — the work's location counts even when the
-  prompt names no path), `name`, and shared-search-tokenized `description` /
-  `selection.when_to_use` text match
-- text matching is two-tiered: common intent words (the stop-word list —
-  plan, review, test, code, ...) can corroborate a match but never establish
-  one; at least one discriminative token overlap is always required, and a
-  single discriminative token establishes the match on its own only when it
-  is long (>= 8 chars) or appears in the SkillCard's name
-- Chinese task wording gets a small runtime keyword bridge before text matching
-  so prompts like "核心架构图" can match English SkillCard descriptions without
-  adding trigger metadata to `SKILL.md`; bridge keywords stay discriminative
-  even when they collide with stop words, and bridges fire only on non-ASCII
-  matches
+- prompt-visible SkillCards are pre-filtered by four DETERMINISTIC reasons only:
+  explicit `$skill` mention, `selection.path_globs` against paths named in the
+  prompt, `selection.path_globs` against recently touched tool paths
+  (`recent_path`, from committed `tool.committed` receipts — the work's location
+  counts even when the prompt names no path), and whole-word `name` match
+- the selector does no fuzzy prose matching. The former tokenized `text_match`
+  (the stop-word list, discriminative-token rules) and the Chinese keyword bridge
+  were removed: surfacing a skill by `description` / `selection.when_to_use`
+  overlap is now `discover_skills`' explicit, model-invoked job. The selector
+  fires only on the deterministic triggers above, and the always-visible catalog
+  guarantees a scorer miss can never hide a skill's existence
 - shortlisted entries render with `name`, `category`, `filePath`,
   `selectionReasons`, `description`, and any available `whenToUse` or
   `pathGlobs`
@@ -109,7 +104,7 @@ a SkillCard never grants authority by being selected.
 The context-excluded custom message carries explicit mention names, selection
 id, selection mode, rendered reasons, counts, render metadata, and the previous
 selection's ADOPTION line (how many rendered SkillCards actually had their
-SKILL.md read afterwards, projected from committed `tool.invocation.started`
+SKILL.md read afterwards, projected from committed `tool.committed`
 receipts). Offered-versus-read is the measurable definition of hit quality;
 selection changes are judged against it. Window semantics: the latest VISIBLE
 selection is found among the last 8 selection receipts, and reads are counted
@@ -142,11 +137,13 @@ attention stays with the model; a Tier-3 gate would be behavior-changing yet not
 replay-derived, which the axiom forbids.
 
 The sole registered Tier-2 exception is selection-field ranking: the
-deterministic selector reads `selection.path_globs`, `selection.when_to_use`,
-`name`, and `description` to order an advisory SkillCard shortlist (see Advisory
-Shortlist above). It produces a ranking the model can ignore, not a gate. Any
-new descriptive-to-runtime read site must be registered here explicitly, or it
-is a Tier-3 violation.
+deterministic selector reads `selection.path_globs` and `name` to order an
+advisory SkillCard shortlist (see Advisory Shortlist above). It produces a
+ranking the model can ignore, not a gate. (`description` and
+`selection.when_to_use` feed only the Tier-1 catalog VIEW, never selection — the
+fuzzy `text_match` reason that once read them was removed.) Any new
+descriptive-to-runtime read site must be registered here explicitly, or it is a
+Tier-3 violation.
 
 Cross-skill handoff references in skill bodies — a verb from the closed set
 `escalate to`, `hand off to`, `route to` (the one-word `handoff to` spelling is

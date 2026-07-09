@@ -149,13 +149,11 @@ export {
   type ToolSurfaceRuntime,
 } from "./tools/tool-surface.js";
 export {
-  buildForcedSkillCandidates,
   buildSkillShortlistContextForPrompt,
   createSkillSelectionLifecycle,
   describeAvailableSkillForDisplay,
   explicitSkillMentionNamesFromReceipt,
   formatSkillSelectionSection,
-  projectGreenfieldImplementSignal,
   readLatestSkillSelectionReceipt,
   skillSelectionSummaryForTrace,
   type AvailableSkillPromptContext,

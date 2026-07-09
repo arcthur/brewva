@@ -1,10 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillDocument } from "@brewva/brewva-vocabulary/session";
 import {
-  buildForcedSkillCandidates,
   buildSkillShortlistContextForPrompt,
   createSkillSelectionLifecycle,
-  projectGreenfieldImplementSignal,
   type SkillSelectionRuntime,
 } from "../../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
 
@@ -203,7 +201,7 @@ describe("hosted advisory skill shortlist context", () => {
     expect(result.renderedSection).toContain("Do not carry a SkillCard workflow into later turns");
   });
 
-  test("selects by path_glob, name, and description text match", () => {
+  test("selects by path_glob and name (deterministic reasons only)", () => {
     const { runtime } = createRuntime(createSkillCatalog());
 
     const pathGlob = buildSkillShortlistContextForPrompt({
@@ -222,7 +220,7 @@ describe("hosted advisory skill shortlist context", () => {
       runtime,
       prompt: "Audit docs/solutions/model-interface.md.",
     });
-    const nameAndText = buildSkillShortlistContextForPrompt({
+    const nameMatch = buildSkillShortlistContextForPrompt({
       runtime,
       prompt: "Run runtime-forensics and check database rollback safety.",
     });
@@ -252,55 +250,24 @@ describe("hosted advisory skill shortlist context", () => {
       score: 400,
       filePath: "/skills/code-review/SKILL.md",
     });
-    // "Audit ..." also carries the docs-audit NAME token, so the name-anchored
-    // text match joins the glob reason.
+    // A docs path with no name/mention token: docs-audit shortlists on the glob
+    // alone. The auto text-match reason is gone — surfacing a skill by prose
+    // overlap is now discover_skills' explicit job, not the selector's.
     expect(directoryPathGlob.receipt.renderedSkillReasons).toContainEqual({
       name: "docs-audit",
       category: "docs",
-      reasons: ["path_glob", "text_match"],
-      reasonCount: 2,
+      reasons: ["path_glob"],
+      reasonCount: 1,
       score: 400,
       filePath: "/skills/docs-audit/SKILL.md",
     });
-    expect(nameAndText.receipt.renderedSkillReasons.map((entry) => entry.name)).toEqual([
+    // "runtime-forensics" appears as a whole word -> name_match. migration-safety,
+    // which used to join on a description text_match ("database rollback"), no
+    // longer auto-shortlists without a deterministic trigger.
+    expect(nameMatch.receipt.renderedSkillReasons.map((entry) => entry.name)).toEqual([
       "runtime-forensics",
-      "migration-safety",
     ]);
-    expect(nameAndText.receipt.renderedSkillReasons[0]?.reasons).toContain("name_match");
-    expect(nameAndText.receipt.renderedSkillReasons[1]?.reasons).toEqual(["text_match"]);
-  });
-
-  test("bridges Chinese task wording to English SkillCard descriptions without trigger metadata", () => {
-    const { runtime } = createRuntime([
-      skill({
-        name: "architecture",
-        category: "core",
-        description:
-          "Find deepening opportunities by assessing architecture, module boundaries, interface burden, and design quality.",
-        whenToUse: "Use when a task asks for architecture improvement or module design analysis.",
-      }),
-      skill({
-        name: "docs-audit",
-        category: "docs",
-        description: "Audit documentation coherence, references, and publishing readiness.",
-      }),
-    ]);
-
-    const result = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "brewva 运行有没有核心架构图看下",
-    });
-
-    expect(renderedNames(result.renderedSection)).toEqual(["architecture"]);
-    expect(result.receipt.renderedSkillReasons).toContainEqual({
-      name: "architecture",
-      category: "core",
-      reasons: ["text_match"],
-      reasonCount: 1,
-      score: 100,
-      filePath: "/skills/architecture/SKILL.md",
-    });
-    expect(result.renderedSection).not.toContain("triggers:");
+    expect(nameMatch.receipt.renderedSkillReasons[0]?.reasons).toContain("name_match");
   });
 
   test("treats directory path_globs as descendant matches", () => {
@@ -363,18 +330,23 @@ describe("hosted advisory skill shortlist context", () => {
   });
 
   test("caps deterministic shortlist at eight cards and records omission counts", () => {
+    // Ten skills all scoped to the same path glob: the prompt path matches every
+    // one, so all ten are deterministic path_glob candidates (score 400) and the
+    // 8-card cap bites, omitting the two alphabetically-last by the deterministic
+    // tie-break.
     const skills = Array.from({ length: 10 }, (_, index) =>
       skill({
         name: `common-${index}`,
         category: "core",
         description: `Skill ${index} for common routing selection.`,
+        pathGlobs: ["src/**"],
       }),
     );
     const { runtime } = createRuntime(skills);
 
     const result = buildSkillShortlistContextForPrompt({
       runtime,
-      prompt: "common routing",
+      prompt: "review src/app.ts",
     });
 
     expect(result.receipt).toMatchObject({
@@ -671,89 +643,6 @@ describe("skill catalog layer and widened signals", () => {
     expect(promptPathRendered?.score).toBe(400);
   });
 
-  test("a forced candidate (P1 post-green review nudge) shortlists a skill the prompt never names — data, not a branch", () => {
-    const { runtime } = createRuntime([
-      skill({
-        name: "review",
-        description: "Adversarial independent review pass after implementation.",
-      }),
-      skill({ name: "changelog-format", description: "Formatting of changelog entries." }),
-    ]);
-    const result = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "please keep going",
-      forcedCandidates: new Map([["review", "post_green_review"]]),
-    });
-
-    // The nudge is data through the generic scorer: `review` shortlists with the
-    // post_green_review reason though the prompt has no matching token, exactly
-    // as the lifecycle injects it when projectPostGreenReviewSignal.active.
-    const reviewRendered = result.receipt.renderedSkillReasons.find(
-      (entry) => entry.name === "review",
-    );
-    expect(reviewRendered?.reasons).toContain("post_green_review");
-    // Recorded as accountable provenance on the selection receipt.
-    expect(result.receipt.forcedCandidates).toContainEqual({
-      skillName: "review",
-      reason: "post_green_review",
-    });
-    // Exactly the forced skill shortlists — the un-forced, unmentioned skill
-    // stays OUT (the nudge shortlists only what it names, no floodgates).
-    expect(renderedNames(result.renderedSection)).toEqual(["review"]);
-    expect(result.receipt.renderedSkillReasons.map((entry) => entry.name)).toEqual(["review"]);
-  });
-
-  test("stop-word overlap alone never matches, but corroborates a strong overlap", () => {
-    const { runtime } = createRuntime([
-      skill({
-        name: "review-planner",
-        description: "Plan review work for the code task.",
-      }),
-      skill({
-        name: "rollback-analysis",
-        description: "Analyze rollback plan risks in review.",
-      }),
-    ]);
-    // Only stop words overlap ("plan", "review", "code", "task"): no candidates.
-    const weakOnly = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "plan the review of this code task",
-    });
-    expect(weakOnly.receipt.candidateSkillCount).toBe(0);
-
-    // One strong token ("rollback") plus a weak corroboration ("review") matches.
-    const corroborated = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "review the rollback before shipping",
-    });
-    const names = corroborated.receipt.renderedSkillReasons.map((entry) => entry.name);
-    expect(names).toContain("rollback-analysis");
-    expect(names).not.toContain("review-planner");
-  });
-
-  test("a short discriminative token establishes a match when it names the skill", () => {
-    const { runtime } = createRuntime([
-      skill({ name: "credential-vault", description: "Credential vault audit tooling." }),
-      skill({ name: "review-planner", description: "Plan review work for the code task." }),
-    ]);
-    // "vault" is only 5 chars and the prompt offers no weak corroboration the
-    // skill text shares, but it IS the skill's name token: that anchors it.
-    const anchored = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "review the vault code",
-    });
-    const names = anchored.receipt.renderedSkillReasons.map((entry) => entry.name);
-    expect(names).toContain("credential-vault");
-    expect(names).not.toContain("review-planner");
-
-    // Without the discriminative token the same stop words establish nothing.
-    const stopOnly = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "review the code",
-    });
-    expect(stopOnly.receipt.candidateSkillCount).toBe(0);
-  });
-
   test("crafted skill names cannot smuggle markdown lines into prompt sections", () => {
     const { runtime } = createRuntime([
       skill({ name: "innocent\n# Injected Section", description: "Safe description." }),
@@ -761,88 +650,6 @@ describe("skill catalog layer and widened signals", () => {
     const result = buildSkillShortlistContextForPrompt({ runtime, prompt: "hello" });
     expect(result.catalogSection).not.toContain("\n# Injected Section");
     expect(result.catalogSection).toContain("- innocent # Injected Section: Safe description.");
-  });
-
-  test("CJK intent bridges survive stop-word filtering (计划 -> plan)", () => {
-    const { runtime } = createRuntime([
-      skill({
-        name: "planning-workflow",
-        description: "Plan strategy documents for multi-step efforts.",
-      }),
-    ]);
-    const result = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "帮我做一个迁移的计划和方案",
-    });
-    expect(result.receipt.renderedSkillReasons.map((entry) => entry.name)).toContain(
-      "planning-workflow",
-    );
-  });
-
-  test("a Latin token before the CJK trigger does not shadow the bridge", () => {
-    const { runtime } = createRuntime([
-      skill({
-        name: "audit-workflow",
-        description: "Audit trail tooling for workspace changes.",
-      }),
-    ]);
-    // Leftmost-match trap: with a Latin alternative in the bridge pattern,
-    // exec() would hit "review" first and the ASCII guard would drop the
-    // bridge even though 评审 is right there.
-    const mixed = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "帮我 review 一下这次评审的流程",
-    });
-    expect(mixed.receipt.renderedSkillReasons.map((entry) => entry.name)).toContain(
-      "audit-workflow",
-    );
-
-    // Pure-English "review" still establishes nothing on its own.
-    const english = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "review the workflow with this change",
-    });
-    expect(english.receipt.candidateSkillCount).toBe(0);
-  });
-
-  test("bridges a CJK greenfield prompt to the greenfield SkillCard deterministically", () => {
-    const { runtime } = createRuntime([
-      skill({
-        name: "greenfield",
-        description:
-          "Standing up a new project in an empty or foreign workspace with staged writes and ladder-based verification.",
-        whenToUse:
-          "Use when implementing a new application or package in an empty or foreign workspace where no repository conventions, checks, or instructions exist yet.",
-      }),
-      skill({
-        name: "implementation",
-        description: "Implement a change inside an existing project with established conventions.",
-      }),
-    ]);
-
-    // "从零搭一个新项目" (build a new project from zero): the greenfield bridge
-    // pattern must fire and shortlist greenfield deterministically, without
-    // relying on catalog luck (text_match alone, no explicit mention or path).
-    const greenfieldPrompt = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "帮我从零搭一个新项目，用什么脚手架初始化项目比较好",
-    });
-    expect(greenfieldPrompt.receipt.renderedSkillReasons.map((entry) => entry.name)).toContain(
-      "greenfield",
-    );
-    expect(
-      greenfieldPrompt.receipt.renderedSkillReasons.find((entry) => entry.name === "greenfield"),
-    ).toMatchObject({ reasons: ["text_match"] });
-
-    // A non-matching CJK prompt (no greenfield trigger terms) must not
-    // shortlist greenfield.
-    const unrelatedPrompt = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "帮我看看这段代码里的循环有没有问题",
-    });
-    expect(unrelatedPrompt.receipt.renderedSkillReasons.map((entry) => entry.name)).not.toContain(
-      "greenfield",
-    );
   });
 
   test("lifecycle derives recent paths and previous adoption from the event tape", () => {
@@ -969,163 +776,5 @@ describe("skill catalog layer and widened signals", () => {
     expect(String(thirdMessage.content)).toContain(
       "Previous Selection Adoption: 1/1 rendered SkillCards read (migration-safety)",
     );
-  });
-});
-
-// R1a: the routing activation. A greenfield-implement turn force-includes the
-// loop's own skills (build + verify + review) so they render instead of losing an
-// alphabetical tie to incidental text matches — advisory, model-bypassable.
-describe("projectGreenfieldImplementSignal — greenfield-implement task-shape proxy", () => {
-  const active = (prompt: string, recentToolPaths: readonly string[] = []): boolean =>
-    projectGreenfieldImplementSignal({ prompt, recentToolPaths }).active;
-
-  test("active: a CJK 'implement a new app' prompt on an untouched session (the up4 shape)", () => {
-    expect(active("请实现一个 macOS menu-bar 语音输入法应用")).toBe(true);
-  });
-
-  test("active: an English 'build a new CLI tool' prompt on an untouched session", () => {
-    expect(active("Please build a new CLI tool that formats logs")).toBe(true);
-  });
-
-  test("inactive once the session has touched a path (the empty-workspace proxy is gone)", () => {
-    expect(active("请实现一个新应用", ["src/main.ts"])).toBe(false);
-  });
-
-  test("inactive without a new-artifact cue (an in-place edit intent)", () => {
-    expect(active("实现这个函数的排序逻辑")).toBe(false);
-  });
-
-  test("inactive without an implement verb (a pure analysis prompt naming an app)", () => {
-    expect(active("分析这个应用的调用链路")).toBe(false);
-  });
-});
-
-describe("greenfield-implement forced-candidate bundle renders the loop's skills", () => {
-  test("all four bundle skills shortlist with the greenfield_implement reason though the prompt has no token", () => {
-    const { runtime } = createRuntime([
-      skill({
-        name: "greenfield",
-        description: "Standing up a new project in an empty workspace.",
-      }),
-      skill({
-        name: "implementation",
-        description: "Code-change execution with scope discipline.",
-      }),
-      skill({ name: "verifier", description: "Behavior validation through adversarial probes." }),
-      skill({ name: "review", description: "Findings-first risk review for diffs." }),
-      skill({ name: "changelog-format", description: "Formatting of changelog entries." }),
-    ]);
-    const result = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "please keep going",
-      forcedCandidates: new Map([
-        ["greenfield", "greenfield_implement"],
-        ["implementation", "greenfield_implement"],
-        ["verifier", "greenfield_implement"],
-        ["review", "greenfield_implement"],
-      ]),
-    });
-
-    for (const name of ["greenfield", "implementation", "verifier", "review"]) {
-      const rendered = result.receipt.renderedSkillReasons.find((entry) => entry.name === name);
-      expect(rendered?.reasons).toContain("greenfield_implement");
-    }
-    // The un-forced skill stays OUT — the nudge shortlists only what it names.
-    expect(renderedNames(result.renderedSection)).not.toContain("changelog-format");
-  });
-});
-
-describe("buildForcedSkillCandidates — nudge precedence", () => {
-  test("both signals active: review keeps the more-specific post_green_review; the rest are greenfield_implement", () => {
-    const forced = buildForcedSkillCandidates({
-      postGreenReviewActive: true,
-      greenfieldImplementActive: true,
-    });
-    expect(forced.get("review")).toBe("post_green_review");
-    expect(forced.get("greenfield")).toBe("greenfield_implement");
-    expect(forced.get("implementation")).toBe("greenfield_implement");
-    expect(forced.get("verifier")).toBe("greenfield_implement");
-  });
-
-  test("only greenfield active: review is forced with greenfield_implement", () => {
-    const forced = buildForcedSkillCandidates({
-      postGreenReviewActive: false,
-      greenfieldImplementActive: true,
-    });
-    expect(forced.get("review")).toBe("greenfield_implement");
-    expect([...forced.keys()].toSorted()).toEqual([
-      "greenfield",
-      "implementation",
-      "review",
-      "verifier",
-    ]);
-  });
-
-  test("only post_green active: just review, no bundle", () => {
-    const forced = buildForcedSkillCandidates({
-      postGreenReviewActive: true,
-      greenfieldImplementActive: false,
-    });
-    expect([...forced.entries()]).toEqual([["review", "post_green_review"]]);
-  });
-
-  test("neither active: empty", () => {
-    const forced = buildForcedSkillCandidates({
-      postGreenReviewActive: false,
-      greenfieldImplementActive: false,
-    });
-    expect(forced.size).toBe(0);
-  });
-});
-
-// R1b: the TF-IDF relevance tie-break replaces the alphabetical cull among
-// equal-priority (score + reason-count) candidates, so the card cap keeps the
-// most prompt-relevant skills, not the alphabetically-first ones.
-describe("R1b: TF-IDF relevance tie-break among equal-priority candidates", () => {
-  const twoTiedSkills = () => [
-    skill({ name: "alpha-helper", description: "general project helper for indexing tasks" }),
-    skill({
-      name: "zeta-indexing",
-      description: "database index tuning and query index optimization for indexing",
-    }),
-  ];
-  const prompt = "optimize the database index and query indexing";
-
-  test("both tie at text_match, but the more prompt-relevant skill sorts first (not alphabetical)", () => {
-    const { runtime } = createRuntime(twoTiedSkills());
-    const result = buildSkillShortlistContextForPrompt({ runtime, prompt });
-    // Both are text_match candidates (score 100, one reason); an alphabetical tie
-    // would put alpha-helper first, but TF-IDF relevance ranks zeta-indexing above it.
-    const reasons = result.receipt.renderedSkillReasons;
-    expect(reasons.find((entry) => entry.name === "zeta-indexing")?.reasons).toEqual([
-      "text_match",
-    ]);
-    expect(reasons.find((entry) => entry.name === "alpha-helper")?.reasons).toEqual(["text_match"]);
-    expect(renderedNames(result.renderedSection)).toEqual(["zeta-indexing", "alpha-helper"]);
-  });
-
-  test("under a 1-card cap the relevant skill survives over the alphabetically-earlier one", () => {
-    const { runtime } = createRuntime(twoTiedSkills());
-    const result = buildSkillShortlistContextForPrompt({ runtime, prompt, maxRenderedSkills: 1 });
-    expect(renderedNames(result.renderedSection)).toEqual(["zeta-indexing"]);
-  });
-
-  test("a relevance tie (no prompt-token overlap) falls back to deterministic alphabetical order", () => {
-    const { runtime } = createRuntime([
-      skill({ name: "zebra", description: "zzz striping" }),
-      skill({ name: "apple", description: "aaa orchard" }),
-    ]);
-    // Both forced (score 330, one reason), and the prompt shares no token with
-    // either skill's text -> both relevance 0 -> the tie-break falls through to the
-    // deterministic alphabetical fallback (apple before zebra), never destabilized.
-    const result = buildSkillShortlistContextForPrompt({
-      runtime,
-      prompt: "qqq unrelated directive",
-      forcedCandidates: new Map([
-        ["zebra", "greenfield_implement"],
-        ["apple", "greenfield_implement"],
-      ]),
-    });
-    expect(renderedNames(result.renderedSection)).toEqual(["apple", "zebra"]);
   });
 });

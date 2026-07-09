@@ -1,25 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import {
   formatSkillAdoptionLine,
   projectLatestSkillAdoption,
-  projectPostGreenReviewSignal,
   projectRecentToolTargetPaths,
   queryRecentSkillProjectionInputs,
   readTargetMatchesSkillFile,
   type SkillProjectionEvent,
 } from "../../../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-adoption.js";
-
-function verificationReceiptEvent(input: {
-  timestamp: number;
-  outcome: string;
-}): SkillProjectionEvent {
-  return {
-    type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
-    timestamp: input.timestamp,
-    payload: { outcome: input.outcome },
-  };
-}
 
 function selectionEvent(input: {
   timestamp: number;
@@ -34,9 +21,9 @@ function selectionEvent(input: {
       renderedSkillReasons: input.rendered.map((entry) => ({
         name: entry.name,
         filePath: entry.filePath,
-        reasons: ["text_match"],
+        reasons: ["name_match"],
         reasonCount: 1,
-        score: 100,
+        score: 200,
         category: "core",
       })),
     },
@@ -201,9 +188,6 @@ describe("queryRecentSkillProjectionInputs", () => {
     expect(queryRecentSkillProjectionInputs(undefined, "s")).toEqual({
       recentInvocations: [],
       adoptionEvents: [],
-      neglectEvents: [],
-      neglectWindowTruncated: false,
-      verificationEvents: [],
     });
     expect(
       queryRecentSkillProjectionInputs(
@@ -217,9 +201,6 @@ describe("queryRecentSkillProjectionInputs", () => {
     ).toEqual({
       recentInvocations: [],
       adoptionEvents: [],
-      neglectEvents: [],
-      neglectWindowTruncated: false,
-      verificationEvents: [],
     });
   });
 
@@ -355,80 +336,5 @@ describe("projectRecentToolTargetPaths", () => {
       8,
     );
     expect(paths).toEqual(["/abs/y.ts", "packages/core", "packages/cli", "src/x.ts"]);
-  });
-});
-
-// P1 post-green nudge — SURFACE 2 gate. This projection decides whether the
-// skill lifecycle force-shortlists `review`. It reads the SAME committed
-// boundary as the tools-side debt marker; without a direct test a regression
-// (e.g. reading a never-emitted annotation, or a stale-pass gate) would ship
-// green exactly as the original dead projection did.
-describe("projectPostGreenReviewSignal", () => {
-  const REVIEW_SKILL = "/skills/core/review/SKILL.md";
-  const freshWrite = invocationEvent({
-    timestamp: 10,
-    toolName: "write",
-    args: { path: "src/a.ts" },
-  });
-  const greenPass = verificationReceiptEvent({ timestamp: 20, outcome: "pass" });
-
-  test("active: fresh code + latest receipt pass + review not adopted + a review skill exists", () => {
-    expect(
-      projectPostGreenReviewSignal({
-        invocationEvents: [freshWrite],
-        verificationEvents: [greenPass],
-        reviewSkillFilePath: REVIEW_SKILL,
-      }),
-    ).toEqual({
-      freshCodeWritten: true,
-      verificationGreen: true,
-      reviewAdopted: false,
-      active: true,
-    });
-  });
-
-  test("inactive without fresh code — nothing to review", () => {
-    const signal = projectPostGreenReviewSignal({
-      invocationEvents: [
-        invocationEvent({ timestamp: 10, toolName: "read", args: { path: "src/a.ts" } }),
-      ],
-      verificationEvents: [greenPass],
-      reviewSkillFilePath: REVIEW_SKILL,
-    });
-    expect(signal.freshCodeWritten).toBe(false);
-    expect(signal.active).toBe(false);
-  });
-
-  test("inactive when the LATEST receipt is a fail — an older pass never outweighs a newer fail", () => {
-    const signal = projectPostGreenReviewSignal({
-      invocationEvents: [freshWrite],
-      verificationEvents: [greenPass, verificationReceiptEvent({ timestamp: 30, outcome: "fail" })],
-      reviewSkillFilePath: REVIEW_SKILL,
-    });
-    expect(signal.verificationGreen).toBe(false);
-    expect(signal.active).toBe(false);
-  });
-
-  test("inactive once the review skill has been read (adopted) — the nudge does not repeat", () => {
-    const signal = projectPostGreenReviewSignal({
-      invocationEvents: [
-        freshWrite,
-        invocationEvent({ timestamp: 25, toolName: "read", args: { path: REVIEW_SKILL } }),
-      ],
-      verificationEvents: [greenPass],
-      reviewSkillFilePath: REVIEW_SKILL,
-    });
-    expect(signal.reviewAdopted).toBe(true);
-    expect(signal.active).toBe(false);
-  });
-
-  test("inactive when no review skill exists to nudge toward (reviewSkillFilePath null)", () => {
-    expect(
-      projectPostGreenReviewSignal({
-        invocationEvents: [freshWrite],
-        verificationEvents: [greenPass],
-        reviewSkillFilePath: null,
-      }).active,
-    ).toBe(false);
   });
 });

@@ -1,9 +1,4 @@
 import { basename } from "node:path";
-import {
-  scoreDocumentsByTfIdf,
-  tokenizeSearchContent,
-  tokenizeSearchQuery,
-} from "@brewva/brewva-search";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { compactWhitespace, truncateText } from "@brewva/brewva-std/text";
 import type {
@@ -26,8 +21,6 @@ import { recordRuntimeSkillSelection } from "../runtime-ports.js";
 import {
   formatSkillAdoptionLine,
   projectLatestSkillAdoption,
-  projectNeglectedTextMatchOffers,
-  projectPostGreenReviewSignal,
   projectRecentToolTargetPaths,
   queryRecentSkillProjectionInputs,
   type SkillAdoptionSample,
@@ -36,8 +29,6 @@ import {
 
 const MAX_RENDERED_SKILLCARDS = 8;
 const HIDDEN_CATEGORIES = new Set<LoadableSkillCategory>(["internal"]);
-// The product-loop review skill the post-green nudge force-shortlists.
-const REVIEW_SKILL_NAME = "review";
 // The always-visible catalog layer: names + one short line each. Its content
 // depends only on the catalog (never on the prompt), so the section is
 // byte-stable across turns and prompt-cache friendly. Visibility is the point:
@@ -48,85 +39,6 @@ const CATALOG_LINE_MAX_CHARS = 120;
 // against path_globs — the OUTPUT side. The queried event-tail size lives in
 // skill-adoption.ts as RECENT_INVOCATION_QUERY_WINDOW (the INPUT side).
 const RECENT_TOOL_PATH_LIMIT = 8;
-const STOP_WORDS = new Set([
-  "about",
-  "after",
-  "against",
-  "agent",
-  "before",
-  "build",
-  "change",
-  "changes",
-  "code",
-  "create",
-  "current",
-  "debug",
-  "document",
-  "file",
-  "files",
-  "from",
-  "have",
-  "implement",
-  "implementation",
-  "into",
-  "need",
-  "plan",
-  "project",
-  "request",
-  "review",
-  "task",
-  "test",
-  "tests",
-  "that",
-  "this",
-  "update",
-  "when",
-  "with",
-  "work",
-  "workflow",
-]);
-const CJK_SKILL_INTENT_KEYWORD_BRIDGES: readonly {
-  readonly pattern: RegExp;
-  readonly keywords: readonly string[];
-}[] = [
-  {
-    pattern: /架构图|系统图|核心架构|调用链|链路|架构|结构|模块|边界|接口|设计/u,
-    keywords: ["architecture", "design", "module", "interface", "diagram", "system"],
-  },
-  {
-    pattern: /仓库|代码库|项目结构|目录结构/u,
-    keywords: ["repository", "analysis", "mapping"],
-  },
-  {
-    pattern: /报错|错误|异常|卡住|死循环|根因|定位/u,
-    keywords: ["debugging", "failure", "root", "cause"],
-  },
-  {
-    pattern: /审查|评审|复查/u,
-    keywords: ["review", "audit"],
-  },
-  {
-    pattern: /计划|方案|规划/u,
-    keywords: ["plan", "strategy"],
-  },
-  {
-    pattern: /实现|修复|改代码|开发/u,
-    keywords: ["implementation", "code"],
-  },
-  {
-    pattern: /文档|说明|指南/u,
-    keywords: ["documentation", "docs", "audit"],
-  },
-  {
-    pattern: /测试|验证|校验/u,
-    keywords: ["test", "verification", "verifier"],
-  },
-  {
-    pattern: /从零|从头搭|新项目|脚手架|初始化项目/u,
-    keywords: ["greenfield", "staged", "workspace", "empty", "foreign"],
-  },
-];
-
 export type SkillSelectionTrigger = "user_message" | "discover_skills";
 export type SkillSelectionMode =
   | "shortlist_prompt_context"
@@ -136,8 +48,6 @@ export type SkillSelectionMode =
 export type SkillSelectionReason =
   | "explicit_mention"
   | "path_glob"
-  | "post_green_review"
-  | "greenfield_implement"
   | "recent_path"
   | "name_match"
   | "text_match";
@@ -146,84 +56,12 @@ const REASON_PRIORITY: Record<SkillSelectionReason, number> = {
   explicit_mention: 500,
   // A path the user named in the prompt outranks one the session merely touched.
   path_glob: 400,
-  // Fresh code verified green with review never adopted: the review skill
-  // outranks incidental signals but never an operator-named path or mention.
-  post_green_review: 350,
-  // A greenfield-implement turn force-includes its build+verify+review bundle: a
-  // task-shape nudge that outranks incidental name/text matches so the loop's own
-  // skills render, but yields to operator-named paths/mentions and the post-green
-  // review nudge.
-  greenfield_implement: 330,
   recent_path: 300,
   name_match: 200,
+  // Produced ONLY by discover_skills (an explicit, model-invoked text search).
+  // The auto-selector no longer fuzzy-text-matches, so nothing else mints this.
   text_match: 100,
 };
-
-/**
- * The skills a greenfield-implement turn should always see: build the new thing
- * (`greenfield`), execute with scope discipline (`implementation`), and — since a
- * fresh workspace has had no independent review yet — the `verifier`/`review`
- * pair that grades and closes requirement atoms. These are ADVISORY forced
- * candidates (axiom 18): they enter shortlist ranking so the loop's own skills
- * render instead of losing an alphabetical tie to incidental text matches; the
- * model may still ignore any rendered card.
- */
-const GREENFIELD_IMPLEMENT_SKILL_BUNDLE = [
-  "greenfield",
-  "implementation",
-  "verifier",
-  REVIEW_SKILL_NAME,
-] as const;
-
-// Proxy for "implement a new application/package in an empty workspace" from the
-// two facts the selector has WITHOUT a disk read: an implement-a-new-artifact
-// intent in the prompt, and no tool paths touched yet this session. This is the
-// RFC's stated interim proxy; a true workspace-emptiness input (a turn-entry
-// readdir) is the flagged follow-up. Advisory only, so proxy imprecision at most
-// makes a few extra cards visible for the model to ignore.
-const GREENFIELD_IMPLEMENT_VERB =
-  /实现|开发|搭建|构建|create|build|implement|scaffold|bootstrap|stand\s+up/iu;
-const GREENFIELD_IMPLEMENT_ARTIFACT =
-  /从零|从头|新项目|脚手架|初始化|新建|应用|程序|\bnew\b|\b(?:app|application|service|package|library|cli|tool|project|program|extension)\b/iu;
-
-/**
- * Whether this turn is a greenfield-implement shape (see the two proxy regexes).
- * When active, the selector force-includes {@link GREENFIELD_IMPLEMENT_SKILL_BUNDLE}.
- */
-export function projectGreenfieldImplementSignal(input: {
-  readonly prompt: string;
-  readonly recentToolPaths: readonly string[];
-}): { readonly active: boolean } {
-  const active =
-    input.recentToolPaths.length === 0 &&
-    GREENFIELD_IMPLEMENT_VERB.test(input.prompt) &&
-    GREENFIELD_IMPLEMENT_ARTIFACT.test(input.prompt);
-  return { active };
-}
-
-/**
- * Merge the turn's product-loop nudges into the forced-candidate map, precedence
- * fixed by insertion order: `post_green_review` seeds `review` FIRST, so when a
- * greenfield-implement turn's bundle also names `review` the `has` guard keeps the
- * more specific, higher-priority `post_green_review` reason. Single-homed so the
- * precedence rule lives in one tested place, not inline in the lifecycle.
- */
-export function buildForcedSkillCandidates(input: {
-  readonly postGreenReviewActive: boolean;
-  readonly greenfieldImplementActive: boolean;
-}): Map<string, SkillSelectionReason> {
-  const forced = new Map<string, SkillSelectionReason>(
-    input.postGreenReviewActive ? [[REVIEW_SKILL_NAME, "post_green_review"]] : [],
-  );
-  if (input.greenfieldImplementActive) {
-    for (const name of GREENFIELD_IMPLEMENT_SKILL_BUNDLE) {
-      if (!forced.has(name)) {
-        forced.set(name, "greenfield_implement");
-      }
-    }
-  }
-  return forced;
-}
 
 export interface SkillSelectionRuntime {
   ops: {
@@ -301,12 +139,6 @@ export interface RenderedSkillReason {
   filePath: string;
 }
 
-/** A product-loop nudge: force-include this skill with this reason. */
-export interface ForcedSkillCandidate {
-  skillName: string;
-  reason: SkillSelectionReason;
-}
-
 export interface SkillSelectionReceipt {
   selectionId: string;
   trigger: SkillSelectionTrigger;
@@ -318,10 +150,6 @@ export interface SkillSelectionReceipt {
   selectionMode: SkillSelectionMode;
   promptPaths: string[];
   recentToolPaths: string[];
-  /** Skills dropped from pure-text_match candidacy after repeated ignored offers. */
-  demotedSkillNames: string[];
-  /** Product-loop nudges that force-included skills this turn, with reasons. */
-  forcedCandidates: ForcedSkillCandidate[];
   renderedSkillReasons: RenderedSkillReason[];
   skillInvocationRecords: SkillInvocationRecord[];
   renderedSkillContext: {
@@ -354,12 +182,6 @@ interface SkillCandidate {
   skill: AvailableSkillPromptContext;
   reasons: SkillSelectionReason[];
   score: number;
-  /**
-   * TF-IDF relevance of the skill's text to the prompt, over the candidate
-   * corpus — the tie-break among equal-priority (score + reason-count) candidates,
-   * so the 8-card cap keeps the MOST RELEVANT eight, not the alphabetically-first.
-   */
-  relevance: number;
 }
 
 interface RenderedSkillShortlist {
@@ -370,8 +192,6 @@ interface RenderedSkillShortlist {
   promptPaths: string[];
   recentToolPaths: string[];
   selectionMode: SkillSelectionMode;
-  demotedSkillNames: string[];
-  forcedCandidates: ForcedSkillCandidate[];
   overBudgetReason?: string;
 }
 
@@ -459,114 +279,6 @@ function toPromptContext(skill: SkillDocument): AvailableSkillPromptContext {
   };
 }
 
-function collectCjkBridgeKeywords(prompt: string): Set<string> {
-  const keywords = new Set<string>();
-  for (const bridge of CJK_SKILL_INTENT_KEYWORD_BRIDGES) {
-    const match = bridge.pattern.exec(prompt);
-    // Bridges translate CJK intent, so patterns must hold ONLY non-ASCII
-    // trigger words: a Latin alternative would both be rejected here (it must
-    // not boost English prompts past the stop-word tiering) and, worse,
-    // shadow a CJK trigger later in the same prompt because exec() returns
-    // the leftmost match. The guard stays as the behavioral backstop.
-    if (!match || !/\P{ASCII}/u.test(match[0])) {
-      continue;
-    }
-    for (const keyword of bridge.keywords) {
-      keywords.add(keyword);
-    }
-  }
-  return keywords;
-}
-
-interface TextMatchTokens {
-  /** Discriminative tokens: non-stop-word, length >= 4 (or non-ASCII). */
-  readonly strong: ReadonlySet<string>;
-  /** Common intent words (STOP_WORDS): count only alongside a strong overlap. */
-  readonly weak: ReadonlySet<string>;
-}
-
-function partitionTextMatchTokens(tokens: readonly string[]): {
-  strong: Set<string>;
-  weak: Set<string>;
-} {
-  const strong = new Set<string>();
-  const weak = new Set<string>();
-  for (const token of tokens) {
-    if (!/^[a-z0-9_-]+$/u.test(token)) {
-      strong.add(token);
-      continue;
-    }
-    if (STOP_WORDS.has(token)) {
-      weak.add(token);
-      continue;
-    }
-    if (token.length >= 4) {
-      strong.add(token);
-    }
-  }
-  return { strong, weak };
-}
-
-function tokenizePromptForTextMatch(prompt: string): TextMatchTokens {
-  const partitioned = partitionTextMatchTokens(tokenizeSearchQuery(prompt, { minLength: 2 }));
-  // Bridge keywords are deliberate intent signals, not lexical noise: they stay
-  // STRONG even when the same word sits in STOP_WORDS (计划 -> plan, 审查 ->
-  // review). Filtering them as stop words used to neutralize half the bridges.
-  for (const keyword of collectCjkBridgeKeywords(prompt)) {
-    partitioned.strong.add(keyword);
-    partitioned.weak.delete(keyword);
-  }
-  return partitioned;
-}
-
-function tokenizeSkillTextForTextMatch(text: string): { strong: Set<string>; weak: Set<string> } {
-  return partitionTextMatchTokens(tokenizeSearchContent(text, { minLength: 2 }));
-}
-
-/**
- * A text match needs at least one STRONG overlap. A single strong token is
- * enough on its own when it is long (>= 8 chars) or appears in the skill's
- * NAME (name tokens are curated, so "vault" alone may establish a match with
- * credential-vault); otherwise a second overlap is required, and that second
- * overlap may be a weak (stop-word) token — common intent words corroborate a
- * match but can never establish one.
- */
-function hasTextMatch(promptTokens: TextMatchTokens, skill: AvailableSkillPromptContext): boolean {
-  const skillTokens = tokenizeSkillTextForTextMatch(
-    [skill.description, skill.whenToUse ?? ""].join(" "),
-  );
-  const skillNameTokens = tokenizeSkillTextForTextMatch(
-    skill.name.replaceAll(/[-_]/gu, " "),
-  ).strong;
-  // A prompt-strong token may sit in the skill's WEAK tier when it is a
-  // stop-word promoted by a CJK intent bridge (计划 -> plan): the deliberate
-  // signal still counts. Ordinary prompt-strong tokens are never stop-words,
-  // so for them this is exactly strong-vs-strong.
-  let strongOverlap = 0;
-  for (const token of promptTokens.strong) {
-    if (
-      !skillTokens.strong.has(token) &&
-      !skillTokens.weak.has(token) &&
-      !skillNameTokens.has(token)
-    ) {
-      continue;
-    }
-    strongOverlap += 1;
-    if (strongOverlap >= 2 || token.length >= 8 || skillNameTokens.has(token)) {
-      return true;
-    }
-  }
-  if (strongOverlap === 0) {
-    return false;
-  }
-  for (const token of skillTokens.weak) {
-    if (promptTokens.weak.has(token)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function rankReasons(reasons: ReadonlySet<SkillSelectionReason>): SkillSelectionReason[] {
   return [...reasons].toSorted(
     (left, right) => REASON_PRIORITY[right] - REASON_PRIORITY[left] || left.localeCompare(right),
@@ -580,10 +292,8 @@ function scoreReasons(reasons: readonly SkillSelectionReason[]): number {
 function buildCandidate(input: {
   skill: AvailableSkillPromptContext;
   prompt: string;
-  promptTokens: TextMatchTokens;
   promptPaths: readonly string[];
   recentToolPaths: readonly string[];
-  forcedCandidates: ReadonlyMap<string, SkillSelectionReason>;
 }): SkillCandidate | null {
   const reasons = new Set<SkillSelectionReason>();
   if (hasExplicitMention(input.prompt, input.skill.name)) {
@@ -591,12 +301,6 @@ function buildCandidate(input: {
   }
   if (input.skill.pathGlobs.some((pathGlob) => pathGlobMatches(pathGlob, input.promptPaths))) {
     reasons.add("path_glob");
-  }
-  // A product-loop nudge (e.g. post-green review) force-includes a skill with
-  // its own reason; the scorer stays generic — nudges are data, not branches.
-  const forcedReason = input.forcedCandidates.get(input.skill.name);
-  if (forcedReason) {
-    reasons.add(forcedReason);
   }
   if (
     input.recentToolPaths.length > 0 &&
@@ -607,9 +311,6 @@ function buildCandidate(input: {
   if (hasNameMatch(input.prompt, input.skill.name)) {
     reasons.add("name_match");
   }
-  if (hasTextMatch(input.promptTokens, input.skill)) {
-    reasons.add("text_match");
-  }
   if (reasons.size === 0) {
     return null;
   }
@@ -618,9 +319,6 @@ function buildCandidate(input: {
     skill: input.skill,
     reasons: rankedReasons,
     score: scoreReasons(rankedReasons),
-    // Relevance is filled once the candidate corpus is known (TF-IDF needs the
-    // corpus for IDF); the shortlist pipeline overwrites this before sorting.
-    relevance: 0,
   };
 }
 
@@ -628,32 +326,8 @@ function compareCandidates(left: SkillCandidate, right: SkillCandidate): number 
   return (
     right.score - left.score ||
     right.reasons.length - left.reasons.length ||
-    // Among equal-priority candidates (e.g. an all-`text_match` collision at
-    // score 100), the more prompt-relevant skill wins — this replaces the old
-    // alphabetical cull so the 8-card cap keeps the relevant eight (R1b).
-    right.relevance - left.relevance ||
     left.skill.category.localeCompare(right.skill.category) ||
     left.skill.name.localeCompare(right.skill.name)
-  );
-}
-
-/**
- * TF-IDF relevance of each candidate skill's text against the prompt, over the
- * candidate corpus, reusing the single shared ranker (`@brewva/brewva-search`,
- * the same one `discover_skills` uses). Advisory ranking only (axiom 18): a
- * tie-break among already-selected candidates, never a gate. Skills the ranker
- * does not score (no token overlap) are absent from the map and read `0`.
- */
-function computeSkillRelevance(
-  prompt: string,
-  skills: readonly AvailableSkillPromptContext[],
-): Map<string, number> {
-  const documents = skills.map((skill) => ({
-    id: skill.name,
-    text: `${skill.name} ${skill.description} ${skill.whenToUse ?? ""}`,
-  }));
-  return new Map(
-    scoreDocumentsByTfIdf(prompt, documents).map((result) => [result.document.id, result.score]),
   );
 }
 
@@ -766,52 +440,19 @@ function buildSkillShortlist(input: {
   promptPaths?: readonly string[];
   recentToolPaths?: readonly string[];
   maxRenderedSkills: number;
-  forcedCandidates?: ReadonlyMap<string, SkillSelectionReason>;
-  neglectedSkillNames?: ReadonlySet<string>;
 }): RenderedSkillShortlist {
   const promptPaths = input.promptPaths ?? extractPromptTargetPaths(input.prompt);
   const recentToolPaths = input.recentToolPaths ?? [];
-  const promptTokens = tokenizePromptForTextMatch(input.prompt);
-  const forcedCandidates = input.forcedCandidates ?? new Map<string, SkillSelectionReason>();
-  const neglectedSkillNames = input.neglectedSkillNames ?? new Set<string>();
-  const demotedSkillNames: string[] = [];
   const rawCandidates = input.skills
-    .map((skill) => {
-      const candidate = buildCandidate({
+    .map((skill) =>
+      buildCandidate({
         skill,
         prompt: input.prompt,
-        promptTokens,
         promptPaths,
         recentToolPaths,
-        forcedCandidates,
-      });
-      // Session-scoped feedback: an offer repeatedly ignored on text_match
-      // alone stops competing on text_match alone. Any stronger reason
-      // (including a forced nudge) bypasses the demotion.
-      if (
-        candidate &&
-        candidate.reasons.length === 1 &&
-        candidate.reasons[0] === "text_match" &&
-        neglectedSkillNames.has(skill.name)
-      ) {
-        demotedSkillNames.push(skill.name);
-        return null;
-      }
-      return candidate;
-    })
+      }),
+    )
     .filter((candidate): candidate is SkillCandidate => candidate !== null);
-  // TF-IDF relevance is computed over the CANDIDATE corpus (post-demotion) and
-  // attached before sorting, so the tie-break in `compareCandidates` keeps the
-  // most prompt-relevant of an equal-priority collision within the 8-card cap.
-  const relevanceByName = computeSkillRelevance(
-    input.prompt,
-    rawCandidates.map((candidate) => candidate.skill),
-  );
-  // Each raw candidate is a fresh object from buildCandidate; set relevance in
-  // place (the `relevance: 0` placeholder is always overwritten before the sort).
-  for (const candidate of rawCandidates) {
-    candidate.relevance = relevanceByName.get(candidate.skill.name) ?? 0;
-  }
   const candidates = rawCandidates.toSorted(compareCandidates);
   const explicitCandidates = candidates.filter((candidate) =>
     candidate.reasons.includes("explicit_mention"),
@@ -835,10 +476,6 @@ function buildSkillShortlist(input: {
     promptPaths: [...promptPaths],
     recentToolPaths: [...recentToolPaths],
     selectionMode,
-    demotedSkillNames: demotedSkillNames.toSorted((left, right) => left.localeCompare(right)),
-    forcedCandidates: [...forcedCandidates.entries()]
-      .map(([skillName, reason]) => ({ skillName, reason }))
-      .toSorted((left, right) => left.skillName.localeCompare(right.skillName)),
     ...(overExplicitBudget ? { overBudgetReason: "explicit_mentions_exceed_render_cap" } : {}),
   };
 }
@@ -924,8 +561,6 @@ function buildReceipt(input: {
     selectionMode: input.renderedShortlist.selectionMode,
     promptPaths: [...input.renderedShortlist.promptPaths],
     recentToolPaths: [...input.renderedShortlist.recentToolPaths],
-    demotedSkillNames: [...input.renderedShortlist.demotedSkillNames],
-    forcedCandidates: [...input.renderedShortlist.forcedCandidates],
     renderedSkillReasons,
     skillInvocationRecords,
     renderedSkillContext: {
@@ -998,8 +633,6 @@ export function buildSkillShortlistContextForPrompt(input: {
   promptPaths?: readonly string[];
   recentToolPaths?: readonly string[];
   maxRenderedSkills?: number;
-  forcedCandidates?: ReadonlyMap<string, SkillSelectionReason>;
-  neglectedSkillNames?: ReadonlySet<string>;
 }): SkillSelectionResult {
   const trigger: SkillSelectionTrigger = "user_message";
   const skills = listPromptVisibleSkills(listSkillCatalog(input.runtime));
@@ -1011,8 +644,6 @@ export function buildSkillShortlistContextForPrompt(input: {
     promptPaths: input.promptPaths,
     recentToolPaths: input.recentToolPaths,
     maxRenderedSkills,
-    forcedCandidates: input.forcedCandidates,
-    neglectedSkillNames: input.neglectedSkillNames,
   });
   const receipt = buildReceipt({
     trigger,
@@ -1059,16 +690,6 @@ function formatSkillSelectionTraceMessage(
         explicitSkillMentionNames.length > 0 ? explicitSkillMentionNames.join(", ") : "none"
       }`,
       formatSkillAdoptionLine(previousAdoption),
-      `Forced SkillCards: ${
-        receipt.forcedCandidates.length > 0
-          ? receipt.forcedCandidates
-              .map((entry) => `${entry.skillName} (${entry.reason})`)
-              .join(", ")
-          : "none"
-      }`,
-      `Demoted SkillCards (ignored text_match offers): ${
-        receipt.demotedSkillNames.length > 0 ? receipt.demotedSkillNames.join(", ") : "none"
-      }`,
       `Selection ID: ${receipt.selectionId}`,
       `Selection Mode: ${receipt.selectionMode}`,
     ].join("\n"),
@@ -1089,8 +710,6 @@ function formatSkillSelectionTraceMessage(
       renderedSkillContext: receipt.renderedSkillContext,
       selectionMode: receipt.selectionMode,
       trigger: receipt.trigger,
-      demotedSkillNames: receipt.demotedSkillNames,
-      forcedCandidates: receipt.forcedCandidates,
       ...(previousAdoption ? { previousAdoption } : {}),
     },
   };
@@ -1124,30 +743,11 @@ export function createSkillSelectionLifecycle(
         runtime.identity?.workspaceRoot ?? null,
       );
       const previousAdoption = projectLatestSkillAdoption(sessionEvents.adoptionEvents);
-      const reviewSkillFilePath = runtime.ops.skills.catalog.get(REVIEW_SKILL_NAME)?.filePath;
-      const postGreenSignal = projectPostGreenReviewSignal({
-        invocationEvents: sessionEvents.adoptionEvents,
-        verificationEvents: sessionEvents.verificationEvents,
-        reviewSkillFilePath: typeof reviewSkillFilePath === "string" ? reviewSkillFilePath : null,
-      });
-      const greenfieldImplementSignal = projectGreenfieldImplementSignal({
-        prompt,
-        recentToolPaths,
-      });
-      const forcedCandidates = buildForcedSkillCandidates({
-        postGreenReviewActive: postGreenSignal.active,
-        greenfieldImplementActive: greenfieldImplementSignal.active,
-      });
-      const neglectedSkillNames = projectNeglectedTextMatchOffers(sessionEvents.neglectEvents, {
-        windowTruncated: sessionEvents.neglectWindowTruncated,
-      });
       const selection = buildSkillShortlistContextForPrompt({
         runtime,
         prompt,
         promptPaths,
         recentToolPaths,
-        forcedCandidates,
-        neglectedSkillNames,
       });
       recordRuntimeSkillSelection(runtime, sessionId, selection.receipt);
       const shortlistSection = formatSkillSelectionSection(selection);

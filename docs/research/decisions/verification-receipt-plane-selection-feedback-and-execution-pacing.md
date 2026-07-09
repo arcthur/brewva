@@ -12,7 +12,14 @@
   marked token estimates; `brewva inspect --run-report` projects the run story
   from the tape.
 - Date: `2026-07-04`
-- Status: accepted
+- Status: accepted (selection-feedback portion superseded 2026-07-09)
+- Superseded in part (2026-07-09): the "generic forced candidates plus
+  deterministic session-scoped demotion of ignored text_match-only offers"
+  selection-feedback mechanism was REMOVED in the heuristic→mechanism
+  subtraction — the selector now fires only on deterministic reasons, and the
+  fuzzy `text_match` reason (with its demotion) no longer exists. The
+  verification-rung and execution-pacing decisions stand. See
+  `docs/reference/skill-routing.md`.
 - Stable docs:
   - `skills/core/verifier/references/verification-ladder.md`
   - `skills/core/greenfield/SKILL.md`
@@ -75,4 +82,9 @@ Obeys `docs/architecture/design-axioms.md`:
 
 ## Superseded by
 
-- None.
+- In part (2026-07-09): the skill selection-feedback decision — generic forced
+  candidates and the `text_match`-only demotion (Decision bullet 3, the
+  "Skill nudges are data" bullet, and Axioms 1/12) — was removed in the
+  heuristic->mechanism subtraction; see the Metadata note and
+  `docs/reference/skill-routing.md`. The verification-rung, execution-pacing,
+  marked-estimate, and run-report decisions stand.

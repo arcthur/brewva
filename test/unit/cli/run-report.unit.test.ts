@@ -104,8 +104,6 @@ describe("buildRunReportProjection", () => {
       }),
       record("skill.selection.recorded", 600, {
         renderedSkillReasons: [{ name: "review", filePath: "skills/core/review/SKILL.md" }],
-        demotedSkillNames: ["telegram"],
-        forcedCandidates: [{ skillName: "review", reason: "post_green_review" }],
       }),
       record("cost.observed", 700, { totalTokens: 1_234, estimated: true }),
     ];
@@ -121,8 +119,6 @@ describe("buildRunReportProjection", () => {
     expect(report.verification.latestRung).toBe("artifact");
     expect(report.verification.unreceiptedGreenVerification).toBe(false);
     expect(report.skills.renderedSkillNames).toEqual(["review"]);
-    expect(report.skills.demotedSkillNames).toEqual(["telegram"]);
-    expect(report.skills.forcedCandidates).toBe(1);
     expect(report.cost).toEqual({
       totalTokens: 1_234,
       includesEstimates: true,
@@ -131,7 +127,6 @@ describe("buildRunReportProjection", () => {
     const text = formatRunReportText(report);
     expect(text).toContain("Run Report: schema=brewva.run-report.v1");
     expect(text).toContain("latest=pass@artifact");
-    expect(text).toContain("forcedCandidates=1");
   });
 
   test("does not book cross-turn idle as model gap and skips execution time for unstarted aborts", () => {
