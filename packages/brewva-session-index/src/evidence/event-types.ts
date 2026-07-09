@@ -16,7 +16,10 @@ import {
   TURN_INPUT_RECORDED_EVENT_TYPE,
   TURN_RENDER_COMMITTED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/session";
-import { TASK_SPEC_SET_EVENT_TYPE } from "@brewva/brewva-vocabulary/task";
+import {
+  TASK_ITEM_ADDED_EVENT_TYPE,
+  TASK_SPEC_SET_EVENT_TYPE,
+} from "@brewva/brewva-vocabulary/task";
 import { USER_FACT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/user-model";
 import {
   ROLLBACK_EVENT_TYPE,
@@ -25,6 +28,13 @@ import {
 
 export const SESSION_INDEX_TEXT_INDEXED_EVENT_TYPES = [
   TASK_SPEC_SET_EVENT_TYPE,
+  // Task-ledger items are durable, text-bearing evidence of work a session did
+  // ("Removed duplicate startup hooks ..."), finer-grained than the goal. The
+  // recall classifier already has a cross-session weak branch ("Advisory
+  // posture") for exactly these events; indexing them closes the gap where they
+  // surfaced session-local but never cross-session. They stay weak, so ranking
+  // keeps them below strong evidence and precedent.
+  TASK_ITEM_ADDED_EVENT_TYPE,
   CLAIM_UPSERTED_EVENT_TYPE,
   TOOL_RESULT_RECORDED_EVENT_TYPE,
   SESSION_COMPACT_EVENT_TYPE,

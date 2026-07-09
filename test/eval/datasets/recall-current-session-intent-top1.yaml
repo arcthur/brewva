@@ -1,16 +1,25 @@
 schema: brewva.recall-eval.dataset.v1
+# Intent lens isolation: the two session goals deliberately share NO tokens with
+# the query, so they never become FTS candidates and only the two note items
+# surface. That leaves a clean current-note vs prior-note contest decided by
+# freshness + the current_session_evidence intent bump: prior-note is fresh and
+# wins WITHOUT the lens; current-note is older, so only the +1.0 current-session
+# source-tier bump lifts it to the top WITH the lens. Keep the goals query-
+# disjoint (and the workspace path free of query tokens) or a goal will surface
+# and compete with its own session's note.
 workspace_files:
-  - path: packages/gateway/session-trace.ts
+  - path: packages/gateway/trace-flag.ts
     content: |
-      export const sessionTrace = true;
+      export const traceFlag = true;
 sessions:
   - id: prior-session
-    goal: Investigate gateway trace marker
+    goal: Review unrelated build tooling flag
     target_files:
-      - packages/gateway/session-trace.ts
+      - packages/gateway/trace-flag.ts
     events:
       - alias: prior-note
         type: task_event
+        age_days: 2
         payload:
           schema: brewva.task.ledger.v1
           kind: item_added
@@ -19,13 +28,13 @@ sessions:
             text: Delta current session evidence marker
             status: done
   - id: current-session
-    goal: Investigate gateway trace marker
+    goal: Review unrelated build tooling flag
     target_files:
-      - packages/gateway/session-trace.ts
+      - packages/gateway/trace-flag.ts
     events:
       - alias: current-note
         type: task_event
-        age_days: 120
+        age_days: 90
         payload:
           schema: brewva.task.ledger.v1
           kind: item_added

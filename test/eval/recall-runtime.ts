@@ -175,6 +175,13 @@ export async function executeRecallRuntimeScenario(input: {
           : typeof event.age_days === "number"
             ? Date.now() - event.age_days * DAY_MS
             : undefined;
+      // Snapshot event ids before the emit so the alias binds to the event THIS
+      // dataset entry produces. Task items carry an age_days timestamp that sorts
+      // them before the session goal, so list().at(-1) would bind the alias (and
+      // any curation pin targeting it) to the goal instead of the item.
+      const beforeEventIds = new Set(
+        runtime.ops.events.records.list(session.id).map((entry) => entry.id),
+      );
       if (event.type === "recall_curation_recorded") {
         runtime.ops.tools.recall.curationRecorded({
           sessionId: session.id,
@@ -197,7 +204,9 @@ export async function executeRecallRuntimeScenario(input: {
           turn: typeof event.turn === "number" ? event.turn : undefined,
         });
       }
-      const recorded = runtime.ops.events.records.list(session.id).at(-1);
+      const recorded = runtime.ops.events.records
+        .list(session.id)
+        .find((entry) => !beforeEventIds.has(entry.id));
       if (event.alias && recorded) {
         eventAliasMap.set(`${session.id}:${event.alias}`, recorded.id);
       }
