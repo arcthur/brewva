@@ -801,7 +801,13 @@ export interface BrewvaToolRuntimeQueryPort {
       get(sessionId: string): RuntimeCostPosture;
     };
     readonly summary: {
-      get(sessionId: string): SessionCostSummary;
+      // `includeAttribution: false` returns session totals only (models + totals)
+      // and skips the per-tool/skill breakdown scans — for hot callers that read
+      // totals, never `.tools`/`.skills`. Defaults to the full breakdown.
+      get(
+        sessionId: string,
+        options?: { readonly includeAttribution?: boolean },
+      ): SessionCostSummary;
     };
   };
   readonly events: {

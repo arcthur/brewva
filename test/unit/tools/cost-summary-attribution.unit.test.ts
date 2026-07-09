@@ -71,6 +71,75 @@ describe("session cost summary attribution", () => {
     expect(summary.skills.investigate?.totalCostUsd ?? 0).toBeCloseTo(0.2, 5);
   });
 
+  test("includeAttribution:false returns totals only and skips the breakdown scans", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("cost-summary-totals-only"),
+    });
+    const sessionId = "cost-totals-only-session";
+
+    runtime.ops.skills.selection.record(sessionId, {
+      selectionId: "sel-1",
+      renderedSkillReasons: [{ name: "investigate" }],
+    });
+    runtime.ops.tools.invocation.recordResult({
+      sessionId,
+      toolCallId: "call-1",
+      toolName: "Read",
+      verdict: "pass",
+      failureClass: "none",
+      resultTokenEstimate: 100,
+    });
+    runtime.ops.cost.usage.recordAssistant({
+      sessionId,
+      model: "openai/gpt-5",
+      inputTokens: 50,
+      outputTokens: 50,
+      totalTokens: 100,
+      costUsd: 0.2,
+    });
+
+    // Full read populates the breakdown.
+    const full = runtime.ops.cost.summary.get(sessionId);
+    expect(Object.keys(full.tools)).toHaveLength(1);
+    expect(Object.keys(full.skills)).toHaveLength(1);
+
+    // Totals-only read (the hot-path contract) skips the breakdown while keeping
+    // session totals correct. Guards that getRuntimeCostSummary stays cheap.
+    const totals = runtime.ops.cost.summary.get(sessionId, { includeAttribution: false });
+    expect(Object.keys(totals.tools)).toHaveLength(0);
+    expect(Object.keys(totals.skills)).toHaveLength(0);
+    expect(totals.totalCostUsd).toBeCloseTo(0.2, 5);
+    expect(totals.totalTokens).toBe(100);
+  });
+
+  test("splits a turn's cost equally across all skills in the active selection", () => {
+    const runtime = createRuntimeInstanceFixture({
+      cwd: createTestWorkspace("cost-summary-multi-skill"),
+    });
+    const sessionId = "cost-multi-skill-session";
+
+    runtime.ops.skills.selection.record(sessionId, {
+      selectionId: "sel-1",
+      renderedSkillReasons: [{ name: "investigate" }, { name: "test-driven-development" }],
+    });
+    runtime.ops.cost.usage.recordAssistant({
+      sessionId,
+      model: "openai/gpt-5",
+      inputTokens: 50,
+      outputTokens: 50,
+      totalTokens: 100,
+      costUsd: 0.2,
+    });
+
+    const summary = runtime.ops.cost.summary.get(sessionId);
+    // Equal split (share = 1/names.length): each of the 2 skills gets half the
+    // turn's cost and tokens.
+    expect(summary.skills.investigate?.totalCostUsd ?? 0).toBeCloseTo(0.1, 5);
+    expect(summary.skills["test-driven-development"]?.totalCostUsd ?? 0).toBeCloseTo(0.1, 5);
+    expect(summary.skills.investigate?.totalTokens ?? 0).toBeCloseTo(50, 5);
+    expect(summary.skills["test-driven-development"]?.totalTokens ?? 0).toBeCloseTo(50, 5);
+  });
+
   test("leaves tool rows empty when no tool results were recorded", () => {
     const runtime = createRuntimeInstanceFixture({
       cwd: createTestWorkspace("cost-summary-attribution-empty"),

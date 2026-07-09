@@ -424,7 +424,7 @@ export function createFourPortCostRuntimeOps(
         ),
     },
     summary: {
-      get: (sessionId) => costSummaryFromEvents(context.runtime, sessionId),
+      get: (sessionId, options) => costSummaryFromEvents(context.runtime, sessionId, options),
     },
     usage: {
       recordAssistant(inputValue: unknown) {

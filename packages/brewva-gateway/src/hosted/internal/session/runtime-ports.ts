@@ -368,7 +368,12 @@ export function getRuntimeCostSummary(
   runtime: Pick<HostedRuntimeAdapterPort, "ops">,
   sessionId: string,
 ): ReturnType<HostedRuntimeAdapterPort["ops"]["cost"]["summary"]["get"]> {
-  return runtime.ops.cost.summary.get(sessionId);
+  // Every caller of this helper reads session totals only (evidence, statusbar,
+  // per-turn agent_end hook, delegation budgeting) — never `.tools`/`.skills`.
+  // The per-tool/skill breakdown is an explicit pull via cost_view / the CLI,
+  // which call `summary.get(sessionId)` directly, so skip the attribution scans
+  // on this hot path.
+  return runtime.ops.cost.summary.get(sessionId, { includeAttribution: false });
 }
 
 export function getRuntimeCostPosture(
