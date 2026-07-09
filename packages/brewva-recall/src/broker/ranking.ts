@@ -71,10 +71,12 @@ export function computeRankingScore(
     `semantic:${semantic.toFixed(3)}`,
     `freshness:${entry.freshness}`,
   ];
-  // Intent is a rank reason only where it actually moved this entry's score:
-  // its sole remaining scoring effect is sourceBaseWeight's current-session bump.
+  // Intent is a rank reason only where it actually moved this entry's score: the
+  // current-session bump in sourceBaseWeight applies to NON-strong current-session
+  // tape only (strong tape is a flat 4.2 regardless of intent).
   if (
     context.intent === "current_session_evidence" &&
+    entry.evidenceStrength !== "strong" &&
     isCurrentSessionTapeEntry(entry, context.currentSessionId)
   ) {
     rankReasons.push(`intent:${context.intent}`);

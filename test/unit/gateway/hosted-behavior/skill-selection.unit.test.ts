@@ -169,6 +169,29 @@ describe("hosted advisory skill shortlist context", () => {
     expect(result.renderedSection).not.toContain("internal-probe");
   });
 
+  test("the selector never mints text_match — prose overlap alone shortlists nothing (discover_skills owns text search)", () => {
+    // A skill whose description/whenToUse heavily overlap the prompt. Under the
+    // removed fuzzy text_match this would have shortlisted; the deterministic
+    // selector has no such reason, so with no $mention / prompt path / whole-word
+    // skill-name match it stays a non-candidate. Locks the invariant that
+    // `text_match` is discover_skills-only and the auto-selector never mints it.
+    const { runtime } = createRuntime([
+      skill({
+        name: "vault-audit",
+        description: "database migration rollback safety and persistent data risk analysis",
+        whenToUse: "Use for database migration rollback and persistent data risk work.",
+      }),
+    ]);
+    const result = buildSkillShortlistContextForPrompt({
+      runtime,
+      prompt: "check database migration rollback safety and persistent data risk",
+    });
+    expect(result.receipt.candidateSkillCount).toBe(0);
+    expect(result.receipt.renderedSkillReasons.flatMap((entry) => entry.reasons)).not.toContain(
+      "text_match",
+    );
+  });
+
   test("selects explicit $skill mentions and marks SkillCards as turn-scoped", () => {
     const { runtime } = createRuntime(createSkillCatalog());
 
