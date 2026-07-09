@@ -16,6 +16,7 @@
   ],
   "type": "module",
   "scripts": {
+    "analyze:advisory-receipts": "bun run script/analyze-advisory-receipts.ts",
     "analyze:projection": "bun run script/analyze-projection.ts",
     "bench:tui": "bun run --preload @opentui/solid/preload test/bench/tui-streaming.bench.ts",
     "build": "bun run typecheck && bun run build:binaries",
