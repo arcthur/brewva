@@ -95,7 +95,6 @@ The dynamic tail is a fixed ordered list. Empty blocks are omitted:
 - `[Workbench]`
 - `[PendingDelegations]`
 - `[CompletedDelegationOutcomes]`
-- `[TurnConsequenceDigest]` inside `turn-consequence-digest`
 - requested capability detail blocks
 - read-path recovery blocks
 
@@ -125,7 +124,8 @@ Admission is deterministic:
 Blocks do not carry category, provenance family, lane reason, or retention
 policy beyond explicit source references.
 
-The consequence digest is rendered from runtime inspect
+The consequence digest — surfaced as the `[RuntimeBrief]` `effects (last turn)`
+section rather than a standalone block — is rendered from runtime inspect
 `events.effects.renderTurnDigest` for the most recent completed runtime turn.
 It is descriptive, not imperative, and its character budget is
 `infrastructure.contextBudget.consequenceDigestMaxChars`.
