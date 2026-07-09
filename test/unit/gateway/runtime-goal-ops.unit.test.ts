@@ -81,6 +81,33 @@ describe("hosted goal runtime ops", () => {
     ).toHaveLength(1);
   });
 
+  test("caps active goals at the configured max-turns and resets the count on continue", () => {
+    const runtime = createRuntimeFixture();
+    const sessionId = "goal-max-turns-session";
+
+    runtime.ops.goal.lifecycle.start(sessionId, {
+      objective: "Cap the loop",
+      maxTurns: 2,
+      now: 100,
+    });
+    runtime.ops.goal.usage.observe(sessionId, { tokens: 1, elapsedMs: 1, turnId: "t1", now: 200 });
+    const second = runtime.ops.goal.usage.observe(sessionId, {
+      tokens: 1,
+      elapsedMs: 1,
+      turnId: "t2",
+      now: 300,
+    });
+
+    expect(second.ok).toBe(true);
+    expect(second.goal?.status).toBe("max_turns");
+    expect(runtime.ops.events.records.query(sessionId, { type: "goal.max_turns" })).toHaveLength(1);
+
+    const continued = runtime.ops.goal.lifecycle.continueGoal(sessionId, { now: 400 });
+    expect(continued.ok).toBe(true);
+    expect(runtime.ops.goal.state.get(sessionId)?.status).toBe("active");
+    expect(runtime.ops.goal.state.get(sessionId)?.usage.goalTurnCount).toBe(0);
+  });
+
   test("records queued continuations with the provided deterministic timestamp", () => {
     const runtime = createRuntimeFixture();
     const sessionId = "goal-continuation-clock-session";

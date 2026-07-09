@@ -455,6 +455,7 @@ export interface BrewvaToolRuntimeCommandPort {
       start(sessionId: string, input: GoalLifecycleInput): GoalRuntimeMutationResult;
       pause(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
       resume(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
+      continueGoal(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
       clear(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
       complete(sessionId: string, input?: GoalLifecycleInput): GoalRuntimeMutationResult;
       block(sessionId: string, input: GoalLifecycleInput): GoalRuntimeMutationResult;

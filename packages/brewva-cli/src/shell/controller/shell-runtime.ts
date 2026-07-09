@@ -2355,10 +2355,33 @@ export class CliShellRuntime {
       );
       return;
     }
+    if (command.kind === "continue") {
+      const result = this.#bundle.operator.goal.continueGoal(sessionId, { reason: "interactive" });
+      if (!result.ok || !result.goal) {
+        this.ui.notify(
+          `Goal continue rejected: ${result.ok ? "missing_goal_state" : result.reason}`,
+          "warning",
+        );
+        return;
+      }
+      await enqueueGoalContinuation({
+        sessionId,
+        goal: result.goal,
+        recordQueued: (targetSessionId, payload) =>
+          recordRuntimeGoalContinuationQueued(this.#bundle.runtime, targetSessionId, payload),
+        prompt: (parts, options) => this.#sessionPort.prompt(parts, options),
+        promptOptions: {
+          source: "interactive",
+        },
+      });
+      this.ui.notify("Goal continued.", "info");
+      return;
+    }
 
     const result = this.#bundle.operator.goal.start(sessionId, {
       objective: command.objective,
       tokenBudget: command.tokenBudget,
+      maxTurns: command.maxTurns,
     });
     if (!result.ok || !result.goal) {
       this.ui.notify(

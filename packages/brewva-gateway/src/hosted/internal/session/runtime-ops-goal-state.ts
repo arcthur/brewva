@@ -6,6 +6,8 @@ import {
   GOAL_CLEARED_EVENT_TYPE,
   GOAL_COMPLETED_EVENT_TYPE,
   GOAL_CONTINUATION_QUEUED_EVENT_TYPE,
+  GOAL_CONTINUED_EVENT_TYPE,
+  GOAL_MAX_TURNS_EVENT_TYPE,
   GOAL_PAUSED_EVENT_TYPE,
   GOAL_REPLACED_EVENT_TYPE,
   GOAL_RESUMED_EVENT_TYPE,
@@ -62,6 +64,10 @@ export function createGoalRuntimeController(ctx: HostedRuntimeOpsContext) {
           : typeof input.tokenBudget === "number" && Number.isFinite(input.tokenBudget)
             ? Math.max(1, Math.trunc(input.tokenBudget))
             : null;
+      const maxTurns =
+        typeof input.maxTurns === "number" && Number.isFinite(input.maxTurns) && input.maxTurns > 0
+          ? Math.trunc(input.maxTurns)
+          : null;
       const goalId =
         typeof input.goalId === "string" && input.goalId.trim()
           ? input.goalId.trim()
@@ -74,6 +80,7 @@ export function createGoalRuntimeController(ctx: HostedRuntimeOpsContext) {
           goalId,
           objective,
           tokenBudget,
+          maxTurns,
           now,
           ...(replacing ? { previousGoalId: current.id } : {}),
         },
@@ -93,6 +100,14 @@ export function createGoalRuntimeController(ctx: HostedRuntimeOpsContext) {
       if (readGoal(sessionId)?.status !== "paused")
         return inactive(sessionId, "goal_not_resumable");
       return append(sessionId, GOAL_RESUMED_EVENT_TYPE, {
+        schema: "brewva.goal.lifecycle.v1",
+        now: normalizeNow(input),
+      });
+    },
+    continueGoal(sessionId: string, input: GoalLifecycleInput = {}): GoalMutation {
+      if (readGoal(sessionId)?.status !== "max_turns")
+        return inactive(sessionId, "goal_not_continuable");
+      return append(sessionId, GOAL_CONTINUED_EVENT_TYPE, {
         schema: "brewva.goal.lifecycle.v1",
         now: normalizeNow(input),
       });
@@ -202,6 +217,17 @@ export function createGoalRuntimeController(ctx: HostedRuntimeOpsContext) {
         return append(sessionId, GOAL_BUDGET_LIMITED_EVENT_TYPE, {
           schema: "brewva.goal.lifecycle.v1",
           reason: "token_budget_exhausted",
+          now: normalizeNow(input),
+        });
+      }
+      if (
+        updated?.status === "active" &&
+        updated.maxTurns !== null &&
+        updated.usage.goalTurnCount >= updated.maxTurns
+      ) {
+        return append(sessionId, GOAL_MAX_TURNS_EVENT_TYPE, {
+          schema: "brewva.goal.lifecycle.v1",
+          reason: "max_turns_reached",
           now: normalizeNow(input),
         });
       }

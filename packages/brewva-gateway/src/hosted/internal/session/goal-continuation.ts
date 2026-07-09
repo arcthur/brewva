@@ -8,6 +8,7 @@ import {
   buildGoalBudgetLimitMessage,
   buildGoalContinuationMessage,
   buildGoalContinuationPayload,
+  buildGoalMaxTurnsMessage,
   GOAL_CONTINUATION_QUEUED_EVENT_TYPE,
   type GoalState,
 } from "@brewva/brewva-vocabulary/goal";
@@ -82,18 +83,27 @@ function sendGoalMessage(input: {
   runtime: HostedRuntimeAdapterPort;
   sessionId: string;
   goal: GoalState;
-  kind: "continue" | "budget_wrap_up";
+  kind: "continue" | "budget_wrap_up" | "max_turns_wrap_up";
   now: number;
 }): void {
   const payload = buildGoalContinuationPayload(input.goal, input.kind, { now: input.now });
   recordRuntimeGoalContinuationQueued(input.runtime, input.sessionId, payload);
+  const customType =
+    input.kind === "continue"
+      ? "goal.continuation"
+      : input.kind === "budget_wrap_up"
+        ? "goal.budget_wrap_up"
+        : "goal.max_turns_wrap_up";
+  const content =
+    input.kind === "continue"
+      ? buildGoalContinuationMessage(input.goal)
+      : input.kind === "budget_wrap_up"
+        ? buildGoalBudgetLimitMessage(input.goal)
+        : buildGoalMaxTurnsMessage(input.goal);
   input.hostApi.sendMessage(
     {
-      customType: input.kind === "continue" ? "goal.continuation" : "goal.budget_wrap_up",
-      content:
-        input.kind === "continue"
-          ? buildGoalContinuationMessage(input.goal)
-          : buildGoalBudgetLimitMessage(input.goal),
+      customType,
+      content,
       display: false,
     },
     { triggerTurn: true, deliverAs: "followUp" },
@@ -157,6 +167,19 @@ export function createGoalContinuationLifecycle(
             sessionId,
             goal,
             kind: "budget_wrap_up",
+            now: resolveNow(options),
+          });
+        }
+        return;
+      }
+      if (goal.status === "max_turns") {
+        if (latestContinuationKind(runtime, sessionId) !== "max_turns_wrap_up") {
+          sendGoalMessage({
+            hostApi,
+            runtime,
+            sessionId,
+            goal,
+            kind: "max_turns_wrap_up",
             now: resolveNow(options),
           });
         }

@@ -36,14 +36,14 @@ export function formatCostViewText(summary: SessionCostSummary, top: number): st
     `- budget action: ${summary.budget.action}`,
     `- budget blocked: ${summary.budget.blocked}`,
     "",
-    "## Top Skills",
+    "## Top Skills (estimated — per-turn spend split across the skills surfaced that turn, not a measured per-skill cost)",
     ...formatTopRows(skillRows, {
       limit: top,
       line: (name, value) =>
         `- ${name}: usd=${value.totalCostUsd.toFixed(6)}, tracked_tokens=${value.totalTokens}, cache_read_tokens=${value.cacheReadTokens}, raw_tokens=${value.totalTokens + value.cacheReadTokens}, usage=${value.usageCount}, turns=${value.turns}`,
     }),
     "",
-    "## Top Tools",
+    "## Top Tools (estimated — session cost split by result-token share; calls are measured, usd/tokens are not a measured per-tool cost)",
     ...formatTopRows(toolRows, {
       limit: top,
       line: (name, value) =>

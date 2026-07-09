@@ -43,6 +43,7 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "capabilities.goal.lifecycle.block",
   "capabilities.goal.lifecycle.clear",
   "capabilities.goal.lifecycle.complete",
+  "capabilities.goal.lifecycle.continueGoal",
   "capabilities.goal.lifecycle.pause",
   "capabilities.goal.lifecycle.resume",
   "capabilities.goal.lifecycle.start",

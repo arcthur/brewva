@@ -156,6 +156,47 @@ describe("goal continuation lifecycle", () => {
     expect(runtime.ops.goal.state.get(sessionId)?.usage.tokens).toBe(25);
   });
 
+  test("queues active continuations and a single max-turns wrap-up follow-up", async () => {
+    const nowValues = [200, 300, 400];
+    const { runtime, lifecycle, ctx, sentMessages, clearPendingMessages } = createLifecycleFixture(
+      "goal-continuation-session",
+      () => nowValues.shift() ?? 999,
+    );
+    const sessionId = "goal-continuation-session";
+
+    runtime.ops.goal.lifecycle.start(sessionId, {
+      objective: "Cap the loop",
+      maxTurns: 1,
+      now: 100,
+    });
+
+    await lifecycle.agentEnd?.({ type: "agent_end", messages: [] }, ctx);
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0]).toMatchObject({ customType: "goal.continuation" });
+
+    clearPendingMessages();
+    await lifecycle.turnEnd?.(
+      {
+        type: "turn_end",
+        turnIndex: 1,
+        message: { usage: { totalTokens: 5 } },
+        toolResults: [],
+      },
+      ctx,
+    );
+    expect(runtime.ops.goal.state.get(sessionId)?.status).toBe("max_turns");
+
+    await lifecycle.agentEnd?.({ type: "agent_end", messages: [] }, ctx);
+    clearPendingMessages();
+    await lifecycle.agentEnd?.({ type: "agent_end", messages: [] }, ctx);
+
+    // Exactly one wrap-up despite two agentEnds (the single-send guard).
+    expect(sentMessages.map((message) => message.customType)).toEqual([
+      "goal.continuation",
+      "goal.max_turns_wrap_up",
+    ]);
+  });
+
   test("queues active continuations and a single budget wrap-up follow-up", async () => {
     const nowValues = [200, 300, 400];
     const { runtime, lifecycle, ctx, sentMessages, clearPendingMessages } = createLifecycleFixture(

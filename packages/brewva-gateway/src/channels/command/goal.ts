@@ -24,6 +24,7 @@ const GOAL_ACTION_PAST_TENSE: Record<Exclude<GoalCommand["kind"], "status">, str
   start: "started",
   pause: "paused",
   resume: "resumed",
+  continue: "continued",
   clear: "cleared",
 };
 
@@ -87,14 +88,17 @@ export async function handleChannelGoalCommand(input: {
       ? goalOps.lifecycle.start(sessionId, {
           objective: command.objective,
           tokenBudget: command.tokenBudget,
+          maxTurns: command.maxTurns,
         })
       : command.kind === "pause"
         ? goalOps.lifecycle.pause(sessionId, { reason: "channel" })
         : command.kind === "resume"
           ? goalOps.lifecycle.resume(sessionId, { reason: "channel" })
-          : goalOps.lifecycle.clear(sessionId, { reason: "channel" });
+          : command.kind === "continue"
+            ? goalOps.lifecycle.continueGoal(sessionId, { reason: "channel" })
+            : goalOps.lifecycle.clear(sessionId, { reason: "channel" });
 
-  if (result.ok && result.goal && command.kind === "start") {
+  if (result.ok && result.goal && (command.kind === "start" || command.kind === "continue")) {
     await enqueueGoalContinuation({
       sessionId,
       goal: result.goal,

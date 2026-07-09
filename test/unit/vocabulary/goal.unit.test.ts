@@ -87,12 +87,55 @@ describe("goal vocabulary", () => {
         kind: "start",
         objective: "replace the runtime seam",
         tokenBudget: 25_000,
+        maxTurns: null,
       },
     });
     expect(parseGoalCommand("pause")).toEqual({ ok: true, command: { kind: "pause" } });
     expect(parseGoalCommand("statusbar")).toEqual({
       ok: false,
       error: "Unsupported /goal subcommand: statusbar",
+    });
+  });
+
+  test("parses the turn cap and the continue subcommand", () => {
+    expect(parseGoalCommand("--max-turns 3 refine the seam")).toEqual({
+      ok: true,
+      command: { kind: "start", objective: "refine the seam", tokenBudget: null, maxTurns: 3 },
+    });
+    expect(parseGoalCommand("--tokens 5k --max-turns=2 do the thing")).toEqual({
+      ok: true,
+      command: { kind: "start", objective: "do the thing", tokenBudget: 5_000, maxTurns: 2 },
+    });
+    expect(parseGoalCommand("continue")).toEqual({ ok: true, command: { kind: "continue" } });
+    expect(parseGoalCommand("--max-turns notanumber the objective")).toEqual({
+      ok: false,
+      error: "Invalid goal max-turns.",
+    });
+  });
+
+  test("folds the turn cap, the max_turns terminal, and the continue reset", () => {
+    const started = makeEvent("goal.started", {
+      goalId: "goal-cap",
+      objective: "Cap the loop",
+      tokenBudget: null,
+      maxTurns: 2,
+      now: 10,
+    });
+    const usage1 = makeEvent("goal.usage.observed", { tokens: 5, elapsedMs: 1, now: 20 });
+    const usage2 = makeEvent("goal.usage.observed", { tokens: 5, elapsedMs: 1, now: 30 });
+    const capped = makeEvent("goal.max_turns", { reason: "max_turns_reached", now: 40 });
+    expect(foldGoalEvents([started, usage1, usage2, capped])).toMatchObject({
+      status: "max_turns",
+      maxTurns: 2,
+      terminalReason: "max_turns_reached",
+      usage: { goalTurnCount: 2 },
+    });
+
+    const continued = makeEvent("goal.continued", { now: 50 });
+    expect(foldGoalEvents([started, usage1, usage2, capped, continued])).toMatchObject({
+      status: "active",
+      maxTurns: 2,
+      usage: { goalTurnCount: 0 },
     });
   });
 

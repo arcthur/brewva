@@ -461,6 +461,9 @@ function recordToolOutcome(
     sessionId: input.sessionId,
     toolCallId: input.toolCallId,
     toolName: input.toolName,
+    // Uncapped token estimate of the full result, for per-tool/skill cost
+    // attribution in the session cost summary. Present on success and failure.
+    resultTokenEstimate: outputObservation.rawTokens,
     verdict: input.verdict,
     failureClass: input.isError
       ? classifyToolFailure({

@@ -232,6 +232,11 @@ export function createCliOperatorPort(adapter: CliOperatorAdapter) {
         input: Parameters<Ops["goal"]["lifecycle"]["resume"]>[1],
       ): ReturnType<Ops["goal"]["lifecycle"]["resume"]> =>
         ops.goal.lifecycle.resume(sessionId, input),
+      continueGoal: (
+        sessionId: string,
+        input: Parameters<Ops["goal"]["lifecycle"]["continueGoal"]>[1],
+      ): ReturnType<Ops["goal"]["lifecycle"]["continueGoal"]> =>
+        ops.goal.lifecycle.continueGoal(sessionId, input),
       clear: (
         sessionId: string,
         input: Parameters<Ops["goal"]["lifecycle"]["clear"]>[1],

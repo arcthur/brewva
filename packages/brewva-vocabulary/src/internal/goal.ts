@@ -7,6 +7,7 @@ export const GOAL_STATUS_VALUES = [
   "active",
   "paused",
   "budget_limited",
+  "max_turns",
   "complete",
   "blocked",
 ] as const;
@@ -22,6 +23,8 @@ export const GOAL_COMPLETED_EVENT_TYPE = "goal.completed" as const;
 export const GOAL_BLOCKED_EVENT_TYPE = "goal.blocked" as const;
 export const GOAL_BLOCKER_OBSERVED_EVENT_TYPE = "goal.blocker.observed" as const;
 export const GOAL_BUDGET_LIMITED_EVENT_TYPE = "goal.budget_limited" as const;
+export const GOAL_MAX_TURNS_EVENT_TYPE = "goal.max_turns" as const;
+export const GOAL_CONTINUED_EVENT_TYPE = "goal.continued" as const;
 export const GOAL_USAGE_OBSERVED_EVENT_TYPE = "goal.usage.observed" as const;
 export const GOAL_CONTINUATION_QUEUED_EVENT_TYPE = "goal.continuation.queued" as const;
 
@@ -35,6 +38,8 @@ export const GOAL_EVENT_TYPES = [
   GOAL_BLOCKED_EVENT_TYPE,
   GOAL_BLOCKER_OBSERVED_EVENT_TYPE,
   GOAL_BUDGET_LIMITED_EVENT_TYPE,
+  GOAL_MAX_TURNS_EVENT_TYPE,
+  GOAL_CONTINUED_EVENT_TYPE,
   GOAL_USAGE_OBSERVED_EVENT_TYPE,
   GOAL_CONTINUATION_QUEUED_EVENT_TYPE,
 ] as const;
@@ -51,6 +56,7 @@ export interface GoalState extends ProtocolRecord {
   readonly objective: string;
   readonly status: GoalStatus;
   readonly tokenBudget: number | null;
+  readonly maxTurns: number | null;
   readonly usage: GoalUsage;
   readonly createdAt: number;
   readonly updatedAt: number;
@@ -68,6 +74,7 @@ export interface GoalState extends ProtocolRecord {
 export interface GoalLifecycleInput extends ProtocolRecord {
   readonly objective?: string;
   readonly tokenBudget?: number | null;
+  readonly maxTurns?: number | null;
   readonly reason?: string;
   readonly evidence?: readonly string[];
   readonly blockerKey?: string;
@@ -89,16 +96,22 @@ export interface GoalContinuationPayload extends ProtocolRecord {
   readonly objective: string;
   readonly tokenBudget: number | null;
   readonly usage: GoalUsage;
-  readonly kind: "continue" | "budget_wrap_up";
+  readonly kind: "continue" | "budget_wrap_up" | "max_turns_wrap_up";
   readonly continuationId?: string;
   readonly now?: number;
 }
 
 export type GoalCommand =
-  | { readonly kind: "start"; readonly objective: string; readonly tokenBudget: number | null }
+  | {
+      readonly kind: "start";
+      readonly objective: string;
+      readonly tokenBudget: number | null;
+      readonly maxTurns: number | null;
+    }
   | { readonly kind: "status" }
   | { readonly kind: "pause" }
   | { readonly kind: "resume" }
+  | { readonly kind: "continue" }
   | { readonly kind: "clear" };
 
 export type GoalCommandParseResult =
@@ -150,12 +163,16 @@ function createGoalFromPayload(
       : parsedBudget !== undefined
         ? Math.max(1, Math.trunc(parsedBudget))
         : null;
+  const parsedMaxTurns = readNumber(payload.maxTurns);
+  const maxTurns =
+    parsedMaxTurns !== undefined && parsedMaxTurns > 0 ? Math.trunc(parsedMaxTurns) : null;
   return {
     schema: GOAL_SCHEMA,
     id: goalId,
     objective,
     status: "active",
     tokenBudget,
+    maxTurns,
     usage: DEFAULT_USAGE,
     createdAt: now,
     updatedAt: now,
@@ -191,6 +208,15 @@ function parseTokenBudget(raw: string): number | null {
   return Number.isSafeInteger(value) ? value : null;
 }
 
+function parseMaxTurns(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!/^\d+$/u.test(trimmed)) {
+    return null;
+  }
+  const value = Number(trimmed);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
 function tokenizeCommand(input: string): string[] {
   return input
     .trim()
@@ -203,7 +229,12 @@ export function parseGoalCommand(input: string): GoalCommandParseResult {
   if (!trimmed || trimmed === "status") {
     return { ok: true, command: { kind: "status" } };
   }
-  if (trimmed === "pause" || trimmed === "resume" || trimmed === "clear") {
+  if (
+    trimmed === "pause" ||
+    trimmed === "resume" ||
+    trimmed === "continue" ||
+    trimmed === "clear"
+  ) {
     return { ok: true, command: { kind: trimmed } };
   }
   if (trimmed === "statusbar") {
@@ -211,14 +242,16 @@ export function parseGoalCommand(input: string): GoalCommandParseResult {
   }
 
   const tokens = tokenizeCommand(trimmed);
+  const usage = "Usage: /goal [--tokens <count>] [--max-turns <count>] <objective>";
   let tokenBudget: number | null = null;
+  let maxTurns: number | null = null;
   let index = 0;
   while (index < tokens.length) {
     const token = tokens[index];
     if (token === "--tokens") {
       const rawBudget = tokens[index + 1];
       if (!rawBudget) {
-        return { ok: false, error: "Usage: /goal [--tokens <count>] <objective>" };
+        return { ok: false, error: usage };
       }
       const parsedBudget = parseTokenBudget(rawBudget);
       if (parsedBudget === null) {
@@ -238,12 +271,35 @@ export function parseGoalCommand(input: string): GoalCommandParseResult {
       index += 1;
       continue;
     }
+    if (token === "--max-turns") {
+      const rawTurns = tokens[index + 1];
+      if (!rawTurns) {
+        return { ok: false, error: usage };
+      }
+      const parsedTurns = parseMaxTurns(rawTurns);
+      if (parsedTurns === null) {
+        return { ok: false, error: "Invalid goal max-turns." };
+      }
+      maxTurns = parsedTurns;
+      index += 2;
+      continue;
+    }
+    const inlineTurns = /^--max-turns=(.+)$/u.exec(token ?? "");
+    if (inlineTurns?.[1]) {
+      const parsedTurns = parseMaxTurns(inlineTurns[1]);
+      if (parsedTurns === null) {
+        return { ok: false, error: "Invalid goal max-turns." };
+      }
+      maxTurns = parsedTurns;
+      index += 1;
+      continue;
+    }
     break;
   }
 
   const objective = tokens.slice(index).join(" ").trim();
   if (!objective) {
-    return { ok: false, error: "Usage: /goal [--tokens <count>] <objective>" };
+    return { ok: false, error: usage };
   }
   return {
     ok: true,
@@ -251,6 +307,7 @@ export function parseGoalCommand(input: string): GoalCommandParseResult {
       kind: "start",
       objective,
       tokenBudget,
+      maxTurns,
     },
   };
 }
@@ -337,6 +394,29 @@ export function foldGoalEvents(events: readonly BrewvaEventRecord[]): GoalState 
             status: "budget_limited",
             updatedAt: now,
             terminalReason: readString(payload.reason) ?? "token_budget_exhausted",
+            lastLifecycleEvent: event.type,
+          });
+        }
+        break;
+      case GOAL_MAX_TURNS_EVENT_TYPE:
+        if (state) {
+          state = updateGoal(state, {
+            status: "max_turns",
+            updatedAt: now,
+            terminalReason: readString(payload.reason) ?? "max_turns_reached",
+            lastLifecycleEvent: event.type,
+          });
+        }
+        break;
+      case GOAL_CONTINUED_EVENT_TYPE:
+        if (state) {
+          // `/goal continue`: resume a max_turns-terminal goal and reset the turn
+          // count so the cap applies afresh. Token usage stays cumulative.
+          state = updateGoal(state, {
+            status: "active",
+            updatedAt: now,
+            terminalReason: undefined,
+            usage: { ...state.usage, goalTurnCount: 0 },
             lastLifecycleEvent: event.type,
           });
         }
@@ -445,5 +525,16 @@ export function buildGoalBudgetLimitMessage(state: GoalState): string {
     "</untrusted_objective>",
     `usage: ${formatGoalUsage(state.usage)}`,
     "The token budget for this goal is exhausted. Produce a concise wrap-up with current state, evidence, and next steps. Do not mark the goal complete unless the completion audit actually passes.",
+  ].join("\n");
+}
+
+export function buildGoalMaxTurnsMessage(state: GoalState): string {
+  return [
+    "[GoalMaxTurns]",
+    "<untrusted_objective>",
+    state.objective,
+    "</untrusted_objective>",
+    `usage: ${formatGoalUsage(state.usage)}`,
+    "The turn cap for this goal is reached. Produce a concise wrap-up with current state, evidence, and next steps. Do not mark the goal complete unless the completion audit actually passes. The operator can extend the goal with /goal continue.",
   ].join("\n");
 }

@@ -65,6 +65,23 @@ function readCostUsd(record: ProtocolRecord): number {
   );
 }
 
+function readSelectionId(payload: ProtocolRecord): string {
+  return typeof payload.selectionId === "string" ? payload.selectionId.trim() : "";
+}
+
+function readSelectionSkillNames(payload: ProtocolRecord): readonly string[] {
+  const rendered = Array.isArray(payload.renderedSkillReasons) ? payload.renderedSkillReasons : [];
+  const names = new Set<string>();
+  for (const entry of rendered) {
+    const record = readRecord(entry);
+    const name = typeof record.skillName === "string" ? record.skillName.trim() : "";
+    if (name) {
+      names.add(name);
+    }
+  }
+  return [...names];
+}
+
 function readTotalTokens(
   record: ProtocolRecord,
   input: number,
@@ -194,7 +211,12 @@ function deriveRuntimeCostPosture(
 function costSummaryFromEvents(
   runtime: Pick<BrewvaRuntime, "config" | "tape">,
   sessionId: string,
+  options: { readonly includeAttribution?: boolean } = {},
 ): SessionCostSummary {
+  // Per-tool/skill attribution is only read by `summary.get`. `posture.get` and
+  // `recordAssistant` read session totals only, so they skip the extra tape scans and
+  // the attribution walk on their hotter paths.
+  const includeAttribution = options.includeAttribution !== false;
   let inputTokens = 0;
   let outputTokens = 0;
   let cacheReadTokens = 0;
@@ -202,6 +224,12 @@ function costSummaryFromEvents(
   let totalTokens = 0;
   let totalCostUsd = 0;
   const models: Record<string, CostModelRow> = {};
+  const costEvents: Array<{
+    readonly timestamp: number;
+    readonly costUsd: number;
+    readonly totalTokens: number;
+    readonly cacheReadTokens: number;
+  }> = [];
   for (const event of listFourPortRuntimeEvents(runtime, sessionId, { type: "cost.observed" })) {
     const payload = readRecord(event.payload);
     const eventInputTokens = readUsageNumber(payload, "inputTokens", "input");
@@ -222,6 +250,14 @@ function costSummaryFromEvents(
     cacheWriteTokens += eventCacheWriteTokens;
     totalTokens += eventTotalTokens;
     totalCostUsd += eventCostUsd;
+    if (includeAttribution) {
+      costEvents.push({
+        timestamp: event.timestamp,
+        costUsd: eventCostUsd,
+        totalTokens: eventTotalTokens,
+        cacheReadTokens: eventCacheReadTokens,
+      });
+    }
     const model = typeof payload.model === "string" ? payload.model.trim() : "";
     if (model) {
       const previous = models[model] ?? {
@@ -242,6 +278,111 @@ function costSummaryFromEvents(
       };
     }
   }
+
+  // Per-tool allocation + per-skill attribution — computed only when a caller reads
+  // the breakdown (summary.get). callCount is measured; tokens + USD are estimated (a
+  // proportional split of the session cost pool; there is no provider per-tool/skill
+  // cost, and openai-codex reports cost=0).
+  const tools: Record<
+    string,
+    { callCount: number; allocatedTokens: number; allocatedCostUsd: number }
+  > = {};
+  const skills: SessionCostSummary["skills"] = {};
+  if (includeAttribution) {
+    for (const event of listFourPortRuntimeEvents(runtime, sessionId, {
+      type: "tool.result.recorded",
+    })) {
+      const payload = readRecord(event.payload);
+      const toolName = typeof payload.toolName === "string" ? payload.toolName.trim() : "";
+      if (!toolName) {
+        continue;
+      }
+      const estimate = Math.max(0, readNumber(payload, "resultTokenEstimate"));
+      const previous = tools[toolName] ?? { callCount: 0, allocatedTokens: 0, allocatedCostUsd: 0 };
+      tools[toolName] = {
+        callCount: previous.callCount + 1,
+        allocatedTokens: previous.allocatedTokens + estimate,
+        allocatedCostUsd: 0,
+      };
+    }
+    const toolTokenTotal = Object.values(tools).reduce((sum, row) => sum + row.allocatedTokens, 0);
+    if (toolTokenTotal > 0 && totalCostUsd > 0) {
+      for (const name of Object.keys(tools)) {
+        const row = tools[name];
+        if (row) {
+          tools[name] = {
+            ...row,
+            allocatedCostUsd: roundCost(totalCostUsd * (row.allocatedTokens / toolTokenTotal)),
+          };
+        }
+      }
+    }
+
+    // Attribute each per-turn cost.observed (equal split) to the skills surfaced by
+    // the most recent skill.selection.recorded at or before it. Both lists arrive
+    // timestamp-sorted, so one forward cursor is O(costs + selections).
+    const selections = listFourPortRuntimeEvents(runtime, sessionId, {
+      type: "skill.selection.recorded",
+    })
+      .map((event) => ({
+        timestamp: event.timestamp,
+        selectionId: readSelectionId(readRecord(event.payload)),
+        names: readSelectionSkillNames(readRecord(event.payload)),
+      }))
+      .filter((selection) => selection.names.length > 0);
+    const skillAccumulators: Record<
+      string,
+      {
+        totalCostUsd: number;
+        totalTokens: number;
+        cacheReadTokens: number;
+        usageCount: number;
+        turnIds: Set<string>;
+      }
+    > = {};
+    let selectionCursor = 0;
+    let active: (typeof selections)[number] | undefined;
+    for (const cost of costEvents) {
+      while (
+        selectionCursor < selections.length &&
+        (selections[selectionCursor]?.timestamp ?? 0) <= cost.timestamp
+      ) {
+        active = selections[selectionCursor];
+        selectionCursor += 1;
+      }
+      if (!active) {
+        continue;
+      }
+      const share = 1 / active.names.length;
+      for (const name of active.names) {
+        const previous = skillAccumulators[name] ?? {
+          totalCostUsd: 0,
+          totalTokens: 0,
+          cacheReadTokens: 0,
+          usageCount: 0,
+          turnIds: new Set<string>(),
+        };
+        previous.totalCostUsd += cost.costUsd * share;
+        previous.totalTokens += cost.totalTokens * share;
+        previous.cacheReadTokens += cost.cacheReadTokens * share;
+        previous.usageCount += 1;
+        if (active.selectionId) {
+          previous.turnIds.add(active.selectionId);
+        }
+        skillAccumulators[name] = previous;
+      }
+    }
+    for (const [name, row] of Object.entries(skillAccumulators)) {
+      skills[name] = {
+        totalCostUsd: roundCost(row.totalCostUsd),
+        totalTokens: Math.round(row.totalTokens),
+        cacheReadTokens: Math.round(row.cacheReadTokens),
+        usageCount: row.usageCount,
+        turns: row.turnIds.size,
+      };
+    }
+  }
+
   const budget = deriveBudgetFields(runtime.config.infrastructure.costTracking, totalCostUsd);
   return {
     ...emptyCostSummary(),
@@ -252,6 +393,8 @@ function costSummaryFromEvents(
     totalTokens,
     totalCostUsd,
     models,
+    tools,
+    skills,
     budget: {
       action: budget.action,
       sessionExceeded: budget.sessionExceeded,
@@ -272,7 +415,7 @@ export function createFourPortCostRuntimeOps(
       get: (sessionId) =>
         deriveRuntimeCostPosture(
           context.runtime.config.infrastructure.costTracking,
-          costSummaryFromEvents(context.runtime, sessionId),
+          costSummaryFromEvents(context.runtime, sessionId, { includeAttribution: false }),
         ),
     },
     summary: {
@@ -286,7 +429,7 @@ export function createFourPortCostRuntimeOps(
           kind: "cost.observed",
           payload,
         });
-        return costSummaryFromEvents(context.runtime, sessionId);
+        return costSummaryFromEvents(context.runtime, sessionId, { includeAttribution: false });
       },
     },
   };

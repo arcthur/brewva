@@ -78,6 +78,7 @@ describe("channel command router", () => {
         kind: "start",
         objective: "finish rollout",
         tokenBudget: 3000,
+        maxTurns: null,
       },
     });
     expect(router.match("/status dir=src/runtime top=7")).toEqual({

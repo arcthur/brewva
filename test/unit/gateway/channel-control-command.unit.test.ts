@@ -16,6 +16,7 @@ describe("channel control command seam", () => {
         kind: "start",
         objective: "ship channel parity",
         tokenBudget: 20_000,
+        maxTurns: null,
       },
     });
     expect(router.match("/goal @agent-b status")).toEqual({
@@ -79,6 +80,7 @@ describe("channel control command seam", () => {
             kind: "start",
             objective: "ship channel parity",
             tokenBudget: 20_000,
+            maxTurns: null,
           },
         },
         "scope-2",
@@ -91,6 +93,7 @@ describe("channel control command seam", () => {
         kind: "start",
         objective: "ship channel parity",
         tokenBudget: 20_000,
+        maxTurns: null,
       },
     });
   });

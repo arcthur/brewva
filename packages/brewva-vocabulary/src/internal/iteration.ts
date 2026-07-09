@@ -161,6 +161,12 @@ export interface ToolResultRecordedEventPayload extends ProtocolRecord {
   readonly ledgerId?: string;
   readonly verdict?: string;
   readonly failureContext?: ToolOutputDistilledEventPayload | null;
+  /**
+   * Uncapped token estimate of the full tool result text (success or failure).
+   * Feeds per-tool / per-skill cost attribution in the session cost summary
+   * (`SessionCostSummary.tools` / `.skills`). Estimated, not measured.
+   */
+  readonly resultTokenEstimate?: number;
 }
 
 export type ReasoningCheckpointBoundary = string;

@@ -229,7 +229,12 @@ describe("channel control router ownership", () => {
     const result = await router.handleCommand(
       {
         kind: "goal",
-        command: { kind: "start", objective: "ship channel goal", tokenBudget: 500 },
+        command: {
+          kind: "start",
+          objective: "ship channel goal",
+          tokenBudget: 500,
+          maxTurns: null,
+        },
       },
       createUserTurn("/goal ship channel goal", { senderUsername: "owner" }),
       "scope-1",
@@ -496,6 +501,7 @@ describe("channel control router ownership", () => {
           kind: "start",
           objective: "should be denied",
           tokenBudget: null,
+          maxTurns: null,
         },
       },
       { kind: "agent-create", agentId: "worker-2", model: "openai/gpt-5.3-codex" },

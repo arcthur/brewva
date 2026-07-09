@@ -323,6 +323,7 @@ describe("shell runtime architecture", () => {
             kind: "start",
             objective: "ship parity",
             tokenBudget: 10_000,
+            maxTurns: null,
           },
         },
       ],

@@ -130,6 +130,7 @@ Every accepted decision inherits these rules:
 
 ### Gateway, Session, And Scheduling
 
+- [harness-forward-consolidation](./harness-forward-consolidation.md)
 - [canonical-hosted-turn-envelope](./canonical-hosted-turn-envelope.md)
 - [agent-runtime-ergonomics-control-plane](./agent-runtime-ergonomics-control-plane.md)
 - [context-chain-subtraction-and-evidence-state-collapse](./context-chain-subtraction-and-evidence-state-collapse.md)

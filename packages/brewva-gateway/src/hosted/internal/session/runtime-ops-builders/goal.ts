@@ -10,6 +10,7 @@ export function buildGoalRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
       start: (sessionId, input) => goal.start(sessionId, input),
       pause: (sessionId, input) => goal.pause(sessionId, input),
       resume: (sessionId, input) => goal.resume(sessionId, input),
+      continueGoal: (sessionId, input) => goal.continueGoal(sessionId, input),
       clear: (sessionId, input) => goal.clear(sessionId, input),
       complete: (sessionId, input) => goal.complete(sessionId, input),
       block: (sessionId, input) => goal.block(sessionId, input),
