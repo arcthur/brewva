@@ -244,7 +244,7 @@ Internal implementation anchors:
 (`netReuseValue`, grade, tool-schema estimate),
 `packages/brewva-gateway/src/hosted/internal/provider/cache/break-detector.ts`,
 `packages/brewva-gateway/src/hosted/internal/context/hosted-compaction-controller.ts`
-(`nudgeTracker`, pressure),
+(`delegationAdvisoryTracker`, pressure),
 `packages/brewva-gateway/src/hosted/internal/session/managed-agent/provider-payload-pipeline.ts`
 (`buildProviderDynamicTailSummary`, the turn-tail seam),
 `packages/brewva-gateway/src/delegation/structured-outcome.ts`
@@ -298,9 +298,14 @@ repeat" framing),
   `[RuntimeBrief]` block in the dynamic tail. Sections: context-pressure posture +
   last-turn effects (consequence digest reframed, internal `runtimeTurn=` cursor
   stripped). Consequence digest composes in as a section (the fold-in choice).
-- Decided in build: pressure hints are STATE-only ("advisory limit reached"); the
-  imperative ("compact now") stays with the cadence-gated compaction nudge so the
-  two never duplicate.
+- Decided in build: pressure hints were STATE-only ("advisory limit reached"), the
+  imperative ("compact now") staying with the cadence-gated compaction nudge. That
+  split was FOLDED (2026-07-09 heuristic->mechanism subtraction): the imperative now
+  rides the posture `line` and shows every turn under sustained pressure (persistent,
+  like the review-closure section) instead of the old full/brief turn cadence; the
+  `stub` (state-only) is the demote target only when the brief's own budget is
+  crowded. The standalone `[ContextCompactionGate]`/`[ContextCompactionAdvisory]`
+  blocks and the compaction `nudgeTracker` were removed.
 - Tests: `runtime-brief.unit.test.ts` (contract) + `hosted-workbench-context.unit.test.ts`
   (end-to-end wiring). `bun run check` green.
 

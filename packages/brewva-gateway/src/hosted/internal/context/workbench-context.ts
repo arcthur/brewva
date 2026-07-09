@@ -38,7 +38,6 @@ import { estimateTokens } from "../session/tools/tool-output-distiller.js";
 import { renderCapabilityView, type BuildCapabilityViewResult } from "./capability-view.js";
 import { applyContextContract } from "./context-contract.js";
 import {
-  decideContextNudge,
   decideContextPressure,
   type ContextLifecyclePressureDecision,
   type ContextNudgeCadenceTracker,
@@ -281,52 +280,6 @@ function buildHiddenContextResult(input: {
       details: input.details,
     },
   };
-}
-
-function buildCompactionGateBlock(input: {
-  status: ContextCompactionGateStatus["status"];
-  mode: "full" | "brief";
-}): HostedContextBlock {
-  const content =
-    input.mode === "brief"
-      ? [
-          "[ContextCompactionGate]",
-          "required: yes",
-          `tokens_until_forced_compact: ${input.status.tokensUntilForcedCompact ?? "unknown"}`,
-          "action: call `workbench_compact` now.",
-        ]
-      : [
-          "[ContextCompactionGate]",
-          "Context has reached the forced compaction limit.",
-          `usage_ratio: ${input.status.usageRatio ?? "unknown"}`,
-          `hard_limit_ratio: ${input.status.hardLimitRatio}`,
-          "Call tool `workbench_compact` immediately before any other tool call.",
-          "Do not run `workbench_compact` via `exec` or shell.",
-        ];
-  return makeHostedContextBlock("compaction-gate", content.join("\n"))!;
-}
-
-function buildCompactionAdvisoryBlock(input: {
-  reason: string;
-  status: ContextCompactionGateStatus["status"];
-  mode: "full" | "brief";
-}): HostedContextBlock {
-  const content =
-    input.mode === "brief"
-      ? [
-          "[ContextCompactionAdvisory]",
-          `pending_compaction_reason: ${input.reason}`,
-          "action: prefer `workbench_compact` before another long tool chain.",
-        ]
-      : [
-          "[ContextCompactionAdvisory]",
-          `pending_compaction_reason: ${input.reason}`,
-          `usage_ratio: ${input.status.usageRatio ?? "unknown"}`,
-          `compact_soon_threshold_ratio: ${input.status.compactionThresholdRatio}`,
-          "Prefer `workbench_compact` before long tool chains or broad repository scans.",
-          "If no further tool work is needed, answer directly instead of compacting first.",
-        ];
-  return makeHostedContextBlock("compaction-advisory", content.join("\n"))!;
 }
 
 interface PinnedWorkbenchMass {
@@ -781,10 +734,6 @@ function buildCapabilityBlocks(capabilityView: BuildCapabilityViewResult): Hoste
     });
 }
 
-function isRequiredHostedContextBlock(block: HostedContextBlock): boolean {
-  return block.id === "compaction-gate";
-}
-
 interface HostedDynamicTail {
   bundle: ContextBundle;
   rendered: HostedContextRenderResult;
@@ -805,16 +754,6 @@ async function buildHostedDynamicTail(input: {
     delegationStore: input.delegationStore,
     sessionId: input.sessionId,
   });
-  const pressure = decideContextPressure({
-    gateStatus: input.gateStatus,
-    pendingCompactionReason: input.pendingCompactionReason,
-  });
-  const nudge = decideContextNudge({
-    sessionId: input.sessionId,
-    turn: input.turn,
-    pressure,
-    tracker: input.statePort.nudgeTracker,
-  });
   const continuationAnchor = decideContinuationAnchorRelevance(
     getRuntimeTapeStatus(input.runtime, input.sessionId).lastAnchor,
   );
@@ -823,19 +762,6 @@ async function buildHostedDynamicTail(input: {
     input.sessionId,
   );
   const blocks = [
-    nudge.kind === "gate" && nudge.mode
-      ? buildCompactionGateBlock({
-          status: input.gateStatus.status,
-          mode: nudge.mode,
-        })
-      : null,
-    nudge.kind === "advisory" && nudge.mode
-      ? buildCompactionAdvisoryBlock({
-          reason: pressure.reason ?? input.pendingCompactionReason ?? "unknown",
-          status: input.gateStatus.status,
-          mode: nudge.mode,
-        })
-      : null,
     buildRuntimeBriefBlockForSession(input.runtime, {
       sessionId: input.sessionId,
       turn: input.turn,
@@ -863,10 +789,13 @@ async function buildHostedDynamicTail(input: {
     blocks: blocks.map((block) => ({
       id: block.id,
       content: block.content,
-      admission: isRequiredHostedContextBlock(block)
-        ? ("required" as const)
-        : ("advisory" as const),
-      priority: isRequiredHostedContextBlock(block) ? 0 : 100,
+      // Every hosted dynamic-tail block is advisory. The only `required` block was
+      // the standalone forced [ContextCompactionGate]; its ask folded into the
+      // RuntimeBrief posture, and the hard-limit host soft-cut enforces compaction
+      // regardless of whether the model reads the line — so nothing here needs the
+      // fail-loud required-overflow path.
+      admission: "advisory" as const,
+      priority: 100,
     })),
     budget: input.runtime.config.infrastructure.contextBudget.enabled
       ? {

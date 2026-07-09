@@ -88,8 +88,9 @@ model reads, recalls, notes, evicts, and compacts through explicit tools.
 
 The dynamic tail is a fixed ordered list. Empty blocks are omitted:
 
-- `[ContextCompactionGate]` or `[ContextCompactionAdvisory]`
-- `[Context Status]`
+- `[RuntimeBrief]` (context-pressure posture — including the `workbench_compact`
+  ask when the runtime advises or forces it — plus last-turn effects and the other
+  salience-gated postures)
 - `[LatestContinuationAnchor]`
 - `[Workbench]`
 - `[PendingDelegations]`
@@ -129,11 +130,13 @@ The consequence digest is rendered from runtime inspect
 It is descriptive, not imperative, and its character budget is
 `infrastructure.contextBudget.consequenceDigestMaxChars`.
 
-Compaction gate/advisory blocks are nudge-throttled per session. The first
-appearance of a stable gate/advisory state is rendered in full; repeated
-appearances use a terse action line, with periodic full reminders. This keeps
-the dynamic tail small and cache-stable while still telling the model when the
-runtime physics require or advise `workbench_compact`.
+The compaction ask rides the `[RuntimeBrief]` context-pressure posture: when the
+runtime advises or forces compaction, the posture `line` carries both the state and
+the `workbench_compact` call-to-action. This replaces the old per-session full/brief
+nudge cadence with a persistent ask — under sustained pressure the imperative shows
+every turn, demoting to the state-only stub only when the RuntimeBrief's own char
+budget is crowded by other sections. The hard-limit host soft-cut is unaffected:
+that physics fires whether or not the model reads the line.
 
 ## Workbench Boundary
 

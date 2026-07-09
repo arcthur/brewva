@@ -80,7 +80,7 @@ describe("context pressure posture", () => {
     ).toBeNull();
   });
 
-  test("advised: high salience usage bar with state hint", () => {
+  test("advised: high salience usage bar with state hint and folded call-to-action", () => {
     const section = renderContextPressureSection({
       tokensUsed: 164_000,
       tokensTotal: 200_000,
@@ -89,10 +89,16 @@ describe("context pressure posture", () => {
       predictedOverflow: false,
     });
     expect(section?.salience).toBe("high");
-    expect(section?.line).toBe("context: 82% — 164k/200k tokens; advisory limit reached");
+    expect(section?.line).toBe(
+      "context: 82% — 164k/200k tokens; advisory limit reached — prefer `workbench_compact` before a long tool chain",
+    );
+    // The imperative rides `line` only; `stub` (state) is the demote target, so
+    // under budget the ask demotes away before the whole section drops.
+    expect(section?.stub).toBe("context: 82% (advisory limit reached)");
+    expect(section?.stub).not.toContain("workbench_compact");
   });
 
-  test("predicted overflow surfaces before the advisory limit", () => {
+  test("predicted overflow surfaces before the advisory limit, with no imperative", () => {
     const section = renderContextPressureSection({
       tokensUsed: 120_000,
       tokensTotal: 200_000,
@@ -101,9 +107,11 @@ describe("context pressure posture", () => {
       predictedOverflow: true,
     });
     expect(section?.line).toContain("growth may overflow soon");
+    // A prediction is not an ask — no compaction imperative.
+    expect(section?.line).not.toContain("workbench_compact");
   });
 
-  test("forced outranks advised in the hint", () => {
+  test("forced outranks advised, and folds in the compact-now imperative", () => {
     const section = renderContextPressureSection({
       tokensUsed: 198_000,
       tokensTotal: 200_000,
@@ -112,6 +120,8 @@ describe("context pressure posture", () => {
       predictedOverflow: false,
     });
     expect(section?.line).toContain("forced-compaction threshold crossed");
+    expect(section?.line).toContain("call `workbench_compact` before any other tool");
+    expect(section?.stub).not.toContain("workbench_compact");
   });
 
   test("unknown usage omits the percentage", () => {

@@ -124,9 +124,17 @@ export interface ContextPressureInput {
  * Context-window pressure as a compact posture (hermes usage-bar form). Relevance-
  * gated like the other sections: silent when the budget is healthy (nothing to act
  * on) so the brief's presence itself stays meaningful; surfaced only once the
- * runtime flags advisory/forced pressure or a predicted overflow. State posture
- * only — the imperative ("compact now") stays with the cadence-gated compaction
- * nudge so the two never duplicate.
+ * runtime flags advisory/forced pressure or a predicted overflow. Carries BOTH the
+ * state AND the call-to-action: the former [ContextCompactionGate] and
+ * [ContextCompactionAdvisory] blocks are folded in here. This replaces the old
+ * per-turn full/brief nudge cadence with a PERSISTENT ask — under sustained
+ * pressure the imperative shows on `line` every turn (a forced-compaction ask is a
+ * physics-required action, so like an unaddressed review finding it stays visible,
+ * not throttled by a turn counter). The `stub` keeps state only, so the imperative
+ * demotes away only when the RuntimeBrief's own char budget is crowded by other
+ * sections — decoupled from how long context pressure has lasted. The hard-limit
+ * host soft-cut (context-budget physics) is unaffected: it fires whether or not the
+ * model reads this line.
  */
 export function renderContextPressureSection(
   input: ContextPressureInput,
@@ -148,6 +156,15 @@ export function renderContextPressureSection(
     : input.compactionAdvised
       ? "advisory limit reached"
       : "growth may overflow soon";
+  // The call-to-action folded in from the removed compaction-nudge blocks: forced
+  // pressure asks for compaction before the next tool; advisory prefers it before a
+  // long chain; a prediction carries no imperative. Lives on `line` only — `stub`
+  // (state) is the demote target.
+  const action = input.forcedCompaction
+    ? " — call `workbench_compact` before any other tool (not via exec/shell)"
+    : input.compactionAdvised
+      ? " — prefer `workbench_compact` before a long tool chain"
+      : "";
   const pinned =
     (input.pinnedTokens ?? 0) > 0
       ? `; pinned ~${formatTokens(input.pinnedTokens ?? 0)} tokens held by attention_pin (explicit evict releases)`
@@ -155,7 +172,7 @@ export function renderContextPressureSection(
   return {
     key: "context",
     salience: "high",
-    line: `context: ${head}; ${hint}${pinned}`,
+    line: `context: ${head}; ${hint}${action}${pinned}`,
     stub: pct !== null ? `context: ${pct}% (${hint})` : `context: ${hint}`,
   };
 }
