@@ -30,7 +30,6 @@ export { blockGoal, completeGoal, getGoalState } from "./goal.js";
 // re-derive the CURRENT requirement fitness from the whole tape.
 export {
   assembleRequirementFitnessInputFromEvents,
-  buildTapeCoverageAttributionMiss,
   buildTapeRequirementDebtSummary,
   buildTapeRequirementFitness,
   buildTapeReviewDebt,

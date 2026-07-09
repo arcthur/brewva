@@ -77,12 +77,18 @@ discipline.
   add behavioral evidence). Diagnoses the game_4→game_5 delegation 3→0 swing — and
   the critical defects an authored-only close shipped — as a control-capability /
   missing-sensor gap (the evidence gap is recorded but never looped back to the
-  decision point), not a weak signal; reuses graded evidence, drives no gate, and
-  hands the choice to the model (axioms 1, 3, 7, 18). The information-channel
+  decision point), not a weak signal; reads the fitness projection, drives no gate, and
+  hands the choice to the model (axioms 1, 3, 7, 18). Its `independenceDebtAtoms` sensor
+  survived the 2026-07-09 subtraction re-anchored grade-free (a high-risk must-atom with
+  no deterministic/independent pass). The information-channel
   companion to the authorship-taints-verification candidate axiom. Landing-plan
   items 1–4 landed on `main` (`dbeeaf3`, `fbb0f00`), and Part 2 — the review→atom
   discharge edge — landed too (see the next entry); what remains is empirical promotion.
 - [RFC: Review→Atom Attribution And The Grade Ceiling On Discharging Independence Debt](./rfc-review-atom-close-connection.md):
+  **Superseded by subtraction (2026-07-09):** the grade ceiling and static-guard producer
+  this RFC's thesis rests on were removed; the grade-free `independenceDebtAtoms` sensor
+  survives (a high-risk must-atom with no deterministic/independent pass). Retained below
+  as provenance — the grade-floor argument in the summary is now historical.
   active RFC on the independence-debt close edges (Part 2), reshaped after an independent
   code review caught the author's own blind spot. game_7's independent review (6 findings,
   4 fixes incl. the recurring `req-1` keycode defect) still left `open: 2` for TWO reasons:

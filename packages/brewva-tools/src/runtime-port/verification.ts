@@ -51,10 +51,7 @@ import {
   SOURCE_PATCH_APPLIED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/workbench";
 import type { BrewvaToolRuntime, RecordReviewFindingInput } from "../contracts/index.js";
-import {
-  deriveSessionFreshTouchedUniverse,
-  targetRefCoversFreshUniverse,
-} from "./session-touched-files.js";
+import { targetRefCoversFreshUniverse } from "./session-touched-files.js";
 
 /**
  * The minimal runtime slice verification recording needs. Named so the
@@ -194,7 +191,7 @@ export function assembleReviewDebtInput(
 }
 
 /**
- * Fold graded {@link EvidenceItem}s into {@link DeterministicFitnessEvidence} — one
+ * Map {@link EvidenceItem}s into {@link DeterministicFitnessEvidence} — one
  * per (item, atomRef) pair. SINGLE-HOMED: both the tape assembler (reading
  * committed receipts) and the claim-time producer (`verification_record`, whose
  * items are not on the tape yet) map items through this, so the two never drift.
@@ -272,9 +269,9 @@ export function assembleRequirementFitnessInputFromEvents(
 
   const findings: FitnessReviewFinding[] = [];
   const independentOutcomes: FitnessIndependentOutcome[] = [];
-  // Graded deterministic evidence (R3): each static-guard result arrives as an
-  // evidence item and joins at its recorded grade. Tape-committed items come from
-  // the receipts below; claim-time items (not on the tape yet) arrive via options.
+  // Deterministic evidence: each item joins the deterministic side of the fitness
+  // join. Tape-committed items come from the receipts below; claim-time items (not on
+  // the tape yet) arrive via options. The channel currently has no producer.
   const deterministicEvidence: DeterministicFitnessEvidence[] = options.deterministicEvidence
     ? [...options.deterministicEvidence]
     : [];
@@ -560,80 +557,4 @@ export function buildTapeUnaddressedReviewFindings(
       writeInvocations: invocations,
     }),
   });
-}
-
-/**
- * A stable key for a `ReviewTargetRef`, so a finding can be matched to the outcome of
- * the SAME review WITHOUT decoding the `${runId}-finding-N` id scheme (which lives in the
- * `families/delegation` layer this module sits BELOW — decoding it here would be an import
- * cycle). Same-review findings and their outcome are recorded from the one
- * `dispatch.targetRef`, so their keys are identical; two DISTINCT reviews that happen to
- * share a targetRef collapse to one key, which only ever UNDER-counts the miss below (the
- * safe direction for an advisory).
- */
-function reviewTargetRefKey(ref: ReviewTargetRef): string {
-  return ref.kind === "file_digests"
-    ? `fd:${Object.keys(ref.digests).toSorted().join("|")}`
-    : `ps:${[...ref.patchSetRefs].toSorted().join("|")}`;
-}
-
-/**
- * Coverage-review attribution misses: independent-perspective FAIL outcomes whose
- * `targetRef` COVERS the session's fresh-touched universe yet whose review named ZERO
- * atoms (no finding on that targetRef carried an `atomRefs`). This is the review→atom
- * fold's silent miss (game_7's failure form): a covering review found problems and
- * FAILED, but pinned no requirement atom, so the independence census sees NO movement —
- * `open` does not fall, `violated` does not rise (an independent fail's own atomRefs are
- * dropped to avoid blanket-violation, so the violation can only arrive through a
- * finding) — and the outcome is indistinguishable from "no review ran".
- *
- * Gated so a flag always corresponds to genuinely owed, under-attributed high-risk debt:
- * counted only while independence debt is OPEN at tape end AND the fresh universe is
- * non-empty (a covering fail attributes to nothing when there is nothing to attribute).
- * Pure over the tape; `workspaceRoot` relativizes write paths for the coverage universe
- * exactly as the dispatch-time fold does, so post-hoc coverage matches what was folded.
- */
-export function buildTapeCoverageAttributionMiss(
-  events: readonly BrewvaEventRecord[],
-  workspaceRoot: string | null = null,
-): number {
-  if (buildTapeRequirementFitness(events).independenceDebtAtoms.length === 0) {
-    return 0; // no owed high-risk debt → a covering fail under-attributes nothing
-  }
-  const { universe, patchSetAppliedPaths } = deriveSessionFreshTouchedUniverse(
-    events,
-    workspaceRoot,
-  );
-  if (!universe.fullyKnown || universe.files.size === 0) {
-    return 0; // no fully-known fresh code → no coverage to under-attribute against
-  }
-  const attributedTargetKeys = new Set<string>();
-  const coveringFailTargets: ReviewTargetRef[] = [];
-  for (const event of events) {
-    if (event.type === REVIEW_FINDING_RECORDED_EVENT_TYPE) {
-      const finding = readReviewFindingRecordedEventPayload(event);
-      if (finding && finding.atomRefs.length > 0) {
-        attributedTargetKeys.add(reviewTargetRefKey(finding.targetRef));
-      }
-      continue;
-    }
-    if (event.type === VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE) {
-      const payload = readVerificationOutcomeRecordedEventPayload(event);
-      if (
-        payload.perspective === "independent" &&
-        payload.outcome === "fail" &&
-        payload.targetRef !== null &&
-        targetRefCoversFreshUniverse(universe, patchSetAppliedPaths, payload.targetRef)
-      ) {
-        coveringFailTargets.push(payload.targetRef);
-      }
-    }
-  }
-  let attributionMiss = 0;
-  for (const targetRef of coveringFailTargets) {
-    if (!attributedTargetKeys.has(reviewTargetRefKey(targetRef))) {
-      attributionMiss += 1;
-    }
-  }
-  return attributionMiss;
 }

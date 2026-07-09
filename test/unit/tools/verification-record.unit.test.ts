@@ -119,6 +119,38 @@ describe("verification_record tool", () => {
     expect(schemaKeys).not.toContain("reviewerContext");
     expect(schemaKeys).not.toContain("targetRef");
   });
+
+  test("producerless invariant: the authored tool feeds NO deterministic evidence — the committed receipt's evidenceItems is empty", async () => {
+    // The deterministic-evidence channel has no producer after the static-guard
+    // subtraction. `verification_record` is an AUTHORED producer and runs none
+    // itself (verification-record.ts seeds `evidenceItems = []` and never pushes
+    // to it). Lock that at the requirements rung — the ONLY rung where the fitness
+    // projection consumes evidence — so a receipt committed there carries an empty
+    // channel. If a future runtime-run producer (a gate, an LSP diagnostic) is
+    // wired in, this must be consciously updated, never silently regained.
+    const runtime = createRuntimeFixture();
+    const verificationRecord = createVerificationRecordTool({
+      runtime: createBundledToolRuntime(runtime),
+    });
+    const sessionId = "verification-record-producerless-1";
+
+    const result = await verificationRecord.execute(
+      "tool-1",
+      { outcome: "pass", level: "requirements", checks: ["requirement re-derivation"] },
+      undefined as never,
+      undefined as never,
+      toolContext(sessionId),
+    );
+    expect(result.outcome.kind).toBe("ok");
+
+    const recorded = runtime.ops.events.records
+      .query(sessionId, { type: VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE })
+      .map((event) =>
+        readVerificationOutcomeRecordedEventPayload(event as { payload?: Record<string, unknown> }),
+      );
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]?.evidenceItems).toEqual([]);
+  });
 });
 
 describe("verification_record tool — review-debt marker", () => {

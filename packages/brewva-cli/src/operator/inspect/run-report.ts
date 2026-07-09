@@ -158,8 +158,8 @@ export interface RunReportRequirementAtomLifecycle {
  * adoption liveness reads. `atomizedBeforeFirstWrite` is the R1/R2 acceptance
  * predicate (atoms must precede generation's first source mutation);
  * `reviewDispatched` is the close-path-was-attempted signal. Anchors
- * (`claimed-by(file:line)`) and evidence grade are the R5b layer that depends on
- * R3's structured `evidenceItems`; this baseline needs nothing R3 adds.
+ * (`claimed-by(file:line)`) are the R5b layer that depends on the receipt's
+ * structured `evidenceItems`; this baseline needs nothing that layer adds.
  */
 export interface RunReportRequirementLifecycle {
   /** Earliest requirement-atom mint time — when the spec first became atoms. */

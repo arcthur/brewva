@@ -29,11 +29,11 @@ function atomEvent(id: string, riskClass?: string): BrewvaEventRecord {
   });
 }
 
-// R3b: graded evidence items flow receipt -> defensive reader -> assembler ->
-// the R3-core join. The point: a static-guard adapter's static_guard-grade PASS
-// can SATISFY a high-risk atom that a presence re-grep leaves capped.
-describe("R3b: graded evidenceItems flow receipt -> assembler -> join", () => {
-  test("a static_guard deterministic PASS satisfies a high-risk atom presence could not", () => {
+// Evidence items flow receipt -> defensive reader -> assembler -> the fitness
+// join. The point: a deterministic PASS keyed to an atom SATISFIES it; a
+// deterministic FAIL violates it (deterministic_conflict).
+describe("evidenceItems flow receipt -> assembler -> join", () => {
+  test("a deterministic PASS keyed to a high-risk atom satisfies it", () => {
     const events = [
       atomEvent("req-1", "runtime"),
       record("verification.outcome.recorded", 10, {
@@ -44,7 +44,6 @@ describe("R3b: graded evidenceItems flow receipt -> assembler -> join", () => {
           {
             id: "guard-1",
             atomRefs: ["req-1"],
-            evidenceKind: "static_guard",
             verdict: "pass",
             anchors: ["FnKeyMonitor.swift: keyCode gate"],
             statement: "tap suppression is keycode-scoped",
@@ -56,7 +55,7 @@ describe("R3b: graded evidenceItems flow receipt -> assembler -> join", () => {
     expect(fitness.atoms[0]?.state).toBe("satisfied");
   });
 
-  test("a static_guard deterministic FAIL violates the atom (deterministic_conflict)", () => {
+  test("a deterministic FAIL violates the atom (deterministic_conflict)", () => {
     const events = [
       atomEvent("req-1", "runtime"),
       record("verification.outcome.recorded", 10, {
@@ -67,7 +66,6 @@ describe("R3b: graded evidenceItems flow receipt -> assembler -> join", () => {
           {
             id: "guard-1",
             atomRefs: ["req-1"],
-            evidenceKind: "static_guard",
             verdict: "fail",
             anchors: ["no tapDisabledBy handling"],
             statement: "tap never re-enables",

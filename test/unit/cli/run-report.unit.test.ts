@@ -766,7 +766,7 @@ describe("buildRunReportProjection — requirement lifecycle (R5a)", () => {
 // anchors / closed-by kind+source+verdict), read from receipts once R3's
 // structured evidence flows.
 describe("buildRunReportProjection — requirement lifecycle evidence (R5b)", () => {
-  test("a receipt's graded evidenceItems surface per-atom with anchors + a closedBy render", () => {
+  test("a receipt's evidenceItems surface per-atom with anchors + a closedBy render", () => {
     const events: BrewvaEventRecord[] = [
       record("turn.started", 0, {}),
       record("task.requirement.recorded", 10, {
@@ -780,7 +780,6 @@ describe("buildRunReportProjection — requirement lifecycle evidence (R5b)", ()
           {
             id: "static-guard:event_tap_keycode_scoped:req-1",
             atomRefs: ["req-1"],
-            evidenceKind: "static_guard",
             verdict: "pass",
             anchors: ["FnKeyMonitor.swift: keyCode gate"],
             statement: "keycode-scoped",
