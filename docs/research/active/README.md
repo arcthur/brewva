@@ -103,6 +103,21 @@ discipline.
   discharge; at-grade clearing is the static-guard producer's job (6 lenses only); and
   unguarded high-risk debt (req-8/req-11) is irreducible headlessly — the sensor stays
   correctly lit (axiom 7). One actuator per close-edge.
+- [RFC: Independence Trust Conditions After The Grade-Ceiling Subtraction](./rfc-independence-trust-conditions.md):
+  active RFC completing the forward half of the 2026-07-09 harness subtraction: with the
+  grade ceiling gone, an independent CLEAR genuinely discharges a high-risk atom, and the
+  trust this places in the reviewer is mostly earned structurally (producer-keyed
+  perspective, CLEAR-only + asked-set `atomRefs` via the coverage-scoped fold) — except
+  ONE live asymmetry: findings age when the reviewed tree changes, passes never do, so a
+  stale CLEAR still satisfies (a false-green path the ceiling used to mask). Proposes the
+  mirror rule — STALENESS NEVER SATISFIES (same tape-only matcher, per-receipt own
+  timestamp, over-aging errs safe by re-lighting debt) — and pins the four-bar
+  reintroduction doctrine for the producerless `EvidenceItem` channel (domain-general +
+  boundary-anchored, deterministic by construction, attribution declared never inferred,
+  additive never a gate), so the next recurring defect becomes an eval fixture, not the
+  next regex lens. Records the re-evaluation (independence, not determinism, was the owed
+  property; capability compounds in the reviewer, not the regex) with game_7/8/9_1 as the
+  eval evidence.
 - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md):
   active RFC for closing the last gap in typed, per-entry, promotion-grade
   attention-selection evidence: making attention selection an accountable effect
