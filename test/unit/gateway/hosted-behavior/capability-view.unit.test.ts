@@ -72,6 +72,13 @@ describe("capability view", () => {
     expect(rendered[0]?.content).toContain("available_total: 3");
     expect(rendered[0]?.content).toContain("visible_now: $exec");
     expect(rendered[2]?.content).toContain("hidden_skill_count: 1");
+    // The always-on manifest line keeps only decision-relevant fields; execution
+    // and recovery governance now live in the on-demand [CapabilityDetail] block.
+    expect(rendered[0]?.content).toContain("- $exec | duty=");
+    expect(rendered[0]?.content).toContain("| load_when=always_on");
+    expect(rendered[0]?.content).not.toContain("recovery_preparation=");
+    expect(rendered[0]?.content).not.toContain("recoverability=");
+    expect(rendered[0]?.content).not.toContain("visibility=");
   });
 
   test("selects capability details from $name requests", () => {

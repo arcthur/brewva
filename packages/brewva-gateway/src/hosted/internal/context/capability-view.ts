@@ -65,19 +65,18 @@ interface CapabilityEntry {
   actionGovernance: CapabilityActionGovernance[];
 }
 
+// The always-on summary manifest carries only what informs the model's use/expand
+// decision: name, one-line duty, action class, risk, admission, and how the tool
+// becomes available. Execution/recovery governance (recovery_preparation,
+// recoverability, visibility, recovery_policy, boundary, effects, approval) lives
+// in the on-demand `[CapabilityDetail:$name]` block, reached with an explicit
+// `$name` request — no need to spend it on every tool, every turn.
 interface CapabilityManifestEntry {
   name: string;
   description: string;
   actionClass?: ToolActionClass;
   riskLevel?: ToolRiskLevel;
   admission?: ToolAdmissionBehavior;
-  recoveryPolicy?: ToolRecoveryPolicy;
-  recoveryPreparation: ToolRecoveryPreparation;
-  recoverability: EffectRecoverability;
-  visibility: EffectVisibility;
-  boundary: ToolExecutionBoundary;
-  effects: ToolEffectClass[];
-  requiresApproval: boolean;
   loadWhen: string;
 }
 
@@ -650,9 +649,7 @@ function renderSummaryBlock(
           entry.actionClass ?? "(unknown)"
         } | risk=${risk} | admission=${
           entry.admission ?? "(unknown)"
-        } | recovery_preparation=${entry.recoveryPreparation} | recoverability=${
-          entry.recoverability
-        } | visibility=${entry.visibility} | load_when=${entry.loadWhen}`;
+        } | load_when=${entry.loadWhen}`;
       }),
     ].join("\n"),
     compactContent: [
@@ -793,13 +790,6 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
       actionClass: entry.actionClass,
       riskLevel: entry.riskLevel,
       admission: entry.admission,
-      recoveryPolicy: entry.recoveryPolicy,
-      recoveryPreparation: entry.recoveryPreparation,
-      recoverability: entry.recoverability,
-      visibility: entry.visibility,
-      boundary: entry.boundary,
-      effects: entry.effects,
-      requiresApproval: entry.requiresApproval,
       loadWhen: resolveManifestLoadWhen(entry.surface),
     })),
     visibleByBoundary: {
