@@ -172,13 +172,26 @@ export function assembleReviewDebtInput(
   // from the per-patch-set appliedPaths map below.
   const patchSetAppliedPaths = collectPatchSetAppliedPaths(allEvents);
   const appliedPathsUnion = Object.values(patchSetAppliedPaths).flat();
-  const freshTouchedUniverse = deriveFreshTouchedFileUniverse({
+  const rawUniverse = deriveFreshTouchedFileUniverse({
     appliedPaths: appliedPathsUnion,
     // Commitment write paths are absolute; the read-model relativizes them
     // against the workspace root so the coverage set matches the review
     // targetRef keys (otherwise coverage could never clear).
     writeInvocationPaths: extractWriteInvocationPaths(invocations, workspaceRoot),
   });
+  // Coverage demands only files that STILL EXIST: a session-written-then-deleted
+  // ghost (a refactor rename's leftover) can never appear in a review's digest
+  // snapshot, so demanding it would keep review debt un-clearable for the rest
+  // of the session — the same dead lock the fold's gate had (see
+  // freshTouchedCoverageForTargetRef, game_9_2's deleted main.swift). The
+  // injected `fileDigest` reader is the existence probe this producer already
+  // owns: a null digest IS "not readable now". The pure tape-only display read
+  // (buildTapeReviewDebt) stays unfiltered — over-showing debt on a display
+  // surface is its documented safe direction.
+  const freshTouchedUniverse = {
+    files: new Set([...rawUniverse.files].filter((path) => fileDigest(path) !== null)),
+    fullyKnown: rawUniverse.fullyKnown,
+  };
   return {
     freshCodeWritten,
     claim,

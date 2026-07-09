@@ -208,18 +208,39 @@ export function targetRefCoversFreshUniverse(
  * can distinguish "covered because there is nothing to cover" (empty universe —
  * trivially covered, no fresh implementation to attest against) from real coverage; the
  * review→atom fold rejects an empty universe by reading it directly.
+ *
+ * `fileExists` (injected — this module stays filesystem-free) scopes the coverage
+ * DEMAND to files that still exist. The universe is a whole-session union of write
+ * targets, so a file written early and DELETED later (a refactor rename's ghost)
+ * stays in it forever, while a review snapshot — digests of the CURRENT tree — can
+ * never include it: one ghost file then fails coverage permanently and silently
+ * disables the fold for the rest of the session (observed in game_9_2: a deleted
+ * `main.swift` kept `reviewedAtomIds` empty across two otherwise-covering reviews,
+ * so twelve findings shipped unattributed). A deleted file cannot be reviewed;
+ * demanding its coverage is not honesty, it is a dead lock. When the filter removes
+ * EVERY file the returned universe is empty and the fold's non-empty guard
+ * correctly keeps it idle. Callers without filesystem access (pure tape-only
+ * display reads) omit the predicate and keep the conservative over-demanding
+ * behavior.
  */
 export function freshTouchedCoverageForTargetRef(
   events: readonly BrewvaEventRecord[],
   workspaceRoot: string,
   targetRef: ReviewTargetRef,
+  fileExists?: (relativePath: string) => boolean,
 ): FreshTouchedCoverage {
   const { universe, patchSetAppliedPaths } = deriveSessionFreshTouchedUniverse(
     events,
     workspaceRoot,
   );
+  const liveUniverse = fileExists
+    ? {
+        files: new Set([...universe.files].filter((path) => fileExists(path))),
+        fullyKnown: universe.fullyKnown,
+      }
+    : universe;
   return {
-    universe,
-    covered: targetRefCoversFreshUniverse(universe, patchSetAppliedPaths, targetRef),
+    universe: liveUniverse,
+    covered: targetRefCoversFreshUniverse(liveUniverse, patchSetAppliedPaths, targetRef),
   };
 }

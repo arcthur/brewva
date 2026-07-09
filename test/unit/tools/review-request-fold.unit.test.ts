@@ -200,3 +200,59 @@ describe("describeTargetForObjective — merged attestation appendix", () => {
     expect(objective).toContain("name the atom's id in that finding's atomRefs");
   });
 });
+
+describe("ghost files — a deleted write target must not dead-lock coverage (game_9_2)", () => {
+  // The universe is a whole-session union of write targets; a file written early
+  // and DELETED later (a refactor rename's ghost) stays in it forever while a
+  // review snapshot (digests of the CURRENT tree) can never include it. game_9_2:
+  // a deleted main.swift kept reviewedAtomIds empty across two otherwise-covering
+  // reviews, shipping twelve findings unattributed.
+  const sessionEvents = [
+    writeRecord("Sources/App.swift", 1),
+    writeRecord("Sources/main.swift", 2), // later deleted from the tree
+    requirementRecord("req-runtime", "runtime"),
+  ];
+  const coveringExistingOnly = fileDigestsRef(["Sources/App.swift"]);
+  const existsOnDisk = (path: string) => path !== "Sources/main.swift";
+
+  test("with the existence probe, coverage demands only living files -> covered", () => {
+    const coverage = freshTouchedCoverageForTargetRef(
+      sessionEvents,
+      WORKSPACE_ROOT,
+      coveringExistingOnly,
+      existsOnDisk,
+    );
+    expect(coverage.covered).toBe(true);
+    // The ghost is out of the returned universe too, so the fold's non-empty
+    // guard reads the LIVING set.
+    expect([...coverage.universe.files]).toEqual(["Sources/App.swift"]);
+  });
+
+  test("without the probe the old conservative demand stands (pure tape-only reads)", () => {
+    expect(
+      freshTouchedCoverageForTargetRef(sessionEvents, WORKSPACE_ROOT, coveringExistingOnly).covered,
+    ).toBe(false);
+  });
+
+  test("the fold fires despite the ghost: debt atoms are attested by a review covering all living files", () => {
+    const folded = resolveFoldedDebtAtoms(
+      runtimeWithEvents(sessionEvents),
+      "s",
+      WORKSPACE_ROOT,
+      coveringExistingOnly,
+      existsOnDisk,
+    );
+    expect(folded.map((atom) => atom.id)).toEqual(["req-runtime"]);
+  });
+
+  test("when EVERY fresh file was deleted the fold stays idle (nothing living to attest)", () => {
+    const folded = resolveFoldedDebtAtoms(
+      runtimeWithEvents(sessionEvents),
+      "s",
+      WORKSPACE_ROOT,
+      coveringExistingOnly,
+      () => false,
+    );
+    expect(folded).toEqual([]);
+  });
+});

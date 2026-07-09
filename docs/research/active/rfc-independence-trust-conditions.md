@@ -282,6 +282,26 @@ residue this RFC pins as doctrine:
   were FAIL; `atomRefs` empty by CLEAR-only, so nothing to age).
 - No new render surface, no new event kind, no schema change.
 
+### Field Data (game_9_2, 2026-07-09 — first run with the mirror rule in the tree)
+
+codex gpt-5.5 xhigh, post-subtraction: the model dispatched TWO covering
+independent reviews (12 findings, 3 HIGHs fixed after) — the strongest
+delegation engagement of the series. The mirror rule ran clean and idle: both
+review outcomes were FAIL, so no CLEAR existed to age and the S3 gate stays
+unmet. Replay found the UPSTREAM blocker that keeps CLEARs structurally
+unreachable: a session-written-then-deleted ghost file (`main.swift`, a
+refactor rename's leftover) sat in the fresh-touched universe forever while the
+review snapshot (digests of the current tree) could never include it, so
+`covered` stayed false, the fold never fired, `reviewedAtomIds` stayed empty on
+both dispatches, and every finding shipped unattributed. Fixed alongside this
+note: the coverage demand now scopes to files that still exist (an injected
+existence probe at the fold's call site; the review-debt `covers` twin reuses
+its already-injected `fileDigest` reader — a null digest IS the probe), with
+the pure tape-only display read left conservatively unfiltered. Replaying
+game_9_2's dispatch gates with the fix: `covered=true`, fold would attest
+`req-2/3/6/7` — guard G3's asked-set chain reconnects, which is the
+prerequisite for any future CLEAR this RFC's S3 gate can observe.
+
 ## Source Anchors
 
 - `packages/brewva-vocabulary/src/internal/fitness.ts` lines 203-220

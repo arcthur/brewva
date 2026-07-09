@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { DelegationReviewDispatch } from "@brewva/brewva-vocabulary/delegation";
 import { Type } from "@sinclair/typebox";
@@ -213,7 +215,18 @@ export function createReviewRequestTool(options: BrewvaToolOptions): ToolDefinit
         const attestedAtoms =
           reviewParams.target.kind === "atoms"
             ? atomsTargetAtoms
-            : resolveFoldedDebtAtoms(runtime, sessionId, workspaceRoot, targetRef);
+            : resolveFoldedDebtAtoms(
+                runtime,
+                sessionId,
+                workspaceRoot,
+                targetRef,
+                // The real existence probe: a session-written-then-deleted ghost
+                // (a refactor rename's leftover) must not fail coverage and
+                // dead-lock the fold — the snapshot above can only digest files
+                // that still exist (game_9_2: a deleted main.swift kept the fold
+                // idle across two otherwise-covering reviews).
+                (relativePath) => existsSync(resolve(workspaceRoot, relativePath)),
+              );
 
         const lenses = reviewParams.lenses;
 

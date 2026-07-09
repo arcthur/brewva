@@ -110,6 +110,20 @@ So the instance is real but single-ring: it exercises the discipline entirely
 within the verify/review domain. That it holds there without leaking authority is
 the evidence; a second ring is what makes it constitutional.
 
+Empirical support keeps accruing from the Fn-dictation eval series (same prompt,
+varying models): in game_7, game_8, and game_9_2 the AUTHORED pass self-claimed
+the work sound while an independent fresh-context review surfaced real defects
+the author could not see in its own output — most sharply game_9_2 (codex
+gpt-5.5 xhigh, post-subtraction), where the authored `requirements` pass listed
+every `must` atom as unverified-by-it while two independent reviews recorded
+twelve findings including three real HIGHs the model then fixed; and game_8,
+where the author's pass self-claimed the very atom (`req-1`) its own review had
+flagged as broken. The counter-case is equally instructive: game_9_1 (a weaker
+open-source model) skipped independent review entirely and the system degraded
+to honest `unverified` — authorship taint never converted into a false green,
+because the affirmative path structurally requires the perspective the author
+cannot mint.
+
 ## Negative Space (Where The Axiom Is Currently Unenforced)
 
 Each is a place where a producer also judges its own output, and where the same

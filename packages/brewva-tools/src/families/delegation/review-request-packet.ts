@@ -124,10 +124,20 @@ export function resolveFoldedDebtAtoms(
   sessionId: string,
   workspaceRoot: string,
   targetRef: ReviewTargetRef,
+  // Scopes the coverage demand to files that still exist (a session-written-then-
+  // deleted ghost cannot be reviewed and must not dead-lock the fold — see
+  // freshTouchedCoverageForTargetRef). Injected so this module stays pure over
+  // the runtime read; the effectful caller (review_request) supplies the probe.
+  fileExists?: (relativePath: string) => boolean,
 ): readonly RequirementAtom[] {
   const records = runtime.capabilities.events?.records;
   const events = records?.query ? records.query(sessionId) : [];
-  const { universe, covered } = freshTouchedCoverageForTargetRef(events, workspaceRoot, targetRef);
+  const { universe, covered } = freshTouchedCoverageForTargetRef(
+    events,
+    workspaceRoot,
+    targetRef,
+    fileExists,
+  );
   // Honest scoping with a non-empty guard: fold only into a review that covers the
   // session's FRESH code. An empty universe (no tool-written files this turn) is
   // "trivially covered" yet has no fresh implementation to attest against — folding
