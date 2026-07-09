@@ -25,6 +25,7 @@ export function resolveOverlayFocusOwner(
       return "sessionSwitcher";
     case "lineage":
     case "tree":
+    case "worlds":
       return "dialog";
     case "notifications":
       return "notificationCenter";

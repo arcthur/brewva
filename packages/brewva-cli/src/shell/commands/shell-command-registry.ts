@@ -165,6 +165,15 @@ const builtInShellCommands: readonly ShellCommand[] = [
     suggested: true,
   },
   {
+    id: "session.worlds",
+    title: "Worlds",
+    description: "Browse the world/rewind timeline, diff worlds, and rewind to a checkpoint.",
+    category: "Session",
+    slash: { name: "worlds" },
+    shortcuts: ["leader v"],
+    suggested: true,
+  },
+  {
     id: "session.queue",
     title: "Queued prompts",
     description: "Inspect and delete queued prompts for the current session.",

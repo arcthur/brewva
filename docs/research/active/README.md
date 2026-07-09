@@ -285,6 +285,28 @@ goal holds the intent; the map externalizes the plan.`
 conversation; a delegated edit lands only when adopted; every effect knows its
 way back — or says it has none.`
 
+- [RFC: The `/worlds` Operator Panel — A git-like TUI Over The World/Rewind Substrate](./rfc-worlds-operator-panel.md):
+  active RFC giving the shipped-but-invisible world substrate (content-addressed
+  worlds, the world-restore rewind lane, basis-anchored delegation changesets) a
+  first-class operator surface. Today's TUI renders only the conversation axis
+  (`TreeOverlay`/`LineageOverlay`: turns, prompts, lineage); the environment axis — the
+  world DAG, world↔world diffs, delegation-fork settlement, per-checkpoint world-lane
+  readiness — is surfaced nowhere, and rewind hides behind a shortcut-less `/rewind`
+  blocking picker. Proposes `/worlds` (+ `leader v`), an operate-tier overlay in the
+  `jj op log`/`undo` mental model with three views (Timeline = conversation axis + world
+  readiness chip; Diff = pure manifest world↔world / world↔working-tree diff with a
+  redacted blob viewer; Forks = tape-rebuilt delegation settlement lanes) and a
+  confirm-gated rewind (mode single-select), reusing the shipped
+  `session.rewind/undo/redo` effects and `ConfirmDialogOverlay` wholesale — the only new
+  code is three small pure pieces (`projectWorldDiff`, a read-only working-tree
+  enumerate, a read-only `worlds` runtime-ops face) plus the standard overlay pipeline.
+  Narrower invariants on the shared projection discipline: opening `/worlds` is strictly
+  read-only (never capture/materialize/sweep), blob diffs render through the existing
+  redaction layer (world blobs are raw bytes and may carry secrets), and it stays
+  explicit-pull / never model-visible. Phased landing (1: read-only Timeline MVP; 2:
+  Diff + confirmed rewind; 3: Forks lane). Under the line `A checkpoint already names a
+world — the panel makes the world navigable, diffable, and reversible.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

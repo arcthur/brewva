@@ -1,6 +1,7 @@
 import { type BrewvaEventRecord } from "./events.js";
 import { type VerifierCheck } from "./iteration.js";
 import { readReviewTargetRef, type ReviewTargetRef } from "./review.js";
+import { isProtocolRecord, readStringArray } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
 
 export type { ProtocolRecord } from "./types/foundation.js";
@@ -35,6 +36,103 @@ export const WORKER_RESULTS_REJECTED_EVENT_TYPE = "worker.results.rejected" as c
 // Runtime-ops worker-result record event: emitted by the hosted session builder and folded
 // by the runtime-ops worker-results projection. Shared so emit and projection never drift.
 export const WORKER_RESULT_RECORDED_EVENT_TYPE = "worker.result.recorded" as const;
+
+/**
+ * The recorded payload shared by the three worker-results settlement events
+ * (applied / apply_failed / rejected). The emit sites in `@brewva/brewva-tools`
+ * build it through {@link buildWorkerResultsSettlementPayload} and the /worlds
+ * Forks projection reads it back — declaring the keys in ONE place stops the
+ * emit/projection key drift that silently zeroes a lane's paths. All fields but
+ * `workerIds` are settlement-variant specific.
+ */
+export interface WorkerResultsSettlementPayload {
+  readonly workerIds: readonly string[];
+  readonly planId: string | null;
+  readonly appliedPatchSetId: string | null;
+  readonly appliedPaths: readonly string[];
+  readonly failedPaths: readonly string[];
+  readonly reason: string | null;
+}
+
+/**
+ * Build a worker-results settlement event payload with every key present and
+ * normalized (missing arrays → [], missing scalars → null), so the Forks
+ * projection never reads an absent key. The exact-typed input rejects a stray
+ * key (e.g. a `conflicts` typo) at compile time — the single guard against the
+ * emit/projection drift class.
+ */
+export function buildWorkerResultsSettlementPayload(input: {
+  readonly workerIds: readonly string[];
+  readonly planId?: string | null;
+  readonly appliedPatchSetId?: string | null;
+  readonly appliedPaths?: readonly string[];
+  readonly failedPaths?: readonly string[];
+  readonly reason?: string | null;
+}): WorkerResultsSettlementPayload {
+  return {
+    workerIds: [...input.workerIds],
+    planId: input.planId ?? null,
+    appliedPatchSetId: input.appliedPatchSetId ?? null,
+    appliedPaths: input.appliedPaths ? [...input.appliedPaths] : [],
+    failedPaths: input.failedPaths ? [...input.failedPaths] : [],
+    reason: input.reason ?? null,
+  };
+}
+
+export type SessionForkOutcome = "applied" | "apply_failed" | "rejected";
+
+/** One delegation-changeset settlement, projected from a worker-results adoption event. */
+export interface SessionForkLane {
+  readonly eventId: string;
+  readonly timestamp: number;
+  readonly outcome: SessionForkOutcome;
+  readonly workerIds: readonly string[];
+  readonly appliedPathCount: number;
+  readonly conflictPaths: readonly string[];
+  /** Why it settled this way (e.g. already_applied / basis_conflict), or null. */
+  readonly reason: string | null;
+}
+
+/**
+ * Project the session's delegation-changeset settlement lanes from the tape's
+ * worker-results adoption events (rfc-worlds-operator-panel Phase 3, Forks view). Each
+ * lane is one settlement: the workers whose changeset was adopted, the outcome
+ * (applied / apply_failed / rejected), the applied-path count, and any conflict paths.
+ * This is the TAPE-DERIVABLE view of fork settlement; the RFC's richer world-level
+ * basis→result lane needs seal-time persistence the tape does not yet carry (Open
+ * Question 2), so it stays a deliberate follow-up. Pure over the event list, in tape order.
+ */
+export function projectSessionForks(
+  events: readonly BrewvaEventRecord[],
+): readonly SessionForkLane[] {
+  const lanes: SessionForkLane[] = [];
+  for (const event of events) {
+    const outcome: SessionForkOutcome | null =
+      event.type === WORKER_RESULTS_APPLIED_EVENT_TYPE
+        ? "applied"
+        : event.type === WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE
+          ? "apply_failed"
+          : event.type === WORKER_RESULTS_REJECTED_EVENT_TYPE
+            ? "rejected"
+            : null;
+    if (outcome === null) {
+      continue;
+    }
+    const payload = isProtocolRecord(event.payload) ? event.payload : {};
+    // The emit side (buildWorkerResultsSettlementPayload) writes appliedPaths and
+    // failedPaths as flat string arrays and reason as a scalar — read the SAME keys.
+    lanes.push({
+      eventId: event.id,
+      timestamp: event.timestamp,
+      outcome,
+      workerIds: readStringArray(payload.workerIds),
+      appliedPathCount: readStringArray(payload.appliedPaths).length,
+      conflictPaths: readStringArray(payload.failedPaths),
+      reason: typeof payload.reason === "string" ? payload.reason : null,
+    });
+  }
+  return lanes;
+}
 
 export const REVIEW_CHANGE_CATEGORIES: readonly string[] = [
   "authn",

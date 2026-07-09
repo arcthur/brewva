@@ -1740,5 +1740,14 @@ export function createSessionViewPort(bundle: CliShellSessionBundle): SessionVie
     listRewindTargets() {
       return bundle.inspect.session.rewindTargets(bundle.session.sessionManager.getSessionId());
     },
+    worldDiff(checkpointId: string) {
+      return bundle.inspect.session.worldDiff(
+        bundle.session.sessionManager.getSessionId(),
+        checkpointId,
+      );
+    },
+    worldForks() {
+      return bundle.inspect.session.worldForks(bundle.session.sessionManager.getSessionId());
+    },
   };
 }

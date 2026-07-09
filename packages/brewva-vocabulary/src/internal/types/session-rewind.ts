@@ -182,6 +182,20 @@ export type SessionRewindTargetLineage =
   | { readonly kind: "active" }
   | { readonly kind: "abandoned"; readonly rewoundBy: string; readonly rewoundAt: number };
 
+/**
+ * The world-lane status of a rewind target's checkpoint, projected PURELY from the
+ * checkpoint's `brewva.world.v1` block (coupled world rewind RFC), zero I/O: `captured`
+ * when the block names a world id, `capture_failed` when the block recorded a failure,
+ * `not_captured` when no block rode the checkpoint (predates the lane, or worlds were
+ * off). Whether a `captured` world's material still exists (`missing_artifacts`) needs a
+ * store verify and is deliberately NOT decided here — the `/worlds` panel layers that on
+ * with the read-only world-store ops.
+ */
+export type SessionRewindTargetWorld =
+  | { readonly status: "captured"; readonly worldId: string }
+  | { readonly status: "capture_failed" }
+  | { readonly status: "not_captured" };
+
 export interface SessionRewindTargetView {
   readonly checkpointId: string;
   readonly turn: number;
@@ -194,6 +208,7 @@ export interface SessionRewindTargetView {
     readonly deleted: number;
   };
   readonly lineage: SessionRewindTargetLineage;
+  readonly world: SessionRewindTargetWorld;
 }
 
 export interface SessionRewindState {

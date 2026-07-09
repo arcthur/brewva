@@ -15,6 +15,8 @@ import type {
   BrewvaSteerOutcome,
 } from "@brewva/brewva-substrate/session";
 import type { BrewvaToolDefinition } from "@brewva/brewva-substrate/tools";
+import type { WorldDiff } from "@brewva/brewva-tools/world-store";
+import type { SessionForkLane } from "@brewva/brewva-vocabulary/delegation";
 import type {
   RecordSessionRewindCheckpointInput,
   SessionLineageTree,
@@ -193,4 +195,8 @@ export interface SessionViewPort {
   redoSession(input?: SessionRedoInput): Promise<SessionRedoResult>;
   getRewindState(): SessionRewindState;
   listRewindTargets(): SessionRewindTargetView[];
+  /** Read-only content-addressed file diff of a checkpoint's world vs the previous world. */
+  worldDiff(checkpointId: string): WorldDiff | undefined;
+  /** Read-only delegation-changeset settlement lanes, projected from worker-results events. */
+  worldForks(): readonly SessionForkLane[];
 }

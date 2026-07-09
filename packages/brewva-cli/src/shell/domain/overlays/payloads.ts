@@ -378,6 +378,111 @@ export interface CliShortcutOverlayPayload {
   footer?: string;
 }
 
+/** The `/worlds` operator panel views (rfc-worlds-operator-panel). Phase 1 ships `timeline`. */
+export type CliWorldsOverlayView = "timeline" | "diff" | "forks";
+
+/**
+ * World-lane chip status for a timeline row. `captured`/`capture_failed`/`not_captured`
+ * are the zero-I/O projection view; `missing_artifacts` is layered on later by the
+ * read-only world-store verify (Phase 2), never by the pure timeline projection.
+ */
+export type CliWorldChipStatus =
+  | "captured"
+  | "missing_artifacts"
+  | "capture_failed"
+  | "not_captured";
+
+export interface CliWorldsTimelineRow {
+  checkpointId: string;
+  turn: number;
+  timestamp: number;
+  promptPreview: string;
+  patchSetCountAfter: number;
+  /** Conversation-axis lineage from listTargets: an abandoned checkpoint was rewound past. */
+  abandoned: boolean;
+  /** True for the checkpoint the session currently sits on (HEAD). */
+  current: boolean;
+  worldStatus: CliWorldChipStatus;
+  worldId: string | null;
+}
+
+export interface CliWorldsDiffFile {
+  path: string;
+  change: "added" | "modified" | "deleted";
+}
+
+/** The Diff view's content: the selected checkpoint's world vs the previous checkpoint's. */
+export interface CliWorldsDiffView {
+  checkpointId: string;
+  turn: number;
+  /** False when the checkpoint captured no world or its material was swept — nothing to diff. */
+  available: boolean;
+  files: CliWorldsDiffFile[];
+  added: number;
+  modified: number;
+  deleted: number;
+}
+
+export type CliWorldsForkOutcome = "applied" | "apply_failed" | "rejected";
+
+/** One delegation-changeset settlement lane in the Forks view (tape-derived). */
+export interface CliWorldsForkLane {
+  eventId: string;
+  timestamp: number;
+  outcome: CliWorldsForkOutcome;
+  workerIds: string[];
+  appliedPathCount: number;
+  conflictPaths: string[];
+  /** Why it settled this way (e.g. already_applied / basis_conflict), or null. */
+  reason: string | null;
+}
+
+export interface CliWorldsOverlayPayload {
+  kind: "worlds";
+  view: CliWorldsOverlayView;
+  selectedIndex: number;
+  sessionId: string;
+  /** False when `worlds.enabled` is off — the environment axis degrades, timeline stays. */
+  worldsEnabled: boolean;
+  rows: CliWorldsTimelineRow[];
+  /** The Diff view's loaded content (null in the Timeline view or before a diff is loaded). */
+  diff: CliWorldsDiffView | null;
+  /** Scroll offset into the Diff view's file list. */
+  diffScrollOffset: number;
+  /** The Forks view's settlement lanes (always tape-derived; empty when no delegation ran). */
+  forks: CliWorldsForkLane[];
+  /** Scroll offset into the Forks view's lane list. */
+  forksScrollOffset: number;
+}
+
+/** Lineage glyph for a timeline row — single-sourced so the rich view and the text view agree. */
+export const WORLD_LINEAGE_GLYPH = {
+  current: "●",
+  abandoned: "⊘",
+  active: "○",
+} as const;
+
+export type WorldLineageKey = keyof typeof WORLD_LINEAGE_GLYPH;
+
+/**
+ * The lineage bucket of a timeline row — single-sourced so the rich view, the text view,
+ * and the detail pane can never disagree on how current/abandoned/active is decided.
+ */
+export function worldLineageKey(row: {
+  readonly current: boolean;
+  readonly abandoned: boolean;
+}): WorldLineageKey {
+  return row.current ? "current" : row.abandoned ? "abandoned" : "active";
+}
+
+/** World-lane chip glyph per status — single-sourced across the rich view and the text view. */
+export const WORLD_CHIP_GLYPH: Record<CliWorldChipStatus, string> = {
+  captured: "✓",
+  missing_artifacts: "⚠",
+  capture_failed: "✗",
+  not_captured: "·",
+};
+
 export interface OverlayPayloadMap {
   approval: CliApprovalOverlayPayload;
   question: CliQuestionOverlayPayload;
@@ -406,6 +511,7 @@ export interface OverlayPayloadMap {
   cockpitArchive: CliCockpitArchiveOverlayPayload;
   cockpitAttention: CliCockpitAttentionOverlayPayload;
   skills: CliSkillsOverlayPayload;
+  worlds: CliWorldsOverlayPayload;
 }
 
 export type ShellOverlayKind = keyof OverlayPayloadMap;

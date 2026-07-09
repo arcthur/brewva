@@ -7,6 +7,7 @@ import type {
   WorkerResult,
 } from "@brewva/brewva-vocabulary/delegation";
 import {
+  buildWorkerResultsSettlementPayload,
   WORKER_RESULTS_APPLIED_EVENT_TYPE,
   WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
   WORKER_RESULTS_REJECTED_EVENT_TYPE,
@@ -473,13 +474,14 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
             type: receipt.ok
               ? WORKER_RESULTS_APPLIED_EVENT_TYPE
               : WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
-            payload: {
+            payload: buildWorkerResultsSettlementPayload({
               workerIds,
               planId: params.plan_id,
               appliedPatchSetId: report.appliedPatchSetId ?? null,
+              appliedPaths: report.appliedPaths,
               failedPaths: report.failedPaths,
               reason: report.reason ?? null,
-            },
+            }),
           });
           if (receipt.ok && workerIds.length > 0) {
             runtime.capabilities.session.workerResults.clear(sessionId, {
@@ -551,13 +553,11 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
           recordToolRuntimeEvent(runtime, {
             sessionId,
             type: WORKER_RESULTS_APPLY_FAILED_EVENT_TYPE,
-            payload: {
+            payload: buildWorkerResultsSettlementPayload({
               workerIds: report.workerIds,
-              planId: null,
-              appliedPatchSetId: null,
               failedPaths: settlement.conflicts.map((conflict) => conflict.path),
               reason: "basis_conflict",
-            },
+            }),
           });
           return errTextResult(
             [
@@ -581,13 +581,12 @@ export function createWorkerResultsApplyTool(options: BrewvaToolOptions): ToolDe
           recordToolRuntimeEvent(runtime, {
             sessionId,
             type: WORKER_RESULTS_APPLIED_EVENT_TYPE,
-            payload: {
+            payload: buildWorkerResultsSettlementPayload({
               workerIds: report.workerIds,
-              planId: null,
               appliedPatchSetId: report.mergedPatchSet.id,
-              failedPaths: [],
+              appliedPaths: [],
               reason: "already_applied",
-            },
+            }),
           });
           if (report.workerIds.length > 0) {
             runtime.capabilities.session.workerResults.clear(sessionId, {
@@ -745,10 +744,10 @@ export function createWorkerResultsRejectTool(options: BrewvaToolOptions): ToolD
       recordToolRuntimeEvent(runtime, {
         sessionId,
         type: WORKER_RESULTS_REJECTED_EVENT_TYPE,
-        payload: {
+        payload: buildWorkerResultsSettlementPayload({
           workerIds,
           reason: params.reason,
-        },
+        }),
       });
       runtime.capabilities.session.workerResults.clear(sessionId, {
         workerIds,

@@ -187,6 +187,8 @@ function updateCommandIntent(
           },
         ],
       });
+    case "session.worlds":
+      return handled({ effects: [{ type: "overlay.openWorlds" }] });
     case "session.queue":
       return handled({ effects: [{ type: "overlay.openQueue" }] });
     case "session.undo":

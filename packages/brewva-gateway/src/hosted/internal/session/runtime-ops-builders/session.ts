@@ -1,4 +1,5 @@
 import {
+  projectSessionForks,
   WORKER_RESULT_RECORDED_EVENT_TYPE,
   type WorkerMergeReport,
 } from "@brewva/brewva-vocabulary/delegation";
@@ -22,6 +23,7 @@ import {
   executeRewind,
   previewWorkspaceRewind,
   recordRewindCheckpoint,
+  worldDiffForCheckpoint,
 } from "../recovery/rewind-engine.js";
 import { projectRewindState } from "../recovery/rewind-state.js";
 import { rememberCommittedCompactionContextState } from "../runtime-ops-compaction-state.js";
@@ -192,6 +194,8 @@ export function buildSessionRuntimeOps(
       ],
       workspaceReadiness: (sessionId, checkpointId) =>
         previewWorkspaceRewind(ctx, sessionId, checkpointId),
+      worldDiff: (sessionId, checkpointId) => worldDiffForCheckpoint(ctx, sessionId, checkpointId),
+      worldForks: (sessionId) => [...projectSessionForks(ctx.listEvents(sessionId))],
       recordCheckpoint: (sessionId, input) => recordRewindCheckpoint(ctx, sessionId, input),
       rewind: (sessionId, input) => executeRewind(ctx, sessionId, input),
       redo: (sessionId, input) => executeRedo(ctx, sessionId, input),

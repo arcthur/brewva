@@ -6,7 +6,10 @@ import type {
 import {
   buildWorldCheckpointBlock,
   createWorkspaceWorldStore,
+  projectWorldDiff,
   type WorkspaceWorldStore,
+  type WorldDiff,
+  type WorldManifest,
 } from "@brewva/brewva-tools/world-store";
 import {
   REASONING_CHECKPOINT_EVENT_TYPE,
@@ -726,4 +729,65 @@ export function previewWorkspaceRewind(
     blockedReason: worldReady ? null : readiness.blockedReason,
     ...(world ? { world } : {}),
   };
+}
+
+/**
+ * Read-only content-addressed file diff of a checkpoint's world against the PREVIOUS
+ * checkpoint's world (git-log style), for the `/worlds` diff view. Diffing adjacent
+ * stored worlds needs no working-tree enumerate (rfc-worlds-operator-panel Open Question
+ * 1); the first checkpoint diffs against an empty world. Returns undefined when worlds
+ * are disabled, the checkpoint captured no world, or the world's material was GC'd — the
+ * UI renders those as "no diff available". Purely reads the store; no capture/materialize.
+ */
+export function worldDiffForCheckpoint(
+  ctx: HostedRuntimeOpsContext,
+  sessionId: string,
+  checkpointId: string,
+): WorldDiff | undefined {
+  const worldStore = worldStoreFor(ctx);
+  if (!worldStore) {
+    return undefined;
+  }
+  const checkpoints = ctx
+    .listEvents(sessionId)
+    .filter((event) => event.type === SESSION_REWIND_CHECKPOINT_EVENT_TYPE);
+  const index = checkpoints.findIndex(
+    (event) =>
+      (isRecord(event.payload) && typeof event.payload.checkpointId === "string"
+        ? event.payload.checkpointId
+        : event.id) === checkpointId,
+  );
+  if (index < 0) {
+    return undefined;
+  }
+  const afterEvent = checkpoints[index];
+  const afterBlock =
+    afterEvent && isRecord(afterEvent.payload)
+      ? parseWorldCheckpointBlock(afterEvent.payload.world)
+      : undefined;
+  if (!afterBlock?.ok) {
+    return undefined; // no world captured at this checkpoint — nothing to diff
+  }
+  const afterManifest = worldStore.readManifest(afterBlock.worldId);
+  if (!afterManifest) {
+    return undefined; // the world's material was swept
+  }
+  if (index === 0) {
+    // The first checkpoint has no basis — diff against an empty world, genuinely all-added.
+    const emptyManifest: WorldManifest = { schema: afterManifest.schema, files: [] };
+    return projectWorldDiff(emptyManifest, afterManifest);
+  }
+  // A previous checkpoint exists, so its world IS the basis. If that world is absent
+  // (the previous checkpoint captured none, or its material was swept), diffing against an
+  // empty world would dishonestly relabel every file "added" — so report no diff instead.
+  const beforeEvent = checkpoints[index - 1];
+  const beforeBlock =
+    beforeEvent && isRecord(beforeEvent.payload)
+      ? parseWorldCheckpointBlock(beforeEvent.payload.world)
+      : undefined;
+  const beforeManifest = beforeBlock?.ok ? worldStore.readManifest(beforeBlock.worldId) : undefined;
+  if (!beforeManifest) {
+    return undefined;
+  }
+  return projectWorldDiff(beforeManifest, afterManifest);
 }

@@ -39,8 +39,8 @@ Key ideas:
 - slash completion starts with `/`
 - workspace path completion starts with `@`
 - `/model`, `/inspect`, `/transcript`, `/inbox`, `/tree`, `/lineage`,
-  `/undo`, `/rewind`, `/redo`, `/handoff`, `/answer`, and `/theme` are
-  interactive veneers over runtime or host state
+  `/undo`, `/rewind`, `/redo`, `/worlds`, `/handoff`, `/answer`, and `/theme`
+  are interactive veneers over runtime or host state
 - `/inspect` opens the shared Work Card first; context, authority, skills,
   inbox, diff, and raw replay are drill-downs
 - `/transcript` opens a read-only snapshot of the current session transcript in
@@ -50,6 +50,9 @@ Key ideas:
   is the macro topology view for work branches, recovery, delegation, adoption,
   and channel-local selection. Per-key behavior lives in
   `docs/reference/commands/interactive.md`.
+- `/worlds` (or `leader v`) is the environment-axis operator panel: a git-like
+  timeline of rewind checkpoints with world-readiness chips, world-to-world
+  diffs, and delegation-fork settlement lanes, with a confirm-gated rewind.
 
 Keyboard details are in `docs/reference/commands/interactive.md`.
 

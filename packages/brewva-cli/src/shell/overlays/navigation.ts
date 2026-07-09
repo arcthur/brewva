@@ -40,6 +40,11 @@ export function selectableItemCount(payload: CliShellOverlayPayload): number | u
   if (payload.kind === "tree") {
     return payload.nodes.length;
   }
+  if (payload.kind === "worlds") {
+    // Only the Timeline view selects rows; the Diff and Forks views scroll their own lists,
+    // so arrow keys must not silently drift the hidden timeline cursor there.
+    return payload.view === "timeline" ? payload.rows.length : 0;
+  }
   if (payload.kind === "queue") {
     return payload.items.length;
   }

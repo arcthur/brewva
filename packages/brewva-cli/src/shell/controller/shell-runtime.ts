@@ -1632,6 +1632,7 @@ export class CliShellRuntime {
       openLineage: () => this.#overlayHandler.openLineageOverlay(),
       openTree: (query, lineageNodeId) =>
         this.#overlayHandler.openTreeOverlay(query, lineageNodeId),
+      openWorlds: () => this.#overlayHandler.openWorldsOverlay(),
       openQueue: () => this.#overlayHandler.openQueueOverlay(),
       openInspect: () => this.#overlayHandler.openInspectOverlay(),
       openNotifications: () => this.#overlayHandler.openNotificationsOverlay(),

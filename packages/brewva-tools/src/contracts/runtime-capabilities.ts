@@ -110,6 +110,8 @@ export const BREWVA_TOOL_RUNTIME_CAPABILITY_PATHS = Object.freeze([
   "capabilities.session.rewind.redo",
   "capabilities.session.rewind.rewind",
   "capabilities.session.rewind.workspaceReadiness",
+  "capabilities.session.rewind.worldDiff",
+  "capabilities.session.rewind.worldForks",
   "capabilities.session.title.get",
   "capabilities.session.title.recordGenerated",
   "capabilities.session.workerResults.clear",

@@ -9,6 +9,7 @@ import type {
 } from "@brewva/brewva-vocabulary/context";
 import type {
   ParallelSlotPort,
+  SessionForkLane,
   WorkerMergeReport,
   WorkerResult,
 } from "@brewva/brewva-vocabulary/delegation";
@@ -127,6 +128,7 @@ import type {
 } from "@brewva/brewva-vocabulary/workbench";
 import type { ManagedExecProcessRegistryRuntime } from "../families/execution/exec-process-registry/runtime.js";
 import type { BoxPlane } from "../internal/box/index.js";
+import type { WorldDiff } from "../world-store/index.js";
 import type { BrewvaToolDelegationQuery, BrewvaToolOrchestration } from "./delegation.js";
 import type { BrewvaToolRuntimeExtensions, BrewvaToolRuntimeToolsExtension } from "./metadata.js";
 
@@ -910,6 +912,8 @@ export interface BrewvaToolRuntimeQueryPort {
       getState(sessionId: string): SessionRewindState;
       listTargets(sessionId: string): SessionRewindTargetView[];
       workspaceReadiness(sessionId: string, checkpointId?: string): WorkspaceRewindReadiness;
+      worldDiff(sessionId: string, checkpointId: string): WorldDiff | undefined;
+      worldForks(sessionId: string): readonly SessionForkLane[];
     };
     readonly title: {
       get(sessionId: string): string | undefined;

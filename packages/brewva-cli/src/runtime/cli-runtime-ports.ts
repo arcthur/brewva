@@ -115,6 +115,13 @@ export function createCliInspectPort(adapter: CliInspectAdapter) {
         ops.session.rewind.getState(sessionId),
       rewindTargets: (sessionId: string): ReturnType<Ops["session"]["rewind"]["listTargets"]> =>
         ops.session.rewind.listTargets(sessionId),
+      worldDiff: (
+        sessionId: string,
+        checkpointId: string,
+      ): ReturnType<Ops["session"]["rewind"]["worldDiff"]> =>
+        ops.session.rewind.worldDiff(sessionId, checkpointId),
+      worldForks: (sessionId: string): ReturnType<Ops["session"]["rewind"]["worldForks"]> =>
+        ops.session.rewind.worldForks(sessionId),
       workspaceRewindReadiness: (
         sessionId: string,
         checkpointId?: string,

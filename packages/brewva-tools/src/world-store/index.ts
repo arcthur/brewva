@@ -1,4 +1,10 @@
 export { buildWorldCheckpointBlock, type WorldCheckpointBlock } from "./checkpoint-block.js";
+export {
+  projectWorldDiff,
+  type WorldDiff,
+  type WorldFileChange,
+  type WorldFileDiff,
+} from "./diff.js";
 // Shared by the delegation fork copy (cross-package): the one git-scope lister
 // and the one runtime-data-root exclusion set, so the fork and capture agree.
 export { listGitScopedPaths, RUNTIME_DATA_ROOT_NAMES } from "./enumerate.js";

@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 
-import { For, Show, createEffect, createMemo } from "solid-js";
+import { For, Match, Show, Switch, createEffect, createMemo } from "solid-js";
 import { visibleWidth } from "../../../src/internal/tui/index.js";
 import type {
   CliCockpitArchiveOverlayPayload,
@@ -14,6 +14,17 @@ import type {
   CliSessionsOverlayPayload,
   CliTasksOverlayPayload,
   CliTreeOverlayPayload,
+  CliWorldChipStatus,
+  CliWorldsDiffFile,
+  CliWorldsDiffView,
+  CliWorldsForkLane,
+  CliWorldsForkOutcome,
+  CliWorldsOverlayPayload,
+} from "../../../src/shell/domain/overlays/payloads.js";
+import {
+  WORLD_CHIP_GLYPH,
+  WORLD_LINEAGE_GLYPH,
+  worldLineageKey,
 } from "../../../src/shell/domain/overlays/payloads.js";
 import { buildNotificationDetailLines } from "../../../src/shell/domain/overlays/projectors/notifications.js";
 import {
@@ -950,6 +961,382 @@ export function LineageOverlay(input: {
           <TextLineBlock lines={detailLines()} color={input.theme.text} />
         </box>
       </box>
+    </OverlaySurface>
+  );
+}
+
+const WORLD_CHIP_COLOR: Record<CliWorldChipStatus, "success" | "warning" | "error" | "textDim"> = {
+  captured: "success",
+  missing_artifacts: "warning",
+  capture_failed: "error",
+  not_captured: "textDim",
+};
+
+const WORLD_CHIP_WIDTH = 2;
+
+/**
+ * The `/worlds` timeline rail: one row per rewind checkpoint fusing the conversation axis
+ * (lineage glyph + turn + prompt) with the environment axis (a colored world-lane chip).
+ * Modeled on {@link TreeSidebarList} — a windowed, selection-inverting custom row so the
+ * chip can carry its own color, which a plain string `SelectionList` cannot.
+ */
+function WorldsTimelineList(input: {
+  payload: CliWorldsOverlayPayload;
+  theme: SessionPalette;
+  sidebarWidth: number;
+  maxVisible: number;
+}) {
+  const selectionWindow = createMemo(() =>
+    windowSelection(input.payload.rows, input.payload.selectedIndex, input.maxVisible),
+  );
+  const labelMaxWidth = createMemo(() =>
+    Math.max(
+      4,
+      input.sidebarWidth - DIALOG_HORIZONTAL_PADDING * 2 - SIDEBAR_MARKER_WIDTH - WORLD_CHIP_WIDTH,
+    ),
+  );
+  return (
+    <box width="100%" flexDirection="column" backgroundColor={input.theme.backgroundPanel}>
+      <For each={selectionWindow().items}>
+        {(row, index) => {
+          const absoluteIndex = createMemo(() => selectionWindow().startIndex + index());
+          const selected = createMemo(() => absoluteIndex() === input.payload.selectedIndex);
+          const marker = createMemo(() => `${WORLD_LINEAGE_GLYPH[worldLineageKey(row)]} `);
+          const markerFg = createMemo(() =>
+            selected()
+              ? input.theme.selectionText
+              : row.current
+                ? input.theme.primary
+                : row.abandoned
+                  ? input.theme.textDim
+                  : input.theme.text,
+          );
+          const chipGlyph = createMemo(() => WORLD_CHIP_GLYPH[row.worldStatus]);
+          const chipColor = createMemo(() => input.theme[WORLD_CHIP_COLOR[row.worldStatus]]);
+          const label = createMemo(() =>
+            truncateDialogText(
+              `t${row.turn}  ${row.promptPreview || "(no prompt)"}`,
+              labelMaxWidth(),
+            ),
+          );
+          return (
+            <box
+              width="100%"
+              flexDirection="row"
+              alignItems="center"
+              backgroundColor={selected() ? input.theme.primary : undefined}
+              paddingLeft={DIALOG_HORIZONTAL_PADDING - SIDEBAR_MARKER_WIDTH}
+              paddingRight={DIALOG_HORIZONTAL_PADDING}
+              flexShrink={0}
+            >
+              <box width={SIDEBAR_MARKER_WIDTH} flexShrink={0}>
+                <text
+                  fg={markerFg()}
+                  wrapMode="none"
+                  attributes={row.current ? TextAttributes.BOLD : undefined}
+                >
+                  {marker()}
+                </text>
+              </box>
+              <text
+                flexGrow={1}
+                fg={selected() ? input.theme.selectionText : input.theme.text}
+                attributes={selected() ? TextAttributes.BOLD : undefined}
+                overflow="hidden"
+                wrapMode="none"
+              >
+                {label()}
+              </text>
+              <box width={WORLD_CHIP_WIDTH} flexShrink={0} alignItems="flex-end">
+                <text fg={selected() ? input.theme.selectionText : chipColor()} wrapMode="none">
+                  {chipGlyph()}
+                </text>
+              </box>
+            </box>
+          );
+        }}
+      </For>
+    </box>
+  );
+}
+
+const DIFF_CHANGE: Record<
+  CliWorldsDiffFile["change"],
+  { readonly glyph: string; readonly token: "diffAdded" | "warning" | "diffRemoved" }
+> = {
+  added: { glyph: "+", token: "diffAdded" },
+  modified: { glyph: "~", token: "warning" },
+  deleted: { glyph: "-", token: "diffRemoved" },
+};
+
+/** The `/worlds` Diff view: the selected checkpoint's world vs the previous, file-level. */
+function WorldsDiffPane(input: {
+  diff: CliWorldsDiffView | null;
+  worldsEnabled: boolean;
+  theme: SessionPalette;
+  scrollOffset: number;
+  contentRows: number;
+}) {
+  const files = createMemo(() => input.diff?.files ?? []);
+  // Reserve the header line; the rest of the pane is the scrollable file window, sized to
+  // the viewport (NOT the checkpoint count) so a large changeset is fully reachable.
+  const windowRows = createMemo(() => Math.max(3, input.contentRows - 2));
+  const maxOffset = createMemo(() => Math.max(0, files().length - windowRows()));
+  const offset = createMemo(() => Math.min(Math.max(0, input.scrollOffset), maxOffset()));
+  const windowFiles = createMemo(() => files().slice(offset(), offset() + windowRows()));
+  const hiddenBelow = createMemo(() => files().length - offset() - windowFiles().length);
+  return (
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      paddingLeft={DIALOG_HORIZONTAL_PADDING}
+      paddingRight={DIALOG_HORIZONTAL_PADDING}
+    >
+      <Show
+        when={input.worldsEnabled}
+        fallback={
+          <text fg={input.theme.textMuted}>
+            Worlds are disabled (config worlds.enabled) — no diff to show.
+          </text>
+        }
+      >
+        <Show
+          when={input.diff}
+          fallback={
+            <text fg={input.theme.textMuted}>
+              Select a checkpoint, then press 2 to diff its world.
+            </text>
+          }
+        >
+          {(diff) => (
+            <Show
+              when={diff().available}
+              fallback={
+                <text fg={input.theme.textMuted}>
+                  No diff available — no world here, or the previous world is unavailable.
+                </text>
+              }
+            >
+              <text fg={input.theme.textMuted} wrapMode="none">
+                world at turn {diff().turn} vs previous · +{diff().added} ~{diff().modified} -
+                {diff().deleted}
+                {offset() > 0 ? ` · scrolled ${offset()}` : ""}
+              </text>
+              <box marginTop={1} flexDirection="column" flexGrow={1}>
+                <Show
+                  when={diff().files.length > 0}
+                  fallback={
+                    <text fg={input.theme.textMuted}>No file changes vs the previous world.</text>
+                  }
+                >
+                  <For each={windowFiles()}>
+                    {(file) => (
+                      <box flexDirection="row" flexShrink={0}>
+                        <text fg={input.theme[DIFF_CHANGE[file.change].token]} wrapMode="none">
+                          {`${DIFF_CHANGE[file.change].glyph} `}
+                        </text>
+                        <text fg={input.theme.text} overflow="hidden" wrapMode="none">
+                          {file.path}
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                  <Show when={hiddenBelow() > 0}>
+                    <text fg={input.theme.textMuted}>… {hiddenBelow()} more (PgDn)</text>
+                  </Show>
+                </Show>
+              </box>
+            </Show>
+          )}
+        </Show>
+      </Show>
+    </box>
+  );
+}
+
+const FORK_OUTCOME: Record<
+  CliWorldsForkOutcome,
+  { readonly glyph: string; readonly token: "diffAdded" | "warning" | "error" }
+> = {
+  applied: { glyph: "✓", token: "diffAdded" },
+  apply_failed: { glyph: "⚠", token: "warning" },
+  rejected: { glyph: "✗", token: "error" },
+};
+
+/**
+ * Tape-derivable settlement-reason badges (RFC View 3: no-op / parent-diverged). A plain
+ * fast-forward apply carries no reason, so it shows no badge; an unknown internal reason
+ * is not surfaced (the outcome glyph already conveys applied/failed/rejected).
+ */
+const FORK_REASON_LABEL: Record<string, string> = {
+  already_applied: "no-op",
+  basis_conflict: "parent diverged",
+};
+
+/** One Forks lane's single-line summary: workers · applied paths · conflicts · reason badge. */
+function forkLaneSummary(lane: CliWorldsForkLane): string {
+  const workers = lane.workerIds.join(", ") || "(workers)";
+  const paths = `${lane.appliedPathCount} path${lane.appliedPathCount === 1 ? "" : "s"}`;
+  const conflicts =
+    lane.conflictPaths.length > 0
+      ? ` · ⚡ ${lane.conflictPaths.length} conflict${lane.conflictPaths.length === 1 ? "" : "s"}`
+      : "";
+  const badge =
+    lane.reason && FORK_REASON_LABEL[lane.reason] ? ` · ${FORK_REASON_LABEL[lane.reason]}` : "";
+  return `${workers} · ${paths}${conflicts}${badge}`;
+}
+
+/** The `/worlds` Forks view: tape-derived delegation-changeset settlement lanes. */
+function WorldsForksPane(input: {
+  forks: readonly CliWorldsForkLane[];
+  theme: SessionPalette;
+  scrollOffset: number;
+  contentRows: number;
+}) {
+  const windowRows = createMemo(() => Math.max(3, input.contentRows - 1));
+  const maxOffset = createMemo(() => Math.max(0, input.forks.length - windowRows()));
+  const offset = createMemo(() => Math.min(Math.max(0, input.scrollOffset), maxOffset()));
+  const windowLanes = createMemo(() => input.forks.slice(offset(), offset() + windowRows()));
+  const hiddenBelow = createMemo(() => input.forks.length - offset() - windowLanes().length);
+  return (
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      paddingLeft={DIALOG_HORIZONTAL_PADDING}
+      paddingRight={DIALOG_HORIZONTAL_PADDING}
+    >
+      <Show
+        when={input.forks.length > 0}
+        fallback={
+          <text fg={input.theme.textMuted}>No delegation forks settled in this session.</text>
+        }
+      >
+        <For each={windowLanes()}>
+          {(lane) => (
+            <box flexDirection="row" flexShrink={0}>
+              <text fg={input.theme[FORK_OUTCOME[lane.outcome].token]} wrapMode="none">
+                {`${FORK_OUTCOME[lane.outcome].glyph} `}
+              </text>
+              <text fg={input.theme.text} overflow="hidden" wrapMode="none">
+                {forkLaneSummary(lane)}
+              </text>
+            </box>
+          )}
+        </For>
+        <Show when={hiddenBelow() > 0}>
+          <text fg={input.theme.textMuted}>… {hiddenBelow()} more (PgDn)</text>
+        </Show>
+      </Show>
+    </box>
+  );
+}
+
+/**
+ * The `/worlds` operator panel (rfc-worlds-operator-panel): a timeline of rewind
+ * checkpoints fused with world-lane readiness chips (Timeline view, 1), a file-level world
+ * diff (Diff view, 2), tape-derived delegation settlement lanes (Forks view, 3), and
+ * confirm-gated rewind (r) — the environment axis as a first-class, operable surface.
+ */
+export function WorldsOverlay(input: {
+  payload: CliWorldsOverlayPayload;
+  theme: SessionPalette;
+  width: number;
+  height: number;
+}) {
+  const row = createMemo(() => input.payload.rows[input.payload.selectedIndex]);
+  const sidebarRows = createMemo(() =>
+    resolveOverlaySurfaceSelectionRows(input.width, input.height, input.payload.rows.length),
+  );
+  const surface = createMemo(() => resolveDialogSurfaceDimensions(input.width, input.height));
+  const sidebarWidth = 52;
+  const detailLines = createMemo(() => {
+    const entry = row();
+    if (!entry) {
+      return input.payload.worldsEnabled
+        ? ["No rewind checkpoints captured yet."]
+        : [
+            "Worlds are disabled (config worlds.enabled).",
+            "The timeline lists checkpoints; no world is captured for them.",
+          ];
+    }
+    const worldLine =
+      entry.worldStatus === "captured"
+        ? `world: captured · ${entry.worldId ?? "—"}`
+        : entry.worldStatus === "missing_artifacts"
+          ? `world: material missing · ${entry.worldId ?? "—"}`
+          : entry.worldStatus === "capture_failed"
+            ? "world: capture failed"
+            : "world: not captured";
+    return [
+      `checkpoint: ${entry.checkpointId}`,
+      `turn: ${entry.turn}`,
+      `time: ${new Date(entry.timestamp).toISOString()}`,
+      `lineage: ${worldLineageKey(entry)}${entry.current ? " (HEAD)" : ""}`,
+      worldLine,
+      `patch sets after: ${entry.patchSetCountAfter}`,
+      `prompt: ${entry.promptPreview || "(none)"}`,
+    ];
+  });
+  const footer = createMemo(() => {
+    if (input.payload.view === "diff") {
+      return "PgUp/PgDn scroll · r rewind · 1 timeline · 3 forks · Esc close";
+    }
+    if (input.payload.view === "forks") {
+      return "PgUp/PgDn scroll · 1 timeline · 2 diff · Esc close";
+    }
+    return input.payload.worldsEnabled
+      ? "↑↓ select · 2 diff · 3 forks · r rewind · Esc close"
+      : "worlds disabled · ↑↓ select · 2 diff · 3 forks · r rewind · Esc close";
+  });
+  return (
+    <OverlaySurface
+      title="Worlds"
+      width={input.width}
+      height={input.height}
+      theme={input.theme}
+      footer={footer()}
+      splitContent
+    >
+      <Switch
+        fallback={
+          <box flexDirection="row" gap={1} flexGrow={1}>
+            <box width={sidebarWidth} flexShrink={0}>
+              <Show
+                when={input.payload.rows.length > 0}
+                fallback={<text fg={input.theme.textMuted}>No checkpoints yet.</text>}
+              >
+                <WorldsTimelineList
+                  payload={input.payload}
+                  theme={input.theme}
+                  sidebarWidth={sidebarWidth}
+                  maxVisible={sidebarRows()}
+                />
+              </Show>
+            </box>
+            <box flexGrow={1} flexDirection="column" paddingRight={DIALOG_HORIZONTAL_PADDING}>
+              <TextLineBlock lines={detailLines()} color={input.theme.text} />
+            </box>
+          </box>
+        }
+      >
+        <Match when={input.payload.view === "diff"}>
+          <WorldsDiffPane
+            diff={input.payload.diff}
+            worldsEnabled={input.payload.worldsEnabled}
+            theme={input.theme}
+            scrollOffset={input.payload.diffScrollOffset}
+            contentRows={surface().contentHeight}
+          />
+        </Match>
+        <Match when={input.payload.view === "forks"}>
+          <WorldsForksPane
+            forks={input.payload.forks}
+            theme={input.theme}
+            scrollOffset={input.payload.forksScrollOffset}
+            contentRows={surface().contentHeight}
+          />
+        </Match>
+      </Switch>
     </OverlaySurface>
   );
 }

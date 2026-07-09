@@ -197,6 +197,7 @@ function rewindTarget(overrides: Partial<SessionRewindTargetView> = {}): Session
     patchSetCountAfter: 3,
     fileSummary: { added: 1, modified: 2, deleted: 0 },
     lineage: { kind: "active" },
+    world: { status: "not_captured" },
     ...overrides,
   };
 }

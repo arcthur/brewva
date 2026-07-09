@@ -1,4 +1,5 @@
 export {
+  buildWorkerResultsSettlementPayload,
   CURRENT_DELEGATION_CONTRACT_VERSION,
   DELEGATION_ENVELOPE_ARCHETYPES,
   deriveDelegationAdoptionRequirement,
@@ -7,6 +8,7 @@ export {
   isDelegationRunTerminalStatus,
   isWaitableParallelSlotRejection,
   normalizeReviewLaneName,
+  projectSessionForks,
   readDelegationLifecycleEventPayload,
   readDelegationReviewDispatch,
   readWorkerResultsAppliedEventPayload,
@@ -80,6 +82,8 @@ export type {
   PendingDelegationOutcomeQuery,
   PublicSubagentRole,
   ReviewLaneName,
+  SessionForkLane,
+  SessionForkOutcome,
   ReviewPrecedentConsultStatus,
   ReviewReportArtifact,
   RecoveryContinuationAnchor,
@@ -89,4 +93,5 @@ export type {
   WorkerApplyReport,
   WorkerMergeReport,
   WorkerResult,
+  WorkerResultsSettlementPayload,
 } from "./internal/delegation.js";

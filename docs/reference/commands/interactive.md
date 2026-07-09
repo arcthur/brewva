@@ -71,6 +71,7 @@ Stable interactive slash commands include:
 - `/undo`
 - `/rewind`
 - `/redo`
+- `/worlds`
 - `/answer <question-id> <answer>`
 - `/theme`
 - `/new`
@@ -95,6 +96,15 @@ visibly separate from file rollback.
 
 `/lineage` opens work-branch topology. It remains the macro-level browser for
 delegation, recovery, adoption, branch summaries, and channel selection.
+
+`/worlds` (or `leader v`) opens the environment-axis operator panel: the
+git-like counterpart to `/tree`, in the `jj op log`/`undo` mental model. Its
+Timeline view fuses the checkpoint timeline with per-checkpoint world-readiness
+chips; `2` opens a pure manifest world-to-world Diff; `3` opens the Forks view of
+tape-rebuilt delegation-changeset settlement lanes (applied / apply_failed /
+rejected, with a no-op / parent-diverged badge). `r` runs a confirm-gated rewind
+(mode single-select) through the same `session.rewind` effect as `/rewind`.
+Opening the panel is read-only — it never writes the world store.
 
 `/archive` opens bounded details for refs visible in the runtime cockpit:
 transcript, event tape, context, Work Card, active decisions, effect receipts,
@@ -217,8 +227,8 @@ slash spelling.
 
 Supported overlays include operator safety, question, task browser, queued
 prompts, model picker, provider connection, thinking level, inspect, context,
-authority, skills, cockpit archive, attention drawer, session switcher, and
-pager surfaces. Background subagent detail opens in the footer surface above
+authority, skills, cockpit archive, attention drawer, session switcher, worlds,
+and pager surfaces. Background subagent detail opens in the footer surface above
 the composer. Opening an overlay preserves the composer draft.
 
 Approval and question flows are rendered as cockpit decision surfaces first.

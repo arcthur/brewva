@@ -43,6 +43,7 @@ export interface ShellEffectDispatcherContext {
   openSessions(): void;
   openLineage(): void;
   openTree(query?: string, lineageNodeId?: string): void;
+  openWorlds(): void;
   openQueue(): void;
   openInspect(): Promise<void>;
   openNotifications(): void;
@@ -216,6 +217,9 @@ export async function dispatchShellEffect(
       return;
     case "overlay.openTree":
       context.openTree(effect.query, effect.lineageNodeId);
+      return;
+    case "overlay.openWorlds":
+      context.openWorlds();
       return;
     case "overlay.openQueue":
       context.openQueue();

@@ -11,6 +11,7 @@ import {
   buildTaskRunPreviewLines,
 } from "../../task-overlay-preview.js";
 import type { CliInboxOverlayItem, CliShellOverlayPayload } from "../payloads.js";
+import { WORLD_CHIP_GLYPH, WORLD_LINEAGE_GLYPH, worldLineageKey } from "../payloads.js";
 import { renderNotificationSummary } from "./notifications.js";
 import { renderQueuePromptSummary } from "./queue.js";
 import { buildSessionsOverlayRows } from "./sessions.js";
@@ -341,6 +342,21 @@ export function buildOverlayView(payload: CliShellOverlayPayload): {
           "Waiting for authorization...",
           payload.manualCodePrompt ? "Enter/p=paste callback  c=copy" : "c=copy",
         ],
+      };
+    case "worlds":
+      return {
+        title: "Worlds",
+        lines:
+          payload.rows.length > 0
+            ? payload.rows.map((row) => {
+                const marker = WORLD_LINEAGE_GLYPH[worldLineageKey(row)];
+                return `${marker} t${row.turn}  ${row.promptPreview || "(no prompt)"}  ${WORLD_CHIP_GLYPH[row.worldStatus]}`;
+              })
+            : [
+                payload.worldsEnabled
+                  ? "No rewind checkpoints captured yet."
+                  : "Worlds are disabled (config worlds.enabled).",
+              ],
       };
     default: {
       const exhaustiveCheck: never = payload;

@@ -15,7 +15,11 @@ import type { CliShellInput } from "../domain/input.js";
 import type { ShellIntent } from "../domain/intent.js";
 import { normalizeShellInputKey } from "../domain/keymap.js";
 import type { OperatorSurfaceSnapshot } from "../domain/operator-snapshot.js";
-import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
+import type {
+  CliShellOverlayPayload,
+  CliWorldsDiffView,
+  CliWorldsOverlayView,
+} from "../domain/overlays/payloads.js";
 import {
   buildAuthorityOverlayPayload,
   buildCockpitArchiveOverlayPayload,
@@ -30,6 +34,7 @@ import {
   buildNotificationsOverlayPayload,
   buildSkillsOverlayPayload,
   buildTreeOverlayPayload,
+  buildWorldsOverlayPayload,
 } from "../domain/overlays/projectors/index.js";
 import {
   cloneCliShellPromptParts,
@@ -240,6 +245,15 @@ function isTreeRewindSelectDialogId(dialogId: string | undefined): boolean {
   return typeof dialogId === "string" && dialogId.startsWith("tree-rewind:");
 }
 
+// The /worlds rewind mode picker — code (workspace only), both (workspace + conversation),
+// or conversation (compensation-free). Ordered code-first: a world panel rewind is
+// primarily about the environment axis.
+const WORLDS_REWIND_OPTIONS = ["Code only", "Conversation and code", "Conversation only"] as const;
+
+function isWorldsRewindSelectDialogId(dialogId: string | undefined): boolean {
+  return typeof dialogId === "string" && dialogId.startsWith("worlds-rewind:");
+}
+
 function isTreeSearchInputDialogId(dialogId: string | undefined): boolean {
   return typeof dialogId === "string" && dialogId.startsWith("tree-search:");
 }
@@ -303,6 +317,7 @@ export class ShellOverlayLifecycleHandler {
   #pendingTreeSearch: {
     active: TreeOverlayPayload;
   } | null = null;
+  #pendingWorldsRewind: { checkpointId: string } | null = null;
 
   constructor(private readonly context: ShellOverlayLifecycleHandlerContext) {}
 
@@ -379,6 +394,9 @@ export class ShellOverlayLifecycleHandler {
       }
       if (payload.kind === "select" && isTreeRewindSelectDialogId(payload.dialogId)) {
         this.#pendingTreeRewind = null;
+      }
+      if (payload.kind === "select" && isWorldsRewindSelectDialogId(payload.dialogId)) {
+        this.#pendingWorldsRewind = null;
       }
       if (payload.kind === "input" && isTreeSearchInputDialogId(payload.dialogId)) {
         this.#pendingTreeSearch = null;
@@ -460,6 +478,20 @@ export class ShellOverlayLifecycleHandler {
       this.replaceActiveOverlay({
         ...active,
         detailScrollOffset: Math.max(0, active.detailScrollOffset + delta),
+      });
+      return;
+    }
+    if (active.kind === "worlds" && active.view === "diff") {
+      this.replaceActiveOverlay({
+        ...active,
+        diffScrollOffset: Math.max(0, active.diffScrollOffset + delta),
+      });
+      return;
+    }
+    if (active.kind === "worlds" && active.view === "forks") {
+      this.replaceActiveOverlay({
+        ...active,
+        forksScrollOffset: Math.max(0, active.forksScrollOffset + delta),
       });
       return;
     }
@@ -684,6 +716,16 @@ export class ShellOverlayLifecycleHandler {
       return true;
     }
 
+    if (active.kind === "worlds" && key === "r" && active.view !== "forks") {
+      await this.handleWorldsRewind(active);
+      return true;
+    }
+
+    if (active.kind === "worlds" && (key === "1" || key === "2" || key === "3")) {
+      this.switchWorldsView(active, key === "2" ? "diff" : key === "3" ? "forks" : "timeline");
+      return true;
+    }
+
     if (active.kind === "oauthWait" && key === "c") {
       await this.context.providerAuth.copyOAuthWaitText(active);
       return true;
@@ -743,6 +785,10 @@ export class ShellOverlayLifecycleHandler {
         }
         if (isTreeRewindSelectDialogId(active.dialogId)) {
           await this.handleTreeRewindSelectPrimary(active);
+          return;
+        }
+        if (isWorldsRewindSelectDialogId(active.dialogId)) {
+          await this.handleWorldsRewindSelectPrimary(active);
           return;
         }
         this.context.resolveDialog(active.dialogId, active.options[active.selectedIndex]);
@@ -899,6 +945,197 @@ export class ShellOverlayLifecycleHandler {
         entryId,
       }),
     );
+  }
+
+  openWorldsOverlay(): void {
+    this.openOverlay(this.buildWorldsPayload());
+  }
+
+  private buildWorldsPayload(options?: {
+    checkpointId?: string;
+    index?: number;
+    view?: CliWorldsOverlayView;
+    diff?: CliWorldsDiffView | null;
+  }): ReturnType<typeof buildWorldsOverlayPayload> {
+    const port = this.context.getSessionPort();
+    const targets = port.listRewindTargets();
+    // HEAD is the checkpoint the session currently sits on — read it authoritatively from
+    // the rewind engine's state rather than re-deriving a "newest active" heuristic.
+    const currentCheckpointId = port.getRewindState().latestRewindable?.checkpointId ?? null;
+    // Newest-first (git-log style): the most recent checkpoint sits at the top.
+    const rows = targets.toReversed().map((target) => ({
+      checkpointId: target.checkpointId,
+      turn: target.turn,
+      timestamp: target.timestamp,
+      promptPreview: target.promptPreview,
+      patchSetCountAfter: target.patchSetCountAfter,
+      abandoned: target.lineage.kind === "abandoned",
+      worldStatus: target.world.status,
+      worldId: target.world.status === "captured" ? target.world.worldId : null,
+    }));
+    const forks = port.worldForks().map((lane) => ({
+      eventId: lane.eventId,
+      timestamp: lane.timestamp,
+      outcome: lane.outcome,
+      workerIds: [...lane.workerIds],
+      appliedPathCount: lane.appliedPathCount,
+      conflictPaths: [...lane.conflictPaths],
+      reason: lane.reason,
+    }));
+    return buildWorldsOverlayPayload({
+      sessionId: port.getSessionId(),
+      // The real config flag, so the disabled-worlds degradation (empty-state + footer)
+      // renders truthfully rather than reading a hardcoded default.
+      worldsEnabled: this.context.getBundle().runtime.config.worlds.enabled,
+      rows,
+      currentCheckpointId,
+      view: options?.view,
+      diff: options?.diff,
+      forks,
+      selection: { checkpointId: options?.checkpointId, index: options?.index },
+    });
+  }
+
+  private loadWorldsDiff(row: { checkpointId: string; turn: number }): CliWorldsDiffView {
+    const diff = this.context.getSessionPort().worldDiff(row.checkpointId);
+    if (!diff) {
+      return {
+        checkpointId: row.checkpointId,
+        turn: row.turn,
+        available: false,
+        files: [],
+        added: 0,
+        modified: 0,
+        deleted: 0,
+      };
+    }
+    return {
+      checkpointId: row.checkpointId,
+      turn: row.turn,
+      available: true,
+      files: diff.files.map((file) => ({ path: file.path, change: file.change })),
+      added: diff.added,
+      modified: diff.modified,
+      deleted: diff.deleted,
+    };
+  }
+
+  private switchWorldsView(
+    active: Extract<CliShellOverlayPayload, { kind: "worlds" }>,
+    view: CliWorldsOverlayView,
+  ): void {
+    if (view === "diff") {
+      const row = active.rows[active.selectedIndex];
+      this.replaceActiveOverlay(
+        this.buildWorldsPayload({
+          view: "diff",
+          diff: row ? this.loadWorldsDiff(row) : null,
+          checkpointId: row?.checkpointId,
+          index: active.selectedIndex,
+        }),
+      );
+      return;
+    }
+    if (view === "forks") {
+      this.replaceActiveOverlay(
+        this.buildWorldsPayload({ view: "forks", index: active.selectedIndex }),
+      );
+      return;
+    }
+    this.replaceActiveOverlay(
+      this.buildWorldsPayload({ view: "timeline", index: active.selectedIndex }),
+    );
+  }
+
+  private async handleWorldsRewind(
+    active: Extract<CliShellOverlayPayload, { kind: "worlds" }>,
+  ): Promise<void> {
+    // Target the checkpoint the operator is actually looking at: the loaded diff in the
+    // Diff view (its own cursor), or the selected row in the Timeline view — so `r` never
+    // rewinds a drifted, off-screen selection.
+    const diff = active.view === "diff" ? active.diff : null;
+    const row = diff ? null : active.rows[active.selectedIndex];
+    const checkpointId = diff?.checkpointId ?? row?.checkpointId;
+    const turn = diff?.turn ?? row?.turn;
+    if (checkpointId === undefined || turn === undefined) {
+      return;
+    }
+    this.#pendingWorldsRewind = { checkpointId };
+    this.openOverlayWithOptions(
+      {
+        kind: "select",
+        dialogId: `worlds-rewind:${randomUUID()}`,
+        title: "Rewind to world",
+        message: `Rewind to the checkpoint at turn ${turn}. Choose what to restore.`,
+        options: [...WORLDS_REWIND_OPTIONS],
+        selectedIndex: 0,
+      },
+      { priority: "queued", suspendCurrent: true },
+    );
+  }
+
+  private async handleWorldsRewindSelectPrimary(
+    active: Extract<CliShellOverlayPayload, { kind: "select" }>,
+  ): Promise<void> {
+    const pending = this.#pendingWorldsRewind;
+    this.#pendingWorldsRewind = null;
+    this.closeActiveOverlay(false);
+    if (!pending) {
+      return;
+    }
+    const choice = active.options[active.selectedIndex];
+    const mode: SessionRewindMode =
+      choice === "Code only" ? "code" : choice === "Conversation only" ? "conversation" : "both";
+    await this.completeWorldsRewind(pending, mode);
+  }
+
+  private async completeWorldsRewind(
+    pending: { checkpointId: string },
+    mode: SessionRewindMode,
+  ): Promise<void> {
+    const result = await this.context.getSessionPort().rewindSession({
+      checkpointId: pending.checkpointId,
+      mode,
+    });
+    if (!result.ok) {
+      this.context.commit([
+        {
+          type: "notification.add",
+          notification: {
+            id: `worlds-rewind:${randomUUID()}`,
+            level: "warning",
+            message: `Rewind unavailable (${result.reason}) for checkpoint ${pending.checkpointId}.`,
+            createdAt: Date.now(),
+          },
+        },
+      ]);
+      return;
+    }
+    this.context.transcriptProjector.refreshFromSession();
+    const actions: ShellAction[] = [...this.context.buildSessionStatusActions()];
+    if (result.restoredPrompt) {
+      actions.push({
+        type: "composer.setPromptState",
+        text: result.restoredPrompt.text,
+        cursor: result.restoredPrompt.text.length,
+        parts: cloneCliShellPromptParts(
+          result.restoredPrompt.parts as unknown as CliShellPromptPart[],
+        ),
+      });
+    }
+    this.context.commit(actions, { debounceStatus: false });
+    this.replaceActiveOverlay(this.buildWorldsPayload({ checkpointId: pending.checkpointId }));
+    this.context.commit([
+      {
+        type: "notification.add",
+        notification: {
+          id: `worlds-rewind:${randomUUID()}`,
+          level: "info",
+          message: `Rewound (${mode}) to the checkpoint ${pending.checkpointId}.`,
+          createdAt: Date.now(),
+        },
+      },
+    ]);
   }
 
   openQueueOverlay(): void {

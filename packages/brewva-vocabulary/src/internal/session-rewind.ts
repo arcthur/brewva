@@ -2,7 +2,7 @@ import { type BrewvaEventRecord } from "./events.js";
 import { SESSION_REWIND_COMPLETED_EVENT_TYPE } from "./session.js";
 import { isProtocolRecord, optionalStringField, readStringArray } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
-import type { SessionRewindTargetView } from "./types/session-rewind.js";
+import type { SessionRewindTargetView, SessionRewindTargetWorld } from "./types/session-rewind.js";
 import { SOURCE_PATCH_APPLIED_EVENT_TYPE } from "./workbench.js";
 
 // Session rewind target projection, kept in its own internal slice so the session
@@ -88,6 +88,14 @@ export function buildSessionRewindProjection(input: ProtocolRecord): ProtocolRec
         candidate.payload.ok === true,
     ).length;
     const abandoned = abandonedBy.get(checkpointId);
+    // The checkpoint's world-lane status is a pure read of its `brewva.world.v1` block —
+    // the block rode the very payload we are folding, so no extra data source is needed.
+    const worldBlock = parseWorldCheckpointBlock(payload.world);
+    const world: SessionRewindTargetWorld = worldBlock
+      ? worldBlock.ok
+        ? { status: "captured", worldId: worldBlock.worldId }
+        : { status: "capture_failed" }
+      : { status: "not_captured" };
 
     targets.push({
       checkpointId,
@@ -101,6 +109,7 @@ export function buildSessionRewindProjection(input: ProtocolRecord): ProtocolRec
       lineage: abandoned
         ? { kind: "abandoned", rewoundBy: abandoned.rewoundBy, rewoundAt: abandoned.rewoundAt }
         : { kind: "active" },
+      world,
     });
   }
 

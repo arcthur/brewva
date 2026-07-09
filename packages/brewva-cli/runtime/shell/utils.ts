@@ -131,6 +131,17 @@ export function cloneOverlayPayload(payload: CliShellOverlayPayload): CliShellOv
         collapsedEntryIds: [...payload.collapsedEntryIds],
         nodes: [...payload.nodes],
       };
+    case "worlds":
+      return {
+        ...payload,
+        rows: [...payload.rows],
+        diff: payload.diff ? { ...payload.diff, files: [...payload.diff.files] } : null,
+        forks: payload.forks.map((lane) => ({
+          ...lane,
+          workerIds: [...lane.workerIds],
+          conflictPaths: [...lane.conflictPaths],
+        })),
+      };
     case "confirm":
       return {
         ...payload,

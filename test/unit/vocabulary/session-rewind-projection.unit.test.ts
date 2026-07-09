@@ -40,6 +40,8 @@ describe("session rewind target projection (RFC WS3)", () => {
     expect(result[0]?.patchSetCountAfter).toBe(2);
     expect(result[0]?.promptPreview).toBe("fix the bug");
     expect(result[0]?.lineage).toEqual({ kind: "active" });
+    // No world block rode this checkpoint → not_captured (the zero-I/O projection view).
+    expect(result[0]?.world).toEqual({ status: "not_captured" });
   });
 
   test("marks a checkpoint abandoned when a later completed rewind rewound past it", () => {
@@ -55,6 +57,45 @@ describe("session rewind target projection (RFC WS3)", () => {
     ]);
 
     expect(result[0]?.lineage).toEqual({ kind: "abandoned", rewoundBy: "rw1", rewoundAt: 5 });
+  });
+
+  test("projects a captured world from the checkpoint's brewva.world.v1 block", () => {
+    const result = targets([
+      {
+        id: "cp1",
+        sessionId,
+        type: "session_rewind_checkpoint",
+        timestamp: 2,
+        payload: { world: { schema: "brewva.world.v1", id: "sha256:w1" } },
+      },
+    ]);
+    expect(result[0]?.world).toEqual({ status: "captured", worldId: "sha256:w1" });
+  });
+
+  test("projects capture_failed when the checkpoint's world block recorded an error", () => {
+    const result = targets([
+      {
+        id: "cp1",
+        sessionId,
+        type: "session_rewind_checkpoint",
+        timestamp: 2,
+        payload: { world: { schema: "brewva.world.v1", error: "disk full" } },
+      },
+    ]);
+    expect(result[0]?.world).toEqual({ status: "capture_failed" });
+  });
+
+  test("a malformed world block (right schema, neither id nor error) projects not_captured", () => {
+    const result = targets([
+      {
+        id: "cp1",
+        sessionId,
+        type: "session_rewind_checkpoint",
+        timestamp: 2,
+        payload: { world: { schema: "brewva.world.v1" } },
+      },
+    ]);
+    expect(result[0]?.world).toEqual({ status: "not_captured" });
   });
 
   test("returns no targets for a session without rewind checkpoints", () => {
