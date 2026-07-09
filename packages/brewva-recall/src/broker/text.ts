@@ -1,4 +1,3 @@
-import { tokenizeSearchContent } from "@brewva/brewva-search";
 import {
   compactWhitespace,
   normalizeStringList,
@@ -27,16 +26,4 @@ export function freshnessFromTimestamp(timestamp: number | undefined): RecallFre
   if (ageDays <= 30) return "fresh";
   if (ageDays <= 180) return "aging";
   return "stale";
-}
-
-export function computeTokenOverlap(queryTokens: readonly string[], text: string): number {
-  if (queryTokens.length === 0) return 0;
-  const textTokens = new Set(tokenizeSearchContent(text));
-  let matches = 0;
-  for (const token of queryTokens) {
-    if (textTokens.has(token)) {
-      matches += 1;
-    }
-  }
-  return matches / queryTokens.length;
 }

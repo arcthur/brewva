@@ -1,4 +1,3 @@
-import { tokenizeSearchQuery } from "@brewva/brewva-search";
 import { createSessionIndex, type SessionIndex } from "@brewva/brewva-session-index";
 import { isSessionIndexTextIndexedEvent } from "@brewva/brewva-session-index/evidence";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
@@ -43,7 +42,7 @@ import {
   mapSessionIndexEvidenceToEvent,
   renderEventTitle,
 } from "./tape-evidence.js";
-import { compactText, computeTokenOverlap, freshnessFromTimestamp } from "./text.js";
+import { compactText, freshnessFromTimestamp } from "./text.js";
 
 const DEFAULT_MAX_RESULTS = 6;
 const DEFAULT_MAX_TAPE_SESSIONS = 6;
@@ -241,7 +240,6 @@ export class RecallBroker {
       this.runtime.identity.workspaceRoot,
     );
     const state = await this.sync();
-    const queryTokens = tokenizeSearchQuery(query);
     const curationById = new Map(state.curation.map((entry) => [entry.stableId, entry]));
     const currentTarget = this.runtime.task.target.getDescriptor(input.sessionId);
     const targetRoots = resolveTargetRoots({
@@ -261,14 +259,7 @@ export class RecallBroker {
 
     const results: RecallSearchEntry[] = [];
     results.push(
-      ...(await this.searchTapeEvidence(
-        tapeCandidateDigests,
-        rankingContext,
-        query,
-        queryTokens,
-        scope,
-        limit,
-      )),
+      ...(await this.searchTapeEvidence(tapeCandidateDigests, rankingContext, query, scope, limit)),
     );
     results.push(
       ...executeKnowledgeSearch([this.runtime.identity.workspaceRoot], {
@@ -381,7 +372,6 @@ export class RecallBroker {
     candidateDigests: readonly RecallSessionDigest[],
     rankingContext: RecallRankingContext,
     query: string,
-    queryTokens: readonly string[],
     scope: RecallScope,
     limit: number,
   ): Promise<RecallSearchEntry[]> {
@@ -417,10 +407,7 @@ export class RecallBroker {
             trustLabel: classification.trustLabel,
             evidenceStrength: classification.evidenceStrength,
             scope,
-            semanticScore:
-              overlap +
-              Math.min(0.12, computeTokenOverlap(queryTokens, digest.digestText) * 0.25) +
-              (digest.sessionId === currentSessionId ? 0.03 : 0),
+            semanticScore: overlap,
             title: renderEventTitle(event),
             summary: compactText(text, 160),
             excerpt: compactText(text, 220),

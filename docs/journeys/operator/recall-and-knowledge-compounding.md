@@ -95,8 +95,9 @@ flowchart TD
    fixed strong-event set rank strong; other current-session memory and advisory
    posture rank weak), plus session scope, freshness, and a stable id.
 5. Ranking blends source weight, evidence strength, semantic overlap, freshness,
-   intent, and a curation adjustment. Curation feedback decays with a 45-day
-   half-life and feeds future ranking.
+   and a curation adjustment (search intent shapes the source weight rather than
+   adding a separate term). Curation feedback decays with a 45-day half-life and
+   feeds future ranking.
 6. Surfacing is not admission: when results exist, `recall_search` records
    provenance refs (stable id, source family, scope, root) — not the content
    body. The model decides what to use.

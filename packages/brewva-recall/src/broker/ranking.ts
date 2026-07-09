@@ -54,26 +54,6 @@ function sourceBaseWeight(
   return 1.25;
 }
 
-function intentWeight(
-  entry: Pick<RecallSearchEntry, "sourceFamily" | "evidenceStrength" | "sessionId">,
-  context: RecallRankingContext,
-): number {
-  switch (context.intent) {
-    case "repository_precedent":
-      return entry.sourceFamily === "repository_precedent" ? 0.9 : 0;
-    case "current_session_evidence":
-      return isCurrentSessionTapeEntry(entry, context.currentSessionId) ? 0.45 : 0;
-    case "durable_runtime_receipts":
-      return entry.sourceFamily === "tape_evidence" && entry.evidenceStrength === "strong"
-        ? 0.9
-        : 0;
-    case "prior_work":
-    case undefined:
-      return 0;
-  }
-  return 0;
-}
-
 export function computeRankingScore(
   entry: Omit<RecallSearchEntry, "rankingScore" | "rankReasons">,
   context: RecallRankingContext,
@@ -82,10 +62,8 @@ export function computeRankingScore(
   const source = sourceBaseWeight(entry, context);
   const strength = EVIDENCE_STRENGTH_WEIGHT[entry.evidenceStrength];
   const freshness = FRESHNESS_WEIGHT[entry.freshness];
-  const intentBoost = intentWeight(entry, context);
   const semantic = Math.max(0, Math.min(1, entry.semanticScore));
-  const rankingScore =
-    source + strength + semantic + freshness + intentBoost + curationAdjustmentValue;
+  const rankingScore = source + strength + semantic + freshness + curationAdjustmentValue;
   const rankReasons = [
     `source:${entry.sourceFamily}`,
     `trust:${entry.trustLabel}`,
@@ -93,7 +71,12 @@ export function computeRankingScore(
     `semantic:${semantic.toFixed(3)}`,
     `freshness:${entry.freshness}`,
   ];
-  if (context.intent) {
+  // Intent is a rank reason only where it actually moved this entry's score:
+  // its sole remaining scoring effect is sourceBaseWeight's current-session bump.
+  if (
+    context.intent === "current_session_evidence" &&
+    isCurrentSessionTapeEntry(entry, context.currentSessionId)
+  ) {
     rankReasons.push(`intent:${context.intent}`);
   }
   if (curationAdjustmentValue !== 0) {
