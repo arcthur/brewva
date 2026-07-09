@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ContextCompactionGateStatus, ContextStatus } from "@brewva/brewva-vocabulary/context";
+import { decideContinuationAnchorRelevance } from "@brewva/brewva-vocabulary/session";
 import {
   createContextNudgeCadenceTracker,
-  decideContextLifecycle,
-  decideContextNudge,
+  decideAutoCompactionEligibility,
   decideContextPressure,
   decideTransientReductionEligibility,
 } from "../../../packages/brewva-gateway/src/hosted/internal/context/context-lifecycle.js";
@@ -48,71 +48,68 @@ function gate(status: Partial<ContextStatus>): ContextCompactionGateStatus {
   };
 }
 
+// These decisions used to be reachable through a single `decideContextLifecycle`
+// aggregator, but production always consumed the sub-decisions piecemeal, so the
+// aggregator (and its thin `decideContextNudge` wrapper) were removed. The tests
+// exercise the live seams directly: `decideContextPressure`, the cadence tracker's
+// `decide`, `decideAutoCompactionEligibility`, `decideTransientReductionEligibility`,
+// and `decideContinuationAnchorRelevance`.
 describe("context lifecycle decisions", () => {
-  test("centralizes pressure action, nudge cadence, auto compaction, and anchor relevance", () => {
+  test("advisory pressure drives a full-then-brief nudge, an agent-active auto-compaction skip, and an available anchor", () => {
     const tracker = createContextNudgeCadenceTracker();
-    const first = decideContextLifecycle({
-      sessionId: "sess_1",
-      turn: 1,
-      gateStatus: gate({ compactionAdvised: true }),
+    const gateStatus = gate({ compactionAdvised: true });
+    const pressure = decideContextPressure({
+      gateStatus,
       pendingCompactionReason: "usage_threshold",
-      continuationAnchor: {
-        id: "anchor-1",
-        summary: "Continue from the hosted context lifecycle extraction.",
-      },
-      nudge: { tracker },
-      autoCompaction: {
+    });
+    expect(pressure).toMatchObject({ action: "workbench_compact_soon", reason: "usage_threshold" });
+
+    expect(tracker.decide({ sessionId: "sess_1", turn: 1, pressure })).toEqual({
+      kind: "advisory",
+      mode: "full",
+    });
+
+    expect(
+      decideAutoCompactionEligibility({
+        gateStatus,
+        pendingCompactionReason: "usage_threshold",
         hasUI: true,
         idle: false,
         recoveryPosture: "idle",
         autoCompactionInFlight: false,
-      },
-    });
-
-    expect(first.pressure).toMatchObject({
-      action: "workbench_compact_soon",
-      reason: "usage_threshold",
-    });
-    expect(first.nudge).toEqual({ kind: "advisory", mode: "full" });
-    expect(first.autoCompaction).toEqual({
+      }),
+    ).toEqual({
       decision: "skip",
       caller: "auto",
       reason: "agent_active_manual_compaction_unsafe",
     });
-    expect(first.continuationAnchor).toMatchObject({
-      include: true,
-      reason: "available",
-      anchorId: "anchor-1",
-    });
 
-    const second = decideContextLifecycle({
-      sessionId: "sess_1",
-      turn: 2,
-      gateStatus: gate({ compactionAdvised: true }),
-      pendingCompactionReason: "usage_threshold",
-      nudge: { tracker },
-    });
+    expect(
+      decideContinuationAnchorRelevance({
+        id: "anchor-1",
+        summary: "Continue from the hosted context lifecycle extraction.",
+      }),
+    ).toMatchObject({ include: true, reason: "available", anchorId: "anchor-1" });
 
-    expect(second.nudge).toEqual({ kind: "advisory", mode: "brief" });
+    // Same pressure on the next turn → the cadence demotes full → brief.
+    expect(tracker.decide({ sessionId: "sess_1", turn: 2, pressure })).toEqual({
+      kind: "advisory",
+      mode: "brief",
+    });
   });
 
-  test("treats hard-limit pressure as a compact-now gate and ignores checkpoint-only anchors", () => {
+  test("hard-limit pressure is a compact-now gate nudge and checkpoint-only anchors are excluded", () => {
     const tracker = createContextNudgeCadenceTracker();
-    const decision = decideContextLifecycle({
-      sessionId: "sess_2",
-      turn: 1,
+    const pressure = decideContextPressure({
       gateStatus: gate({ forcedCompaction: true }),
       pendingCompactionReason: null,
-      continuationAnchor: { id: "checkpoint-1", name: "   " },
-      nudge: { tracker },
     });
-
-    expect(decision.pressure).toMatchObject({
-      action: "workbench_compact_now",
-      reason: "hard_limit",
+    expect(pressure).toMatchObject({ action: "workbench_compact_now", reason: "hard_limit" });
+    expect(tracker.decide({ sessionId: "sess_2", turn: 1, pressure })).toEqual({
+      kind: "gate",
+      mode: "full",
     });
-    expect(decision.nudge).toEqual({ kind: "gate", mode: "full" });
-    expect(decision.continuationAnchor).toEqual({
+    expect(decideContinuationAnchorRelevance({ id: "checkpoint-1", name: "   " })).toEqual({
       include: false,
       reason: "checkpoint_only",
       anchorId: "checkpoint-1",
@@ -126,40 +123,35 @@ describe("context lifecycle decisions", () => {
       pendingCompactionReason: "usage_threshold",
     });
 
-    expect(
-      decideContextNudge({
-        sessionId: "sess_track",
-        turn: 1,
-        pressure,
-        tracker,
-      }),
-    ).toEqual({ kind: "advisory", mode: "full" });
-    expect(
-      decideContextNudge({
-        sessionId: "sess_track",
-        turn: 2,
-        pressure,
-        tracker,
-      }),
-    ).toEqual({ kind: "advisory", mode: "brief" });
-    expect(
-      decideContextNudge({
-        sessionId: "sess_track",
-        turn: 3,
-        pressure,
-        tracker,
-      }),
-    ).toEqual({ kind: "advisory", mode: "full" });
+    expect(tracker.decide({ sessionId: "sess_track", turn: 1, pressure })).toEqual({
+      kind: "advisory",
+      mode: "full",
+    });
+    expect(tracker.decide({ sessionId: "sess_track", turn: 2, pressure })).toEqual({
+      kind: "advisory",
+      mode: "brief",
+    });
+    expect(tracker.decide({ sessionId: "sess_track", turn: 3, pressure })).toEqual({
+      kind: "advisory",
+      mode: "full",
+    });
 
     tracker.clearSession("sess_track");
+    expect(tracker.decide({ sessionId: "sess_track", turn: 4, pressure })).toEqual({
+      kind: "advisory",
+      mode: "full",
+    });
+  });
+
+  test("a disabled nudge yields the pressure kind with a null mode", () => {
+    const tracker = createContextNudgeCadenceTracker();
+    const pressure = decideContextPressure({
+      gateStatus: gate({ compactionAdvised: true }),
+      pendingCompactionReason: null,
+    });
     expect(
-      decideContextNudge({
-        sessionId: "sess_track",
-        turn: 4,
-        pressure,
-        tracker,
-      }),
-    ).toEqual({ kind: "advisory", mode: "full" });
+      tracker.decide({ sessionId: "sess_disabled", turn: 1, pressure, enabled: false }),
+    ).toEqual({ kind: "advisory", mode: null });
   });
 
   test("keeps transient reduction behind replay-visible compaction at hard limits", () => {
@@ -260,35 +252,5 @@ describe("context lifecycle decisions", () => {
       forcedCompaction: true,
       cacheCold: false,
     });
-  });
-
-  test("returns transient reduction eligibility from the central lifecycle decision", () => {
-    const gateStatus = gate({ compactionAdvised: true });
-    const decision = decideContextLifecycle({
-      sessionId: "sess_3",
-      turn: 1,
-      gateStatus,
-      pendingCompactionReason: null,
-      nudge: { enabled: false },
-      transientReduction: {
-        contextBudgetEnabled: true,
-        usageAvailable: true,
-        postureBlockReason: null,
-        gateStatus,
-        pendingCompactionReason: null,
-        compactionEligibilityDecision: "execute",
-        compactionEligibilityReason: "usage_threshold",
-        cacheCold: false,
-      },
-    });
-
-    expect(decision.transientReduction).toEqual({
-      allowed: true,
-      detail: null,
-      compactionAdvised: true,
-      forcedCompaction: false,
-      cacheCold: false,
-    });
-    expect(decision.nudge).toEqual({ kind: "advisory", mode: null });
   });
 });

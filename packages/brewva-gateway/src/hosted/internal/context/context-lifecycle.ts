@@ -7,11 +7,6 @@ import type {
   ContextCompactionGateStatus,
   ContextCompactionReason,
 } from "@brewva/brewva-vocabulary/context";
-import {
-  decideContinuationAnchorRelevance,
-  type ContinuationAnchorRelevanceDecision,
-  type TapeStatusState,
-} from "@brewva/brewva-vocabulary/session";
 
 export const DEFAULT_COMPACTION_NUDGE_FULL_EVERY_TURNS = 5;
 export type ContextLifecyclePressureAction =
@@ -38,8 +33,6 @@ export interface ContextLifecycleNudgeDecision {
   readonly kind: ContextLifecycleNudgeKind;
   readonly mode: ContextLifecycleNudgeMode;
 }
-
-export type ContextLifecycleContinuationAnchorDecision = ContinuationAnchorRelevanceDecision;
 
 export interface ContextNudgeCadenceInput {
   readonly sessionId: string;
@@ -72,35 +65,6 @@ export interface ContextAutoCompactionEligibilityInput {
   readonly autoCompactionInFlight?: boolean;
   readonly autoCompactionBreakerOpen?: boolean;
   readonly autoCompactionIneffective?: boolean;
-}
-
-export interface ContextLifecycleDecision {
-  readonly pressure: ContextLifecyclePressureDecision;
-  readonly nudge: ContextLifecycleNudgeDecision;
-  readonly autoCompaction: CompactionPolicyDecision | null;
-  readonly transientReduction: ContextTransientReductionDecision | null;
-  readonly continuationAnchor: ContextLifecycleContinuationAnchorDecision;
-}
-
-export interface ContextLifecycleDecisionInput {
-  readonly sessionId: string;
-  readonly turn: number;
-  readonly gateStatus?: ContextCompactionGateStatus | null;
-  readonly pendingCompactionReason?: ContextCompactionReason | null;
-  readonly continuationAnchor?: TapeStatusState["lastAnchor"] | null;
-  readonly nudge?: {
-    readonly enabled?: boolean;
-    readonly tracker?: ContextNudgeCadenceTracker;
-  };
-  readonly autoCompaction?: {
-    readonly hasUI?: boolean;
-    readonly idle?: boolean;
-    readonly recoveryPosture?: "idle" | "active";
-    readonly autoCompactionInFlight?: boolean;
-    readonly autoCompactionBreakerOpen?: boolean;
-    readonly autoCompactionIneffective?: boolean;
-  };
-  readonly transientReduction?: ContextTransientReductionEligibilityInput;
 }
 
 export interface ContextTransientReductionEligibilityInput {
@@ -146,16 +110,6 @@ function resolveNudgeKind(pressure: ContextLifecyclePressureDecision): ContextLi
   if (pressure.action === "workbench_compact_now") return "gate";
   if (pressure.action === "workbench_compact_soon") return "advisory";
   return "none";
-}
-
-export function decideContextNudge(input: {
-  readonly sessionId: string;
-  readonly turn: number;
-  readonly pressure: ContextLifecyclePressureDecision;
-  readonly enabled?: boolean;
-  readonly tracker: ContextNudgeCadenceTracker;
-}): ContextLifecycleNudgeDecision {
-  return input.tracker.decide(input);
 }
 
 export function createContextNudgeCadenceTracker(
@@ -351,52 +305,4 @@ export function decideAutoCompactionEligibility(
     autoCompactionBreakerOpen: input.autoCompactionBreakerOpen,
     autoCompactionIneffective: input.autoCompactionIneffective,
   });
-}
-
-export function decideContextLifecycle(
-  input: ContextLifecycleDecisionInput & {
-    readonly transientReduction: ContextTransientReductionEligibilityInput;
-  },
-): ContextLifecycleDecision & {
-  readonly transientReduction: ContextTransientReductionDecision;
-};
-export function decideContextLifecycle(
-  input: ContextLifecycleDecisionInput,
-): ContextLifecycleDecision;
-export function decideContextLifecycle(
-  input: ContextLifecycleDecisionInput,
-): ContextLifecycleDecision {
-  const pressure = decideContextPressure({
-    gateStatus: input.gateStatus,
-    pendingCompactionReason: input.pendingCompactionReason,
-  });
-  return {
-    pressure,
-    nudge: input.nudge?.tracker
-      ? decideContextNudge({
-          sessionId: input.sessionId,
-          turn: input.turn,
-          pressure,
-          enabled: input.nudge.enabled,
-          tracker: input.nudge.tracker,
-        })
-      : { kind: resolveNudgeKind(pressure), mode: null },
-    autoCompaction:
-      input.autoCompaction && input.gateStatus
-        ? decideAutoCompactionEligibility({
-            gateStatus: input.gateStatus,
-            pendingCompactionReason: input.pendingCompactionReason,
-            hasUI: input.autoCompaction.hasUI,
-            idle: input.autoCompaction.idle,
-            recoveryPosture: input.autoCompaction.recoveryPosture,
-            autoCompactionInFlight: input.autoCompaction.autoCompactionInFlight,
-            autoCompactionBreakerOpen: input.autoCompaction.autoCompactionBreakerOpen,
-            autoCompactionIneffective: input.autoCompaction.autoCompactionIneffective,
-          })
-        : null,
-    transientReduction: input.transientReduction
-      ? decideTransientReductionEligibility(input.transientReduction)
-      : null,
-    continuationAnchor: decideContinuationAnchorRelevance(input.continuationAnchor),
-  };
 }
