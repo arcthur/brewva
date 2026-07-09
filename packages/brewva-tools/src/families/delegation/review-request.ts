@@ -15,8 +15,6 @@ import { commitReviewReceipts, resolveRoutedModel } from "./review-receipts.js";
 import {
   buildReviewPacket,
   buildReviewResultText,
-  mergeLenses,
-  preloadedTrapLenses,
   resolveAtomsForTarget,
   resolveFoldedDebtAtoms,
   snapshotTargetRef,
@@ -217,18 +215,7 @@ export function createReviewRequestTool(options: BrewvaToolOptions): ToolDefinit
             ? atomsTargetAtoms
             : resolveFoldedDebtAtoms(runtime, sessionId, workspaceRoot, targetRef);
 
-        // Preload write/verify trap lenses for the target's files (advisory
-        // only — Task 9): a caller-supplied lens and a trap-derived lens
-        // merge, deduped by exact text, so composeIndependenceBasis and
-        // reviewerContext.lenses downstream see the honest merged set without
-        // either committer re-deriving the match.
-        const trapLenses = preloadedTrapLenses(
-          runtime,
-          sessionId,
-          workspaceRoot,
-          reviewParams.target,
-        );
-        const lenses = mergeLenses(reviewParams.lenses, trapLenses);
+        const lenses = reviewParams.lenses;
 
         // The dispatch anchor rides the request onto the run record in BOTH
         // modes: the record carries what receipts cannot re-derive later (the

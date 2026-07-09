@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { buildDelegationEvidenceReport } from "@brewva/brewva-gateway/hosted";
-import { committedToolEvent } from "../../helpers/tool-events.js";
 
 let seq = 0;
 function ev(type: string, payload: Record<string, unknown>) {
@@ -67,15 +66,6 @@ describe("buildDelegationEvidenceReport (Lever 6 instrument)", () => {
 
     // Adoption counts worker RESULTS, not events: the batch-apply of [w1, w2] is 2.
     expect(aggregate.adoption).toEqual({ applied: 2, applyFailed: 0, rejected: 1 });
-
-    // No requirement atoms on this tape -> nothing carried into close as independence debt.
-    expect(aggregate.independenceDebt).toEqual({
-      open: 0,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 0,
-    });
-    expect(aggregate.coverageAttributionMiss).toBe(0);
   });
 
   test("failureRate is null and counts are zero on a tape with no delegations", () => {
@@ -84,161 +74,7 @@ describe("buildDelegationEvidenceReport (Lever 6 instrument)", () => {
     expect(report.aggregate.counts.total).toBe(0);
     expect(report.aggregate.failures.total).toBe(0);
     expect(report.aggregate.failureRate).toBeNull();
-    expect(report.aggregate.independenceDebt).toEqual({
-      open: 0,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 0,
-    });
     expect(report.sessions).toHaveLength(1);
-  });
-
-  test("carries high-risk unmet must atoms into the independence-debt open count (Lever 6)", () => {
-    seq = 0;
-    // A runtime-risk `must` atom recorded with no evidence reaches tape close still
-    // owing an at-grade independent read — the channel's activation counter-signal. The
-    // NON-high-risk must atom (presence floor) is deliberately excluded, proving the
-    // instrument reads independenceDebtAtoms, not the broader unverifiedMustAtoms.
-    const events = [
-      ev("subagent_spawned", {
-        runId: "r1",
-        agent: "navigator",
-        waitMode: "completion",
-        executionPrimitive: "named",
-      }),
-      ev("subagent_completed", { runId: "r1", agent: "navigator" }),
-      ev("task.requirement.recorded", {
-        atom: {
-          id: "req-runtime",
-          statement: "event tap must re-arm on disable",
-          modality: "must",
-          provenance: "trap",
-          riskClass: "runtime",
-        },
-      }),
-      ev("task.requirement.recorded", {
-        atom: {
-          id: "req-ux",
-          statement: "menu bar shows a mic glyph",
-          modality: "must",
-          provenance: "prompt",
-        },
-      }),
-    ];
-    const { aggregate, sessions } = buildDelegationEvidenceReport(runtimeFor(events));
-
-    // One high-risk must atom unmet at close -> open 1; the presence-floor atom is excluded.
-    expect(aggregate.independenceDebt).toEqual({
-      open: 1,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 0,
-    });
-    expect(sessions[0]?.independenceDebt).toEqual({
-      open: 1,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 0,
-    });
-    // The debt coexists with normal delegation reach in the same session report.
-    expect(aggregate.counts.total).toBe(1);
-  });
-
-  test("censuses an at-grade discharge: a static_guard evidence pass reports dischargedAtGrade, not open", () => {
-    seq = 0;
-    // A high-risk must atom + a receipt carrying a graded static_guard evidence-item
-    // pass on it -> the atom reaches `satisfied` at grade, so the census reports it
-    // under dischargedAtGrade — and the aggregate sum for that field runs end to end.
-    const events = [
-      ev("task.requirement.recorded", {
-        atom: {
-          id: "req-runtime",
-          statement: "event tap must re-arm on disable",
-          modality: "must",
-          provenance: "trap",
-          riskClass: "runtime",
-        },
-      }),
-      ev("verification.outcome.recorded", {
-        outcome: "pass",
-        level: "requirements",
-        perspective: "authored",
-        evidenceItems: [
-          {
-            id: "guard-1",
-            atomRefs: ["req-runtime"],
-            evidenceKind: "static_guard",
-            verdict: "pass",
-            anchors: ["FnKeyMonitor.swift: keyCode gate"],
-            statement: "tap suppression is keycode-scoped",
-          },
-        ],
-      }),
-    ];
-    const { aggregate } = buildDelegationEvidenceReport(runtimeFor(events));
-    expect(aggregate.independenceDebt).toEqual({
-      open: 0,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 1,
-    });
-  });
-
-  test("sums disjoint per-session independence debt into the aggregate open count", () => {
-    seq = 0;
-    // Session-local atom ids: s1 owes 1 (runtime), s2 owes 2 (security + runtime). The
-    // per-session values differ (1 != 2) so a Math.max/overwrite regression on the
-    // aggregate sum line would NOT reproduce the expected total of 3.
-    const s1Events = [
-      ev("task.requirement.recorded", {
-        atom: {
-          id: "a1",
-          statement: "event tap must re-arm on disable",
-          modality: "must",
-          provenance: "trap",
-          riskClass: "runtime",
-        },
-      }),
-    ];
-    const s2Events = [
-      ev("task.requirement.recorded", {
-        atom: {
-          id: "b1",
-          statement: "hardened entitlement must hold",
-          modality: "must",
-          provenance: "trap",
-          riskClass: "security",
-        },
-      }),
-      ev("task.requirement.recorded", {
-        atom: {
-          id: "b2",
-          statement: "audio route must survive device change",
-          modality: "must",
-          provenance: "trap",
-          riskClass: "runtime",
-        },
-      }),
-    ];
-    const bySession: Record<string, ReturnType<typeof ev>[]> = { s1: s1Events, s2: s2Events };
-    const runtime = {
-      ops: {
-        events: {
-          records: {
-            listSessionIds: () => ["s1", "s2"],
-            list: (sessionId: string) => bySession[sessionId] ?? [],
-          },
-        },
-      },
-    } as never;
-
-    const { aggregate, sessions } = buildDelegationEvidenceReport(runtime);
-
-    const openById = Object.fromEntries(
-      sessions.map((s) => [s.sessionId, s.independenceDebt.open]),
-    );
-    expect(openById).toEqual({ s1: 1, s2: 2 });
-    expect(aggregate.independenceDebt.open).toBe(3);
   });
 
   test("counts unaddressed (still-live) review findings — the act-on-review loop-close signal", () => {
@@ -276,53 +112,6 @@ describe("buildDelegationEvidenceReport (Lever 6 instrument)", () => {
       total: 2,
       highOrCritical: 1,
       unattributed: 1,
-    });
-    // No covering independent-FAIL review on this tape, so no attribution-miss.
-    expect(aggregate.coverageAttributionMiss).toBe(0);
-  });
-
-  test("surfaces a coverage attribution-miss end to end (census stays flat, the miss is counted)", () => {
-    seq = 0;
-    const targetRef = { kind: "file_digests", digests: { "a.swift": "sha-a" } };
-    // A write establishes the fresh universe; an independent FAIL over the same file
-    // COVERS it but names no atom -> the runtime debt atom stays `open`, the census shows
-    // NO movement, and the miss is what makes that visible. workspaceRoot relativizes the
-    // absolute write path so it matches the review's workspace-relative targetRef.
-    const events = [
-      committedToolEvent({
-        toolName: "write",
-        args: { path: "/ws/a.swift" },
-        timestamp: 1,
-      }) as unknown as ReturnType<typeof ev>,
-      ev("task.requirement.recorded", {
-        atom: {
-          id: "req-runtime",
-          statement: "event tap must re-arm on disable",
-          modality: "must",
-          provenance: "trap",
-          riskClass: "runtime",
-        },
-      }),
-      ev("verification.outcome.recorded", {
-        outcome: "fail",
-        level: "requirements",
-        perspective: "independent",
-        targetRef,
-        reviewerContext: { contextId: "r1", model: null, lenses: [] },
-        atomRefs: [],
-      }),
-    ];
-    const { aggregate, sessions } = buildDelegationEvidenceReport(runtimeFor(events), {
-      workspaceRoot: "/ws",
-    });
-    expect(sessions[0]?.coverageAttributionMiss).toBe(1);
-    expect(aggregate.coverageAttributionMiss).toBe(1);
-    // The census itself shows NOTHING — exactly the blind spot the miss count exists to fill.
-    expect(aggregate.independenceDebt).toEqual({
-      open: 1,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 0,
     });
   });
 });

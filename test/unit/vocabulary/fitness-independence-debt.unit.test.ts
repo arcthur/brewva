@@ -7,8 +7,11 @@ import type { RequirementAtom } from "@brewva/brewva-vocabulary/task";
 
 // `independenceDebtAtoms` = high-risk (runtime/security) `must` atoms not reaching
 // `satisfied` — the atoms an independent perspective is owed on (authorship taints
-// verification). A presence grep clears a low-risk atom honestly, and a live fail
-// is a discrepancy, not an independence gap; both are excluded.
+// verification). Any deterministic OR independent pass clears the debt (there is no
+// grade floor); an author-only self-claim (likelySatisfied) does NOT — the authoring
+// stream cannot mint the independent perspective on its own work. A presence grep
+// clears a low-risk atom honestly, and a live fail is a discrepancy, not an
+// independence gap; both are excluded.
 
 function mustAtom(id: string, riskClass?: RequirementAtom["riskClass"]): RequirementAtom {
   return {
@@ -43,34 +46,33 @@ describe("independenceDebtAtoms — high-risk must atoms owed an independent rea
     expect(projection.independenceDebtAtoms).toEqual(["a"]);
   });
 
-  test("an independent pass AT the risk floor clears the debt (reaches satisfied)", () => {
+  test("an independent pass clears the debt (reaches satisfied)", () => {
     const projection = projectRequirementFitness({
       ...inputFor([mustAtom("a", "runtime")]),
-      independentOutcomes: [
-        { atomRefs: ["a"], verdict: "pass", ref: "indep-1", evidenceKind: "static_guard" },
-      ],
+      independentOutcomes: [{ atomRefs: ["a"], verdict: "pass", ref: "indep-1" }],
     });
+    expect(projection.atoms[0]?.state).toBe("satisfied");
     expect(projection.independenceDebtAtoms).toEqual([]);
   });
 
-  test("a deterministic pass AT the risk floor clears the debt (no independent read needed)", () => {
+  test("a deterministic pass clears the debt (no independent read needed)", () => {
     const projection = projectRequirementFitness({
       ...inputFor([mustAtom("a", "runtime")]),
-      deterministicEvidence: [
-        { atomId: "a", verdict: "pass", ref: "g-1", evidenceKind: "static_guard" },
-      ],
+      deterministicEvidence: [{ atomId: "a", verdict: "pass", ref: "g-1" }],
     });
+    expect(projection.atoms[0]?.state).toBe("satisfied");
     expect(projection.independenceDebtAtoms).toEqual([]);
   });
 
-  test("a SUB-FLOOR presence pass leaves the debt (likelySatisfied, still owed an at-grade read)", () => {
+  test("an author-only self-claim (likelySatisfied) does NOT clear the debt", () => {
+    // The core of authorship-taints-verification: a high-risk atom the author
+    // merely claims to cover still owes an independent read — a self-attestation
+    // is not the perspective the authoring stream cannot mint on its own work.
     const projection = projectRequirementFitness({
       ...inputFor([mustAtom("a", "runtime")]),
-      independentOutcomes: [
-        { atomRefs: ["a"], verdict: "pass", ref: "indep-1", evidenceKind: "presence" },
-      ],
+      authoredOutcomes: [{ atomRefs: ["a"], ref: "authored-1" }],
     });
-    // presence on a runtime atom caps at `likelySatisfied` — the independence gap is still open
+    expect(projection.atoms[0]?.state).toBe("likelySatisfied");
     expect(projection.independenceDebtAtoms).toEqual(["a"]);
   });
 
@@ -119,26 +121,10 @@ describe("independenceDebtAtoms — high-risk must atoms owed an independent rea
         mustAtom("b"), // non-high-risk → not debt
         mustAtom("c", "security"), // debt
       ]),
-      // clear `c` with an at-grade independent pass so it drops out
-      independentOutcomes: [
-        { atomRefs: ["c"], verdict: "pass", ref: "indep-1", evidenceKind: "static_guard" },
-      ],
+      // clear `c` with an independent pass so it drops out
+      independentOutcomes: [{ atomRefs: ["c"], verdict: "pass", ref: "indep-1" }],
     });
     expect(projection.independenceDebtAtoms).toEqual(["a"]);
-  });
-
-  test("a deterministic SUB-FLOOR presence pass (a machine grep, no independent) is still debt", () => {
-    // A static-guard adapter ran but only reached presence grade — a runtime atom
-    // still owes an AT-GRADE read; the check that ran was deterministic, not independent.
-    const projection = projectRequirementFitness({
-      ...inputFor([mustAtom("a", "runtime")]),
-      deterministicEvidence: [
-        { atomId: "a", verdict: "pass", ref: "g-1", evidenceKind: "presence" },
-      ],
-    });
-    expect(projection.independenceDebtAtoms).toEqual(["a"]);
-    // It legitimately co-appears in the ORTHOGONAL grade-debt axis (not a contradiction).
-    expect(projection.insufficientGradeAtoms.map((entry) => entry.atomId)).toEqual(["a"]);
   });
 
   test("an independent FAIL (the second violation channel) also excludes the atom", () => {
@@ -153,128 +139,10 @@ describe("independenceDebtAtoms — high-risk must atoms owed an independent rea
   });
 
   test("an EXPLICIT low-risk class (ux, presence floor) must atom is NOT debt", () => {
-    // riskClass is set but its floor is `presence`, so self-review clears it honestly —
-    // guards against "any riskClass means high-risk".
+    // riskClass is set but it is not a high-risk class, so self-review clears it
+    // honestly — guards against "any riskClass means high-risk".
     const projection = projectRequirementFitness(inputFor([mustAtom("a", "ux")]));
     expect(projection.independenceDebtAtoms).toEqual([]);
     expect(projection.unverifiedMustAtoms).toEqual(["a"]);
-  });
-});
-
-describe("independenceDebtResolution — the discharge census (report:delegation-evidence)", () => {
-  test("an unmet high-risk must atom is open, nothing resolved; open === independenceDebtAtoms.length", () => {
-    const projection = projectRequirementFitness(inputFor([mustAtom("a", "runtime")]));
-    expect(projection.independenceDebtResolution).toEqual({
-      open: 1,
-      reviewedSubGrade: 0, // unverified — nobody looked, so not "reviewed sub-grade"
-      violated: 0,
-      dischargedAtGrade: 0,
-    });
-    expect(projection.independenceDebtResolution.open).toBe(
-      projection.independenceDebtAtoms.length,
-    );
-  });
-
-  test("an at-grade deterministic pass discharges the atom -> dischargedAtGrade, open drops", () => {
-    const projection = projectRequirementFitness({
-      ...inputFor([mustAtom("a", "runtime")]),
-      deterministicEvidence: [
-        { atomId: "a", verdict: "pass", ref: "g-1", evidenceKind: "static_guard" },
-      ],
-    });
-    expect(projection.independenceDebtResolution).toEqual({
-      open: 0,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 1,
-    });
-  });
-
-  test("an independent FAIL on the atom -> violated, NOT open (the review→atom close-edge)", () => {
-    const projection = projectRequirementFitness({
-      ...inputFor([mustAtom("a", "runtime")]),
-      independentOutcomes: [{ atomRefs: ["a"], verdict: "fail", ref: "i-1" }],
-    });
-    expect(projection.independenceDebtResolution).toEqual({
-      open: 0,
-      reviewedSubGrade: 0,
-      violated: 1,
-      dischargedAtGrade: 0,
-    });
-  });
-
-  test("an independent presence-grade pass stays open but counts as reviewedSubGrade", () => {
-    const projection = projectRequirementFitness({
-      ...inputFor([mustAtom("a", "runtime")]),
-      independentOutcomes: [
-        { atomRefs: ["a"], verdict: "pass", ref: "i-1", evidenceKind: "presence" },
-      ],
-    });
-    // A fresh-context reviewer DID read the atom, but presence-grade cannot clear a
-    // runtime floor (grade ceiling) — so it stays `open`, yet is now visible as a
-    // review that LOOKED, distinct from an atom nobody touched.
-    expect(projection.independenceDebtResolution).toEqual({
-      open: 1,
-      reviewedSubGrade: 1,
-      violated: 0,
-      dischargedAtGrade: 0,
-    });
-    expect(projection.independenceDebtResolution.reviewedSubGrade).toBeLessThanOrEqual(
-      projection.independenceDebtResolution.open,
-    );
-  });
-
-  test("a DETERMINISTIC sub-floor pass is open but NOT reviewedSubGrade (a grep is not a perspective)", () => {
-    const projection = projectRequirementFitness({
-      ...inputFor([mustAtom("a", "runtime")]),
-      deterministicEvidence: [
-        { atomId: "a", verdict: "pass", ref: "g-1", evidenceKind: "presence" },
-      ],
-    });
-    // `reviewedSubGrade` is the INDEPENDENCE axis: a deterministic presence pass sets
-    // grade debt but no independent perspective looked, so it does NOT count here.
-    expect(projection.independenceDebtResolution).toEqual({
-      open: 1,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 0,
-    });
-    expect(projection.insufficientGradeAtoms.map((entry) => entry.atomId)).toEqual(["a"]);
-  });
-
-  test("an author-only claim is open but NOT reviewedSubGrade (author coverage is not independent)", () => {
-    const projection = projectRequirementFitness({
-      ...inputFor([mustAtom("a", "runtime")]),
-      authoredOutcomes: [{ atomRefs: ["a"], ref: "auth-1" }],
-    });
-    expect(projection.independenceDebtResolution).toEqual({
-      open: 1,
-      reviewedSubGrade: 0,
-      violated: 0,
-      dischargedAtGrade: 0,
-    });
-  });
-
-  test("censuses ONLY high-risk must atoms: a mix of open/violated/discharged, low-risk excluded", () => {
-    const projection = projectRequirementFitness({
-      ...inputFor([
-        mustAtom("open", "runtime"),
-        mustAtom("broken", "security"),
-        mustAtom("clean", "runtime"),
-        mustAtom("low", "ux"),
-      ]),
-      independentOutcomes: [{ atomRefs: ["broken"], verdict: "fail", ref: "i-1" }],
-      deterministicEvidence: [
-        { atomId: "clean", verdict: "pass", ref: "g-1", evidenceKind: "static_guard" },
-      ],
-    });
-    expect(projection.independenceDebtResolution).toEqual({
-      open: 1,
-      reviewedSubGrade: 0, // the `open` atom is unverified — no reviewer looked
-      violated: 1,
-      dischargedAtGrade: 1,
-    });
-    // The low-risk `must` atom is unverified-must but never enters the high-risk census.
-    expect(projection.unverifiedMustAtoms).toContain("low");
   });
 });

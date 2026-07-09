@@ -14,12 +14,6 @@ import {
 import type { FitnessDiscrepancy, FitnessProjection } from "@brewva/brewva-vocabulary/fitness";
 import { VERIFICATION_RUNGS, type EvidenceItem } from "@brewva/brewva-vocabulary/iteration";
 import { projectReviewDebt } from "@brewva/brewva-vocabulary/review";
-import { foldTaskLedgerEvents } from "@brewva/brewva-vocabulary/task";
-import {
-  extractWriteInvocationPaths,
-  projectToolInvocations,
-} from "@brewva/brewva-vocabulary/tool-invocations";
-import { collectPatchSetAppliedPaths } from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaBundledToolOptions, BrewvaToolRuntime } from "../../contracts/index.js";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
@@ -30,7 +24,6 @@ import {
   evidenceItemsToDeterministicEvidence,
   recordVerificationOutcome,
 } from "../../runtime-port/verification.js";
-import { collectStaticGuardEvidence } from "../../shared/static-guard/producer.js";
 import { readLiteral } from "../../utils/literal.js";
 import { errTextResult, okTextResult } from "../../utils/result.js";
 import { getSessionId } from "../../utils/session.js";
@@ -119,59 +112,6 @@ function readWorkspaceFileDigest(workspaceRoot: string, path: string): string | 
   }
 }
 
-/** Read the current on-disk source of a workspace path as text, or null. */
-function readWorkspaceSource(workspaceRoot: string, path: string): string | null {
-  try {
-    return readFileSync(resolve(workspaceRoot, path), "utf8");
-  } catch {
-    return null;
-  }
-}
-
-/**
- * R3c: the RUNTIME runs the static-guard adapters over the session's fresh-touched
- * source, attributing each verdict through the atoms' DECLARED bindings (a trap
- * entry's `staticGuards` at `property` coverage; the atom's own
- * `observableSignals` construct join at `facet` coverage — see the producer),
- * recording deterministic, `static_guard`-grade results on the receipt. A
- * producer the model cannot fabricate — the predicate runs on the real file; a
- * property PASS can satisfy a high-risk atom presence-only evidence leaves
- * capped, any FAIL is a real `deterministic_conflict`, and an applicable FAIL
- * no atom declares still rides the receipt unbound (empty `atomRefs`). Inert
- * (`[]`) with no atoms, no fresh writes, or no applicable lens.
- */
-function collectStaticGuardEvidenceForSession(
-  runtime: BrewvaToolRuntime,
-  sessionId: string,
-  ctx: ExtensionContext,
-): EvidenceItem[] {
-  const records = runtime.capabilities.events?.records;
-  const events = records?.list ? records.list(sessionId) : [];
-  const atoms = foldTaskLedgerEvents(events).requirements.map((atom) => ({
-    id: atom.id,
-    statement: atom.statement,
-    provenance: atom.provenance,
-    observableSignals: atom.observableSignals,
-  }));
-  const workspaceRoot = resolveWorkspaceRoot(runtime, ctx);
-  const invocations = projectToolInvocations(events);
-  const writePaths = extractWriteInvocationPaths(invocations)
-    .map((invocation) => invocation.path)
-    .filter((path): path is string => path !== null);
-  // A session that lands its fix via `source_patch_apply` (not a bare write/edit)
-  // touches files whose paths live authoritatively on the `source_patch_applied`
-  // receipt, NOT on tool args — union them in (the SAME appliedPaths the
-  // review-debt fresh-touched universe uses), so a patched source file is not
-  // invisible to the guard, which would silently drop its FAIL evidence.
-  const patchPaths = Object.values(collectPatchSetAppliedPaths(events)).flat();
-  const sourcePaths = [...new Set([...writePaths, ...patchPaths])];
-  return collectStaticGuardEvidence({
-    atoms,
-    sourcePaths,
-    readSource: (path) => readWorkspaceSource(workspaceRoot, path),
-  });
-}
-
 /**
  * Model-facing producer for the `verification.outcome.recorded` receipt.
  *
@@ -233,14 +173,10 @@ export function createVerificationRecordTool(options: BrewvaBundledToolOptions):
         // is omitted entirely.
         const fitnessGated =
           outcome === "pass" && VERIFICATION_RUNGS.indexOf(level) >= REQUIREMENTS_RUNG_INDEX;
-        // R3c: run the static-guard adapters over the fresh-touched source FIRST (a
-        // producer the model cannot fabricate — the runtime runs the predicate on the
-        // real file). These items are not on the tape yet (THIS receipt will carry
-        // them), so they are injected into the claim-time fitness below; otherwise
-        // its `discrepancies` would miss the deterministic_conflict just found.
-        const evidenceItems = fitnessGated
-          ? collectStaticGuardEvidenceForSession(runtime, sessionId, ctx)
-          : [];
+        // The deterministic-evidence channel (`evidenceItems`) stays open for a
+        // future runtime-run producer (a verification gate, an LSP diagnostic), but
+        // `verification_record` is an AUTHORED producer and runs none itself.
+        const evidenceItems: EvidenceItem[] = [];
         const fitness = fitnessGated
           ? projectRequirementFitness(
               assembleRequirementFitnessInput(runtime, sessionId, {
@@ -272,9 +208,8 @@ export function createVerificationRecordTool(options: BrewvaBundledToolOptions):
           // An AUTHORED claim attests to no specific atom (the positive signal is
           // exclusively an independent clear atoms-review's job). Always `[]`.
           atomRefs: [],
-          // Deterministic static-guard results (R3c): NOT an authored atom claim —
-          // the runtime ran the predicate, so a `deterministic` PASS is trustworthy
-          // and can satisfy a high-risk atom regardless of this receipt's perspective.
+          // The deterministic-evidence channel — empty here: this AUTHORED producer
+          // runs none. A future gate/LSP producer would feed it.
           evidenceItems,
         });
         if (!result) {
@@ -293,21 +228,6 @@ export function createVerificationRecordTool(options: BrewvaBundledToolOptions):
         // RESULT TEXT only — never the outcome and never the recorded receipt). A
         // fail/skipped outcome runs neither scan and touches no filesystem.
         const markers: string[] = [];
-        // UNBOUND deterministic FAILs (empty atomRefs): real static-guard
-        // conflicts no requirement atom declares. They move no atom state by
-        // design (attribution unknown is said, not guessed — axiom 7), so the
-        // receipt is their ONLY surface; without this marker the signal would be
-        // write-only. Text-only, like every marker here.
-        const unboundFails = evidenceItems.filter(
-          (item) => item.atomRefs.length === 0 && item.verdict === "fail",
-        );
-        if (unboundFails.length > 0) {
-          markers.push(
-            `UNBOUND DETERMINISTIC CONFLICTS (no requirement atom declares these constructs — fix or claim them via observableSignals):\n${unboundFails
-              .map((item) => `- ${item.id}: ${item.anchors[0] ?? item.statement}`)
-              .join("\n")}`,
-          );
-        }
         if (outcome === "pass") {
           const workspaceRoot = resolveWorkspaceRoot(runtime, ctx);
           const debtInput = assembleReviewDebtInput(

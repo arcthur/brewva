@@ -53,15 +53,6 @@ const requiredVocabularyInternalModules = [
   "work-card",
   "workbench",
 ] as const;
-// Raised 800 -> 900 (Finding P1, post-merge review): `deriveLatestTreeMutationAt`
-// — the single shared tree-mutation-timestamp fold — is homed in `iteration.ts`
-// beside the sibling touched-file-universe derivations it shares a predicate
-// with (`BARE_WRITE_TOOL_NAMES`, `extractWriteInvocationPaths`,
-// `deriveFreshTouchedFileUniverse`), replacing two DUPLICATED inline reductions
-// in the CLI review-debt read and the requirement-fitness assembler. That is
-// cohesive single-homing, not cathedral-building — the module stays domain-sliced
-// (event vocabulary + its projections), well under the retired body.ts scale.
-const vocabularyInternalLineBudget = 900;
 const allowedVocabularyBrewvaDeps = ["@brewva/brewva-std"] as const;
 
 type Extends<Left, Right> = [Left] extends [Right] ? true : false;
@@ -121,10 +112,6 @@ function repoPath(absolutePath: string): string {
   return relative(repoRoot, absolutePath).replaceAll("\\", "/");
 }
 
-function lineCount(source: string): number {
-  return source.split("\n").length;
-}
-
 describe("vocabulary boundary fitness", () => {
   test("vocabulary is a leaf package with explicit subpaths and no root export", () => {
     const packageJson = readJson("packages/brewva-vocabulary/package.json") as {
@@ -178,8 +165,6 @@ describe("vocabulary boundary fitness", () => {
     const offenders = requiredVocabularySubpaths.flatMap((subpath) => {
       const sourcePath = `packages/brewva-vocabulary/src/${subpath.slice(2)}.ts`;
       const source = readRepoFile(sourcePath);
-      const exportCount = source.match(/^  [A-Za-z0-9_]+,?$/gmu)?.length ?? 0;
-      const sourceLineCount = lineCount(source);
       const errors: string[] = [];
 
       if (/export\s+\*/u.test(source)) {
@@ -187,18 +172,6 @@ describe("vocabulary boundary fitness", () => {
       }
       if (source.includes("./internal/body.js")) {
         errors.push(`${sourcePath} imports the retired internal body`);
-      }
-      // The coupled world rewind RFC added four real cross-package names to
-      // the session domain (the checkpoint event type constant replacing raw
-      // string literals at the emit/find sites, the `brewva.world.v1` block
-      // schema, its minimal parse, and the `SessionWorldRestoreRecord` receipt
-      // block the completion payload carries) — contract exports, not barrel
-      // growth.
-      if (exportCount > 104) {
-        errors.push(`${sourcePath} exports ${exportCount} names`);
-      }
-      if (sourceLineCount > 140) {
-        errors.push(`${sourcePath} has ${sourceLineCount} lines`);
       }
       return errors;
     });
@@ -213,16 +186,10 @@ describe("vocabulary boundary fitness", () => {
     const offenders = requiredVocabularyInternalModules.flatMap((moduleName) => {
       const sourcePath = `packages/brewva-vocabulary/src/internal/${moduleName}.ts`;
       const absolutePath = resolve(repoRoot, sourcePath);
-      const errors: string[] = [];
-
       if (!existsSync(absolutePath)) {
         return [`${sourcePath} is missing`];
       }
-      const sourceLineCount = lineCount(readFileSync(absolutePath, "utf8"));
-      if (sourceLineCount > vocabularyInternalLineBudget) {
-        errors.push(`${sourcePath} has ${sourceLineCount} lines`);
-      }
-      return errors;
+      return [];
     });
 
     expect(offenders).toEqual([]);

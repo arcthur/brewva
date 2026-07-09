@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
-import {
-  buildTapeRequirementFitness,
-  buildTapeUnverifiedRequirementDebt,
-} from "../../packages/brewva-cli/src/operator/inspect/requirement-fitness.js";
+import { buildTapeUnverifiedRequirementDebt } from "../../packages/brewva-cli/src/operator/inspect/requirement-fitness.js";
 import { buildRunReportProjection } from "../../packages/brewva-cli/src/operator/inspect/run-report.js";
 
 // Requirement-loop LIVENESS (RFC acceptance). The RFC ships R1/R2 only with a
@@ -75,52 +72,6 @@ describe("R1/R2 adoption liveness (acceptance)", () => {
     const life = buildRunReportProjection("s", events).requirementLifecycle;
     expect(life.atomizedBeforeFirstWrite).toBe(false);
     expect(life.reviewDispatched).toBe(false);
-  });
-});
-
-// R3 grading over the tape (join-level): a graded static_guard receipt clears a
-// high-risk atom that a presence-grade clear cannot. This asserts the JOIN. The
-// end-to-end PRODUCER liveness — the tool actually running the static-guard
-// adapter over real source and committing the graded receipt — is driven in
-// verification-record.unit.test.ts, which ships the real Swift fixtures.
-describe("R3 grading over the tape (join-level)", () => {
-  test("a graded static_guard receipt SATISFIES a high-risk atom presence could not", () => {
-    const graded = [
-      atom("req-1", 1, { riskClass: "runtime" }),
-      ev("verification.outcome.recorded", 10, {
-        outcome: "pass",
-        level: "requirements",
-        perspective: "authored",
-        evidenceItems: [
-          {
-            id: "g",
-            atomRefs: ["req-1"],
-            evidenceKind: "static_guard",
-            verdict: "pass",
-            anchors: ["FnKeyMonitor.swift:1"],
-            statement: "guard",
-          },
-        ],
-      }),
-    ];
-    expect(buildTapeRequirementFitness(graded).atoms[0]?.state).toBe("satisfied");
-
-    // The production presence path: an independent review clears req-1 via the
-    // receipt's top-level atomRefs (deterministic evidence rides items; independent
-    // evidence rides atomRefs). It grades as presence, which cannot satisfy a
-    // runtime-risk atom, so it caps at likelySatisfied and raises grade debt.
-    const presenceOnly = [
-      atom("req-1", 1, { riskClass: "runtime" }),
-      ev("verification.outcome.recorded", 10, {
-        outcome: "pass",
-        level: "requirements",
-        perspective: "independent",
-        atomRefs: ["req-1"],
-      }),
-    ];
-    const fitness = buildTapeRequirementFitness(presenceOnly);
-    expect(fitness.atoms[0]?.state).toBe("likelySatisfied");
-    expect(fitness.insufficientGradeAtoms).toHaveLength(1);
   });
 });
 

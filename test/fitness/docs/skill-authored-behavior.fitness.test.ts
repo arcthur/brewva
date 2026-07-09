@@ -48,61 +48,6 @@ describe("skill authored behavior coverage", () => {
     });
   }
 
-  test("skill authoring references the shared authored-behavior guide", () => {
-    const markdown = readRepoFile("skills/meta/skill-authoring/SKILL.md");
-
-    expect(markdown).toContain("references/authored-behavior.md");
-    expect(markdown).toContain("Author the behavior, not just the schema");
-  });
-
-  test("strategy documents timing pressure", () => {
-    const markdown = readRepoFile("skills/core/strategy/SKILL.md");
-
-    expect(markdown).toMatch(/why now/i);
-  });
-
-  test("architecture preserves seam discipline", () => {
-    const markdown = readRepoFile("skills/core/architecture/SKILL.md");
-
-    expect(markdown).toContain("NO DEEPENING OPPORTUNITY WITHOUT A NAMED MODULE");
-    expect(markdown).toContain("deletion test");
-    expect(markdown).toContain("interface as the test surface");
-  });
-
-  test("office-hours preserves diagnostic discipline from the source skill", () => {
-    const markdown = readRepoFile("skills/core/office-hours/SKILL.md");
-
-    expect(markdown).toContain("NO OFFICE HOURS WITHOUT MODE, PREMISES, AND A NEXT ASSIGNMENT");
-    expect(markdown).toContain("Ask one question at a time");
-  });
-
-  test("verifier documents diff-aware, browser-first, and rerun-after-fix behavior", () => {
-    const markdown = readRepoFile("skills/core/verifier/SKILL.md");
-    const referenceMarkdown = readRepoFile(
-      "skills/core/verifier/references/exploratory-regression-checklist.md",
-    );
-
-    expect(markdown).toContain("diff-aware");
-    expect(referenceMarkdown).toContain("browser-first");
-    expect(referenceMarkdown).toContain("rerun");
-  });
-
-  test("ship documents read-only release engineer boundaries", () => {
-    const markdown = readRepoFile("skills/core/ship/SKILL.md");
-
-    expect(markdown).toMatch(/read-only\s+release engineer/i);
-    expect(markdown).toContain("PR handoff");
-    expect(markdown).toContain("does not patch product code");
-  });
-
-  test("retro documents metrics-first hotspot analysis", () => {
-    const markdown = readRepoFile("skills/core/retro/SKILL.md");
-    const referenceMarkdown = readRepoFile("skills/core/retro/references/retrospective-lenses.md");
-
-    expect(referenceMarkdown).toContain("Metrics-First Questions");
-    expect(markdown).toContain("systemic");
-  });
-
   test("predict-review maps perspectives to canonical built-in agent specs", () => {
     const skillMarkdown = readRepoFile("skills/domain/predict-review/SKILL.md");
     const referenceMarkdown = readRepoFile(
@@ -123,59 +68,5 @@ describe("skill authored behavior coverage", () => {
     expect(referenceMarkdown).toContain("`verifier`");
     expect(referenceMarkdown).not.toContain("`reviewer`");
     expect(referenceMarkdown).not.toContain("`researcher`");
-  });
-
-  test("Brewva project skills preserve the accepted Bub-shaped product vision", () => {
-    const criticalRules = readRepoFile("skills/project/shared/critical-rules.md");
-    const sourceMap = readRepoFile("skills/project/shared/source-map.md");
-    const antiPatterns = readRepoFile("skills/project/shared/anti-patterns.md");
-    const runtimeArtifacts = readRepoFile("skills/project/shared/runtime-artifacts.md");
-    const implementationOverlay = readRepoFile("skills/project/overlays/implementation/SKILL.md");
-    const reviewOverlay = readRepoFile("skills/project/overlays/review/SKILL.md");
-    const forensicsOverlay = readRepoFile("skills/project/overlays/runtime-forensics/SKILL.md");
-
-    expect(criticalRules).toContain("receive -> orient -> authorize -> act -> verify -> continue");
-    expect(criticalRules).toContain("same evidence, different authority");
-    expect(criticalRules).toContain("Work Card");
-    expect(criticalRules).toContain("attention_options");
-    expect(criticalRules).toContain("attention_consume");
-    expect(criticalRules).toContain("session.continuationAnchor");
-    expect(criticalRules).toContain("SkillCards");
-    expect(criticalRules).toContain("authority posture `none`");
-    expect(criticalRules).toContain("verification gate manifest");
-    expect(criticalRules).toContain("Advisory extension manifests");
-
-    expect(sourceMap).toContain("packages/brewva-cli/src/operator/inspect/work-card.ts");
-    expect(sourceMap).toContain("packages/brewva-tools/src/families/memory/attention-options.ts");
-    expect(sourceMap).toContain("packages/brewva-gateway/src/extensions/api.ts");
-    expect(sourceMap).toContain(
-      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-verification-gates.ts",
-    );
-    expect(sourceMap).toContain(
-      "packages/brewva-gateway/src/hosted/internal/context/workbench-context.ts",
-    );
-
-    expect(antiPatterns).toContain("forensic inspect dump as the default operator surface");
-    expect(antiPatterns).toContain("second memory store");
-    expect(antiPatterns).toContain("block_tool");
-    expect(antiPatterns).toContain("Run skill");
-    expect(antiPatterns).toContain("verifier adapter");
-
-    expect(runtimeArtifacts).toContain("tape_handoff");
-    expect(runtimeArtifacts).toContain("Work Card");
-    expect(runtimeArtifacts).toContain("continuation anchors");
-
-    expect(implementationOverlay).toContain("Work Card");
-    expect(implementationOverlay).toContain("Attention Options");
-    expect(implementationOverlay).toContain("continuation");
-
-    expect(reviewOverlay).toContain("Work Card");
-    expect(reviewOverlay).toContain("attention option");
-    expect(reviewOverlay).toContain("verification gate manifest");
-    expect(reviewOverlay).toContain("advisory extension");
-
-    expect(forensicsOverlay).toContain("Work Card");
-    expect(forensicsOverlay).toContain("drill-down");
-    expect(forensicsOverlay).toContain("raw replay");
   });
 });

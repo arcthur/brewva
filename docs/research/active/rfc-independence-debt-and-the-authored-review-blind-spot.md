@@ -1,5 +1,11 @@
 # RFC: Independence Debt — Surfacing The Authored-Review Blind Spot At Turn Close
 
+> **Reshaped by subtraction (2026-07-09).** The grade-ceiling / at-grade / census
+> machinery this RFC assumed was removed; the `independenceDebtAtoms` sensor it
+> introduced survives grade-free — a high-risk `must` atom covered only by an author
+> self-claim (`likelySatisfied`), or by nothing, still owes an independent read. See
+> `docs/research/decisions/harness-subtraction-trap-static-guard-grade-ceiling.md`.
+
 ## Metadata
 
 - Status: active

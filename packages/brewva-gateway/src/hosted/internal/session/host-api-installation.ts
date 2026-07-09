@@ -29,7 +29,6 @@ import {
   type HostedRuntimeAdapterOptions,
   type HostedRuntimeAdapterPort,
 } from "./runtime-ports.js";
-import { createOrientRequirementInjectionLifecycle } from "./skills/orient-requirement-injection.js";
 import { createSkillSelectionLifecycle } from "./skills/skill-selection.js";
 import {
   createHostedToolExecutionCoordinator,
@@ -150,11 +149,6 @@ export {
   type ToolSurfaceRuntime,
 } from "./tools/tool-surface.js";
 export {
-  createOrientRequirementInjectionLifecycle,
-  type OrientRequirementInjectionLifecycle,
-  type OrientRequirementInjectionRuntime,
-} from "./skills/orient-requirement-injection.js";
-export {
   buildForcedSkillCandidates,
   buildSkillShortlistContextForPrompt,
   createSkillSelectionLifecycle,
@@ -269,7 +263,6 @@ function installHostedBehavior(
     toolDefinitionsByName,
   });
   const skillSelection = createSkillSelectionLifecycle(runtime);
-  const orientRequirementInjection = createOrientRequirementInjectionLifecycle(runtime);
   const toolSurface = createToolSurfaceLifecycle(hostApi, toolSurfaceRuntime, {
     dynamicToolDefinitions: registerTools ? toolDefinitionsByName : undefined,
   });
@@ -289,13 +282,6 @@ function installHostedBehavior(
     pre_model: [
       localHookManager.lifecycle,
       { beforeAgentStart: skillSelection.beforeAgentStart },
-      // Deterministic orient-phase trap atom injection: reads the same
-      // accepted prompt skill-selection just read, plus folded task state,
-      // and ONLY ever records task.requirement.recorded events (never a
-      // systemPrompt, message, or gate) — so its position relative to
-      // skill-selection is unordered in effect, but it sits right after it
-      // because both read the same orient-time inputs.
-      { beforeAgentStart: orientRequirementInjection.beforeAgentStart },
       {
         turnStart: contextTransform.turnStart,
         sessionCompact: contextTransform.sessionCompact,

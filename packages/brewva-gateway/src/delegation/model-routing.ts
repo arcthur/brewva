@@ -9,18 +9,6 @@ import type { HostedDelegationTarget } from "./targets.js";
 
 type RegisteredModel = ReturnType<BrewvaModelCatalog["getAll"]>[number];
 
-interface DelegationRoutingPolicy {
-  id: string;
-  reason: string;
-  candidateModels: readonly string[];
-  score(input: {
-    target: HostedDelegationTarget;
-    packet: DelegationPacket;
-    keywordText: string;
-    effectiveSkillName?: string;
-  }): number;
-}
-
 export interface DelegationModelRoutingContext {
   availableModels: RegisteredModel[];
   activePreset?: BrewvaModelPreset;
@@ -31,79 +19,6 @@ export interface ResolvedDelegationModelRoute {
   model?: string;
   modelRole?: BrewvaModelRoleAlias;
   modelRoute?: DelegationModelRouteRecord;
-}
-
-const FRONTEND_KEYWORDS = [
-  "frontend",
-  "ui",
-  "ux",
-  "design system",
-  "css",
-  "tailwind",
-  "react",
-  "component",
-  "layout",
-  "animation",
-  "typography",
-] as const;
-
-const DEEP_REASONING_KEYWORDS = [
-  "architecture",
-  "design",
-  "office hours",
-  "startup",
-  "demand",
-  "wedge",
-  "premise",
-  "strategy",
-  "tradeoff",
-  "root cause",
-  "migration",
-  "rfc",
-  "reasoning",
-] as const;
-
-const EXECUTION_KEYWORDS = [
-  "fix",
-  "patch",
-  "edit",
-  "implement",
-  "refactor",
-  "ci",
-  "test failure",
-  "lint",
-  "compile",
-  "ship",
-] as const;
-
-function normalizeKeywordText(value: string): string {
-  const normalized = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-  return normalized.length > 0 ? ` ${normalized} ` : " ";
-}
-
-function countKeywordMatches(haystack: string, keywords: readonly string[]): number {
-  let matches = 0;
-  for (const keyword of keywords) {
-    if (haystack.includes(normalizeKeywordText(keyword))) {
-      matches += 1;
-    }
-  }
-  return matches;
-}
-
-function normalizeObjectiveText(packet: DelegationPacket): string {
-  return [
-    packet.objective,
-    packet.deliverable,
-    ...(packet.constraints ?? []),
-    ...(packet.sharedNotes ?? []),
-  ]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .join(" ")
-    .toLowerCase();
 }
 
 function resolveDelegationRoleAlias(input: {
@@ -211,78 +126,6 @@ function resolveModelTextAgainstInventory(
   });
 }
 
-const ROUTING_POLICIES: readonly DelegationRoutingPolicy[] = [
-  {
-    id: "frontend-design",
-    reason: "Frontend-heavy delegation benefits from a design-strong route when available.",
-    candidateModels: ["anthropic/claude-opus-4.1", "openai/gpt-5.5:high"],
-    score({ keywordText, effectiveSkillName }) {
-      const keywordMatches = countKeywordMatches(keywordText, FRONTEND_KEYWORDS);
-      if (keywordMatches === 0) {
-        return 0;
-      }
-      return (
-        keywordMatches +
-        (effectiveSkillName === "plan" || effectiveSkillName === "frontend" ? 2 : 0)
-      );
-    },
-  },
-  {
-    id: "deep-reasoning",
-    reason: "Reasoning-heavy delegation should prefer a frontier reasoning model.",
-    candidateModels: ["openai/gpt-5.5:high", "openai/gpt-5.4-mini:high"],
-    score({ target, keywordText, effectiveSkillName }) {
-      if (
-        effectiveSkillName === "plan" ||
-        effectiveSkillName === "office-hours" ||
-        target.consultKind === "design" ||
-        target.consultKind === "diagnose"
-      ) {
-        return 8;
-      }
-      if (target.resultMode !== "consult") {
-        return 0;
-      }
-      const keywordMatches = countKeywordMatches(keywordText, DEEP_REASONING_KEYWORDS);
-      return keywordMatches > 0 ? 4 + keywordMatches : 0;
-    },
-  },
-  {
-    id: "review-and-verification",
-    reason: "Review and Verifier work should bias toward higher-fidelity reasoning.",
-    candidateModels: ["openai/gpt-5.5:medium", "openai/gpt-5.4-mini:medium"],
-    score({ target, effectiveSkillName }) {
-      return target.consultKind === "review" ||
-        target.resultMode === "verifier" ||
-        effectiveSkillName === "review" ||
-        effectiveSkillName === "verifier"
-        ? 8
-        : 0;
-    },
-  },
-  {
-    id: "fast-patch-loop",
-    reason: "Execution-first patch work should prefer a fast coding-oriented model.",
-    candidateModels: [
-      "openai/gpt-5.3-codex-spark:high",
-      "openai/gpt-5.3-codex:medium",
-      "openai/gpt-5.4-mini:medium",
-    ],
-    score({ target, keywordText, effectiveSkillName }) {
-      const keywordMatches = countKeywordMatches(keywordText, EXECUTION_KEYWORDS);
-      let score = 0;
-      if (target.resultMode === "patch") {
-        score += 3;
-      }
-      if (effectiveSkillName === "implementation" || effectiveSkillName === "ship") {
-        score += 2;
-      }
-      score += keywordMatches * 4;
-      return score;
-    },
-  },
-] as const;
-
 export function createDelegationModelRoutingContext(
   registry: Pick<BrewvaModelCatalog, "getAll">,
   options: {
@@ -356,7 +199,7 @@ export function resolveDelegationModelRoute(input: {
   // Advisory model hint: when the packet carries one that resolves against the
   // configured registry, the gateway honors it. The decision stays gateway-
   // owned — an unresolvable hint is ignored and routing falls through to the
-  // keyword policies below rather than failing the run. A preset-explicit
+  // category→role→target default rather than failing the run. A preset-explicit
   // mapping (handled above) still outranks the hint.
   const modelHint = input.packet.modelHint?.trim();
   if (modelHint) {
@@ -376,60 +219,17 @@ export function resolveDelegationModelRoute(input: {
         },
       };
     } catch {
-      // Unresolvable hint: ignore it and let keyword policies decide.
+      // Unresolvable hint: ignore it and fall through to the target default.
     }
   }
 
-  const keywordText = normalizeKeywordText(normalizeObjectiveText(input.packet));
-  let resolvedRoute: ResolvedDelegationModelRoute | undefined;
-  let resolvedScore = 0;
-
-  // Choose the highest-signal policy instead of relying on fragile array order.
-  // Execution cues intentionally outrank surface-domain keywords when both are present.
-  for (const policy of ROUTING_POLICIES) {
-    const score = policy.score({
-      target: input.target,
-      packet: input.packet,
-      keywordText,
-      effectiveSkillName,
-    });
-    if (score <= 0) {
-      continue;
-    }
-    for (const candidateModel of policy.candidateModels) {
-      try {
-        const selectedModel = resolveModelTextAgainstInventory(candidateModel, input.modelRouting);
-        if (score > resolvedScore) {
-          resolvedScore = score;
-          resolvedRoute = {
-            model: selectedModel,
-            modelRole: role,
-            modelRoute: {
-              selectedModel,
-              category,
-              ...(role ? { role } : {}),
-              source: "policy",
-              mode: "auto",
-              reason: policy.reason,
-              policyId: policy.id,
-              ...(presetMissReason ? { presetMissReason } : {}),
-            },
-          };
-        }
-        break;
-      } catch {
-        // Try the next candidate pattern before falling back to the target defaults.
-      }
-    }
-  }
-
-  return (
-    resolvedRoute ??
-    presetMissRoute({
-      activePresetName: activePreset?.name,
-      category,
-      role,
-      reason: presetMissReason,
-    })
-  );
+  // No preset-explicit mapping and no resolvable hint: the delegation category's
+  // role maps to the target's own default model. Model choice is negotiated
+  // through presets and the advisory hint, never guessed from objective keywords.
+  return presetMissRoute({
+    activePresetName: activePreset?.name,
+    category,
+    role,
+    reason: presetMissReason,
+  });
 }

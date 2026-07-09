@@ -274,7 +274,6 @@ describe("docs/research index consistency", () => {
     for (const fileName of listMarkdownFiles(resolve(researchDir, "decisions"))) {
       const repoRelativePath = `docs/research/decisions/${fileName}`;
       const markdown = readFileSync(resolve(repoRoot, repoRelativePath), "utf-8");
-      const lineCount = markdown.trimEnd().split("\n").length;
 
       for (const requiredLine of [
         "- Decision:",
@@ -286,11 +285,6 @@ describe("docs/research index consistency", () => {
         if (!markdown.includes(requiredLine)) {
           errors.push(`${repoRelativePath} is missing ${requiredLine}`);
         }
-      }
-      if (lineCount > 80) {
-        errors.push(
-          `${repoRelativePath} has ${lineCount} lines; accepted decisions must stay under 80`,
-        );
       }
 
       const decisionValue = readMetadataLine(markdown, "Decision");

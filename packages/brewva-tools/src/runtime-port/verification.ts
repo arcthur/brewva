@@ -88,9 +88,10 @@ export interface RecordVerificationOutcomeInput {
    */
   readonly atomRefs: readonly string[];
   /**
-   * Structured graded evidence items (R3). Supplied by a graded producer (the
-   * static-guard guard-check tool); the authored `verification_record` path omits
-   * it, so a model cannot fabricate a `deterministic` static-guard result here.
+   * Structured deterministic evidence items. The channel for a future runtime-run
+   * producer (a verification gate, an LSP diagnostic); the authored
+   * `verification_record` path emits none, so a model cannot fabricate a
+   * `deterministic` result here.
    */
   readonly evidenceItems?: readonly EvidenceItem[];
 }
@@ -203,32 +204,20 @@ export function evidenceItemsToDeterministicEvidence(
 ): DeterministicFitnessEvidence[] {
   // An unbound item (empty atomRefs — a deterministic FAIL no atom declares)
   // maps to nothing here by construction: it stays a receipt-level signal and
-  // moves no atom's state. `coverage` rides through so the join can tell a
-  // whole-property pass (dischargeable) from a facet pass (trail-only).
+  // moves no atom's state.
   return items.flatMap((item) =>
-    item.atomRefs.map((atomId) =>
-      item.coverage
-        ? {
-            atomId,
-            verdict: item.verdict,
-            ref: item.id,
-            evidenceKind: item.evidenceKind,
-            coverage: item.coverage,
-          }
-        : { atomId, verdict: item.verdict, ref: item.id, evidenceKind: item.evidenceKind },
-    ),
+    item.atomRefs.map((atomId) => ({ atomId, verdict: item.verdict, ref: item.id })),
   );
 }
 
 /**
- * Claim-time-only injected evidence the tape does not yet carry. When
- * `verification_record` runs the static-guard producer, the resulting items are
- * NOT yet on the tape (this very receipt will carry them), so the claim-time
- * fitness cross-check must be handed them directly — otherwise the receipt's own
- * `discrepancies` annotation (and the summary shown to the model) would miss a
- * `deterministic_conflict` the static-guard run just found. A pure tape
- * re-derivation (`buildTapeRequirementFitness`) reads the same evidence back from
- * committed `evidenceItems`, so it passes no options.
+ * Claim-time-only injected evidence the tape does not yet carry. A future
+ * runtime-run producer whose items are NOT yet on the tape (this very receipt
+ * will carry them) hands them here so the claim-time fitness cross-check sees
+ * them — otherwise the receipt's own `discrepancies` annotation would miss a
+ * `deterministic_conflict`. A pure tape re-derivation
+ * (`buildTapeRequirementFitness`) reads the same evidence back from committed
+ * `evidenceItems`, so it passes no options.
  */
 export interface RequirementFitnessAssemblyOptions {
   readonly deterministicEvidence?: readonly DeterministicFitnessEvidence[];
@@ -249,8 +238,8 @@ export interface RequirementFitnessAssemblyOptions {
  * `verification.outcome.recorded` receipt's `atomRefs` (a clear atoms-review's
  * `pass` names the reviewed atoms, so `satisfied` is reachable in production; a
  * fail is inert — findings own violations). Deterministic evidence is fed from
- * every receipt's graded `evidenceItems` — the static-guard producer's results,
- * which the runtime ran over real source (not a caller-supplied claim).
+ * every receipt's `evidenceItems` — a runtime-run producer's results (currently
+ * none; the channel awaits a gate/LSP producer).
  *
  * Remaining honest gap: authored coverage (`likelySatisfied`) has no producer —
  * a future author-attestation channel would feed `authoredOutcomes`.
@@ -320,13 +309,11 @@ export function assembleRequirementFitnessInputFromEvents(
           ref: payload.reviewerContext?.contextId ?? `independent-outcome-${index}`,
         });
       }
-      // R3: structured graded evidence items are DETERMINISTIC by construction (the
-      // runtime ran a static-guard predicate over real source), so each feeds the
-      // deterministic side of the join at its recorded grade, regardless of the
-      // receipt's perspective. A pass at `static_guard`+ can clear a high-risk atom
-      // a presence re-grep cannot; a fail is a real `deterministic_conflict`.
-      // Independent evidence rides the top-level `atomRefs` above, not items — one
-      // home per source, so there is nothing to double-count.
+      // Structured evidence items are DETERMINISTIC by construction (a runtime-run
+      // producer, not a model claim), so each feeds the deterministic side of the
+      // join regardless of the receipt's perspective: a pass clears the atom, a fail
+      // is a real `deterministic_conflict`. Independent evidence rides the top-level
+      // `atomRefs` above, not items — one home per source, nothing to double-count.
       deterministicEvidence.push(...evidenceItemsToDeterministicEvidence(payload.evidenceItems));
     }
   }

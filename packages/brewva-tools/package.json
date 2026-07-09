@@ -78,12 +78,6 @@
       "bun": "./src/families/workflow/api.ts",
       "import": "./dist/families/workflow/api.js",
       "default": "./dist/families/workflow/api.js"
-    },
-    "./trap-library": {
-      "types": "./dist/shared/trap-library/index.d.ts",
-      "bun": "./src/shared/trap-library/index.ts",
-      "import": "./dist/shared/trap-library/index.js",
-      "default": "./dist/shared/trap-library/index.js"
     }
   },
   "dependencies": {

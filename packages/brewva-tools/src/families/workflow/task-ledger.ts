@@ -65,7 +65,7 @@ const taskSetSpecVerificationGuideline =
   "TaskSpec no longer carries a verification profile. Use verification.commands only when the task needs explicit command checks; otherwise verification is derived from task acceptance and recorded evidence.";
 
 const taskSetSpecObservableSignalsGuideline =
-  "In requirements[].observableSignals, name the concrete API constructs that would evidence the requirement (e.g. CGEvent.tapCreate, NSPasteboard, TISSelectInputSource) — deterministic static-guard checks attribute their verdicts through declared bindings only (these constructs, or a known trap's declared adapter), never by guessing from the statement's prose.";
+  "In requirements[].observableSignals, name the concrete API constructs that would evidence the requirement (e.g. the specific functions, types, or config keys a reviewer would grep for) — a machine-legible hint for what to look at, never a gate.";
 
 const taskItemStatusGuideline =
   "Status values are pending, in_progress, blocked, or done; use pending for not-started work and in_progress for active work.";
@@ -203,9 +203,7 @@ function readRequirementAtomEntries(
  * `task_set_spec`'s own entries carry provenance "prompt" — the author typed
  * or otherwise directly authored these requirements via this tool call. The
  * mint/dedup judgment itself is single-homed in
- * `resolveRequirementAtoms` (`@brewva/brewva-vocabulary/task`), shared with
- * the orient-phase trap injection producer so both producers dedupe against
- * the SAME folded state with the SAME statement-match rule.
+ * `resolveRequirementAtoms` (`@brewva/brewva-vocabulary/task`).
  */
 function resolvePromptRequirementAtoms(
   foldedRequirements: Parameters<typeof resolveRequirementAtoms>[0],

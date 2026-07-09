@@ -70,16 +70,16 @@ function makeTarget(overrides: Partial<HostedDelegationTarget> = {}): HostedDele
   };
 }
 
+// Model choice is negotiated through the active preset (an explicit role→model
+// mapping) and an advisory per-request `modelHint`, never guessed from objective
+// keywords. Without a preset or a resolvable hint the router chooses no model and
+// the target's own default applies downstream.
 describe("subagent model routing", () => {
-  test("prefers active preset subagent model before policy routes", () => {
+  test("prefers an active preset's explicit role mapping", () => {
+    // deep-reasoning maps to the `slow` role; the preset maps `slow` to opus.
     const resolved = resolveDelegationModelRoute({
-      target: makeTarget({
-        agentSpecName: "explorer",
-        resultMode: "patch",
-      }),
-      packet: {
-        objective: "Fix the React component layout without broad refactors.",
-      },
+      target: makeTarget({ agentSpecName: "explorer" }),
+      packet: { objective: "Investigate the router prefix handling." },
       modelRouting: {
         availableModels: [...AVAILABLE_MODELS],
         activePreset: {
@@ -98,69 +98,43 @@ describe("subagent model routing", () => {
     });
   });
 
-  test("keeps verification category outside model-facing preset roles", () => {
+  test("honors an advisory modelHint that resolves against the registry", () => {
     const resolved = resolveDelegationModelRoute({
-      target: makeTarget({
-        agent: "verifier",
-        targetName: "verifier",
-        agentSpecName: "verifier",
-        consultKind: "review",
-        modelCategory: "verification",
-      }),
+      target: makeTarget(),
       packet: {
-        objective: "Review the runtime change.",
+        objective: "Investigate the router prefix handling.",
+        modelHint: "openai/gpt-5.5:high",
       },
       modelRouting: {
         availableModels: [...AVAILABLE_MODELS],
-        activePreset: {
-          name: "OpenAI Stack",
-          roles: { default: "openai/gpt-5.5:high", slow: "anthropic/claude-opus-4.1" },
-        },
-      } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
+      },
     });
 
-    expect(resolved.model).toBe("openai/gpt-5.5:medium");
+    expect(resolved.model).toBe("openai/gpt-5.5:high");
     expect(resolved.modelRoute).toMatchObject({
-      selectedModel: "openai/gpt-5.5:medium",
-      source: "policy",
-      mode: "auto",
-      policyId: "review-and-verification",
-      presetMissReason:
-        'Preset "OpenAI Stack" has no public role mapping for delegation category "verification".',
+      selectedModel: "openai/gpt-5.5:high",
+      source: "hint",
+      mode: "explicit",
     });
   });
 
-  test("does not force unknown delegation categories through the task role", () => {
+  test("an unresolvable modelHint is ignored and falls through to the target default", () => {
     const resolved = resolveDelegationModelRoute({
-      target: makeTarget({
-        modelCategory: "unknown-category",
-        resultMode: "patch",
-      }),
+      target: makeTarget(),
       packet: {
-        objective: "Fix the failing CI patch and keep edits minimal.",
+        objective: "Investigate the router prefix handling.",
+        modelHint: "nonexistent/model-x",
       },
       modelRouting: {
         availableModels: [...AVAILABLE_MODELS],
-        activePreset: {
-          name: "Task Stack",
-          roles: { task: "openai/gpt-5.3-codex-spark:high" },
-        },
-      } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
+      },
     });
 
-    expect(resolved.model).toBe("openai/gpt-5.3-codex-spark:high");
-    expect({ modelRole: resolved.modelRole ?? null }).toEqual({ modelRole: null });
-    expect(resolved.modelRoute).toMatchObject({
-      selectedModel: "openai/gpt-5.3-codex-spark:high",
-      source: "policy",
-      policyId: "fast-patch-loop",
-      category: "unknown-category",
-      presetMissReason:
-        'Preset "Task Stack" has no public role mapping for delegation category "unknown-category".',
-    });
+    // No preset, hint unresolvable → the router chooses no model.
+    expect([resolved.model, resolved.modelRoute]).toEqual([undefined, undefined]);
   });
 
-  test("does not route from target model pins", () => {
+  test("no preset and no hint yields no router-chosen model (and never reads target model pins)", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({
         model: "anthropic/claude-opus-4.1",
@@ -176,107 +150,36 @@ describe("subagent model routing", () => {
     expect([resolved.model, resolved.modelRoute]).toEqual([undefined, undefined]);
   });
 
-  test("does not accept explicit executionShape model selections", () => {
+  test("a preset lacking the category's role mapping surfaces a presetMissReason, not a guessed model", () => {
     const resolved = resolveDelegationModelRoute({
       target: makeTarget({
+        agent: "verifier",
+        targetName: "verifier",
+        agentSpecName: "verifier",
         consultKind: "review",
+        modelCategory: "verification",
       }),
       packet: {
         objective: "Review the runtime change.",
       },
       modelRouting: {
         availableModels: [...AVAILABLE_MODELS],
-      },
+        activePreset: {
+          name: "OpenAI Stack",
+          roles: { default: "openai/gpt-5.5:high" },
+        },
+      } as unknown as Parameters<typeof resolveDelegationModelRoute>[0]["modelRouting"],
     });
 
+    // verification maps to no public role; the router does NOT invent a model —
+    // it surfaces the miss reason and leaves the choice to the target default.
+    expect([resolved.model, resolved.modelRole]).toEqual([undefined, undefined]);
     expect(resolved.modelRoute).toMatchObject({
-      source: "policy",
-      policyId: "review-and-verification",
-      category: "deep-reasoning",
-    });
-    expect(resolved.modelRoute?.source).not.toBe("execution_shape");
-  });
-
-  test("auto-routes execution-first patch work to the fast codex path when available", () => {
-    const resolved = resolveDelegationModelRoute({
-      target: makeTarget({
-        resultMode: "patch",
-      }),
-      packet: {
-        objective: "Fix the failing CI patch and keep edits minimal.",
-      },
-      modelRouting: {
-        availableModels: [...AVAILABLE_MODELS],
-      },
-    });
-
-    expect(resolved.model).toBe("openai/gpt-5.3-codex-spark:high");
-    expect(resolved.modelRole).toBe("slow");
-    expect(resolved.modelRoute).toMatchObject({
-      selectedModel: "openai/gpt-5.3-codex-spark:high",
-      source: "policy",
+      source: "preset",
       mode: "auto",
-      policyId: "fast-patch-loop",
-    });
-  });
-
-  test("prefers the frontend-design route when the objective is UI-heavy", () => {
-    const resolved = resolveDelegationModelRoute({
-      target: makeTarget({
-        resultMode: "patch",
-      }),
-      packet: {
-        objective: "Refresh the React UI layout and tighten the CSS typography rhythm.",
-      },
-      modelRouting: {
-        availableModels: [...AVAILABLE_MODELS],
-      },
-    });
-
-    expect(resolved.model).toBe("anthropic/claude-opus-4.1");
-    expect(resolved.modelRoute).toMatchObject({
-      selectedModel: "anthropic/claude-opus-4.1",
-      source: "policy",
-      mode: "auto",
-      policyId: "frontend-design",
-    });
-  });
-
-  test("does not treat substring matches as execution keywords", () => {
-    const resolved = resolveDelegationModelRoute({
-      target: makeTarget({
-        consultKind: "investigate",
-      }),
-      packet: {
-        objective: "Inspect the prefix handling in the router before changing anything.",
-      },
-      modelRouting: {
-        availableModels: [...AVAILABLE_MODELS],
-      },
-    });
-
-    expect([resolved.model, resolved.modelRoute]).toEqual([undefined, undefined]);
-  });
-
-  test("lets explicit execution intent outrank frontend surface keywords", () => {
-    const resolved = resolveDelegationModelRoute({
-      target: makeTarget({
-        resultMode: "patch",
-      }),
-      packet: {
-        objective: "Fix the React component layout without broad refactors.",
-      },
-      modelRouting: {
-        availableModels: [...AVAILABLE_MODELS],
-      },
-    });
-
-    expect(resolved.model).toBe("openai/gpt-5.3-codex-spark:high");
-    expect(resolved.modelRoute).toMatchObject({
-      selectedModel: "openai/gpt-5.3-codex-spark:high",
-      source: "policy",
-      mode: "auto",
-      policyId: "fast-patch-loop",
+      presetName: "OpenAI Stack",
+      reason:
+        'Preset "OpenAI Stack" has no public role mapping for delegation category "verification".',
     });
   });
 });

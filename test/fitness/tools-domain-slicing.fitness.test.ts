@@ -33,20 +33,13 @@ const PUBLIC_TOOLS_SUBPATHS = [
   "registry",
   "runtime-port",
   "patch-lifecycle",
+  "world-store",
   "navigation",
   "execution",
   "memory",
   "delegation",
   "skills",
   "workflow",
-  // Pure trap library (deterministic engine + seed data, no tool-runtime deps).
-  // Exported as a subpath because it is consumed cross-package by the gateway's
-  // orient-phase atom injection, not just by tool families.
-  "trap-library",
-  // Content-addressed workspace world store (coupled world rewind RFC). A
-  // subpath because the gateway's rewind engine captures and verifies worlds
-  // at checkpoint boundaries — cross-package, like patch-lifecycle.
-  "world-store",
 ] as const;
 const RUNTIME_FREE_MANAGED_FACTORY_TOOL_NAMES = new Set([
   "agent_broadcast",

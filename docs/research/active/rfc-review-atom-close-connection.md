@@ -1,5 +1,11 @@
 # RFC: Review→Atom Attribution And The Grade Ceiling On Discharging Independence Debt
 
+> **Superseded by subtraction (2026-07-09).** The grade ceiling, the static-guard
+> producer, and the review→atom close-edges this RFC designed were removed — see
+> `docs/research/decisions/harness-subtraction-trap-static-guard-grade-ceiling.md`.
+> The `independenceDebtAtoms` sensor survives grade-free (a high-risk `must` atom
+> with no deterministic or independent pass). Retained as provenance.
+
 ## Metadata
 
 - Status: active
@@ -302,12 +308,8 @@ atoms whose code a narrow review never covered — a fabricated attestation (axi
   301-325 — `reviewTargetFilePaths`; the atom-attestation objective gated on `atoms`.
 - `packages/brewva-tools/src/families/delegation/review-receipts.ts` lines 299, 347 —
   outcome `atomRefs` CLEAR-only; per-finding `atomRefs` from the reviewer.
-- `packages/brewva-tools/src/shared/static-guard/predicates.ts` (`STATIC_GUARD_LENSES`,
-  `STATIC_GUARD_DOMAINS`) and `packages/brewva-tools/src/shared/static-guard/producer.ts`
-  (`resolveStaticGuardBindings`) — the fixed 6-lens set and the DECLARED attribution join
-  (trap `staticGuards` at `property` coverage; `observableSignals` construct join at `facet`
-  coverage). Statement-keyword routing (`routeAtomToStaticGuardLens`) was deleted after
-  game_8 proved it mis-attributes (see Field Verification below).
+- The static-guard producer and its fixed 6-lens set were removed in the harness
+  subtraction (`docs/research/decisions/harness-subtraction-trap-static-guard-grade-ceiling.md`).
 - `packages/brewva-tools/src/runtime-port/session-touched-files.ts` (`sessionFreshTouchedFilePaths`)
   and `packages/brewva-vocabulary/src/internal/review.ts` line 390 (`universeCoveredBy`) —
   the coverage predicate.

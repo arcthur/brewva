@@ -555,7 +555,6 @@ function buildRequirementDebtSection(
   return renderRequirementDebtSection({
     unverifiedMustCount: summary.debt.unverifiedMustCount,
     debtReason: summary.debt.reason,
-    insufficientGradeCount: summary.fitness.insufficientGradeAtoms.length,
   });
 }
 
@@ -636,7 +635,7 @@ function buildDelegationAdvisorySection(
   const reviewDebtClosure = buildTapeReviewDebt(runtimeEvents).debt;
   // Independence debt reuses the SAME single fitness derivation the requirement-debt
   // section reads (passed in), never re-projecting: high-risk `must` atoms that
-  // reached close with no independent OR deterministic pass at the risk-floor grade.
+  // reached close with no independent OR deterministic pass.
   // Carried as the atom-ID list (not a boolean) so the advisory names the count and
   // enumerates the atoms downstream (RFC information-channel thesis).
   const independenceDebtAtoms = requirementDebtSummary?.fitness.independenceDebtAtoms ?? [];
@@ -662,8 +661,8 @@ function buildDelegationAdvisorySection(
   // Lead with independence, matching the rendered stub and line so "which reason is
   // THE reason" is identical between what the model reads and what telemetry keys.
   // Independence is both the most SPECIFIC reason (it names high-risk atoms) and the
-  // most STABLE — near-monotone on the tape (it clears only when an at-grade pass
-  // binds an atom), whereas pressure is transient/economic. Keying the anti-nag
+  // most STABLE — near-monotone on the tape (it clears only when a deterministic or
+  // independent pass binds an atom), whereas pressure is transient/economic. Keying the anti-nag
   // cadence to the stable signal means a pressure blip under a persistent
   // independence debt does NOT flip the bucket and re-nag.
   // KNOWN LIMITATION (low): were independence and review-debt to alternate

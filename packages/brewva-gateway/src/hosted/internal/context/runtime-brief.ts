@@ -224,38 +224,27 @@ export interface RequirementDebtInput {
   readonly unverifiedMustCount: number;
   /** Why the ladder/coverage debt fires, or null when there is none. */
   readonly debtReason: UnverifiedRequirementDebtReason | null;
-  /** High-risk atoms whose only positive coverage is presence-grade (R3 grade debt). */
-  readonly insufficientGradeCount: number;
 }
 
 /**
  * Requirement-debt posture (R4): surfaces to the PRODUCING model, at turn tail,
  * the debt run-report already computes for the operator — so "done" is not
  * declared blind (the up4 failure: the model never saw its own seven unverified
- * must atoms). Relevance-gated: silent when there is neither ladder/coverage debt
- * NOR a presence-only high-risk atom (nothing to act on). Inform-only; the sole
- * gate stays the operator-promoted verification-gate manifest (axiom 18).
+ * must atoms). Relevance-gated: silent when there is no ladder/coverage debt.
+ * Inform-only; the sole gate stays the operator-promoted verification-gate
+ * manifest (axiom 18).
  */
 export function renderRequirementDebtSection(
   input: RequirementDebtInput,
 ): RuntimeBriefSection | null {
-  const hasLadderDebt = input.debtReason !== null && input.unverifiedMustCount > 0;
-  const hasGradeDebt = input.insufficientGradeCount > 0;
-  if (!hasLadderDebt && !hasGradeDebt) {
+  if (input.debtReason === null || input.unverifiedMustCount === 0) {
     return null;
   }
-  const parts: string[] = [];
-  if (hasLadderDebt) {
-    parts.push(`${input.unverifiedMustCount} must atom(s) unverified (${input.debtReason})`);
-  }
-  if (hasGradeDebt) {
-    parts.push(`${input.insufficientGradeCount} high-risk atom(s) on presence-only evidence`);
-  }
-  const body = parts.join("; ");
+  const body = `${input.unverifiedMustCount} must atom(s) unverified (${input.debtReason})`;
   return {
     key: "requirements",
     salience: "normal",
-    line: `requirements: ${body} — dispatch an independent review or climb to a behavioral check before finalizing`,
+    line: `requirements: ${body} — dispatch an independent review before finalizing`,
     stub: `requirements: ${body}`,
   };
 }
@@ -277,11 +266,9 @@ export interface DelegationAdvisoryInput {
    */
   readonly reviewDebtClosure: boolean;
   /**
-   * High-risk `must` atom IDs that reached turn close with NO independent OR
-   * deterministic pass at the risk-floor grade (`FitnessProjection.independenceDebtAtoms`).
-   * They owe an independent read AT grade — the perspective the author cannot mint
-   * on its own work. A sub-floor independent receipt MAY exist, so the surface says
-   * "at grade", never "no independent receipt".
+   * High-risk `must` atom IDs that reached turn close with NO deterministic or
+   * independent pass (`FitnessProjection.independenceDebtAtoms`). They owe an
+   * independent read — the perspective the author cannot mint on its own work.
    *
    * Carried as the atom-ID list (not a boolean) so the advisory can name the count
    * AND enumerate the atoms, per the RFC's information-channel thesis: the model can
@@ -301,7 +288,7 @@ export interface DelegationAdvisoryInput {
  *    or verification is cheaper in a child session than in a window already
  *    under advisory pressure. An orthogonal economic ask — always its own clause.
  *  - independence-debt: high-risk `must` atoms reached close with no independent
- *    read at grade. The atom-named "an independent read is owed" ask; it names the
+ *    read. The atom-named "an independent read is owed" ask; it names the
  *    count and enumerates the atoms so the model can perceive (thus steer on) the gap.
  *  - review-debt-closure: with open review debt, a `review_request` is the one
  *    `independent`-perspective receipt the model cannot mint for itself.
@@ -340,7 +327,7 @@ export function renderDelegationAdvisorySection(
     // budget the whole section demotes to its count-only stub, so the list is never
     // truncated mid-structure.
     parts.push(
-      `${independenceDebtCount} high-risk must-atom(s) have no independent read at grade ` +
+      `${independenceDebtCount} high-risk must-atom(s) have no independent read ` +
         `(${input.independenceDebtAtoms.join(", ")}) — a fresh-context review is the ` +
         "perspective you cannot mint on your own work",
     );
@@ -366,7 +353,7 @@ export function renderDelegationAdvisorySection(
     // stub carries the COUNT but not the atom list — it is the budget-demoted form,
     // so it stays compact; the full line above enumerates the atoms.
     stub: independenceDebt
-      ? `delegation: ${independenceDebtCount} high-risk must-atom(s) owe an independent read at grade`
+      ? `delegation: ${independenceDebtCount} high-risk must-atom(s) owe an independent read`
       : input.reviewDebtClosure
         ? "delegation: `review_request` closes open review debt"
         : "delegation: a child session can relieve context pressure",

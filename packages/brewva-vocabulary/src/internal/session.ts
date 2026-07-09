@@ -164,12 +164,7 @@ export type AttentionOptionSourceFamily =
   | "workbench"
   | "surfaced_recall"
   | "session_tape_evidence"
-  | "repository_precedent"
-  // A write/verify-phase trap-library lens that matched a file the session
-  // touched (see @brewva/brewva-tools/trap-library) — an advisory review
-  // stance surfaced as its own candidate card, honestly distinct from a
-  // recall/skill/workbench/tape-evidence source (Task 9).
-  | "trap_lens";
+  | "repository_precedent";
 
 export type AttentionOptionAuthorityPosture = "none" | "read_context" | "write_workbench";
 

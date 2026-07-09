@@ -347,9 +347,7 @@ describe("hosted-tape projection liveness (real gpt-5.5 session)", () => {
     // folds the coarser review-debt line. The line now names the COUNT (RFC
     // information thesis); the exact N/atom-ids depend on the tape, so assert the
     // shape — N + the contiguous phrase — not a literal count.
-    expect(block?.content).toMatch(
-      /\d+ high-risk must-atom\(s\) have no independent read at grade/,
-    );
+    expect(block?.content).toMatch(/\d+ high-risk must-atom\(s\) have no independent read/);
     // Fold proof + HIGH-1 honesty: the review-debt-specific `review_request` line is
     // suppressed, and the render never claims there is NO independent receipt.
     expect(block?.content).not.toContain("`review_request`");

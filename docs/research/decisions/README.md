@@ -81,6 +81,7 @@ Every accepted decision inherits these rules:
 - [axiom-negative-space-and-decisions-demotion](./axiom-negative-space-and-decisions-demotion.md)
 - [rfc-supply-chain-hardening-and-mcp-catalog-gate](./rfc-supply-chain-hardening-and-mcp-catalog-gate.md)
 - [rfc-checked-invariants-and-disciplined-borrowing](./rfc-checked-invariants-and-disciplined-borrowing.md)
+- [harness-subtraction-trap-static-guard-grade-ceiling](./harness-subtraction-trap-static-guard-grade-ceiling.md)
 
 ### Delegation, Product, And Knowledge
 

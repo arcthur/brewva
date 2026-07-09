@@ -3,11 +3,7 @@ import {
   type SessionIndexDelegationRun,
 } from "@brewva/brewva-session-index";
 import { isRecord } from "@brewva/brewva-std/unknown";
-import {
-  buildTapeCoverageAttributionMiss,
-  buildTapeRequirementFitness,
-  buildTapeUnaddressedReviewFindings,
-} from "@brewva/brewva-tools/runtime-port";
+import { buildTapeUnaddressedReviewFindings } from "@brewva/brewva-tools/runtime-port";
 import {
   SUBAGENT_FAILED_EVENT_TYPE,
   SUBAGENT_OUTCOME_PARSE_FAILED_EVENT_TYPE,
@@ -90,36 +86,6 @@ export interface ContextEconomics {
 }
 
 /**
- * Independence-debt census carried into turn close — the discharge OUTCOME the
- * review→atom close-edge produced for the session's high-risk `must` atoms
- * (`FitnessProjection.independenceDebtResolution`, re-derived once at tape end):
- * - `open`: still owes an at-grade read. An `open` that never falls even as reviews
- *   run is the debt's irreducible tail (no at-grade producer can reach those atoms),
- *   the way a rising `failureRate` means activation hit a wall;
- * - `reviewedSubGrade`: a SUBSET of `open` — a fresh-context reviewer DID read the atom
- *   but could only presence-grade it (the grade ceiling). A `reviewedSubGrade` that
- *   tracks `open` while `dischargedAtGrade` stays flat is the honest "reviews keep
- *   LOOKING but nothing clears at grade" signal — those atoms wait on the static-guard
- *   producer, not another presence review;
- * - `violated`: a live fail named it as a known break — a review/independent FAIL OR a
- *   deterministic static-guard fail (both reach `violated`);
- * - `dischargedAtGrade`: reached `satisfied` via an at-grade pass, independent OR
- *   deterministic (a presence-grade review CANNOT clear a high-risk atom — the grade
- *   ceiling).
- * A rising `violated` + `dischargedAtGrade` against a flat `open` means high-risk atoms
- * are reaching at-grade closure rather than being left owed; the review→atom fold is
- * ONE driver, not the sole one — read it as closure, not as a review-only signal.
- * `reviewedSubGrade` ⊆ `open`, so only `open` + `violated` + `dischargedAtGrade` partition
- * the high-risk `must` set — never add `reviewedSubGrade` into that sum.
- */
-export interface IndependenceDebtCounts {
-  readonly open: number;
-  readonly reviewedSubGrade: number;
-  readonly violated: number;
-  readonly dischargedAtGrade: number;
-}
-
-/**
  * Act-on-review closure census at tape end (`buildTapeUnaddressedReviewFindings`):
  * review findings still LIVE (the flagged code was not changed since), so a review
  * that HAPPENED has an open ask. The loop-close signal — `total` FALLING across an
@@ -141,16 +107,7 @@ export interface DelegationEvidenceSessionReport {
   readonly failures: DelegationFailureCounts;
   readonly adoption: AdoptionOutcomeCounts;
   readonly contextEconomics: ContextEconomics;
-  readonly independenceDebt: IndependenceDebtCounts;
   readonly unaddressedReviewFindings: UnaddressedReviewFindingsCounts;
-  /**
-   * The independence census's blind spot, surfaced explicitly: independent-perspective
-   * FAIL reviews that COVERED the fresh-touched universe yet named zero atoms, so the
-   * `independenceDebt` buckets show NO movement (a covering fail found problems but
-   * pinned nothing owed — game_7's form). Distinct from `unaddressedReviewFindings`
-   * (which counts still-LIVE findings): this counts the fold's attribution gap at close.
-   */
-  readonly coverageAttributionMiss: number;
 }
 
 export interface DelegationEvidenceAggregate {
@@ -160,10 +117,7 @@ export interface DelegationEvidenceAggregate {
   readonly failures: DelegationFailureCounts;
   readonly adoption: AdoptionOutcomeCounts;
   readonly contextEconomics: ContextEconomics;
-  readonly independenceDebt: IndependenceDebtCounts;
   readonly unaddressedReviewFindings: UnaddressedReviewFindingsCounts;
-  /** Sum of {@link DelegationEvidenceSessionReport.coverageAttributionMiss} over sessions. */
-  readonly coverageAttributionMiss: number;
   /**
    * Distinct failed runs / runs started — a true [0,1] rate (a run can raise
    * several failure EVENTS, so this dedupes by run before dividing). The
@@ -321,14 +275,9 @@ function aggregate(
   let rejected = 0;
   let childRunsWithTokens = 0;
   let childTotalTokens = 0;
-  let independenceDebtOpen = 0;
-  let independenceDebtReviewedSubGrade = 0;
-  let independenceDebtViolated = 0;
-  let independenceDebtDischargedAtGrade = 0;
   let unaddressedTotal = 0;
   let unaddressedHighOrCritical = 0;
   let unaddressedUnattributed = 0;
-  let coverageAttributionMiss = 0;
   for (const session of sessions) {
     total += session.counts.total;
     mergeCounts(byRole, session.counts.byRole);
@@ -345,14 +294,9 @@ function aggregate(
     rejected += session.adoption.rejected;
     childRunsWithTokens += session.contextEconomics.childRunsWithTokens;
     childTotalTokens += session.contextEconomics.childTotalTokens;
-    independenceDebtOpen += session.independenceDebt.open;
-    independenceDebtReviewedSubGrade += session.independenceDebt.reviewedSubGrade;
-    independenceDebtViolated += session.independenceDebt.violated;
-    independenceDebtDischargedAtGrade += session.independenceDebt.dischargedAtGrade;
     unaddressedTotal += session.unaddressedReviewFindings.total;
     unaddressedHighOrCritical += session.unaddressedReviewFindings.highOrCritical;
     unaddressedUnattributed += session.unaddressedReviewFindings.unattributed;
-    coverageAttributionMiss += session.coverageAttributionMiss;
   }
   return {
     sessionCount: sessions.length,
@@ -361,18 +305,11 @@ function aggregate(
     failures: { total: dispatch + consult, dispatch, consult, failedRuns },
     adoption: { applied, applyFailed, rejected },
     contextEconomics: { childRunsWithTokens, childTotalTokens },
-    independenceDebt: {
-      open: independenceDebtOpen,
-      reviewedSubGrade: independenceDebtReviewedSubGrade,
-      violated: independenceDebtViolated,
-      dischargedAtGrade: independenceDebtDischargedAtGrade,
-    },
     unaddressedReviewFindings: {
       total: unaddressedTotal,
       highOrCritical: unaddressedHighOrCritical,
       unattributed: unaddressedUnattributed,
     },
-    coverageAttributionMiss,
     failureRate: total > 0 ? failedRuns / total : null,
   };
 }
@@ -399,23 +336,11 @@ export function buildDelegationEvidenceReport(
       failures: countFailures(records),
       adoption: countAdoption(records),
       contextEconomics: measureContextEconomics(delegation.runs),
-      // The report stores nothing new (axiom 6): re-derive the same tape-folded
-      // fitness projection the runtime brief reads and take its independence-debt
-      // census (open / violated / dischargedAtGrade — the close-edge's discharge
-      // outcome), so operator and model views cannot diverge by construction.
-      independenceDebt: buildTapeRequirementFitness(records).independenceDebtResolution,
       // The act-on-review closure census — the SAME tape read the runtime brief's
       // review-closure section renders, so the measured loop-close and what the
       // model saw cannot diverge. Passes the session root so anchor-scoped freshness
       // matches the render surface.
       unaddressedReviewFindings: summarizeUnaddressedReviewFindings(
-        records,
-        options.workspaceRoot ?? null,
-      ),
-      // The census's blind spot made explicit: covering independent-FAIL reviews that
-      // named no atom (so `independenceDebt` shows no movement). Same workspace root as
-      // the coverage universe the dispatch-time fold used, so post-hoc coverage matches.
-      coverageAttributionMiss: buildTapeCoverageAttributionMiss(
         records,
         options.workspaceRoot ?? null,
       ),

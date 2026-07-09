@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type {
   DelegationRunRecord,
   SubagentRunRequest,
@@ -25,14 +25,6 @@ import {
   type HostedRuntimeAdapterPort,
 } from "../../helpers/runtime.js";
 import { committedToolEvent, seedCommittedToolEvents } from "../../helpers/tool-events.js";
-
-const FIXTURES_DIR = resolve(import.meta.dir, "../../fixtures/intent-realization");
-
-function readFixture(name: string): string {
-  return readFileSync(join(FIXTURES_DIR, name), "utf8");
-}
-
-const TAP_LENS = "verify suppression is keycode-scoped and callback ownership uses passUnretained";
 
 const toolContext = (sessionId: string) =>
   ({
@@ -587,175 +579,6 @@ describe("review_request tool — independence basis composition", () => {
     // The stance is still present in the objective; lenses are additive.
     expect(dispatched?.packet?.objective).toContain("lens-alpha");
     expect(dispatched?.packet?.objective.toLowerCase()).toContain("wrong");
-  });
-});
-
-describe("review_request tool — write/verify trap lens preload (Task 9)", () => {
-  test("a files target whose content matches a write/verify trap auto-appends the lens to the packet and reviewerContext", async () => {
-    const runtime = createRuntimeFixture();
-    let dispatched: SubagentRunRequest | undefined;
-    const tool = createReviewRequestTool({
-      runtime: createBundledToolRuntime(
-        runtime,
-        stubReviewOrchestration({
-          onRun: (request) => {
-            dispatched = request;
-          },
-        }),
-      ),
-    });
-    const sessionId = "review-request-trap-lens-files-1";
-    writeFileSync(
-      join(runtime.identity.cwd, "OverbroadTap.swift"),
-      readFixture("overbroad-tap.swift"),
-    );
-
-    const result = await tool.execute(
-      "tc-1",
-      { target: { kind: "files", paths: ["OverbroadTap.swift"] } },
-      undefined as never,
-      undefined as never,
-      toolContext(sessionId),
-    );
-
-    expect(result.outcome.kind).toBe("ok");
-    const outcome = outcomeEvents(runtime, sessionId)[0];
-    expect(outcome?.independenceBasis).toContain("preloaded_lens");
-    expect(outcome?.reviewerContext?.lenses).toEqual([TAP_LENS]);
-    expect(dispatched?.packet?.objective).toContain(TAP_LENS);
-    expect(dispatched?.reviewDispatch?.lenses).toEqual([TAP_LENS]);
-  });
-
-  test("a session_diff target whose applied-patch-set file matches a trap preloads the lens the same way", async () => {
-    const runtime = createRuntimeFixture();
-    const tool = createReviewRequestTool({
-      runtime: createBundledToolRuntime(runtime, stubReviewOrchestration({})),
-    });
-    const sessionId = "review-request-trap-lens-session-diff-1";
-    writeFileSync(
-      join(runtime.identity.cwd, "LeakyTap.swift"),
-      readFixture("pass-retained-leak.swift"),
-    );
-    runtime.ops.tools.sourcePatch.plans.apply(sessionId, {
-      ok: true,
-      planId: "plan-1",
-      patchSetId: "patch-1",
-      appliedPaths: ["LeakyTap.swift"],
-      failedPaths: [],
-    });
-
-    const result = await tool.execute(
-      "tc-1",
-      { target: { kind: "session_diff" } },
-      undefined as never,
-      undefined as never,
-      toolContext(sessionId),
-    );
-
-    expect(result.outcome.kind).toBe("ok");
-    const outcome = outcomeEvents(runtime, sessionId)[0];
-    // The leak fixture fires BOTH the tap lens and the passRetained lens.
-    expect(outcome?.reviewerContext?.lenses).toEqual([
-      TAP_LENS,
-      "balance every passRetained with a matching release, or use passUnretained when the callback does not take ownership",
-    ]);
-    expect(outcome?.independenceBasis).toContain("preloaded_lens");
-  });
-
-  test("a target with no trap match preloads nothing: basis stays fresh_context only, lenses stay empty", async () => {
-    const runtime = createRuntimeFixture();
-    const tool = createReviewRequestTool({
-      runtime: createBundledToolRuntime(runtime, stubReviewOrchestration({})),
-    });
-    const sessionId = "review-request-trap-lens-none-1";
-    writeFileSync(join(runtime.identity.cwd, "plain.ts"), "export const x = 1;\n");
-
-    await tool.execute(
-      "tc-1",
-      { target: { kind: "files", paths: ["plain.ts"] } },
-      undefined as never,
-      undefined as never,
-      toolContext(sessionId),
-    );
-
-    const outcome = outcomeEvents(runtime, sessionId)[0];
-    expect(outcome?.independenceBasis).toEqual(["fresh_context"]);
-    expect(outcome?.reviewerContext?.lenses).toEqual([]);
-  });
-
-  test("a caller-supplied lens identical to the trap's lens text is deduped, not doubled", async () => {
-    const runtime = createRuntimeFixture();
-    const tool = createReviewRequestTool({
-      runtime: createBundledToolRuntime(runtime, stubReviewOrchestration({})),
-    });
-    const sessionId = "review-request-trap-lens-dedup-1";
-    writeFileSync(
-      join(runtime.identity.cwd, "OverbroadTap.swift"),
-      readFixture("overbroad-tap.swift"),
-    );
-
-    await tool.execute(
-      "tc-1",
-      {
-        target: { kind: "files", paths: ["OverbroadTap.swift"] },
-        lenses: [TAP_LENS],
-      },
-      undefined as never,
-      undefined as never,
-      toolContext(sessionId),
-    );
-
-    const outcome = outcomeEvents(runtime, sessionId)[0];
-    // Exactly one copy of the shared lens text, not two.
-    expect(outcome?.reviewerContext?.lenses).toEqual([TAP_LENS]);
-  });
-
-  test("a caller lens plus a distinct trap lens merge into the union, caller lens first", async () => {
-    const runtime = createRuntimeFixture();
-    const tool = createReviewRequestTool({
-      runtime: createBundledToolRuntime(runtime, stubReviewOrchestration({})),
-    });
-    const sessionId = "review-request-trap-lens-merge-1";
-    writeFileSync(
-      join(runtime.identity.cwd, "OverbroadTap.swift"),
-      readFixture("overbroad-tap.swift"),
-    );
-
-    await tool.execute(
-      "tc-1",
-      {
-        target: { kind: "files", paths: ["OverbroadTap.swift"] },
-        lenses: ["hunt for missing rollback safety"],
-      },
-      undefined as never,
-      undefined as never,
-      toolContext(sessionId),
-    );
-
-    const outcome = outcomeEvents(runtime, sessionId)[0];
-    expect(outcome?.reviewerContext?.lenses).toEqual([
-      "hunt for missing rollback safety",
-      TAP_LENS,
-    ]);
-  });
-
-  test("the correct-tap fixture ALSO preloads the tap lens (lens != verdict: firing is not a defect claim)", async () => {
-    const runtime = createRuntimeFixture();
-    const tool = createReviewRequestTool({
-      runtime: createBundledToolRuntime(runtime, stubReviewOrchestration({})),
-    });
-    const sessionId = "review-request-trap-lens-correct-1";
-    writeFileSync(join(runtime.identity.cwd, "CorrectTap.swift"), readFixture("correct-tap.swift"));
-
-    await tool.execute(
-      "tc-1",
-      { target: { kind: "files", paths: ["CorrectTap.swift"] } },
-      undefined as never,
-      undefined as never,
-      toolContext(sessionId),
-    );
-
-    expect(outcomeEvents(runtime, sessionId)[0]?.reviewerContext?.lenses).toEqual([TAP_LENS]);
   });
 });
 
@@ -2085,14 +1908,5 @@ describe("review_request tool — review→atom fold liveness (fitness edges)", 
     ]);
     // The finding named req-tap -> `violated` -> it leaves the debt set. open 1 -> 0.
     expect(debt).toEqual([]);
-  });
-
-  test("a presence-grade CLEAR does NOT discharge the high-risk atom (grade ceiling) → open holds", async () => {
-    const debt = await runCoveringReview("clear", []);
-    // The fold set reviewedAtomIds=[req-tap], so the clear outcome names it — but an
-    // independent pass is presence-grade, which for a runtime atom only reaches
-    // `likelySatisfied` (Part 1's static_guard floor), NOT `satisfied`. So it STAYS
-    // independence debt: open holds at 1. This is the RFC's grade ceiling, enforced.
-    expect(debt).toEqual(["req-tap"]);
   });
 });

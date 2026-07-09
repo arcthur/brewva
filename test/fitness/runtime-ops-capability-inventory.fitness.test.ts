@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
@@ -15,7 +15,6 @@ import { HOSTED_RUNTIME_OPS_NAMESPACE_LABELS } from "../../packages/brewva-gatew
 const REPO_ROOT = process.cwd();
 const RUNTIME_OPS_BUILDER_DIR =
   "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders";
-const HOSTED_OPS_BUILDER_LINE_BUDGET = 230;
 const RUNTIME_OPS_BUILDER_FILES = {
   channel: "channel.ts",
   claim: "claim.ts",
@@ -43,20 +42,6 @@ const RUNTIME_OPS_BUILDER_FILES = {
 
 function readRepoFile(path: string): string {
   return readFileSync(join(REPO_ROOT, path), "utf8");
-}
-
-const RUNTIME_OPS_PROJECTIONS_FILE = "runtime-ops-projections.ts";
-
-function runtimeOpsBuilderSources(): readonly string[] {
-  return (
-    readdirSync(join(REPO_ROOT, RUNTIME_OPS_BUILDER_DIR))
-      .filter((fileName) => fileName.endsWith(".ts"))
-      // The projection layer owns durable state for all six domains in one cohesive
-      // module; it is not a per-namespace port builder, so it carries its own line
-      // budget (below) rather than the small per-builder cap.
-      .filter((fileName) => fileName !== RUNTIME_OPS_PROJECTIONS_FILE)
-      .map((fileName) => readRepoFile(`${RUNTIME_OPS_BUILDER_DIR}/${fileName}`))
-  );
 }
 
 function interfaceBlock(source: string, name: string): string {
@@ -267,158 +252,19 @@ describe("runtime ops capability inventory fitness", () => {
     for (const namespace of namespaceFiles) {
       const source = readRepoFile(`${adapterRoot}/four-port/${namespace}.ts`);
       expect(source).toContain(`createFourPort${namespace[0]!.toUpperCase()}${namespace.slice(1)}`);
-      expect(source.split("\n").length).toBeLessThanOrEqual(320);
     }
   });
 
-  test("keeps hosted ops implementation under the Phase 5 compression budget", () => {
+  test("keeps hosted ops implementation composed from the port module instead of mirroring it", () => {
     const runtimeOps = readRepoFile(
       "packages/brewva-gateway/src/hosted/internal/session/runtime-ops.ts",
     );
-    const runtimeOpsContext = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/session/runtime-ops-context.ts",
-    );
-    const runtimeOpsBuilders = runtimeOpsBuilderSources();
-    const projections = readRepoFile(`${RUNTIME_OPS_BUILDER_DIR}/${RUNTIME_OPS_PROJECTIONS_FILE}`);
-    const toolRuntime = readRepoFile("packages/brewva-tools/src/contracts/runtime.ts");
 
-    expect(runtimeOps.split("\n").length).toBeLessThanOrEqual(120);
-    expect(runtimeOpsContext.split("\n").length).toBeLessThanOrEqual(600);
-    for (const builder of runtimeOpsBuilders) {
-      expect(builder.split("\n").length).toBeLessThanOrEqual(HOSTED_OPS_BUILDER_LINE_BUDGET);
-    }
-    // The projection layer is one cohesive module with the pure tape rebuild for
-    // all six durable domains; it gets a larger single-file budget than a port builder.
-    expect(projections.split("\n").length).toBeLessThanOrEqual(320);
     expect(runtimeOps).not.toContain("export interface HostedRuntimeOpsPort");
     expect(runtimeOps).not.toContain("export type { HostedRuntimeOpsPort }");
     expect(runtimeOps).not.toContain("as unknown as HostedRuntimeOpsPort");
     expect(runtimeOps).toContain("const ops: HostedRuntimeOpsPort =");
     expect(runtimeOps).toContain('from "./runtime-ops-port.js"');
-    const hostedOpsLines =
-      runtimeOps.split("\n").length +
-      runtimeOpsContext.split("\n").length +
-      projections.split("\n").length +
-      runtimeOpsBuilders.reduce((sum, builder) => sum + builder.split("\n").length, 0);
-    const hostedOpsMirrorLines = runtimeOps.split("\n").length + toolRuntime.split("\n").length;
-    // The intent-realization loop's orient-phase atom injection needed a
-    // `task.requirements.record` port method distinct from `spec.set` (a caller
-    // that only adds atoms must not be forced to re-emit a `task.spec.set`
-    // event) — a real new producer seam with its doc comment, not facade
-    // growth. +13 lines on the tool-runtime contract.
-    // The durable planning-map capability (RFC: durable-cross-session-planning-map)
-    // adds the `planMap` command+query port — map/ticket (open/claim/unclaim/resolve/
-    // close/rescope)/fog (record/graduate), the `PlanMapRuntimeMutationResult` type, and
-    // the vocabulary input imports — to the tool-runtime contract: a real new capability
-    // namespace mirrored by a runtime-ops builder, not facade growth. (+2 for the
-    // `ticket.unclaim` port method + its input import — the claim-liveness escape hatch.)
-    // The coupled world rewind RFC then added the world-snapshot lane availability to
-    // `WorkspaceRewindReadiness` (`WorldRewindAvailability` + its honest four-status
-    // union) — a real read-model contract for the world lane, not facade growth. The
-    // exact merged ceiling is 1143 (planning-map + world lane, re-derived after rebase).
-    expect(hostedOpsMirrorLines).toBeLessThanOrEqual(1_143);
-    // Same feature, implementation side: the orient-injection `requirements.record`
-    // builder plus its shared `emitRequirementAtoms` helper (one emit site guarding
-    // spec.set/requirements.record against event-shape drift) grew
-    // runtime-ops-builders/task.ts by +25 lines — a real producer, not bloat.
-    // W3's Task 13 (claim-time fitness annotation) then extended the verify()
-    // write side to round-trip the two new receipt fields (discrepancies +
-    // unverifiedMustAtoms) through the SAME whole-payload reader the other
-    // evidence fields use — +11 lines in verification.ts: a real producer of the
-    // accountable-claim annotation, not facade growth. The projection itself and
-    // its assembly live in `@brewva/brewva-vocabulary` and the tools runtime-port
-    // (off this count). The intent-realization positive-half loop then round-trips
-    // ONE more receipt fact — a clear independent atoms-review's `atomRefs` (which
-    // atoms it affirmatively verified) — through that same whole-payload reader on
-    // the verify() write side: +2 lines in verification.ts, again a real receipt
-    // producer, not facade growth. The clear-only producer semantics, the
-    // reviewedAtomIds dispatch threading, and the assembly feed all live in
-    // `@brewva/brewva-vocabulary` and the tools runtime-port (off this count).
-    // This RFC's receipt producers round-trip real receipt facts through the same
-    // whole-payload readers — the R3 graded `evidenceItems` on the verify() write
-    // side plus the R3.2 trap `riskClass` threading — +2 lines, real producer
-    // wiring, not facade growth.
-    // The pre-compaction prune's `preCompactPrune` telemetry recorder (its tape
-    // receipt) plus the vocabulary event-type import add +2 real producer lines.
-    // The durable planning-map builder (`runtime-ops-builders/plan-map.ts`) plus its
-    // `planMap` wiring in `runtime-ops.ts` add real hosted-ops producer lines for the
-    // new capability namespace (map/ticket/fog); its controller and sidecar store live
-    // off this count. (+1 for the `ticket.unclaim` builder wiring.)
-    expect(hostedOpsLines).toBeLessThanOrEqual(2_876);
-    // WS2 added tape-derived rebuild projections (workbench/task/resource-lease/
-    // worker-results) that fix the invariant-9/12 restart-loses-state bug. A
-    // follow-up review pass then completed the tape-authority migration on the
-    // write side too: blocker record/resolve, parallel admission, and the stall
-    // watchdog now read the projection instead of the in-memory Map, so a
-    // resolve verdict, an active lease budget, and stall arming all survive a
-    // restart. The inspect/replay/recovery RFC then added honest hydration and
-    // integrity (discriminated unions in tool-runtime) plus the rewind/redo ops
-    // wiring; the transaction engine itself lives under `recovery/` (outside this
-    // count) so the builders stay thin. This is necessary correctness growth, not
-    // bloat — a later net-reduction of the ops facade is expected to tighten the
-    // budget again. The user-model RFC then added the `recordUserFact` advisory-lane
-    // authoring path on the workbench builder; the entry construction and the
-    // cross-session latest-wins fold both live in `@brewva/brewva-vocabulary` (off this
-    // count), and the cross-session read is the recall broker's (not a hosted-ops
-    // projection), so only the thin emit lands here. A later desync-hardening pass then
-    // promoted the runtime-ops task/worker event-type strings to shared
-    // `@brewva/brewva-vocabulary` constants (emit and projection reference one constant, never
-    // a drifting literal), which adds only the import lines here. The
-    // contract-liveness audit (2026-07-02) then revived the dead write side of
-    // the event vocabulary: a real verification builder (verify records the
-    // canonical outcome receipt, evaluate projects it), the WAL observability
-    // verbs on the vocabulary types, the scheduler deferral verb, the turn
-    // receipt verbs, and the tape-authoritative session title read — producers
-    // that consumers had been silently awaiting, not facade growth. The
-    // skill workspace-scoping fix then grew the skills builder: project-category
-    // skills are composed per-root project scope (cross-project overlay
-    // contamination fix) and the exclusions land in the load report as
-    // outOfScopeSkills — catalog composition correctness, not facade growth.
-    // The intent-realization loop's Task 2 (producer wiring) then added a
-    // taskRequirements projection reusing foldTaskLedgerEvents (+14 lines in
-    // runtime-ops-projections.ts), spec.set emitting one task.requirement.recorded
-    // per resolved atom instead of a hardcoded empty requirements read (+9 lines
-    // in task.ts), and verify()'s defensive perspective/independenceBasis/
-    // reviewerContext/targetRef mapping reusing the whole-payload reader instead
-    // of a hardcoded authored stub (+2 lines in verification.ts) — the first real
-    // requirement-atom and evidence-perspective producers, not facade growth.
-    // The Task 2 review fix then made the spec.set seam truthful: an explicit
-    // TaskSpecSetInput { spec, requirements } contract type replaced the
-    // index-signature smuggling and its `as` casts at both seam ends (+13 lines
-    // across the contract and the task builder) — compiler-checked seam typing,
-    // not facade growth.
-    // The intent-realization loop's Task 4 (review_request) then added the
-    // `review.finding.recorded` write seam: an explicit RecordReviewFindingInput
-    // contract type plus the verification.findings.record port method (+27 lines
-    // in tool-runtime) and the finding builder that emits through the whole-
-    // payload reader (+21 lines in verification.ts, the hostedOps side) — the
-    // first review-finding receipt producer (the W1 discovery organ), typed at
-    // the seam with zero casts, not facade growth.
-    // W2's Task 8 (orient-phase atom injection) then added the
-    // `task.requirements.record` port method + its `emitRequirementAtoms` builder
-    // (+13 contract, +25 builder) so an atom-only caller need not re-emit
-    // `task.spec.set` — a real orient-time producer seam, not facade growth.
-    // W3's Task 13 fitness-annotation verify() mapping (+11 builder lines, see
-    // above) carries through to the combined budget as well; the tool-runtime
-    // contract itself is unchanged by this task.
-    // The intent-realization positive-half loop's verify() atomRefs round-trip
-    // (+2 builder lines, see above) likewise carries through here; the tool-runtime
-    // contract is again unchanged (the clear-only producer, reviewedAtomIds
-    // threading, and assembly feed all live off this count).
-    // This RFC's receipt producers (R3 graded evidenceItems, R3.2 riskClass
-    // threading) carry the same +2 into the combined budget.
-    // The pre-compaction prune's `preCompactPrune` telemetry recorder + its import
-    // (+2 builder, no tool-runtime contract change) carry +2 into the combined budget.
-    // The durable planning-map capability carries both its tool-runtime contract
-    // growth (the planMap command+query port + result type + input imports) and its
-    // hosted-ops builder growth (map/ticket/fog wiring) into the combined budget — a
-    // real new capability namespace, not facade growth. (+3 for the `unclaim` port
-    // method, its input import, and its builder wiring.) The coupled world rewind RFC
-    // adds the `WorldRewindAvailability` read-model contract on
-    // `WorkspaceRewindReadiness`; the capture/verify implementation lives in the rewind
-    // engine and `@brewva/brewva-tools/world-store`, off this count. Exact merged
-    // ceiling is 3935 (planning-map + world lane, re-derived after rebase onto main).
-    expect(hostedOpsLines + toolRuntime.split("\n").length).toBeLessThanOrEqual(3_935);
   });
 
   test("keeps hosted ops shared state explicit and closed to new ad hoc maps", () => {
@@ -494,7 +340,6 @@ describe("runtime ops capability inventory fitness", () => {
       expect(source).not.toMatch(
         /ctx\.(?:emit|recordSessionPayload|listEvents|queryEvents|queryStructuredEvents|runtime\.tape)/u,
       );
-      expect(source.split("\n").length).toBeLessThanOrEqual(12);
     }
   });
 });

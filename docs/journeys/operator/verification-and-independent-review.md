@@ -13,8 +13,6 @@
   depth rung)
 - `review_request` (bounded fresh-context reviewer that commits findings plus one
   `independent` outcome)
-- hosted turn `beforeAgentStart` orient-requirement injection (implicit, every
-  turn; seeds requirement atoms from the trap library)
 - `brewva inspect` Work Card Evidence / Fitness / review-debt lines
 - `brewva inspect --run-report` Fitness and verification sections
 - operator gate-bridge promotion of a recurring `deterministic_conflict` into a
@@ -33,7 +31,7 @@ and the only gate that ever blocks stays the operator-promoted
 
 - the verification depth ladder on `verification.outcome.recorded` and its
   `authored` vs `independent` perspective
-- requirement atoms as task-ledger artifacts and their orient-time injection
+- requirement atoms as task-ledger artifacts authored via `task_set_spec`
 - `review_request` findings (`review.finding.recorded`) and the independent
   outcome, including review debt
 - the read-time fitness join that grades atoms × evidence into discrepancies
@@ -54,7 +52,7 @@ and the only gate that ever blocks stays the operator-promoted
 
 ```mermaid
 flowchart TD
-  A["Turn start (beforeAgentStart)"] --> B["Orient trap library injects requirement atoms (provenance: prompt | trap)"]
+  A["Turn start"] --> B["Model authors requirement atoms via task_set_spec (provenance: prompt)"]
   B --> C["Model works, then calls verification_record"]
   C --> D["Commit authored verification.outcome.recorded at a depth rung"]
   D -.->|optional| E["review_request runs a fresh-context reviewer"]
@@ -74,11 +72,10 @@ flowchart TD
 
 ## Key Steps
 
-1. At `beforeAgentStart` the orient trap library matches the prompt and task goal
-   and records implicit domain requirements as `task.requirement.recorded` atoms
-   with `provenance: "trap"`; prompt-derived atoms carry `provenance: "prompt"`.
-   Injection is advisory, deduped against existing atoms, and never mutates the
-   prompt or gates the turn.
+1. The model authors requirement atoms through `task_set_spec`, recorded as
+   `task.requirement.recorded` events with `provenance: "prompt"`. Atoms are
+   task-ledger artifacts; recording one is advisory, deduped against existing
+   atoms, and never mutates the prompt or gates the turn.
 2. `verification_record` is the first model-facing producer of the receipt plane.
    It commits `verification.outcome.recorded` at a depth rung
    (`exit_code -> diagnostics -> artifact -> requirements -> runtime_smoke`) and
@@ -114,12 +111,10 @@ flowchart TD
   structural (no perspective input on `verification_record`)
 - "green" is receipt-only and latest-only for the authored outcome; fitness counts
   are a re-derivable view, not commitment memory, and are never stored
-- requirement atoms, findings, discrepancies, traps, and lenses derive views, never
-  authority — they add no new blocking path (design axiom 18)
+- requirement atoms, findings, and discrepancies derive views, never authority —
+  they add no new blocking path (design axiom 18)
 - a stale or unbacked atom reads `unverified` and a contradicted pass reads as
   visible debt; the surfaces are honest rather than a fake pass/fail (axiom 7)
-- a lens surfaces a stance, never asserts a defect; the precision guard lives in the
-  fitness join, not in trap surfacing, and the trap library gates nothing
 - act-on-review closure is the complement of review debt: review debt asks "was an
   independent read OWED"; the act-on-review advisory asks "did a review that HAPPENED
   get acted on". A `review.finding.recorded` is UNADDRESSED when the code IT flagged
@@ -165,8 +160,8 @@ flowchart TD
   `task.requirement.recorded` atoms
 - producer liveness is pinned by
   `test/fitness/hosted-tape-projection-liveness.fitness.test.ts`, which asserts a
-  canonical run emits trap-sourced atoms, re-derives fitness over the real tape,
-  and fires requirement-verification debt with reason `unverified_after_requirements`
+  canonical run re-derives fitness over the real tape and fires
+  requirement-verification debt with reason `unverified_after_requirements`
 - discrepancy vocabulary: `deterministic_conflict`, `advisory_conflict`. The two
   debt vocabularies are distinct: review-debt reasons are `no_independent_receipt`
   and `independent_receipts_stale` (an independent receipt is missing or no longer
@@ -187,8 +182,6 @@ flowchart TD
 - Review-receipt intake: `packages/brewva-tools/src/families/delegation/review-receipts.ts`
   (gateway observer: `packages/brewva-gateway/src/delegation/review-receipt-observer.ts`)
 - Read-time fitness / verification port: `packages/brewva-tools/src/runtime-port/verification.ts`
-- Trap library: `packages/brewva-tools/src/shared/trap-library/index.ts`
-- Orient requirement injection: `packages/brewva-gateway/src/hosted/internal/session/skills/orient-requirement-injection.ts`
 - Perspective receipt builder: `packages/brewva-gateway/src/hosted/internal/session/runtime-ops-builders/verification.ts`
 - Requirement / review / fitness vocabulary: `packages/brewva-vocabulary/src/internal/{iteration,review,fitness,task}.ts`
 - Fitness re-derive over tape: `packages/brewva-cli/src/operator/inspect/requirement-fitness.ts`

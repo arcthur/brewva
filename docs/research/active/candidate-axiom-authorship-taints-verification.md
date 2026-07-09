@@ -1,5 +1,10 @@
 # Candidate Axiom: Authorship Taints Verification
 
+> **Principle retained, machinery removed (2026-07-09).** The static-guard / grade
+> mechanisms this candidate axiom's first instance relied on were subtracted; the
+> principle survives as the grade-free `independenceDebtAtoms` advisory. See
+> `docs/research/decisions/harness-subtraction-trap-static-guard-grade-ceiling.md`.
+
 ## Metadata
 
 - Status: active

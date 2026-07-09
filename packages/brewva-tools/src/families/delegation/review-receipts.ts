@@ -296,8 +296,8 @@ export function commitReviewReceipts(input: CommitReviewReceiptsInput): CommitRe
   // files/session_diff review that COVERS the whole change (its outstanding debt
   // atoms folded in at dispatch — the review→atom fold); a narrow review carries
   // none, so its clear outcome stays []. This list is "affirmatively READ, clear" —
-  // for a high-risk folded atom a presence-grade clear only reaches `likelySatisfied`
-  // downstream (the grade ceiling), never `satisfied`.
+  // for a high-risk folded atom an independent clear now discharges it: any
+  // independent pass naming the atom reaches `satisfied` downstream (no grade ceiling).
   const outcomeAtomRefs = outcome === "pass" ? [...(input.dispatch.reviewedAtomIds ?? [])] : [];
   const committed = recordVerificationOutcome(input.runtime, input.sessionId, {
     outcome,

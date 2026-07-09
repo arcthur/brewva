@@ -28,8 +28,7 @@
     `docs/reference/tools.md` (`review_request`)
 - Code anchors:
   - `packages/brewva-vocabulary/src/internal/{iteration,review,fitness,task}.ts`
-  - `packages/brewva-tools/src/{families/delegation/review-request*,shared/trap-library,families/workflow/verification-record,runtime-port/verification}.ts`
-  - `packages/brewva-gateway/src/hosted/internal/session/skills/orient-requirement-injection.ts`
+  - `packages/brewva-tools/src/{families/delegation/review-request*,families/workflow/verification-record,runtime-port/verification}.ts`
   - `packages/brewva-cli/src/operator/inspect/{fitness-summary,requirement-fitness,run-report,work-card,review-debt}.ts`
 
 ## Decision Summary
@@ -76,4 +75,6 @@ Obeys `docs/architecture/design-axioms.md`:
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/harness-subtraction-trap-static-guard-grade-ceiling.md`
+  removed the trap library and orient-injection this decision also built; the
+  perspective / independent-review / fitness-join core it lands is retained.

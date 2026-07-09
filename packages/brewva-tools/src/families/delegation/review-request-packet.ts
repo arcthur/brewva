@@ -14,11 +14,9 @@ import type {
 import {
   freshTouchedCoverageForTargetRef,
   sessionAppliedPatchSetIds,
-  sessionAppliedTouchedFilePaths,
   sessionFreshTouchedFilePaths,
 } from "../../runtime-port/session-touched-files.js";
 import { buildTapeRequirementFitness } from "../../runtime-port/verification.js";
-import { matchFileAgainstWriteVerifyTraps } from "../../shared/trap-library/index.js";
 import { normalizeReviewFindingSeverity } from "./review-receipts.js";
 
 /**
@@ -83,15 +81,6 @@ function readFileDigest(workspaceRoot: string, path: string): string | null {
   }
 }
 
-/** Same read-and-swallow shape as {@link readFileDigest}, for lens preloading — content, not a digest. */
-function readFileTextOrNull(workspaceRoot: string, path: string): string | null {
-  try {
-    return readFileSync(resolve(workspaceRoot, path), "utf8");
-  } catch {
-    return null;
-  }
-}
-
 /**
  * The atoms a target resolves to (folded from the tape, filtered to the
  * caller's `atomIds` when given). Shared by the objective builder (which
@@ -125,11 +114,10 @@ export function resolveAtomsForTarget(
  * subset stays atom-free. Empty when nothing is covered or no debt is owed. One
  * `records.query` read feeds the coverage gate, the debt set, and the atom objects.
  *
- * Grade ceiling (per the review→atom RFC): the debt atoms are high-risk by
- * construction, so a reviewer CLEAR only moves them to `likelySatisfied` — it does
- * NOT discharge them. The fold pays off on a FAIL, which names the violated atom so
- * it drops out of the debt set. Clearing to `satisfied` is the static-guard
- * producer's job, not a presence-grade review's.
+ * The debt atoms are high-risk by construction. Folding them into a covering
+ * review lets a CLEAR outcome's `atomRefs` discharge them (an independent pass
+ * reaches `satisfied`) and a FAIL name the violated atom so it drops out of the
+ * debt set.
  */
 export function resolveFoldedDebtAtoms(
   runtime: BrewvaToolRuntime,
@@ -154,79 +142,6 @@ export function resolveFoldedDebtAtoms(
     return [];
   }
   return foldTaskLedgerEvents(events).requirements.filter((atom) => debtIds.has(atom.id));
-}
-
-/**
- * The actual file paths a target names, for trap-lens preloading — as
- * distinct from `ReviewTargetRef` (which for `patch_sets` carries only
- * patch-set ids, not paths). A `files` target's paths are already known; a
- * `session_diff` or `atoms` target re-derives them from the same
- * applied-patch-set paths `sessionAppliedTouchedFilePaths` exposes (the
- * identical file set both targets review, per {@link snapshotTargetRef}'s
- * `patch_sets` ref).
- */
-export function reviewTargetFilePaths(
-  runtime: BrewvaToolRuntime,
-  sessionId: string,
-  target: ReviewTarget,
-): readonly string[] {
-  return target.kind === "files"
-    ? target.paths
-    : sessionAppliedTouchedFilePaths(runtime, sessionId);
-}
-
-/**
- * Preload write/verify trap lenses for a review: read each target file's
- * current content (best-effort — an unreadable file contributes no lens
- * rather than failing the whole preload) and fold every distinct lens that
- * fires through the shared trap-library helper. Deterministic order: file
- * order (as given by {@link reviewTargetFilePaths}) × the helper's own
- * write-then-verify, entry-order dedup — the same ordering contract
- * `matchFileAgainstWriteVerifyTraps` documents, extended across files by
- * first-seen-wins.
- */
-export function preloadedTrapLenses(
-  runtime: BrewvaToolRuntime,
-  sessionId: string,
-  workspaceRoot: string,
-  target: ReviewTarget,
-): readonly string[] {
-  const seen = new Set<string>();
-  const lenses: string[] = [];
-  for (const path of reviewTargetFilePaths(runtime, sessionId, target)) {
-    const text = readFileTextOrNull(workspaceRoot, path);
-    if (text === null) {
-      continue;
-    }
-    for (const match of matchFileAgainstWriteVerifyTraps(text)) {
-      if (!seen.has(match.lens)) {
-        seen.add(match.lens);
-        lenses.push(match.lens);
-      }
-    }
-  }
-  return lenses;
-}
-
-/**
- * Merge caller-supplied lenses with trap-preloaded lenses, deduped by exact
- * text (a caller who already named a trap's lens verbatim must not see it
- * twice). Caller lenses keep their given order and precedence; trap lenses
- * ride in tail, in the order {@link preloadedTrapLenses} produced them.
- */
-export function mergeLenses(
-  callerLenses: readonly string[],
-  trapLenses: readonly string[],
-): readonly string[] {
-  const merged = [...callerLenses];
-  const seen = new Set(callerLenses);
-  for (const lens of trapLenses) {
-    if (!seen.has(lens)) {
-      seen.add(lens);
-      merged.push(lens);
-    }
-  }
-  return merged;
 }
 
 /**
@@ -398,8 +313,7 @@ export function describeTargetForObjective(
  *
  * `lenses` is an explicit parameter (not read off `params.lenses`) so the
  * reviewer's objective text always matches whatever lens set the caller
- * decided to dispatch with — including the merged caller+trap-preloaded set
- * (Task 9), never silently falling back to the caller-only subset. `atoms` is
+ * decided to dispatch with. `atoms` is
  * likewise explicit: only an `atoms` target's objective actually uses it, but
  * threading it through keeps this builder a pure function of everything the
  * objective depends on.

@@ -181,62 +181,6 @@ describe("hosted runtime brief block (end-to-end wiring)", () => {
     expect(block?.content).toContain("dispatch an independent review");
   });
 
-  test("surfaces grade debt when a high-risk atom is 'verified' only by presence-grade independent evidence (R3-core + R4 e2e)", () => {
-    const block = buildRuntimeBriefBlockForSession(
-      runtimeWithBriefSources({
-        status: {
-          tokensUsed: 20_000,
-          tokensTotal: 200_000,
-          compactionAdvised: false,
-          forcedCompaction: false,
-          predictedOverflow: false,
-        },
-        digest: "runtimeTurn=2 declared=0 attempted=0 decisions=0 executed=0 recovery=0 warnings=0",
-        tapeEvents: [
-          {
-            type: "task.requirement.recorded",
-            timestamp: 1,
-            payload: {
-              atom: {
-                id: "req-1",
-                statement: "tap must re-enable on timeout",
-                modality: "must",
-                provenance: "trap",
-                riskClass: "runtime",
-              },
-            },
-          },
-          {
-            type: "tool.committed",
-            timestamp: 2,
-            payload: {
-              call: { toolName: "write", args: { path: "Sources/FnKeyMonitor.swift" } },
-              result: { outcome: { kind: "ok" } },
-            },
-          },
-          // An INDEPENDENT atoms-review PASS naming req-1 — but presence-grade (a
-          // re-grep). R3-core caps the high-risk (runtime) atom at likelySatisfied
-          // and raises grade debt; R4 surfaces it. Satisfied-ish, so no ladder part.
-          {
-            type: "verification.outcome.recorded",
-            timestamp: 3,
-            payload: {
-              outcome: "pass",
-              level: "requirements",
-              perspective: "independent",
-              atomRefs: ["req-1"],
-            },
-          },
-        ],
-      }),
-      { sessionId: "sess_grade", turn: 3 },
-    );
-
-    expect(block?.content).toContain("1 high-risk atom(s) on presence-only evidence");
-    // req-1 is likelySatisfied (not unverified), so no ladder/unverified part appears.
-    expect(block?.content).not.toContain("unverified");
-  });
-
   test("stays silent on a fully calm turn (no pressure, effects, or cache break)", () => {
     const block = buildRuntimeBriefBlockForSession(
       runtimeWithBriefSources({
@@ -577,9 +521,7 @@ describe("delegation advisory decision (Lever 2)", () => {
       }),
     });
     // Count + atom carried end-to-end (RFC information thesis): one high-risk atom, named.
-    expect(rendered?.content).toContain(
-      "1 high-risk must-atom(s) have no independent read at grade",
-    );
+    expect(rendered?.content).toContain("1 high-risk must-atom(s) have no independent read");
     expect(rendered?.content).toContain("(req-1)");
     // HIGH-1 honesty carried end-to-end: never claim there is NO independent receipt.
     expect(rendered?.content ?? "").not.toContain("no independent receipt");

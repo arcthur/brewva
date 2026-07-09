@@ -792,13 +792,12 @@ describe("buildRunReportProjection — requirement lifecycle evidence (R5b)", ()
 
     expect(report.requirementLifecycle.atoms[0]?.evidence).toEqual([
       {
-        evidenceKind: "static_guard",
         verdict: "pass",
         anchors: ["FnKeyMonitor.swift: keyCode gate"],
       },
     ]);
     expect(formatRunReportText(report)).toContain(
-      "closedBy=[static_guard:pass@FnKeyMonitor.swift: keyCode gate]",
+      "closedBy=[pass@FnKeyMonitor.swift: keyCode gate]",
     );
   });
 

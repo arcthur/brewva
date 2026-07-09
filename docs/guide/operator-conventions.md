@@ -64,62 +64,6 @@ loaded global-first (`resource-loader` `source: "global"`), and
 `brewva inspect --diagnostic` surfaces the composed context. If the file
 exists and is readable it is in the prompt.
 
-## Retro distillation: run-report -> retro -> trap library
-
-Operator conventions state what "done" looks like going in. The trap library
-(`@brewva/brewva-tools/trap-library`) is the matching mechanism coming out: it
-compiles hindsight from audited runs into deterministic, phase-gated recall
-that fires on future prompts, diffs, and files. This section is the standard
-operator flow that keeps that library growing from evidence instead of
-vibes — the same "no lesson without concrete evidence" bar the `retro` skill
-holds already, applied specifically to trap authoring.
-
-**1. Read the run report.** After an audited run — one with at least one
-independent verification receipt or a recorded review finding —
-`brewva inspect --session <id> --run-report` projects the tape into the same
-evidence every other consumer (Work Card, `retro`) sees: verification receipt
-count and latest rung, the authored/independent perspective split, findings
-recorded, and whether the tape's latest receipt leaves review debt. Nothing
-here is inferred from generation memory; it is folded from recorded events.
-
-**2. Judge findings against requirements, not against each other.** The
-distillation question is not "which findings were correct" — the report
-predates that verdict. It is: which review findings had strong runtime
-evidence behind them (a receipt, a reproducible command, a concrete file
-pointer), and separately, which stated requirements had **no** runtime
-evidence anywhere in the tape — no receipt, no finding, no independent
-perspective touching them at all. That second category is the gap a trap
-exists to close: an implicit requirement that only surfaced late, or didn't
-surface at all until someone went looking.
-
-**3. Compile new entries with real provenance and a retirement condition.**
-Entries live in
-`packages/brewva-tools/src/shared/trap-library/entries.ts` as
-`TrapEntry` values matched by the pure `matchTraps` engine (see the module doc
-comment in `packages/brewva-tools/src/shared/trap-library/index.ts` for the
-full trigger/phase contract). Every new entry MUST carry:
-
-- `provenance` — the actual trace or run it was distilled from (e.g. a tape
-  path or run identifier), not a generic description. A trap with no traceable
-  origin cannot be evaluated for retirement later and should not be added.
-- `retirement` — a concrete, checkable condition under which the entry should
-  be removed (typically: "retire when a deterministic adapter checks this
-  directly"). A trap without a retirement condition is a permanent tax on
-  every future match; name the condition at authoring time, not later.
-
-**4. Remember what a trap actually does.** An `orient`-phase entry injects an
-`atomCore` onto the task ledger — a requirement atom, stated before code
-exists. A `write`/`verify`-phase entry surfaces a **lens**: advisory
-"look here with this stance" text for whoever reviews the match next. A lens
-firing is not a verdict — it fires on correct code and incorrect code alike
-(the canonical case: an event-tap lens fires on every `CGEvent.tapCreate`
-site, including a properly scoped one). Telling correct from incorrect is
-deliberately not this layer's job; that precision guard is the W3 fitness
-join, which reasons over verification evidence, not over trigger matches. Do
-not encode "only fire on the broken variant" logic into a lens-surfacing
-entry — write the trigger to find the _topic_, and let evidence adjudicate
-the _verdict_.
-
 ## From visible debt to a blocking gate
 
 `verification_record` claim-time annotates a contradicted `pass` with graded

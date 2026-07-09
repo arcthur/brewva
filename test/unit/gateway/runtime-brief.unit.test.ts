@@ -238,12 +238,11 @@ describe("consequence section", () => {
 // for the operator to the PRODUCING model at turn tail — inform-only, gated silent
 // when there is nothing to act on.
 describe("renderRequirementDebtSection (R4)", () => {
-  test("silent when there is neither ladder debt nor grade debt", () => {
+  test("silent when there is no ladder debt", () => {
     expect(
       renderRequirementDebtSection({
         unverifiedMustCount: 0,
         debtReason: null,
-        insufficientGradeCount: 0,
       }),
     ).toBeNull();
     // An unverified count with no firing reason is still silent (the debt gate is off).
@@ -251,7 +250,6 @@ describe("renderRequirementDebtSection (R4)", () => {
       renderRequirementDebtSection({
         unverifiedMustCount: 3,
         debtReason: null,
-        insufficientGradeCount: 0,
       }),
     ).toBeNull();
   });
@@ -260,7 +258,6 @@ describe("renderRequirementDebtSection (R4)", () => {
     const section = renderRequirementDebtSection({
       unverifiedMustCount: 7,
       debtReason: "ladder_below_requirements",
-      insufficientGradeCount: 0,
     });
     expect(section?.key).toBe("requirements");
     expect(section?.salience).toBe("normal");
@@ -269,27 +266,14 @@ describe("renderRequirementDebtSection (R4)", () => {
     expect(section?.line).not.toContain("presence-only");
   });
 
-  test("grade debt alone (no ladder debt) still fires", () => {
-    const section = renderRequirementDebtSection({
-      unverifiedMustCount: 0,
-      debtReason: null,
-      insufficientGradeCount: 2,
-    });
-    expect(section?.line).toContain("2 high-risk atom(s) on presence-only evidence");
-    expect(section?.line).not.toContain("unverified");
-  });
-
-  test("both debts compose into one line and stub", () => {
+  test("ladder debt composes count, reason, and action into one line and stub", () => {
     const section = renderRequirementDebtSection({
       unverifiedMustCount: 1,
       debtReason: "unverified_after_requirements",
-      insufficientGradeCount: 3,
     });
     expect(section?.line).toContain("1 must atom(s) unverified (unverified_after_requirements)");
-    expect(section?.line).toContain("3 high-risk atom(s) on presence-only evidence");
     expect(section?.stub).toBe(
-      "requirements: 1 must atom(s) unverified (unverified_after_requirements); " +
-        "3 high-risk atom(s) on presence-only evidence",
+      "requirements: 1 must atom(s) unverified (unverified_after_requirements)",
     );
   });
 });
@@ -339,16 +323,14 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
       independenceDebtAtoms: ["req-1", "req-2"],
     });
     // The channel names the COUNT and enumerates the atoms (RFC information thesis).
-    expect(section?.line).toContain("2 high-risk must-atom(s) have no independent read at grade");
+    expect(section?.line).toContain("2 high-risk must-atom(s) have no independent read");
     expect(section?.line).toContain("(req-1, req-2)");
     expect(section?.line).toContain("fresh-context review");
     // Load-bearing honesty (HIGH-1): a sub-floor independent receipt MAY exist, so the
     // line must never claim there is none.
     expect(section?.line).not.toContain("no independent receipt");
     // Stub carries the count (budget-demoted form) but not the atom list.
-    expect(section?.stub).toBe(
-      "delegation: 2 high-risk must-atom(s) owe an independent read at grade",
-    );
+    expect(section?.stub).toBe("delegation: 2 high-risk must-atom(s) owe an independent read");
   });
 
   test("independence debt FOLDS the coarser review-debt line when both apply", () => {
@@ -357,14 +339,12 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
       reviewDebtClosure: true,
       independenceDebtAtoms: ["req-1"],
     });
-    expect(section?.line).toContain("1 high-risk must-atom(s) have no independent read at grade");
+    expect(section?.line).toContain("1 high-risk must-atom(s) have no independent read");
     expect(section?.line).toContain("(req-1)");
     // Fold (Open Question 3): the coarser review-debt line is subsumed, not shown as a
     // second same-ask clause. Line and stub agree — no "two asks at full, one demoted".
     expect(section?.line).not.toContain("`review_request`");
-    expect(section?.stub).toBe(
-      "delegation: 1 high-risk must-atom(s) owe an independent read at grade",
-    );
+    expect(section?.stub).toBe("delegation: 1 high-risk must-atom(s) owe an independent read");
   });
 
   test("pressure + independence + review: independence folds review, pressure stays", () => {
@@ -377,9 +357,7 @@ describe("renderDelegationAdvisorySection (Lever 2)", () => {
     expect(section?.line).toContain("1 high-risk must-atom(s)"); // independence names the count
     expect(section?.line).toContain("(req-1)"); // ...and the atom
     expect(section?.line).not.toContain("`review_request`"); // review-debt folded into independence
-    expect(section?.stub).toBe(
-      "delegation: 1 high-risk must-atom(s) owe an independent read at grade",
-    );
+    expect(section?.stub).toBe("delegation: 1 high-risk must-atom(s) owe an independent read");
   });
 });
 

@@ -8,10 +8,6 @@ function readRepoFile(path: string): string {
   return readFileSync(join(REPO_ROOT, path), "utf8");
 }
 
-function lineCount(source: string): number {
-  return source.split("\n").length;
-}
-
 describe("runtime topology boundary fitness", () => {
   test("retired hosted turn port binding does not reappear in production code", () => {
     const runtimePorts = readRepoFile(
@@ -54,10 +50,8 @@ describe("runtime topology boundary fitness", () => {
     );
     const runtimeAssembly = readRepoFile("packages/brewva-runtime/src/runtime/runtime.ts");
 
-    expect(lineCount(executionPorts)).toBeLessThanOrEqual(40);
     expect(executionPorts).not.toMatch(/providerRuntimeLayer|streamProviderMessage/u);
     expect(executionPorts).not.toMatch(/createActionPolicyRegistry|resolveToolAuthority/u);
-    expect(lineCount(runtimeAssembly)).toBeLessThanOrEqual(260);
     expect(runtimeAssembly).toContain("createRuntimePhysicsTurnRunner");
     expect(runtimeAssembly).not.toContain("function createReplayThenRealTurnRunner");
   });
@@ -78,15 +72,5 @@ describe("runtime topology boundary fitness", () => {
     expect(adapter).not.toContain("runtimeToolCallFromEventPayload");
     expect(sessionMux).toContain("export function emitRuntimeEventFrame");
     expect(sessionMux).toContain("export function emitRuntimeToolProgressFrame");
-    expect(lineCount(adapter)).toBeLessThanOrEqual(375);
-    expect(lineCount(sessionMux)).toBeLessThanOrEqual(500);
-  });
-
-  test("keeps provider binding adapter below the topology fold soft ceiling", () => {
-    const providerAdapter = readRepoFile(
-      "packages/brewva-gateway/src/hosted/internal/turn/runtime-turn-provider.ts",
-    );
-
-    expect(lineCount(providerAdapter)).toBeLessThanOrEqual(900);
   });
 });

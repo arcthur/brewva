@@ -22,10 +22,8 @@
 - Code anchors:
   - `packages/brewva-vocabulary/src/internal/{fitness,iteration,task}.ts`
     (`EvidenceKind`, `insufficientGradeAtoms`, `evidenceItems`, `riskClass`)
-  - `packages/brewva-tools/src/shared/static-guard/{predicates,producer}.ts`
   - `packages/brewva-tools/src/families/workflow/verification-record.ts`,
     `packages/brewva-tools/src/runtime-port/verification.ts`
-  - `packages/brewva-gateway/src/hosted/internal/session/skills/orient-requirement-injection.ts`
   - `packages/brewva-cli/src/operator/inspect/run-report.ts` (requirement lifecycle)
 
 ## Decision Summary
@@ -65,4 +63,6 @@ Obeys `docs/architecture/design-axioms.md`:
 
 ## Superseded by
 
-- None.
+- `docs/research/decisions/harness-subtraction-trap-static-guard-grade-ceiling.md`
+  removed the evidence grade axis, the static-guard producer, and
+  `insufficientGradeAtoms` this decision built.

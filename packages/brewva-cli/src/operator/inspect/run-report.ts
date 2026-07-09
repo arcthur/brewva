@@ -5,8 +5,6 @@ import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { FITNESS_DISCREPANCY_GRADES } from "@brewva/brewva-vocabulary/fitness";
 import type {
   AtomFitnessState,
-  EvidenceCoverage,
-  EvidenceKind,
   FitnessDiscrepancy,
   FitnessDiscrepancyGrade,
   UnverifiedRequirementDebt,
@@ -132,20 +130,13 @@ export interface RunReportFitness {
 }
 
 /**
- * R5b: one graded evidence item bearing on an atom, read from a receipt's
- * `evidenceItems` — the claimed-by(`anchors`) / closed-by(`evidenceKind`) detail
- * R5a's baseline lacked, available once R3's structured evidence flows. Empty on
- * atoms with no evidence items yet.
+ * R5b: one evidence item bearing on an atom, read from a receipt's
+ * `evidenceItems` — the claimed-by(`anchors`) detail R5a's baseline lacked,
+ * available once structured evidence flows. Empty on atoms with no evidence
+ * items yet.
  */
 export interface RunReportAtomEvidence {
-  readonly evidenceKind: EvidenceKind;
   readonly verdict: "pass" | "fail";
-  /**
-   * Attribution coverage, when the item carried one: without it a reader sees a
-   * `static_guard` PASS listed under an atom stuck `unverified` and cannot tell
-   * that the pass was facet-scoped (trail-only) rather than dischargeable.
-   */
-  readonly coverage?: EvidenceCoverage;
   readonly anchors: readonly string[];
 }
 
@@ -158,7 +149,7 @@ export interface RunReportRequirementAtomLifecycle {
   readonly createdAt: number;
   /** Current fitness state, re-derived over the whole tape (not a frozen receipt). */
   readonly state: AtomFitnessState;
-  /** R5b: graded evidence items bearing on this atom, in tape order. */
+  /** R5b: evidence items bearing on this atom, in tape order. */
   readonly evidence: readonly RunReportAtomEvidence[];
 }
 
@@ -320,7 +311,7 @@ export function buildRunReportProjection(
   // liveness compares against the first source mutation.
   let firstAtomizedAt: number | null = null;
   const atomCreatedAt = new Map<string, number>();
-  // R5b: graded evidence items bearing on each atom, gathered from receipts.
+  // R5b: evidence items bearing on each atom, gathered from receipts.
   const atomEvidence = new Map<string, RunReportAtomEvidence[]>();
 
   for (const event of ordered) {
@@ -458,20 +449,11 @@ export function buildRunReportProjection(
         } else {
           authoredReceipts += 1;
         }
-        // R5b: gather each receipt's graded evidence items by the atom(s) they name.
+        // R5b: gather each receipt's evidence items by the atom(s) they name.
         for (const item of parsed.evidenceItems) {
           for (const atomId of item.atomRefs) {
             const list = atomEvidence.get(atomId) ?? [];
-            list.push(
-              item.coverage
-                ? {
-                    evidenceKind: item.evidenceKind,
-                    verdict: item.verdict,
-                    coverage: item.coverage,
-                    anchors: item.anchors,
-                  }
-                : { evidenceKind: item.evidenceKind, verdict: item.verdict, anchors: item.anchors },
-            );
+            list.push({ verdict: item.verdict, anchors: item.anchors });
             atomEvidence.set(atomId, list);
           }
         }
@@ -787,15 +769,13 @@ export function formatRunReportText(report: RunReportProjection): string {
         `reviewDispatched=${yesNo(lifecycle.reviewDispatched)}`,
     );
     for (const atom of lifecycle.atoms) {
-      // R5b: closed-by(evidenceKind:verdict@anchor) — the graded, anchored
-      // evidence that decided the atom, when R3's structured items exist.
+      // R5b: closed-by(verdict@anchor) — the anchored evidence that decided the
+      // atom, when structured items exist.
       const closedBy =
         atom.evidence.length > 0
           ? ` closedBy=[${atom.evidence
               .map(
-                (entry) =>
-                  `${entry.evidenceKind}:${entry.verdict}` +
-                  (entry.anchors.length > 0 ? `@${entry.anchors[0]}` : ""),
+                (entry) => entry.verdict + (entry.anchors.length > 0 ? `@${entry.anchors[0]}` : ""),
               )
               .join(", ")}]`
           : "";

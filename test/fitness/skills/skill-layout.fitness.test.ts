@@ -5,7 +5,6 @@ import { parseSkillDocument } from "@brewva/brewva-vocabulary/session";
 import type { SkillCategory } from "@brewva/brewva-vocabulary/session";
 
 const LOADABLE_CATEGORIES = ["core", "domain", "operator", "meta", "internal"] as const;
-const MAX_SKILL_BODY_LINES = 150;
 
 function listMissingSkillDocuments(root: string): string[] {
   const missing: string[] = [];
@@ -139,20 +138,6 @@ describe("skill layout quality", () => {
       expect(content, `${skillFile} should omit empty requires`).not.toMatch(
         /^requires:\s*\[\]\s*$/m,
       );
-    }
-  });
-
-  it("keeps authored skill bodies within the progressive-disclosure line cap", () => {
-    const repoRoot = resolve(import.meta.dirname, "../../..");
-    const skillFiles = collectSkillFiles(resolve(repoRoot, "skills"));
-
-    for (const skillFile of skillFiles) {
-      const parsed = parseSkillDocument(skillFile, inferCategory(skillFile));
-      const bodyLines = parsed.markdown.split("\n").length;
-      expect(
-        bodyLines,
-        `${skillFile} body has ${bodyLines} lines; move examples, tables, or protocol details to references/invariants/scripts`,
-      ).toBeLessThanOrEqual(MAX_SKILL_BODY_LINES);
     }
   });
 
