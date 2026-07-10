@@ -22,9 +22,19 @@ export interface HarnessCandidatePatch {
 export function buildHarnessCandidatePatch(input: {
   readonly base: HarnessManifest;
   readonly candidate: HarnessManifest;
+  /**
+   * The base↔candidate changed-field set, if the caller already computed it
+   * (`diffHarnessManifestFields`), so a compare that also reports
+   * `changedFields` does not diff the same pair twice. Omit to have the patch
+   * derive it — a boundary that does not trust the caller (the API) always
+   * omits it and re-derives.
+   */
+  readonly changedFields?: readonly string[];
 }): HarnessCandidatePatch {
+  const changedFields =
+    input.changedFields ?? diffHarnessManifestFields(input.base, input.candidate);
   const delta: HarnessCandidateDeltaEntry[] = [];
-  for (const field of diffHarnessManifestFields(input.base, input.candidate)) {
+  for (const field of changedFields) {
     if (isHarnessNonEditableManifestField(field)) {
       continue;
     }

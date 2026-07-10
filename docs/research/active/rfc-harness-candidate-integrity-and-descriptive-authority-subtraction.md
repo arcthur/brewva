@@ -48,12 +48,12 @@
   default-deny — no prefix rules (a prefix admitted the value-bearing
   `plugins.mutatingHookIds` as derived), and the model-removal direction
   refuses (`field_removal_not_materializable`). Honesty is enforced at
-  every layer the review found it leaking: the API re-derives the
-  materialization proof itself in real mode (self-computed diff; blocked
-  fields become `execution_candidate_field_not_materializable` regressions),
-  the workspace input is a discriminated union so a trial-world claim cannot
-  exist without its root/basis/source evidence, a loaded candidate refuses
-  when the base manifest no longer describes the current runtime
+  every layer the review found it leaking: the API materializes the candidate
+  patch it derives itself (not a caller field list) and refuses before any
+  port or runtime exists (see the deep-review and abstraction-collapse notes
+  below — the original landing pushed blocked-field regressions instead), a
+  loaded candidate refuses when the base manifest no longer describes the
+  current runtime
   (`harness_base_manifest_stale_vs_current_runtime`), and a materialized
   model is verified against the session's active model before the run
   (creation-time fallback: `harness_materialized_model_unavailable`) and
@@ -825,6 +825,40 @@ null patch", one candidate by definition — all no-edit baseline compares
 deliberately share its id, since everything that differs between them is
 derived or provenance and belongs to evaluation receipts, not candidate
 identity.
+
+Abstraction-collapse follow-up (the reviewer's root-cause guidance, applied
+after the symptom fixes above). The correction round introduced the four
+mechanisms but left two of the three wrong abstractions only half-retired;
+this closes them so the mechanisms are load-bearing rather than bolted on:
+
+- Wrong abstraction 1 (the full observed manifest doubled as fact snapshot AND
+  editable candidate, so the classifier kept growing derived/blocked
+  bookkeeping): the candidate PATCH is now the single execution artifact.
+  `resolveHarnessCandidatePatchMaterialization(delta)` replaces the
+  manifest-diff-based `resolveHarnessCandidateMaterialization`; because the
+  patch builder already stripped derived/provenance, materialization is a pure
+  allowlist over the editable delta — there is no `derivedFields` exemption
+  list on the result anymore. The CLI diffs the base↔candidate pair once and
+  reuses it for both the report's `changedFields` and the patch
+  (`buildHarnessCandidatePatch` accepts the precomputed diff); the API
+  re-derives the diff exactly once more, deliberately — that second derivation
+  is its don't-trust-the-caller boundary (a caller cannot omit a blocked field
+  from the patch to slip it past materialization). `classifyField` stays as the single D6
+  boundary definition, read by the patch builder (strip) and the materializer
+  (allow); a hand-crafted patch that smuggles a frozen-surface field in still
+  refuses. observed manifests are now only ever execution OUTPUTS (the source
+  run's base, the trial run's tape-read executed manifest).
+- Wrong abstraction 2 residue (world / runtime / tape different owners → a
+  caller-declared workspace): `HarnessExecutionWorkspace` as a separate input
+  is deleted. The trial world descriptor rides on
+  `HarnessAttachedTrialRuntime.world` — the runtime and the fork it is rooted
+  at are one object created by the one owner — so `workspaceMode` is derived
+  (`attachedRuntime ? trial_world : shared_operator_cwd`), and the old
+  cross-check that a `trial_world` claim came with an attached runtime is gone
+  because the two can no longer be stated separately or contradict.
+
+Wrong abstraction 3 (candidate not an entity) was already retired by the
+CandidatePatch / EvaluationReceipt / DecisionReceipt split above.
 
 Open for the P5 design review (proposed resolutions, to be confirmed before
 build):

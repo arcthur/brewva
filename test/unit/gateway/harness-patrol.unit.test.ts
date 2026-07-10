@@ -265,7 +265,6 @@ describe("harness patrol", () => {
       divergeAt: "event-source-msg",
       baseManifest,
       candidateManifest,
-      workspace: { mode: "shared_operator_cwd" },
       sourceEvents,
       changedFields: ["runtime.configHash"],
     });
@@ -372,7 +371,6 @@ describe("harness patrol", () => {
         divergeAt: "event-source-msg",
         baseManifest,
         candidateManifest,
-        workspace: { mode: "shared_operator_cwd" } as const,
         sourceEvents,
         changedFields: ["runtime.configHash"],
       },
@@ -469,8 +467,16 @@ describe("harness patrol", () => {
           throw new Error("real_mode_must_not_create_a_second_runtime");
         },
       },
+      // The trial world rides on the attached runtime — one object, no
+      // separate workspace claim that could contradict it.
       attachedRuntime: {
         runtime: input.fork.runtime,
+        world: {
+          root: "/tmp/brewva-harness-trial-x/workspace",
+          basisWorldId: "sha256:trial-basis",
+          source: "git",
+          settingsHash: "harness_trial_settings:abc",
+        },
         bindPorts: input.fork.bindPorts,
       },
       ports: realPorts(),
@@ -479,13 +485,6 @@ describe("harness patrol", () => {
       divergeAt: "event-source-msg",
       baseManifest: input.baseManifest,
       candidateManifest: input.candidateManifest,
-      workspace: {
-        mode: "trial_world",
-        root: "/tmp/brewva-harness-trial-x/workspace",
-        basisWorldId: "sha256:trial-basis",
-        source: "git",
-        settingsHash: "harness_trial_settings:abc",
-      },
       sourceEvents: input.sourceEvents,
       changedFields: ["provider.model"],
     };
@@ -649,24 +648,7 @@ describe("harness patrol", () => {
     expect(fork.boundPorts() ?? null).toBe(null);
   });
 
-  test("real mode requires a trial world workspace", async () => {
-    const { sourceEvents, baseManifest } = sourceFixture();
-    const candidateManifest = buildHarnessManifest({
-      ...baseManifest,
-      manifestId: undefined,
-      provider: { model: "model-next" },
-    });
-    const fork = attachedFork(() => []);
-
-    expect(
-      executeHarnessCandidateComparison({
-        ...realComparisonInput({ fork, baseManifest, candidateManifest, sourceEvents }),
-        workspace: { mode: "shared_operator_cwd" },
-      }),
-    ).rejects.toThrow("harness_real_compare_requires_trial_world");
-  });
-
-  test("real mode requires the attached single-writer trial runtime", async () => {
+  test("real mode requires the attached single-writer trial runtime (which carries the world)", async () => {
     const { sourceEvents, baseManifest } = sourceFixture();
     const candidateManifest = buildHarnessManifest({
       ...baseManifest,
@@ -682,6 +664,24 @@ describe("harness patrol", () => {
         attachedRuntime: undefined,
       }),
     ).rejects.toThrow("harness_real_compare_requires_attached_runtime");
+  });
+
+  test("fixture mode forbids an attached runtime (a fixture run has no trial world)", async () => {
+    const { input } = forkComparisonInput({});
+    const fork = attachedFork(() => []);
+
+    // The coupling holds both ways: attaching a trial runtime to a fixture run
+    // would let the report claim a trial world the no-op tools never touched.
+    expect(
+      executeHarnessCandidateComparison({
+        ...input,
+        attachedRuntime: {
+          runtime: fork.runtime,
+          world: { root: "/tmp/x", basisWorldId: "sha256:x", source: "git" },
+          bindPorts: fork.bindPorts,
+        },
+      }),
+    ).rejects.toThrow("harness_fixture_compare_forbids_attached_runtime");
   });
 
   test("closes the forked harness runtime exactly once on success", async () => {
@@ -794,7 +794,6 @@ describe("harness patrol", () => {
         divergeAt: "event-source-start",
         baseManifest,
         candidateManifest,
-        workspace: { mode: "shared_operator_cwd" },
         sourceEvents,
       }),
     ).rejects.toThrow("harness_compare_target_session_must_be_empty");

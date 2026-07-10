@@ -3,8 +3,8 @@ import {
   buildHarnessManifest,
   type BuildHarnessManifestInput,
 } from "@brewva/brewva-vocabulary/harness";
-import { diffHarnessManifestFields } from "../../../packages/brewva-gateway/src/harness/internal/manifest-diff.js";
-import { resolveHarnessCandidateMaterialization } from "../../../packages/brewva-gateway/src/harness/internal/materialize.js";
+import { buildHarnessCandidatePatch } from "../../../packages/brewva-gateway/src/harness/internal/candidate-patch.js";
+import { resolveHarnessCandidatePatchMaterialization } from "../../../packages/brewva-gateway/src/harness/internal/materialize.js";
 
 function manifest(overrides: Partial<BuildHarnessManifestInput> = {}) {
   return buildHarnessManifest({
@@ -23,6 +23,10 @@ function manifest(overrides: Partial<BuildHarnessManifestInput> = {}) {
   });
 }
 
+function patchFor(base: ReturnType<typeof manifest>, candidate: ReturnType<typeof manifest>) {
+  return buildHarnessCandidatePatch({ base, candidate }).delta;
+}
+
 describe("harness candidate materialization", () => {
   test("a model delta materializes as a hosted-session override", () => {
     const base = manifest();
@@ -30,11 +34,7 @@ describe("harness candidate materialization", () => {
       provider: { provider: "faux", api: "faux-api", model: "candidate-model" },
     });
 
-    const resolution = resolveHarnessCandidateMaterialization({
-      base,
-      candidate,
-      changedFields: diffHarnessManifestFields(base, candidate),
-    });
+    const resolution = resolveHarnessCandidatePatchMaterialization(patchFor(base, candidate));
 
     if (!resolution.ok) {
       throw new Error(`expected materialization, got ${JSON.stringify(resolution)}`);
@@ -43,7 +43,7 @@ describe("harness candidate materialization", () => {
     expect(resolution.materializedFields).toEqual(["provider.model"]);
   });
 
-  test("derived and provenance deltas materialize as a no-op", () => {
+  test("the patch strips derived and provenance deltas, leaving an empty no-op", () => {
     const base = manifest();
     const candidate = manifest({
       sessionId: "other-session",
@@ -56,22 +56,18 @@ describe("harness candidate materialization", () => {
       refs: { sourceEventIds: ["event-2"] },
     });
 
-    const resolution = resolveHarnessCandidateMaterialization({
-      base,
-      candidate,
-      changedFields: diffHarnessManifestFields(base, candidate),
-    });
+    // Only derived/provenance fields changed, so the editable delta is empty:
+    // there is no derived-field "exemption" bookkeeping — the patch never
+    // carries them, and materialization is a clean no-op.
+    const delta = patchFor(base, candidate);
+    expect(delta).toEqual([]);
 
+    const resolution = resolveHarnessCandidatePatchMaterialization(delta);
     if (!resolution.ok) {
       throw new Error(`expected materialization, got ${JSON.stringify(resolution)}`);
     }
     expect(resolution.overrides).toEqual({});
     expect(resolution.materializedFields).toEqual([]);
-    expect(resolution.derivedFields).toEqual([
-      "prompt.systemPromptHash",
-      "runtime.configHash",
-      "runtime.runtimeIdentityHash",
-    ]);
   });
 
   test("value fields without an execution seam refuse with the field named", () => {
@@ -81,13 +77,7 @@ describe("harness candidate materialization", () => {
       provider: { provider: "other-provider", api: "faux-api", model: "faux-model" },
     });
 
-    const resolution = resolveHarnessCandidateMaterialization({
-      base,
-      candidate,
-      changedFields: diffHarnessManifestFields(base, candidate),
-    });
-
-    expect(resolution).toEqual({
+    expect(resolveHarnessCandidatePatchMaterialization(patchFor(base, candidate))).toEqual({
       ok: false,
       blockedFields: [
         { field: "provider.provider", reason: "field_not_yet_materializable" },
@@ -104,13 +94,7 @@ describe("harness candidate materialization", () => {
       plugins: { mutatingHookIds: ["before_provider_request:beta"] },
     });
 
-    const resolution = resolveHarnessCandidateMaterialization({
-      base,
-      candidate,
-      changedFields: diffHarnessManifestFields(base, candidate),
-    });
-
-    expect(resolution).toEqual({
+    expect(resolveHarnessCandidatePatchMaterialization(patchFor(base, candidate))).toEqual({
       ok: false,
       blockedFields: [{ field: "plugins.mutatingHookIds", reason: "field_not_yet_materializable" }],
     });
@@ -122,13 +106,7 @@ describe("harness candidate materialization", () => {
       provider: { provider: "faux", api: "faux-api" },
     });
 
-    const resolution = resolveHarnessCandidateMaterialization({
-      base,
-      candidate,
-      changedFields: diffHarnessManifestFields(base, candidate),
-    });
-
-    expect(resolution).toEqual({
+    expect(resolveHarnessCandidatePatchMaterialization(patchFor(base, candidate))).toEqual({
       ok: false,
       blockedFields: [{ field: "provider.model", reason: "field_removal_not_materializable" }],
     });
@@ -136,38 +114,41 @@ describe("harness candidate materialization", () => {
 
   test("an explicit JSON null model refuses the same removal direction", () => {
     const base = manifest();
-    // A loaded candidate file can spell removal as `"model": null`; the
-    // runtime value defeats an undefined-only guard and would leak a null
-    // into the string-typed session override.
+    // A loaded candidate file can spell removal as `"model": null`; the patch
+    // marks the removal as `to: null`, which the string-only materializer
+    // refuses instead of leaking a null into the session override.
     const candidate = manifest({
       provider: { provider: "faux", api: "faux-api", model: null as unknown as string },
     });
 
-    const resolution = resolveHarnessCandidateMaterialization({
-      base,
-      candidate,
-      changedFields: diffHarnessManifestFields(base, candidate),
-    });
-
-    expect(resolution).toEqual({
+    expect(resolveHarnessCandidatePatchMaterialization(patchFor(base, candidate))).toEqual({
       ok: false,
       blockedFields: [{ field: "provider.model", reason: "field_removal_not_materializable" }],
     });
   });
 
+  test("a smuggled derived field in a hand-crafted patch refuses, not silently applied", () => {
+    // The honest patch builder never emits a derived field. A patch delta
+    // hand-crafted to carry one must still refuse — the allowlist is the only
+    // way through, so a frozen-surface field cannot ride in as "derived".
+    expect(
+      resolveHarnessCandidatePatchMaterialization([
+        { field: "provider.model", to: "candidate-model" },
+        { field: "runtime.configHash", to: "forged" },
+      ]),
+    ).toEqual({
+      ok: false,
+      blockedFields: [{ field: "runtime.configHash", reason: "field_not_classified" }],
+    });
+  });
+
   test("unclassified fields refuse fail-closed so future manifest fields arrive blocked", () => {
-    const base = manifest();
-    const candidate = manifest({
-      provider: { provider: "faux", api: "faux-api", model: "candidate-model" },
-    });
-
-    const resolution = resolveHarnessCandidateMaterialization({
-      base,
-      candidate,
-      changedFields: ["provider.model", "future.surface.knob"],
-    });
-
-    expect(resolution).toEqual({
+    expect(
+      resolveHarnessCandidatePatchMaterialization([
+        { field: "provider.model", to: "candidate-model" },
+        { field: "future.surface.knob", to: "x" },
+      ]),
+    ).toEqual({
       ok: false,
       blockedFields: [{ field: "future.surface.knob", reason: "field_not_classified" }],
     });

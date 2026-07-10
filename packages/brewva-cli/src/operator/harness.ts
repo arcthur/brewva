@@ -2,10 +2,7 @@ import { existsSync } from "node:fs";
 import { cp, readdir, readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
-import {
-  createIsolatedWorkspace,
-  type IsolatedWorkspaceHandle,
-} from "@brewva/brewva-gateway/delegation";
+import { createIsolatedWorkspace } from "@brewva/brewva-gateway/delegation";
 import {
   absolutizeHarnessDataRoots,
   appendHarnessCandidateLifecycleRecord,
@@ -15,7 +12,7 @@ import {
   diffHarnessManifestFields,
   executeHarnessCandidateComparison,
   readHarnessCandidateLifecycleRecords,
-  resolveHarnessCandidateMaterialization,
+  resolveHarnessCandidatePatchMaterialization,
   toHarnessRuntimeFactory,
   type HarnessAttachedTrialRuntime,
   type HarnessCandidateExecutionPorts,
@@ -306,11 +303,12 @@ export function formatHarnessComparisonText(report: HarnessComparisonReport): st
 /**
  * Fixture replay executes scripted provider frames and no-op tools — a
  * loaded candidate manifest cannot reach that execution, so fixture mode
- * refuses it. Real mode admits a loaded candidate only through
- * `resolveHarnessCandidateMaterialization`: every changed field must flow
- * through an execution seam or be recomputed-by-definition, else the compare
- * refuses with the blocked fields named. Either way no replay report labels
- * a candidate the fork did not run.
+ * refuses it. Real mode admits a loaded candidate only by reducing it to a
+ * patch and materializing that patch
+ * (`resolveHarnessCandidatePatchMaterialization`): every editable delta field
+ * must flow through an execution seam, else the compare refuses with the
+ * blocked fields named. Either way no replay report labels a candidate the
+ * fork did not run.
  */
 export function harnessReplayCandidateGuardError(
   options: Pick<HarnessCliOptions, "candidateManifestPath" | "mode">,
@@ -459,9 +457,13 @@ async function runHarnessCompare(
     if (options.mode === "manifest") {
       report = compareHarnessCandidate({
         mode: options.mode,
+        // The candidate PATCH is the lifecycle identity; the full manifests
+        // are only the fact snapshots it was derived from. Reuse the diff
+        // computed above rather than re-diffing the same pair.
         candidateId: buildHarnessCandidatePatch({
           base: baseManifest,
           candidate: candidateManifest,
+          changedFields,
         }).candidateId,
         sourceSessionId: options.sourceSessionId,
         targetSessionId,
@@ -487,13 +489,20 @@ async function runHarnessCompare(
           return 1;
         }
       }
+      // Real mode: pre-check the candidate patch's materializability so an
+      // unbuildable candidate refuses BEFORE the expensive trial-world fork.
+      // The API re-derives the patch (its own trust boundary) and re-enforces,
+      // so this is a nicer early error, not the authority. Fixture mode builds
+      // no patch here — its candidateId is minted inside the comparison.
       const materialization =
         options.mode === "real"
-          ? resolveHarnessCandidateMaterialization({
-              base: baseManifest,
-              candidate: candidateManifest,
-              changedFields,
-            })
+          ? resolveHarnessCandidatePatchMaterialization(
+              buildHarnessCandidatePatch({
+                base: baseManifest,
+                candidate: candidateManifest,
+                changedFields,
+              }).delta,
+            )
           : undefined;
       if (materialization && !materialization.ok) {
         console.error(
@@ -609,6 +618,7 @@ async function runHarnessReplayCompare(input: {
     throw new Error("harness_real_compare_requires_materialization");
   }
   if (!realMode) {
+    // No attached runtime → fixture no-op tools, shared_operator_cwd.
     return executeHarnessCandidateComparison({
       mode: "fixture",
       runtime: toHarnessRuntimeFactory(input.runtime),
@@ -617,7 +627,6 @@ async function runHarnessReplayCompare(input: {
       divergeAt: input.options.divergeAt,
       baseManifest: input.baseManifest,
       candidateManifest: input.candidateManifest,
-      workspace: { mode: "shared_operator_cwd" },
       sourceEvents,
       changedFields: input.changedFields,
     });
@@ -653,6 +662,8 @@ async function runHarnessReplayCompare(input: {
         );
       }
     }
+    // The trial world rides on the attached runtime (one owner created both),
+    // so there is no separate workspace claim to pass or contradict.
     const report = await executeHarnessCandidateComparison({
       mode: "real",
       runtime: toHarnessRuntimeFactory(input.runtime),
@@ -662,13 +673,6 @@ async function runHarnessReplayCompare(input: {
       divergeAt: input.options.divergeAt,
       baseManifest: input.baseManifest,
       candidateManifest: input.candidateManifest,
-      workspace: {
-        mode: "trial_world",
-        root: trial.world.root,
-        basisWorldId: trial.world.basisWorldId,
-        source: trial.world.basisSource,
-        ...(trial.settingsHash ? { settingsHash: trial.settingsHash } : {}),
-      },
       sourceEvents,
       changedFields: input.changedFields,
       ports: trial.ports,
@@ -691,10 +695,9 @@ async function runHarnessReplayCompare(input: {
 }
 
 interface HarnessTrialRunOwner {
-  readonly world: IsolatedWorkspaceHandle;
   readonly ports: ReturnType<typeof createHostedHarnessRuntimeExecutionPorts>;
+  /** Carries the fork descriptor (`.world`) the comparison reports from. */
   readonly attachedRuntime: HarnessAttachedTrialRuntime;
-  readonly settingsHash?: string;
   readonly modelFallbackMessage?: string;
   dispose(): Promise<void>;
 }
@@ -810,15 +813,22 @@ async function createHarnessTrialRunOwner(input: {
       actionAdmissionOverrides: ownedAdapter.config.security.actionAdmissionOverrides,
     });
     return {
-      world,
       ports,
       attachedRuntime: {
         runtime: ownedAdapter.runtime,
+        // The fork descriptor travels WITH the runtime that owns it — the
+        // comparison never receives (or could contradict) a separate
+        // workspace claim.
+        world: {
+          root: world.root,
+          basisWorldId: world.basisWorldId,
+          source: world.basisSource,
+          ...(settingsHash ? { settingsHash } : {}),
+        },
         bindPorts: (boundPorts) => {
           portCell.ports = boundPorts;
         },
       },
-      ...(settingsHash ? { settingsHash } : {}),
       ...(session.modelFallbackMessage
         ? { modelFallbackMessage: session.modelFallbackMessage }
         : {}),

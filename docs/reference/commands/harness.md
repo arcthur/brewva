@@ -56,16 +56,17 @@ into the fork (`.brewva/agent`) is fingerprinted as `trialSettingsHash`.
 Forking copies and hashes the tracked tree — large workspaces pay real IO,
 oversized trees fail closed — and forks from a linked git worktree are
 git-less (reported as `trialWorldSource: "walk"`). A loaded
-`--candidate-manifest` is admitted only through materialization: every changed
-field must flow through an execution seam (today exactly `provider.model`,
-applied as the trial session's model and verified before and after the run) or
-be a hash the run recomputes; anything else — including removing the model —
-refuses with the blocked fields named before any provider or tool call, and
-the base manifest must still describe the current runtime. Execution honesty
-is read back, never asserted: the report's `executedManifestId` is the
-manifest the target tape actually recorded (null when the run recorded none),
-and every materialized delta field is verified against it
-(`deltaVerifiedFields`); a mismatch is recorded as a rejecting
+`--candidate-manifest` is reduced to a candidate patch — its normalized
+editable delta, with derived hashes and provenance stripped — and admitted
+only through materialization of that patch: every patch field must flow
+through an execution seam (today exactly `provider.model`, applied as the
+trial session's model and verified before and after the run); anything else —
+including removing the model — refuses with the blocked fields named before
+any provider or tool call, and the base manifest must still describe the
+current runtime. Execution honesty is read back, never asserted: the report's
+`executedManifestId` is the manifest the target tape actually recorded (null
+when the run recorded none), and every materialized delta field is verified
+against it (`deltaVerifiedFields`); a mismatch is recorded as a rejecting
 `execution_candidate_delta_not_executed:<field>` regression.
 
 Replay-backed compare modes choose a continuation prompt from the first source

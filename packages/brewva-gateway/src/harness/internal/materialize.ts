@@ -1,40 +1,34 @@
-import type { HarnessManifest } from "@brewva/brewva-vocabulary/harness";
+import type { HarnessCandidateDeltaEntry } from "@brewva/brewva-vocabulary/harness";
 
 /**
- * Candidate materialization: the projection from a candidate manifest's
- * changed fields onto the execution seams the harness can actually drive.
+ * Candidate materialization: the projection from a candidate PATCH's editable
+ * delta onto the execution seams the harness can actually drive.
  *
- * This module is the first code enforcement of the optimization-surface
- * boundary (RFC: harness candidate integrity, D6). Optimizable surface:
- * prompt/skill assets, the visible tool subset, selector/ranking policy
- * parameters, context-budget soft parameters, presentation/distillation
- * policy. Frozen surface, never candidate-mutable: permission, credential,
- * and approval surfaces; tape/WAL/receipt schemas; evaluator definitions and
- * held-out splits; promotion authority; world isolation and rollback
- * machinery.
+ * This module is the code enforcement of the optimization-surface boundary
+ * (RFC: harness candidate integrity, D6). Optimizable surface: prompt/skill
+ * assets, the visible tool subset, selector/ranking policy parameters,
+ * context-budget soft parameters, presentation/distillation policy. Frozen
+ * surface, never candidate-mutable: permission, credential, and approval
+ * surfaces; tape/WAL/receipt schemas; evaluator definitions and held-out
+ * splits; promotion authority; world isolation and rollback machinery.
  *
- * The classifier is total-or-refuse and default-deny:
+ * `classifyField` is the single definition of that boundary, four total
+ * classes: `materializable` (a real seam — today exactly `provider.model`),
+ * `derived` (hashes/outcomes the execution recomputes), `provenance` (source
+ * identity), and `blocked` (value-bearing but no seam yet, or never seen —
+ * fail-closed). Two consumers read it, each for what it needs:
  *
- * - `materializable` fields apply through a real execution seam. Today that
- *   is exactly `provider.model` (the hosted session's `model` input; model
- *   routing derives provider/api from it).
- * - `derived` fields are hashes and attempt outcomes the execution recomputes
- *   (`runtime.*`, `prompt.*`, `context.*`, tool-surface hashes, provider
- *   attempt hashes/status). A candidate cannot honestly author them, so they
- *   are reported, never compared and never blocking.
- * - `provenance` fields identify the source session the candidate was built
- *   from; differing values are expected and harmless.
- * - Every other changed field refuses: value-bearing fields whose execution
- *   seam does not exist yet (`field_not_yet_materializable`) and fields this
- *   classifier has never seen (`field_not_classified`). A future manifest
- *   field therefore arrives fail-closed until someone classifies it here —
- *   and a frozen-surface field must never move out of the refusing classes.
+ * - the candidate patch builder strips `derived`/`provenance` fields (they are
+ *   not authorable edits) so the patch is the normalized editable delta;
+ * - {@link resolveHarnessCandidatePatchMaterialization} maps each patch entry
+ *   to a seam — `materializable` applies, anything else refuses.
  *
- * A report produced after `ok: true` may claim the candidate as executed:
- * every changed field either flowed through a seam or is recomputed by
- * definition. That is what keeps the P3 invariant
- * (`executedManifestId === candidateManifestId`) honest under
- * materialization.
+ * Because materialization runs on the ALREADY-STRIPPED patch, it never sees a
+ * derived or provenance field in the honest path; there is no derived-field
+ * "exemption" bookkeeping here anymore. A hand-crafted patch that smuggles a
+ * frozen-surface field in is still refused, not silently applied. A report
+ * produced after `ok: true` may claim the candidate as executed: every patch
+ * field flowed through a seam.
  */
 
 export type HarnessBlockedFieldReason =
@@ -44,10 +38,9 @@ export type HarnessBlockedFieldReason =
 
 export interface HarnessCandidateMaterialization {
   readonly ok: true;
-  /** Hosted-session execution overrides derived from the candidate. */
+  /** Hosted-session execution overrides derived from the candidate patch. */
   readonly overrides: { readonly model?: string };
   readonly materializedFields: readonly string[];
-  readonly derivedFields: readonly string[];
 }
 
 export interface HarnessCandidateMaterializationRefusal {
@@ -152,49 +145,42 @@ function classifyField(field: string): {
   return { kind: "blocked", reason: "field_not_classified" };
 }
 
-export function resolveHarnessCandidateMaterialization(input: {
-  readonly base: HarnessManifest;
-  readonly candidate: HarnessManifest;
-  readonly changedFields: readonly string[];
-}): HarnessCandidateMaterializationResult {
+/**
+ * Materialize a candidate PATCH — the normalized editable delta, already
+ * stripped of derived/provenance fields by the patch builder. Each entry maps
+ * to a seam through `classifyField`: a `materializable` field applies (today
+ * `provider.model`, whose target must be a present string — a removal, spelled
+ * either as an absent field or an explicit `null`, has no seam and refuses),
+ * and any other class refuses. The honest path never carries a derived or
+ * provenance entry (they are not in the patch); a hand-crafted patch that
+ * smuggles one in refuses as unclassified rather than being silently applied.
+ */
+export function resolveHarnessCandidatePatchMaterialization(
+  delta: readonly HarnessCandidateDeltaEntry[],
+): HarnessCandidateMaterializationResult {
   const materializedFields: string[] = [];
-  const derivedFields: string[] = [];
   const blockedFields: { field: string; reason: HarnessBlockedFieldReason }[] = [];
+  let model: string | undefined;
 
-  for (const field of [...input.changedFields].toSorted()) {
-    const classified = classifyField(field);
-    switch (classified.kind) {
-      case "materializable":
-        materializedFields.push(field);
-        break;
-      case "derived":
-        derivedFields.push(field);
-        break;
-      case "provenance":
-        break;
-      case "blocked":
-        blockedFields.push({
-          field,
-          reason: classified.reason ?? "field_not_classified",
-        });
-        break;
-      default:
-        classified.kind satisfies never;
+  for (const entry of delta) {
+    const classified = classifyField(entry.field);
+    if (classified.kind !== "materializable") {
+      blockedFields.push({
+        field: entry.field,
+        // A derived/provenance field in a patch is not a normal edit (the
+        // builder strips those); treat a smuggled one as unclassified.
+        reason: classified.reason ?? "field_not_classified",
+      });
+      continue;
     }
-  }
-
-  const model = input.candidate.provider?.model;
-  // The removal direction has no seam: "execute with no model" is not a
-  // materializable intent — the session would fall back to the operator's
-  // default selection while the report claimed the candidate's absence.
-  // `== null` deliberately: a loaded JSON candidate can spell the removal as
-  // an explicit `"model": null`, which must refuse the same way as absence
-  // (and must never leak a null into the string-typed override).
-  if (materializedFields.includes("provider.model") && model == null) {
-    blockedFields.push({
-      field: "provider.model",
-      reason: "field_removal_not_materializable",
-    });
+    if (entry.field === "provider.model") {
+      if (typeof entry.to !== "string" || entry.to.length === 0) {
+        blockedFields.push({ field: entry.field, reason: "field_removal_not_materializable" });
+        continue;
+      }
+      model = entry.to;
+    }
+    materializedFields.push(entry.field);
   }
 
   if (blockedFields.length > 0) {
@@ -206,14 +192,9 @@ export function resolveHarnessCandidateMaterialization(input: {
     };
   }
 
-  const overrides: { model?: string } = {};
-  if (materializedFields.includes("provider.model") && model != null) {
-    overrides.model = model;
-  }
   return {
     ok: true,
-    overrides,
-    materializedFields,
-    derivedFields,
+    overrides: model !== undefined ? { model } : {},
+    materializedFields: materializedFields.toSorted(),
   };
 }

@@ -26,13 +26,9 @@ import {
   type HarnessTraceSnapshot,
 } from "@brewva/brewva-vocabulary/harness";
 import { buildHarnessCandidatePatch } from "./internal/candidate-patch.js";
+import { readManifestFieldValue, stableCompareJson } from "./internal/manifest-diff.js";
 import {
-  diffHarnessManifestFields,
-  readManifestFieldValue,
-  stableCompareJson,
-} from "./internal/manifest-diff.js";
-import {
-  resolveHarnessCandidateMaterialization,
+  resolveHarnessCandidatePatchMaterialization,
   type HarnessCandidateMaterialization,
 } from "./internal/materialize.js";
 
@@ -48,7 +44,7 @@ export {
 } from "./internal/candidate-patch.js";
 export { diffHarnessManifestFields } from "./internal/manifest-diff.js";
 export {
-  resolveHarnessCandidateMaterialization,
+  resolveHarnessCandidatePatchMaterialization,
   type HarnessBlockedFieldReason,
   type HarnessCandidateMaterialization,
   type HarnessCandidateMaterializationRefusal,
@@ -160,27 +156,34 @@ export interface HarnessCandidateExecutionPorts {
   readonly resolveToolAuthority?: RuntimeToolAuthorityResolver;
 }
 
-export type HarnessExecutionWorkspace =
-  | {
-      readonly mode: "trial_world";
-      /** Absolute root of the disposable fork the execution runs in. */
-      readonly root: string;
-      /** Content-addressed world id of what the fork saw at creation. */
-      readonly basisWorldId: string;
-      /** Enumeration backend the basis capture used. */
-      readonly source: "git" | "walk";
-      /**
-       * Content hash of the operator settings tree copied into the fork
-       * (`.brewva/agent`). The basis id excludes runtime data roots by
-       * design, so this is the second half of the trial environment's
-       * identity.
-       */
-      readonly settingsHash?: string;
-    }
-  | { readonly mode: "shared_operator_cwd" };
+/**
+ * The disposable copy-on-write fork a real comparison runs in. It is NOT a
+ * caller-declarable field of its own — it rides on {@link
+ * HarnessAttachedTrialRuntime} because the runtime and the world it is rooted
+ * at are one thing (the trial adapter created both). Fixture mode has no
+ * attached runtime and therefore no trial world; its no-op tools touch nothing
+ * (`shared_operator_cwd`).
+ */
+export interface HarnessTrialWorldDescriptor {
+  /** Absolute root of the disposable fork the execution runs in. */
+  readonly root: string;
+  /** Content-addressed world id of what the fork saw at creation. */
+  readonly basisWorldId: string;
+  /** Enumeration backend the basis capture used. */
+  readonly source: "git" | "walk";
+  /**
+   * Content hash of the operator settings tree copied into the fork
+   * (`.brewva/agent`). The basis id excludes runtime data roots by design, so
+   * this is the second half of the trial environment's identity.
+   */
+  readonly settingsHash?: string;
+}
 
 /**
- * Real-mode execution substrate: the caller-owned trial runtime. Its physics
+ * Real-mode execution substrate: the caller-owned trial runtime AND the trial
+ * world it is rooted at, as one object. Coupling them is the point — a real
+ * run cannot claim a trial world without the runtime that owns it, and cannot
+ * attach a runtime while claiming it ran against the live tree. Its physics
  * already declares the replay-then-real fork, its tape is the ONLY writer for
  * the target session (the hosted session that supplies the execution ports is
  * built over this same runtime, so provider-manifest advisories and turn/tool
@@ -190,6 +193,8 @@ export type HarnessExecutionWorkspace =
  */
 export interface HarnessAttachedTrialRuntime {
   readonly runtime: BrewvaRuntime;
+  /** The fork the runtime is rooted at; its containment evidence for the report. */
+  readonly world: HarnessTrialWorldDescriptor;
   /**
    * Bind the execution ports the trial runtime's late-bound physics thunks
    * will consume. The comparison calls this exactly once, with its
@@ -207,18 +212,14 @@ export interface ExecuteHarnessCandidateComparisonInput {
   readonly divergeAt: string;
   readonly baseManifest: HarnessManifest;
   readonly candidateManifest: HarnessManifest;
-  /**
-   * Where the fork's tool effects land. The trial-world arm couples the
-   * containment claim to its evidence: a caller cannot declare `trial_world`
-   * without the fork root and the basis world id it rests on. Real mode
-   * refuses anything but `trial_world` — there is no honest real execution
-   * against the operator's live tree.
-   */
-  readonly workspace: HarnessExecutionWorkspace;
   readonly sourceEvents: readonly CanonicalEvent[];
   /** Fixture-fork creation and operator-store tape reads. */
   readonly runtime: HarnessRuntimeFactory;
-  /** Required in real mode: the single-writer trial runtime. */
+  /**
+   * Required in real mode, absent in fixture mode: the single-writer trial
+   * runtime and its fork. Its presence IS the "ran in a trial world" claim —
+   * there is no separate workspace assertion that could contradict it.
+   */
   readonly attachedRuntime?: HarnessAttachedTrialRuntime;
   readonly changedFields?: readonly string[];
   readonly regressions?: readonly string[];
@@ -353,25 +354,24 @@ export async function executeHarnessCandidateComparison(
     candidate: input.candidateManifest,
   });
   const regressions = [...(input.regressions ?? [])];
-  // Real mode re-derives the materialization proof from the manifests
-  // themselves (not the caller's changedFields) and refuses BEFORE any
-  // runtime or port exists: a blocked candidate must produce zero provider
-  // and tool calls, not a red label on a run that already had side effects.
-  // The enforcement therefore holds for every caller, not just the CLI's
-  // pre-check.
+  // Real mode materializes the candidate PATCH (the delta the API derived
+  // above from the manifests it was given — not a caller-supplied field list)
+  // and refuses BEFORE any runtime or port exists: a blocked candidate must
+  // produce zero provider and tool calls, not a red label on a run that
+  // already had side effects. The enforcement therefore holds for every
+  // caller, not just the CLI's pre-check.
+  // The attached runtime's presence IS the "ran in a trial world" claim, in
+  // both directions: real mode demands it, fixture mode forbids it (a fixture
+  // run touches nothing, so a trial world would be a lie on the report).
+  if (input.mode === "fixture" && input.attachedRuntime) {
+    throw new Error("harness_fixture_compare_forbids_attached_runtime");
+  }
   let materialization: HarnessCandidateMaterialization | undefined;
   if (input.mode === "real") {
-    if (input.workspace.mode !== "trial_world") {
-      throw new Error("harness_real_compare_requires_trial_world");
-    }
     if (!input.attachedRuntime) {
       throw new Error("harness_real_compare_requires_attached_runtime");
     }
-    const enforcement = resolveHarnessCandidateMaterialization({
-      base: input.baseManifest,
-      candidate: input.candidateManifest,
-      changedFields: diffHarnessManifestFields(input.baseManifest, input.candidateManifest),
-    });
+    const enforcement = resolveHarnessCandidatePatchMaterialization(candidatePatch.delta);
     if (!enforcement.ok) {
       throw new Error(
         `harness_candidate_not_materializable:${enforcement.blockedFields
@@ -381,6 +381,7 @@ export async function executeHarnessCandidateComparison(
     }
     materialization = enforcement;
   }
+  const trialWorld = input.attachedRuntime?.world;
 
   const prompt = resolveReplayContinuationPrompt({
     events: input.sourceEvents,
@@ -478,17 +479,18 @@ export async function executeHarnessCandidateComparison(
       execution: {
         executedManifestId: executedManifest?.manifestId ?? null,
         ...(deltaVerifiedFields.length > 0 ? { deltaVerifiedFields } : {}),
-        workspaceMode: input.workspace.mode,
+        // The workspace is not a caller claim: `trial_world` exactly when a
+        // trial runtime is attached, `shared_operator_cwd` otherwise (fixture
+        // no-op tools touch nothing).
+        workspaceMode: trialWorld ? "trial_world" : "shared_operator_cwd",
         ...(materialization && materialization.materializedFields.length > 0
           ? { materializedFields: materialization.materializedFields }
           : {}),
-        ...(input.workspace.mode === "trial_world"
+        ...(trialWorld
           ? {
-              trialWorldBasisId: input.workspace.basisWorldId,
-              trialWorldSource: input.workspace.source,
-              ...(input.workspace.settingsHash
-                ? { trialSettingsHash: input.workspace.settingsHash }
-                : {}),
+              trialWorldBasisId: trialWorld.basisWorldId,
+              trialWorldSource: trialWorld.source,
+              ...(trialWorld.settingsHash ? { trialSettingsHash: trialWorld.settingsHash } : {}),
             }
           : {}),
         replayEventCount: replayEventCountThroughDivergence(input.sourceEvents, input.divergeAt),
