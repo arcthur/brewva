@@ -144,6 +144,19 @@ interface CompactionGateState {
    */
   committedAutoCompactionAttemptId: number | null;
   /**
+   * Auto attempt whose watchdog already fired (recording
+   * context.compaction.auto.failed) but whose deferred compaction may still commit
+   * successfully afterwards. The watchdog deadline is armed at execute/arm time and
+   * covers request → committed-tool-result boundary → summarization latency, not
+   * just summarization — so a slow-but-successful streaming compaction trips it
+   * before its session_compact commit lands. Parked here so that late auto-origin
+   * commit can emit a corrective `context.compaction.auto.completed`, un-latching
+   * the breaker instead of leaving three slow successes counted as three failures.
+   * Preserved across {@link clearAutoCompactionExecutionState} (the watchdog clears
+   * execution state immediately after parking it), exactly like the committed slot.
+   */
+  watchdogTimedOutAutoCompactionAttemptId: number | null;
+  /**
    * Last skip reason that produced telemetry. Pressure checks now run per
    * provider request, so an unchanged skip reason would otherwise repeat one
    * receipt per request for the whole pressure episode.
@@ -389,6 +402,7 @@ function getOrCreateGateState(
     autoCompactionAttemptId: 0,
     activeAutoCompactionAttemptId: null,
     committedAutoCompactionAttemptId: null,
+    watchdogTimedOutAutoCompactionAttemptId: null,
     lastAutoCompactionSkipReason: null,
   };
   store.set(sessionId, created);
@@ -510,6 +524,11 @@ export function createHostedCompactionController(
       if (!state.autoCompactionInFlight || state.activeAutoCompactionAttemptId !== attemptId) {
         return;
       }
+      // Remember this attempt as timed-out before clearing execution state: the
+      // deferred compaction may still commit successfully after the deadline, and
+      // that late auto-origin commit must be able to emit a corrective
+      // auto.completed so the breaker never latches on a slow-but-successful path.
+      state.watchdogTimedOutAutoCompactionAttemptId = attemptId;
       clearAutoCompactionExecutionState(state);
       runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
       telemetry.emitAutoFailed({
@@ -613,14 +632,24 @@ export function createHostedCompactionController(
         input.sessionId,
         previousUsage,
       ).required;
-      // Park the in-flight attempt id before clearing: in the managed deferred
-      // flow this commit IS the active attempt's, and its onComplete (which
-      // emits auto.completed) only runs after this hook. The clear must still
-      // happen unconditionally so a manual compaction landing during an
-      // in-flight auto attempt disarms the watchdog.
-      if (state.activeAutoCompactionAttemptId !== null) {
-        state.committedAutoCompactionAttemptId = state.activeAutoCompactionAttemptId;
+      // Park the attempt whose trailing onComplete must emit auto.completed, then
+      // clear. In the managed deferred flow this commit IS the active attempt's,
+      // and its onComplete (which emits auto.completed) only runs after this hook.
+      // Slow-success recovery: when the active attempt was already cleared by its
+      // watchdog, an *auto-origin* commit landing now proves that attempt actually
+      // succeeded, so adopt its parked id to emit a corrective auto.completed. A
+      // manual/extension commit (fromExtension) is not evidence the auto path
+      // works, so it never adopts the timed-out attempt. The clear still happens
+      // unconditionally so a manual compaction landing during an in-flight auto
+      // attempt disarms the watchdog.
+      const isAutoOriginCommit = input.fromExtension !== true;
+      const parkedAutoCompactionAttemptId =
+        state.activeAutoCompactionAttemptId ??
+        (isAutoOriginCommit ? state.watchdogTimedOutAutoCompactionAttemptId : null);
+      if (parkedAutoCompactionAttemptId !== null) {
+        state.committedAutoCompactionAttemptId = parkedAutoCompactionAttemptId;
       }
+      state.watchdogTimedOutAutoCompactionAttemptId = null;
       clearAutoCompactionExecutionState(state);
       runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
       const sanitizedSummary =
@@ -685,12 +714,14 @@ export function createHostedCompactionController(
       const state = gateStateBySession.get(input.sessionId);
       if (state) {
         clearAutoCompactionExecutionState(state);
-        // `clearAutoCompactionExecutionState` intentionally preserves the
-        // committed slot (sessionCompact clears execution state right after
-        // parking it), so drop it explicitly on shutdown — otherwise an
-        // onComplete closure that still holds this state by reference could
-        // emit a post-shutdown auto.completed for a disposed session.
+        // `clearAutoCompactionExecutionState` intentionally preserves the parked
+        // slots (sessionCompact clears execution state right after parking one),
+        // so drop them explicitly on shutdown — otherwise an onComplete closure
+        // that still holds this state by reference could emit a post-shutdown
+        // auto.completed for a disposed session, or a stale timed-out attempt
+        // could be adopted by a later commit.
         state.committedAutoCompactionAttemptId = null;
+        state.watchdogTimedOutAutoCompactionAttemptId = null;
       }
       gateStateBySession.delete(input.sessionId);
       delegationAdvisoryTracker.clearSession(input.sessionId);
