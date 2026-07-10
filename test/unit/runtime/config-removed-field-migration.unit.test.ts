@@ -1,9 +1,10 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   formatBrewvaConfigWarning,
+  loadBrewvaConfig,
   loadBrewvaConfigResolution,
   normalizeExplicitBrewvaConfigResolution,
   type BrewvaForensicConfigWarning,
@@ -77,6 +78,27 @@ describe("removed config fields strip-and-warn instead of blocking startup", () 
 
     expect(seen.map((warning) => warning.code)).toEqual(["config_removed_fields_stripped"]);
     expect(seen[0]?.configPath).toBe("<direct runtime config>");
+  });
+
+  test("the convenience loader prints stripped-field warnings to stderr by default", () => {
+    const dir = mkdtempSync(join(tmpdir(), "brewva-config-migration-print-"));
+    const configPath = join(dir, "brewva.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ skills: { routing: { profile: "legacy" } } }),
+      "utf8",
+    );
+
+    const errorSpy = spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const config = loadBrewvaConfig({ cwd: dir, configPath });
+      expect((config.skills as Record<string, unknown>).routing).toBe(undefined);
+      const printed = errorSpy.mock.calls.map((call) => String(call[0]));
+      expect(printed.some((line) => line.startsWith("[config:warning]"))).toBe(true);
+      expect(printed.some((line) => line.includes("skills.routing has been removed"))).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test("formatBrewvaConfigWarning renders the CLI [config:warning] convention with fields", () => {

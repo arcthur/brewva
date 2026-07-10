@@ -138,10 +138,18 @@ truncation.
   base+skill surface ships unconditionally. The `loadWhen` label is a manifest
   annotation, not a gate (axiom 19: a documented invariant nothing checks). This
   reframes the subtraction: **demotion is implementing the surface contract the
-  docs already state**, not inventing a new mechanism. _Implemented in this
-  branch_: `shouldExposeManagedTool` now gates skill-surface tools on an explicit
-  `$name` request (one turn) or a selected capability; the `load_when` label and
-  the capability-view policy text read `explicit_request` — label and gate agree.
+  docs already state**, not inventing a new mechanism. _Implemented (and
+  review-hardened) in this branch_: `shouldExposeManagedTool` gates skill-surface
+  tools on three turn-scoped pull channels — a `$name` in the user prompt, a
+  `$name` the model wrote in its previous reply (the model-native self-pull;
+  without it the hidden-tool hint would be a promise the model cannot act on),
+  and the instructed-tool union of the skills rendered this turn (extracted from
+  each SKILL.md's backticked tool mentions and carried on the selection receipt)
+  — plus selected-capability authorization as the authority-gated path. The
+  `load_when` label and the capability-view policy text read `explicit_request` —
+  label and gate agree, and the core skills' instructed tools (e.g.
+  `verification_record` in the verifier ladder) stay reachable on the turns
+  those skills render.
 - **The model prefers primitives even where the ontology is the textbook fit.**
   Session D asked for a codebase architecture summary over 32 files — the canonical
   use case for `code_digest` / `source_read` / the `attention` family. `glm5.2`'s

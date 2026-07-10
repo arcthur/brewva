@@ -5,6 +5,7 @@ import {
   createSkillSelectionLifecycle,
   type SkillSelectionRuntime,
 } from "../../../../packages/brewva-gateway/src/hosted/internal/session/host-api-installation.js";
+import { extractInstructedToolNames } from "../../../../packages/brewva-gateway/src/hosted/internal/session/skills/skill-selection.js";
 
 function skill(input: {
   name: string;
@@ -799,5 +800,25 @@ describe("skill catalog layer and widened signals", () => {
     expect(String(thirdMessage.content)).toContain(
       "Previous Selection Adoption: 1/1 rendered SkillCards read (migration-safety)",
     );
+  });
+});
+
+describe("instructed-tool extraction (skill-surface pull gate)", () => {
+  test("collects backticked managed tool mentions and ignores everything else", () => {
+    const markdown = [
+      "# Verifier",
+      "Commit the reached rung with `verification_record`. Pin context via `$attention_pin`.",
+      "Do not confuse with `not_a_real_tool` or plain verification_record without backticks.",
+      "Also mentions `exec` (base tool: extracted but base is always-on anyway).",
+    ].join("\n");
+    expect(extractInstructedToolNames(markdown)).toEqual([
+      "attention_pin",
+      "exec",
+      "verification_record",
+    ]);
+  });
+
+  test("returns empty for documents without managed tool mentions", () => {
+    expect(extractInstructedToolNames("# Just prose\nNothing here.")).toEqual([]);
   });
 });

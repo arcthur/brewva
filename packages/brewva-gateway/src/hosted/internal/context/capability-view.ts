@@ -667,11 +667,13 @@ function renderInventoryBlock(inventory: CapabilityVisibilityInventory): string 
     `hidden_external_count: ${inventory.hiddenBySurface.external}`,
   ];
   if (inventory.hints.includes("request_tool_expansion")) {
-    lines.push("skill_hint: request a hidden tool with `$name` to surface it for this turn.");
+    lines.push(
+      "skill_hint: request a hidden tool with `$name` — a user prompt surfaces it this turn; your own mention surfaces it next turn; skills you follow surface their instructed tools automatically.",
+    );
   }
   if (inventory.hints.includes("operator_host_lane_available")) {
     lines.push(
-      "operator_hint: hosted operator turns keep operator tools visible by default; only requestable operator tools can be surfaced via `$name` for the current turn.",
+      "operator_hint: operator tools surface only when a `$name` request selects an operator capability for the current turn.",
     );
   }
   return lines.join("\n");
@@ -686,7 +688,7 @@ function renderPolicyBlock(
   for (const policy of policies) {
     if (policy.id === "surface_visibility") {
       lines.push(
-        "surface_policy: base tools stay visible; skill tools surface for one turn on an explicit $name request or a selected capability; hosted operator turns keep operator tools visible by default, while operator-gated tools remain hosted-only.",
+        "surface_policy: base tools stay visible; skill tools surface for one turn on a $name request (user prompt or your previous reply), a rendered skill that instructs them, or a selected capability; operator tools surface only through a selected capability.",
       );
       continue;
     }

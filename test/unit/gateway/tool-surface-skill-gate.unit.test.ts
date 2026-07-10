@@ -52,10 +52,16 @@ function createFakeExtensionApi(initialHostTools: string[]): FakeExtensionApi {
   return api;
 }
 
-function createFakeRuntime(): ToolSurfaceRuntime {
+interface FakeRuntimeHandle {
+  runtime: ToolSurfaceRuntime;
+  setSkillSelectionReceipt(receipt: object | undefined): void;
+}
+
+function createFakeRuntime(): FakeRuntimeHandle {
   const capabilityReceipts = new Map<string, object>();
   const surfacePayloads: object[] = [];
-  return {
+  let skillSelectionReceipt: object | undefined;
+  const runtime: ToolSurfaceRuntime = {
     identity: { cwd: process.cwd(), workspaceRoot: process.cwd() },
     config: {
       capabilities: {
@@ -67,7 +73,7 @@ function createFakeRuntime(): ToolSurfaceRuntime {
     ops: {
       skills: {
         selection: {
-          latest: () => undefined,
+          latest: () => skillSelectionReceipt,
         },
       },
       tools: {
@@ -92,6 +98,12 @@ function createFakeRuntime(): ToolSurfaceRuntime {
       },
     },
   };
+  return {
+    runtime,
+    setSkillSelectionReceipt(receipt) {
+      skillSelectionReceipt = receipt;
+    },
+  };
 }
 
 function makeContext(sessionId: string): object {
@@ -106,7 +118,7 @@ function makeContext(sessionId: string): object {
 describe("tool-surface skill gate (pull, not push)", () => {
   test("skill tools stay out of the default payload, surface for one $name turn, then drop again", () => {
     const extensionApi = createFakeExtensionApi(["read", "edit"]);
-    const runtime = createFakeRuntime();
+    const { runtime } = createFakeRuntime();
     const definitions = new Map<string, BrewvaToolDefinition>([
       ["grep", toolDefinition("grep")],
       ["recall_search", toolDefinition("recall_search")],
@@ -140,5 +152,65 @@ describe("tool-surface skill gate (pull, not push)", () => {
     expect(turn3).not.toContain("recall_search");
     expect(extensionApi.registered).toContain("recall_search");
     expect(turn3).toContain("grep");
+  });
+
+  test("a rendered skill's instructed tools surface for the turn its receipt covers", () => {
+    const extensionApi = createFakeExtensionApi(["read"]);
+    const handle = createFakeRuntime();
+    const definitions = new Map<string, BrewvaToolDefinition>([
+      ["grep", toolDefinition("grep")],
+      ["verification_record", toolDefinition("verification_record")],
+    ]);
+    const lifecycle = createToolSurfaceLifecycle(
+      extensionApi as unknown as Parameters<typeof createToolSurfaceLifecycle>[0],
+      handle.runtime,
+      { dynamicToolDefinitions: definitions },
+    );
+    const ctx = makeContext("sess_instructed");
+
+    // Turn 1: the verifier skill rendered — its instructed tool is reachable.
+    handle.setSkillSelectionReceipt({
+      selectionId: "skill_selection_test1",
+      explicitSkillMentions: [],
+      selectionMode: "shortlist_prompt_context",
+      instructedToolNames: ["verification_record"],
+    });
+    lifecycle.beforeAgentStart({ prompt: "verify the change" }, ctx);
+    expect(extensionApi.setActiveCalls.at(-1) ?? []).toContain("verification_record");
+
+    // Turn 2: no skill rendered — the instructed tool drops back out.
+    handle.setSkillSelectionReceipt({
+      selectionId: "skill_selection_test2",
+      explicitSkillMentions: [],
+      selectionMode: "shortlist_prompt_context",
+      instructedToolNames: [],
+    });
+    lifecycle.beforeAgentStart({ prompt: "carry on" }, ctx);
+    expect(extensionApi.setActiveCalls.at(-1) ?? []).not.toContain("verification_record");
+  });
+
+  test("the model's own $name mention in its previous reply pulls the tool next turn", () => {
+    const extensionApi = createFakeExtensionApi(["read"]);
+    const { runtime } = createFakeRuntime();
+    const definitions = new Map<string, BrewvaToolDefinition>([
+      ["grep", toolDefinition("grep")],
+      ["attention_pin", toolDefinition("attention_pin")],
+    ]);
+    const lifecycle = createToolSurfaceLifecycle(
+      extensionApi as unknown as Parameters<typeof createToolSurfaceLifecycle>[0],
+      runtime,
+      { dynamicToolDefinitions: definitions },
+    );
+    const ctx = makeContext("sess_selfpull");
+
+    lifecycle.beforeAgentStart(
+      { prompt: "carry on", previousAssistantText: "Next I will pin this with $attention_pin." },
+      ctx,
+    );
+    expect(extensionApi.setActiveCalls.at(-1) ?? []).toContain("attention_pin");
+
+    // Without the mention the tool drops again (one-turn semantics).
+    lifecycle.beforeAgentStart({ prompt: "and then?" }, ctx);
+    expect(extensionApi.setActiveCalls.at(-1) ?? []).not.toContain("attention_pin");
   });
 });

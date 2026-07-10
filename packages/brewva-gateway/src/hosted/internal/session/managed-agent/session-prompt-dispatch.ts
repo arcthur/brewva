@@ -149,6 +149,35 @@ export interface ManagedPromptDispatchDeps {
   readonly syncContextState: () => Promise<void>;
 }
 
+function lastAssistantMessageText(
+  messages: readonly BrewvaAgentProtocolMessage[],
+): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== "assistant") continue;
+    const content = (message as { content?: unknown }).content;
+    if (typeof content === "string") {
+      return content.length > 0 ? content : undefined;
+    }
+    if (Array.isArray(content)) {
+      const text = content
+        .map((part) =>
+          part &&
+          typeof part === "object" &&
+          (part as { type?: unknown }).type === "text" &&
+          typeof (part as { text?: unknown }).text === "string"
+            ? (part as { text: string }).text
+            : "",
+        )
+        .filter((entry) => entry.length > 0)
+        .join("\n");
+      return text.length > 0 ? text : undefined;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
 export async function prepareManagedPromptDispatch(
   deps: ManagedPromptDispatchDeps,
   parts: readonly BrewvaPromptContentPart[],
@@ -234,6 +263,7 @@ export async function prepareManagedPromptDispatch(
     resourceLoader: deps.resourceLoader,
   });
 
+  const previousAssistantText = lastAssistantMessageText(restoredMessages);
   const beforeStart = await deps.runner.emitBeforeAgentStart(
     {
       type: "before_agent_start",
@@ -241,6 +271,7 @@ export async function prepareManagedPromptDispatch(
       parts: cloneBrewvaPromptContentParts(currentParts),
       promptPaths: promptTargetPaths,
       systemPrompt,
+      ...(previousAssistantText ? { previousAssistantText } : {}),
     },
     deps.createHostContext(),
   );

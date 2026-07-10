@@ -151,7 +151,9 @@ export function normalizeExplicitBrewvaConfig(
   config: unknown,
   options: NormalizeExplicitBrewvaConfigOptions = {},
 ): BrewvaConfig {
-  return normalizeExplicitBrewvaConfigResolution(config, options).config;
+  const resolution = normalizeExplicitBrewvaConfigResolution(config, options);
+  emitBrewvaConfigWarningsToStderr(resolution.warnings);
+  return resolution.config;
 }
 
 export function normalizeExplicitBrewvaConfigResolution(
@@ -269,8 +271,22 @@ function readConfigFileForInspect(configPath: string): {
   };
 }
 
+/**
+ * Convenience forms are visible-by-default: a caller that only wants a config
+ * has not signed up to route advisories, and a silently stripped removed field
+ * is a config the user believes is active. Callers that capture warnings use
+ * the Resolution forms, which stay pure.
+ */
+function emitBrewvaConfigWarningsToStderr(warnings: readonly BrewvaForensicConfigWarning[]): void {
+  for (const warning of warnings) {
+    console.error(formatBrewvaConfigWarning(warning));
+  }
+}
+
 export function loadBrewvaConfig(options: LoadConfigOptions = {}): BrewvaConfig {
-  return loadBrewvaConfigResolution(options).config;
+  const resolution = loadBrewvaConfigResolution(options);
+  emitBrewvaConfigWarningsToStderr(resolution.warnings);
+  return resolution.config;
 }
 
 export function loadBrewvaConfigResolution(

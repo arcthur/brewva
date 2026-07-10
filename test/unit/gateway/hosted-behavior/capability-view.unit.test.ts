@@ -315,7 +315,9 @@ describe("capability view", () => {
         capabilityView: result,
         mode: "full",
         includeInventory: true,
-      })[2]?.content.includes("operator_hint: hosted operator turns keep operator tools visible"),
+      })[2]?.content.includes(
+        "operator_hint: operator tools surface only when a `$name` request selects an operator capability",
+      ),
     ).toBe(true);
   });
 

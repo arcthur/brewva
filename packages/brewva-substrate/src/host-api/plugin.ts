@@ -141,6 +141,13 @@ export interface BrewvaHostBeforeAgentStartEvent {
   parts: BrewvaPromptContentPart[];
   promptPaths?: readonly string[];
   systemPrompt: string;
+  /**
+   * The previous assistant message's text, when the session has one. Lets
+   * turn-scoped policies honor requests the MODEL made in its own reply (e.g.
+   * a `$tool_name` pull for the next turn) — user prompts alone would make
+   * model-facing hints impossible for the model to act on.
+   */
+  previousAssistantText?: string;
 }
 
 export interface BrewvaHostAgentStartEvent {

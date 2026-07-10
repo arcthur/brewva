@@ -190,6 +190,7 @@ function shouldExposeManagedTool(input: {
   hasUI: boolean;
   goalActive: boolean;
   requestedToolNames: ReadonlySet<string>;
+  skillInstructedToolNames: ReadonlySet<string>;
   actionClass?: ToolActionClass;
   selectedCapabilityReceipt?: CapabilitySelectionReceipt;
   capabilityManifests: readonly CapabilityManifest[];
@@ -216,12 +217,19 @@ function shouldExposeManagedTool(input: {
     return input.operatorProfile || explicitlyAuthorized === true;
   }
   // Skill-surface tools are pull, not push (tool-surface subtraction RFC): they
-  // enter the payload only for a turn that explicitly requested them ($name) or
-  // authorized them through a selected capability. Across n=12 real sessions the
-  // always-pushed skill surface scored near-zero invocations while costing schema
-  // tokens every turn; base primitives stay always-on.
+  // enter the payload only when this turn pulled them. Three pull channels, all
+  // turn-scoped: an explicit `$name` in the user prompt, a `$name` the MODEL
+  // wrote in its previous reply (the model-native self-pull — without it the
+  // capability-view hint would be a promise the model cannot act on), and the
+  // instructed-tool union of the skills rendered this turn (a skill that says
+  // "record it with `verification_record`" must have that tool reachable).
+  // Selected-capability authorization stays as the fourth, authority-gated path.
   if (getBrewvaToolSurface(input.toolName) === "skill") {
-    return input.requestedToolNames.has(input.toolName) || explicitlyAuthorized === true;
+    return (
+      input.requestedToolNames.has(input.toolName) ||
+      input.skillInstructedToolNames.has(input.toolName) ||
+      explicitlyAuthorized === true
+    );
   }
   return true;
 }
@@ -263,6 +271,7 @@ function registerMissingManagedTools(input: {
   hasUI: boolean;
   goalActive: boolean;
   requestedToolNames: ReadonlySet<string>;
+  skillInstructedToolNames: ReadonlySet<string>;
   selectedCapabilityReceipt?: CapabilitySelectionReceipt;
   capabilityManifests: readonly CapabilityManifest[];
 }): void {
@@ -283,6 +292,7 @@ function registerMissingManagedTools(input: {
         hasUI: input.hasUI,
         goalActive: input.goalActive,
         requestedToolNames: input.requestedToolNames,
+        skillInstructedToolNames: input.skillInstructedToolNames,
         actionClass: resolveToolActionClass({
           toolName,
           dynamicToolDefinitions: input.dynamicToolDefinitions,
@@ -303,6 +313,7 @@ function resolveAndActivateToolSurface(input: {
   runtime: ToolSurfaceRuntime;
   sessionId: string;
   prompt: string;
+  previousAssistantText?: string;
   hasUI: boolean;
   dynamicToolDefinitions?: ReadonlyMap<string, ToolDefinition>;
   selectedCapabilityReceipt?: CapabilitySelectionReceipt;
@@ -324,7 +335,23 @@ function resolveAndActivateToolSurface(input: {
   const operatorProfile = isOperatorProfile(input.runtime);
   const goalActive = input.runtime.ops.goal.state.get(input.sessionId)?.status === "active";
   const requestedToolNames = extractRequestedToolNames(input.prompt);
-  const requestedToolNameSet = new Set(requestedToolNames);
+  // The model's own `$name` mentions in its previous reply are a pull channel of
+  // equal standing for SKILL tools (never for operator authorization, which stays
+  // user/capability-driven): the model reads the hidden-tool hint and can act on
+  // it without user cooperation, one turn later.
+  const assistantRequestedToolNames = input.previousAssistantText
+    ? extractRequestedToolNames(input.previousAssistantText)
+    : [];
+  const requestedToolNameSet = new Set([...requestedToolNames, ...assistantRequestedToolNames]);
+  // The skills rendered THIS turn (their receipt is recorded earlier in the same
+  // pre_model chain) pull the tools their documents instruct.
+  const latestSkillSelectionReceipt = readLatestSkillSelectionReceipt({
+    runtime: input.runtime,
+    sessionId: input.sessionId,
+  });
+  const skillInstructedToolNames: ReadonlySet<string> = new Set(
+    latestSkillSelectionReceipt?.instructedToolNames ?? [],
+  );
   const initialTools = allToolsGetter.call(input.extensionApi);
   const knownToolNames = new Set(
     Array.isArray(initialTools) ? initialTools.map((tool) => normalizeToolName(tool.name)) : [],
@@ -338,6 +365,7 @@ function resolveAndActivateToolSurface(input: {
     hasUI: input.hasUI,
     goalActive,
     requestedToolNames: requestedToolNameSet,
+    skillInstructedToolNames,
     selectedCapabilityReceipt: input.selectedCapabilityReceipt,
     capabilityManifests: input.capabilityManifests,
   });
@@ -369,6 +397,7 @@ function resolveAndActivateToolSurface(input: {
         hasUI: input.hasUI,
         goalActive,
         requestedToolNames: requestedToolNameSet,
+        skillInstructedToolNames,
         actionClass: resolveToolActionClass({
           toolName,
           dynamicToolDefinitions: input.dynamicToolDefinitions,
@@ -391,12 +420,7 @@ function resolveAndActivateToolSurface(input: {
     (toolName) => allToolNameSet.has(toolName) && !activeToolNames.includes(toolName),
   );
   const counts = computeSurfaceCounts({ allToolNames, activeToolNames });
-  const skillSelection = skillSelectionSummaryForTrace(
-    readLatestSkillSelectionReceipt({
-      runtime: input.runtime,
-      sessionId: input.sessionId,
-    }),
-  );
+  const skillSelection = skillSelectionSummaryForTrace(latestSkillSelectionReceipt);
 
   recordRuntimeToolSurfaceResolved(input.runtime, input.sessionId, {
     availableCount: allToolNames.length,
@@ -420,6 +444,12 @@ function resolveAndActivateToolSurface(input: {
     removedGates: ["task_spec", "repair_posture"],
     operatorRequested: requestedToolNames.filter((toolName) =>
       OPERATOR_BREWVA_TOOL_NAMES.includes(toolName),
+    ),
+    assistantRequestedToolNames: assistantRequestedToolNames.filter((toolName) =>
+      allToolNameSet.has(toolName),
+    ),
+    skillInstructedToolNames: [...skillInstructedToolNames].toSorted((left, right) =>
+      left.localeCompare(right),
     ),
     ...skillSelection,
     selectedCapabilityNames:
@@ -465,11 +495,16 @@ export function createToolSurfaceLifecycle(
         receipt,
       });
 
+      const previousAssistantText =
+        typeof (rawEvent as { previousAssistantText?: unknown }).previousAssistantText === "string"
+          ? (rawEvent as { previousAssistantText: string }).previousAssistantText
+          : undefined;
       resolveAndActivateToolSurface({
         extensionApi,
         runtime,
         sessionId,
         prompt,
+        ...(previousAssistantText ? { previousAssistantText } : {}),
         hasUI: (ctx as { hasUI?: boolean }).hasUI === true,
         dynamicToolDefinitions: options.dynamicToolDefinitions,
         selectedCapabilityReceipt: receipt,

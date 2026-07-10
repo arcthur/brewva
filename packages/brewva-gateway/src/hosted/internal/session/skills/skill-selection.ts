@@ -7,6 +7,7 @@ import type {
 } from "@brewva/brewva-substrate/host-api";
 import { appendBrewvaSystemPromptTextSection } from "@brewva/brewva-substrate/prompt";
 import { estimateModelTokens } from "@brewva/brewva-token-estimation";
+import { MANAGED_BREWVA_TOOL_NAMES } from "@brewva/brewva-tools/registry";
 import {
   listSkillResourceRefs,
   listSurfacedSkillResourceRefs,
@@ -121,6 +122,8 @@ export interface AvailableSkillPromptContext {
     readonly scripts: readonly string[];
     readonly invariants: readonly string[];
   };
+  /** Managed tools this skill's document instructs (backticked mentions). */
+  instructedToolNames: readonly string[];
 }
 
 export interface ExplicitSkillMention {
@@ -152,6 +155,13 @@ export interface SkillSelectionReceipt {
   recentToolPaths: string[];
   renderedSkillReasons: RenderedSkillReason[];
   skillInvocationRecords: SkillInvocationRecord[];
+  /**
+   * Union of the rendered skills' instructed tools. The tool surface unions
+   * this set into the skill-surface pull gate for the turn, so a skill that
+   * says "record it with `verification_record`" always has that tool reachable
+   * on the turns it renders.
+   */
+  instructedToolNames: string[];
   renderedSkillContext: {
     charCount: number;
     estimatedTokens: number;
@@ -265,6 +275,25 @@ function listPromptVisibleSkills(skills: readonly SkillDocument[]): SkillDocumen
     );
 }
 
+const MANAGED_TOOL_NAME_SET: ReadonlySet<string> = new Set(MANAGED_BREWVA_TOOL_NAMES);
+// Skill documents reference the tools they instruct in backticks
+// (`verification_record`, `$knowledge_capture`). The intersection with the
+// managed registry is the skill's instructed-tool set: when the skill renders
+// for a turn, those tools must be reachable, so the tool surface unions them
+// into the pull gate (the "skill commitments" half of the documented policy).
+const INSTRUCTED_TOOL_MENTION_PATTERN = /`\$?([a-z][a-z0-9_]{2,})`/gu;
+
+export function extractInstructedToolNames(markdown: string): string[] {
+  const found = new Set<string>();
+  for (const match of markdown.matchAll(INSTRUCTED_TOOL_MENTION_PATTERN)) {
+    const candidate = match[1];
+    if (candidate && MANAGED_TOOL_NAME_SET.has(candidate)) {
+      found.add(candidate);
+    }
+  }
+  return [...found].toSorted((left, right) => left.localeCompare(right));
+}
+
 function toPromptContext(skill: SkillDocument): AvailableSkillPromptContext {
   return {
     name: skill.name,
@@ -276,6 +305,7 @@ function toPromptContext(skill: SkillDocument): AvailableSkillPromptContext {
     argumentHints: skill.card.argumentHints ?? [],
     outputArtifacts: skill.card.outputArtifacts ?? [],
     resources: skill.resources,
+    instructedToolNames: extractInstructedToolNames(skill.markdown),
   };
 }
 
@@ -549,6 +579,13 @@ function buildReceipt(input: {
       candidate,
     }),
   );
+  const instructedToolNames = [
+    ...new Set(
+      input.renderedShortlist.renderedCandidates.flatMap((candidate) => [
+        ...candidate.skill.instructedToolNames,
+      ]),
+    ),
+  ].toSorted((left, right) => left.localeCompare(right));
   return {
     selectionId,
     trigger: input.trigger,
@@ -563,6 +600,7 @@ function buildReceipt(input: {
     recentToolPaths: [...input.renderedShortlist.recentToolPaths],
     renderedSkillReasons,
     skillInvocationRecords,
+    instructedToolNames,
     renderedSkillContext: {
       charCount: input.renderedShortlist.section.length,
       estimatedTokens: input.renderedShortlist.tokenEstimate.tokens,
