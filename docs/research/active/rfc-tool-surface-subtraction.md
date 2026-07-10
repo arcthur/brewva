@@ -237,7 +237,7 @@ and the tool itself is one `$name` away.
 
 So the ontology is not _pre-adoption_; it is a heuristic layer the model has already
 routed around. Keeping it surfaced costs schema tokens (the very cost
-[RFC: Accountable Tool-Schema Cost](./rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md)
+[RFC: Accountable Tool-Schema Cost](../archive/rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md)
 is trying to observe), widens the capability-selection decision space, and adds
 context noise — while returning near-zero exercised value. Under axiom 15 (`Public
 width should compress toward authority width`) and axiom 3 (`Subtraction beats

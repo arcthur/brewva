@@ -175,18 +175,6 @@ must grade itself.`
   applies. Stays a candidate until proven across ≥2 distinct rings. Under the
   grammar `Account the unmeasurable; grade the claim; calibrate, don't assert.`
 
-- [RFC: Accountable Tool-Schema Cost And The Deferred Definition-Side Compression Trigger](./rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md):
-  active RFC re-opening the 2026-03-02 deferral of definition-side capability
-  compression (`maka`'s `load_tools` tool-schema economy). Phase 1 adds
-  power-neutral tool-schema cost observability — a per-turn provider-visible
-  schema token estimate plus a named `tool_schema_set_changed` accounted
-  cache-break cause reusing `fingerprint`/`break-detector`/`context-evidence` —
-  and a falsifiable gate read from that data. Phase 2 (gated) is a model-invoked
-  `capability_expand` group activation with tape-receipt reseed and an
-  execute-boundary guard, never a runtime auto-hide gate, keeping advertisement
-  orthogonal to permission. Under the line `Measure schema cost before gating
-it; if gated, the model operates it and the tape accounts for it`.
-
 - [RFC: Pre-Compaction Deterministic Prune — Dedupe, Informative Replace, And Image Strip Before LLM Summarization](./rfc-pre-compaction-deterministic-prune.md):
   active RFC, Phase 1 + Phase 2 landed. A pure `pruneCompactionInput`
   deterministically dedupes / informative-replaces / image-strips old tool

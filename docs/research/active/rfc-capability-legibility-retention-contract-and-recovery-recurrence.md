@@ -43,7 +43,7 @@ test/eval/variants/harness-fluency-statements.md` and a third scenario
 - Owner: Runtime, gateway, and tools maintainers
 - Last reviewed: `2026-07-02`
 - Depends on:
-  - [RFC: Accountable Tool-Schema Cost And The Deferred Definition-Side Compression Trigger](./rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md)
+  - [RFC: Accountable Tool-Schema Cost And The Deferred Definition-Side Compression Trigger](../archive/rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md)
     (advertisement/permission orthogonality; the gated `capability_expand`
     verb R1 must stay compatible with)
   - [Decision: Model-Facing Runtime Intelligence Digests](../decisions/model-facing-runtime-intelligence-digests.md)

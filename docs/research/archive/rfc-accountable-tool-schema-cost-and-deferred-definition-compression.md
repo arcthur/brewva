@@ -1,14 +1,34 @@
 # RFC: Accountable Tool-Schema Cost And The Deferred Definition-Side Compression Trigger
 
+> **Gate evaluated 2026-07-10 — NOT FIRED; archived with the measurement as its
+> result.** Phase 1 observability measured the advertised-schema cost across the
+> live corpus: pre-subtraction sessions carried 14615–15363 estimated schema
+> tokens per turn (≈15% of a 100k-token long-session prefix — at the proposed
+> threshold), and the 2026-07-10 tool-surface subtraction (`df8a121`, base
+> surface 116 managed → 22 + host) cut the estimate to 5801 (≈6% — clearly
+> below). The second condition found no evidence at all: across every session
+> with cache observations, `tool_schema_set_changed` appears zero times as a
+> break cause (the only observed break reason is `cache_state_cold`). Both gate
+> conditions fail, so per this note's own disposition the 2026-03-02 deferral
+> stands, Phase 2 (`capability_expand`) stays unbuilt, and no Phase 2 surface is
+> spent. Corpus caveat: the measurement spans a thin corpus (3 pre-subtraction
+> sessions with schema estimates, 1 post-subtraction calibration session); the
+> Phase 1 instrumentation stays live, so a future corpus can re-read the gate
+> without new code. Phase 1's shipped surface (the per-turn schema token
+> estimate and the named `tool_schema_set_changed` break cause) is carried by
+> `docs/reference/token-cache.md` (schema snapshots, epochs, break causes) and
+> the `report:context-evidence` recipe.
+
 ## Metadata
 
-- Status: active
+- Status: `archived`
 - Implementation state: Phase 1 (observability) landed against a green typecheck
   and targeted gateway unit suites; Phase 2 remains gated on the Phase 1
   measurement. This note re-opens a previously deferred decision rather than
-  proposing a net-new capability.
+  proposing a net-new capability. Gate evaluated 2026-07-10: not fired (see the
+  banner above).
 - Owner: Runtime, gateway, and provider-core maintainers
-- Last reviewed: `2026-06-26`
+- Last reviewed: `2026-07-10`
 - Depends on:
   - [Decision: Capability Compression And Output Distillation](../decisions/capability-compression-and-output-distillation.md)
     (the standing deferral this note re-opens)
@@ -17,7 +37,7 @@
   - [Decision: Cost Observability And Budget Governance](../decisions/cost-observability-and-budget-governance.md)
     (cost surfaces must not widen tool authority or routing)
   - [Decision: Managed Tool Capability Single-Sourcing](../decisions/managed-tool-capability-single-sourcing.md)
-  - [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](./rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md)
+  - [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](../active/rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md)
 - Promotion target:
   - `docs/reference/token-cache.md`
   - `docs/reference/budget-matrix.md`

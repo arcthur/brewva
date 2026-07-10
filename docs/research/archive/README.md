@@ -43,6 +43,7 @@ runtime, product, and session contracts.
 - [`model-operated-working-memory-evaluation.md`](./model-operated-working-memory-evaluation.md)
 - [`product-semantic-compression-and-decision-surface-subtraction.md`](./product-semantic-compression-and-decision-surface-subtraction.md)
 - [`provider-transport-ownership-and-substrate-driver-boundary.md`](./provider-transport-ownership-and-substrate-driver-boundary.md)
+- [`rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md`](./rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md)
 - [`rfc-substrate-domain-slicing-and-agent-engine-removal.md`](./rfc-substrate-domain-slicing-and-agent-engine-removal.md)
 - [`rfc-deliberation-home-and-compounding-intelligence.md`](./rfc-deliberation-home-and-compounding-intelligence.md)
 - [`rfc-effect-governance-and-contract-vnext.md`](./rfc-effect-governance-and-contract-vnext.md)
