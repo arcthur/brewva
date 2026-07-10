@@ -12,6 +12,43 @@ import type { CliShellRuntime } from "../../../packages/brewva-cli/src/shell/con
 import { buildOperatorSafetyShellToolView } from "../../../packages/brewva-cli/src/shell/domain/operator-safety/shell-view.js";
 import type { CliShellTranscriptMessage } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
 
+function mockRuntime(messages: CliShellTranscriptMessage[]): CliShellRuntime {
+  return {
+    getViewState() {
+      return {
+        theme: DEFAULT_TUI_THEME,
+        transcript: { messages, followMode: "live", scrollOffset: 0 },
+        diff: { style: "auto", wrapMode: "word" },
+        view: { showThinking: true, toolDetails: true },
+      };
+    },
+    getSessionIdentity() {
+      return {
+        sessionId: "session-fold",
+        assistantLabel: "Brewva",
+        lineageLabel: null,
+        modelLabel: "GPT-5.4 Mini",
+        thinkingLevel: "high",
+      };
+    },
+    getToolDefinitions() {
+      return new Map();
+    },
+    handleInput() {
+      return Promise.resolve(true);
+    },
+  } as unknown as CliShellRuntime;
+}
+
+async function renderPager(messages: CliShellTranscriptMessage[]): Promise<string> {
+  const lines = await renderCliTranscriptScrollbackLines({
+    runtime: mockRuntime(messages),
+    toolRenderCache: createToolRenderCache(),
+    width: 100,
+  });
+  return lines.join("\n");
+}
+
 describe("transcript scrollback rendering", () => {
   let previewDir = "";
 
@@ -371,5 +408,82 @@ describe("transcript scrollback rendering", () => {
     expect(joined).toContain("grep");
     expect(joined).toContain("architecture");
     expect(joined).toContain("docs/architecture/system-architecture.md");
+  });
+});
+
+describe("transcript scrollback — pager folding is static (P1)", () => {
+  test("a long assistant code fence is fully expanded, with no inert fold hint", async () => {
+    const code = Array.from({ length: 30 }, (_, i) => `const line${i} = ${i};`).join("\n");
+    const joined = await renderPager([
+      {
+        id: "wire:s:t1:att:assistant:0",
+        role: "assistant",
+        renderMode: "stable",
+        turnId: "t1",
+        attemptId: "att",
+        parts: [
+          {
+            type: "text",
+            id: "a0:text",
+            text: `Here is the helper:\n\n\`\`\`ts\n${code}\n\`\`\``,
+            renderMode: "stable",
+          },
+        ],
+      },
+    ]);
+    // Fully expanded: the LAST code line is present, and no inert "Click to expand".
+    expect(joined).toContain("const line29 = 29;");
+    expect(joined).not.toContain("Click to expand");
+  });
+
+  test("long reasoning is fully expanded, not collapsed to a title line", async () => {
+    const body = Array.from({ length: 20 }, (_, i) => `deliberation step ${i}`).join("\n");
+    const joined = await renderPager([
+      {
+        id: "wire:s:t1:att:assistant:1",
+        role: "assistant",
+        renderMode: "stable",
+        turnId: "t1",
+        attemptId: "att",
+        parts: [
+          {
+            type: "reasoning",
+            id: "r0:think",
+            text: `**Planning the change**\n\n${body}`,
+            renderMode: "stable",
+          },
+        ],
+      },
+    ]);
+    // The body is present (fully expanded), not just the collapsed "▸ Thought:" title.
+    expect(joined).toContain("deliberation step 19");
+    expect(joined).not.toContain("▸ Thought:");
+  });
+
+  test("a completed whole-file Write echo is fully expanded", async () => {
+    const fileContent = Array.from({ length: 30 }, (_, i) => `file row ${i}`).join("\n");
+    const joined = await renderPager([
+      {
+        id: "wire:s:t1:tool:cw",
+        role: "tool",
+        renderMode: "stable",
+        turnId: "t1",
+        parts: [
+          {
+            type: "tool",
+            id: "w0:part",
+            toolCallId: "cw",
+            toolName: "write",
+            safety: buildOperatorSafetyShellToolView({ toolName: "write", status: "completed" }),
+            args: { path: "big.txt", content: fileContent },
+            status: "completed",
+            result: { content: [] },
+            renderMode: "stable",
+          },
+        ],
+      },
+    ]);
+    expect(joined).toContain("file row 29");
+    expect(joined).not.toContain("Click to expand");
   });
 });

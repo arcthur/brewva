@@ -10,6 +10,11 @@ export interface ShellRenderContextValue {
   diffWrapMode: Accessor<ShellDiffWrapMode>;
   showThinking: Accessor<boolean>;
   scrollAcceleration: Accessor<ScrollAcceleration>;
+  /** "interactive" (live shell — folds are click-toggleable) vs "static" (the
+   *  external `$PAGER` transcript export — folds render FULLY EXPANDED, because a
+   *  "Click to expand" / "▸ Thought" hint is inert in `less` and would strand the
+   *  hidden content out of the export). */
+  folding: Accessor<"interactive" | "static">;
 }
 
 const ShellRenderContext = createContext<ShellRenderContextValue>();
@@ -39,6 +44,9 @@ export function buildShellRenderContext(runtime: ShellRendererController): Shell
     diffWrapMode: () => viewState.diff.wrapMode,
     showThinking: () => viewState.view.showThinking,
     scrollAcceleration: () => createScrollAcceleration(runtime.getTuiConfig().scroll.acceleration),
+    // The pager export is a static document — fully expand every fold so nothing is
+    // stranded behind an inert "Click to expand" in `less`.
+    folding: () => "static",
   };
 }
 

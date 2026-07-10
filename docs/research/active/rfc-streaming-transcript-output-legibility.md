@@ -315,6 +315,37 @@ the old helper dead.
 Landed files: `tool-tone.ts`, `transcript-rows.ts`, `transcript-row-spacing.ts`, `code-fold.ts`,
 `reasoning-summary.ts` (each with a unit test), plus edits to `transcript.tsx` and `fullscreen-app.tsx`.
 
+### Post-merge review fixes (external review after the ff-merge)
+
+An external review of the merged commit found no P0 but one P1 and several P2/P3; all were
+confirmed real and fixed on a follow-up branch:
+
+- **P2 (correctness): turn scope was parsed from the message id** via `indexOf(":tool:")` /
+  `":assistant:"`. A channel reply turnId (`channel-reply-writer`) can itself embed those
+  sentinels, so a substring split mis-cut and merged unrelated turns (wrong packing / hidden
+  labels). Fixed by adding STRUCTURAL `turnId` / `attemptId` to `CliShellTranscriptMessage`
+  (filled by wire-fold; two additive optional fields) and comparing those in the projection —
+  never the id. Regression tests use sentinel-bearing turnIds.
+- **P1: the `$PAGER` transcript export re-used the interactive view**, so folded code / writes /
+  reasoning showed inert "Click to expand" / "▸ Thought" hints that do nothing in `less` and
+  stranded the hidden content out of the export. Fixed with a `folding: "interactive" | "static"`
+  render-context flag; the pager builds it `"static"` so every fold renders fully expanded with no
+  hint. Integration tests render the pager and assert the last code line is present and no hint leaks.
+- **P2: a single over-wide line bypassed the fold** (`collapsible` was line-count only), so a 200KB
+  minified line still flooded the highlighter. `collapseCodeContent` now also folds on line WIDTH
+  when `maxLineWidth` is set.
+- **P3: an indented (list-nested) fence was lifted out**, breaking the list. `splitFoldableCodeBlocks`
+  now lifts TOP-LEVEL fences only.
+- **P2 (docs): the `active/README.md` entry described the initial design** — corrected to the
+  as-built projection / helpers with diff folding deferred.
+- **P2 (gate honesty): the initial "full gate green" claim omitted `test:contract` and
+  `test:system`** — the full `bun test` is `test:ci` = unit + contract + system + fitness. The
+  post-merge landing runs the full `test:ci` plus `check`, `test:tui`, and `test:dist`.
+
+Coverage was thin on render glue: the sentinel-scope, single-line-width, top-level-fence, and
+pager-static-fold behaviors now have tests, and the transcript-rows fixtures were corrected (they
+used empty parts while claiming to exercise turn/id guards).
+
 ## Open Questions / Risks
 
 - **Streaming→stable reflow.** Splitting into fold blocks at `stable` produces one visual jump when a

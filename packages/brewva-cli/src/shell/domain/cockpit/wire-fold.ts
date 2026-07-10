@@ -718,6 +718,8 @@ class ShellCockpitSessionWireFold {
           role: "assistant",
           text: segment.text,
           renderMode: "streaming",
+          turnId: segment.turnId,
+          attemptId: segment.attemptId,
         }),
       );
     }
@@ -738,6 +740,8 @@ class ShellCockpitSessionWireFold {
         role: "assistant",
         text: segment.text,
         renderMode: "stable",
+        turnId: segment.turnId,
+        attemptId: segment.attemptId,
       });
       this.upsertTranscriptMessage(turnId, message);
     }
@@ -776,6 +780,7 @@ class ShellCockpitSessionWireFold {
           frame.type === "tool.finished" ? (frame.isError ? "error" : "completed") : "running",
         renderMode: input.resultMode === "finish" ? "stable" : "streaming",
         fallbackMessageId,
+        turnId: frame.turnId,
       },
     );
     this.recordTranscriptMessage(frame.turnId, fallbackMessageId);
@@ -822,6 +827,7 @@ class ShellCockpitSessionWireFold {
         status: input.toolOutput.isError ? "error" : "completed",
         renderMode: "stable",
         fallbackMessageId,
+        turnId: input.turnId,
       },
     );
     this.recordTranscriptMessage(input.turnId, fallbackMessageId);
@@ -905,6 +911,8 @@ class ShellCockpitSessionWireFold {
           role: "assistant",
           text: item.segment.text,
           renderMode: "stable",
+          turnId: frame.turnId,
+          attemptId: frame.attemptId,
         });
         this.upsertTranscriptMessage(frame.turnId, message);
         continue;
@@ -945,6 +953,8 @@ class ShellCockpitSessionWireFold {
       role: "assistant",
       text: frame.assistantText,
       renderMode: "stable",
+      turnId: frame.turnId,
+      attemptId: frame.attemptId,
     });
     this.upsertTranscriptMessage(frame.turnId, message);
   }

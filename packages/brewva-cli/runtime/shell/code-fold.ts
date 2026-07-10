@@ -39,7 +39,12 @@ export function collapseCodeContent(input: {
 }): CollapsedCode {
   const lines = input.content.split(/\r?\n/u);
   const totalLineCount = lines.length;
-  const collapsible = totalLineCount > input.limit;
+  // Collapsible on line COUNT or line WIDTH: a single 200KB minified/generated line
+  // has totalLineCount 1 but must still fold, or it floods the view and stalls the
+  // highlighter — the very "giant payload" this fold exists to bound.
+  const overWide =
+    input.maxLineWidth !== undefined && lines.some((line) => line.length > input.maxLineWidth!);
+  const collapsible = totalLineCount > input.limit || overWide;
 
   if (!collapsible || input.expanded) {
     return { visibleContent: input.content, collapsible, hiddenLineCount: 0, totalLineCount };
@@ -62,9 +67,11 @@ export type TranscriptTextSegment =
   | { readonly kind: "markdown"; readonly content: string }
   | { readonly kind: "code"; readonly content: string; readonly lang: string | undefined };
 
-// A fence that opens a block: up to 3 leading spaces, then ``` or ~~~ (3+), then an
-// optional info string. The info string cannot start with a backtick/tilde/space.
-const OPEN_FENCE = /^ {0,3}(`{3,}|~{3,})[ \t]*([^\s`~][^\n]*)?$/u;
+// A fence that opens a foldable block: TOP-LEVEL only (no leading indent), then
+// ``` or ~~~ (3+), then an optional info string (which cannot start with a
+// backtick/tilde/space). Indented fences (e.g. inside a list item) are deliberately
+// left to the markdown renderer, so lifting a code block never tears a list apart.
+const OPEN_FENCE = /^(`{3,}|~{3,})[ \t]*([^\s`~][^\n]*)?$/u;
 
 // A fence that closes a block: same run character, length >= the opener, no info.
 function isClosingFence(line: string, openMarker: string): boolean {

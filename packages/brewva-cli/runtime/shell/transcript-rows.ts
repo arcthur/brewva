@@ -35,27 +35,18 @@ export function transcriptRowHint(
   return hints.get(id) ?? DEFAULT_TRANSCRIPT_ROW_HINT;
 }
 
-const TOOL_ID_SEPARATOR = ":tool:";
-const ASSISTANT_ID_SEPARATOR = ":assistant:";
-
 /**
- * Turn scope of a tool message id (`wire:<session>:<turn>:tool:<callId>` →
- * `wire:<session>:<turn>`). Two tool messages share a turn iff their scopes match.
- * Uses the `:tool:` sentinel so it never depends on session/turn id internals.
+ * Turn+attempt scope for assistant label dedupe, from the STRUCTURAL `turnId` /
+ * `attemptId` fields (filled by wire-fold) — never parsed from the id. A channel
+ * reply turnId can itself embed `:tool:` / `:assistant:` sentinels (see
+ * channel-reply-writer), so a substring split would mis-cut and merge unrelated
+ * turns. `\u0000` joins the two components (neither can contain a null byte); a
+ * message with no structural turnId keys on its own id (own scope → always labels).
  */
-function toolTurnScope(id: string): string | undefined {
-  const index = id.indexOf(TOOL_ID_SEPARATOR);
-  return index >= 0 ? id.slice(0, index) : undefined;
-}
-
-/**
- * Turn+attempt scope of an assistant message id
- * (`wire:<session>:<turn>:<attempt>:assistant:…` → `wire:<session>:<turn>:<attempt>`).
- * All assistant segments of one attempt share a scope; only the last shows the byline.
- */
-function assistantTurnScope(id: string): string | undefined {
-  const index = id.indexOf(ASSISTANT_ID_SEPARATOR);
-  return index >= 0 ? id.slice(0, index) : undefined;
+function assistantLabelScope(message: CliShellTranscriptMessage): string {
+  return message.turnId !== undefined
+    ? `${message.turnId}\u0000${message.attemptId ?? ""}`
+    : message.id;
 }
 
 // Tools whose row is ALWAYS a single line regardless of status/payload/details —
@@ -90,34 +81,35 @@ function rendersAsSingleLine(message: CliShellTranscriptMessage): boolean {
 export function projectTranscriptRowHints(
   messages: readonly CliShellTranscriptMessage[],
 ): Map<string, TranscriptRowHint> {
-  // First pass: last assistant index per (turn, attempt) scope. An id with no
-  // parseable scope keys on itself, so it still shows its own label.
+  // First pass: last assistant index per (turn, attempt) scope. A message with no
+  // structural turnId keys on its own id, so it still shows its own label.
   const lastAssistantIndexByScope = new Map<string, number>();
   messages.forEach((message, index) => {
     if (message.role !== "assistant") return;
-    lastAssistantIndexByScope.set(assistantTurnScope(message.id) ?? message.id, index);
+    lastAssistantIndexByScope.set(assistantLabelScope(message), index);
   });
 
   const hints = new Map<string, TranscriptRowHint>();
   messages.forEach((message, index) => {
     let compactTop = false;
     if (message.role === "tool") {
-      const scope = toolTurnScope(message.id);
+      const turnId = message.turnId;
       const previous = index > 0 ? messages[index - 1] : undefined;
       // Pack only against an immediately-preceding same-turn tool row that is
       // guaranteed to render as a single line; anything that might render as a block
-      // keeps a gap below it. An unparseable scope (undefined) never packs, the safe
-      // default.
+      // keeps a gap below it. Same-turn is compared on the STRUCTURAL turnId (never
+      // parsed from the id); a message with no turnId (undefined) never packs, the
+      // safe default.
       compactTop =
-        scope !== undefined &&
+        turnId !== undefined &&
         previous !== undefined &&
         previous.role === "tool" &&
-        toolTurnScope(previous.id) === scope &&
+        previous.turnId === turnId &&
         rendersAsSingleLine(previous);
     }
     const showAssistantLabel =
       message.role === "assistant" &&
-      lastAssistantIndexByScope.get(assistantTurnScope(message.id) ?? message.id) === index;
+      lastAssistantIndexByScope.get(assistantLabelScope(message)) === index;
     hints.set(message.id, { compactTop, showAssistantLabel });
   });
 

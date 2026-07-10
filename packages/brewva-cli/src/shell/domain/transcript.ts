@@ -79,6 +79,14 @@ export interface CliShellTranscriptMessage {
   role: CliShellTranscriptRole;
   parts: CliShellTranscriptPart[];
   renderMode: CliTranscriptRenderMode;
+  /** Structural turn identity for render projections (tool packing, label dedupe).
+   *  Never parse turn scope out of `id`: a channel reply turnId can itself embed
+   *  `:tool:` / `:assistant:` sentinels (see channel-reply-writer), which would make
+   *  a substring split merge unrelated turns. */
+  turnId?: string;
+  /** Structural attempt identity (assistant messages); pairs with `turnId` for the
+   *  per-(turn, attempt) assistant-label dedupe scope. */
+  attemptId?: string;
 }
 
 export interface BuildTranscriptMessageOptions {
@@ -97,6 +105,7 @@ export interface CliTranscriptToolExecutionUpdate {
   status?: CliShellTranscriptToolStatus;
   renderMode?: CliTranscriptRenderMode;
   fallbackMessageId?: string;
+  turnId?: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -257,6 +266,7 @@ function buildToolFallbackMessage(
     id: update.fallbackMessageId ?? `tool:${update.toolCallId}`,
     role: "tool",
     renderMode,
+    turnId: update.turnId,
     parts: [
       {
         type: "tool",
@@ -339,6 +349,8 @@ export function buildTextTranscriptMessage(input: {
   role: CliShellTranscriptRole;
   text: string;
   renderMode?: CliTranscriptRenderMode;
+  turnId?: string;
+  attemptId?: string;
 }): CliShellTranscriptMessage | null {
   const renderMode = input.renderMode ?? "stable";
   const textPart = buildTextPart(`${input.id}:text:0`, input.text, renderMode);
@@ -350,6 +362,8 @@ export function buildTextTranscriptMessage(input: {
     role: input.role,
     parts: [textPart],
     renderMode,
+    turnId: input.turnId,
+    attemptId: input.attemptId,
   };
 }
 

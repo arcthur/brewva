@@ -114,6 +114,7 @@ function CollapsibleCodeBlock(input: {
   lang: string | undefined;
   theme: SessionPalette;
 }) {
+  const shellContext = useShellRenderContext();
   const renderer = useRenderer();
   const syntax = createSyntaxStyleMemo(() => getTranscriptSyntaxStyle(input.theme));
   const [expanded, setExpanded] = createSignal(false);
@@ -121,7 +122,8 @@ function CollapsibleCodeBlock(input: {
     collapseCodeContent({
       content: input.content,
       limit: CODE_COLLAPSED_LINE_LIMIT,
-      expanded: expanded(),
+      // The pager export ("static") expands every fold — a hint is inert in `less`.
+      expanded: expanded() || shellContext.folding() === "static",
       maxLineWidth: COLLAPSED_LINE_CHAR_LIMIT,
     }),
   );
@@ -149,7 +151,7 @@ function CollapsibleCodeBlock(input: {
         syntaxStyle={syntax()}
         content={collapsed().visibleContent}
       />
-      <Show when={collapsed().collapsible}>
+      <Show when={collapsed().collapsible && shellContext.folding() === "interactive"}>
         <text fg={input.theme.textMuted}>{collapseHint()}</text>
       </Show>
     </box>
@@ -392,7 +394,10 @@ function ReasoningPartView(input: {
   // Collapse committed reasoning to its title line so it stops drowning the turn
   // (density-first, same posture as code folding). Keep it fully visible while it
   // streams — the reader watches it think — and when there is nothing to hide.
-  const collapsed = createMemo(() => !streaming() && !expanded() && summary().hasMore);
+  const collapsed = createMemo(
+    () =>
+      shellContext.folding() === "interactive" && !streaming() && !expanded() && summary().hasMore,
+  );
   const toggle = () => {
     if (streaming() || !summary().hasMore) {
       return;
@@ -470,6 +475,7 @@ function WriteToolView(input: {
   theme: SessionPalette;
   toolRenderCache: ToolRenderCache;
 }) {
+  const shellContext = useShellRenderContext();
   const path = createMemo(() => readToolPath(input.part) ?? "file");
   const content = createMemo(() => readToolTextInput(input.part) ?? "");
   const writeSyntax = createSyntaxStyleMemo(() => getTranscriptSyntaxStyle(input.theme));
@@ -482,7 +488,7 @@ function WriteToolView(input: {
     collapseCodeContent({
       content: content(),
       limit: CODE_COLLAPSED_LINE_LIMIT,
-      expanded: expanded(),
+      expanded: expanded() || shellContext.folding() === "static",
       maxLineWidth: COLLAPSED_LINE_CHAR_LIMIT,
     }),
   );
@@ -517,7 +523,7 @@ function WriteToolView(input: {
               syntaxStyle={writeSyntax()}
               content={collapsed().visibleContent}
             />
-            <Show when={collapsed().collapsible}>
+            <Show when={collapsed().collapsible && shellContext.folding() === "interactive"}>
               <text fg={input.theme.textMuted}>{collapseHint()}</text>
             </Show>
           </box>
@@ -700,6 +706,7 @@ function ExecToolView(input: {
   theme: SessionPalette;
   toolRenderCache: ToolRenderCache;
 }) {
+  const shellContext = useShellRenderContext();
   const interactionState = readTranscriptToolInteractionState(
     input.toolRenderCache,
     input.part.toolCallId,
@@ -728,7 +735,9 @@ function ExecToolView(input: {
     () => outputLines().length > EXEC_COLLAPSED_LINE_LIMIT || summaryLines().length > 0,
   );
   const visibleOutputLines = createMemo(() =>
-    collapsible() && !expanded() ? collapsedOutputLines() : outputLines(),
+    collapsible() && !expanded() && shellContext.folding() === "interactive"
+      ? collapsedOutputLines()
+      : outputLines(),
   );
   const hiddenLineCount = createMemo(() =>
     Math.max(0, outputLines().length - visibleOutputLines().length),
@@ -780,7 +789,7 @@ function ExecToolView(input: {
             <Show when={visibleOutputLines().length > 0}>
               <TextLineBlock lines={visibleOutputLines()} color={input.theme.text} />
             </Show>
-            <Show when={collapsible()}>
+            <Show when={collapsible() && shellContext.folding() === "interactive"}>
               <text paddingLeft={1} fg={input.theme.textMuted}>
                 {collapseHint()}
               </text>
@@ -817,6 +826,9 @@ function GenericToolView(input: {
     input.part.toolCallId,
   );
   const [expanded, setExpanded] = createSignal(Boolean(interactionState.genericExpanded));
+  // The pager export ("static") expands every fold; the local toggle still drives
+  // the live view. Used for render/visibility decisions only, never the toggle state.
+  const effectiveExpanded = createMemo(() => expanded() || shellContext.folding() === "static");
   const workerSessionId = createMemo(() =>
     input.part.toolName === "subagent_run" || input.part.toolName === "subagent_fanout"
       ? readToolWorkerSessionId(input.part)
@@ -873,7 +885,7 @@ function GenericToolView(input: {
       toolRenderCache: input.toolRenderCache,
       part: input.part,
       width: input.transcriptWidth,
-      expanded: expanded(),
+      expanded: effectiveExpanded(),
     }),
   );
   const fallbackCallLines = createMemo(() => {
@@ -900,11 +912,11 @@ function GenericToolView(input: {
     if (hasDiffPayload()) {
       return diffSummaryText();
     }
-    return expanded() ? defaultExpandedResultText() : defaultCollapsedResultText();
+    return effectiveExpanded() ? defaultExpandedResultText() : defaultCollapsedResultText();
   });
   const usesCollapsedDisplaySummary = createMemo(
     () =>
-      !expanded() &&
+      !effectiveExpanded() &&
       !hasDiffPayload() &&
       resultLines().length === 0 &&
       Boolean(displaySummaryText()),
@@ -931,7 +943,7 @@ function GenericToolView(input: {
     return resultTextLines().length > GENERIC_COLLAPSED_LINE_LIMIT;
   });
   const visibleResultLines = createMemo(() =>
-    resultCollapsible() && !expanded()
+    resultCollapsible() && !effectiveExpanded()
       ? resultTextLines().slice(0, GENERIC_COLLAPSED_LINE_LIMIT)
       : resultTextLines(),
   );
@@ -1059,7 +1071,7 @@ function GenericToolView(input: {
                 </For>
               </box>
             </Show>
-            <Show when={resultCollapsible()}>
+            <Show when={resultCollapsible() && shellContext.folding() === "interactive"}>
               <text paddingLeft={1} fg={input.theme.textMuted}>
                 {collapseHint()}
               </text>

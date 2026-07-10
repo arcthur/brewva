@@ -307,18 +307,25 @@ reaches for is a heuristic wearing a schema.`
   `opencode`'s organizing move — let tools recede (dim + single-line + packed) so
   narration advances — with **no new dependency** (the installed
   `@opentui/core@0.4.2` already ships the `CodeRenderable` / `createMarkdownCodeBlockRenderer`
-  fold hooks). Three pillars, render-layer only: (1) dim completed tools + a pure
-  `groupTranscriptMessages` static projection that packs consecutive same-`turn`
-  tool rows into one group (chosen over porting opencode's rejected per-frame
-  `setPreLayoutSiblingMargin` — declarative, unit-testable, no per-frame cost);
-  (2) information-density-first folding of long code / whole-file writes / diffs
-  under one cap-policy home, reviving the dead `splitTranscriptTextBlocks`, folding
-  only at `stable` so streaming stays live; (3) light block convergence via
-  per-turn label dedupe. Net-zero Surface Budget (no config key, no persisted
-  format, no public surface); wire-fold, the tape, and the transcript projector are
-  untouched. The block-explosion **root** (per-tool-frame segment split) is
-  diagnosed but deferred to a data-layer follow-up by design. Under the line
-  `Let the tools recede so the narration advances — and put a ceiling on every large payload.`
+  fold hooks). Three pillars, render-layer only (AS BUILT): (1) dim completed
+  single-line tools + a pure `projectTranscriptRowHints` hint-map that packs
+  consecutive same-turn inline tool rows to `marginTop=0` — a hint map, NOT grouped
+  rows, so the transcript keeps its message-keyed `<For>` for zero per-frame rebuild;
+  packing is guarded to a guaranteed-inline previous-tool allowlist; (2)
+  information-density-first folding of long code and whole-file writes to 16 lines
+  via `splitFoldableCodeBlocks` (TOP-LEVEL fences only, so list-nested fences are not
+  torn out) + `collapseCodeContent` (line- AND width-capped, so a single 200KB line
+  still folds), only at `stable`; **diff folding is deferred**; (3) per-turn label
+  dedupe, plus reasoning collapsed to a title line (opencode borrow). Turn scope for
+  packing/dedupe uses STRUCTURAL `turnId`/`attemptId` fields (never parsed from ids,
+  which can embed channel `:tool:`/`:assistant:` sentinels); the `$PAGER` export
+  renders with `folding: "static"` so nothing is stranded behind an inert hint.
+  Surface Budget: two additive optional `CliShellTranscriptMessage` fields
+  (`turnId`/`attemptId`); no config key, persisted format, or public surface; the
+  wire-fold fold logic, the tape, and the transcript projector are untouched. The
+  block-explosion **root** (per-tool-frame segment split) is deferred to a data-layer
+  follow-up by design. Under the line `Let the tools recede so the narration advances
+— and put a ceiling on every large payload.`
 
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create

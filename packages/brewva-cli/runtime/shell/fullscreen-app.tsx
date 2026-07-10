@@ -141,6 +141,9 @@ export function BrewvaFullScreenShell(input: {
     scrollAcceleration: createMemo(() =>
       createScrollAcceleration(input.runtime.getTuiConfig().scroll.acceleration),
     ),
+    // The live shell folds are interactive (click-toggleable); the pager export
+    // path overrides this to "static" (see buildShellRenderContext).
+    folding: (): "interactive" | "static" => "interactive",
   };
 
   const modelLabel = createMemo(

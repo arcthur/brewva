@@ -88,6 +88,36 @@ describe("collapseCodeContent", () => {
     const result = collapseCodeContent({ content, limit: 2, expanded: true, maxLineWidth: 10 });
     expect(result.visibleContent).toBe(content);
   });
+
+  test("a single over-wide line is collapsible even under the line limit (P2)", () => {
+    const giant = "x".repeat(500);
+    const result = collapseCodeContent({
+      content: giant,
+      limit: 16,
+      expanded: false,
+      maxLineWidth: 100,
+    });
+    expect(result.collapsible).toBe(true);
+    expect(result.totalLineCount).toBe(1);
+    expect(result.visibleContent).toBe(`${"x".repeat(100)}…`);
+    expect(result.hiddenLineCount).toBe(0);
+  });
+
+  test("expanding an over-wide single line restores the untruncated content", () => {
+    const giant = "x".repeat(500);
+    const result = collapseCodeContent({
+      content: giant,
+      limit: 16,
+      expanded: true,
+      maxLineWidth: 100,
+    });
+    expect(result.visibleContent).toBe(giant);
+  });
+
+  test("without maxLineWidth an over-wide line is not collapsible on width alone", () => {
+    const result = collapseCodeContent({ content: "x".repeat(500), limit: 16, expanded: false });
+    expect(result.collapsible).toBe(false);
+  });
 });
 
 const F3 = "```";
@@ -160,5 +190,20 @@ describe("splitFoldableCodeBlocks", () => {
     expect(segs).toHaveLength(1);
     expect(segs[0]!.kind).toBe("code");
     expect(segs[0]!.content).toContain(F3);
+  });
+
+  test("an indented fence (inside a list item) is NOT lifted — stays markdown (P3)", () => {
+    // A 2-space-indented open fence must not be torn out of its list; the whole
+    // thing stays one markdown segment so the list renders intact.
+    const content = `1. intro\n\n  ${F3}ts\n${codeLines(10)}\n  ${F3}\n\n2. next`;
+    const segs = splitFoldableCodeBlocks(content, 8);
+    expect(segs).toHaveLength(1);
+    expect(segs[0]!.kind).toBe("markdown");
+  });
+
+  test("a top-level fence is still lifted (P3 does not over-restrict)", () => {
+    const content = `intro\n\n${F3}ts\n${codeLines(10)}\n${F3}\n\nnext`;
+    const segs = splitFoldableCodeBlocks(content, 8);
+    expect(segs.map((s) => s.kind)).toEqual(["markdown", "code", "markdown"]);
   });
 });

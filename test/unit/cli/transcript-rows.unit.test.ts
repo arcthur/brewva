@@ -13,18 +13,26 @@ import type {
 function message(
   id: string,
   role: CliShellTranscriptRole,
-  renderMode: CliTranscriptRenderMode = "stable",
+  opts: { renderMode?: CliTranscriptRenderMode; turnId?: string; attemptId?: string } = {},
 ): CliShellTranscriptMessage {
-  return { id, role, parts: [], renderMode };
+  return {
+    id,
+    role,
+    parts: [],
+    renderMode: opts.renderMode ?? "stable",
+    turnId: opts.turnId,
+    attemptId: opts.attemptId,
+  };
 }
 
-// A tool message carrying a real tool part, so projectTranscriptRowHints can read
-// its toolName (used by the block-capable packing guard).
-function toolMessage(id: string, toolName: string): CliShellTranscriptMessage {
+// A tool message carrying a real tool part (so the packing guard can read toolName)
+// and a STRUCTURAL turnId (scope never depends on parsing the id).
+function toolMessage(id: string, toolName: string, turnId: string): CliShellTranscriptMessage {
   return {
     id,
     role: "tool",
     renderMode: "stable",
+    turnId,
     parts: [
       {
         type: "tool",
@@ -39,11 +47,14 @@ function toolMessage(id: string, toolName: string): CliShellTranscriptMessage {
   };
 }
 
-// id builders mirror wire-fold.ts:96-146
-const toolId = (turn: string, callId: string) => `wire:s1:${turn}:tool:${callId}`;
-const assistantId = (turn: string, attempt: string, seq: string) =>
-  `wire:s1:${turn}:${attempt}:assistant:${seq}`;
-const userId = (turn: string) => `wire:s1:${turn}:user`;
+function assistantMsg(
+  id: string,
+  turnId: string,
+  attemptId: string,
+  renderMode: CliTranscriptRenderMode = "stable",
+): CliShellTranscriptMessage {
+  return { id, role: "assistant", parts: [], renderMode, turnId, attemptId };
+}
 
 function compactTopFor(messages: CliShellTranscriptMessage[], id: string): boolean {
   return transcriptRowHint(projectTranscriptRowHints(messages), id).compactTop;
@@ -54,135 +65,150 @@ function showLabelFor(messages: CliShellTranscriptMessage[], id: string): boolea
 
 describe("projectTranscriptRowHints — tool packing (compactTop)", () => {
   test("a lone tool message does not pack", () => {
-    const messages = [message(toolId("t1", "c1"), "tool")];
-    expect(compactTopFor(messages, toolId("t1", "c1"))).toBe(false);
+    expect(compactTopFor([toolMessage("c1", "read", "t1")], "c1")).toBe(false);
   });
 
   test("a second same-turn inline tool packs against the first, which does not", () => {
-    const messages = [
-      toolMessage(toolId("t1", "c1"), "read"),
-      toolMessage(toolId("t1", "c2"), "read"),
-    ];
-    expect(compactTopFor(messages, toolId("t1", "c1"))).toBe(false);
-    expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(true);
+    const messages = [toolMessage("c1", "read", "t1"), toolMessage("c2", "read", "t1")];
+    expect(compactTopFor(messages, "c1")).toBe(false);
+    expect(compactTopFor(messages, "c2")).toBe(true);
   });
 
   test("a run of three same-turn inline tools packs the 2nd and 3rd", () => {
     const messages = [
-      toolMessage(toolId("t1", "c1"), "read"),
-      toolMessage(toolId("t1", "c2"), "read"),
-      toolMessage(toolId("t1", "c3"), "read"),
+      toolMessage("c1", "read", "t1"),
+      toolMessage("c2", "read", "t1"),
+      toolMessage("c3", "read", "t1"),
     ];
-    expect(compactTopFor(messages, toolId("t1", "c1"))).toBe(false);
-    expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(true);
-    expect(compactTopFor(messages, toolId("t1", "c3"))).toBe(true);
+    expect(compactTopFor(messages, "c1")).toBe(false);
+    expect(compactTopFor(messages, "c2")).toBe(true);
+    expect(compactTopFor(messages, "c3")).toBe(true);
   });
 
   test("a tool from a different turn never packs against the previous turn's tool", () => {
-    const messages = [message(toolId("t1", "c1"), "tool"), message(toolId("t2", "c1"), "tool")];
-    expect(compactTopFor(messages, toolId("t2", "c1"))).toBe(false);
+    const messages = [toolMessage("c1", "read", "t1"), toolMessage("c2", "read", "t2")];
+    expect(compactTopFor(messages, "c2")).toBe(false);
   });
 
   test("a tool does not pack when the previous row is an assistant message", () => {
     const messages = [
-      message(toolId("t1", "c1"), "tool"),
-      message(assistantId("t1", "a1", "0"), "assistant"),
-      message(toolId("t1", "c2"), "tool"),
+      toolMessage("c1", "read", "t1"),
+      assistantMsg("a0", "t1", "att"),
+      toolMessage("c2", "read", "t1"),
     ];
-    expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(false);
+    expect(compactTopFor(messages, "c2")).toBe(false);
   });
 
-  test("an unparseable tool id never packs (safe default)", () => {
-    const messages = [message("weird-1", "tool"), message("weird-2", "tool")];
-    expect(compactTopFor(messages, "weird-2")).toBe(false);
+  test("a tool message with no structural turnId never packs (safe default)", () => {
+    const messages = [message("x1", "tool"), message("x2", "tool")];
+    expect(compactTopFor(messages, "x2")).toBe(false);
   });
 
   test("a non-tool message never packs", () => {
-    const messages = [
-      message(userId("t1"), "user"),
-      message(assistantId("t1", "a1", "0"), "assistant"),
-    ];
-    expect(compactTopFor(messages, userId("t1"))).toBe(false);
-    expect(compactTopFor(messages, assistantId("t1", "a1", "0"))).toBe(false);
+    const messages = [message("u", "user", { turnId: "t1" }), assistantMsg("a", "t1", "att")];
+    expect(compactTopFor(messages, "u")).toBe(false);
+    expect(compactTopFor(messages, "a")).toBe(false);
   });
 });
 
 describe("projectTranscriptRowHints — assistant label dedupe (showAssistantLabel)", () => {
   test("a single assistant segment shows its label", () => {
-    const messages = [message(assistantId("t1", "a1", "0"), "assistant")];
-    expect(showLabelFor(messages, assistantId("t1", "a1", "0"))).toBe(true);
+    expect(showLabelFor([assistantMsg("a0", "t1", "att")], "a0")).toBe(true);
   });
 
   test("only the LAST assistant segment of a turn+attempt shows the label", () => {
     const messages = [
-      message(assistantId("t1", "a1", "0"), "assistant"),
-      message(toolId("t1", "c1"), "tool"),
-      message(assistantId("t1", "a1", "1"), "assistant"),
-      message(toolId("t1", "c2"), "tool"),
-      message(assistantId("t1", "a1", "2"), "assistant"),
+      assistantMsg("a0", "t1", "att"),
+      toolMessage("c1", "read", "t1"),
+      assistantMsg("a1", "t1", "att"),
+      toolMessage("c2", "read", "t1"),
+      assistantMsg("a2", "t1", "att"),
     ];
-    expect(showLabelFor(messages, assistantId("t1", "a1", "0"))).toBe(false);
-    expect(showLabelFor(messages, assistantId("t1", "a1", "1"))).toBe(false);
-    expect(showLabelFor(messages, assistantId("t1", "a1", "2"))).toBe(true);
-  });
-
-  test("committed segment ids in the same scope dedupe to the last one", () => {
-    const first = assistantId("t1", "a1", "0");
-    const committed = `wire:s1:t1:a1:assistant:committed:evt:index:0`;
-    const messages = [message(first, "assistant"), message(committed, "assistant")];
-    expect(showLabelFor(messages, first)).toBe(false);
-    expect(showLabelFor(messages, committed)).toBe(true);
+    expect(showLabelFor(messages, "a0")).toBe(false);
+    expect(showLabelFor(messages, "a1")).toBe(false);
+    expect(showLabelFor(messages, "a2")).toBe(true);
   });
 
   test("different attempts of the same turn each keep their own label", () => {
-    const messages = [
-      message(assistantId("t1", "a1", "0"), "assistant"),
-      message(assistantId("t1", "a2", "0"), "assistant"),
-    ];
-    expect(showLabelFor(messages, assistantId("t1", "a1", "0"))).toBe(true);
-    expect(showLabelFor(messages, assistantId("t1", "a2", "0"))).toBe(true);
+    const messages = [assistantMsg("a0", "t1", "att1"), assistantMsg("a1", "t1", "att2")];
+    expect(showLabelFor(messages, "a0")).toBe(true);
+    expect(showLabelFor(messages, "a1")).toBe(true);
   });
 
   test("a streaming final assistant segment shows its label", () => {
     const messages = [
-      message(userId("t1"), "user"),
-      message(assistantId("t1", "a1", "0"), "assistant", "streaming"),
+      message("u", "user", { turnId: "t1" }),
+      assistantMsg("a0", "t1", "att", "streaming"),
     ];
-    expect(showLabelFor(messages, assistantId("t1", "a1", "0"))).toBe(true);
+    expect(showLabelFor(messages, "a0")).toBe(true);
+  });
+
+  test("an assistant with no structural turnId keys on its own id (always labels)", () => {
+    const messages = [message("a0", "assistant"), message("a1", "assistant")];
+    expect(showLabelFor(messages, "a0")).toBe(true);
+    expect(showLabelFor(messages, "a1")).toBe(true);
   });
 
   test("a tool message never carries an assistant label", () => {
-    const messages = [message(toolId("t1", "c1"), "tool")];
-    expect(showLabelFor(messages, toolId("t1", "c1"))).toBe(false);
+    expect(showLabelFor([toolMessage("c1", "read", "t1")], "c1")).toBe(false);
+  });
+});
+
+describe("projectTranscriptRowHints — structural scope resists sentinel-bearing turnIds (P2)", () => {
+  test("same sentinel-bearing turnId still groups (an id-substring split would mis-cut)", () => {
+    // A channel reply turnId embeds the :tool: sentinel; splitting the id on
+    // ":tool:" would cut at the wrong offset. The structural turnId compares whole.
+    const t = "chan:tool:0";
+    const messages = [toolMessage("c1", "read", t), toolMessage("c2", "read", t)];
+    expect(compactTopFor(messages, "c2")).toBe(true);
+  });
+
+  test("DIFFERENT sentinel-bearing turnIds do NOT merge", () => {
+    // Both share the prefix "chan" before ":tool:", so an id-split would wrongly
+    // pack them; the structural turnId keeps the two turns apart.
+    const messages = [
+      toolMessage("c1", "read", "chan:tool:0"),
+      toolMessage("c2", "read", "chan:tool:1"),
+    ];
+    expect(compactTopFor(messages, "c2")).toBe(false);
+  });
+
+  test("assistant label scope keeps sentinel-bearing turns apart", () => {
+    const messages = [
+      assistantMsg("a0", "chan:assistant:0", "att"),
+      assistantMsg("a1", "chan:assistant:1", "att"),
+    ];
+    expect(showLabelFor(messages, "a0")).toBe(true);
+    expect(showLabelFor(messages, "a1")).toBe(true);
   });
 });
 
 describe("projectTranscriptRowHints — interleaved turn + determinism", () => {
   test("a full text→tool→tool→text→tool→text turn packs tools and dedupes labels", () => {
     const messages = [
-      message(userId("t1"), "user"),
-      message(assistantId("t1", "a1", "0"), "assistant"),
-      toolMessage(toolId("t1", "c1"), "read"),
-      toolMessage(toolId("t1", "c2"), "read"),
-      message(assistantId("t1", "a1", "1"), "assistant"),
-      toolMessage(toolId("t1", "c3"), "read"),
-      message(assistantId("t1", "a1", "2"), "assistant"),
+      message("u", "user", { turnId: "t1" }),
+      assistantMsg("a0", "t1", "att"),
+      toolMessage("c1", "read", "t1"),
+      toolMessage("c2", "read", "t1"),
+      assistantMsg("a1", "t1", "att"),
+      toolMessage("c3", "read", "t1"),
+      assistantMsg("a2", "t1", "att"),
     ];
     // c2 packs against c1; c3 is lone (assistant precedes it).
-    expect(compactTopFor(messages, toolId("t1", "c1"))).toBe(false);
-    expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(true);
-    expect(compactTopFor(messages, toolId("t1", "c3"))).toBe(false);
+    expect(compactTopFor(messages, "c1")).toBe(false);
+    expect(compactTopFor(messages, "c2")).toBe(true);
+    expect(compactTopFor(messages, "c3")).toBe(false);
     // Only the last assistant segment shows the byline.
-    expect(showLabelFor(messages, assistantId("t1", "a1", "0"))).toBe(false);
-    expect(showLabelFor(messages, assistantId("t1", "a1", "2"))).toBe(true);
+    expect(showLabelFor(messages, "a0")).toBe(false);
+    expect(showLabelFor(messages, "a2")).toBe(true);
   });
 
   test("is deterministic — identical input yields an identical hint map", () => {
     const messages = [
-      message(assistantId("t1", "a1", "0"), "assistant"),
-      message(toolId("t1", "c1"), "tool"),
-      message(toolId("t1", "c2"), "tool"),
-      message(assistantId("t1", "a1", "1"), "assistant"),
+      assistantMsg("a0", "t1", "att"),
+      toolMessage("c1", "read", "t1"),
+      toolMessage("c2", "read", "t1"),
+      assistantMsg("a1", "t1", "att"),
     ];
     const a = projectTranscriptRowHints(messages);
     const b = projectTranscriptRowHints(messages);
@@ -191,9 +217,9 @@ describe("projectTranscriptRowHints — interleaved turn + determinism", () => {
 
   test("covers every message id in the map", () => {
     const messages = [
-      message(userId("t1"), "user"),
-      message(toolId("t1", "c1"), "tool"),
-      message(assistantId("t1", "a1", "0"), "assistant"),
+      message("u", "user", { turnId: "t1" }),
+      toolMessage("c1", "read", "t1"),
+      assistantMsg("a0", "t1", "att"),
     ];
     const hints = projectTranscriptRowHints(messages);
     expect([...hints.keys()].toSorted()).toEqual(messages.map((m) => m.id).toSorted());
@@ -202,28 +228,19 @@ describe("projectTranscriptRowHints — interleaved turn + determinism", () => {
 
 describe("projectTranscriptRowHints — packing is guarded to guaranteed-inline previous tools", () => {
   test("an inline tool after a block-capable tool (exec) does NOT pack against it", () => {
-    const messages = [
-      toolMessage(toolId("t1", "c1"), "exec"),
-      toolMessage(toolId("t1", "c2"), "read"),
-    ];
-    expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(false);
+    const messages = [toolMessage("c1", "exec", "t1"), toolMessage("c2", "read", "t1")];
+    expect(compactTopFor(messages, "c2")).toBe(false);
   });
 
   test("an inline tool after another inline tool (read) DOES pack", () => {
-    const messages = [
-      toolMessage(toolId("t1", "c1"), "read"),
-      toolMessage(toolId("t1", "c2"), "read"),
-    ];
-    expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(true);
+    const messages = [toolMessage("c1", "read", "t1"), toolMessage("c2", "read", "t1")];
+    expect(compactTopFor(messages, "c2")).toBe(true);
   });
 
   test("write / edit / apply_patch previous tools block packing", () => {
     for (const blockTool of ["write", "edit", "apply_patch"]) {
-      const messages = [
-        toolMessage(toolId("t1", "c1"), blockTool),
-        toolMessage(toolId("t1", "c2"), "read"),
-      ];
-      expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(false);
+      const messages = [toolMessage("c1", blockTool, "t1"), toolMessage("c2", "read", "t1")];
+      expect(compactTopFor(messages, "c2")).toBe(false);
     }
   });
 
@@ -231,16 +248,13 @@ describe("projectTranscriptRowHints — packing is guarded to guaranteed-inline 
   // space) that a denylist could never enumerate must still block packing.
   test("a GenericToolView block-rendered tool (subagent / MCP / custom) does NOT get packed against", () => {
     for (const blockTool of ["subagent_run", "subagent_fanout", "my_mcp_tool"]) {
-      const messages = [
-        toolMessage(toolId("t1", "c1"), blockTool),
-        toolMessage(toolId("t1", "c2"), "read"),
-      ];
-      expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(false);
+      const messages = [toolMessage("c1", blockTool, "t1"), toolMessage("c2", "read", "t1")];
+      expect(compactTopFor(messages, "c2")).toBe(false);
     }
   });
 
   test("a previous tool message with no tool part is not known-inline, so no pack", () => {
-    const messages = [message(toolId("t1", "c1"), "tool"), toolMessage(toolId("t1", "c2"), "read")];
-    expect(compactTopFor(messages, toolId("t1", "c2"))).toBe(false);
+    const messages = [message("c1", "tool", { turnId: "t1" }), toolMessage("c2", "read", "t1")];
+    expect(compactTopFor(messages, "c2")).toBe(false);
   });
 });
