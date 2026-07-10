@@ -46,7 +46,7 @@ test/eval/variants/harness-fluency-statements.md` and a third scenario
   - [RFC: Accountable Tool-Schema Cost And The Deferred Definition-Side Compression Trigger](./rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md)
     (advertisement/permission orthogonality; the gated `capability_expand`
     verb R1 must stay compatible with)
-  - [RFC: Model-Facing Runtime Intelligence Digests](./rfc-model-facing-runtime-intelligence-digests.md)
+  - [Decision: Model-Facing Runtime Intelligence Digests](../decisions/model-facing-runtime-intelligence-digests.md)
     (the `[RuntimeBrief]` carrier and legibility contract R3 rides on)
   - [RFC: Attention As An Accountable Effect](./rfc-attention-as-an-accountable-effect.md)
     (persisted `retention_hint` and attention receipts R2 builds on)

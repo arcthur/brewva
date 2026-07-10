@@ -45,8 +45,8 @@ accident — each now owned by a live follow-up rather than an open trigger:
   exists). The consequence channel is intact — `buildTapeReviewDebt` keys on
   verification receipts, not atom attribution, so an unattributed FAIL still
   drives review debt and the RuntimeBrief advisory — but the gap itself is no
-  longer measured. The review→atom attribution question is owned by the active
-  `docs/research/active/rfc-review-atom-close-connection.md`; if dogfooding
+  longer measured. The review→atom attribution question is recorded in the
+  archived `docs/research/archive/rfc-review-atom-close-connection.md`; if dogfooding
   shows covering FAILs repeatedly failing to land on atoms, the measure returns
   there as a discrepancy-side view over review events, never as a census.
 - **Producerless deterministic channel.** The `EvidenceItem` plumbing stays with

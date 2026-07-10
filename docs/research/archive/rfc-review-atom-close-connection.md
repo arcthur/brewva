@@ -8,12 +8,12 @@
 
 ## Metadata
 
-- Status: active
+- Status: `archived`
 - Kind: RFC (an independence-debt / delegation-activation increment, not a new plane)
 - Owner: Runtime, gateway, and delegation maintainers
 - Last reviewed: `2026-07-08`
 - Depends on:
-  - [RFC: Independence Debt — Surfacing The Authored-Review Blind Spot At Turn Close](./rfc-independence-debt-and-the-authored-review-blind-spot.md)
+  - [RFC: Independence Debt — Surfacing The Authored-Review Blind Spot At Turn Close](../active/rfc-independence-debt-and-the-authored-review-blind-spot.md)
     (Part 1 — the sensor this attributes to; `FitnessProjection.independenceDebtAtoms`,
     the render-time advisory that names the debt atoms, the risk-class grade floor)
   - [Decision: Requirement Fitness And Independent Review](../decisions/requirement-fitness-and-independent-review.md)
@@ -413,7 +413,7 @@ Promote to `docs/research/decisions/` (and thread into
 
 ## Related Work
 
-- [RFC: Independence Debt — Surfacing The Authored-Review Blind Spot At Turn Close](./rfc-independence-debt-and-the-authored-review-blind-spot.md)
+- [RFC: Independence Debt — Surfacing The Authored-Review Blind Spot At Turn Close](../active/rfc-independence-debt-and-the-authored-review-blind-spot.md)
   — Part 1: the sensor and its grade floor.
 - [Decision: Requirement Fitness And Independent Review](../decisions/requirement-fitness-and-independent-review.md)
   — the grade gate: independent = presence, only `static_guard`+ deterministic clears high risk.

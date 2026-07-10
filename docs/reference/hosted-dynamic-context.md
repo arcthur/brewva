@@ -141,6 +141,13 @@ every turn, demoting to the state-only stub only when the RuntimeBrief's own cha
 budget is crowded by other sections. The hard-limit host soft-cut is unaffected:
 that physics fires whether or not the model reads the line.
 
+`[RuntimeBrief]` is inform-only and honors the cost-observability boundary: it
+surfaces runtime intelligence the operator plane already computes, derives
+entirely from committed receipts and cheap per-turn runtime state, and widens no
+context admission, provider routing, or tool authority. Sections are
+relevance-gated and budget-bounded (demote-then-drop), and the block is omitted
+when nothing is decision-relevant.
+
 ## Workbench Boundary
 
 Workbench entries are model-authored notebook entries written through:

@@ -157,6 +157,7 @@ Every accepted decision inherits these rules:
 - [session-rewind-as-conversation-fork-primitive](./session-rewind-as-conversation-fork-primitive.md)
 - [token-cache-fidelity-and-provider-prefix-stability](./token-cache-fidelity-and-provider-prefix-stability.md)
 - [advisory-receipt-and-calibration-standard](./advisory-receipt-and-calibration-standard.md)
+- [model-facing-runtime-intelligence-digests](./model-facing-runtime-intelligence-digests.md)
 - [trace-driven-harness-improvement](./trace-driven-harness-improvement.md)
 - [typebox-derived-provider-streaming-parse-boundary](./typebox-derived-provider-streaming-parse-boundary.md)
 - [turn-lifecycle-spine](./turn-lifecycle-spine.md)

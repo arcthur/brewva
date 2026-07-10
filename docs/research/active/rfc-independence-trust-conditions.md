@@ -354,7 +354,7 @@ prerequisite for any future CLEAR this RFC's S3 gate can observe.
 
 - [Decision: Harness Subtraction Of Trap Library, Static-Guard Grade Ceiling, And Independence-Debt Census](../decisions/harness-subtraction-trap-static-guard-grade-ceiling.md)
   — the WHAT; this RFC is the forward WHY-and-WHAT-NEXT.
-- [RFC: Review→Atom Attribution And The Grade Ceiling On Discharging Independence Debt](./rfc-review-atom-close-connection.md)
+- [RFC: Review→Atom Attribution And The Grade Ceiling On Discharging Independence Debt](../archive/rfc-review-atom-close-connection.md)
   — superseded-by-subtraction provenance; its coverage-scoped fold survives as
   guard G3, and its min(verdict, attribution) lesson survives as reintroduction
   bar 3.

@@ -83,26 +83,9 @@ discipline.
   no deterministic/independent pass). The information-channel
   companion to the authorship-taints-verification candidate axiom. Landing-plan
   items 1–4 landed on `main` (`dbeeaf3`, `fbb0f00`), and Part 2 — the review→atom
-  discharge edge — landed too (see the next entry); what remains is empirical promotion.
-- [RFC: Review→Atom Attribution And The Grade Ceiling On Discharging Independence Debt](./rfc-review-atom-close-connection.md):
-  **Superseded by subtraction (2026-07-09):** the grade ceiling and static-guard producer
-  this RFC's thesis rests on were removed; the grade-free `independenceDebtAtoms` sensor
-  survives (a high-risk must-atom with no deterministic/independent pass). Retained below
-  as provenance — the grade-floor argument in the summary is now historical.
-  active RFC on the independence-debt close edges (Part 2), reshaped after an independent
-  code review caught the author's own blind spot. game_7's independent review (6 findings,
-  4 fixes incl. the recurring `req-1` keycode defect) still left `open: 2` for TWO reasons:
-  the review was a `files` review whose findings carried empty `atomRefs` (attribution
-  gap), AND — the deeper one — a presence-grade LLM review architecturally CANNOT drive a
-  high-risk atom to `satisfied` (Part 1's grade floor: independent outcomes are
-  presence-grade; only `static_guard`+ deterministic evidence clears high risk). Honest
-  thesis: coverage-scope the fold (target files ⊇ fresh-touched universe via
-  `universeCoveredBy`, NOT target kind — game_7 was a files-covering-all review) so a FAIL
-  marks the violated atom (`open` drops for genuinely-broken atoms; the model gets
-  atom-anchored findings); a CLEAR reaches only `likelySatisfied` and is NOT claimed as a
-  discharge; at-grade clearing is the static-guard producer's job (6 lenses only); and
-  unguarded high-risk debt (req-8/req-11) is irreducible headlessly — the sensor stays
-  correctly lit (axiom 7). One actuator per close-edge.
+  discharge edge — landed too (its RFC is superseded and archived as
+  [rfc-review-atom-close-connection](../archive/rfc-review-atom-close-connection.md));
+  what remains is empirical promotion.
 - [RFC: Independence Trust Conditions After The Grade-Ceiling Subtraction](./rfc-independence-trust-conditions.md):
   active RFC completing the forward half of the 2026-07-09 harness subtraction: with the
   grade ceiling gone, an independent CLEAR genuinely discharges a high-risk atom, and the
@@ -226,20 +209,6 @@ it; if gated, the model operates it and the tape accounts for it`.
   visibility line as performance-only state under `Warm the cache, never the
 context.` Both phases landed on `main` (`9f583ae`); the remaining promotion gate
   is the cold-vs-warm latency measurement, not the mechanism.
-
-- [RFC: Model-Facing Runtime Intelligence Digests](./rfc-model-facing-runtime-intelligence-digests.md):
-  active RFC generalizing the proven `[TurnConsequenceDigest]` pattern into a small
-  bounded **runtime-brief** family that surfaces brewva's already-computed runtime
-  intelligence (context pressure, compaction `netReuseValue` posture, tool-schema
-  cost, open verifier findings) to the model — on the premise that a strong model
-  is the best consumer of runtime intelligence brewva currently routes only to the
-  operator. Strictly inform-only (read-only, authority-neutral, turn-tail so it
-  never moves `stablePrefixHash`), revisiting the `cost-observability` "no context
-  admission" boundary in form but honoring its intent. Core is a **legibility
-  contract**: stable tagged structure, salience order, explicit units, no
-  model-unusable hashes/ids, budgeted with structure-preserving drop, silent when
-  nothing is decision-relevant. Under `Inform the model, don't seize it — and make
-the telling legible.`
 
 - [RFC: Capability Legibility, Retention Contract, And Recovery Recurrence](./rfc-capability-legibility-retention-contract-and-recovery-recurrence.md):
   active RFC distilling the residue from a four-quality experience audit of a
