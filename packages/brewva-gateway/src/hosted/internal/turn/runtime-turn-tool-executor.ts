@@ -128,6 +128,47 @@ function verifyProposalToolIdentity(input: {
   }
 }
 
+// Levenshtein edit distance between two tool names.
+function toolNameEditDistance(a: string, b: string): number {
+  const width = b.length + 1;
+  let previous = Array.from({ length: width }, (_, index) => index);
+  let current = Array.from({ length: width }, () => 0);
+  for (let i = 1; i <= a.length; i += 1) {
+    current[0] = i;
+    for (let j = 1; j < width; j += 1) {
+      const substitutionCost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        previous[j]! + 1,
+        current[j - 1]! + 1,
+        previous[j - 1]! + substitutionCost,
+      );
+    }
+    [previous, current] = [current, previous];
+  }
+  return previous[b.length]!;
+}
+
+// Suggest the closest registered tool name for a not-found call so a model that
+// hallucinated a near-miss (e.g. task_view_status for the real task_view_state)
+// can self-correct from the aborted tool result. Only a genuinely close match is
+// offered; a large edit distance would steer the model toward an unrelated tool.
+function closestToolName(target: string, names: readonly string[]): string | undefined {
+  let best: string | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const name of names) {
+    const distance = toolNameEditDistance(target, name);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = name;
+    }
+  }
+  if (best === undefined || bestDistance === 0) {
+    return undefined;
+  }
+  const threshold = Math.max(2, Math.floor(target.length / 4));
+  return bestDistance <= threshold ? best : undefined;
+}
+
 export function createHostedRuntimeToolExecutorPort(
   session: CollectSessionPromptOutputSession,
 ): RuntimeToolExecutorPort {
@@ -141,11 +182,18 @@ export function createHostedRuntimeToolExecutorPort(
   const toolSession = session;
   return {
     async execute(commitment, input): Promise<ToolExecutionResult> {
-      const tool = toolSession
-        .getRegisteredTools()
-        .find((candidate) => candidate.name === commitment.call.toolName);
+      const registeredTools = toolSession.getRegisteredTools();
+      const tool = registeredTools.find((candidate) => candidate.name === commitment.call.toolName);
       if (!tool) {
-        throw new Error(`hosted_runtime_tool_not_found:${commitment.call.toolName}`);
+        const suggestion = closestToolName(
+          commitment.call.toolName,
+          registeredTools.map((candidate) => candidate.name),
+        );
+        throw new Error(
+          `hosted_runtime_tool_not_found:${commitment.call.toolName}${
+            suggestion === undefined ? "" : ` (did you mean ${suggestion}?)`
+          }`,
+        );
       }
       verifyProposalToolIdentity({
         proposalManifestId: commitment.call.proposalManifestId,

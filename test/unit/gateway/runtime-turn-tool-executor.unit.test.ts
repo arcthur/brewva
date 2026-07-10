@@ -423,4 +423,75 @@ describe("runtime turn tool executor", () => {
       expect((error as Error).message).toContain("unsupported_tool_outcome_version:v2");
     }
   });
+
+  // A model that hallucinates a near-miss tool name (e.g. task_view_status for the
+  // real task_view_state) should get a "did you mean" hint in the not-found error,
+  // which is observable on the aborted tool result and lets it self-correct fast.
+  test("suggests the closest registered tool name when a tool is not found", async () => {
+    const tool = defineBrewvaTool({
+      name: "task_view_state",
+      label: "Task View State",
+      description: "Views the task ledger state.",
+      parameters: Type.Object({}),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const executor = createHostedRuntimeToolExecutorPort(createExecutorSession(tool));
+
+    try {
+      await executor.execute(
+        {
+          id: "commitment-not-found",
+          call: {
+            sessionId: "s1",
+            toolCallId: "call-not-found",
+            toolName: "task_view_status",
+            args: {},
+          },
+        },
+        {},
+      );
+      expect.unreachable("expected an unknown tool to fail closed");
+    } catch (error) {
+      expect((error as Error).message).toBe(
+        "hosted_runtime_tool_not_found:task_view_status (did you mean task_view_state?)",
+      );
+    }
+  });
+
+  // A wildly different name has no close registered match, so the error stays bare
+  // rather than steering the model toward an unrelated tool.
+  test("does not suggest a tool name when no registered tool is close", async () => {
+    const tool = defineBrewvaTool({
+      name: "read",
+      label: "Read",
+      description: "Reads a file.",
+      parameters: Type.Object({}),
+      async execute() {
+        return { content: [{ type: "text", text: "ran" }], outcome: { kind: "ok", value: {} } };
+      },
+    });
+    const executor = createHostedRuntimeToolExecutorPort(createExecutorSession(tool));
+
+    try {
+      await executor.execute(
+        {
+          id: "commitment-far",
+          call: {
+            sessionId: "s1",
+            toolCallId: "call-far",
+            toolName: "subagent_fanout_configure",
+            args: {},
+          },
+        },
+        {},
+      );
+      expect.unreachable("expected an unknown tool to fail closed");
+    } catch (error) {
+      expect((error as Error).message).toBe(
+        "hosted_runtime_tool_not_found:subagent_fanout_configure",
+      );
+    }
+  });
 });
