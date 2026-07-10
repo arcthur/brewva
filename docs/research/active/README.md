@@ -322,6 +322,35 @@ way back — or says it has none.`
   Diff + confirmed rewind; 3: Forks lane). Under the line `A checkpoint already names a
 world — the panel makes the world navigable, diffable, and reversible.`
 
+- [RFC: Tool-Surface Subtraction And The Optimizer Last-Hop — What n=12 Real Sessions Say About Crystallized Heuristics](./rfc-tool-surface-subtraction.md):
+  active RFC testing Lilian Weng's harness thesis against brewva's own tape: a
+  strong model routes around crystallized heuristics and reaches for general
+  primitives. Measures designed-vs-exercised model-facing surface across n=12 real
+  sessions (7 read/analysis from the session index + 5 fresh build/comprehension
+  runs on `glm5.2`, read from `tool.proposed`/`tool.committed` on the event tape):
+  116 managed / 94–95 surfaced / **4** distinct tools used in the fresh corpus
+  (`read`/`glob`/`edit`/`exec` — host-plane primitives), 12 across the read corpus,
+  and **zero** across all twelve for `source_patch_*`, six of eight `code_*`,
+  `verification_record`, the five `attention_*`, `recall`, `knowledge` (generic
+  `read` beats `source_read` 82:6; the codebase-overview task drew a raw shell
+  `find|grep|sort` over `code_digest`; `plan-map`/task-ledger also zero but they
+  are `control_plane`, never model-surfaced). Concludes the specialized ontology is
+  near-dead model-facing surface the model has already routed around, and proposes
+  reversible measure-then-subtract: a per-family invocation view in the offline
+  calibration recipe + a surface ceiling fitness, demotion now — by implementing
+  the documented surface policy (base always; skill tools follow skill commitments;
+  explicit request surfaces one turn), with receipt-bearing families gated on
+  boundary-receipt equivalence — and deletion only after a cross-model
+  re-measurement with a taught-ontology control arm (axioms 3, 15, 1, 7). Flags this dataset as the demand telemetry the planning-map /
+  attention / capability-legibility RFCs deferred to (it reads near-zero), plus two
+  incidental debt surfaces (`getEnvApiKey` zero callers; `skills.routing`/`overrides`
+  removed with no migration shim, crashing existing configs at load) and the headless
+  in-loop approval gap. Forward half (gated, note-only): make the sandbox+tape+fitness
+  recipe an in-repo self-eval and parameterize the asserted attention constants, so
+  the substrate brewva already shipped can close Weng's optimizer last-hop with the
+  permission layer staying outside the loop. Under the line `A tool the model never
+reaches for is a heuristic wearing a schema.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

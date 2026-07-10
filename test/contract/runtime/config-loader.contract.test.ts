@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEFAULT_BREWVA_CONFIG } from "@brewva/brewva-runtime";
-import { loadBrewvaConfig, resolveGlobalBrewvaConfigPath } from "@brewva/brewva-runtime/config";
+import {
+  loadBrewvaConfig,
+  loadBrewvaConfigResolution,
+  resolveGlobalBrewvaConfigPath,
+} from "@brewva/brewva-runtime/config";
 import { createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { createTestWorkspace } from "../../helpers/workspace.js";
 
@@ -30,27 +34,12 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
-  test("fails fast on removed legacy context-budget keys for direct runtime config", () => {
+  test("strips removed legacy context-budget keys from direct runtime config", () => {
     const legacyCases = [
-      {
-        key: "hardLimitPercent",
-        value: 0.9,
-      },
-      {
-        key: "compactionThresholdPercent",
-        value: 0.85,
-      },
-      {
-        key: "maxInjectionTokens",
-        value: 2400,
-      },
-      {
-        key: "arena",
-        value: {
-          enabled: true,
-        },
-        message: "has been removed",
-      },
+      { key: "hardLimitPercent", value: 0.9 },
+      { key: "compactionThresholdPercent", value: 0.85 },
+      { key: "maxInjectionTokens", value: 2400 },
+      { key: "arena", value: { enabled: true } },
     ] as const;
 
     for (const legacyCase of legacyCases) {
@@ -64,22 +53,19 @@ describe("Brewva config loader normalization", () => {
         },
       };
 
-      expect(() =>
-        createRuntimeInstanceFixture({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
-      ).toThrow(
-        new RegExp(
-          `infrastructure\\.contextBudget\\.${legacyCase.key} ${
-            "message" in legacyCase ? legacyCase.message : "has been removed"
-          }`,
-        ),
-      );
+      const runtime = createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      });
+      const contextBudget = runtime.config.infrastructure.contextBudget as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(contextBudget[legacyCase.key]).toBe(undefined);
     }
   });
 
-  test("fails fast on withdrawn compaction shrink-guard keys for direct runtime config", () => {
+  test("strips withdrawn compaction shrink-guard keys from direct runtime config", () => {
     const withdrawnCases = [
       { key: "minCompactionShrinkRatio", value: 0.1 },
       { key: "minCompactionShrinkAttempts", value: 1 },
@@ -99,16 +85,13 @@ describe("Brewva config loader normalization", () => {
         },
       };
 
-      expect(() =>
-        createRuntimeInstanceFixture({
-          cwd: workspace,
-          config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-        }),
-      ).toThrow(
-        new RegExp(
-          `infrastructure\\.contextBudget\\.compaction\\.${withdrawnCase.key} has been removed`,
-        ),
-      );
+      const runtime = createRuntimeInstanceFixture({
+        cwd: workspace,
+        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+      });
+      const compaction = runtime.config.infrastructure.contextBudget
+        .compaction as unknown as Record<string, unknown>;
+      expect(compaction[withdrawnCase.key]).toBe(undefined);
     }
   });
 
@@ -130,7 +113,7 @@ describe("Brewva config loader normalization", () => {
     ).toThrow(/unknown property "toolOutputDistillationInjection"/);
   });
 
-  test("fails fast when removed adaptive projection fields are present", () => {
+  test("strips removed adaptive projection fields from config files with a warning", () => {
     const workspace = createTestWorkspace("config-removed-projection-fields");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -152,9 +135,18 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /projection\.recallMode has been removed/,
-    );
+    const resolution = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    expect(resolution.warnings.map((warning) => warning.code)).toEqual([
+      "config_removed_fields_stripped",
+    ]);
+    expect(resolution.warnings[0]?.message).toMatch(/projection\.recallMode has been removed/);
+    const projection = resolution.config.projection as unknown as Record<string, unknown>;
+    expect(projection.recallMode).toBe(undefined);
+    expect(projection.cognitive).toBe(undefined);
+    expect(projection.global).toBe(undefined);
   });
 
   test("fails fast when legacy top-level memory config is present", () => {
@@ -567,7 +559,7 @@ describe("Brewva config loader normalization", () => {
     );
   });
 
-  test("fails fast on removed skills.selector config", () => {
+  test("strips removed skills.selector config with a warning", () => {
     const workspace = createTestWorkspace("selector-config-removed");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -585,12 +577,20 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /skills\.selector has been removed/,
+    const resolution = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    expect(resolution.warnings.map((warning) => warning.code)).toEqual([
+      "config_removed_fields_stripped",
+    ]);
+    expect(resolution.warnings[0]?.message).toMatch(/skills\.selector has been removed/);
+    expect((resolution.config.skills as unknown as Record<string, unknown>).selector).toBe(
+      undefined,
     );
   });
 
-  test("fails fast on removed skills.routing continuity override config", () => {
+  test("strips removed skills.routing continuity override config with a warning", () => {
     const workspace = createTestWorkspace("routing-continuity-config-removed");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -608,8 +608,16 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
-      /skills\.routing\.continuityPhrases has been removed/,
+    const resolution = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    expect(resolution.warnings.map((warning) => warning.code)).toEqual([
+      "config_removed_fields_stripped",
+    ]);
+    expect(resolution.warnings[0]?.message).toMatch(/skills\.routing has been removed/);
+    expect((resolution.config.skills as unknown as Record<string, unknown>).routing).toBe(
+      undefined,
     );
   });
 
@@ -640,7 +648,7 @@ describe("Brewva config loader normalization", () => {
     expect(resolved.endsWith("brewva/brewva.json")).toBe(true);
   });
 
-  test("fails fast when security.execution.commandDenyList is present in config files", () => {
+  test("strips security.execution.commandDenyList from config files with a warning", () => {
     const workspace = createTestWorkspace("execution-command-deny-list-present");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -658,12 +666,22 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+    const resolution = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    expect(resolution.warnings.map((warning) => warning.code)).toEqual([
+      "config_removed_fields_stripped",
+    ]);
+    expect(resolution.warnings[0]?.message).toMatch(
       /security\.execution\.commandDenyList must not appear in active config/,
     );
+    expect(
+      (resolution.config.security.execution as unknown as Record<string, unknown>).commandDenyList,
+    ).toBe(undefined);
   });
 
-  test("fails fast when removed security.execution.sandbox is present in config files", () => {
+  test("strips removed security.execution.sandbox from config files with a warning", () => {
     const workspace = createTestWorkspace("inline-sandbox-present");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -681,12 +699,22 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+    const resolution = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    expect(resolution.warnings.map((warning) => warning.code)).toEqual([
+      "config_removed_fields_stripped",
+    ]);
+    expect(resolution.warnings[0]?.message).toMatch(
       /security\.execution\.sandbox has been removed/,
     );
+    expect(
+      (resolution.config.security.execution as unknown as Record<string, unknown>).sandbox,
+    ).toBe(undefined);
   });
 
-  test("fails fast when removed security.credentials.sandboxApiKeyRef is present", () => {
+  test("strips removed security.credentials.sandboxApiKeyRef with a warning", () => {
     const workspace = createTestWorkspace("sandbox-api-key-ref-present");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -704,12 +732,23 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+    const resolution = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    expect(resolution.warnings.map((warning) => warning.code)).toEqual([
+      "config_removed_fields_stripped",
+    ]);
+    expect(resolution.warnings[0]?.message).toMatch(
       /security\.credentials\.sandboxApiKeyRef has been removed/,
     );
+    expect(
+      (resolution.config.security.credentials as unknown as Record<string, unknown>)
+        .sandboxApiKeyRef,
+    ).toBe(undefined);
   });
 
-  test("fails fast when legacy context-budget keys are present in config files", () => {
+  test("strips legacy context-budget keys from config files with a warning", () => {
     const workspace = createTestWorkspace("file-legacy-context-budget");
     writeFileSync(
       join(workspace, ".brewva/brewva.json"),
@@ -727,12 +766,23 @@ describe("Brewva config loader normalization", () => {
       "utf8",
     );
 
-    expect(() => loadBrewvaConfig({ cwd: workspace, configPath: ".brewva/brewva.json" })).toThrow(
+    const resolution = loadBrewvaConfigResolution({
+      cwd: workspace,
+      configPath: ".brewva/brewva.json",
+    });
+    expect(resolution.warnings.map((warning) => warning.code)).toEqual([
+      "config_removed_fields_stripped",
+    ]);
+    expect(resolution.warnings[0]?.message).toMatch(
       /infrastructure\.contextBudget\.hardLimitPercent has been removed/,
     );
+    expect(
+      (resolution.config.infrastructure.contextBudget as unknown as Record<string, unknown>)
+        .hardLimitPercent,
+    ).toBe(undefined);
   });
 
-  test("fails fast on direct runtime config when security.execution.commandDenyList appears", () => {
+  test("strips security.execution.commandDenyList from direct runtime config", () => {
     const workspace = createTestWorkspace("direct-runtime-command-deny-list");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
     config["security"] = {
@@ -743,15 +793,16 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(() =>
-      createRuntimeInstanceFixture({
-        cwd: workspace,
-        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-      }),
-    ).toThrow(/security\.execution\.commandDenyList must not appear in active config/);
+    const runtime = createRuntimeInstanceFixture({
+      cwd: workspace,
+      config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+    });
+    expect(
+      (runtime.config.security.execution as unknown as Record<string, unknown>).commandDenyList,
+    ).toBe(undefined);
   });
 
-  test("fails fast on direct runtime config when removed security.execution.sandbox appears", () => {
+  test("strips removed security.execution.sandbox from direct runtime config", () => {
     const workspace = createTestWorkspace("direct-runtime-inline-sandbox");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
     config["security"] = {
@@ -762,15 +813,16 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(() =>
-      createRuntimeInstanceFixture({
-        cwd: workspace,
-        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-      }),
-    ).toThrow(/security\.execution\.sandbox has been removed/);
+    const runtime = createRuntimeInstanceFixture({
+      cwd: workspace,
+      config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+    });
+    expect((runtime.config.security.execution as unknown as Record<string, unknown>).sandbox).toBe(
+      undefined,
+    );
   });
 
-  test("fails fast on direct runtime config when removed skills.selector appears", () => {
+  test("strips removed skills.selector from direct runtime config", () => {
     const workspace = createTestWorkspace("direct-runtime-skills-selector-removed");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
     config["skills"] = {
@@ -780,15 +832,14 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(() =>
-      createRuntimeInstanceFixture({
-        cwd: workspace,
-        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-      }),
-    ).toThrow(/skills\.selector has been removed/);
+    const runtime = createRuntimeInstanceFixture({
+      cwd: workspace,
+      config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+    });
+    expect((runtime.config.skills as unknown as Record<string, unknown>).selector).toBe(undefined);
   });
 
-  test("fails fast on direct runtime config when removed skills.routing continuity overrides appear", () => {
+  test("strips removed skills.routing continuity overrides from direct runtime config", () => {
     const workspace = createTestWorkspace("direct-runtime-routing-continuity-removed");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
     config["skills"] = {
@@ -798,15 +849,14 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(() =>
-      createRuntimeInstanceFixture({
-        cwd: workspace,
-        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-      }),
-    ).toThrow(/skills\.routing has been removed/);
+    const runtime = createRuntimeInstanceFixture({
+      cwd: workspace,
+      config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+    });
+    expect((runtime.config.skills as unknown as Record<string, unknown>).routing).toBe(undefined);
   });
 
-  test("fails fast on direct runtime config when removed skills.cascade appears", () => {
+  test("strips removed skills.cascade from direct runtime config", () => {
     const workspace = createTestWorkspace("direct-runtime-skills-cascade-removed");
     const config = structuredClone(DEFAULT_BREWVA_CONFIG) as unknown as Record<string, unknown>;
     config["skills"] = {
@@ -816,11 +866,10 @@ describe("Brewva config loader normalization", () => {
       },
     };
 
-    expect(() =>
-      createRuntimeInstanceFixture({
-        cwd: workspace,
-        config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
-      }),
-    ).toThrow(/skills\.cascade has been removed/);
+    const runtime = createRuntimeInstanceFixture({
+      cwd: workspace,
+      config: config as unknown as typeof DEFAULT_BREWVA_CONFIG,
+    });
+    expect((runtime.config.skills as unknown as Record<string, unknown>).cascade).toBe(undefined);
   });
 });

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { BrewvaConfigLoadError } from "@brewva/brewva-runtime/config";
 import { DEFAULT_BREWVA_CONFIG } from "../../../packages/brewva-runtime/src/config/defaults.js";
 import {
   forensicallyValidateLoadedBrewvaConfigObject,
@@ -18,38 +17,32 @@ describe("config object validation boundary", () => {
       "<test-config>",
     );
 
-    expect(validated.$schema).toBe(undefined);
-    expect(validated.skills).toEqual({
+    expect(validated.value.$schema).toBe(undefined);
+    expect(validated.value.skills).toEqual({
       roots: ["./skills"],
     });
+    expect(validated.warnings).toEqual([]);
   });
 
-  test("loaded config validation rejects active-config field policy violations with semantic errors", () => {
-    expect(() =>
-      validateLoadedBrewvaConfigObject(
-        {
-          skills: {
-            selector: {
-              mode: "llm_auto",
-            },
-          },
+  test("removed-field policy violations strip with a warning instead of failing the load", () => {
+    const input = {
+      skills: {
+        selector: {
+          mode: "llm_auto",
         },
-        "<test-config>",
-      ),
-    ).toThrow(BrewvaConfigLoadError);
+      },
+    };
+    const validated = validateLoadedBrewvaConfigObject(input, "<test-config>");
 
-    expect(() =>
-      validateLoadedBrewvaConfigObject(
-        {
-          skills: {
-            selector: {
-              mode: "llm_auto",
-            },
-          },
-        },
-        "<test-config>",
-      ),
-    ).toThrow(/skills\.selector has been removed/);
+    // Old semantics stay disabled: the removed field is gone from the value.
+    expect(validated.value.skills).toEqual({});
+    expect(validated.warnings.map((warning) => warning.code)).toEqual([
+      "config_removed_fields_stripped",
+    ]);
+    expect(validated.warnings[0]?.message).toMatch(/skills\.selector has been removed/);
+    expect(validated.warnings[0]?.fields).toEqual(["/skills/selector"]);
+    // Stripping operates on a clone: the caller's own object is untouched.
+    expect(input.skills.selector.mode).toBe("llm_auto");
   });
 
   test("loaded config validation rejects schema drift separately from field policy", () => {

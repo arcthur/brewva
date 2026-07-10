@@ -31,7 +31,6 @@ export {
   supportsXhighModelId,
 } from "./catalog/index.js";
 
-export { getEnvApiKey } from "./auth/index.js";
 export {
   DEFAULT_PROVIDER_CACHE_POLICY,
   buildProviderCacheBucketKey,

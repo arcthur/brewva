@@ -359,7 +359,7 @@ describe("capability view", () => {
     });
 
     expect(result.inventory.hiddenBySurface.skill).toBe(1);
-    expect(result.inventory.hints).toContain("load_or_accept_skill");
+    expect(result.inventory.hints).toContain("request_tool_expansion");
   });
 
   test("captures effect boundaries for mutable task tools without recovery hints", () => {

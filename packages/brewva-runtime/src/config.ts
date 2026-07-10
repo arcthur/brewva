@@ -19,6 +19,7 @@ export { DEFAULT_BREWVA_CONFIG } from "./config/defaults.js";
 export { parseJsonc } from "./config/jsonc.js";
 export {
   BrewvaConfigLoadError,
+  formatBrewvaConfigWarning,
   loadBrewvaConfig,
   loadBrewvaConfigResolution,
   loadBrewvaInspectConfigResolution,

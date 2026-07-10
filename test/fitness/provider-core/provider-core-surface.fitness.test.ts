@@ -40,7 +40,6 @@ describe("provider core surface contract", () => {
     expect(rootSourceFiles).toEqual(["index.ts"]);
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
       ".",
-      "./auth",
       "./cache",
       "./catalog",
       "./contracts",
@@ -48,7 +47,6 @@ describe("provider core surface contract", () => {
       "./stream",
     ]);
     expect(indexSource).toContain('from "./stream/index.js"');
-    expect(indexSource).toContain('from "./auth/index.js"');
     expect(indexSource).toContain('from "./cache/index.js"');
     expect(indexSource).toContain('from "./catalog/index.js"');
     expect(indexSource).toContain('from "./contracts/index.js"');
@@ -91,7 +89,6 @@ describe("provider core surface contract", () => {
       "completeSimple",
       "getApiProvider",
       "getApiProviders",
-      "getEnvApiKey",
       "getExternalApiProvider",
       "getModel",
       "getModels",

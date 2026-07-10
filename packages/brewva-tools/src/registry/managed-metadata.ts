@@ -92,14 +92,14 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.skills.catalog.list",
     "capabilities.skills.selection.record",
   ]),
-  attention_options: metadata("base", "workspace_read", [
+  attention_options: metadata("skill", "workspace_read", [
     "capabilities.skills.catalog.list",
     "capabilities.workbench.list",
     "capabilities.events.records.query",
     "capabilities.events.recordMetricObservation",
     "capabilities.task.target.getDescriptor",
   ]),
-  attention_consume: metadata("base", "memory_write", [
+  attention_consume: metadata("skill", "memory_write", [
     "capabilities.skills.catalog.get",
     "capabilities.workbench.list",
     "capabilities.events.records.query",
@@ -107,14 +107,14 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.events.recordAttentionConsumption",
     "capabilities.events.recordMetricObservation",
   ]),
-  attention_pin: metadata("base", "memory_write", ["capabilities.workbench.note"]),
-  attention_ignore: metadata("base", "memory_write", [
+  attention_pin: metadata("skill", "memory_write", ["capabilities.workbench.note"]),
+  attention_ignore: metadata("skill", "memory_write", [
     "capabilities.events.recordMetricObservation",
   ]),
-  attention_verify_plan: metadata("base", "memory_write", [
+  attention_verify_plan: metadata("skill", "memory_write", [
     "capabilities.events.recordMetricObservation",
   ]),
-  code_outline: metadata("base", "workspace_read", [
+  code_outline: metadata("skill", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "extensions.tools.onClearState",
@@ -138,7 +138,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.sourceIntelligenceQuery",
     "capabilities.tools.readPath.discoveryObserved",
   ]),
-  code_deps: metadata("base", "workspace_read", [
+  code_deps: metadata("skill", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "extensions.tools.onClearState",
@@ -146,7 +146,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.sourceIntelligenceQuery",
     "capabilities.tools.readPath.discoveryObserved",
   ]),
-  code_reverse_deps: metadata("base", "workspace_read", [
+  code_reverse_deps: metadata("skill", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "extensions.tools.onClearState",
@@ -154,7 +154,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.sourceIntelligenceQuery",
     "capabilities.tools.readPath.discoveryObserved",
   ]),
-  code_cycles: metadata("base", "workspace_read", [
+  code_cycles: metadata("skill", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "extensions.tools.onClearState",
@@ -162,7 +162,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.sourceIntelligenceQuery",
     "capabilities.tools.readPath.discoveryObserved",
   ]),
-  code_callers: metadata("base", "workspace_read", [
+  code_callers: metadata("skill", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "extensions.tools.onClearState",
@@ -170,7 +170,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
     "capabilities.tools.outputs.sourceIntelligenceQuery",
     "capabilities.tools.readPath.discoveryObserved",
   ]),
-  code_callees: metadata("base", "workspace_read", [
+  code_callees: metadata("skill", "workspace_read", [
     "capabilities.events.records.query",
     "capabilities.task.target.getDescriptor",
     "extensions.tools.onClearState",
@@ -184,7 +184,7 @@ export const MANAGED_BREWVA_TOOL_METADATA_BY_NAME = {
   reasoning_revert: metadata("control_plane", "control_state_mutation", [
     "capabilities.reasoning.reverts.revert",
   ]),
-  verification_record: metadata("base", "memory_write", [
+  verification_record: metadata("skill", "memory_write", [
     "capabilities.verification.checks.verify",
     "capabilities.events.records.list",
   ]),

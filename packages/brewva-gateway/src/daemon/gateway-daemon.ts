@@ -12,7 +12,11 @@ import {
 } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import type { BrewvaScheduleSelfImproveConfig } from "@brewva/brewva-runtime/config";
-import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
+import {
+  formatBrewvaConfigWarning,
+  loadBrewvaConfigResolution,
+  resolveWorkspaceRootDir,
+} from "@brewva/brewva-runtime/config";
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
 import { createDeferred } from "@brewva/brewva-std/async";
 import { sha256Hex } from "@brewva/brewva-std/hash";
@@ -457,10 +461,16 @@ export class GatewayDaemon {
     ensureDirectoryCwd(options.cwd);
     const resolvedCwd = resolve(options.cwd);
     const workspaceRoot = resolveWorkspaceRootDir(resolvedCwd);
-    const runtimeConfig = loadBrewvaConfig({
+    const runtimeResolution = loadBrewvaConfigResolution({
       cwd: resolvedCwd,
       configPath: options.configPath,
     });
+    // The daemon's StructuredLogger is not constructed yet at this point; the
+    // stderr `[config:warning]` convention matches the CLI startup surface.
+    for (const warning of runtimeResolution.warnings) {
+      console.error(formatBrewvaConfigWarning(warning));
+    }
+    const runtimeConfig = runtimeResolution.config;
     this.stateStore =
       options.stateStore ??
       new FileGatewayStateStore(

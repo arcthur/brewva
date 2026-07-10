@@ -33,7 +33,7 @@ interface ToolLike {
 }
 
 export type CapabilitySurface = BrewvaToolSurface | "external";
-export type CapabilityHintId = "load_or_accept_skill" | "operator_host_lane_available";
+export type CapabilityHintId = "request_tool_expansion" | "operator_host_lane_available";
 export type CapabilityPolicyId =
   | "surface_visibility"
   | "effect_boundaries"
@@ -484,7 +484,7 @@ function formatVisibleNames(names: string[], maxCount: number): string {
 
 function resolveManifestLoadWhen(surface: CapabilitySurface): string {
   if (surface === "base") return "always_on";
-  if (surface === "skill") return "active_or_accepted_skill";
+  if (surface === "skill") return "explicit_request";
   if (surface === "control_plane") return "control_plane";
   if (surface === "operator") return "operator_or_meta_profile";
   return "provider_specific";
@@ -666,8 +666,8 @@ function renderInventoryBlock(inventory: CapabilityVisibilityInventory): string 
     `hidden_operator_count: ${inventory.hiddenBySurface.operator}`,
     `hidden_external_count: ${inventory.hiddenBySurface.external}`,
   ];
-  if (inventory.hints.includes("load_or_accept_skill")) {
-    lines.push("skill_hint: load or accept a skill to expose task-specific tools.");
+  if (inventory.hints.includes("request_tool_expansion")) {
+    lines.push("skill_hint: request a hidden tool with `$name` to surface it for this turn.");
   }
   if (inventory.hints.includes("operator_host_lane_available")) {
     lines.push(
@@ -686,7 +686,7 @@ function renderPolicyBlock(
   for (const policy of policies) {
     if (policy.id === "surface_visibility") {
       lines.push(
-        "surface_policy: base tools stay visible; skill tools follow current skill commitments; requestable managed tools can be surfaced for one turn with an explicit $name request; hosted operator turns keep operator tools visible by default, while operator-gated tools remain hosted-only.",
+        "surface_policy: base tools stay visible; skill tools surface for one turn on an explicit $name request or a selected capability; hosted operator turns keep operator tools visible by default, while operator-gated tools remain hosted-only.",
       );
       continue;
     }
@@ -809,7 +809,7 @@ export function buildCapabilityView(input: BuildCapabilityViewInput): BuildCapab
 
   const visibleSkillCount = visibleEntries.filter((entry) => entry.surface === "skill").length;
   if (inventory.hiddenBySurface.skill > 0 && visibleSkillCount === 0) {
-    inventory.hints.push("load_or_accept_skill");
+    inventory.hints.push("request_tool_expansion");
   }
   if (inventory.hiddenBySurface.operator > 0) {
     inventory.hints.push("operator_host_lane_available");

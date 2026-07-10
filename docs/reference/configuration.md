@@ -46,8 +46,12 @@ config:
 - governance posture is selected by constructing a governance port, not by
   mutating config at runtime.
 
-Removed or invalid fields fail fast during config load. Unknown fields may be
-stripped only in forensic inspect paths where the loader explicitly marks the
+Config load separates two failure classes. Enumerated REMOVED fields (the
+active field policy list) are stripped on every load path with a
+`[config:warning]` advisory — their old semantics stay disabled, and stripping
+can never grant authority, so startup proceeds. Unknown or type-invalid fields
+still fail fast: a typo silently dropped would be a config the user believes is
+active. Forensic inspect paths additionally strip unknown fields and mark the
 result degraded.
 
 ## Runtime Effect Config Services
@@ -65,8 +69,9 @@ service or a test override layer.
 ## Skill Files
 
 `skills` is catalog configuration only. It accepts `roots` and `disabled`.
-Removed fields such as `skills.routing` and `skills.overrides` fail fast during
-config load.
+Removed fields such as `skills.routing` and `skills.overrides` are stripped at
+config load with a `[config:warning]` advisory; their old semantics stay
+disabled.
 
 External action authority belongs under `capabilities`, which owns manifest
 roots, defaults, and policy inputs. Workspace defaults only select within
@@ -300,8 +305,9 @@ at a wrong time.
   count-based recent-window protection only. Set to a large value to disable
   reduction in practice when the tail is small.
 
-Removed context-budget keys fail fast during config load rather than being
-normalized through compatibility shims. This includes the old flat
+Removed context-budget keys are stripped at config load with a
+`[config:warning]` advisory — never normalized through compatibility shims, so
+their old semantics stay disabled. This includes the old flat
 `hardLimitPercent`, `compactionThresholdPercent`, `maxInjectionTokens`,
 `dynamicTail`, `predictiveTurnGrowth`, `modelPhysics`,
 `compaction.minSecondsBetween`, `compaction.cooldownBypassPercent`,

@@ -1,4 +1,5 @@
 import {
+  formatBrewvaConfigWarning,
   loadBrewvaConfigResolution,
   normalizeExplicitBrewvaConfigResolution,
   type BrewvaConfigMetadata,
@@ -24,6 +25,17 @@ export function resolveRuntimeConfigState(input: {
         cwd: input.cwd,
         configPath: input.options.configPath,
       });
+  // Every runtime creation funnels through here, so this is the single
+  // visibility point for load advisories. Default to stderr (the CLI's
+  // `[config:*]` convention): a stripped removed field the user cannot see is
+  // a silent behavior change. Hosts pass onConfigWarning to capture instead.
+  for (const warning of resolution.warnings) {
+    if (input.options.onConfigWarning) {
+      input.options.onConfigWarning(warning);
+    } else {
+      console.error(formatBrewvaConfigWarning(warning));
+    }
+  }
   const config = resolution.config;
 
   return {

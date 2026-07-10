@@ -23,7 +23,6 @@ import {
   resolvePathInput,
   resolveProjectBrewvaConfigPath,
 } from "./paths.js";
-import { assertExplicitBrewvaConfigSemantics } from "./semantic-validation.js";
 
 export interface LoadConfigOptions {
   cwd?: string;
@@ -41,11 +40,22 @@ export interface BrewvaConfigMetadata {
 export interface BrewvaConfigResolution {
   config: BrewvaConfig;
   metadata: BrewvaConfigMetadata;
+  /**
+   * Load-time advisories (e.g. removed config fields stripped with their old
+   * semantics disabled). Never fatal: fatal problems throw BrewvaConfigLoadError.
+   */
+  warnings: BrewvaForensicConfigWarning[];
 }
 
 export interface BrewvaForensicConfigResolution extends BrewvaConfigResolution {
   consultedPaths: string[];
-  warnings: BrewvaForensicConfigWarning[];
+}
+
+/** Render a load warning in the CLI's `[config:*]` stderr convention. */
+export function formatBrewvaConfigWarning(warning: BrewvaForensicConfigWarning): string {
+  const fields =
+    warning.fields && warning.fields.length > 0 ? ` (${warning.fields.join(", ")})` : "";
+  return `[config:warning] ${warning.configPath}: ${warning.message}${fields}`;
 }
 
 function createDefaultBrewvaConfigMetadata(): BrewvaConfigMetadata {
@@ -149,15 +159,20 @@ export function normalizeExplicitBrewvaConfigResolution(
   options: NormalizeExplicitBrewvaConfigOptions = {},
 ): BrewvaConfigResolution {
   const sourceLabel = options.sourceLabel ?? "<direct runtime config>";
-  assertExplicitBrewvaConfigSemantics(config);
   const validated = validateLoadedBrewvaConfigObject(config, sourceLabel);
   return {
-    config: normalizeBrewvaConfig(validated as Partial<BrewvaConfig>, DEFAULT_BREWVA_CONFIG),
-    metadata: collectBrewvaConfigMetadata(validated),
+    config: normalizeBrewvaConfig(validated.value as Partial<BrewvaConfig>, DEFAULT_BREWVA_CONFIG),
+    metadata: collectBrewvaConfigMetadata(validated.value),
+    warnings: validated.warnings,
   };
 }
 
-function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
+function readConfigFile(configPath: string):
+  | {
+      parsed: Partial<BrewvaConfig>;
+      warnings: BrewvaForensicConfigWarning[];
+    }
+  | undefined {
   if (!existsSync(configPath)) return undefined;
   let parsed: unknown;
   try {
@@ -173,7 +188,10 @@ function readConfigFile(configPath: string): Partial<BrewvaConfig> | undefined {
   }
 
   const cleaned = validateLoadedBrewvaConfigObject(parsed, configPath);
-  return resolveConfigRelativePaths(cleaned as Partial<BrewvaConfig>, configPath);
+  return {
+    parsed: resolveConfigRelativePaths(cleaned.value as Partial<BrewvaConfig>, configPath),
+    warnings: cleaned.warnings,
+  };
 }
 
 function readConfigFileForInspect(configPath: string): {
@@ -267,16 +285,19 @@ export function loadBrewvaConfigResolution(
 
   let merged = defaults;
   let metadata = createDefaultBrewvaConfigMetadata();
+  const warnings: BrewvaForensicConfigWarning[] = [];
   for (const configPath of configPaths) {
-    const parsed = readConfigFile(configPath);
-    if (!parsed) continue;
-    merged = deepMerge(merged, parsed);
-    metadata = mergeBrewvaConfigMetadata(metadata, collectBrewvaConfigMetadata(parsed));
+    const read = readConfigFile(configPath);
+    if (!read) continue;
+    warnings.push(...read.warnings);
+    merged = deepMerge(merged, read.parsed);
+    metadata = mergeBrewvaConfigMetadata(metadata, collectBrewvaConfigMetadata(read.parsed));
   }
 
   return {
     config: normalizeBrewvaConfig(merged, DEFAULT_BREWVA_CONFIG),
     metadata,
+    warnings,
   };
 }
 

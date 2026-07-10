@@ -151,6 +151,13 @@ Skill-surface tools are counted by `skillSurfaceToolActiveCount` and
 `hiddenSkillSurfaceToolCount`. They are tool inventory counters, not selected
 SkillCard counters.
 
+Skill-surface tools are pull, not push: the default per-turn payload carries
+only base-surface tools (plus host primitives), and a skill-surface tool enters
+the payload for exactly one turn when the prompt requests it with `$name` or a
+selected capability authorizes it. The capability view renders hidden tools
+with `load_when: explicit_request` and a `$name` hint, so a scorer miss never
+means the model cannot reach a tool.
+
 No code may use available or explicitly mentioned SkillCards to grant tools,
 accounts, budgets, external authority, or mutation rights. Tool authority
 remains capability-governed.

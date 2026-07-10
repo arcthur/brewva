@@ -189,6 +189,7 @@ function shouldExposeManagedTool(input: {
   operatorProfile: boolean;
   hasUI: boolean;
   goalActive: boolean;
+  requestedToolNames: ReadonlySet<string>;
   actionClass?: ToolActionClass;
   selectedCapabilityReceipt?: CapabilitySelectionReceipt;
   capabilityManifests: readonly CapabilityManifest[];
@@ -213,6 +214,14 @@ function shouldExposeManagedTool(input: {
   );
   if (isOperatorTool(input.toolName)) {
     return input.operatorProfile || explicitlyAuthorized === true;
+  }
+  // Skill-surface tools are pull, not push (tool-surface subtraction RFC): they
+  // enter the payload only for a turn that explicitly requested them ($name) or
+  // authorized them through a selected capability. Across n=12 real sessions the
+  // always-pushed skill surface scored near-zero invocations while costing schema
+  // tokens every turn; base primitives stay always-on.
+  if (getBrewvaToolSurface(input.toolName) === "skill") {
+    return input.requestedToolNames.has(input.toolName) || explicitlyAuthorized === true;
   }
   return true;
 }
@@ -253,6 +262,7 @@ function registerMissingManagedTools(input: {
   operatorProfile: boolean;
   hasUI: boolean;
   goalActive: boolean;
+  requestedToolNames: ReadonlySet<string>;
   selectedCapabilityReceipt?: CapabilitySelectionReceipt;
   capabilityManifests: readonly CapabilityManifest[];
 }): void {
@@ -272,6 +282,7 @@ function registerMissingManagedTools(input: {
         operatorProfile: input.operatorProfile,
         hasUI: input.hasUI,
         goalActive: input.goalActive,
+        requestedToolNames: input.requestedToolNames,
         actionClass: resolveToolActionClass({
           toolName,
           dynamicToolDefinitions: input.dynamicToolDefinitions,
@@ -326,6 +337,7 @@ function resolveAndActivateToolSurface(input: {
     operatorProfile,
     hasUI: input.hasUI,
     goalActive,
+    requestedToolNames: requestedToolNameSet,
     selectedCapabilityReceipt: input.selectedCapabilityReceipt,
     capabilityManifests: input.capabilityManifests,
   });
@@ -356,6 +368,7 @@ function resolveAndActivateToolSurface(input: {
         operatorProfile,
         hasUI: input.hasUI,
         goalActive,
+        requestedToolNames: requestedToolNameSet,
         actionClass: resolveToolActionClass({
           toolName,
           dynamicToolDefinitions: input.dynamicToolDefinitions,

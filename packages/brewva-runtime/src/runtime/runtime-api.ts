@@ -1,3 +1,4 @@
+import type { BrewvaForensicConfigWarning } from "../config/errors.js";
 import type { BrewvaConfig } from "../config/types.js";
 import type { DeepReadonly } from "../core/deep-readonly.js";
 import type {
@@ -172,6 +173,14 @@ export interface BrewvaRuntimeOptions {
   configPath?: string;
   config?: BrewvaConfig;
   agentId?: string;
+  /**
+   * Receives config load advisories (e.g. removed fields stripped, their old
+   * semantics staying disabled). When omitted they print to stderr in the
+   * `[config:warning]` convention — a stripped field the user cannot see is a
+   * silent behavior change, so visibility is the default and hosts opt into
+   * capturing instead.
+   */
+  onConfigWarning?: (warning: BrewvaForensicConfigWarning) => void;
   physics: RuntimePhysicsDeclaration;
   /**
    * Runaway-loop backstop: maximum provider tool-call continuation passes in

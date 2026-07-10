@@ -27,7 +27,8 @@ efficiently through ordinary tools:
 - pending or newly completed delegation handoffs
 - latest replayable continuation anchor when present
 - the previous completed turn's bounded consequence digest
-- explicitly requested capability details
+- explicitly requested capability details (the same `$name` request also
+  surfaces a hidden skill-surface tool for that turn)
 - bounded read-path recovery hints
 
 It does not decide:

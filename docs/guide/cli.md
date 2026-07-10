@@ -88,9 +88,11 @@ For Telegram/webhook ingress, see
 
 ## Config Loading
 
-`brewva config` has been removed. If removed or invalid config fields remain in
-the selected config file, normal CLI startup fails during config load. Rewrite
-or delete those fields before rerunning Brewva.
+`brewva config` has been removed. Enumerated removed fields left in the
+selected config file are stripped at load with a `[config:warning]` line on
+stderr (their old semantics stay disabled) and startup proceeds; delete them at
+leisure. Unknown or type-invalid fields still fail startup during config load —
+rewrite or delete those before rerunning Brewva.
 
 ## Hosted Extension Commands
 

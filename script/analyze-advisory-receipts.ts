@@ -17,6 +17,10 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import {
+  BREWVA_TOOL_SURFACE_BY_NAME,
+  MANAGED_BREWVA_TOOL_NAMES,
+} from "@brewva/brewva-tools/registry";
 
 interface TapeEvent {
   kind: string;
@@ -110,6 +114,33 @@ function distillerStrategyGroup(toolName: string): string | null {
   return null;
 }
 
+// Family grouping for the tool-surface RFC's per-family invocation view. Names
+// mirror the RFC's families; anything unmatched reports under its own name.
+function toolFamily(toolName: string): string {
+  if (toolName.startsWith("code_")) return "code";
+  if (toolName.startsWith("attention_")) return "attention";
+  if (toolName.startsWith("browser_")) return "browser";
+  if (toolName.startsWith("lsp_")) return "lsp";
+  if (toolName.startsWith("source_patch_")) return "source_patch";
+  if (toolName.startsWith("recall_")) return "recall";
+  if (toolName.startsWith("knowledge_")) return "knowledge";
+  if (toolName.startsWith("precedent_")) return "precedent";
+  if (toolName.startsWith("workbench_")) return "workbench";
+  if (toolName.startsWith("worker_results_")) return "worker_results";
+  if (toolName.startsWith("subagent_")) return "subagent";
+  if (toolName.startsWith("task_")) return "task_ledger";
+  if (toolName.startsWith("tape_")) return "tape";
+  if (toolName.startsWith("git_")) return "git";
+  if (toolName.startsWith("obs_")) return "obs";
+  if (toolName.startsWith("agent_")) return "agent";
+  if (toolName.startsWith("reasoning_")) return "reasoning";
+  if (toolName.startsWith("iteration_")) return "iteration";
+  if (toolName.endsWith("_plan_map") || toolName.endsWith("_plan_ticket")) return "plan_map";
+  if (toolName === "record_fog" || toolName === "graduate_fog") return "plan_map";
+  if (toolName === "get_goal" || toolName === "update_goal") return "goal";
+  return toolName;
+}
+
 const { values: args } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
@@ -143,6 +174,10 @@ const distillerRatios = new Map<string, number[]>();
 let distillerTruncated = 0;
 let distillerReceiptsTotal = 0;
 const eligibleToolCommits = new Map<string, number>();
+// --- tool surface (per-family invocation) ---
+const managedToolCommits = new Map<string, number>();
+const hostToolCommits = new Map<string, number>();
+const managedToolNameSet = new Set<string>(MANAGED_BREWVA_TOOL_NAMES);
 let totalEvents = 0;
 
 for (const file of tapeFiles) {
@@ -162,6 +197,11 @@ for (const file of tapeFiles) {
     const call = isRecord(event.payload.call) ? event.payload.call : undefined;
     const toolName = readString(call?.toolName);
     if (!toolName) continue;
+    if (managedToolNameSet.has(toolName)) {
+      bump(managedToolCommits, toolName);
+    } else {
+      bump(hostToolCommits, toolName);
+    }
     const group = distillerStrategyGroup(toolName);
     if (group) bump(eligibleToolCommits, group);
     if (!READ_TOOL_NAMES.has(toolName)) continue;
@@ -286,4 +326,54 @@ if (eligibleToolCommits.size === 0) {
   console.log("    (none)");
 } else {
   for (const line of formatCounts(eligibleToolCommits)) console.log(line);
+}
+
+console.log("\n## tool surface (per-family invocation — tool-surface RFC view)");
+interface FamilyRow {
+  family: string;
+  surfaces: Set<string>;
+  toolCount: number;
+  committed: number;
+  usedTools: Set<string>;
+}
+const familyRows = new Map<string, FamilyRow>();
+for (const toolName of MANAGED_BREWVA_TOOL_NAMES) {
+  const surface = BREWVA_TOOL_SURFACE_BY_NAME[toolName] ?? "unknown";
+  // The RFC measures the model-facing surface; control-plane/operator tools are
+  // not in the per-turn payload, so they are excluded from this view.
+  if (surface !== "base" && surface !== "skill") continue;
+  const family = toolFamily(toolName);
+  const row = familyRows.get(family) ?? {
+    family,
+    surfaces: new Set<string>(),
+    toolCount: 0,
+    committed: 0,
+    usedTools: new Set<string>(),
+  };
+  row.surfaces.add(surface);
+  row.toolCount += 1;
+  const committed = managedToolCommits.get(toolName) ?? 0;
+  row.committed += committed;
+  if (committed > 0) row.usedTools.add(toolName);
+  familyRows.set(family, row);
+}
+const sortedFamilies = [...familyRows.values()].toSorted(
+  (left, right) => right.committed - left.committed || left.family.localeCompare(right.family),
+);
+console.log("  family [surfaces] tools=N committed=N distinct_used=N");
+for (const row of sortedFamilies) {
+  const surfaces = [...row.surfaces].toSorted((a, b) => a.localeCompare(b)).join("+");
+  console.log(
+    `    ${row.family.padEnd(16)} [${surfaces}] tools=${String(row.toolCount).padStart(2)} committed=${String(row.committed).padStart(4)} distinct_used=${row.usedTools.size}`,
+  );
+}
+const zeroFamilies = sortedFamilies.filter((row) => row.committed === 0).length;
+console.log(
+  `  families with zero committed calls in this corpus: ${zeroFamilies}/${sortedFamilies.length}`,
+);
+console.log("  host-plane tool commits (two-plane comparison):");
+if (hostToolCommits.size === 0) {
+  console.log("    (none)");
+} else {
+  for (const line of formatCounts(hostToolCommits)) console.log(line);
 }

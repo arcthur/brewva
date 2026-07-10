@@ -97,10 +97,15 @@ function stripUnknownPropertiesForForensics(root: Record<string, unknown>): stri
   return [...stripped].toSorted((left, right) => left.localeCompare(right));
 }
 
+export interface ValidatedBrewvaConfigObject {
+  value: Record<string, unknown>;
+  warnings: BrewvaForensicConfigWarning[];
+}
+
 export function validateLoadedBrewvaConfigObject(
   parsed: unknown,
   configPath: string,
-): Record<string, unknown> {
+): ValidatedBrewvaConfigObject {
   if (!isRecord(parsed)) {
     throw new BrewvaConfigLoadError({
       code: "config_not_object",
@@ -109,18 +114,31 @@ export function validateLoadedBrewvaConfigObject(
     });
   }
 
-  const policyErrors = collectActiveConfigFieldPolicyViolations(parsed).map(
-    (violation) => violation.message,
-  );
-  if (policyErrors.length > 0) {
-    throw new BrewvaConfigLoadError({
-      code: "config_schema_invalid",
-      message: formatFieldPolicyInvalidMessage(policyErrors),
+  // Clone before stripping: the direct-runtime-config path hands us the
+  // caller's own object, and policy stripping must never mutate caller input.
+  const sanitized = stripMetaFields(structuredClone(parsed));
+  const warnings: BrewvaForensicConfigWarning[] = [];
+
+  // Removed fields are enumerated, deliberate subtractions whose semantics are
+  // already disabled — stripping cannot grant authority, so blocking startup on
+  // them is pure hostility to existing configs. Strip and warn (the same
+  // contract the forensic path has always had); unknown fields and schema type
+  // drift below stay fail-loud because a typo silently dropped is a config the
+  // user believes is active.
+  const policyViolations = collectActiveConfigFieldPolicyViolations(sanitized);
+  if (policyViolations.length > 0) {
+    const removedFields = stripActiveConfigFieldPolicyFields(sanitized);
+    warnings.push({
+      code: "config_removed_fields_stripped",
       configPath,
+      message: formatFieldPolicyInvalidMessage(
+        policyViolations.map((violation) => violation.message),
+      ),
+      fields: removedFields,
     });
   }
 
-  const validation = validateBrewvaConfigFile(parsed);
+  const validation = validateBrewvaConfigFile(sanitized);
   if (!validation.ok) {
     if ("reason" in validation) {
       throw new BrewvaConfigLoadError({
@@ -139,7 +157,7 @@ export function validateLoadedBrewvaConfigObject(
     }
   }
 
-  return stripMetaFields(parsed);
+  return { value: sanitized, warnings };
 }
 
 export function forensicallyValidateLoadedBrewvaConfigObject(
