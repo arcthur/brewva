@@ -9,6 +9,7 @@ export {
   type BrewvaProjectInstructionSet,
   type BrewvaProjectInstructionSource,
   createBrewvaResourceRouter,
+  parseUriSchemePrefix,
   toBrewvaFileResourceUri,
   type BrewvaResourceProvider,
   type BrewvaResourceReadResult,

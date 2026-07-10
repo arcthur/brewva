@@ -27,6 +27,7 @@ import {
   type ContextEvidenceArtifactRef,
   type ContextEvidenceEconomicVerdict,
   type ContextEvidenceEconomicVerdictKind,
+  type ContextEvidenceInconclusiveReason,
   type ContextEvidenceVerdictSource,
   type ContextEvidenceVerdictGrade,
   type ContextEvidencePromotionReadiness,
@@ -43,6 +44,7 @@ export type {
   ContextEvidenceArtifactRef,
   ContextEvidenceEconomicVerdict,
   ContextEvidenceEconomicVerdictKind,
+  ContextEvidenceInconclusiveReason,
   ContextEvidencePromotionReadiness,
   ContextEvidenceReport,
   ContextEvidenceReportOptions,
@@ -342,6 +344,31 @@ interface CacheCostMultipliers {
   readMultiplier: number;
 }
 
+// How a compaction's cache pricing resolved at its timestamp. `unpriced_model`
+// means a model selection was in effect but carries no usable cache pricing
+// (unknown to the catalog, zero-priced, or degenerate w <= r); `missing_pricing`
+// means no model selection precedes the compaction at all.
+export type CompactionCachePricing =
+  | { status: "priced"; multipliers: CacheCostMultipliers }
+  | { status: "unpriced_model" }
+  | { status: "missing_pricing" };
+
+const MISSING_PRICING: CompactionCachePricing = { status: "missing_pricing" };
+
+// Usable for the net-reuse model: finite, write strictly above read — the
+// rebuild penalty (w - r) must stay positive or the model fails closed (mirrors
+// computeNetReuseValue's pricing guards). A zero-priced model collapses to
+// w = r = 0 and is unpriced for this purpose.
+function usableCacheCostMultipliers(multipliers: CacheCostMultipliers): boolean {
+  return (
+    Number.isFinite(multipliers.writeMultiplier) &&
+    Number.isFinite(multipliers.readMultiplier) &&
+    multipliers.writeMultiplier > 0 &&
+    multipliers.readMultiplier >= 0 &&
+    multipliers.writeMultiplier > multipliers.readMultiplier
+  );
+}
+
 function readFiniteOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -349,41 +376,69 @@ function readFiniteOrNull(value: unknown): number | null {
 // Phase 1: compute a per-compaction net-reuse value (headroom's #856 model, pure)
 // from the committed payload. Both inputs derive from already-recorded fields, so
 // every commit path (controller, replay) is covered without a new recorded
-// quantity: dT = fromTokens - toTokens (tokens freed), and S = toTokens (the
-// retained post-compaction context that re-caches under the changed prefix).
-// Returns null inputs/value when pricing or the token counts are absent, so
-// missing data never fabricates a number.
+// quantity: dT = fromTokens - toTokens (negative when the summary grew the
+// context — an observed loss, priced as one), and S = toTokens (the retained
+// post-compaction context that re-caches under the changed prefix). Missing
+// pricing or token counts never fabricate a number — they resolve to a named
+// unresolved reason instead of silence (axiom 7).
 function readCompactionNetReuse(
   payload: unknown,
-  multipliers: CacheCostMultipliers | null,
+  pricing: CompactionCachePricing,
   expectedReads: number,
-): { compactId?: string; netReuseValue: number | null; netReuseInputs: NetReuseInputs | null } {
+): {
+  compactId?: string;
+  netReuseValue: number | null;
+  netReuseInputs: NetReuseInputs | null;
+  deltaTokens: number | null;
+  suffixTokens: number | null;
+  unresolvedReason: ContextEvidenceInconclusiveReason | null;
+} {
   const record = isRecord(payload) ? payload : null;
   const compactId =
     record && typeof record.compactId === "string" && record.compactId.length > 0
       ? record.compactId
       : undefined;
   const base = compactId ? { compactId } : {};
-  if (!record || !multipliers) {
-    return { ...base, netReuseValue: null, netReuseInputs: null };
+  const fromTokens = record ? readFiniteOrNull(record.fromTokens) : null;
+  const toTokens = record ? readFiniteOrNull(record.toTokens) : null;
+  // Mirror computeNetReuseValue's suffix guard: a negative retained count is as
+  // unusable as an absent one.
+  const tokensUsable = fromTokens !== null && toTokens !== null && toTokens >= 0;
+  const deltaTokens = tokensUsable ? fromTokens - toTokens : null;
+  const suffixTokens = tokensUsable ? toTokens : null;
+  const unresolved = {
+    ...base,
+    netReuseValue: null,
+    netReuseInputs: null,
+    deltaTokens,
+    suffixTokens,
+  };
+  if (pricing.status !== "priced") {
+    return { ...unresolved, unresolvedReason: pricing.status };
   }
-  const fromTokens = readFiniteOrNull(record.fromTokens);
-  const toTokens = readFiniteOrNull(record.toTokens);
-  if (fromTokens === null || toTokens === null) {
-    return { ...base, netReuseValue: null, netReuseInputs: null };
+  if (!tokensUsable) {
+    return { ...unresolved, unresolvedReason: "missing_token_counts" };
   }
   const estimate = computeNetReuseValue({
     deltaTokens: fromTokens - toTokens,
     suffixTokens: toTokens,
-    writeMultiplier: multipliers.writeMultiplier,
-    readMultiplier: multipliers.readMultiplier,
+    writeMultiplier: pricing.multipliers.writeMultiplier,
+    readMultiplier: pricing.multipliers.readMultiplier,
     expectedReads,
     pAlive: 1, // Phase 1: conservative full penalty; idle-decay is deferred to Loop 3.
   });
+  if (!estimate) {
+    // Timeline bases are pre-validated, so the only way here is a caller-supplied
+    // priced basis whose multipliers still fail the model's guards — unpriced.
+    return { ...unresolved, unresolvedReason: "unpriced_model" };
+  }
   return {
     ...base,
-    netReuseValue: estimate?.netReuseValue ?? null,
-    netReuseInputs: estimate?.inputs ?? null,
+    netReuseValue: estimate.netReuseValue,
+    netReuseInputs: estimate.inputs,
+    deltaTokens,
+    suffixTokens,
+    unresolvedReason: null,
   };
 }
 
@@ -432,12 +487,17 @@ export function buildCompactionEconomicVerdicts(input: {
   compactionEvents: readonly { payload?: unknown; timestamp?: number }[];
   // Pricing is resolved per compaction at its own timestamp, so a mid-session
   // model change does not reprice older compactions.
-  cacheCostMultipliersAt?: (timestamp: number | undefined) => CacheCostMultipliers | null;
+  cachePricingAt?: (timestamp: number | undefined) => CompactionCachePricing;
   expectedSuffixReads?: number;
   providerCacheSamples?: readonly ProviderCacheObservationEvidenceSample[];
 }): ContextEvidenceEconomicVerdict[] {
-  const resolveMultipliers = input.cacheCostMultipliersAt ?? (() => null);
-  const expectedReads = input.expectedSuffixReads ?? DEFAULT_EXPECTED_SUFFIX_READS;
+  const resolvePricing = input.cachePricingAt ?? (() => MISSING_PRICING);
+  const expectedReads =
+    typeof input.expectedSuffixReads === "number" &&
+    Number.isFinite(input.expectedSuffixReads) &&
+    input.expectedSuffixReads >= 1
+      ? input.expectedSuffixReads
+      : DEFAULT_EXPECTED_SUFFIX_READS;
   const providerCacheSamples = input.providerCacheSamples ?? [];
   // Verdicts are per-cut, not per-kind: one compaction may yield several kinds,
   // and several compactions may each yield the same kind. Dedup receipts by
@@ -454,8 +514,8 @@ export function buildCompactionEconomicVerdicts(input: {
       }
       seenCompactIds.add(compactId);
     }
-    const multipliers = resolveMultipliers(event.timestamp);
-    const netReuse = readCompactionNetReuse(event.payload, multipliers, expectedReads);
+    const pricing = resolvePricing(event.timestamp);
+    const netReuse = readCompactionNetReuse(event.payload, pricing, expectedReads);
     const observation = informativeObservation(
       typeof event.timestamp === "number"
         ? nextProviderCacheSampleAfter(providerCacheSamples, event.timestamp)
@@ -465,13 +525,35 @@ export function buildCompactionEconomicVerdicts(input: {
     const source = (kind: ContextEvidenceEconomicVerdictKind): ContextEvidenceVerdictSource =>
       verdictSource(kind, netReuse.compactId, observation);
 
+    // Axiom 7 carrier: an observed cut whose economics cannot resolve grades
+    // itself inconclusive with a named reason instead of staying silent. A
+    // joined cache observation measures the cache outcome, not the absent
+    // economics, so it never promotes this verdict nor annotates its source.
+    if (netReuse.unresolvedReason !== null) {
+      verdicts.push({
+        kind: "inconclusive",
+        reason: netReuse.unresolvedReason,
+        metrics: { deltaTokens: netReuse.deltaTokens, suffixTokens: netReuse.suffixTokens },
+        source: verdictSource("inconclusive", netReuse.compactId),
+        netReuseValue: null,
+        netReuseInputs: null,
+        grade: "inconclusive",
+      });
+    }
+
     // Phase 3: wasteful is the per-cut economic verdict — the cut freed less cache
     // value than it cost to rebuild the suffix. It depends only on the net-reuse
     // economics, not on cache-impact evidence, so it is evaluated independently.
+    // dT <= 0 (the summary grew the context, or freed nothing) is the most
+    // wasteful observed outcome and prices as a loss, never as missing data.
     if (netReuse.netReuseValue !== null && netReuse.netReuseValue < 0) {
+      const expansion =
+        netReuse.netReuseInputs !== null && netReuse.netReuseInputs.deltaTokens <= 0;
       verdicts.push({
         kind: "wasteful",
-        reason: "compaction freed less cache value than it cost to rebuild the suffix",
+        reason: expansion
+          ? "compaction did not shrink the context (freed <= 0 tokens) yet invalidated the cache prefix"
+          : "compaction freed less cache value than it cost to rebuild the suffix",
         metrics: {
           netReuseValue: netReuse.netReuseValue,
           deltaTokens: netReuse.netReuseInputs?.deltaTokens ?? null,
@@ -539,12 +621,16 @@ export function buildCompactionEconomicVerdicts(input: {
 
 export interface CacheCostBasis {
   readonly atTimestamp: number;
-  readonly multipliers: CacheCostMultipliers;
+  // null: the selected model has no usable cache pricing (unknown to the
+  // catalog, zero-priced, or degenerate w <= r) — an unpriced basis.
+  readonly multipliers: CacheCostMultipliers | null;
 }
 
 // A session's model-pricing timeline: each model_select resolved to its cache
 // multipliers, ascending by timestamp. w/r are price weights from the model
-// catalog, never inferred from token volumes; unresolvable models are skipped.
+// catalog, never inferred from token volumes. A selection without usable
+// pricing is recorded as an unpriced (null-multiplier) basis so it shadows
+// earlier priced bases — stale pricing must never leak onto a later model.
 function buildSessionCacheCostTimeline(
   runtime: Pick<HostedRuntimeAdapterPort, "ops">,
   sessionId: string,
@@ -560,37 +646,38 @@ function buildSessionCacheCostTimeline(
     }
     const resolved = findCatalogModel(provider, model);
     const multipliers = resolved ? resolveCacheCostMultipliers(resolved.cost) : null;
-    if (multipliers) {
-      timeline.push({ atTimestamp: event.timestamp, multipliers });
-    }
+    timeline.push({
+      atTimestamp: event.timestamp,
+      multipliers: multipliers && usableCacheCostMultipliers(multipliers) ? multipliers : null,
+    });
   }
   return timeline.toSorted((left, right) => left.atTimestamp - right.atTimestamp);
 }
 
 /**
- * Resolve the pricing active at a given timestamp — the latest model_select at or
- * before it. A compaction before any model_select has no basis (null); when the
- * timestamp is unknown the most recent basis is the best available fallback.
+ * Resolve the pricing in effect at a given timestamp — the latest model_select
+ * basis at or before it. An unpriced basis resolves to `unpriced_model` (it
+ * shadows earlier priced bases); no basis at all resolves to `missing_pricing`;
+ * when the timestamp is unknown the most recent basis is the best available
+ * fallback.
  */
 export function resolvePricingFromTimeline(
   timeline: readonly CacheCostBasis[],
   timestamp: number | undefined,
-): CacheCostMultipliers | null {
-  if (timeline.length === 0) {
-    return null;
-  }
-  if (typeof timestamp !== "number") {
-    return timeline[timeline.length - 1]!.multipliers;
-  }
-  let active: CacheCostMultipliers | null = null;
+): CompactionCachePricing {
+  let active: CacheCostBasis | null = null;
   for (const basis of timeline) {
-    if (basis.atTimestamp <= timestamp) {
-      active = basis.multipliers;
-    } else {
+    if (typeof timestamp === "number" && basis.atTimestamp > timestamp) {
       break;
     }
+    active = basis;
   }
-  return active;
+  if (!active) {
+    return MISSING_PRICING;
+  }
+  return active.multipliers
+    ? { status: "priced", multipliers: active.multipliers }
+    : { status: "unpriced_model" };
 }
 
 function countScopeAwareStablePrefixTurns(
@@ -622,6 +709,17 @@ function countByString(values: readonly string[]): Record<string, number> {
     }
   }
   return counts;
+}
+
+function countEconomicVerdictKind(
+  sessions: readonly ContextEvidenceSessionReport[],
+  kind: ContextEvidenceEconomicVerdictKind,
+): number {
+  return sessions.reduce(
+    (sum, session) =>
+      sum + session.economicVerdicts.filter((verdict) => verdict.kind === kind).length,
+    0,
+  );
 }
 
 function isTtlProviderCacheBreakReason(reason: string | null): boolean {
@@ -1186,8 +1284,7 @@ export function buildContextEvidenceReport(
       const cacheCostTimeline = buildSessionCacheCostTimeline(runtime, sessionId);
       const economicVerdicts = buildCompactionEconomicVerdicts({
         compactionEvents,
-        cacheCostMultipliersAt: (timestamp) =>
-          resolvePricingFromTimeline(cacheCostTimeline, timestamp),
+        cachePricingAt: (timestamp) => resolvePricingFromTimeline(cacheCostTimeline, timestamp),
         providerCacheSamples,
       });
 
@@ -1465,23 +1562,10 @@ export function buildContextEvidenceReport(
       0,
     ),
     economicVerdictCounts: {
-      cache_regression: sessions.reduce(
-        (sum, session) =>
-          sum +
-          session.economicVerdicts.filter((verdict) => verdict.kind === "cache_regression").length,
-        0,
-      ),
-      unaccounted_break: sessions.reduce(
-        (sum, session) =>
-          sum +
-          session.economicVerdicts.filter((verdict) => verdict.kind === "unaccounted_break").length,
-        0,
-      ),
-      wasteful: sessions.reduce(
-        (sum, session) =>
-          sum + session.economicVerdicts.filter((verdict) => verdict.kind === "wasteful").length,
-        0,
-      ),
+      cache_regression: countEconomicVerdictKind(sessions, "cache_regression"),
+      inconclusive: countEconomicVerdictKind(sessions, "inconclusive"),
+      unaccounted_break: countEconomicVerdictKind(sessions, "unaccounted_break"),
+      wasteful: countEconomicVerdictKind(sessions, "wasteful"),
     },
   };
   aggregate.stablePrefixRate = ratio(aggregate.stablePrefixTurns, aggregate.promptObservedTurns);

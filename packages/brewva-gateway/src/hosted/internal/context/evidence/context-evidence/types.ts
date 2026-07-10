@@ -3,6 +3,8 @@ import type { NetReuseInputs } from "@brewva/brewva-substrate/context-budget";
 export const CONTEXT_EVIDENCE_SAMPLE_SCHEMA = "brewva.context_evidence.sample.v2";
 // v3: `wasteful` is now the per-cut net-reuse verdict (netReuseValue < 0),
 // replacing the aggregate cache-creation-ratio heuristic (RFC Phase 3).
+// Additive on v3: the `inconclusive` verdict kind — an observed cut whose
+// economics cannot resolve names its reason instead of staying silent.
 export const CONTEXT_EVIDENCE_REPORT_SCHEMA = "brewva.context_evidence.report.v3";
 
 export interface PromptStabilityEvidenceSample {
@@ -73,8 +75,20 @@ export interface ContextEvidenceArtifactRef {
 
 export type ContextEvidenceEconomicVerdictKind =
   | "cache_regression"
+  | "inconclusive"
   | "unaccounted_break"
   | "wasteful";
+
+// Why the economics of an observed compaction could not resolve (axiom 7:
+// absence of evidence is graded and named, never silent). `unpriced_model`: a
+// model selection was in effect but carries no usable cache pricing — unknown
+// to the catalog, zero-priced (a self-hosted relay collapses to w = r = 0), or
+// degenerate (w <= r). `missing_pricing`: no model selection precedes the cut.
+// `missing_token_counts`: the committed receipt lacks usable fromTokens/toTokens.
+export type ContextEvidenceInconclusiveReason =
+  | "unpriced_model"
+  | "missing_pricing"
+  | "missing_token_counts";
 
 // Per-verdict provenance so a verdict can be joined back to the specific
 // compaction it came from and to the cache observation that confirms it. When the

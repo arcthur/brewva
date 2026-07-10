@@ -26,6 +26,30 @@ export interface CreateBrewvaResourceRouterInput {
 
 const RESOURCE_PREFIX = "brewva-resource:///" as const;
 const EXTERNAL_RESOURCE_SCHEMES = new Set(["memory", "mcp", "pr", "issue", "conflict"]);
+// Requires a slash after the colon so bare filenames containing a colon
+// (note:draft.md) keep resolving as relative paths.
+const URI_SCHEME_PREFIX_PATTERN = /^([a-z][a-z0-9+.-]+):\/+(.*)$/iu;
+
+/**
+ * Splits a scheme-bearing URI into its lowercased scheme and its payload with
+ * leading slashes stripped, so `scheme:/p`, `scheme://p`, and `scheme:///p`
+ * all carry the same payload. Returns null for bare paths (including
+ * filenames that contain a colon but no slash after it). This is the single
+ * definition of the resource-URI scheme grammar; tool-side preflights reuse
+ * it instead of re-declaring the regex.
+ */
+export function parseUriSchemePrefix(
+  uri: string,
+): { readonly scheme: string; readonly payload: string } | null {
+  const match = URI_SCHEME_PREFIX_PATTERN.exec(uri);
+  if (!match) {
+    return null;
+  }
+  return {
+    scheme: (match[1] ?? "").toLowerCase(),
+    payload: (match[2] ?? "").replace(/^\/+/u, ""),
+  };
+}
 
 function normalizeResourceUri(uri: string): string {
   if (uri.startsWith(RESOURCE_PREFIX)) {
@@ -33,6 +57,18 @@ function normalizeResourceUri(uri: string): string {
   }
   if (uri.startsWith("file://")) {
     return `${RESOURCE_PREFIX}file/${encodeURI(fileURLToPath(uri))}`;
+  }
+  const parsed = parseUriSchemePrefix(uri);
+  if (parsed) {
+    // `source:` is the model-facing file-scheme alias (source_read).
+    if (parsed.scheme === "source") {
+      return `${RESOURCE_PREFIX}file/${parsed.payload}`;
+    }
+    // Canonical URIs written with too few slashes heal to the canonical form.
+    if (parsed.scheme === "brewva-resource") {
+      return `${RESOURCE_PREFIX}${parsed.payload}`;
+    }
+    return `${RESOURCE_PREFIX}${parsed.scheme}/${parsed.payload}`;
   }
   return isAbsolute(uri)
     ? `${RESOURCE_PREFIX}file/${encodeURI(resolve(uri))}`
@@ -103,15 +139,32 @@ function selectJsonPath(content: string, fieldPath: string): string | undefined 
 
 function createFileProvider(cwd: string, roots: readonly string[]): BrewvaResourceProvider {
   const allowedRoots = roots.length > 0 ? roots.map((root) => resolve(root)) : [cwd];
+  const insideRoots = (path: string): boolean =>
+    allowedRoots.some((root) => isInsideOrEqual(root, path));
+  const resolveCandidatePath = (decodedPath: string): string => {
+    if (isAbsolute(decodedPath)) {
+      return resolve(decodedPath);
+    }
+    const relativeCandidate = resolve(cwd, decodedPath);
+    if (insideRoots(relativeCandidate) && existsSync(relativeCandidate)) {
+      return relativeCandidate;
+    }
+    // Alias forms (source:///<path>) strip leading slashes, so an absolute
+    // payload arrives in relative shape; fall back to the filesystem-root
+    // interpretation when the cwd-relative one does not resolve.
+    const rootedCandidate = resolve("/", decodedPath);
+    if (insideRoots(rootedCandidate) && existsSync(rootedCandidate)) {
+      return rootedCandidate;
+    }
+    return relativeCandidate;
+  };
   return {
     scheme: "file",
     read(uri) {
       const parsed = parseResourceUri(uri);
       const decodedPath = decodeURIComponent(parsed.path);
-      const absolutePath = isAbsolute(decodedPath)
-        ? resolve(decodedPath)
-        : resolve(cwd, decodedPath);
-      if (!allowedRoots.some((root) => isInsideOrEqual(root, absolutePath))) {
+      const absolutePath = resolveCandidatePath(decodedPath);
+      if (!insideRoots(absolutePath)) {
         return unavailable(uri, "path_outside_root");
       }
       if (!existsSync(absolutePath)) {

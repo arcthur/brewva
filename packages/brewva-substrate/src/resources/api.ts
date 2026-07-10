@@ -11,6 +11,7 @@ export {
 } from "./resource-loader.js";
 export {
   createBrewvaResourceRouter,
+  parseUriSchemePrefix,
   toBrewvaFileResourceUri,
   type BrewvaResourceProvider,
   type BrewvaResourceReadResult,

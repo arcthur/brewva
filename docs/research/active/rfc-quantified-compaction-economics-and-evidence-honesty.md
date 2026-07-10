@@ -4,7 +4,7 @@
 
 - Status: active
 - Owner: Runtime, gateway, and CLI-inspect maintainers
-- Last reviewed: `2026-06-26`
+- Last reviewed: `2026-07-10`
 - Depends on:
   - [Decision: Context Operating System And Compaction Physics](../decisions/context-operating-system-and-compaction-physics.md)
   - [RFC: Reversible References, Advisory Compression Routing, And Replay-Distilled Precedent](./rfc-reversible-references-advisory-compression-and-replay-distilled-precedent.md)
@@ -170,9 +170,15 @@ summary) remains a future option (Open Questions).
 The Brewva-native sharpening over `headroom` is that the value carries
 `netReuseInputs` so it is reproducible and diffable, and that it never fabricates
 certainty: missing `S`, missing `w`/`r` pricing, or missing observation each yield
-`netReuseValue = null` rather than a number. When all inputs are present, the
-verdict's `wasteful` meaning becomes `netReuseValue < 0` (the cut cost more cache
-than it freed). The value is evidence on the verdict — rendered in inspect and
+`netReuseValue = null` rather than a number. The null is strictly a
+missing-data grade, never an outcome grade: `ΔT ≤ 0` (the cut freed nothing, or
+the summary grew the retained context) is an **observed** outcome, and the
+formula is total there — both terms point the same way, so the value is
+non-positive and cannot fabricate a profit. An expansion therefore prices as a
+loss instead of vanishing into null (live calibration found exactly that
+dishonesty; see Calibration Notes). When all inputs are present, the verdict's
+`wasteful` meaning becomes `netReuseValue < 0` (the cut cost more cache than it
+freed). The value is evidence on the verdict — rendered in inspect and
 available to the model's attention surface — and never a runtime mutation trigger.
 The helper is pure and deterministic from receipts plus pricing metadata; nothing
 in the kernel commitment path reads it (axioms 1, 2, 18: descriptive evidence
@@ -222,6 +228,30 @@ folded into a per-kind map), so a session with several losing compactions yields
 several `wasteful` verdicts and the aggregate counts are accurate. Receipts are
 deduplicated by `compactId` first, so one compaction surfacing as both a legacy
 `session_compact` and a committed event is counted once.
+
+Sharpened after live calibration: the grade needs a **carrier** when a cut emits
+no other verdict. A compaction whose economics cannot resolve and whose cache
+impact triggers nothing used to disappear from `economicVerdicts` entirely —
+indistinguishable from a cut that paid off. Every such cut now emits a
+first-class `inconclusive` verdict (a fourth kind beside `cache_regression` /
+`unaccounted_break` / `wasteful`) whose `reason` names the blocker:
+`unpriced_model` (a selection was in effect but has no usable cache pricing —
+unknown to the catalog, zero-priced like a self-hosted relay where `w = r = 0`,
+or degenerate `w ≤ r`), `missing_pricing` (no `model_select` precedes the cut),
+or `missing_token_counts` (the receipt lacks usable `fromTokens`/`toTokens`).
+Its grade is `inconclusive` by construction — a joined cache observation
+measures the cache outcome, not the absent economics, so it never promotes this
+verdict and is deliberately omitted from its `source`. The observed cut stays
+legible: `metrics` carries `deltaTokens`/`suffixTokens` whenever the token
+counts exist, so an unpriced expansion still shows the summary grew. The
+per-cut trichotomy is now total: resolved-negative → `wasteful`,
+resolved-non-negative → silence, unresolvable → `inconclusive`.
+
+The same calibration closed a pricing fabrication: the session pricing timeline
+used to **skip** a `model_select` that resolved to no usable multipliers, so a
+compaction after switching to an unpriced model silently borrowed the previous
+model's prices. Unpriced selections are now recorded as null-multiplier bases
+that shadow earlier priced ones — stale pricing never leaks onto a later model.
 
 ### Loop 3 — Break-even and idle-decay sharpening of `--recommend`
 
@@ -284,6 +314,43 @@ during calibration:
    migration. The real-trace calibration comparison against the old heuristic remains
    the promotion-to-decision gate (it cannot run in an autonomous pass).
 
+## Calibration Notes
+
+First live-trace calibration (session `1de74ac4-cc28-4cd3-be7b-87d8eb27c47c`, a
+zero-priced self-hosted relay) caught the shipped surface being evidence-silent
+on its worst observed case, and drove two semantic closures plus one fabrication
+fix — all evidence-side, still zero runtime decision points:
+
+- **The observed cut.** One committed compaction with `fromTokens: 103`,
+  `toTokens: 292` — the summary GREW the context by 189 tokens (`ΔT = −189`)
+  while burning 1269 summarizer tokens, and the next provider cache observation
+  was `warm`. `report:context-evidence` showed `economicVerdicts: []` and
+  `wasteful: 0` against `totalCompactionsWithPostCacheObservation: 1`: the most
+  wasteful outcome on tape produced no verdict at all.
+- **Closure 1 — expansion is data, not absence.** The pure helper's `ΔT ≤ 0`
+  null-guard conflated an observed negative shrink with missing data. The guard
+  is gone: the formula is total for `ΔT ≤ 0` and provably non-positive there
+  (golden: `−189·2.15 − 1.15·(292 − 189) = −524.8`), so on a priced model this
+  cut now yields a `wasteful` verdict graded `measured` by its warm observation.
+  `compactionBreakEvenReads` still returns null for `ΔT ≤ 0` — no finite read
+  count redeems an expansion, so there the null honestly means "does not exist".
+- **Closure 2 — unpriced models grade themselves.** The relay's zero pricing
+  (`cost.input/output = 0`) collapses `w = r = 0`, so every compaction on such a
+  model was verdict-less. Each unresolvable cut now emits the `inconclusive`
+  verdict kind with a named reason (`unpriced_model` here; `missing_pricing` /
+  `missing_token_counts` for the other blockers), with `deltaTokens` still
+  visible in `metrics`. Axiom 7 made literal on the economics.
+- **Fabrication fix (found while closing 2).** The pricing timeline skipped
+  unpriced `model_select` events, so a cut after switching to an unpriced model
+  silently borrowed the previous model's multipliers. Unpriced selections now
+  record null-multiplier bases that shadow earlier priced ones.
+
+Distribution note: on priced traces the `wasteful` count can only grow (by
+previously-null expansion cuts, each carrying its negative net figure), and
+`inconclusive` is a new, separately-counted kind — the calibration comparison
+against the old heuristic (the promotion gate above) must read `wasteful`
+together with `inconclusive` rather than treating verdict absence as health.
+
 ## Source Anchors
 
 - Economic verdict type and producer:
@@ -322,7 +389,9 @@ postCompactionCacheResetObservations}` in the same file
 
 - Loop 1: with all inputs present, a compaction that frees fewer tokens than it
   costs in cache rewrite produces `netReuseValue < 0`; a large shave under a small
-  invalidated suffix produces `netReuseValue > 0`. The pure helper supports
+  invalidated suffix produces `netReuseValue > 0`; an observed expansion
+  (`ΔT ≤ 0`) produces a strictly-negative value and a `wasteful` verdict, never
+  null (live golden: `103 → 292` prices at `−524.8`). The pure helper supports
   `pAlive` (a near-TTL idle cut with `pAlive ≈ 0` drops the penalty term — unit
   tested), but production uses `pAlive = 1` (conservative full penalty) until the
   idle-decay derivation lands with Loop 3. A missing `S`/`ΔT` (token counts) or
@@ -334,7 +403,10 @@ postCompactionCacheResetObservations}` in the same file
   `provider_cache_observation` grades `measured`; a predicted-only verdict with no
   joined observation grades `estimated`; a null-input or below-floor verdict grades
   `inconclusive`. No verdict claims `measured` from an aggregate count or a
-  prediction.
+  prediction. A cut whose economics cannot resolve emits the `inconclusive`
+  verdict kind with a named reason (`unpriced_model` / `missing_pricing` /
+  `missing_token_counts`) instead of vanishing, and an unpriced `model_select`
+  shadows earlier priced bases instead of inheriting their multipliers.
 - Loop 3: `--recommend` echoes `breakEvenReads` and `idleDecayAtReset`; a reset
   cluster at high idle is annotated `idle_ttl_likely` (and, per the open question,
   either holds posture or only annotates); a reset cluster at low idle with few
@@ -354,8 +426,11 @@ number | null`, `netReuseInputs` (the `{ ΔT, S, w, r, R, pAlive }` bag), and
   `source` in Phase 1 (+3 typed fields, additive); `grade` lands in Phase 2 (+1).
   `source` carries `compactId` plus, for a `measured` verdict, the joined
   observation's `observationTurn`/`observationStatus`/`observationExpected`/
-  `observationReason` so the measurement is auditable. The recommendation record
-  would gain `breakEvenReads` and `idleDecayAtReset` (Loop 3, not implemented).
+  `observationReason` so the measurement is auditable. The verdict kind
+  vocabulary gains `inconclusive` (+1 enum value, additive on the `v3` schema)
+  whose `reason` is one of three named blockers rather than free prose. The
+  recommendation record would gain `breakEvenReads` and `idleDecayAtReset`
+  (Loop 3, not implemented).
 - Routing / control-plane decision points: 1 → 1 (**+0**). The compaction gate is
   unchanged; nothing new reads `netReuseValue` to gate a turn.
 - Config keys: +0 confirmed. Loop 3 reuses the existing `--recommend` opt-in; a

@@ -58,6 +58,8 @@ export type HostedRuntimeOpsState = {
   readonly latestContextUsage: Map<string, ContextBudgetUsage>;
   readonly latestCompactionGateStatus: Map<string, ContextCompactionGateStatus>;
   readonly pendingContextCompactionReasons: Map<string, string>;
+  /** Last reason receipted as context_compaction_deferred, per session — arms once per pressure episode. */
+  readonly deferredCompactionReceiptReasons: Map<string, string>;
   readonly contextPredictedGrowthEmaTokens: Map<string, number>;
   readonly contextTurnIndexes: Map<string, number>;
   readonly activeTaskStalls: Map<
@@ -216,6 +218,7 @@ export function createHostedRuntimeOpsContext(options: {
     latestContextUsage: new Map<string, ContextBudgetUsage>(),
     latestCompactionGateStatus: new Map<string, ContextCompactionGateStatus>(),
     pendingContextCompactionReasons: new Map<string, string>(),
+    deferredCompactionReceiptReasons: new Map<string, string>(),
     contextPredictedGrowthEmaTokens: new Map<string, number>(),
     contextTurnIndexes: new Map<string, number>(),
     activeTaskStalls: new Map(),

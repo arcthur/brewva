@@ -188,6 +188,17 @@ export function createContextBudgetRuntimeController(ctx: HostedRuntimeOpsContex
       ),
     rememberDeferredReason(sessionId: string, reason: string | null) {
       rememberPendingReason(sessionId, reason);
+      // A clear is not a deferral, and pressure checks run per provider
+      // request — receipt only a newly armed reason, so the tape carries one
+      // context_compaction_deferred per episode instead of null/repeat spam.
+      if (!reason) {
+        ctx.state.deferredCompactionReceiptReasons.delete(sessionId);
+        return null;
+      }
+      if (ctx.state.deferredCompactionReceiptReasons.get(sessionId) === reason) {
+        return null;
+      }
+      ctx.state.deferredCompactionReceiptReasons.set(sessionId, reason);
       return ctx.emit(sessionId, "context_compaction_deferred", { reason });
     },
     checkGate(sessionId: string, toolName: string, usage?: ContextBudgetUsage) {

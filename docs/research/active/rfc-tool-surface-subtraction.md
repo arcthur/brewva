@@ -156,7 +156,7 @@ truncation.
   first move was a raw shell `find … -name "*.py" … | grep -v … | sort` (it even
   guessed Python). It reached for Unix tooling it already knows, not the ontology
   brewva built for exactly this.
-- **Two dead/debt surfaces surfaced during measurement** (independent of the model
+- **Three dead/debt surfaces surfaced during measurement** (independent of the model
   result, and each already an axiom violation):
   - `getEnvApiKey` (formerly the provider-core `./auth` subpath) mapped
     `deepseek` to `DEEPSEEK_API_KEY` etc. but had **zero in-repo callers** — an
@@ -166,6 +166,20 @@ truncation.
     migration shim** (`packages/brewva-runtime/src/config/field-policy.ts`): every
     existing config carrying those keys **fails config load at startup** today.
     Subtraction was done; the migration half of axiom 3 was not.
+  - `source_read` **rejected the URI grammar models actually guess**: the resource
+    router recognized only `brewva-resource:///`, `file://`, and bare paths, so a
+    model-written `source:///packages/…` fell into the bare-relative-path branch
+    and was joined into `<cwd>/source:/packages/…` → `not_found` (live tape:
+    session `5d433e0b-7f11-4414-badc-5fffa2d6e360`, GLM5.2), after which the model
+    fell back to host-plane `read`. The `uri` parameter documented no accepted
+    form, and the error named the mangled path instead of the grammar — a
+    plausible friction mechanism inside the 82:6 `read` : `source_read` ratio,
+    which means part of that ratio measures a broken door, not a rejected
+    ontology. Repaired in this RFC's debt-repayment step: the router now aliases
+    `source:` (1-3 slashes, abs-or-repo-relative payload) to the file scheme,
+    unknown schemes return `unknown_scheme` plus the accepted grammar instead of
+    a path-mangled `not_found`, and `source_read.uri` carries a grammar
+    description in its schema.
 - **Headless has no in-loop approval path.** Both `--print` backends (embedded and
   gateway) suspend on the first `exec` (`approval_pending`) with no config/env/flag
   to auto-decide, so an unattended tool-using session cannot complete. For a harness

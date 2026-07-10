@@ -269,6 +269,7 @@ function installHostedBehavior(
 
   hostApi.on("tool_call", qualityGate.toolCall);
   hostApi.on("context", contextTransform.context);
+  hostApi.on("before_provider_request", contextTransform.beforeProviderRequest);
   registerEventStream(hostApi, runtime, turnClock, {
     toolDefinitionsByName,
   });

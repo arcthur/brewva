@@ -87,17 +87,60 @@ describe("computeNetReuseValue", () => {
     });
   });
 
-  test("returns null when no tokens were freed (deltaTokens <= 0)", () => {
-    expect(
-      computeNetReuseValue({
-        deltaTokens: 0,
-        suffixTokens: 50_000,
-        writeMultiplier: W,
-        readMultiplier: R,
-        expectedReads: 10,
-        pAlive: 1,
-      }),
-    ).toBeNull();
+  test("an observed expansion (deltaTokens < 0) prices as maximally wasteful, not null", () => {
+    // Live calibration golden (session 1de74ac4): a 103-token context compacted
+    // INTO a 292-token summary — dT = -189, S = 292. Every future turn pays for
+    // the grown context AND the cut still invalidated the cache prefix:
+    // -189*(1.25 + 0.1*9) - 1*1.15*(292-189) = -406.35 - 118.45 = -524.8
+    const estimate = computeNetReuseValue({
+      deltaTokens: -189,
+      suffixTokens: 292,
+      writeMultiplier: W,
+      readMultiplier: R,
+      expectedReads: 10,
+      pAlive: 1,
+    });
+    expect(estimate?.netReuseValue).toBeCloseTo(-524.8, 6);
+    expect(estimate?.inputs.deltaTokens).toBe(-189);
+  });
+
+  test("an expansion stays negative even when the cache was already dead (pAlive=0)", () => {
+    // Dropping the rebuild penalty never turns growth into profit:
+    // -189*2.15 - 0 = -406.35
+    const estimate = computeNetReuseValue({
+      deltaTokens: -189,
+      suffixTokens: 292,
+      writeMultiplier: W,
+      readMultiplier: R,
+      expectedReads: 10,
+      pAlive: 0,
+    });
+    expect(estimate?.netReuseValue).toBeCloseTo(-406.35, 6);
+  });
+
+  test("a cut that freed nothing (deltaTokens = 0) prices the pure cache break", () => {
+    // 0 - 1*1.15*50000 = -57500: the prefix was invalidated for zero benefit.
+    const estimate = computeNetReuseValue({
+      deltaTokens: 0,
+      suffixTokens: 50_000,
+      writeMultiplier: W,
+      readMultiplier: R,
+      expectedReads: 10,
+      pAlive: 1,
+    });
+    expect(estimate?.netReuseValue).toBeCloseTo(-57_500, 6);
+  });
+
+  test("an empty no-op cut (deltaTokens = 0, suffix = 0) is exactly zero", () => {
+    const estimate = computeNetReuseValue({
+      deltaTokens: 0,
+      suffixTokens: 0,
+      writeMultiplier: W,
+      readMultiplier: R,
+      expectedReads: 10,
+      pAlive: 1,
+    });
+    expect(estimate?.netReuseValue).toBe(0);
   });
 
   test("returns null when a pricing multiplier is missing or non-finite", () => {
@@ -202,6 +245,19 @@ describe("compactionBreakEvenReads", () => {
         readMultiplier: R,
         suffixTokens: 10_000,
         deltaTokens: 0,
+      }),
+    ).toBeNull();
+  });
+
+  test("returns null for an expansion — no finite read count redeems it", () => {
+    // Unlike computeNetReuseValue (which prices dT < 0 as a loss), break-even
+    // genuinely does not exist here: the net value is negative for every R.
+    expect(
+      compactionBreakEvenReads({
+        writeMultiplier: W,
+        readMultiplier: R,
+        suffixTokens: 292,
+        deltaTokens: -189,
       }),
     ).toBeNull();
   });

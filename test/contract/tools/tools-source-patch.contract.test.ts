@@ -117,6 +117,55 @@ describe("source_read and source_patch tools", () => {
     ).toContain("L1@");
   });
 
+  test("source_read accepts source:/// triple-slash URIs as repo-relative paths", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-source-read-source-uri-"));
+    const filePath = join(workspace, "example.ts");
+    writeFileSync(filePath, "export const alpha = 1;\n", "utf8");
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = createSourceReadTool({ runtime });
+
+    const result = await tool.execute(
+      "tc-source-read-source-uri",
+      {
+        uri: "source:///example.ts",
+        mode: "spans",
+        spans: [{ start_line: 1, end_line: 1 }],
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-source-read-source-uri"),
+    );
+
+    const details = toolOutcomePayload(result) as SourceReadToolDetails;
+    expect(details?.resourceUri).toBe("brewva-resource:///file/example.ts");
+    expect(
+      extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("L1@");
+  });
+
+  test("source_read names the accepted grammar when the URI scheme is unknown", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-source-read-unknown-scheme-"));
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const tool = createSourceReadTool({ runtime });
+
+    const result = await tool.execute(
+      "tc-source-read-unknown-scheme",
+      {
+        uri: "repo://example.ts",
+        mode: "raw",
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-source-read-unknown-scheme"),
+    );
+
+    expect(result.outcome.kind).toBe("err");
+    const text = extractTextContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("unknown_scheme");
+    expect(text).toContain("source:///");
+    expect(toolOutcomePayload(result)).toMatchObject({ reason: "unknown_scheme" });
+  });
+
   test("source_read rejects runtime tape resources before file read", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-source-read-runtime-tape-"));
     mkdirSync(join(workspace, ".brewva", "tape"), { recursive: true });
@@ -228,6 +277,59 @@ describe("source_read and source_patch tools", () => {
     expect(details.status).toBe("conflict");
     expect(details.conflicts?.[0]?.reason).toBe("runtime_artifact_read_denied");
     expect(existsSync(join(workspace, ".brewva", "tape", "injected.jsonl"))).toBe(false);
+  });
+
+  test("source_patch_prepare resolves slash-stripped absolute resource URIs", async () => {
+    // resourceUriForPath emits files outside baseCwd (multi-root scopes) as
+    // brewva-resource:///file/<absolute-path-without-leading-slash>; the
+    // parse side must round-trip that shape back to the absolute path.
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-source-patch-stripped-abs-"));
+    const filePath = join(workspace, "example.ts");
+    writeFileSync(filePath, "export const alpha = 1;\nexport const beta = 2;\n", "utf8");
+    const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+    const sourceRead = createSourceReadTool({ runtime });
+    const [prepare] = createSourcePatchTools({ runtime });
+
+    const readResult = await sourceRead.execute(
+      "tc-source-patch-stripped-abs-read",
+      {
+        uri: "example.ts",
+        mode: "spans",
+        spans: [{ start_line: 2, end_line: 2 }],
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-source-patch-stripped-abs"),
+    );
+    const readDetails = toolOutcomePayload(readResult) as SourceReadToolDetails;
+    if (!readDetails) {
+      throw new Error("Missing source_read details.");
+    }
+
+    const strippedAbsoluteUri = `brewva-resource:///file/${filePath.replace(/^\/+/u, "")}`;
+    const prepareResult = await prepare.execute(
+      "tc-source-patch-stripped-abs-prepare",
+      {
+        edits: [
+          {
+            kind: "replace_anchor",
+            uri: strippedAbsoluteUri,
+            snapshot_id: readDetails.snapshot.id,
+            start_anchor: requireAnchor(readDetails, 2),
+            replacement: "export const beta = 20;",
+          },
+        ],
+      },
+      undefined,
+      undefined,
+      fakeContext("tc-source-patch-stripped-abs"),
+    );
+
+    const prepareText = extractTextContent(
+      prepareResult as { content: Array<{ type: string; text?: string }> },
+    );
+    expect(prepareText).toContain("[SourcePatchPlan]");
+    expect(prepareText).toContain("+export const beta = 20;");
   });
 
   test("source_patch_prepare and source_patch_apply are the only source mutation path", async () => {

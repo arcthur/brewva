@@ -48,6 +48,83 @@ describe("Brewva resource router", () => {
     expect(result.content).toBe("# Note\n");
   });
 
+  test("reads source:/// triple-slash URIs as repo-relative file resources", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-source-triple-"));
+    mkdirSync(join(workspace, "packages"), { recursive: true });
+    writeFileSync(join(workspace, "packages", "note.md"), "# Note\n", "utf8");
+    const loader = await createTestResourceLoader(workspace);
+    const router = createBrewvaResourceRouter({ cwd: workspace, loader });
+
+    const result = await router.read("source:///packages/note.md");
+
+    expect(result.status).toBe("ok");
+    expect(result.uri).toBe("brewva-resource:///file/packages/note.md");
+    expect(result.path).toBe(join(workspace, "packages", "note.md"));
+    expect(result.content).toBe("# Note\n");
+  });
+
+  test("reads source:// double-slash URIs as repo-relative file resources", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-source-double-"));
+    writeFileSync(join(workspace, "note.md"), "# Note\n", "utf8");
+    const loader = await createTestResourceLoader(workspace);
+    const router = createBrewvaResourceRouter({ cwd: workspace, loader });
+
+    const result = await router.read("source://note.md");
+
+    expect(result.status).toBe("ok");
+    expect(result.path).toBe(join(workspace, "note.md"));
+  });
+
+  test("resolves source:/// absolute payloads inside the allowed roots", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-source-abs-"));
+    const filePath = join(workspace, "note.md");
+    writeFileSync(filePath, "# Note\n", "utf8");
+    const loader = await createTestResourceLoader(workspace);
+    const router = createBrewvaResourceRouter({ cwd: workspace, loader });
+
+    const result = await router.read(`source://${filePath}`);
+
+    expect(result.status).toBe("ok");
+    expect(result.path).toBe(filePath);
+  });
+
+  test("returns unknown_scheme for unrecognized URI schemes instead of path-mangling", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-unknown-scheme-"));
+    const loader = await createTestResourceLoader(workspace);
+    const router = createBrewvaResourceRouter({ cwd: workspace, loader });
+
+    const result = await router.read("repo://packages/note.md");
+
+    expect(result.status).toBe("unavailable");
+    expect(result.reason).toBe("unknown_scheme");
+    expect(result.uri).toBe("brewva-resource:///repo/packages/note.md");
+  });
+
+  test("reads canonical brewva-resource URIs written with two slashes", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-two-slash-"));
+    writeFileSync(join(workspace, "note.md"), "# Note\n", "utf8");
+    const loader = await createTestResourceLoader(workspace);
+    const router = createBrewvaResourceRouter({ cwd: workspace, loader });
+
+    const result = await router.read("brewva-resource://file/note.md");
+
+    expect(result.status).toBe("ok");
+    expect(result.path).toBe(join(workspace, "note.md"));
+  });
+
+  test("still reads bare relative paths containing a colon", async () => {
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-colon-file-"));
+    writeFileSync(join(workspace, "note:draft.md"), "# Colon\n", "utf8");
+    const loader = await createTestResourceLoader(workspace);
+    const router = createBrewvaResourceRouter({ cwd: workspace, loader });
+
+    const result = await router.read("note:draft.md");
+
+    expect(result.status).toBe("ok");
+    expect(result.path).toBe(join(workspace, "note:draft.md"));
+    expect(result.content).toBe("# Colon\n");
+  });
+
   test("supports agent JSON field-path sub-selection", async () => {
     const workspace = mkdtempSync(join(tmpdir(), "brewva-resource-router-agent-"));
     const loader = await createTestResourceLoader(workspace);

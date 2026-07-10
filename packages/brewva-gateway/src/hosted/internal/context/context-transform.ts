@@ -26,6 +26,7 @@ export interface ContextTransformOptions {
 export interface ContextTransformLifecycle {
   turnStart: (event: unknown, ctx: unknown) => undefined;
   context: (event: unknown, ctx: unknown) => { messages: BrewvaAgentProtocolMessage[] } | undefined;
+  beforeProviderRequest: (event: unknown, ctx: unknown) => undefined;
   sessionCompact: (event: unknown, ctx: unknown) => Promise<undefined>;
   sessionShutdown: (event: unknown, ctx: unknown) => undefined;
   beforeAgentStart: (event: unknown, ctx: unknown) => Promise<HostedWorkbenchContextResult>;
@@ -79,6 +80,21 @@ function resolveUsage(ctx: HostedContextLifecycleContext) {
   );
 }
 
+function resolveCompactionPressureCheckInput(lifecycleContext: HostedContextLifecycleContext) {
+  return {
+    sessionId: lifecycleContext.sessionManager.getSessionId(),
+    usage: resolveUsage(lifecycleContext),
+    hasUI: lifecycleContext.hasUI === true,
+    // Eval-only opt-in: BREWVA_EVAL_FORCE_COMPACTION lets a headless run exercise
+    // the real session-compaction path (which the non_interactive_mode skip
+    // otherwise reserves for interactive sessions), so validation runs can
+    // produce genuine session.compact / pre_compact_prune / economics receipts.
+    allowNonInteractive: process.env.BREWVA_EVAL_FORCE_COMPACTION === "1",
+    idle: typeof lifecycleContext.isIdle === "function" ? lifecycleContext.isIdle() : false,
+    compact: lifecycleContext.compact,
+  };
+}
+
 export function createContextTransformLifecycle(
   extensionApi: InternalHostPluginApi,
   runtime: HostedRuntimeAdapterPort,
@@ -112,18 +128,7 @@ export function createContextTransformLifecycle(
     },
     context(event, ctx) {
       const lifecycleContext = asLifecycleContext(ctx);
-      compactionController.context({
-        sessionId: lifecycleContext.sessionManager.getSessionId(),
-        usage: resolveUsage(lifecycleContext),
-        hasUI: lifecycleContext.hasUI === true,
-        // Eval-only opt-in: BREWVA_EVAL_FORCE_COMPACTION lets a headless run exercise
-        // the real session-compaction path (which the non_interactive_mode skip
-        // otherwise reserves for interactive sessions), so validation runs can
-        // produce genuine session.compact / pre_compact_prune / economics receipts.
-        allowNonInteractive: process.env.BREWVA_EVAL_FORCE_COMPACTION === "1",
-        idle: typeof lifecycleContext.isIdle === "function" ? lifecycleContext.isIdle() : false,
-        compact: lifecycleContext.compact,
-      });
+      compactionController.context(resolveCompactionPressureCheckInput(lifecycleContext));
       const messages = (event as ContextEvent).messages;
       if (!Array.isArray(messages)) {
         return undefined;
@@ -134,6 +139,16 @@ export function createContextTransformLifecycle(
           messages: messages as BrewvaAgentProtocolMessage[],
         }),
       };
+    },
+    beforeProviderRequest(_event, ctx) {
+      // The `context` hook runs once per turn, before the first provider
+      // request — usage that crosses the hard limit inside the turn loop is
+      // only observed after each response, so re-check here (per request) or a
+      // single-prompt headless run exits before any evaluation sees pressure.
+      compactionController.beforeProviderRequest(
+        resolveCompactionPressureCheckInput(asLifecycleContext(ctx)),
+      );
+      return undefined;
     },
     async sessionCompact(event, ctx) {
       const lifecycleContext = asLifecycleContext(ctx);
@@ -179,6 +194,7 @@ export function registerContextTransform(
   const lifecycle = createContextTransformLifecycle(extensionApi, runtime, options);
   hooks.on("turn_start", lifecycle.turnStart);
   hooks.on("context", lifecycle.context);
+  hooks.on("before_provider_request", lifecycle.beforeProviderRequest);
   hooks.on("session_compact", lifecycle.sessionCompact);
   hooks.on("session_shutdown", lifecycle.sessionShutdown);
   hooks.on("before_agent_start", lifecycle.beforeAgentStart);

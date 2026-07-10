@@ -23,10 +23,11 @@ export type RuntimeSessionRecorder = (
   sessionId: string,
   payload?: object | null,
 ) => RuntimeEventRecord;
+/** Returns the receipted event for a newly armed deferral; null when clearing or when the reason is already receipted. */
 export type RuntimeDeferredReasonRecorder = (
   sessionId: string,
   reason: string | null,
-) => RuntimeEventRecord;
+) => RuntimeEventRecord | null;
 export type RuntimeSemanticRecorder = (...args: unknown[]) => RuntimeEventRecord;
 export type RuntimeStateUnsubscribe = () => boolean;
 export type RuntimeLineageRecordInput = ProtocolRecord;

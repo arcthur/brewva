@@ -158,15 +158,16 @@ describe("context evidence report continuation anchor metrics", () => {
     const report = buildContextEvidenceReport(runtime, { sessionIds: [sessionId] });
     const session = report.sessions.find((entry) => entry.sessionId === sessionId);
 
-    // No session model is recorded, so net-reuse economics stay null and the
-    // per-cut `wasteful` verdict (Phase 3) does not fire — only the cache-impact
-    // verdicts do.
-    expect(session?.economicVerdicts.map((entry) => entry.kind).toSorted()).toEqual([
-      "cache_regression",
-      "unaccounted_break",
-    ]);
+    // No session model is recorded, so net-reuse economics stay null: the
+    // per-cut `wasteful` verdict (Phase 3) cannot fire, and the unresolved
+    // economics surface as a named `inconclusive` verdict beside the
+    // cache-impact verdicts (axiom 7: absence of pricing is never silence).
+    expect(
+      session?.economicVerdicts.map((entry) => entry.kind).toSorted((a, b) => a.localeCompare(b)),
+    ).toEqual(["cache_regression", "inconclusive", "unaccounted_break"]);
     expect(report.aggregate.economicVerdictCounts).toEqual({
       cache_regression: 1,
+      inconclusive: 1,
       unaccounted_break: 1,
       wasteful: 0,
     });

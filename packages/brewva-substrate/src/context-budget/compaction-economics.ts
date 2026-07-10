@@ -4,7 +4,9 @@
 // `docs/research/active/rfc-quantified-compaction-economics-and-evidence-honesty.md`.
 
 export interface NetReuseInputs {
-  // Tokens freed by the compaction cut (fromTokens - toTokens).
+  // Tokens freed by the compaction cut (fromTokens - toTokens). Negative when
+  // the cut GREW the retained context (the summary outweighed what it replaced)
+  // — an observed outcome that prices as a loss, never as missing data.
   deltaTokens: number;
   // Provider input tokens in the cache suffix the cut invalidates (S).
   suffixTokens: number;
@@ -36,8 +38,11 @@ function clamp01(value: number): number {
  * netReuseValue = dT*(w + r*(R-1)) - pAlive*(w-r)*(S+dT)
  *
  * Positive means the cut freed more cache value than it cost to rebuild the
- * invalidated suffix. Returns null when any input is missing or degenerate, so
- * the absence of pricing/suffix data never fabricates a number.
+ * invalidated suffix. dT <= 0 — a cut that freed nothing, or a summary that
+ * grew the context — is an observed outcome, not missing data: both terms then
+ * point the same way, so the value is non-positive and can never fabricate a
+ * profit. Returns null only when an input is missing or degenerate, so absent
+ * pricing/suffix data never fabricates a number.
  */
 export function computeNetReuseValue(input: NetReuseInputs): NetReuseEstimate | null {
   const { deltaTokens, suffixTokens, writeMultiplier, readMultiplier, expectedReads } = input;
@@ -52,7 +57,6 @@ export function computeNetReuseValue(input: NetReuseInputs): NetReuseEstimate | 
     return null;
   }
   if (
-    deltaTokens <= 0 ||
     suffixTokens < 0 ||
     writeMultiplier <= 0 ||
     readMultiplier < 0 ||
@@ -75,7 +79,8 @@ export function computeNetReuseValue(input: NetReuseInputs): NetReuseEstimate | 
 /**
  * Break-even reads: solving netReuseValue = 0 at pAlive = 1 for R gives
  * R = ((w - r) / r) * (S / dT). Returns null when read pricing is absent, write
- * does not exceed read, or no tokens were freed.
+ * does not exceed read, or dT <= 0 — unlike computeNetReuseValue (which prices
+ * an expansion as a loss), no finite read count exists that redeems it.
  */
 export function compactionBreakEvenReads(input: {
   writeMultiplier: number;

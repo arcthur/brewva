@@ -8,12 +8,13 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
 import {
   createBrewvaResourceRouter,
   createHostedResourceLoader,
+  parseUriSchemePrefix,
   type BrewvaResourceProvider,
   type BrewvaResourceReadResult,
   type BrewvaResourceRouter,
@@ -62,6 +63,17 @@ const SOURCE_READ_MODE_SCHEMA = buildStringEnumSchema(SOURCE_READ_MODE_VALUES, {
 });
 const MAX_SOURCE_READ_SPANS = 16;
 const MAX_SOURCE_READ_LINES = 400;
+const SOURCE_URI_GRAMMAR_HINT =
+  "Accepted uri forms: a repo-relative or absolute file path, source:///<path>, brewva-resource:///file/<path>, or file:///<absolute-path>.";
+// Schemes source_read can serve without the resource loader. Anything else
+// fails fast here: routing it would materialize the hosted loader (a full
+// skill-discovery scan) just to learn the scheme is unknown.
+const SOURCE_READ_URI_SCHEMES = new Set(["file", "source", "brewva-resource"]);
+
+function hasUnknownSourceReadScheme(uri: string): boolean {
+  const parsed = parseUriSchemePrefix(uri);
+  return parsed !== null && !SOURCE_READ_URI_SCHEMES.has(parsed.scheme);
+}
 const GENERATED_SCAN_BYTES = 4096;
 const ROLLBACK_MANIFEST_FILE = "rollback.json";
 
@@ -272,11 +284,31 @@ function pathFromResourceUri(uri: string, scope: ToolTargetScope): string | null
     return resolveScopedPath(fileURLToPath(uri), scope);
   }
   if (uri.startsWith("brewva-resource:///file/")) {
-    const resourcePath = decodeURIComponent(uri.slice("brewva-resource:///file/".length));
-    const candidate = isAbsolute(resourcePath) ? resourcePath : resourcePath;
-    return resolveScopedPath(candidate, scope);
+    const payload = decodeURIComponent(uri.slice("brewva-resource:///file/".length));
+    return resolveStrippedUriPayload(payload, scope);
+  }
+  const parsed = parseUriSchemePrefix(uri);
+  if (parsed?.scheme === "source") {
+    return resolveStrippedUriPayload(decodeURIComponent(parsed.payload), scope);
   }
   return resolveScopedPath(uri, scope);
+}
+
+// Resource-uri payloads strip leading slashes (resourceUriForPath and the
+// router's source alias both do), so an absolute path can arrive in relative
+// shape. Resolve cwd-relative first, then fall back to the filesystem-root
+// interpretation; a payload nothing resolves keeps the cwd-relative answer so
+// create-file intents and error messages stay anchored to the base cwd.
+function resolveStrippedUriPayload(payload: string, scope: ToolTargetScope): string | null {
+  const relativeCandidate = resolveScopedPath(payload, scope);
+  if (relativeCandidate && existsSync(relativeCandidate)) {
+    return relativeCandidate;
+  }
+  const rootedCandidate = resolveScopedPath(resolve("/", payload), scope);
+  if (rootedCandidate && existsSync(rootedCandidate)) {
+    return rootedCandidate;
+  }
+  return relativeCandidate;
 }
 
 function readExistingFile(path: string): string {
@@ -924,7 +956,11 @@ export function createSourceReadTool(options?: {
     description:
       "Read source resources with snapshot ids and hash-anchored editable lines. Use this before source_patch_prepare. Anchors look like L42@a1b2c3; copy them verbatim from source_read output.",
     parameters: Type.Object({
-      uri: Type.String({ minLength: 1 }),
+      uri: Type.String({
+        minLength: 1,
+        description:
+          "File to read: repo-relative or absolute path; source:///<path>, brewva-resource:///file/<path>, and file:// URIs are also accepted.",
+      }),
       mode: Type.Optional(SOURCE_READ_MODE_SCHEMA),
       spans: Type.Optional(
         Type.Array(
@@ -937,6 +973,12 @@ export function createSourceReadTool(options?: {
       ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      if (hasUnknownSourceReadScheme(params.uri)) {
+        return errTextResult(
+          `source_read unavailable: unknown_scheme (uri: ${params.uri}). ${SOURCE_URI_GRAMMAR_HINT}`,
+          { ok: false, reason: "unknown_scheme" },
+        );
+      }
       const scope = resolveToolTargetScope(runtime, ctx);
       const preflightPath = pathFromResourceUri(params.uri, scope);
       const preflightRuntimeArtifact = preflightPath
@@ -995,9 +1037,11 @@ export function createSourceReadTool(options?: {
         resource.reason !== "not_found" &&
         resource.reason !== "not_file"
       ) {
-        return errTextResult(`source_read unavailable: ${resource.reason ?? "not_found"}`, {
+        const reason = resource.reason ?? "not_found";
+        const hint = reason === "unknown_scheme" ? ` ${SOURCE_URI_GRAMMAR_HINT}` : "";
+        return errTextResult(`source_read unavailable: ${reason} (uri: ${params.uri}).${hint}`, {
           ok: false,
-          reason: resource.reason ?? "not_found",
+          reason,
         });
       }
       if (!existsSync(absolutePath)) {
@@ -1761,12 +1805,16 @@ async function resourceRouterForRoot(input: {
 
 function formatResourceRead(result: BrewvaResourceReadResult): string {
   if (result.status !== "ok") {
-    return [
+    const lines = [
       "[ResourceRead]",
       "status: unavailable",
       `uri: ${result.uri}`,
       `reason: ${result.reason ?? "provider_unavailable"}`,
-    ].join("\n");
+    ];
+    if (result.reason === "unknown_scheme") {
+      lines.push(`hint: ${SOURCE_URI_GRAMMAR_HINT}`);
+    }
+    return lines.join("\n");
   }
   return [
     "[ResourceRead]",

@@ -1,5 +1,8 @@
 import { sha256Hex } from "@brewva/brewva-std/hash";
-import { readAutoCompactionBreakerOpen } from "@brewva/brewva-substrate/context-budget";
+import {
+  readAutoCompactionBreakerOpen,
+  resolveCompactionPressureReason,
+} from "@brewva/brewva-substrate/context-budget";
 import {
   CONTEXT_COMPACTION_AUTO_COMPLETED_EVENT_TYPE,
   CONTEXT_COMPACTION_AUTO_FAILED_EVENT_TYPE,
@@ -79,16 +82,26 @@ export interface HostedContextGateStatePort {
   readonly delegationAdvisoryTracker: ContextNudgeCadenceTracker;
 }
 
+export interface HostedCompactionPressureCheckInput {
+  sessionId: string;
+  usage?: ContextBudgetUsage;
+  hasUI: boolean;
+  allowNonInteractive?: boolean;
+  idle: boolean;
+  compact: HostedManualCompact;
+}
+
 export interface HostedCompactionController extends HostedContextGateStatePort {
   turnStart: (input: { sessionId: string; turnIndex: number; timestamp: number }) => void;
-  context: (input: {
-    sessionId: string;
-    usage?: ContextBudgetUsage;
-    hasUI: boolean;
-    allowNonInteractive?: boolean;
-    idle: boolean;
-    compact: HostedManualCompact;
-  }) => void;
+  context: (input: HostedCompactionPressureCheckInput) => void;
+  /**
+   * Mid-turn pressure re-check. The `context` hook fires once per turn, before
+   * the first provider request, so usage that crosses the hard limit inside the
+   * turn loop (observed only after each provider response) would otherwise wait
+   * for the next turn's dispatch — which a single-prompt headless run never
+   * reaches. Rides `before_provider_request` and does not re-observe usage.
+   */
+  beforeProviderRequest: (input: HostedCompactionPressureCheckInput) => void;
   sessionCompact: (input: {
     sessionId: string;
     usage?: ContextBudgetUsage;
@@ -121,6 +134,12 @@ interface CompactionGateState {
   autoCompactionWatchdog: ReturnType<typeof setTimeout> | null;
   autoCompactionAttemptId: number;
   activeAutoCompactionAttemptId: number | null;
+  /**
+   * Last skip reason that produced telemetry. Pressure checks now run per
+   * provider request, so an unchanged skip reason would otherwise repeat one
+   * receipt per request for the whole pressure episode.
+   */
+  lastAutoCompactionSkipReason: string | null;
 }
 
 export const DEFAULT_AUTO_COMPACTION_WATCHDOG_MS = 30_000;
@@ -360,6 +379,7 @@ function getOrCreateGateState(
     autoCompactionWatchdog: null,
     autoCompactionAttemptId: 0,
     activeAutoCompactionAttemptId: null,
+    lastAutoCompactionSkipReason: null,
   };
   store.set(sessionId, created);
   return created;
@@ -390,6 +410,157 @@ export function createHostedCompactionController(
     return getOrCreateGateState(gateStateBySession, sessionId);
   };
 
+  const emitCompactionSkippedOnce = (
+    state: CompactionGateState,
+    sessionId: string,
+    reason: string,
+  ): void => {
+    if (state.lastAutoCompactionSkipReason === reason) {
+      return;
+    }
+    state.lastAutoCompactionSkipReason = reason;
+    telemetry.emitCompactionSkipped({ sessionId, turn: state.turnIndex, reason });
+  };
+
+  const evaluateCompactionPressure = (input: HostedCompactionPressureCheckInput): void => {
+    const state = getSessionState(input.sessionId);
+    runtime.ops.context.compaction.checkAndRequest(input.sessionId, input.usage);
+    const gateStatus = getRuntimeCompactionGateStatus(runtime, input.sessionId, input.usage);
+    const pendingReason = getRuntimePendingCompactionReason(runtime, input.sessionId);
+    const eligibility = decideAutoCompactionEligibility({
+      gateStatus,
+      pendingCompactionReason: pendingReason,
+      hasUI: input.hasUI,
+      allowNonInteractive: input.allowNonInteractive,
+      idle: input.idle,
+      recoveryPosture: "idle",
+      autoCompactionInFlight: state.autoCompactionInFlight,
+      autoCompactionBreakerOpen: isAutoCompactionBreakerOpen(runtime, input.sessionId),
+      autoCompactionIneffective: isAutoCompactionIneffective(runtime, input.sessionId),
+    });
+
+    if (eligibility.decision === "skip" && eligibility.reason === "no_request") {
+      // Pressure episode over: the next skip or deferral is news again.
+      state.lastAutoCompactionSkipReason = null;
+      runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
+      return;
+    }
+
+    if (eligibility.decision === "skip" && eligibility.reason === "non_interactive_mode") {
+      emitCompactionSkippedOnce(state, input.sessionId, "non_interactive_mode");
+      return;
+    }
+
+    if (
+      eligibility.decision === "skip" &&
+      eligibility.reason === "agent_active_manual_compaction_unsafe"
+    ) {
+      // The receipt records why compaction was wanted (hard_limit /
+      // usage_threshold / predicted_overflow), not the skip cause — the
+      // remembered reason is what a later idle evaluation executes on.
+      runtime.ops.context.compaction.rememberDeferredReason(
+        input.sessionId,
+        resolveCompactionPressureReason(gateStatus, pendingReason),
+      );
+      emitCompactionSkippedOnce(state, input.sessionId, "agent_active_manual_compaction_unsafe");
+      return;
+    }
+
+    runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
+
+    if (eligibility.decision === "skip" && eligibility.reason === "auto_compaction_in_flight") {
+      emitCompactionSkippedOnce(state, input.sessionId, "auto_compaction_in_flight");
+      return;
+    }
+
+    if (eligibility.decision === "skip" && eligibility.reason === "auto_compaction_breaker_open") {
+      emitCompactionSkippedOnce(state, input.sessionId, "auto_compaction_breaker_open");
+      return;
+    }
+
+    if (eligibility.decision === "skip" && eligibility.reason === "compaction_ineffective") {
+      emitCompactionSkippedOnce(state, input.sessionId, "compaction_ineffective");
+      return;
+    }
+
+    if (eligibility.decision !== "execute") {
+      return;
+    }
+
+    state.lastAutoCompactionSkipReason = null;
+    const compactionReason = eligibility.reason;
+    state.autoCompactionAttemptId += 1;
+    const attemptId = state.autoCompactionAttemptId;
+    state.autoCompactionInFlight = true;
+    state.activeAutoCompactionAttemptId = attemptId;
+    if (state.autoCompactionWatchdog) {
+      clearTimeout(state.autoCompactionWatchdog);
+    }
+    state.autoCompactionWatchdog = setTimeout(() => {
+      if (!state.autoCompactionInFlight || state.activeAutoCompactionAttemptId !== attemptId) {
+        return;
+      }
+      clearAutoCompactionExecutionState(state);
+      runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
+      telemetry.emitAutoFailed({
+        sessionId: input.sessionId,
+        turn: state.turnIndex,
+        reason: compactionReason,
+        error: AUTO_COMPACTION_WATCHDOG_ERROR,
+        watchdogMs: autoCompactionWatchdogMs,
+      });
+    }, autoCompactionWatchdogMs);
+
+    telemetry.emitAutoRequested({
+      sessionId: input.sessionId,
+      turn: state.turnIndex,
+      reason: compactionReason,
+      usagePercent: getRuntimeContextUsageRatio(runtime, input.usage),
+      tokens: input.usage?.tokens ?? null,
+    });
+
+    const clearInFlight = () => {
+      clearAutoCompactionExecutionState(state);
+    };
+    const recordCompactionFailure = (error: unknown) => {
+      if (state.activeAutoCompactionAttemptId !== attemptId) {
+        return;
+      }
+      telemetry.emitAutoFailed({
+        sessionId: input.sessionId,
+        turn: state.turnIndex,
+        reason: compactionReason,
+        error: telemetry.normalizeRuntimeError(error),
+      });
+      runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
+      clearInFlight();
+    };
+
+    try {
+      const compact = input.compact as NonNullable<HostedManualCompact>;
+      compact({
+        customInstructions: getRuntimeContextCompactionInstructions(runtime),
+        onComplete: () => {
+          if (state.activeAutoCompactionAttemptId !== attemptId) {
+            return;
+          }
+          clearInFlight();
+          runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
+          telemetry.emitAutoCompleted({
+            sessionId: input.sessionId,
+            turn: state.turnIndex,
+            reason: compactionReason,
+          });
+        },
+        onError: (error) => {
+          recordCompactionFailure(error);
+        },
+      });
+    } catch (error) {
+      recordCompactionFailure(error);
+    }
+  };
+
   return {
     delegationAdvisoryTracker,
     getTurnIndex(sessionId) {
@@ -406,160 +577,11 @@ export function createHostedCompactionController(
       runtime.ops.context.lifecycle.onTurnStart(input.sessionId, runtimeTurn);
     },
     context(input) {
-      const state = getSessionState(input.sessionId);
       runtime.ops.context.usage.observe(input.sessionId, input.usage);
-      runtime.ops.context.compaction.checkAndRequest(input.sessionId, input.usage);
-      const gateStatus = getRuntimeCompactionGateStatus(runtime, input.sessionId, input.usage);
-      const pendingReason = getRuntimePendingCompactionReason(runtime, input.sessionId);
-      const eligibility = decideAutoCompactionEligibility({
-        gateStatus,
-        pendingCompactionReason: pendingReason,
-        hasUI: input.hasUI,
-        allowNonInteractive: input.allowNonInteractive,
-        idle: input.idle,
-        recoveryPosture: "idle",
-        autoCompactionInFlight: state.autoCompactionInFlight,
-        autoCompactionBreakerOpen: isAutoCompactionBreakerOpen(runtime, input.sessionId),
-        autoCompactionIneffective: isAutoCompactionIneffective(runtime, input.sessionId),
-      });
-
-      if (eligibility.decision === "skip" && eligibility.reason === "no_request") {
-        return;
-      }
-
-      if (eligibility.decision === "skip" && eligibility.reason === "non_interactive_mode") {
-        telemetry.emitCompactionSkipped({
-          sessionId: input.sessionId,
-          turn: state.turnIndex,
-          reason: "non_interactive_mode",
-        });
-        return;
-      }
-
-      if (
-        eligibility.decision === "skip" &&
-        eligibility.reason === "agent_active_manual_compaction_unsafe"
-      ) {
-        if (
-          !runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, pendingReason)
-        ) {
-          return;
-        }
-        telemetry.emitCompactionSkipped({
-          sessionId: input.sessionId,
-          turn: state.turnIndex,
-          reason: "agent_active_manual_compaction_unsafe",
-        });
-        return;
-      }
-
-      runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
-
-      if (eligibility.decision === "skip" && eligibility.reason === "auto_compaction_in_flight") {
-        telemetry.emitCompactionSkipped({
-          sessionId: input.sessionId,
-          turn: state.turnIndex,
-          reason: "auto_compaction_in_flight",
-        });
-        return;
-      }
-
-      if (
-        eligibility.decision === "skip" &&
-        eligibility.reason === "auto_compaction_breaker_open"
-      ) {
-        telemetry.emitCompactionSkipped({
-          sessionId: input.sessionId,
-          turn: state.turnIndex,
-          reason: "auto_compaction_breaker_open",
-        });
-        return;
-      }
-
-      if (eligibility.decision === "skip" && eligibility.reason === "compaction_ineffective") {
-        telemetry.emitCompactionSkipped({
-          sessionId: input.sessionId,
-          turn: state.turnIndex,
-          reason: "compaction_ineffective",
-        });
-        return;
-      }
-
-      if (eligibility.decision !== "execute") {
-        return;
-      }
-
-      const compactionReason = eligibility.reason;
-      state.autoCompactionAttemptId += 1;
-      const attemptId = state.autoCompactionAttemptId;
-      state.autoCompactionInFlight = true;
-      state.activeAutoCompactionAttemptId = attemptId;
-      if (state.autoCompactionWatchdog) {
-        clearTimeout(state.autoCompactionWatchdog);
-      }
-      state.autoCompactionWatchdog = setTimeout(() => {
-        if (!state.autoCompactionInFlight || state.activeAutoCompactionAttemptId !== attemptId) {
-          return;
-        }
-        clearAutoCompactionExecutionState(state);
-        runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
-        telemetry.emitAutoFailed({
-          sessionId: input.sessionId,
-          turn: state.turnIndex,
-          reason: compactionReason,
-          error: AUTO_COMPACTION_WATCHDOG_ERROR,
-          watchdogMs: autoCompactionWatchdogMs,
-        });
-      }, autoCompactionWatchdogMs);
-
-      telemetry.emitAutoRequested({
-        sessionId: input.sessionId,
-        turn: state.turnIndex,
-        reason: compactionReason,
-        usagePercent: getRuntimeContextUsageRatio(runtime, input.usage),
-        tokens: input.usage?.tokens ?? null,
-      });
-
-      const clearInFlight = () => {
-        clearAutoCompactionExecutionState(state);
-      };
-      const recordCompactionFailure = (error: unknown) => {
-        if (state.activeAutoCompactionAttemptId !== attemptId) {
-          return;
-        }
-        telemetry.emitAutoFailed({
-          sessionId: input.sessionId,
-          turn: state.turnIndex,
-          reason: compactionReason,
-          error: telemetry.normalizeRuntimeError(error),
-        });
-        runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
-        clearInFlight();
-      };
-
-      try {
-        const compact = input.compact as NonNullable<HostedManualCompact>;
-        compact({
-          customInstructions: getRuntimeContextCompactionInstructions(runtime),
-          onComplete: () => {
-            if (state.activeAutoCompactionAttemptId !== attemptId) {
-              return;
-            }
-            clearInFlight();
-            runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
-            telemetry.emitAutoCompleted({
-              sessionId: input.sessionId,
-              turn: state.turnIndex,
-              reason: compactionReason,
-            });
-          },
-          onError: (error) => {
-            recordCompactionFailure(error);
-          },
-        });
-      } catch (error) {
-        recordCompactionFailure(error);
-      }
+      evaluateCompactionPressure(input);
+    },
+    beforeProviderRequest(input) {
+      evaluateCompactionPressure(input);
     },
     async sessionCompact(input) {
       const state = getSessionState(input.sessionId);
