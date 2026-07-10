@@ -109,6 +109,7 @@ Every accepted decision inherits these rules:
 - [session-index-evidence-projection-boundary](./session-index-evidence-projection-boundary.md)
 - [recall-source-typed-retrieval-spine](./recall-source-typed-retrieval-spine.md)
 - [recall-first-compounding-intelligence-and-experience-products](./recall-first-compounding-intelligence-and-experience-products.md)
+- [recall-next-turn-cache-warming](./recall-next-turn-cache-warming.md)
 - [rfc-user-model-as-a-tape-folded-advisory-projection](./rfc-user-model-as-a-tape-folded-advisory-projection.md)
 - [duckdb-session-query-plane](./duckdb-session-query-plane.md)
 - [session-index-read-model-engine](./session-index-read-model-engine.md)

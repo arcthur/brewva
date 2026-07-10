@@ -23,12 +23,28 @@
 test/eval/variants/harness-fluency-statements.md` and a third scenario
   measuring R1's unselected-capability request signal
   (`harness-fluency-capability-request`, hermetic workspace manifest +
-  config). The live delta itself is still unmeasured: this machine's
-  `--print` path currently fails auth
-  (`hosted_runtime_provider_auth_failed: Token refresh failed: 401` — the
-  openai-codex OAuth slot expired 2026-05-24 and model selection reaches its
-  refresh even with `--model deepseek-v4-flash`), so the one-command A/B waits
-  on an operator environment with working provider auth. Two deliberate behavior
+  config). The live A/B delta was measured 2026-07-10 on
+  `super-relay/opensource/glm5.2` (the auth blocker cleared: a self-hosted
+  relay provider needs no OAuth slot), 3 runs per scenario per arm.
+  `goal-holding`: baseline 2/3 vs statements 3/3 — the one baseline failure
+  read "continue" as `single_increment`/`one_step`, exactly the posture the
+  statement targets, so the delta is directionally positive but a single flip
+  at n=3 is not yet the replicated delta the landing rule requires.
+  `terse-anchoring`: 3/3 in both arms across two measurement rounds — a
+  capability ceiling on this model; the statement shows no measurable effect.
+  `capability-request`: 0/3 in both arms for a reason that is neither the
+  model nor R1 — the scenario's premise no longer holds. Intent scoring
+  ACTUALLY selects `slack-notify` for the scenario prompt
+  (`tool.surface.resolved` shows `selectedCapabilityNames: ["slack-notify"]`
+  in a manual reproduction, session `dc76f619`), so the model truthfully
+  answers `already_selected: true` and the rubric — built on the
+  never-selected premise — fails the truthful answer. The scenario needs its
+  premise restored (plus a premise check in the harness) before it measures
+  anything; until then its runs stay out of the statements evaluation.
+  Disposition: the statements stay in this RFC (not landed, not deleted) —
+  goal-holding earns a larger-n replication, terse-anchoring has two rounds
+  of ceiling evidence and is the deletion candidate if a third round agrees.
+  Two deliberate behavior
   notes: restoring the `tool.result.recorded` producer re-arms every dormant
   consumer of that receipt — including read-path recovery's read-gate
   enforcement (now also un-drifted on the write side and contract-tested
@@ -41,7 +57,7 @@ test/eval/variants/harness-fluency-statements.md` and a third scenario
   `pinnedRefs`. Still gated, not built: R1c `discover_capabilities`, R4
   Phase 2 promotion.
 - Owner: Runtime, gateway, and tools maintainers
-- Last reviewed: `2026-07-02`
+- Last reviewed: `2026-07-10`
 - Depends on:
   - [RFC: Accountable Tool-Schema Cost And The Deferred Definition-Side Compression Trigger](../archive/rfc-accountable-tool-schema-cost-and-deferred-definition-compression.md)
     (advertisement/permission orthogonality; the gated `capability_expand`

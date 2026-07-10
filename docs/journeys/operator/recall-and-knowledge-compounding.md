@@ -123,6 +123,12 @@ flowchart TD
   metadata, not a third family
 - recall results are advisory, not authority — `tape_evidence` and
   `repository_precedent` are recall, not kernel claims
+- the broker self-warms after every `turn.ended` advisory ops event
+  (fire-and-forget, dirty-gated, single-flight with any concurrent live
+  search), so the dirty-sync cost moves off the next `recall_search`'s
+  critical path; measured on a real 8-session corpus this took cold-search
+  p50 from ~89 ms to ~0.6 ms warm, with identical results either way — the
+  latency half of prefetch without the injection half
 - the `prior_work` intent is the neutral default and adds no ranking boost
 - curation weights decay with a 45-day half-life and each signal's effect is
   bounded

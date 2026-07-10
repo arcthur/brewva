@@ -351,6 +351,24 @@ previously-null expansion cuts, each carrying its negative net figure), and
 against the old heuristic (the promotion gate above) must read `wasteful`
 together with `inconclusive` rather than treating verdict absence as health.
 
+Second calibration batch (2026-07-10, post-fix, session `d5f1a464`): a
+three-turn headless GLM5.2 session with the repaired auto path fired three
+genuine `origin: auto_compaction` cuts — all expansions (103→304, 212→393,
+317→592; each burning 1.4–1.7k summarizer tokens re-summarizing bootstrap plus
+the previous summary, the structural headless-resume limitation recorded in the
+prune RFC). The verdict surface behaved exactly per the closed semantics: three
+first-class `inconclusive` verdicts, `reason: unpriced_model` (the relay's real
+catalog entry is zero-priced), each with `deltaTokens` visible in `metrics` —
+the observed expansions stay legible instead of silent. Two working notes:
+verdict pricing resolves from the **report-time** catalog (a synthetic-pricing
+catalog visible only to the session process does not price the verdicts —
+provenance to keep in mind when calibrating across catalog edits), and the
+`compaction_ineffective` thrash guard did not arm within three consecutive
+sub-floor shrinks (its attempts threshold tolerates at least that many; worth a
+look if forced headless loops ever run longer). Priced-trace `wasteful`/
+`measured` samples still come from interactive sessions on catalog-priced
+models — that remains the open half of the calibration gate.
+
 ## Source Anchors
 
 - Economic verdict type and producer:

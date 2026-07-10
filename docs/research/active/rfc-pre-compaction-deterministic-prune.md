@@ -445,6 +445,19 @@ property tests plus the per-operation and receipt-reader unit tests live in
 `test/unit/substrate/compaction-prune.unit.test.ts`. Real-session economy
 measurement (Phase 3) is still pending.
 
+Phase 3 channel finding (2026-07-10): headless cannot produce the
+effectiveness signal. With the `before_provider_request` pressure re-check
+landed, auto compaction now genuinely fires headlessly under
+`BREWVA_EVAL_FORCE_COMPACTION` — a three-turn `--print --session` GLM5.2
+session (`d5f1a464`, 20k eval window) fired it three times — but every cut was
+`minimum_tail` over 103/212/317 tokens with zero `session.pre_compact_prune`
+receipts, because a headless resume does not re-materialize prior turns'
+transcript into context: the compactable region only ever holds bootstrap
+entries plus the previous summary, never old tool results, so the prune's
+eligible set stays empty by construction. The >=5% effectiveness signal
+therefore must come from interactive-session telemetry, where transcript
+genuinely accumulates, not from headless validation runs.
+
 ## Surface Budget
 
 | Surface                               | Before | After | Notes                                                                        |

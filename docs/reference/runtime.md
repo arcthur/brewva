@@ -291,6 +291,19 @@ is never replay truth. The model is authority-free: a per-fact
 `measured` / `estimated` / `inconclusive` grade derives the read view but gates no
 runtime decision, and the explicit-pull retrieval surface lives in the recall journey.
 
+## Recall Cache Warming
+
+After each `turn.ended` advisory ops event the recall broker fire-and-forgets
+`RecallBroker.warm()` — the same dirty-gated, single-flight `sync()` a live
+search would run — so the next explicit `recall_search` finds a warm broker and
+read model. Warming is performance-only state below the visibility line: it is
+strictly index-local (no provider or network call), result-neutral (never
+changes what a search returns, adds no model-visible byte), revision-checked
+(a warm in flight when an invalidating event lands re-marks dirty rather than
+publishing soon-stale state), and a failed or quiet-turn warm folds to a
+benign no-op. Contract and trigger live in
+`packages/brewva-recall/src/broker/broker.ts`.
+
 ## Generated Surface
 
 <!-- generated:runtime-surface start -->
