@@ -1,4 +1,3 @@
-import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import {
@@ -34,18 +33,6 @@ export interface ReadPathRecoveryState {
 interface ReadPathFailureState {
   consecutiveMissingPathFailures: number;
   failedPaths: string[];
-}
-
-function normalizeWorkspacePath(baseCwd: string, candidate: string): string | undefined {
-  const absolutePath = isAbsolute(candidate) ? resolve(candidate) : resolve(baseCwd, candidate);
-  const relativePath = relative(baseCwd, absolutePath).replaceAll("\\", "/");
-  if (relativePath.startsWith("../") || relativePath === "..") {
-    return undefined;
-  }
-  if (relativePath.length === 0) {
-    return ".";
-  }
-  return relativePath.replace(/^\.\/+/u, "");
 }
 
 function clampStringList(values: Iterable<string>, maxItems: number): string[] {
@@ -212,40 +199,6 @@ export function analyzeReadPathRecoveryState(
   };
 }
 
-export function isReadPathVerified(
-  state: ReadPathRecoveryState,
-  requestedPath: string,
-  cwd: string,
-): boolean {
-  if (!state.active || state.phase === "inactive") {
-    return true;
-  }
-
-  const normalizedRequestedPath = normalizeWorkspacePath(cwd, requestedPath);
-  if (!normalizedRequestedPath) {
-    return false;
-  }
-  if (state.observedPaths.includes(normalizedRequestedPath)) {
-    return true;
-  }
-
-  let currentDirectory = dirname(normalizedRequestedPath).replaceAll("\\", "/");
-  if (currentDirectory === "") {
-    currentDirectory = ".";
-  }
-
-  while (true) {
-    if (state.observedDirectories.includes(currentDirectory)) {
-      return true;
-    }
-    if (currentDirectory === ".") {
-      return false;
-    }
-    const nextDirectory = dirname(currentDirectory).replaceAll("\\", "/");
-    currentDirectory = nextDirectory === "" ? "." : nextDirectory;
-  }
-}
-
 export function createReadPathRecoveryLifecycle(
   runtime: HostedRuntimeAdapterPort,
 ): TurnLifecyclePort {
@@ -260,13 +213,12 @@ export function createReadPathRecoveryLifecycle(
         return undefined;
       }
 
-      const state = analyzeReadPathRecoveryState(runtime, sessionId);
-      if (state.active) {
-        return undefined;
-      }
-
+      // Emit exactly when a failure run crosses the threshold: once per run,
+      // and a NEW run after recovery re-arms with fresh failed paths (the
+      // analyzer reads the latest arming event and evidence observed after
+      // it, so the rendered evidence never goes stale on a later run).
       const failureState = analyzeRecentMissingPathFailures(runtime, sessionId);
-      if (failureState.consecutiveMissingPathFailures < MIN_CONSECUTIVE_MISSING_PATH_FAILURES) {
+      if (failureState.consecutiveMissingPathFailures !== MIN_CONSECUTIVE_MISSING_PATH_FAILURES) {
         return undefined;
       }
 
@@ -283,6 +235,9 @@ export function createReadPathRecoveryLifecycle(
   };
 }
 
+// Evidence, not a gate (axiom 18): this block states what happened and what
+// has been observed since; it never constrains which paths `read` may touch.
+// The model decides how to recover.
 export function buildReadPathRecoveryBlock(state: ReadPathRecoveryState): string | null {
   if (!state.active) {
     return null;
@@ -291,15 +246,15 @@ export function buildReadPathRecoveryBlock(state: ReadPathRecoveryState): string
   const lines = [
     "[Brewva Read Path Recovery]",
     `Recent \`read\` calls hit ${state.consecutiveMissingPathFailures} consecutive path-not-found failures.`,
-    "Direct `read` is now gated by discovery evidence.",
   ];
 
   if (state.phase === "required") {
-    lines.push("Run repository discovery or inspect a known existing file first.");
-    lines.push("No additional `read` calls are allowed until at least one real path is observed.");
+    lines.push("No discovery evidence has been observed since those failures.");
+    lines.push(
+      "Blind retries are likely to miss again; discovery (glob, grep, ls, or reading a known existing file) records observed paths here.",
+    );
   } else {
-    lines.push("Discovery evidence has been observed, but `read` stays constrained.");
-    lines.push("Only read paths that were observed directly or live under observed directories.");
+    lines.push("Discovery evidence observed since:");
     if (state.observedDirectories.length > 0) {
       lines.push(`observed_directories: ${state.observedDirectories.slice(0, 8).join(", ")}`);
     }
@@ -325,39 +280,6 @@ export function buildReadPathRecoveryBlocks(
   }
   const block = makeHostedContextBlock("read-path-recovery", content);
   return block ? [block] : [];
-}
-
-export function buildReadPathGuardWarningPayload(input: {
-  requestedPath: string;
-  state: ReadPathRecoveryState;
-}): Record<string, unknown> {
-  return {
-    toolName: "read",
-    requestedPath: input.requestedPath,
-    recentFailedPaths: input.state.failedPaths,
-    observedPaths: input.state.observedPaths,
-    observedDirectories: input.state.observedDirectories,
-    consecutiveMissingPathFailures: input.state.consecutiveMissingPathFailures,
-    phase: input.state.phase,
-    reason: "path_discovery_required_after_missing_path_failures",
-  };
-}
-
-export function recordReadPathGuardWarning(
-  runtime: HostedRuntimeAdapterPort,
-  input: {
-    sessionId: string;
-    requestedPath: string;
-    state: ReadPathRecoveryState;
-  },
-): void {
-  runtime.ops.tools.readPath.contractWarning({
-    sessionId: input.sessionId,
-    payload: buildReadPathGuardWarningPayload({
-      requestedPath: input.requestedPath,
-      state: input.state,
-    }),
-  });
 }
 
 export { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE, TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE };

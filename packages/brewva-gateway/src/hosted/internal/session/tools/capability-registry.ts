@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import { parse as parseYaml } from "yaml";
@@ -69,6 +69,13 @@ export interface CapabilitySelectionCandidate {
   source: CapabilitySelectorDecisionSource;
   score: number;
   reason: string;
+  /**
+   * Content hash of the manifest this entry was selected against. Authority
+   * and carry both revalidate against it, so a selection never outlives the
+   * manifest terms it was granted under. Absent only on receipts recorded
+   * before manifest hashing existed; such entries revalidate as stale.
+   */
+  manifestHash?: string;
 }
 
 export interface CapabilitySelectionFilteredOut {
@@ -404,19 +411,51 @@ function policyDefaultMatchesIntent(input: {
   return scoreManifestTokens(input.manifest, input.intentTokens) > 0;
 }
 
+function manifestPolicyExclusion(
+  manifest: CapabilityManifest,
+  policy: {
+    agentScope: ReadonlySet<string>;
+    workspaceScope: ReadonlySet<string>;
+    allowedAccounts?: readonly string[];
+  },
+): CapabilitySelectionFilteredOut["reason"] | undefined {
+  if (!intersects(manifest.agentScope, policy.agentScope)) {
+    return "agent_scope";
+  }
+  if (!intersects(manifest.workspaceScope, policy.workspaceScope)) {
+    return "workspace_scope";
+  }
+  if (
+    manifest.authProfile &&
+    policy.allowedAccounts &&
+    policy.allowedAccounts.length > 0 &&
+    !policy.allowedAccounts.includes(manifest.authProfile)
+  ) {
+    return "account_restriction";
+  }
+  return undefined;
+}
+
+const manifestHashCache = new WeakMap<CapabilityManifest, string>();
+
+// Content identity for one manifest: every authored field, no filePath — a
+// pure file rename must not change a manifest's identity or revoke selections
+// pinned to it.
+export function computeCapabilityManifestHash(manifest: CapabilityManifest): string {
+  const cached = manifestHashCache.get(manifest);
+  if (cached) return cached;
+  const { filePath: _filePath, ...content } = manifest;
+  const hash = stableJsonSha256Hex(content);
+  manifestHashCache.set(manifest, hash);
+  return hash;
+}
+
+// The registry version derives from the full content identity of every
+// manifest. Sorted byte-wise (not localeCompare) so the version is identical
+// across process locales and ICU versions.
 export function computeCapabilityRegistryVersion(manifests: readonly CapabilityManifest[]): string {
   return stableJsonSha256Hex(
-    manifests
-      .map((manifest) => ({
-        name: manifest.name,
-        provider: manifest.provider,
-        domain: manifest.domain,
-        action: manifest.action,
-        toolNames: manifest.toolNames,
-        riskLevel: manifest.riskLevel,
-        filePath: manifest.filePath ? basename(manifest.filePath) : undefined,
-      }))
-      .toSorted((left, right) => left.name.localeCompare(right.name)),
+    manifests.map((manifest) => computeCapabilityManifestHash(manifest)).toSorted(),
   );
 }
 
@@ -443,21 +482,13 @@ export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySe
   const policyDecisions: string[] = [];
 
   const scoped = input.manifests.filter((manifest) => {
-    if (!intersects(manifest.agentScope, agentScope)) {
-      filteredOut.push({ name: manifest.name, reason: "agent_scope" });
-      return false;
-    }
-    if (!intersects(manifest.workspaceScope, workspaceScope)) {
-      filteredOut.push({ name: manifest.name, reason: "workspace_scope" });
-      return false;
-    }
-    if (
-      manifest.authProfile &&
-      policy.allowedAccounts &&
-      policy.allowedAccounts.length > 0 &&
-      !policy.allowedAccounts.includes(manifest.authProfile)
-    ) {
-      filteredOut.push({ name: manifest.name, reason: "account_restriction" });
+    const exclusion = manifestPolicyExclusion(manifest, {
+      agentScope,
+      workspaceScope,
+      allowedAccounts: policy.allowedAccounts,
+    });
+    if (exclusion) {
+      filteredOut.push({ name: manifest.name, reason: exclusion });
       return false;
     }
     return true;
@@ -474,6 +505,7 @@ export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySe
         source: "explicit",
         score: 1_000,
         reason: "explicit capability target",
+        manifestHash: computeCapabilityManifestHash(manifest),
       });
     } else {
       policyDecisions.push(`explicit capability '${explicitName}' was not allowed by policy`);
@@ -496,12 +528,14 @@ export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySe
           }),
       ),
     );
-    if (defaultMatches.length === 1) {
+    const defaultManifest = defaultMatches[0];
+    if (defaultMatches.length === 1 && defaultManifest) {
       selected.push({
-        name: defaultMatches[0]?.name ?? "",
+        name: defaultManifest.name,
         source: "policy",
         score: 900,
         reason: "policy default",
+        manifestHash: computeCapabilityManifestHash(defaultManifest),
       });
     } else if (defaultMatches.length > 1) {
       conflicts.push({
@@ -530,6 +564,7 @@ export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySe
         source: "deterministic" as const,
         score: entry.score,
         reason: "selection fields matched intent text",
+        manifestHash: computeCapabilityManifestHash(entry.manifest),
       })),
     );
     for (const entry of ranked.slice(maxCandidates)) {
@@ -572,6 +607,103 @@ export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySe
     registry_version: input.registryVersion ?? computeCapabilityRegistryVersion(input.manifests),
   } satisfies Omit<CapabilitySelectionReceipt, "selection_id">;
 
+  return {
+    selection_id: buildSelectionId(event),
+    ...event,
+  };
+}
+
+export interface ResolveCarriedCapabilityReceiptInput {
+  registry: Pick<CapabilityRegistry, "manifests" | "registryVersion">;
+  policy: CapabilityPolicy;
+  previous: CapabilitySelectionReceipt;
+  createdAt?: string;
+}
+
+/**
+ * Carried selections are revalidated per entry, every carried turn: an entry
+ * survives only while its manifest still exists with identical content
+ * (`manifestHash`) and still passes the current policy scope. Registry churn
+ * that leaves a selected manifest untouched therefore never revokes it, while
+ * a policy narrowed mid-session or an edited manifest drops exactly the
+ * affected entries. Entries from receipts predating manifest hashing cannot
+ * be revalidated and drop as stale.
+ */
+export function resolveCarriedCapabilityReceipt(
+  input: ResolveCarriedCapabilityReceiptInput,
+): CapabilitySelectionReceipt {
+  const agentScope = new Set(input.policy.agentScope ?? []);
+  const workspaceScope = new Set(input.policy.workspaceScope ?? []);
+  const manifestsByName = new Map(
+    input.registry.manifests.map((manifest) => [manifest.name, manifest]),
+  );
+  const kept: CapabilitySelectionCandidate[] = [];
+  const droppedFilteredOut: CapabilitySelectionFilteredOut[] = [];
+  const policyDecisions: string[] = [];
+  let staleDrops = 0;
+
+  for (const entry of input.previous.selected_capabilities) {
+    const manifest = manifestsByName.get(entry.name);
+    if (!manifest) {
+      staleDrops += 1;
+      policyDecisions.push(`carried_selection_dropped: ${entry.name} manifest_missing`);
+      continue;
+    }
+    if (!entry.manifestHash || entry.manifestHash !== computeCapabilityManifestHash(manifest)) {
+      staleDrops += 1;
+      policyDecisions.push(
+        `carried_selection_dropped: ${entry.name} ${
+          entry.manifestHash ? "manifest_changed" : "manifest_hash_unavailable"
+        }`,
+      );
+      continue;
+    }
+    const exclusion = manifestPolicyExclusion(manifest, {
+      agentScope,
+      workspaceScope,
+      allowedAccounts: input.policy.allowedAccounts,
+    });
+    if (exclusion) {
+      droppedFilteredOut.push({ name: entry.name, reason: exclusion });
+      policyDecisions.push(`carried_selection_dropped: ${entry.name} ${exclusion}`);
+      continue;
+    }
+    kept.push(Object.assign({}, entry));
+  }
+
+  const versionMatches = input.previous.registry_version === input.registry.registryVersion;
+  if (versionMatches && kept.length === input.previous.selected_capabilities.length) {
+    return carryCapabilitySelection({ previous: input.previous, createdAt: input.createdAt });
+  }
+
+  // Same policy-exclusion carry rule as carryCapabilitySelection, extended
+  // with the exclusions discovered by this revalidation (deduped by name).
+  const droppedNames = new Set(droppedFilteredOut.map((entry) => entry.name));
+  const filteredOut = [
+    ...input.previous.filtered_out
+      .filter((entry) => entry.reason !== "not_ranked" && !droppedNames.has(entry.name))
+      .map((entry) => Object.assign({}, entry)),
+    ...droppedFilteredOut,
+  ];
+  // Stale entries (missing/changed/unhashed manifests) are registry-relative
+  // staleness even when the aggregate version happens to match; pure policy
+  // drops under a matching version are the only policy_change shape.
+  const event = {
+    trigger: (!versionMatches || staleDrops > 0
+      ? "registry_change"
+      : "policy_change") as CapabilitySelectionTrigger,
+    input_intent_hash: input.previous.input_intent_hash,
+    selected_capabilities: kept,
+    filtered_out: filteredOut,
+    policy_decisions: [
+      `carried selection ${input.previous.selection_id} revalidated against the current registry and policy`,
+      ...policyDecisions,
+    ],
+    conflicts: input.previous.conflicts.map((entry) => Object.assign({}, entry)),
+    carried_from: input.previous.selection_id,
+    created_at: input.createdAt ?? new Date().toISOString(),
+    registry_version: input.registry.registryVersion,
+  } satisfies Omit<CapabilitySelectionReceipt, "selection_id">;
   return {
     selection_id: buildSelectionId(event),
     ...event,

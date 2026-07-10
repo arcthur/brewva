@@ -20,10 +20,9 @@ import {
   skillSelectionSummaryForTrace,
 } from "../skills/skill-selection.js";
 import type { CapabilityManifest, CapabilitySelectionReceipt } from "./capability-registry.js";
-import { carryCapabilitySelection } from "./capability-registry.js";
 import {
+  carryCapabilitySelectionReceiptForTurn,
   formatCapabilitySelectionSection,
-  loadRuntimeCapabilityRegistry,
   recordCapabilitySelectionReceipt,
   readLatestCapabilitySelectionReceipt,
   resolveCapabilityAuthorityAccess,
@@ -210,11 +209,9 @@ function shouldExposeManagedTool(input: {
   if (!capabilityAccess.allowed) {
     return false;
   }
-  const explicitlyAuthorized = capabilityAccess.advisory?.startsWith(
-    "selected_capability_authorized:",
-  );
+  const explicitlyAuthorized = capabilityAccess.selectionAuthorized === true;
   if (isOperatorTool(input.toolName)) {
-    return input.operatorProfile || explicitlyAuthorized === true;
+    return input.operatorProfile || explicitlyAuthorized;
   }
   // Skill-surface tools are pull, not push (tool-surface subtraction RFC): they
   // enter the payload only when this turn pulled them. Three pull channels, all
@@ -228,7 +225,7 @@ function shouldExposeManagedTool(input: {
     return (
       input.requestedToolNames.has(input.toolName) ||
       input.skillInstructedToolNames.has(input.toolName) ||
-      explicitlyAuthorized === true
+      explicitlyAuthorized
     );
   }
   return true;
@@ -478,12 +475,9 @@ export function createToolSurfaceLifecycle(
         return undefined;
       }
       const previousReceipt = readLatestCapabilitySelectionReceipt({ runtime, sessionId });
-      const carried = prompt.trim().length === 0 && previousReceipt !== undefined;
-      const selection = carried
-        ? {
-            registry: loadRuntimeCapabilityRegistry(runtime),
-            receipt: carryCapabilitySelection({ previous: previousReceipt }),
-          }
+      const carriedPrevious = prompt.trim().length === 0 ? previousReceipt : undefined;
+      const selection = carriedPrevious
+        ? carryCapabilitySelectionReceiptForTurn({ runtime, previous: carriedPrevious })
         : selectCapabilityReceiptForPrompt({
             runtime,
             prompt,

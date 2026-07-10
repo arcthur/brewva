@@ -17,7 +17,6 @@ import {
   EXEC_FAILED_EVENT_TYPE,
   readToolResultRecordedEventPayload,
   TOOL_CALL_BLOCKED_EVENT_TYPE,
-  TOOL_CONTRACT_WARNING_EVENT_TYPE,
   VERIFICATION_OUTCOME_RECORDED_EVENT_TYPE,
   VERIFICATION_WRITE_MARKED_EVENT_TYPE,
 } from "@brewva/brewva-vocabulary/iteration";
@@ -449,14 +448,13 @@ function buildDurabilityFinding(base: InspectBaseReportForAnalysis): InspectFind
 }
 
 function buildToolContractFinding(events: BrewvaEventRecord[]): InspectFinding | null {
-  const warnings = events.filter((event) => event.type === TOOL_CONTRACT_WARNING_EVENT_TYPE);
   const blocked = events.filter((event) => event.type === TOOL_CALL_BLOCKED_EVENT_TYPE);
-  if (warnings.length === 0 && blocked.length === 0) {
+  if (blocked.length === 0) {
     return null;
   }
 
   const reasons = uniqueStrings(
-    [...warnings, ...blocked]
+    blocked
       .map((event) =>
         typeof event.payload?.reason === "string" ? event.payload.reason.trim() : "",
       )
@@ -466,11 +464,11 @@ function buildToolContractFinding(events: BrewvaEventRecord[]): InspectFinding |
   const reasonText = reasons.length > 0 ? ` Reasons: ${reasons.join(" | ")}.` : "";
   return {
     code: "tool_contract",
-    severity: blocked.length > 0 ? "warn" : "info",
+    severity: "warn",
     confidence: "high",
-    summary: `Observed ${warnings.length} tool contract warning(s) and ${blocked.length} blocked tool call(s), which points to tool-access or contract friction rather than raw model capability.${reasonText}`,
+    summary: `Observed ${blocked.length} blocked tool call(s), which points to tool-access or contract friction rather than raw model capability.${reasonText}`,
     evidenceRefs: topEvidenceRefs({
-      eventIds: [...warnings, ...blocked].map((event) => event.id),
+      eventIds: blocked.map((event) => event.id),
     }),
   };
 }

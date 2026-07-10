@@ -8,11 +8,15 @@ import {
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import { recordRuntimeToolCapabilitySelection } from "../runtime-ports.js";
 import {
+  computeCapabilityManifestHash,
   loadCapabilityRegistry,
+  resolveCarriedCapabilityReceipt,
   selectCapabilities,
   type CapabilityManifest,
+  type CapabilityPolicy,
   type CapabilityRegistry,
   type CapabilitySelectionReceipt,
+  type CapabilitySelectorDecisionSource,
 } from "./capability-registry.js";
 
 export interface CapabilitySelectionRuntimeView {
@@ -59,6 +63,12 @@ export interface CapabilityAuthorityAccessFact extends ProtocolRecord {
   receiptId?: string;
   source?: string;
   selectedCapabilityNames?: readonly string[];
+  /**
+   * True only when a gated surface was authorized by an authority-granting
+   * receipt entry — the structured signal exposure logic keys off, instead of
+   * parsing the human-readable advisory.
+   */
+  selectionAuthorized?: boolean;
   reason?: string;
   advisory?: string;
 }
@@ -199,6 +209,15 @@ export function loadRuntimeCapabilityRegistry(
   return loadCapabilityRegistry({ roots });
 }
 
+function runtimeCapabilityPolicy(runtime: CapabilitySelectionRuntimeView): CapabilityPolicy {
+  return {
+    agentScope: runtime.config.capabilities.policy.agentScope,
+    workspaceScope: runtime.config.capabilities.policy.workspaceScope,
+    allowedAccounts: runtime.config.capabilities.policy.allowedAccounts,
+    defaults: runtime.config.capabilities.defaults,
+  };
+}
+
 export function selectCapabilityReceiptForPrompt(input: {
   runtime: CapabilitySelectionRuntimeView;
   prompt: string;
@@ -210,17 +229,29 @@ export function selectCapabilityReceiptForPrompt(input: {
     manifests: registry.manifests,
     intentText: input.prompt,
     explicitCapability,
-    policy: {
-      agentScope: input.runtime.config.capabilities.policy.agentScope,
-      workspaceScope: input.runtime.config.capabilities.policy.workspaceScope,
-      allowedAccounts: input.runtime.config.capabilities.policy.allowedAccounts,
-      defaults: input.runtime.config.capabilities.defaults,
-    },
+    policy: runtimeCapabilityPolicy(input.runtime),
     trigger: explicitCapability ? "explicit_capability" : "user_message",
     registryVersion: registry.registryVersion,
     createdAt: input.createdAt,
   });
   return { registry, receipt };
+}
+
+export function carryCapabilitySelectionReceiptForTurn(input: {
+  runtime: CapabilitySelectionRuntimeView;
+  previous: CapabilitySelectionReceipt;
+  createdAt?: string;
+}): { registry: CapabilityRegistry; receipt: CapabilitySelectionReceipt } {
+  const registry = loadRuntimeCapabilityRegistry(input.runtime);
+  return {
+    registry,
+    receipt: resolveCarriedCapabilityReceipt({
+      registry,
+      policy: runtimeCapabilityPolicy(input.runtime),
+      previous: input.previous,
+      createdAt: input.createdAt,
+    }),
+  };
 }
 
 export function recordCapabilitySelectionReceipt(input: {
@@ -240,22 +271,60 @@ export function readLatestCapabilitySelectionReceipt(input: {
     return undefined;
   }
   const receipt = payload as Partial<CapabilitySelectionReceipt>;
-  return typeof receipt.selection_id === "string" &&
-    Array.isArray(receipt.selected_capabilities) &&
-    typeof receipt.registry_version === "string"
-    ? (receipt as CapabilitySelectionReceipt)
-    : undefined;
+  if (
+    typeof receipt.selection_id !== "string" ||
+    !Array.isArray(receipt.selected_capabilities) ||
+    typeof receipt.registry_version !== "string"
+  ) {
+    return undefined;
+  }
+  // Older persisted payloads may omit the list fields the carry path
+  // dereferences; normalize them so a legacy receipt degrades to reselection
+  // instead of a turn-start TypeError.
+  return {
+    ...(receipt as CapabilitySelectionReceipt),
+    filtered_out: Array.isArray(receipt.filtered_out) ? receipt.filtered_out : [],
+    conflicts: Array.isArray(receipt.conflicts) ? receipt.conflicts : [],
+    policy_decisions: Array.isArray(receipt.policy_decisions) ? receipt.policy_decisions : [],
+  };
 }
 
-function selectedManifests(input: {
+// Axiom 18: only accountable selection sources grant authority. Deterministic
+// (and any future similarity-derived) matches stay views — rendered, carried,
+// never authorizing.
+const AUTHORITY_GRANTING_SELECTION_SOURCES: ReadonlySet<CapabilitySelectorDecisionSource> = new Set(
+  ["explicit", "policy"],
+);
+
+function isAuthorityGrantingCandidate(candidate: {
+  source: CapabilitySelectorDecisionSource;
+}): boolean {
+  return AUTHORITY_GRANTING_SELECTION_SOURCES.has(candidate.source);
+}
+
+// An entry authorizes only against the manifest content it was selected
+// under (`manifestHash`): a manifest edited after selection — including
+// mid-turn — never inherits the old grant. Entries without a hash (legacy
+// receipts) are stale by definition and re-earn authority via reselection.
+function authorityGrantingSelectedManifests(input: {
   receipt: CapabilitySelectionReceipt | undefined;
   manifests: readonly CapabilityManifest[];
 }): CapabilityManifest[] {
-  const selectedNames = new Set(
-    input.receipt?.selected_capabilities.map((candidate) => candidate.name) ?? [],
-  );
-  if (selectedNames.size === 0) return [];
-  return input.manifests.filter((manifest) => selectedNames.has(manifest.name));
+  const grantingEntries =
+    input.receipt?.selected_capabilities.filter(
+      (candidate) => isAuthorityGrantingCandidate(candidate) && candidate.manifestHash,
+    ) ?? [];
+  if (grantingEntries.length === 0) return [];
+  const manifestsByName = new Map(input.manifests.map((manifest) => [manifest.name, manifest]));
+  const granted: CapabilityManifest[] = [];
+  for (const entry of grantingEntries) {
+    const manifest = manifestsByName.get(entry.name);
+    if (!manifest || entry.manifestHash !== computeCapabilityManifestHash(manifest)) {
+      continue;
+    }
+    granted.push(manifest);
+  }
+  return granted;
 }
 
 function selectedCapabilityNames(receipt: CapabilitySelectionReceipt | undefined): string[] {
@@ -284,7 +353,7 @@ function selectedCapabilitiesAuthorize(input: {
 }): boolean {
   const namesToCheck = [input.toolName, input.commandName].map(normalizeName).filter(Boolean);
   if (namesToCheck.length === 0) return false;
-  for (const manifest of selectedManifests(input)) {
+  for (const manifest of authorityGrantingSelectedManifests(input)) {
     const authorityNames = manifestAuthorityNames(manifest);
     if (namesToCheck.some((name) => authorityNames.has(name))) {
       return true;
@@ -350,6 +419,7 @@ export function resolveCapabilityAuthorityAccess(input: {
       ...(receiptId ? { receiptId } : {}),
       source,
       selectedCapabilityNames: selectedCapabilityNamesValue,
+      selectionAuthorized: true,
       advisory: `selected_capability_authorized:${input.receipt?.selection_id ?? "unknown"}`,
     };
   }
@@ -438,12 +508,27 @@ export function selectableCapabilities(input: {
   manifests: readonly CapabilityManifest[];
 }): Array<{ name: string; whenToUse?: string }> {
   const excluded = new Set<string>([
-    ...input.receipt.selected_capabilities.map((candidate) => candidate.name),
+    ...input.receipt.selected_capabilities
+      .filter((candidate) => isAuthorityGrantingCandidate(candidate))
+      .map((candidate) => candidate.name),
     ...policyForbiddenNames(input.receipt),
   ]);
   const manifestsByName = new Map(input.manifests.map((manifest) => [manifest.name, manifest]));
   const ordered: CapabilityManifest[] = [];
   const seen = new Set<string>();
+  // View-only selections (deterministic matches) lead the requestable list:
+  // they are the intent-ranked candidates, and listing them here — instead of
+  // under `selected` — is what tells the model they need an explicit
+  // `/capability:` request before they authorize anything.
+  for (const candidate of input.receipt.selected_capabilities) {
+    if (isAuthorityGrantingCandidate(candidate) || excluded.has(candidate.name)) {
+      continue;
+    }
+    const manifest = manifestsByName.get(candidate.name);
+    if (!manifest || seen.has(candidate.name)) continue;
+    seen.add(candidate.name);
+    ordered.push(manifest);
+  }
   for (const entry of input.receipt.filtered_out) {
     if (entry.reason !== "not_ranked" || excluded.has(entry.name) || seen.has(entry.name)) {
       continue;
@@ -481,16 +566,28 @@ export function formatCapabilitySelectionSection(input: {
     return "";
   }
   const manifestsByName = new Map(input.manifests.map((manifest) => [manifest.name, manifest]));
+  // Only authority-granting entries render as `selected`; view-only matches
+  // surface through `selectableCapabilities` above so the prompt never claims
+  // an authority the gate would deny.
   const selection: BrewvaSystemPromptCapabilitySelection = {
-    selectedCapabilities: input.receipt.selected_capabilities.map((candidate) => {
-      const manifest = manifestsByName.get(candidate.name);
-      return {
-        name: candidate.name,
-        ...(manifest?.authProfile ? { profile: manifest.authProfile } : {}),
-        ...(manifest?.riskLevel ? { mode: manifest.riskLevel } : {}),
-        reason: candidate.reason,
-      };
-    }),
+    selectedCapabilities: input.receipt.selected_capabilities
+      .filter((candidate) => isAuthorityGrantingCandidate(candidate))
+      .map((candidate) => {
+        const manifest = manifestsByName.get(candidate.name);
+        const entry: NonNullable<
+          BrewvaSystemPromptCapabilitySelection["selectedCapabilities"]
+        >[number] = {
+          name: candidate.name,
+          reason: candidate.reason,
+        };
+        if (manifest?.authProfile) {
+          entry.profile = manifest.authProfile;
+        }
+        if (manifest?.riskLevel) {
+          entry.mode = manifest.riskLevel;
+        }
+        return entry;
+      }),
     selectableCapabilities: selectable,
     forbiddenCandidates: [
       ...input.receipt.filtered_out

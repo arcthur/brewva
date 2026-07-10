@@ -29,10 +29,11 @@ owner: runtime-maintainers
   but kernel admission, capability receipts, sandbox posture, and adoption
   authority remain separate and authoritative. (axiom 11)
 - Keep Attention Options narrow: `attention_options` returns bounded candidate
-  cards, `attention_consume` reveals selected content, `attention_pin` writes
-  workbench pins, `attention_ignore` is session-scoped advisory suppression, and
-  `attention_verify_plan` returns only a verification recipe. Do not add a
-  second memory store or hidden context admission path. (axiom 1)
+  cards, `attention_consume` reveals selected content or refuses with a typed
+  reason, `attention_pin` writes workbench pins carrying the resolved content,
+  and `attention_ignore` is session-scoped suppression of the option from later
+  card sets. Do not add a second memory store or hidden context admission
+  path. (axiom 1)
 - Keep continuation anchors replayable: `session.continuationAnchor` and
   `tape_handoff` record anchors that Work Cards, transcripts, export bundles,
   channel inspect, and hosted context can display without becoming new truth

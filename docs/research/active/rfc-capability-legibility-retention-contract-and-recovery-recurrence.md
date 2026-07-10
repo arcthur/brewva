@@ -59,11 +59,12 @@ test/eval/variants/harness-fluency-statements.md` and a third scenario
   of ceiling evidence and is the deletion candidate if a third round agrees.
   Two deliberate behavior
   notes: restoring the `tool.result.recorded` producer re-arms every dormant
-  consumer of that receipt — including read-path recovery's read-gate
-  enforcement (now also un-drifted on the write side and contract-tested
-  end to end: deflect, discover, unlock; note for a product call — an armed
-  gate has no decay, it holds for the session and each new directory needs
-  fresh discovery evidence), stall adjudication, session-index text
+  consumer of that receipt — including read-path recovery (SUPERSEDED on the
+  enforcement leg: the harness-candidate-integrity RFC's P2 deleted the
+  tool-layer read gate as an axiom-18 violation; the armed state, discovery
+  evidence events, and context block remain as evidence only, and the former
+  gate-enforcement contract test now pins the evidence behavior), stall
+  adjudication, session-index text
   ingestion, and recall classification — not only the new brief section; and pin identity is now
   keyed on `retentionHint` alone (the shared vocabulary predicate), so a
   hand-authored pin-reason-without-hint note no longer projects into

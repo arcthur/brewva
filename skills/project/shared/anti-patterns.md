@@ -61,7 +61,7 @@ retirement_sensitivity: review_only
 - Creating a second memory store for Attention Options instead of using
   workbench pins, session tape evidence, recall, and repository precedents. (axiom 1)
 - Treating `attention_ignore` as global policy rather than session-scoped
-  advisory suppression. (axiom 1)
+  suppression of the option from later card sets. (axiom 1)
 - Recreating hidden local-hook policy with `block_tool` or any equivalent
   blocking result outside explicit kernel admission and verification gates. (axiom 18)
 - Adding a `Run skill` path or allowing SkillCards to grant tools, accounts,

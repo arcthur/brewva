@@ -183,7 +183,10 @@ export interface AttentionOptionProjection extends ProtocolRecord {
   readonly authorityPosture: AttentionOptionAuthorityPosture;
 }
 
-export type AttentionOptionActionKind = "consume" | "pin" | "ignore" | "verify_plan";
+// `verify_plan` was retired with the `attention_verify_plan` tool (a static
+// recipe wearing a tool schema); historical `attention.verify_plan` metric
+// observations remain readable as raw records.
+export type AttentionOptionActionKind = "consume" | "pin" | "ignore";
 
 export interface SessionCompactionAttentionRefs extends ProtocolRecord {
   readonly generationIds: readonly string[];

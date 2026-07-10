@@ -98,7 +98,9 @@ export const RECALL_RESULTS_SURFACED_EVENT_TYPE = "recall.results.surfaced" as c
 
 export const TOOL_CALL_BLOCKED_EVENT_TYPE = "tool.call.blocked" as const;
 
-export const TOOL_CONTRACT_WARNING_EVENT_TYPE = "tool.contract.warning" as const;
+// `tool.contract.warning` was retired with the read-path hard gate (its only
+// producer); historical tape events of that type remain readable as raw
+// records, but no constant or consumer exists anymore.
 
 // Underscore on purpose: the ledger-writer artifact chain has always
 // written "tool_output_artifact_persisted" and output-search reads it back;

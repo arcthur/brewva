@@ -53,7 +53,7 @@ function toolContext(sessionId: string) {
 }
 
 describe("attention option tools", () => {
-  test("options return bounded cards; consume, pin, ignore, and verify_plan keep separate effects", async () => {
+  test("options return bounded cards; consume, pin, and ignore keep separate effects", async () => {
     const runtime = createRuntimeFixture({
       ops: {
         skills: {
@@ -99,13 +99,18 @@ describe("attention option tools", () => {
     });
 
     const tools = createAttentionOptionTools({ runtime: createBundledToolRuntime(runtime) });
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "attention_options",
+      "attention_consume",
+      "attention_pin",
+      "attention_ignore",
+    ]);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     const optionsTool = byName.get("attention_options");
     const consumeTool = byName.get("attention_consume");
     const pinTool = byName.get("attention_pin");
     const ignoreTool = byName.get("attention_ignore");
-    const verifyPlanTool = byName.get("attention_verify_plan");
-    if (!optionsTool || !consumeTool || !pinTool || !ignoreTool || !verifyPlanTool) {
+    if (!optionsTool || !consumeTool || !pinTool || !ignoreTool) {
       throw new Error("expected_attention_tools_registered");
     }
 
@@ -187,27 +192,23 @@ describe("attention option tools", () => {
       scope: "session",
     });
 
-    const beforeVerifyEventCount = runtime.ops.events.records.query(sessionId).length;
-    const beforeVerifyWorkbenchCount = runtime.ops.workbench.list(sessionId).length;
-    const verifyResult = await verifyPlanTool.execute(
-      "attention-verify-plan-1",
-      { option_id: "skill:runtime-orientation" },
+    // Ignore is real suppression: the ignored option id is absent from the
+    // next option set in the same session.
+    const optionsAfterIgnore = await optionsTool.execute(
+      "attention-options-2",
+      { query: "runtime context", limit: 5 },
       new AbortController().signal,
       async () => undefined,
       toolContext(sessionId) as never,
     );
-    expect(toolOutcomePayload(verifyResult)).toMatchObject({
-      ok: true,
-      optionId: "skill:runtime-orientation",
-      effects: {
-        fs: false,
-        command: false,
-        provider: false,
-        network: false,
-      },
-    });
-    expect(runtime.ops.events.records.query(sessionId)).toHaveLength(beforeVerifyEventCount + 1);
-    expect(runtime.ops.workbench.list(sessionId)).toHaveLength(beforeVerifyWorkbenchCount);
+    const optionIdsAfterIgnore = (
+      toolOutcomePayload(optionsAfterIgnore) as {
+        options: Array<{ optionId: string }>;
+      }
+    ).options.map((card) => card.optionId);
+    expect(optionIdsAfterIgnore).not.toContain("precedent:docs/solutions/runtime-context.md");
+    expect(optionIdsAfterIgnore).toContain("skill:runtime-orientation");
+
     expect(
       runtime.ops.events.iteration
         .listMetricObservations(sessionId)
@@ -219,7 +220,6 @@ describe("attention option tools", () => {
         "attention.consume",
         "attention.option_consume_ratio",
         "attention.ignore",
-        "attention.verify_plan",
       ]),
     );
   });
@@ -232,6 +232,7 @@ describe("attention option tools", () => {
     );
 
     expect(metadata.attention_options?.requiredCapabilities).toEqual([
+      "capabilities.events.iteration.listMetricObservations",
       "capabilities.events.recordMetricObservation",
       "capabilities.events.records.query",
       "capabilities.skills.catalog.list",
@@ -244,15 +245,20 @@ describe("attention option tools", () => {
       "capabilities.events.recordMetricObservation",
       "capabilities.events.records.query",
       "capabilities.skills.catalog.get",
+      "capabilities.task.target.getDescriptor",
       "capabilities.workbench.list",
     ]);
-    expect(metadata.attention_pin?.requiredCapabilities).toEqual(["capabilities.workbench.note"]);
+    expect(metadata.attention_pin?.requiredCapabilities).toEqual([
+      "capabilities.events.records.query",
+      "capabilities.skills.catalog.get",
+      "capabilities.task.target.getDescriptor",
+      "capabilities.workbench.list",
+      "capabilities.workbench.note",
+    ]);
     expect(metadata.attention_ignore?.requiredCapabilities).toEqual([
       "capabilities.events.recordMetricObservation",
     ]);
-    expect(metadata.attention_verify_plan?.requiredCapabilities).toEqual([
-      "capabilities.events.recordMetricObservation",
-    ]);
+    expect(metadata).not.toHaveProperty("attention_verify_plan");
   });
 
   test("options source schema rejects source families without producers", () => {
@@ -426,6 +432,122 @@ describe("attention option tools", () => {
     expect(text).not.toContain("should-not-load");
     expect(skillListCalls).toBe(0);
     expect(workbenchListCalls).toBe(0);
+  });
+
+  test("precedent consume returns the knowledge document body and pin stores it", async () => {
+    const runtime = createRuntimeFixture();
+    const solutionDir = join(runtime.identity.workspaceRoot, "docs", "solutions");
+    mkdirSync(solutionDir, { recursive: true });
+    writeFileSync(
+      join(solutionDir, "consumable-precedent.md"),
+      [
+        "---",
+        "status: active",
+        "tags:",
+        "  - consumable",
+        "---",
+        "# Consumable Precedent",
+        "",
+        "## Problem",
+        "",
+        "Precedent cards must be consumable with real content.",
+        "",
+        "## Solution",
+        "",
+        "FULL PRECEDENT BODY VISIBLE ON CONSUME",
+      ].join("\n"),
+    );
+
+    const sessionId = "attention-precedent-consume-session";
+    const tools = createAttentionOptionTools({ runtime: createBundledToolRuntime(runtime) });
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    const consumeTool = byName.get("attention_consume");
+    const pinTool = byName.get("attention_pin");
+    if (!consumeTool || !pinTool) {
+      throw new Error("expected_attention_tools_registered");
+    }
+
+    const consumeResult = await consumeTool.execute(
+      "attention-consume-precedent",
+      {
+        option_id: "precedent:docs/solutions/consumable-precedent.md",
+        reason: "Need the precedent body.",
+      },
+      new AbortController().signal,
+      async () => undefined,
+      toolContext(sessionId) as never,
+    );
+    expect(toolOutcomePayload(consumeResult)).toMatchObject({
+      ok: true,
+      optionId: "precedent:docs/solutions/consumable-precedent.md",
+    });
+    expect(
+      textContent(consumeResult as { content: Array<{ type: string; text?: string }> }),
+    ).toContain("FULL PRECEDENT BODY VISIBLE ON CONSUME");
+
+    const pinResult = await pinTool.execute(
+      "attention-pin-precedent",
+      {
+        option_id: "precedent:docs/solutions/consumable-precedent.md",
+        note: "Keep this precedent at hand.",
+      },
+      new AbortController().signal,
+      async () => undefined,
+      toolContext(sessionId) as never,
+    );
+    expect(toolOutcomePayload(pinResult)).toMatchObject({
+      ok: true,
+      contentResolved: true,
+    });
+    const pinnedEntry = runtime.ops.workbench
+      .list(sessionId)
+      .find((entry) =>
+        entry.sourceRefs?.includes("precedent:docs/solutions/consumable-precedent.md"),
+      );
+    expect(pinnedEntry?.content ?? "").toContain("FULL PRECEDENT BODY VISIBLE ON CONSUME");
+    expect(pinnedEntry?.content ?? "").toContain("Keep this precedent at hand.");
+  });
+
+  test("surfaced recall ids without local content refuse with a typed pointer", async () => {
+    const runtime = createRuntimeFixture();
+    const sessionId = "attention-recall-refusal-session";
+    runtime.ops.tools.recall.resultsSurfaced({
+      sessionId,
+      type: RECALL_RESULTS_SURFACED_EVENT_TYPE,
+      payload: {
+        results: [
+          {
+            stableId: "tape:other-session:event-9",
+            sourceFamily: "tape_evidence",
+            sessionScope: "cross_session",
+            rootRef: runtime.identity.workspaceRoot,
+          },
+        ],
+      },
+    });
+
+    const consumeTool = createAttentionOptionTools({
+      runtime: createBundledToolRuntime(runtime),
+    }).find((tool) => tool.name === "attention_consume");
+    if (!consumeTool) {
+      throw new Error("expected_attention_consume_tool_registered");
+    }
+
+    const result = await consumeTool.execute(
+      "attention-consume-recall-refusal",
+      { option_id: "tape:other-session:event-9", reason: "Need the recall content." },
+      new AbortController().signal,
+      async () => undefined,
+      toolContext(sessionId) as never,
+    );
+
+    expect(toolOutcomePayload(result)).toMatchObject({
+      ok: false,
+      error: "content_unavailable",
+    });
+    const text = textContent(result as { content: Array<{ type: string; text?: string }> });
+    expect(text).toContain("recall_search");
+    expect(text).toContain('stable_ids: ["tape:other-session:event-9"]');
   });
 
   test("options include bounded docs/solutions precedent cards without consuming full content", async () => {

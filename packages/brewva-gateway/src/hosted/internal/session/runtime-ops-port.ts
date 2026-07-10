@@ -245,9 +245,6 @@ export type HostedRuntimeOpsExtensions = {
     };
   };
   readonly tools: {
-    readonly readPath: {
-      contractWarning(input: unknown): unknown;
-    };
     readonly steering: {
       queued: RuntimeSemanticRecorder;
       applied: RuntimeSemanticRecorder;

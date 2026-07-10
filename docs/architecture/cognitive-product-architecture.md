@@ -90,12 +90,15 @@ before returning large content.
 
 The action split is part of the authority model:
 
-- `attention_options` returns bounded cards only
-- `attention_consume` reveals the selected content and records consumed refs
-- `attention_pin` writes through the existing workbench pin path
-- `attention_ignore` records session-scoped advisory suppression
-- `attention_verify_plan` returns a recipe only, without filesystem, command,
-  provider, or network effects
+- `attention_options` returns bounded cards only, excluding options ignored
+  earlier in the session
+- `attention_consume` reveals the selected content and records consumed refs,
+  or refuses with a typed `content_unavailable` reason naming the explicit
+  deep-read path
+- `attention_pin` resolves the option content and writes it through the
+  existing workbench pin path
+- `attention_ignore` suppresses the option from later card sets for the rest
+  of the session (advisory view shaping, never authority)
 
 Consuming `session_tape_evidence` returns a redacted event summary, not raw tape
 payload JSON.

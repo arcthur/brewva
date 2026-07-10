@@ -36,6 +36,19 @@ discipline.
 
 ## Current Active Notes
 
+- [RFC: Harness Candidate Integrity And Descriptive-Authority Subtraction](./rfc-harness-candidate-integrity-and-descriptive-authority-subtraction.md):
+  active RFC from a verified external review of the improvement-loop
+  subsystems. Six phases: demote token-overlap capability selections from
+  authority to view (axiom 18) with full-manifest registry versioning and
+  validated carry; delete the read-path hard gate keeping evidence-only
+  recovery context; make `harness compare` refuse unmaterialized candidate
+  manifests (`executedManifestId` honesty invariant); close the four broken
+  attention-options feedback edges and delete `attention_verify_plan`;
+  then materialize candidate deltas into trial-world-isolated replay and
+  unify harness/eval/learnings under one candidate lifecycle with
+  accountable accept/reject/archive verbs. Carries the optimization-surface
+  boundary list (optimizable vs frozen) targeted at a decision record.
+
 - [RFC: Provider HTTP Transport (Forced HTTP/1.1, Idle Timeout, Proxy)](./rfc-provider-http-transport.md):
   active RFC borrowing pi-mono's `http-dispatcher` shape into brewva: a
   provider-scoped transport policy (forced HTTP/1.1 via `undici`

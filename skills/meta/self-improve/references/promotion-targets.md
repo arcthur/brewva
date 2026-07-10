@@ -35,6 +35,11 @@ A learning qualifies for promotion when **any** of these hold:
 2. Choose target from the matrix above.
 3. Run `scripts/promote.sh <entry-id> <target>` or apply manually.
 4. Update the original entry: `**Status**: promoted`, `**Promoted**: <target>`.
+5. If the learning came out of a harness candidate experiment, cite its
+   `candidateId` in the promoted entry (`**Candidate**: <candidateId>`) —
+   the id appears in the compare report and in
+   `.brewva/harness/candidates.jsonl`, so the promoted guidance stays
+   traceable to the evaluation and accept/reject receipts behind it.
 
 ## Quality Gates Before Promotion
 

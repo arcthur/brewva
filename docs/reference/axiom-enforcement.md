@@ -28,8 +28,8 @@ Enforced by:
 
 - `anti-patterns.md` — Creating a second memory store for Attention Options instead of using workbench pins, session tape evidence, recall, and repository precedents.
 - `anti-patterns.md` — Materializing unbounded context through `attention_options`; options return candidate cards and `attention_consume` is the reveal boundary.
-- `anti-patterns.md` — Treating `attention_ignore` as global policy rather than session-scoped advisory suppression.
-- `critical-rules.md` — Keep Attention Options narrow: `attention_options` returns bounded candidate cards, `attention_consume` reveals selected content, `attention_pin` writes workbench pins, `attention_ignore` is session-scoped advisory suppression, and `attention_verify_plan` returns only a verification recipe. Do not add a second memory store or hidden context admission path.
+- `anti-patterns.md` — Treating `attention_ignore` as global policy rather than session-scoped suppression of the option from later card sets.
+- `critical-rules.md` — Keep Attention Options narrow: `attention_options` returns bounded candidate cards, `attention_consume` reveals selected content or refuses with a typed reason, `attention_pin` writes workbench pins carrying the resolved content, and `attention_ignore` is session-scoped suppression of the option from later card sets. Do not add a second memory store or hidden context admission path.
 
 Precedent decisions: `context-operating-system-and-compaction-physics`, `derivation-direction-invariant-and-skill-navigation`, `rfc-user-model-as-a-tape-folded-advisory-projection`, `trust-substrate-optimization-axis`
 

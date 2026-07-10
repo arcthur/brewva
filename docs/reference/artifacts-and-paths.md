@@ -39,6 +39,7 @@ durability boundaries:
 
 - `.brewva/tape/`: canonical runtime truth and replay authority
 - `.brewva/steering/`: per-session durable-transient log of unconsumed in-session prompt injections
+- `.brewva/harness/`: workspace-scoped harness candidate lifecycle receipts
 - `.orchestrator/`: rollback material, recovery WAL, and rebuildable derived caches
 - `.brewva/`: operator config, control-plane state, addons, channel metadata, and optional helper material
 
@@ -66,6 +67,14 @@ shape (`projection.dir=.orchestrator/projection`,
   - per-session log of deferred user-prompt injections (steer / queue / follow-up);
     appended on enqueue, tombstoned on consume, and the unconsumed survivors replay
     on restart. Next-turn custom messages are transient context and are not persisted.
+- Harness candidate ledger (`preservable receipts`): `.brewva/harness/candidates.jsonl`
+  - workspace-scoped append-only lifecycle receipts for harness candidates:
+    every `brewva harness compare` appends an `evaluated` row under the
+    report's `candidateId`, and `brewva harness candidate accept|reject|archive`
+    records the operator's accountable decision with its reason. Cross-session
+    by design (candidates outlive the sessions that produced them), fsync-durable
+    per append, never read by any authority path — wipe it and you lose the
+    audit trail behind promoted learnings, not any runtime behavior.
 - Working projection file (`rebuildable state`): `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/<projection.workingFile>` — read by inspect when present; not currently written by the runtime. Projections are recomputed from tape on demand, with no persisted unit log or cache-state file.
 - These projection files are rebuildable execution helpers. They are not the
   history-view baseline and they are not receipt authority.

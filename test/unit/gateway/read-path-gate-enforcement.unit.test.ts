@@ -1,16 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  analyzeReadPathRecoveryState,
+  buildReadPathRecoveryBlocks,
+} from "../../../packages/brewva-gateway/src/hosted/internal/context/read-path-recovery.js";
 import { createCompactReadTool } from "../../../packages/brewva-gateway/src/hosted/internal/session/init/session-assembly.js";
 import { createRuntimeFixture } from "../../helpers/runtime.js";
 import { cleanupTestWorkspace, createTestWorkspace } from "../../helpers/workspace.js";
 
-// The read-path gate's ENFORCEMENT leg, end to end: the write-side kind drift
-// fixed by the contract-liveness audit means this guard had never run in
-// production. Contract under test: two consecutive missing-path failures arm
-// the gate; while armed, a read outside observed evidence is deflected to a
-// [ReadPathGuard] err receipt (never executed); discovery evidence unlocks
-// reads under observed directories, and observed-path reads pass exactly.
+// Read-path recovery is EVIDENCE, not a gate (RFC: harness candidate
+// integrity and descriptive-authority subtraction, P2). Repeated missing-path
+// failures arm a recovery-evidence state that renders an evidential context
+// block and tape events; the read tool itself is never deflected — the model
+// decides how to recover. This file replaced the former gate-enforcement
+// contract when the tool-layer interception was deleted.
 
 function readCtx(sessionId: string) {
   return { sessionManager: { getSessionId: () => sessionId } };
@@ -39,27 +43,17 @@ async function executeRead(
   };
 }
 
-describe("read-path gate enforcement", () => {
-  test("armed gate deflects unverified reads and discovery evidence unlocks them", async () => {
-    const workspace = createTestWorkspace("read-path-gate");
-    const sessionId = "read-gate-session";
+describe("read-path recovery evidence", () => {
+  test("an armed recovery state never blocks reads and renders evidence instead", async () => {
+    const workspace = createTestWorkspace("read-path-recovery");
+    const sessionId = "read-recovery-session";
     try {
-      mkdirSync(join(workspace, "src"), { recursive: true });
       mkdirSync(join(workspace, "docs"), { recursive: true });
-      writeFileSync(join(workspace, "src/present.ts"), "export const present = true;\n", "utf8");
       writeFileSync(join(workspace, "docs/notes.md"), "release notes\n", "utf8");
 
       const runtime = createRuntimeFixture();
       const tool = createCompactReadTool({ cwd: workspace, runtime });
 
-      // Not armed: a read of an existing file passes untouched. A successful
-      // read records discovery evidence for its own directory, so the gated
-      // attempts below use a DIFFERENT directory (docs/) that has no evidence.
-      const beforeArm = await executeRead(tool, sessionId, "src/present.ts");
-      expect(beforeArm.outcomeKind).not.toBe("err");
-      expect(beforeArm.text).toContain("export const present = true;");
-
-      // Arm through the ops verb (the vocabulary-aligned type the analyzer reads).
       runtime.ops.tools.readPath.gateArmed({
         sessionId,
         payload: {
@@ -68,26 +62,27 @@ describe("read-path gate enforcement", () => {
         },
       });
 
-      // Armed + no discovery evidence for docs/: even an EXISTING file there
-      // is deflected — the gate demands discovery first; the read must not run.
-      const deflected = await executeRead(tool, sessionId, "docs/notes.md");
-      expect(deflected.outcomeKind).toBe("err");
-      expect(deflected.text).toContain("[ReadPathGuard]");
-      expect(deflected.text).toContain("2 consecutive path-not-found failures");
+      // The armed state renders as an evidential context block naming the
+      // failure run and the failed paths — before any evidence exists.
+      const armedBlocks = buildReadPathRecoveryBlocks(runtime, sessionId);
+      expect(armedBlocks.map((block) => block.id)).toEqual(["read-path-recovery"]);
+      const armedContent = armedBlocks[0]?.content ?? "";
+      expect(armedContent).toContain("2 consecutive path-not-found failures");
+      expect(armedContent).toContain("missing-a.ts, missing-b.ts");
+      expect(armedContent).toContain("No discovery evidence has been observed since");
 
-      // Discovery evidence for the directory unlocks reads beneath it.
-      runtime.ops.tools.readPath.discoveryObserved({
-        sessionId,
-        payload: { observedPaths: [], observedDirectories: ["docs"] },
-      });
-      const unlocked = await executeRead(tool, sessionId, "docs/notes.md");
-      expect(unlocked.outcomeKind).not.toBe("err");
-      expect(unlocked.text).toContain("release notes");
+      // Armed with zero discovery evidence: the read still executes — no
+      // deflection, no guard receipt.
+      const read = await executeRead(tool, sessionId, "docs/notes.md");
+      expect(read.outcomeKind).not.toBe("err");
+      expect(read.text).toContain("release notes");
+      expect(read.text).not.toContain("[ReadPathGuard]");
 
-      // Paths outside the observed evidence stay gated.
-      const stillGated = await executeRead(tool, sessionId, "lib/other.ts");
-      expect(stillGated.outcomeKind).toBe("err");
-      expect(stillGated.text).toContain("[ReadPathGuard]");
+      // The successful read itself records discovery evidence for its
+      // directory, flipping the block to its satisfied shape.
+      const satisfiedBlocks = buildReadPathRecoveryBlocks(runtime, sessionId);
+      expect(satisfiedBlocks[0]?.content ?? "").toContain("observed_directories: docs");
+      expect(analyzeReadPathRecoveryState(runtime, sessionId).phase).toBe("satisfied");
     } finally {
       cleanupTestWorkspace(workspace);
     }

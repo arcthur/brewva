@@ -16,7 +16,6 @@ import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
   RECALL_RESULTS_SURFACED_EVENT_TYPE,
   TOOL_CALL_BLOCKED_EVENT_TYPE,
-  TOOL_CONTRACT_WARNING_EVENT_TYPE,
   TOOL_OUTPUT_ARTIFACT_PERSISTED_EVENT_TYPE,
   TOOL_OUTPUT_SEARCH_EVENT_TYPE,
   TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE,
@@ -196,7 +195,6 @@ export function buildToolsRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntim
     readPath: {
       discoveryObserved: ctx.recordInputPayload(TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE),
       gateArmed: ctx.recordInputPayload(TOOL_READ_PATH_GATE_ARMED_EVENT_TYPE),
-      contractWarning: ctx.recordInputPayload(TOOL_CONTRACT_WARNING_EVENT_TYPE),
     },
     steering: {
       queued: ctx.recordSemanticEvent("tool_steering_queued"),

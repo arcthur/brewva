@@ -15,8 +15,6 @@ export {
 export {
   analyzeReadPathRecoveryState,
   createReadPathRecoveryLifecycle,
-  isReadPathVerified,
-  recordReadPathGuardWarning,
   type ReadPathRecoveryState,
 } from "./internal/context/read-path-recovery.js";
 export {

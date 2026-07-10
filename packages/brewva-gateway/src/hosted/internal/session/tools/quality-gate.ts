@@ -55,6 +55,7 @@ interface RuntimeCapabilityAccessFact extends ProtocolRecord {
   receiptId?: string;
   source?: string;
   selectedCapabilityNames?: readonly string[];
+  selectionAuthorized?: boolean;
   reason?: string;
   advisory?: string;
 }
@@ -165,6 +166,7 @@ function resolveRuntimeCapabilityAccess(input: {
       receiptId: selectedCapabilityAccess.receiptId,
       source: selectedCapabilityAccess.source,
       selectedCapabilityNames: selectedCapabilityAccess.selectedCapabilityNames,
+      selectionAuthorized: selectedCapabilityAccess.selectionAuthorized,
       advisory: selectedCapabilityAccess.advisory,
     };
   }
@@ -174,6 +176,7 @@ function resolveRuntimeCapabilityAccess(input: {
     receiptId: selectedCapabilityAccess.receiptId,
     source: selectedCapabilityAccess.source,
     selectedCapabilityNames: selectedCapabilityAccess.selectedCapabilityNames,
+    selectionAuthorized: selectedCapabilityAccess.selectionAuthorized,
     advisory: [
       selectedCapabilityAccess.advisory,
       `runtime_capabilities:${required.requiredCapabilities.join(",")}`,

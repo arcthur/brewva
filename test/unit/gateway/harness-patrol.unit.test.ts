@@ -251,6 +251,8 @@ describe("harness patrol", () => {
       divergeAt: "event-source-msg",
       baseManifest,
       candidateManifest,
+      executedManifestId: candidateManifest.manifestId,
+      workspace: { mode: "shared_operator_cwd" },
       sourceEvents,
       changedFields: ["runtime.configHash"],
     });
@@ -266,6 +268,8 @@ describe("harness patrol", () => {
     // runtime. Its target tape (replay + real events) is verified through the
     // report metrics; replay events live only in the fork's in-memory tape.
     expect(report.metrics.execution).toMatchObject({
+      executedManifestId: candidateManifest.manifestId,
+      workspaceMode: "shared_operator_cwd",
       replayEventCount: 2,
       targetEventCount: 8,
       providerExecuted: true,
@@ -327,6 +331,11 @@ describe("harness patrol", () => {
       attempt: 1,
       refs: { sourceEventIds: sourceEvents.map((event) => event.id) },
     });
+    const candidateManifest = buildHarnessManifest({
+      ...baseManifest,
+      manifestId: undefined,
+      runtime: { configHash: "runtime_config:candidate" },
+    });
     return {
       runtime,
       closeCount: () => closes,
@@ -337,16 +346,85 @@ describe("harness patrol", () => {
         targetSessionId: "target-session",
         divergeAt: "event-source-msg",
         baseManifest,
-        candidateManifest: buildHarnessManifest({
-          ...baseManifest,
-          manifestId: undefined,
-          runtime: { configHash: "runtime_config:candidate" },
-        }),
+        candidateManifest,
+        executedManifestId: candidateManifest.manifestId,
+        workspace: { mode: "shared_operator_cwd" } as const,
         sourceEvents,
         changedFields: ["runtime.configHash"],
       },
     };
   }
+
+  test("a report that did not execute its candidate records the mismatch as a rejecting regression", async () => {
+    const { input } = forkComparisonInput({});
+    const report = await executeHarnessCandidateComparison({
+      ...input,
+      executedManifestId: input.baseManifest.manifestId,
+    });
+
+    expect(report.metrics.execution).toMatchObject({
+      executedManifestId: input.baseManifest.manifestId,
+    });
+    expect(report.metrics.regressions).toEqual([
+      `execution_candidate_delta_not_executed:${input.candidateManifest.manifestId}`,
+    ]);
+    expect(report.promotion.recommendation).toBe("reject");
+  });
+
+  test("execution echoes the materialization and trial-world evidence fields", async () => {
+    const { input } = forkComparisonInput({});
+    const report = await executeHarnessCandidateComparison({
+      ...input,
+      workspace: {
+        mode: "trial_world",
+        root: "/tmp/brewva-harness-trial-x/workspace",
+        basisWorldId: "sha256:trial-basis",
+        source: "git",
+      },
+      materializedFields: ["provider.model"],
+    });
+
+    expect(report.metrics.execution).toMatchObject({
+      workspaceMode: "trial_world",
+      materializedFields: ["provider.model"],
+      trialWorldBasisId: "sha256:trial-basis",
+      trialWorldSource: "git",
+    });
+  });
+
+  test("real mode re-derives the materialization proof and rejects unmaterializable deltas", async () => {
+    const { input } = forkComparisonInput({});
+    const report = await executeHarnessCandidateComparison({
+      ...input,
+      mode: "real",
+      ports: {
+        provider: {
+          async *stream() {
+            yield { type: "text" as const, delta: "real probe" };
+          },
+        },
+        toolExecutor: {
+          async execute() {
+            return { outcome: { kind: "ok" as const, value: {} }, content: "noop" };
+          },
+        },
+      },
+      candidateManifest: buildHarnessManifest({
+        ...input.baseManifest,
+        manifestId: undefined,
+        tools: { activeToolNames: ["only-read"] },
+      }),
+      executedManifestId: input.baseManifest.manifestId,
+    });
+
+    // The base fixture carries no tools section, so the candidate's addition
+    // diffs at the section level and refuses through the fail-closed
+    // unclassified default — equally valid proof the API enforces the seam.
+    expect(report.metrics.regressions).toContain(
+      "execution_candidate_field_not_materializable:tools",
+    );
+    expect(report.promotion.recommendation).toBe("reject");
+  });
 
   test("closes the forked harness runtime exactly once on success", async () => {
     const { closeCount, input } = forkComparisonInput({});
@@ -416,6 +494,8 @@ describe("harness patrol", () => {
         divergeAt: "event-source-start",
         baseManifest,
         candidateManifest,
+        executedManifestId: candidateManifest.manifestId,
+        workspace: { mode: "shared_operator_cwd" },
         sourceEvents,
       }),
     ).rejects.toThrow("harness_compare_target_session_must_be_empty");

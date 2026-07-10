@@ -1,4 +1,7 @@
-import { executeKnowledgeSearch } from "@brewva/brewva-recall/knowledge";
+import {
+  executeKnowledgeSearch,
+  findKnowledgeDocByRelativePath,
+} from "@brewva/brewva-recall/knowledge";
 import { scoreDocumentsByTfIdf } from "@brewva/brewva-search";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import {
@@ -278,7 +281,7 @@ function skillToDocument(skill: SkillDocument, generation: string): AttentionOpt
     tokenEstimate: estimateTokens(text),
     resourceRefs,
     outputArtifacts: skill.card.outputArtifacts ?? [],
-    allowedActions: ["consume", "pin", "ignore", "verify_plan"],
+    allowedActions: ["consume", "pin", "ignore"],
     authorityPosture: "none",
   };
   return { id: card.optionId, text, card };
@@ -305,7 +308,7 @@ function workbenchToDocument(
     tokenEstimate: estimateTokens(content),
     resourceRefs: entry.sourceRefs,
     outputArtifacts: [],
-    allowedActions: ["consume", "pin", "ignore", "verify_plan"],
+    allowedActions: ["consume", "pin", "ignore"],
     authorityPosture: "read_context",
   };
   return { id: card.optionId, text: [content, entry.reason, ...entry.sourceRefs].join("\n"), card };
@@ -341,7 +344,7 @@ function readRecallResults(
       tokenEstimate: null,
       resourceRefs: [rootRef],
       outputArtifacts: [],
-      allowedActions: ["consume", "pin", "ignore", "verify_plan"],
+      allowedActions: ["consume", "pin", "ignore"],
       authorityPosture: "none",
     };
     return [{ id: stableId, text: [stableId, rootRef, sourceFamily].join("\n"), card }];
@@ -369,7 +372,7 @@ function recentTapeDocuments(
         tokenEstimate: estimateTokens(summary),
         resourceRefs: [rootRef],
         outputArtifacts: [],
-        allowedActions: ["consume", "pin", "ignore", "verify_plan"],
+        allowedActions: ["consume", "pin", "ignore"],
         authorityPosture: "none",
       };
       return { id: card.optionId, text: summary, card };
@@ -408,7 +411,7 @@ function repositoryPrecedentDocuments(input: {
       tokenEstimate: estimateTokens(text),
       resourceRefs: [rootRef],
       outputArtifacts: [],
-      allowedActions: ["consume", "pin", "ignore", "verify_plan"],
+      allowedActions: ["consume", "pin", "ignore"],
       authorityPosture: "none",
     };
     return { id: optionId, text, card };
@@ -490,7 +493,30 @@ function collectOptionDocuments(input: {
   if (sourceFamilies.includes("session_tape_evidence")) {
     documents.push(...recentTapeDocuments(tapeEvents, generation));
   }
-  return { generation, documents: dedupeDocuments(documents) };
+  const ignored = ignoredOptionIds(input.runtime, input.sessionId);
+  const visible =
+    ignored.size === 0 ? documents : documents.filter((document) => !ignored.has(document.id));
+  return { generation, documents: dedupeDocuments(visible) };
+}
+
+// Session-scoped suppression: an ignored option id is excluded from later
+// option sets in the same session. Suppression shapes an advisory view, not
+// authority (axiom 18) — feedback into views is what closes the loop.
+function ignoredOptionIds(runtime: BrewvaToolRuntime, sessionId: string): Set<string> {
+  const ignored = new Set<string>();
+  for (const observation of runtime.capabilities.events.iteration.listMetricObservations(
+    sessionId,
+  )) {
+    if (observation.metricKey !== "attention.ignore") {
+      continue;
+    }
+    // evidenceRefs rides the observation payload passthrough; the typed
+    // record only names the metric core fields.
+    for (const ref of readStringArray((observation as { evidenceRefs?: unknown }).evidenceRefs)) {
+      ignored.add(ref);
+    }
+  }
+  return ignored;
 }
 
 function dedupeDocuments(documents: readonly AttentionOptionDocument[]): AttentionOptionDocument[] {
@@ -617,24 +643,42 @@ function recordAttentionConsumeRatio(input: {
   });
 }
 
+type ConsumedContentResolution =
+  | {
+      readonly status: "resolved";
+      readonly title: string;
+      readonly content: string;
+      readonly refs: readonly string[];
+      readonly sourceFamily: AttentionOptionSourceFamily;
+    }
+  | {
+      readonly status: "content_unavailable";
+      readonly title: string;
+      readonly refs: readonly string[];
+      readonly sourceFamily: AttentionOptionSourceFamily;
+      readonly hint: string;
+    }
+  | { readonly status: "unknown_option" };
+
+// Consume returns content or refuses with a typed reason — it never returns
+// identifiers dressed up as content. Every card family the options tool can
+// emit resolves here: skill/workbench/event from their stores, `precedent:`
+// from the knowledge doc body, and remaining surfaced-recall ids refuse with
+// a pointer at the explicit deep-read path (`recall_search` stable_ids).
 function resolveConsumedContent(input: {
   readonly runtime: BrewvaToolRuntime;
   readonly sessionId: string;
   readonly optionId: string;
-  readonly workspaceRoot: string;
-}): {
-  readonly title: string;
-  readonly content: string;
-  readonly refs: readonly string[];
-  readonly sourceFamily: AttentionOptionSourceFamily;
-} | null {
+  readonly searchRoots: readonly string[];
+}): ConsumedContentResolution {
   if (input.optionId.startsWith("skill:")) {
     const name = input.optionId.slice("skill:".length);
     const skill = input.runtime.capabilities.skills.catalog.get(name);
     if (!skill) {
-      return null;
+      return { status: "unknown_option" };
     }
     return {
+      status: "resolved",
       title: skill.name,
       content: skill.markdown,
       refs: [
@@ -650,13 +694,34 @@ function resolveConsumedContent(input: {
       .list(input.sessionId)
       .find((candidate) => candidate.id === stableRef || candidate.digest === stableRef);
     if (!entry) {
-      return null;
+      return { status: "unknown_option" };
     }
     return {
+      status: "resolved",
       title: input.optionId,
       content: readNonEmptyString(entry.content) ?? readNonEmptyString(entry.text) ?? "",
       refs: entry.sourceRefs,
       sourceFamily: "workbench",
+    };
+  }
+  if (input.optionId.startsWith("precedent:")) {
+    const relativePath = input.optionId.slice("precedent:".length);
+    const doc = findKnowledgeDocByRelativePath(input.searchRoots, relativePath);
+    if (doc) {
+      return {
+        status: "resolved",
+        title: doc.title,
+        content: doc.body,
+        refs: [doc.relativePath],
+        sourceFamily: "repository_precedent",
+      };
+    }
+    return {
+      status: "content_unavailable",
+      title: input.optionId,
+      refs: [relativePath],
+      sourceFamily: "repository_precedent",
+      hint: "knowledge document not found under the allowed roots; it may have moved or the root is out of scope",
     };
   }
   const recallDocument = input.runtime.capabilities.events.records
@@ -665,14 +730,11 @@ function resolveConsumedContent(input: {
     .find((document) => document.id === input.optionId);
   if (recallDocument) {
     return {
+      status: "content_unavailable",
       title: recallDocument.card.title,
-      content: [
-        `stable_id: ${recallDocument.card.optionId}`,
-        `source: ${recallDocument.card.sourceFamily}`,
-        `root_ref: ${recallDocument.card.rootRef}`,
-      ].join("\n"),
       refs: recallDocument.card.resourceRefs,
       sourceFamily: recallDocument.card.sourceFamily,
+      hint: `surfaced recall content is read through recall_search with stable_ids: ["${input.optionId}"]`,
     };
   }
   if (input.optionId.startsWith("event:")) {
@@ -681,16 +743,17 @@ function resolveConsumedContent(input: {
       .query(input.sessionId, { last: 100 })
       .find((candidate) => candidate.id === eventId);
     if (!event) {
-      return null;
+      return { status: "unknown_option" };
     }
     return {
+      status: "resolved",
       title: event.type,
       content: renderTapeEventSummary(event),
       refs: [input.optionId],
       sourceFamily: "session_tape_evidence",
     };
   }
-  return null;
+  return { status: "unknown_option" };
 }
 
 export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefinition[] {
@@ -706,10 +769,6 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
   const attentionIgnoreTool = createRuntimeBoundBrewvaToolFactory(
     options.runtime,
     "attention_ignore",
-  );
-  const attentionVerifyPlanTool = createRuntimeBoundBrewvaToolFactory(
-    options.runtime,
-    "attention_verify_plan",
   );
 
   const attentionOptions = attentionOptionsTool.define({
@@ -773,19 +832,35 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const sessionId = getSessionId(ctx);
       const optionId = params.option_id.trim();
-      const workspaceRoot = resolveWorkspaceRoot(attentionConsumeTool.runtime, ctx);
+      const scope = resolveToolTargetScope(attentionConsumeTool.runtime, ctx);
       const consumed = resolveConsumedContent({
         runtime: attentionConsumeTool.runtime,
         sessionId,
         optionId,
-        workspaceRoot,
+        searchRoots: scope.allowedRoots,
       });
-      if (!consumed) {
+      if (consumed.status === "unknown_option") {
         return errTextResult(`attention_consume could not resolve option ${optionId}.`, {
           ok: false,
           optionId,
           error: "unknown_option",
         });
+      }
+      if (consumed.status === "content_unavailable") {
+        return errTextResult(
+          [
+            `attention_consume cannot materialize content for ${optionId}.`,
+            `hint: ${consumed.hint}`,
+            `refs: ${consumed.refs.join(",") || "none"}`,
+          ].join("\n"),
+          {
+            ok: false,
+            optionId,
+            error: "content_unavailable",
+            hint: consumed.hint,
+            refs: consumed.refs,
+          },
+        );
       }
       const reason = readNonEmptyString(params.reason);
       const event = recordAttentionMetric({
@@ -838,20 +913,44 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
     name: "attention_pin",
     label: "Attention Pin",
     description:
-      "Pin one attention option into the workbench memory store with the attention_pin retention contract: the entry survives compaction and render eviction until you explicitly release it with workbench_evict (span ref entry:<id>).",
+      "Pin one attention option into the workbench memory store with the attention_pin retention contract: the resolved option content is stored with the pin, and the entry survives compaction and render eviction until you explicitly release it with workbench_evict (span ref entry:<id>).",
     parameters: Type.Object({
       option_id: Type.String({ minLength: 1, maxLength: 512 }),
       note: Type.Optional(Type.String({ minLength: 1, maxLength: 8_000 })),
       reason: Type.Optional(Type.String({ minLength: 1, maxLength: 1_000 })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const sessionId = getSessionId(ctx);
       const optionId = params.option_id.trim();
       const reason = readNonEmptyString(params.reason) ?? ATTENTION_PIN_RETENTION_HINT;
-      const entry = noteWorkbench(attentionPinTool.runtime, getSessionId(ctx), {
-        content:
-          readNonEmptyString(params.note) ??
-          `Pinned attention option for explicit follow-up: ${optionId}`,
-        sourceRefs: [optionId],
+      const scope = resolveToolTargetScope(attentionPinTool.runtime, ctx);
+      // A pin preserves the option's content, not just its id: resolve first
+      // so the surviving workbench entry is useful after the option's source
+      // is gone. Unresolvable options pin their id with an explicit marker.
+      const resolution = resolveConsumedContent({
+        runtime: attentionPinTool.runtime,
+        sessionId,
+        optionId,
+        searchRoots: scope.allowedRoots,
+      });
+      const note = readNonEmptyString(params.note);
+      const resolvedContent =
+        resolution.status === "resolved"
+          ? truncateText(resolution.content, MAX_CONSUMED_CHARS, { marker: "\n..." })
+          : undefined;
+      const contentParts = [
+        note ?? `Pinned attention option for explicit follow-up: ${optionId}`,
+        ...(resolvedContent ? ["", resolvedContent] : []),
+        ...(resolution.status !== "resolved"
+          ? [
+              "",
+              `content_unresolved: ${resolution.status === "content_unavailable" ? resolution.hint : "unknown_option"}`,
+            ]
+          : []),
+      ];
+      const entry = noteWorkbench(attentionPinTool.runtime, sessionId, {
+        content: contentParts.join("\n"),
+        sourceRefs: [optionId, ...(resolution.status !== "unknown_option" ? resolution.refs : [])],
         reason,
         retentionHint: ATTENTION_PIN_RETENTION_HINT,
       });
@@ -868,6 +967,7 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
         entryId: entry.id ?? null,
         digest: entry.digest,
         sourceRefs: entry.sourceRefs,
+        contentResolved: resolution.status === "resolved",
       });
     },
   });
@@ -875,7 +975,8 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
   const attentionIgnore = attentionIgnoreTool.define({
     name: "attention_ignore",
     label: "Attention Ignore",
-    description: "Record a session-scoped advisory suppression for one attention option.",
+    description:
+      "Suppress one attention option for this session: it is excluded from subsequent attention_options results (advisory view shaping, not authority).",
     parameters: Type.Object({
       option_id: Type.String({ minLength: 1, maxLength: 512 }),
       reason: Type.Optional(Type.String({ minLength: 1, maxLength: 1_000 })),
@@ -898,48 +999,5 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
     },
   });
 
-  const attentionVerifyPlan = attentionVerifyPlanTool.define({
-    name: "attention_verify_plan",
-    label: "Attention Verify Plan",
-    description:
-      "Return an advisory verification recipe for one attention option without reading files or running commands.",
-    parameters: Type.Object({
-      option_id: Type.String({ minLength: 1, maxLength: 512 }),
-      objective: Type.Optional(Type.String({ minLength: 1, maxLength: 1_000 })),
-    }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const optionId = params.option_id.trim();
-      const objective = readNonEmptyString(params.objective) ?? "Validate the selected context.";
-      const event = recordAttentionMetric({
-        runtime: attentionVerifyPlanTool.runtime,
-        sessionId: getSessionId(ctx),
-        action: "verify_plan",
-        optionId,
-        reason: objective,
-      });
-      const recipe = [
-        "# Attention Verify Plan",
-        `option_id: ${optionId}`,
-        `objective: ${objective}`,
-        "1. Confirm the option ref is still relevant to the current user request.",
-        "2. Check whether the work card already contains fresher authority, work, or evidence refs.",
-        "3. If implementation depends on this option, consume it explicitly before acting.",
-        "4. Treat any missing or stale evidence as advisory unless a verification gate manifest says otherwise.",
-      ].join("\n");
-      return okTextResult(recipe, {
-        ok: true,
-        optionId,
-        eventId: event?.id ?? null,
-        recipe,
-        effects: {
-          fs: false,
-          command: false,
-          provider: false,
-          network: false,
-        },
-      });
-    },
-  });
-
-  return [attentionOptions, attentionConsume, attentionPin, attentionIgnore, attentionVerifyPlan];
+  return [attentionOptions, attentionConsume, attentionPin, attentionIgnore];
 }

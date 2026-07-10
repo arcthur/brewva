@@ -56,8 +56,6 @@ export {
 export {
   analyzeReadPathRecoveryState,
   createReadPathRecoveryLifecycle,
-  isReadPathVerified,
-  recordReadPathGuardWarning,
   type ReadPathRecoveryState,
 } from "../context/read-path-recovery.js";
 export { applyContextContract, buildContextContractBlock } from "../context/context-contract.js";

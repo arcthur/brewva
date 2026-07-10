@@ -68,12 +68,18 @@ injects, cites, or preserves it in workbench state.
 
 Attention options are the bounded product layer over unbounded memory sources:
 
-- `attention_options` returns candidate cards only
-- `attention_consume` returns selected content and records consumed refs
-- `attention_pin` writes to the existing workbench pin path
-- `attention_ignore` records session-scoped advisory suppression
-- `attention_verify_plan` returns a recipe without filesystem, command,
-  provider, or network effects
+- `attention_options` returns candidate cards only, excluding options ignored
+  earlier in the session
+- `attention_consume` returns the selected option's content and records
+  consumed refs; `precedent:` ids resolve to the knowledge document body, and
+  ids it cannot materialize (for example `tape:` recall hits) refuse with a
+  typed `content_unavailable` error naming the `recall_search` stable-id path
+  instead of returning identifiers as content
+- `attention_pin` resolves the option content first and stores it with the
+  pin on the existing workbench pin path
+- `attention_ignore` suppresses the option for the rest of the session: it
+  disappears from subsequent `attention_options` results (advisory view
+  shaping, never authority)
 
 For `session_tape_evidence`, consume returns a redacted event summary rather
 than the raw event payload. It preserves event identity and safe structural

@@ -157,11 +157,13 @@ describe("event contract liveness", () => {
   });
 
   test("the historical regression class stays covered: tool.result.recorded and the read-path gate are live", () => {
-    // These three were dead contracts fixed on this branch; if they reappear
-    // in the scan the producer regressed again.
+    // These were dead contracts fixed on this branch; if they reappear in the
+    // scan the producer regressed again. `tool.contract.warning` left the set
+    // for good: the read-path hard gate (its only producer) was deleted by the
+    // harness-candidate-integrity RFC P2, and the audit convention retires an
+    // abandoned consumer together with its constant.
     const flagged = new Set(scanConsumedButNeverProduced());
     expect(flagged.has("tool.result.recorded")).toBe(false);
     expect(flagged.has("tool.read_path.gate.armed")).toBe(false);
-    expect(flagged.has("tool.contract.warning")).toBe(false);
   });
 });

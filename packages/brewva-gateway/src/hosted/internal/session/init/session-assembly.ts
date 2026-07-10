@@ -22,11 +22,6 @@ import type { CreateBrewvaSessionOptions as RuntimeCreateBrewvaSessionOptions } 
 import { type HostedDelegationBuiltinToolName } from "../../../../delegation/api.js";
 import { type HostedExtensionPlugin, type LocalHookPort } from "../../../../extensions/api.js";
 import { rememberHostedVisibleReadState } from "../../context/materialization.js";
-import {
-  analyzeReadPathRecoveryState,
-  isReadPathVerified,
-  recordReadPathGuardWarning,
-} from "../../context/read-path-recovery.js";
 import { createReadUnchangedState } from "../../provider/cache/index.js";
 import type { ProviderConnectionSeams } from "../../provider/connection-types.js";
 import type { HostedSessionLogger } from "../../shared/logger.js";
@@ -210,45 +205,6 @@ function resolveReadSessionId(ctx: unknown): string | undefined {
     : undefined;
 }
 
-function buildReadPathGuardResult(input: {
-  requestedPath: string;
-  state: ReturnType<typeof analyzeReadPathRecoveryState>;
-}) {
-  const lines = [
-    "[ReadPathGuard]",
-    `Blocked direct \`read\` after ${input.state.consecutiveMissingPathFailures} consecutive path-not-found failures.`,
-    "Read is now gated by discovery evidence.",
-    input.state.phase === "required"
-      ? "Run repository discovery or inspect a known existing file before retrying `read`."
-      : "Retry `read` only for paths that were observed directly or live under observed directories.",
-    `requested_path: ${input.requestedPath}`,
-  ];
-  if (input.state.observedDirectories.length > 0) {
-    lines.push(`observed_directories: ${input.state.observedDirectories.slice(0, 8).join(", ")}`);
-  }
-  if (input.state.observedPaths.length > 0) {
-    lines.push(`observed_paths: ${input.state.observedPaths.slice(0, 8).join(", ")}`);
-  }
-  if (input.state.failedPaths.length > 0) {
-    lines.push(`recent_failed_paths: ${input.state.failedPaths.slice(0, 4).join(", ")}`);
-  }
-  return {
-    content: [{ type: "text", text: lines.join("\n") }],
-    outcome: {
-      kind: "err" as const,
-      error: {
-        requestedPath: input.requestedPath,
-        recentFailedPaths: input.state.failedPaths,
-        observedPaths: input.state.observedPaths,
-        observedDirectories: input.state.observedDirectories,
-        consecutiveMissingPathFailures: input.state.consecutiveMissingPathFailures,
-        phase: input.state.phase,
-        recoveryHint: "path_discovery_required_after_missing_path_failures",
-      },
-    },
-  };
-}
-
 function didReadToolSucceed(result: { outcome?: { kind?: unknown } } | undefined): boolean {
   return result?.outcome?.kind !== "err";
 }
@@ -379,21 +335,6 @@ export function createCompactReadTool(input: CompactReadToolInput): HostedSessio
           } as unknown as Awaited<ReturnType<HostedSessionCustomTool["execute"]>>;
         }
       }
-      if (input.runtime && requestedPath && sessionId) {
-        const recoveryState = analyzeReadPathRecoveryState(input.runtime, sessionId);
-        if (recoveryState.active && !isReadPathVerified(recoveryState, requestedPath, input.cwd)) {
-          recordReadPathGuardWarning(input.runtime, {
-            sessionId,
-            requestedPath,
-            state: recoveryState,
-          });
-          return buildReadPathGuardResult({
-            requestedPath,
-            state: recoveryState,
-          }) as unknown as Awaited<ReturnType<HostedSessionCustomTool["execute"]>>;
-        }
-      }
-
       const result = await createReadDelegate(input.cwd, input.getReadToolOptions?.()).execute(
         toolCallId,
         params,

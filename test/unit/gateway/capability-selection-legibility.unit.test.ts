@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+  carryCapabilitySelection,
+  computeCapabilityManifestHash,
   parseCapabilityManifestContent,
   selectCapabilities,
   type CapabilityManifest,
+  type CapabilitySelectionCandidate,
   type CapabilitySelectionReceipt,
+  type CapabilitySelectorDecisionSource,
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/tools/capability-registry.js";
 import {
   formatCapabilitySelectionSection,
@@ -59,6 +63,26 @@ function receiptWith(
     conflicts: [],
     created_at: "2026-01-01T00:00:00.000Z",
     registry_version: "v-test",
+    ...overrides,
+  };
+}
+
+function selectedEntry(
+  manifestList: readonly CapabilityManifest[],
+  name: string,
+  source: CapabilitySelectorDecisionSource,
+  overrides: Partial<CapabilitySelectionCandidate> = {},
+): CapabilitySelectionCandidate {
+  const target = manifestList.find((entry) => entry.name === name);
+  if (!target) {
+    throw new Error(`test manifest '${name}' not found`);
+  }
+  return {
+    name,
+    source,
+    score: source === "explicit" ? 1000 : source === "policy" ? 900 : 3,
+    reason: source,
+    manifestHash: computeCapabilityManifestHash(target),
     ...overrides,
   };
 }
@@ -185,7 +209,7 @@ describe("capability selection legibility", () => {
     expect(line.endsWith("…")).toBe(true);
   });
 
-  test("selectable stays consistent with a real selector receipt", () => {
+  test("deterministic matches render as requestable views, never as selected", () => {
     const manifests = [
       manifest("gmail-search"),
       manifest("linear-sync", {
@@ -201,11 +225,36 @@ describe("capability selection legibility", () => {
       policy: POLICY,
       createdAt: "2026-01-01T00:00:00.000Z",
     });
+    expect(receipt.selected_capabilities.map((entry) => entry.source)).toEqual(["deterministic"]);
+
     const section = formatCapabilitySelectionSection({ receipt, manifests });
     expect(section).toContain("[CapabilitySelection]");
+    expect(section).not.toContain("selected:");
+    const selectableIndex = section.indexOf("selectable");
+    const searchIndex = section.indexOf("- gmail-search", selectableIndex);
+    const syncIndex = section.indexOf("- linear-sync: Use for issue syncing.", selectableIndex);
+    expect(searchIndex).toBeGreaterThan(selectableIndex);
+    expect(syncIndex).toBeGreaterThan(searchIndex);
+  });
+
+  test("granting selections render as selected while views stay requestable", () => {
+    const manifests = [manifest("gmail-search"), manifest("linear-sync")];
+    const section = formatCapabilitySelectionSection({
+      receipt: receiptWith({
+        selected_capabilities: [
+          selectedEntry(manifests, "gmail-search", "explicit"),
+          selectedEntry(manifests, "linear-sync", "deterministic"),
+        ],
+      }),
+      manifests,
+    });
+
     expect(section).toContain("selected:");
     expect(section).toContain("- gmail-search");
-    expect(section).toContain("- linear-sync: Use for issue syncing.");
+    const selectableIndex = section.indexOf("selectable");
+    expect(section.indexOf("- linear-sync", selectableIndex)).toBeGreaterThan(selectableIndex);
+    const selectedBlock = section.slice(0, selectableIndex);
+    expect(selectedBlock).not.toContain("- linear-sync");
   });
 });
 
@@ -260,6 +309,110 @@ describe("capability denial advisory", () => {
     expect(access.allowed).toBe(false);
     expect(access.advisory).toContain("no selectable capability manifest covers it");
     expect(access.advisory).not.toContain("/capability:");
+  });
+
+  test("deterministic selections stay views: they never authorize gated tools", () => {
+    const access = resolveCapabilityAuthorityAccess({
+      receipt: receiptWith({
+        selected_capabilities: [selectedEntry(manifests, "slack-notify", "deterministic")],
+      }),
+      manifests,
+      toolName: "agent_send",
+      actionClass: "external_side_effect",
+    });
+
+    expect(access.allowed).toBe(false);
+    expect(access.reason).toBe("missing_selected_capability");
+    expect(access.advisory).toContain("'/capability:slack-broadcast'");
+  });
+
+  test("explicit selections authorize gated tools", () => {
+    const access = resolveCapabilityAuthorityAccess({
+      receipt: receiptWith({
+        selected_capabilities: [selectedEntry(manifests, "slack-notify", "explicit")],
+      }),
+      manifests,
+      toolName: "agent_send",
+      actionClass: "external_side_effect",
+    });
+
+    expect(access.allowed).toBe(true);
+    expect(access.selectionAuthorized).toBe(true);
+    expect(access.advisory).toContain("selected_capability_authorized");
+  });
+
+  test("policy-default selections authorize gated tools", () => {
+    const access = resolveCapabilityAuthorityAccess({
+      receipt: receiptWith({
+        selected_capabilities: [selectedEntry(manifests, "slack-notify", "policy")],
+      }),
+      manifests,
+      toolName: "agent_send",
+      actionClass: "external_side_effect",
+    });
+
+    expect(access.allowed).toBe(true);
+  });
+
+  test("an explicit entry whose manifest changed after selection never authorizes", () => {
+    const staleHash = resolveCapabilityAuthorityAccess({
+      receipt: receiptWith({
+        selected_capabilities: [
+          selectedEntry(manifests, "slack-notify", "explicit", {
+            manifestHash: "stale-manifest-hash",
+          }),
+        ],
+      }),
+      manifests,
+      toolName: "agent_send",
+      actionClass: "external_side_effect",
+    });
+    const legacyNoHash = resolveCapabilityAuthorityAccess({
+      receipt: receiptWith({
+        selected_capabilities: [
+          { name: "slack-notify", source: "explicit", score: 1000, reason: "explicit" },
+        ],
+      }),
+      manifests,
+      toolName: "agent_send",
+      actionClass: "external_side_effect",
+    });
+
+    expect(staleHash.allowed).toBe(false);
+    expect(staleHash.reason).toBe("missing_selected_capability");
+    expect(legacyNoHash.allowed).toBe(false);
+  });
+
+  test("carried explicit selections keep their authority; carried deterministic ones do not", () => {
+    const explicitCarried = carryCapabilitySelection({
+      previous: receiptWith({
+        selected_capabilities: [selectedEntry(manifests, "slack-notify", "explicit")],
+      }),
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+    const deterministicCarried = carryCapabilitySelection({
+      previous: receiptWith({
+        selected_capabilities: [selectedEntry(manifests, "slack-notify", "deterministic")],
+      }),
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(
+      resolveCapabilityAuthorityAccess({
+        receipt: explicitCarried,
+        manifests,
+        toolName: "agent_send",
+        actionClass: "external_side_effect",
+      }).allowed,
+    ).toBe(true);
+    expect(
+      resolveCapabilityAuthorityAccess({
+        receipt: deterministicCarried,
+        manifests,
+        toolName: "agent_send",
+        actionClass: "external_side_effect",
+      }).allowed,
+    ).toBe(false);
   });
 
   test("names the CLI command for exec-based denials", () => {

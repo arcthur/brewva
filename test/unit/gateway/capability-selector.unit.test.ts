@@ -1,11 +1,29 @@
 import { describe, expect, test } from "bun:test";
 import {
   carryCapabilitySelection,
+  computeCapabilityManifestHash,
+  computeCapabilityRegistryVersion,
   parseCapabilityManifestContent,
+  resolveCarriedCapabilityReceipt,
   selectCapabilities,
 } from "../../../packages/brewva-gateway/src/hosted/internal/session/tools/capability-registry.js";
 
-function manifest(name: string, riskLevel: "read" | "draft" | "write" = "read") {
+const POLICY = {
+  agentScope: ["coding-agent"],
+  workspaceScope: ["default"],
+  allowedAccounts: ["google-work"],
+};
+
+function manifest(
+  name: string,
+  options: {
+    riskLevel?: "read" | "draft" | "write";
+    whenToUse?: string;
+    agentScope?: string;
+    fileName?: string;
+  } = {},
+) {
+  const riskLevel = options.riskLevel ?? "read";
   return parseCapabilityManifestContent(
     `name: ${name}
 provider: google
@@ -17,7 +35,7 @@ risk_level: ${riskLevel}
 requires_explicit_account: true
 requires_confirmation: ${riskLevel === "read" ? "false" : "true"}
 agent_scope:
-  - coding-agent
+  - ${options.agentScope ?? "coding-agent"}
 workspace_scope:
   - default
 conflicts_with: []
@@ -27,24 +45,21 @@ env_allowlist:
   - GOOGLE_APPLICATION_CREDENTIALS
 inherit_env: false
 selection:
-  when_to_use: Use for ${name} email tasks.
+  when_to_use: ${options.whenToUse ?? `Use for ${name} email tasks.`}
 `,
-    `${name}.yaml`,
+    options.fileName ?? `${name}.yaml`,
   );
 }
 
 describe("capability selector", () => {
   test("honors explicit capability before deterministic ranking", () => {
+    const draft = manifest("gmail-draft", { riskLevel: "draft" });
     const receipt = selectCapabilities({
-      manifests: [manifest("gmail-search"), manifest("gmail-draft", "draft")],
+      manifests: [manifest("gmail-search"), draft],
       explicitCapability: "gmail-draft",
       intentText: "search email",
       trigger: "explicit_capability",
-      policy: {
-        agentScope: ["coding-agent"],
-        workspaceScope: ["default"],
-        allowedAccounts: ["google-work"],
-      },
+      policy: POLICY,
       createdAt: "2026-01-01T00:00:00.000Z",
     });
 
@@ -54,6 +69,7 @@ describe("capability selector", () => {
         source: "explicit",
         score: 1000,
         reason: "explicit capability target",
+        manifestHash: computeCapabilityManifestHash(draft),
       },
     ]);
   });
@@ -63,11 +79,7 @@ describe("capability selector", () => {
       manifests: [manifest("gmail-search")],
       intentText: "email",
       trigger: "user_message",
-      policy: {
-        agentScope: ["ops-agent"],
-        workspaceScope: ["default"],
-        allowedAccounts: ["google-work"],
-      },
+      policy: { ...POLICY, agentScope: ["ops-agent"] },
       createdAt: "2026-01-01T00:00:00.000Z",
     });
 
@@ -80,11 +92,7 @@ describe("capability selector", () => {
       manifests: [manifest("gmail-search")],
       explicitCapability: "gmail-search",
       trigger: "explicit_capability",
-      policy: {
-        agentScope: ["coding-agent"],
-        workspaceScope: ["default"],
-        allowedAccounts: ["google-work"],
-      },
+      policy: POLICY,
       createdAt: "2026-01-01T00:00:00.000Z",
     });
 
@@ -103,11 +111,7 @@ describe("capability selector", () => {
       manifests: [manifest("gmail-search")],
       intentText: "email",
       trigger: "user_message",
-      policy: {
-        agentScope: ["ops-agent"],
-        workspaceScope: ["default"],
-        allowedAccounts: ["google-work"],
-      },
+      policy: { ...POLICY, agentScope: ["ops-agent"] },
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     expect(first.filtered_out).toEqual([{ name: "gmail-search", reason: "agent_scope" }]);
@@ -123,16 +127,185 @@ describe("capability selector", () => {
     expect(carried.filtered_out).toEqual([{ name: "gmail-search", reason: "agent_scope" }]);
   });
 
+  test("registry version tracks every authored manifest field", () => {
+    const baseVersion = computeCapabilityRegistryVersion([manifest("gmail-search")]);
+    const whenToUseVersion = computeCapabilityRegistryVersion([
+      manifest("gmail-search", { whenToUse: "Changed guidance must change the version." }),
+    ]);
+    const scopeVersion = computeCapabilityRegistryVersion([
+      manifest("gmail-search", { agentScope: "ops-agent" }),
+    ]);
+
+    expect(whenToUseVersion).not.toBe(baseVersion);
+    expect(scopeVersion).not.toBe(baseVersion);
+    expect(computeCapabilityRegistryVersion([manifest("gmail-search")])).toBe(baseVersion);
+  });
+
+  test("registry version and manifest hash ignore pure file renames", () => {
+    const original = manifest("gmail-search");
+    const renamed = manifest("gmail-search", { fileName: "renamed-gmail.yaml" });
+
+    expect(computeCapabilityManifestHash(renamed)).toBe(computeCapabilityManifestHash(original));
+    expect(computeCapabilityRegistryVersion([renamed])).toBe(
+      computeCapabilityRegistryVersion([original]),
+    );
+  });
+
+  test("resolveCarriedCapabilityReceipt carries when the registry and policy still match", () => {
+    const manifests = [manifest("gmail-search")];
+    const registryVersion = computeCapabilityRegistryVersion(manifests);
+    const previous = selectCapabilities({
+      manifests,
+      explicitCapability: "gmail-search",
+      trigger: "explicit_capability",
+      policy: POLICY,
+      registryVersion,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const resolved = resolveCarriedCapabilityReceipt({
+      registry: { manifests, registryVersion },
+      policy: POLICY,
+      previous,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(resolved.trigger).toBe("carried");
+    expect(resolved.carried_from).toBe(previous.selection_id);
+    expect(resolved.selected_capabilities).toEqual(previous.selected_capabilities);
+  });
+
+  test("unrelated registry churn keeps a revalidated explicit selection", () => {
+    const oldManifests = [manifest("gmail-search")];
+    const previous = selectCapabilities({
+      manifests: oldManifests,
+      explicitCapability: "gmail-search",
+      trigger: "explicit_capability",
+      policy: POLICY,
+      registryVersion: computeCapabilityRegistryVersion(oldManifests),
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const newManifests = [
+      manifest("gmail-search"),
+      manifest("slack-notify", { riskLevel: "write" }),
+    ];
+    const newVersion = computeCapabilityRegistryVersion(newManifests);
+    const resolved = resolveCarriedCapabilityReceipt({
+      registry: { manifests: newManifests, registryVersion: newVersion },
+      policy: POLICY,
+      previous,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(resolved.trigger).toBe("registry_change");
+    expect(resolved.carried_from).toBe(previous.selection_id);
+    expect(resolved.registry_version).toBe(newVersion);
+    expect(resolved.selected_capabilities).toEqual(previous.selected_capabilities);
+    expect(resolved.policy_decisions).toEqual([
+      `carried selection ${previous.selection_id} revalidated against the current registry and policy`,
+    ]);
+  });
+
+  test("an edited selected manifest drops exactly that carried entry", () => {
+    const oldManifests = [manifest("gmail-search")];
+    const previous = selectCapabilities({
+      manifests: oldManifests,
+      explicitCapability: "gmail-search",
+      trigger: "explicit_capability",
+      policy: POLICY,
+      registryVersion: computeCapabilityRegistryVersion(oldManifests),
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const editedManifests = [manifest("gmail-search", { whenToUse: "Edited guidance." })];
+    const editedVersion = computeCapabilityRegistryVersion(editedManifests);
+    const resolved = resolveCarriedCapabilityReceipt({
+      registry: { manifests: editedManifests, registryVersion: editedVersion },
+      policy: POLICY,
+      previous,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(resolved.trigger).toBe("registry_change");
+    expect(resolved.selected_capabilities).toEqual([]);
+    expect(resolved.registry_version).toBe(editedVersion);
+    expect(resolved.policy_decisions).toEqual([
+      `carried selection ${previous.selection_id} revalidated against the current registry and policy`,
+      "carried_selection_dropped: gmail-search manifest_changed",
+    ]);
+  });
+
+  test("a policy narrowed mid-session drops the carried entry as policy_change", () => {
+    const manifests = [manifest("gmail-search")];
+    const registryVersion = computeCapabilityRegistryVersion(manifests);
+    const previous = selectCapabilities({
+      manifests,
+      explicitCapability: "gmail-search",
+      trigger: "explicit_capability",
+      policy: POLICY,
+      registryVersion,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const resolved = resolveCarriedCapabilityReceipt({
+      registry: { manifests, registryVersion },
+      policy: { ...POLICY, allowedAccounts: ["ops-account"] },
+      previous,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(resolved.trigger).toBe("policy_change");
+    expect(resolved.carried_from).toBe(previous.selection_id);
+    expect(resolved.selected_capabilities).toEqual([]);
+    expect(resolved.filtered_out).toEqual([
+      { name: "gmail-search", reason: "account_restriction" },
+    ]);
+    expect(resolved.policy_decisions).toEqual([
+      `carried selection ${previous.selection_id} revalidated against the current registry and policy`,
+      "carried_selection_dropped: gmail-search account_restriction",
+    ]);
+  });
+
+  test("legacy entries without a manifest hash drop as stale instead of carrying", () => {
+    const manifests = [manifest("gmail-search")];
+    const registryVersion = computeCapabilityRegistryVersion(manifests);
+    const withHash = selectCapabilities({
+      manifests,
+      explicitCapability: "gmail-search",
+      trigger: "explicit_capability",
+      policy: POLICY,
+      registryVersion,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    const legacy = {
+      ...withHash,
+      selected_capabilities: withHash.selected_capabilities.map(
+        ({ manifestHash: _manifestHash, ...entry }) => entry,
+      ),
+    };
+
+    const resolved = resolveCarriedCapabilityReceipt({
+      registry: { manifests, registryVersion },
+      policy: POLICY,
+      previous: legacy,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(resolved.trigger).toBe("registry_change");
+    expect(resolved.selected_capabilities).toEqual([]);
+    expect(resolved.policy_decisions).toEqual([
+      `carried selection ${legacy.selection_id} revalidated against the current registry and policy`,
+      "carried_selection_dropped: gmail-search manifest_hash_unavailable",
+    ]);
+  });
+
   test("selection ids are stable across receipt creation times", () => {
     const base = {
       manifests: [manifest("gmail-search")],
       explicitCapability: "gmail-search",
       trigger: "explicit_capability" as const,
-      policy: {
-        agentScope: ["coding-agent"],
-        workspaceScope: ["default"],
-        allowedAccounts: ["google-work"],
-      },
+      policy: POLICY,
     };
 
     const first = selectCapabilities({

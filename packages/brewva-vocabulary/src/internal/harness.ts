@@ -153,6 +153,80 @@ export type BuildHarnessManifestInput = Omit<
 > &
   Partial<Pick<HarnessManifest, "schema" | "eventType" | "manifestId">>;
 
+export const HARNESS_CANDIDATE_LIFECYCLE_SCHEMA = "brewva.harness.candidate_lifecycle.v1";
+
+export const HARNESS_CANDIDATE_LIFECYCLE_ACTIONS = [
+  "evaluated",
+  "accepted",
+  "rejected",
+  "archived",
+] as const;
+
+export type HarnessCandidateLifecycleAction = (typeof HARNESS_CANDIDATE_LIFECYCLE_ACTIONS)[number];
+
+/**
+ * One append-only lifecycle receipt for a harness candidate. `evaluated`
+ * records are appended by compare runs and carry the report's key facts;
+ * `accepted`/`rejected`/`archived` are accountable operator decisions
+ * (`brewva harness candidate <verb>`) and carry the operator's reason. The
+ * runtime holds no promotion authority: these records are the audit trail of
+ * human decisions, never an input to any gate.
+ */
+export interface HarnessCandidateLifecycleRecord {
+  readonly schema: typeof HARNESS_CANDIDATE_LIFECYCLE_SCHEMA;
+  readonly candidateId: string;
+  readonly action: HarnessCandidateLifecycleAction;
+  readonly at: string;
+  readonly actor: "operator_cli";
+  readonly baseManifestId?: string;
+  readonly candidateManifestId?: string;
+  readonly sourceSessionId?: string;
+  readonly targetSessionId?: string;
+  readonly mode?: HarnessComparisonReport["mode"];
+  readonly recommendation?: HarnessComparisonReport["promotion"]["recommendation"];
+  readonly regressionCount?: number;
+  readonly reason?: string;
+}
+
+/**
+ * Guard for ledger lines: the schema owner decides what counts as a record so
+ * readers never drift from the vocabulary. The action check derives from the
+ * const action list — an unknown action (newer writer, hand edit) is not a
+ * record rather than a lie to the type system.
+ */
+export function isHarnessCandidateLifecycleRecord(
+  value: unknown,
+): value is HarnessCandidateLifecycleRecord {
+  if (!isProtocolRecord(value)) {
+    return false;
+  }
+  const record = value as Partial<HarnessCandidateLifecycleRecord>;
+  return (
+    record.schema === HARNESS_CANDIDATE_LIFECYCLE_SCHEMA &&
+    typeof record.candidateId === "string" &&
+    record.candidateId.length > 0 &&
+    typeof record.action === "string" &&
+    (HARNESS_CANDIDATE_LIFECYCLE_ACTIONS as readonly string[]).includes(record.action) &&
+    typeof record.at === "string" &&
+    record.actor === "operator_cli"
+  );
+}
+
+/**
+ * The candidate identity is the (base, candidate) manifest pair — both ids
+ * are content hashes, so the same delta authored twice collapses to one
+ * candidate across compare runs, eval reports, and lifecycle receipts.
+ */
+export function buildHarnessCandidateId(input: {
+  readonly baseManifestId: string;
+  readonly candidateManifestId: string;
+}): string {
+  return stableHarnessId("harness_candidate_pair", {
+    baseManifestId: input.baseManifestId,
+    candidateManifestId: input.candidateManifestId,
+  });
+}
+
 export interface HarnessTraceSignal {
   readonly kind: HarnessTraceSignalKind;
   readonly severity: HarnessSeverity;
@@ -234,6 +308,12 @@ export interface HarnessPatternCandidate {
 export interface HarnessComparisonReport {
   readonly schema: typeof HARNESS_EVAL_REPORT_SCHEMA;
   readonly mode: "manifest" | "fixture" | "real";
+  /**
+   * Stable candidate identity across the improvement workflows: the same
+   * (base, candidate) manifest pair yields the same id in a harness compare,
+   * an eval A/B report, and a lifecycle accept/reject/archive receipt.
+   */
+  readonly candidateId: string;
   readonly sourceSessionId: string;
   readonly targetSessionId?: string;
   readonly divergeAt: string;
@@ -248,6 +328,31 @@ export interface HarnessComparisonReport {
     readonly changedFieldCount: number;
     readonly regressions: readonly string[];
     readonly execution?: {
+      /**
+       * Manifest describing the harness that actually executed the fork. A
+       * replay report is candidate evidence only when this equals
+       * `candidateManifestId`; a mismatch is recorded as an execution
+       * regression and must never promote.
+       */
+      readonly executedManifestId: string;
+      /**
+       * Where the fork's tool effects landed: `trial_world` is a disposable
+       * copy-on-write fork of the workspace (real mode, always), while
+       * `shared_operator_cwd` marks executions whose tool executor never
+       * touches the filesystem (fixture no-op tools).
+       */
+      readonly workspaceMode: "trial_world" | "shared_operator_cwd";
+      /** Candidate fields applied through an execution seam (materialization). */
+      readonly materializedFields?: readonly string[];
+      /** Content-addressed world id of what the trial fork saw at creation. */
+      readonly trialWorldBasisId?: string;
+      /**
+       * Enumeration backend the trial-world basis used: `git` forks carry a
+       * usable `.git`; `walk` forks (linked worktrees) are git-less, which
+       * explains environment-caused divergence git tooling would otherwise
+       * mask as a candidate regression.
+       */
+      readonly trialWorldSource?: "git" | "walk";
       readonly replayEventCount: number;
       readonly targetEventCount: number;
       readonly frameCount: number;
