@@ -63,6 +63,18 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     // do not occupy every session's prompt budget until a workspace enables it.
     mapEnabled: false,
   },
+  lsp: {
+    // Opt-in, matching brewva's convention for cost-bearing features (routing,
+    // rate-limit backoff, planning map all default off): write-after diagnostics
+    // adds up to `inlineBudgetMs` to every successful apply, may spawn a language
+    // server, and injects model-facing tokens. A workspace that wants immediate
+    // type-error feedback enables it; the default leaves the hot edit path and
+    // prompt budget untouched.
+    diagnosticsOnApply: false,
+    inlineBudgetMs: 400,
+    deferredBudgetMs: 8000,
+    maxMessages: 20,
+  },
   security: {
     mode: "standard",
     sanitizeContext: true,

@@ -50,6 +50,50 @@ function compareCandidates(
   return leftKey.localeCompare(rightKey);
 }
 
+/**
+ * Pick a same-provider sibling with a strictly LARGER context window, for
+ * promotion on a context-overflow failure before falling back to a generic
+ * (possibly-smaller) model or compacting. Chooses the SMALLEST strictly-larger
+ * window (least cost/latency escalation), tie-broken by token affinity to the
+ * current model, then by key for determinism. Returns undefined when no larger
+ * sibling exists — the caller then proceeds to generic fallback / compaction.
+ */
+export function selectLargerContextModel(input: {
+  currentModel: RegisteredModel;
+  availableModels: readonly RegisteredModel[];
+  excludeModelKeys?: ReadonlySet<string>;
+}): RegisteredModel | undefined {
+  const currentWindow = input.currentModel.contextWindow;
+  if (typeof currentWindow !== "number" || currentWindow <= 0) {
+    return undefined;
+  }
+  const currentTokens = tokenizeModelId(input.currentModel.id);
+  const larger = input.availableModels.filter(
+    (candidate) =>
+      candidate.provider === input.currentModel.provider &&
+      candidate.id !== input.currentModel.id &&
+      input.excludeModelKeys?.has(`${candidate.provider}/${candidate.id}`) !== true &&
+      typeof candidate.contextWindow === "number" &&
+      candidate.contextWindow > currentWindow,
+  );
+  if (larger.length === 0) {
+    return undefined;
+  }
+  return larger.toSorted((left, right) => {
+    const leftWindow = left.contextWindow;
+    const rightWindow = right.contextWindow;
+    if (leftWindow !== rightWindow) {
+      return leftWindow - rightWindow;
+    }
+    const leftAffinity = countIntersection(currentTokens, tokenizeModelId(left.id));
+    const rightAffinity = countIntersection(currentTokens, tokenizeModelId(right.id));
+    if (leftAffinity !== rightAffinity) {
+      return rightAffinity - leftAffinity;
+    }
+    return `${left.provider}/${left.id}`.localeCompare(`${right.provider}/${right.id}`);
+  })[0];
+}
+
 export function selectBrewvaFallbackModel(input: {
   currentModel: RegisteredModel;
   availableModels: readonly RegisteredModel[];

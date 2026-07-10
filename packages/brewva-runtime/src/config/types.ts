@@ -155,6 +155,23 @@ export interface BrewvaConfig {
     /** Opt-in switch for the durable planning-map managed tools (default off). */
     mapEnabled: boolean;
   };
+  lsp: {
+    /**
+     * Surface language-server diagnostics in the `source_patch_apply` result so
+     * type errors introduced by an edit are seen immediately, without a separate
+     * `lsp_diagnostics` call. TypeScript-family files only today.
+     */
+    diagnosticsOnApply: boolean;
+    /** Max milliseconds the apply result blocks waiting for diagnostics inline. */
+    inlineBudgetMs: number;
+    /**
+     * Max milliseconds a slow diagnostics fetch may run in the background before
+     * its result is delivered as a next-turn advisory instead of inline.
+     */
+    deferredBudgetMs: number;
+    /** Max diagnostic messages rendered in a single diagnostics block or advisory. */
+    maxMessages: number;
+  };
   security: {
     mode: "permissive" | "standard" | "strict";
     sanitizeContext: boolean;
@@ -328,6 +345,7 @@ export interface BrewvaConfigFile {
   worlds?: Partial<BrewvaConfig["worlds"]>;
   projection?: DeepPartial<BrewvaConfig["projection"]>;
   planning?: Partial<BrewvaConfig["planning"]>;
+  lsp?: Partial<BrewvaConfig["lsp"]>;
   security?: Partial<
     Omit<BrewvaConfig["security"], "execution" | "boundaryPolicy" | "loopDetection" | "credentials">
   > & {

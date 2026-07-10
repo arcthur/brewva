@@ -312,6 +312,28 @@
             }
           }
         },
+        "lsp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "deferredBudgetMs": {
+              "description": "Max milliseconds a slow diagnostics fetch may run in the background before its result is delivered as a next-turn advisory instead of inline.",
+              "type": "number"
+            },
+            "diagnosticsOnApply": {
+              "description": "Surface language-server diagnostics in the `source_patch_apply` result so type errors introduced by an edit are seen immediately, without a separate `lsp_diagnostics` call. TypeScript-family files only today.",
+              "type": "boolean"
+            },
+            "inlineBudgetMs": {
+              "description": "Max milliseconds the apply result blocks waiting for diagnostics inline.",
+              "type": "number"
+            },
+            "maxMessages": {
+              "description": "Max diagnostic messages rendered in a single diagnostics block or advisory.",
+              "type": "number"
+            }
+          }
+        },
         "parallel": {
           "type": "object",
           "additionalProperties": false,

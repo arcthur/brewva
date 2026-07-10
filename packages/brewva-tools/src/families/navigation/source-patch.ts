@@ -131,6 +131,28 @@ const SNAPSHOTS = new Map<string, SourceSnapshot>();
 const PLANS = new Map<string, StoredSourcePatchPlan>();
 const RESOURCE_ROUTERS = new Map<string, Promise<BrewvaResourceRouter>>();
 
+/**
+ * Monotonic per-file mutation counter, bumped once per applied path inside the
+ * source-patch write loop. It is the staleness token for out-of-band consumers
+ * (e.g. background LSP diagnostics fetched after an apply): a consumer snapshots
+ * {@link getFileMutationVersion} at dispatch time and discards its late result
+ * for any file whose version advanced, because a newer apply superseded it.
+ * Process-scoped and deliberately unpersisted — staleness only matters within a
+ * live run, and the tape remains the durable source of truth.
+ */
+const FILE_MUTATION_VERSIONS = new Map<string, number>();
+
+export function bumpFileMutationVersion(absPath: string): number {
+  const key = resolve(absPath);
+  const next = (FILE_MUTATION_VERSIONS.get(key) ?? 0) + 1;
+  FILE_MUTATION_VERSIONS.set(key, next);
+  return next;
+}
+
+export function getFileMutationVersion(absPath: string): number {
+  return FILE_MUTATION_VERSIONS.get(resolve(absPath)) ?? 0;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -1626,6 +1648,8 @@ export function applyStoredSourcePatchPlan(input: {
       mkdirSync(dirname(newPath), { recursive: true });
       renameSync(oldPath, newPath);
       appliedPaths.push(newPath);
+      bumpFileMutationVersion(oldPath);
+      bumpFileMutationVersion(newPath);
       continue;
     }
     if (mutation.operation === "delete") {
@@ -1633,12 +1657,14 @@ export function applyStoredSourcePatchPlan(input: {
         rmSync(mutation.path);
       }
       appliedPaths.push(mutation.path);
+      bumpFileMutationVersion(mutation.path);
       continue;
     }
     if (mutation.after !== undefined) {
       mkdirSync(dirname(mutation.path), { recursive: true });
       writeFileSync(mutation.path, mutation.after, "utf8");
       appliedPaths.push(mutation.path);
+      bumpFileMutationVersion(mutation.path);
     }
   }
 

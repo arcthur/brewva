@@ -22,6 +22,7 @@ import { deterministicJitterFraction } from "@brewva/brewva-vocabulary/schedule"
 import {
   resolveBrewvaModelSelection,
   selectBrewvaFallbackModel,
+  selectLargerContextModel,
 } from "../../../policy/model-routing/api.js";
 import { streamProviderMessage } from "../provider/execution-port.js";
 import { isBrewvaModelRoleAlias as isHostedModelRoleAlias } from "../session/settings/model-presets.js";
@@ -410,6 +411,11 @@ function fallbackCandidates(input: {
     modelKey(input.currentModel),
     ...input.attemptedModelKeys,
     ...(input.face.getUnavailableProviderModels?.()?.keys() ?? []),
+    // Models still cooling from a recent rate-limit / quota wall: excluded from
+    // fallback selection so recovery does not immediately re-dial one, mirroring
+    // the pre-ranking exclusion above (filtering the single top pick post-hoc
+    // would read as exhaustion while viable candidates remain).
+    ...(input.face.getSuppressedSelectors?.(Date.now())?.keys() ?? []),
   ]);
   const candidates: BrewvaRegisteredModel[] = [];
   const push = (model: BrewvaRegisteredModel | undefined) => {
@@ -660,6 +666,27 @@ export function createHostedRuntimeProviderPort(
       let activeModel = initialModel;
       let fallbackMetadata: Record<string, JsonValue> | undefined;
       const attempted = new Set<string>();
+      // Cross-turn cooldown skip: the active model is re-seeded from the preset
+      // every turn, so if the preset primary is still cooling from a recent
+      // rate-limit / quota wall, start on a non-suppressed fallback instead of
+      // paying a wasted failed request re-dialing it during the outage window.
+      // If nothing viable is un-suppressed, dial the primary anyway (a cooling
+      // model beats no model). Proactive routing, not a failure — deliberately
+      // not drift-sampled; the abandonment that set the cooldown was already
+      // sampled on its own turn, and the response manifest records the model
+      // actually used.
+      const suppressedAtStart = face.getSuppressedSelectors?.(Date.now());
+      if (suppressedAtStart && suppressedAtStart.has(modelKey(activeModel))) {
+        const [warmStart] = fallbackCandidates({
+          face,
+          currentModel: activeModel,
+          attemptedModelKeys: new Set([modelKey(activeModel)]),
+          activeRole,
+        });
+        if (warmStart) {
+          activeModel = warmStart;
+        }
+      }
       // Final failure per route, in attempt order. Same-model retries (credential
       // rotation, rate-limit backoff) overwrite their entry rather than append, so
       // an exhaustion report reads one line per route.
@@ -692,6 +719,9 @@ export function createHostedRuntimeProviderPort(
           // One read of the routing settings per recovery attempt, shared by credential
           // rotation and the rate-limit backoff below.
           const routingSettings = face.getModelRoutingSettings();
+          // Overall retry ceiling: caps how long a single recovery step may block
+          // before preferring a model switch (or failure) over sleeping.
+          const retryMaxDelayMs = face.getRetrySettings?.()?.maxDelayMs;
           const rotationReason = credentialRotationReason(reason);
           const rotationSettings = routingSettings?.credentialRotation;
           if (rotationReason && rotationSettings?.enabled === true) {
@@ -742,7 +772,19 @@ export function createHostedRuntimeProviderPort(
               routingSettings?.rateLimitBackoff,
               deterministicJitterFraction(`${input.turn.sessionId}:${used}`),
             );
-            if (backoffMs !== undefined) {
+            // Fail-fast cap: when the computed wait exceeds the overall retry
+            // ceiling, do NOT sleep — fall through to model fallback below. If a
+            // fallback model exists we switch to it; if none does, the error
+            // surfaces instead of the turn blocking for `backoffMs`. brewva does
+            // not honor `Retry-After`, so today `backoffMs` is already bounded by
+            // `rateLimitBackoff.maxDelayMs`; this is the cross-path ceiling (and
+            // the guard should header honoring ever be added).
+            const withinCap =
+              retryMaxDelayMs === undefined ||
+              retryMaxDelayMs <= 0 ||
+              backoffMs === undefined ||
+              backoffMs <= retryMaxDelayMs;
+            if (backoffMs !== undefined && withinCap) {
               if (!(await sleepWithAbort(backoffMs, input.turn.signal))) {
                 throw attemptError.causeError;
               }
@@ -778,6 +820,46 @@ export function createHostedRuntimeProviderPort(
               modelId: activeModel.id,
               reason: attemptSummary,
             });
+          }
+          // Cool down a model that hit a transient rate-limit / quota wall so the
+          // next turn's start skips re-dialing it during the outage window.
+          // Bundled with rate-limit backoff: active only when the operator
+          // configured backoff (`maxRetries > 0`), reusing its `maxDelayMs` as the
+          // cooldown window, so the default (backoff off) behavior is unchanged.
+          const backoffSettings = routingSettings?.rateLimitBackoff;
+          const cooldownMs =
+            backoffSettings && backoffSettings.maxRetries > 0 ? backoffSettings.maxDelayMs : 0;
+          if (cooldownMs > 0 && (reason === "rate_limit" || reason === "quota")) {
+            face.suppressSelector?.(modelKey(activeModel), Date.now() + cooldownMs);
+          }
+          // Context overflow: promote to a strictly-larger-context sibling and
+          // retry before falling back to a generic (possibly smaller) model or
+          // compacting. Pre-first-frame (`NoFrame`), so this is request-time
+          // recovery, not a mid-stream switch. Bounded by `attempted`: a repeated
+          // overflow excludes the promoted model and picks a yet-larger one, or
+          // none — then control falls through to the generic fallback.
+          if (reason === "context") {
+            const promoted = selectLargerContextModel({
+              currentModel: activeModel,
+              availableModels: face.getModelCatalog().getAll(),
+              excludeModelKeys: new Set<string>([
+                modelKey(activeModel),
+                ...attempted,
+                ...(face.getUnavailableProviderModels?.()?.keys() ?? []),
+                ...(face.getSuppressedSelectors?.(Date.now())?.keys() ?? []),
+              ]),
+            });
+            if (promoted) {
+              fallbackMetadata = providerFallbackMetadata({
+                active: true,
+                attemptedModel: activeModel,
+                selectedModel: promoted,
+                reason,
+                errorSummary: attemptSummary,
+              });
+              activeModel = promoted;
+              continue;
+            }
           }
           const [nextModel] = fallbackCandidates({
             face,

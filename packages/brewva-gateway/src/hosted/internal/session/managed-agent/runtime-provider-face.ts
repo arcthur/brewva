@@ -48,6 +48,15 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
   // plan upgrade, so a fresh session re-verifies against the provider instead of
   // trusting a stale local verdict. Keyed by `provider/modelId`.
   readonly #unavailableProviderModels = new Map<string, string>();
+  // Session-scoped, deliberately NOT persisted and time-boxed: a model that just
+  // hit a rate-limit / quota wall is "cooling down" until `untilMs`. Because the
+  // active model is re-seeded from the preset every turn, the recovery loop
+  // consults this to skip re-dialing a cooling PRIMARY at the next turn's start
+  // (and to keep it out of fallback candidates) until its cooldown expires —
+  // then it naturally returns. Lazily swept on read so an expired cooldown never
+  // strands the user on a fallback. Keyed by `provider/modelId`; value is the
+  // expiry epoch-ms.
+  readonly #suppressedSelectors = new Map<string, number>();
 
   constructor(input: {
     settings: BrewvaManagedAgentSessionSettingsPort;
@@ -135,6 +144,27 @@ export class ManagedSessionRuntimeProviderFace implements RuntimeProviderFace {
 
   getUnavailableProviderModels(): ReadonlyMap<string, string> {
     return this.#unavailableProviderModels;
+  }
+
+  getRetrySettings(): { maxDelayMs: number } | undefined {
+    return this.#settings.getRetrySettings();
+  }
+
+  suppressSelector(selector: string, untilMs: number): void {
+    const existing = this.#suppressedSelectors.get(selector);
+    // Keep the later expiry when re-suppressed while still cooling.
+    if (existing === undefined || untilMs > existing) {
+      this.#suppressedSelectors.set(selector, untilMs);
+    }
+  }
+
+  getSuppressedSelectors(now: number): ReadonlyMap<string, number> {
+    for (const [selector, untilMs] of this.#suppressedSelectors) {
+      if (untilMs <= now) {
+        this.#suppressedSelectors.delete(selector);
+      }
+    }
+    return this.#suppressedSelectors;
   }
 
   recordProviderFallbackSelection(input: {

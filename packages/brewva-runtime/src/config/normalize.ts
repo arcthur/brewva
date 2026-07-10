@@ -8,6 +8,7 @@ import {
 import { normalizeChannelsConfig } from "./normalize-channels.js";
 import { normalizeInfrastructureConfig } from "./normalize-infrastructure.js";
 import { normalizeIntegrationsConfig } from "./normalize-integrations.js";
+import { normalizeLspConfig } from "./normalize-lsp.js";
 import { normalizeParallelConfig } from "./normalize-parallel.js";
 import { normalizePlanningConfig } from "./normalize-planning.js";
 import { normalizeProjectionConfig } from "./normalize-projection.js";
@@ -29,6 +30,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
   const worldsInput = isRecord(input.worlds) ? input.worlds : {};
   const projectionInput = isRecord(input.projection) ? input.projection : {};
   const planningInput = isRecord(input.planning) ? input.planning : {};
+  const lspInput = isRecord(input.lsp) ? input.lsp : {};
   const securityInput = isRecord(input.security) ? input.security : {};
   const scheduleInput = isRecord(input.schedule) ? input.schedule : {};
   const parallelInput = isRecord(input.parallel) ? input.parallel : {};
@@ -66,6 +68,7 @@ export function normalizeBrewvaConfig(config: unknown, defaults: BrewvaConfig): 
     },
     projection: normalizeProjectionConfig(projectionInput, defaults.projection),
     planning: normalizePlanningConfig(planningInput, defaults.planning),
+    lsp: normalizeLspConfig(lspInput, defaults.lsp),
     security: normalizeSecurityConfig(securityInput, defaults.security),
     schedule: normalizeScheduleConfig(scheduleInput, defaults.schedule),
     parallel: normalizeParallelConfig(parallelInput, defaults.parallel),

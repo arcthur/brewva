@@ -82,6 +82,17 @@ export interface RuntimeProviderFace {
   }): void;
   /** Keyed by `provider/modelId`; value is the recorded rejection reason. */
   getUnavailableProviderModels?(): ReadonlyMap<string, string>;
+  /** The overall retry ceiling; `maxDelayMs` caps how long one recovery step may block. */
+  getRetrySettings?(): { maxDelayMs: number } | undefined;
+  /**
+   * Cool down a model selector (`provider/modelId`) until `untilMs`. Used after a
+   * rate-limit / quota route is abandoned, so the recovery loop skips re-dialing a
+   * cooling primary on the next turn instead of paying a wasted request per turn
+   * for the outage window. Session-scoped, time-boxed, never persisted.
+   */
+  suppressSelector?(selector: string, untilMs: number): void;
+  /** Currently-cooling selectors, expired entries swept against `now`. */
+  getSuppressedSelectors?(now: number): ReadonlyMap<string, number>;
   getVerificationGateManifests(): readonly VerificationGateManifest[];
   getVerificationGateEvidence(sessionId: string): readonly VerificationGateEvidence[];
   getVerificationGateNow?(): number;

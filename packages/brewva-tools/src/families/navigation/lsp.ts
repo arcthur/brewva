@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { delimiter, extname, resolve } from "node:path";
+import { delimiter, dirname, extname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { SourcePatchIntent } from "@brewva/brewva-vocabulary/workbench";
@@ -581,6 +581,208 @@ function createReadRequestTool(input: {
       );
     },
   });
+}
+
+export type LspWriteAfterSeverity = "error" | "warning" | "information" | "hint";
+
+export interface LspWriteAfterDiagnostic {
+  readonly path: string;
+  readonly severity: LspWriteAfterSeverity;
+  /** 1-based line number. */
+  readonly line: number;
+  /** 1-based column number. */
+  readonly column: number;
+  readonly message: string;
+  readonly code?: string;
+  readonly source?: string;
+}
+
+export interface LspWriteAfterDiagnosticsResult {
+  /** Whether a language server could be resolved for the workspace. */
+  readonly available: boolean;
+  readonly scannedPaths: readonly string[];
+  readonly diagnostics: readonly LspWriteAfterDiagnostic[];
+}
+
+/** LSP language ids the write-after diagnostics pass understands (TS server only today). */
+const LSP_WRITE_AFTER_LANGUAGES = new Set([
+  "typescript",
+  "typescriptreact",
+  "javascript",
+  "javascriptreact",
+]);
+
+/**
+ * TypeScript project-level diagnostic codes that flood a file with no tsconfig
+ * ancestor (module resolution, top-level await, missing `require`). They are
+ * suppressed for orphan files so a freshly created file outside any project does
+ * not drown the model in setup noise. Mirrors omp's orphan suppression set.
+ */
+const ORPHAN_TS_PROJECT_DIAGNOSTIC_CODES = new Set([1375, 1378, 2307, 2580, 2591, 2792, 2867]);
+
+function writeAfterSeverityFromLsp(value: unknown): LspWriteAfterSeverity {
+  switch (value) {
+    case 2:
+      return "warning";
+    case 3:
+      return "information";
+    case 4:
+      return "hint";
+    default:
+      // LSP severity 1 is Error; an unspecified severity is treated as an error
+      // (conservative — surface it rather than hide it).
+      return "error";
+  }
+}
+
+function hasTsconfigAncestor(absPath: string): boolean {
+  let dir = dirname(resolve(absPath));
+  while (true) {
+    if (existsSync(resolve(dir, "tsconfig.json")) || existsSync(resolve(dir, "jsconfig.json"))) {
+      return true;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      return false;
+    }
+    dir = parent;
+  }
+}
+
+function toWriteAfterDiagnostic(
+  absPath: string,
+  entry: unknown,
+): LspWriteAfterDiagnostic | undefined {
+  if (!entry || typeof entry !== "object") {
+    return undefined;
+  }
+  const record = entry as {
+    range?: { start?: { line?: unknown; character?: unknown } };
+    severity?: unknown;
+    message?: unknown;
+    code?: unknown;
+    source?: unknown;
+  };
+  if (typeof record.message !== "string") {
+    return undefined;
+  }
+  const startLine = record.range?.start?.line;
+  const startCharacter = record.range?.start?.character;
+  // LSP diagnostic codes are number | string per the protocol.
+  const code =
+    typeof record.code === "number" || typeof record.code === "string"
+      ? String(record.code)
+      : undefined;
+  const source = typeof record.source === "string" ? record.source : undefined;
+  return {
+    path: absPath,
+    severity: writeAfterSeverityFromLsp(record.severity),
+    line: typeof startLine === "number" ? startLine + 1 : 1,
+    column: typeof startCharacter === "number" ? startCharacter + 1 : 1,
+    message: record.message,
+    ...(code !== undefined ? { code } : {}),
+    ...(source !== undefined ? { source } : {}),
+  };
+}
+
+/**
+ * Project raw LSP diagnostic entries for one file into the write-after shape,
+ * applying orphan-file suppression. Pure and fs-free: `isOrphan` (a file with no
+ * tsconfig/jsconfig ancestor) is supplied by the caller, so this is unit-testable
+ * without a real workspace or server. When orphan, TypeScript project-setup codes
+ * are dropped so a freshly-created file outside any project does not flood setup
+ * noise; otherwise every mappable entry (0-based LSP line/col → 1-based) survives.
+ */
+export function projectLspWriteAfterDiagnostics(
+  absPath: string,
+  rawEntries: readonly unknown[],
+  isOrphan: boolean,
+): LspWriteAfterDiagnostic[] {
+  const collected: LspWriteAfterDiagnostic[] = [];
+  for (const entry of rawEntries) {
+    const diagnostic = toWriteAfterDiagnostic(absPath, entry);
+    if (!diagnostic) {
+      continue;
+    }
+    if (
+      isOrphan &&
+      diagnostic.code !== undefined &&
+      ORPHAN_TS_PROJECT_DIAGNOSTIC_CODES.has(Number(diagnostic.code)) &&
+      (diagnostic.source === undefined || diagnostic.source === "typescript")
+    ) {
+      continue;
+    }
+    collected.push(diagnostic);
+  }
+  return collected;
+}
+
+/**
+ * Fetch language-server diagnostics for freshly written files. Intended to run
+ * immediately after a successful `source_patch_apply` so type errors introduced
+ * by an edit surface in the tool result instead of on the next explicit
+ * `lsp_diagnostics` call. Pure I/O against the shared LSP server pool: it opens
+ * each TS-family path, waits (bounded by `timeoutMs` across all paths) for
+ * published diagnostics, and applies orphan-file project-error suppression. When
+ * no server resolves it returns `available: false` so the caller can stay silent.
+ */
+export async function runLspWriteAfterDiagnostics(input: {
+  readonly cwd: string;
+  readonly absPaths: readonly string[];
+  readonly timeoutMs?: number;
+  readonly signal?: AbortSignal;
+}): Promise<LspWriteAfterDiagnosticsResult> {
+  const cwd = resolve(input.cwd);
+  const uniquePaths = [
+    ...new Set(
+      input.absPaths
+        .map((path) => resolve(path))
+        .filter(
+          (path) => LSP_WRITE_AFTER_LANGUAGES.has(languageIdForPath(path)) && existsSync(path),
+        ),
+    ),
+  ];
+  if (uniquePaths.length === 0) {
+    return { available: true, scannedPaths: [], diagnostics: [] };
+  }
+  const resolution = resolveTypeScriptLanguageServer(cwd);
+  if (!resolution.available) {
+    return { available: false, scannedPaths: [], diagnostics: [] };
+  }
+  const readableRoots = [...new Set([cwd, ...uniquePaths.map((path) => dirname(path))])];
+  const scope: ToolTargetScope = {
+    baseCwd: cwd,
+    primaryRoot: cwd,
+    allowedRoots: readableRoots,
+    readableRoots,
+  };
+  const deadline = Date.now() + (input.timeoutMs ?? 800);
+  const outcome = await withClient({
+    scope,
+    resolution,
+    fn: async (lease) => {
+      const collected: LspWriteAfterDiagnostic[] = [];
+      for (const absPath of uniquePaths) {
+        if (input.signal?.aborted) {
+          break;
+        }
+        const lspUri = openDocumentForUri(lease, absPath, scope);
+        if (!lspUri) {
+          continue;
+        }
+        const remaining = Math.max(0, deadline - Date.now());
+        const raw = await lease.client.waitForDiagnostics(lspUri, remaining);
+        collected.push(
+          ...projectLspWriteAfterDiagnostics(absPath, raw, !hasTsconfigAncestor(absPath)),
+        );
+      }
+      return collected;
+    },
+  });
+  if (!outcome.ok) {
+    return { available: true, scannedPaths: uniquePaths, diagnostics: [] };
+  }
+  return { available: true, scannedPaths: uniquePaths, diagnostics: outcome.value };
 }
 
 export function createLspTools(options?: { runtime?: BrewvaBundledToolRuntime }): ToolDefinition[] {
