@@ -698,6 +698,25 @@ function buildAssistantTextMessage(text: string): {
   };
 }
 
+// Shown when a completed turn produced no reply text and ran no tools. This is
+// almost always a model that spent its whole output-token budget (max_tokens) on
+// reasoning before emitting any answer, so the turn commits "completed" with an
+// empty assistant message and zero tool outputs. Surfacing it keeps the turn from
+// reading as a silent hang ("no reaction").
+const EMPTY_TURN_NOTICE_TEXT =
+  'The model ended this turn without any reply or tool call: it produced only internal reasoning, which usually means the output budget (max_tokens) ran out before it could answer. Send "continue" to let it resume, or raise the model\'s maxTokens.';
+
+function isEmptyCompletionCommittedFrame(
+  frame: Extract<SessionWireFrame, { type: "turn.committed" }>,
+): boolean {
+  return (
+    frame.status === "completed" &&
+    frame.assistantText.trim().length === 0 &&
+    frame.toolOutputs.length === 0 &&
+    (frame.assistantSegments?.every((segment) => segment.text.trim().length === 0) ?? true)
+  );
+}
+
 function buildAssistantDeltaEvent(input: {
   delta: string;
   assistantText: string;
@@ -1092,6 +1111,18 @@ export function buildSessionWireTranscriptSeedMessages(
         },
       });
     }
+    if (replayItems.length === 0 && isEmptyCompletionCommittedFrame(frame)) {
+      replayItems.push({
+        ts: frame.ts,
+        order,
+        message: {
+          role: "assistant",
+          stopReason: "stop",
+          content: [{ type: "text", text: EMPTY_TURN_NOTICE_TEXT }],
+          timestamp: frame.ts,
+        },
+      });
+    }
     for (const item of replayItems.toSorted((left, right) => {
       if (left.sequence !== undefined && right.sequence !== undefined) {
         const sequenceOrder = left.sequence - right.sequence;
@@ -1308,6 +1339,12 @@ function emitRuntimeTurnSessionFrame(input: {
       input.emit({
         type: "message_end",
         message: buildAssistantTextMessage(frame.assistantText),
+      });
+    } else if (!state.emittedAssistantMessage && isEmptyCompletionCommittedFrame(frame)) {
+      state.emittedAssistantMessage = true;
+      input.emit({
+        type: "message_end",
+        message: buildAssistantTextMessage(EMPTY_TURN_NOTICE_TEXT),
       });
     }
     emitRuntimeSessionPhase({

@@ -12,7 +12,10 @@ import {
   buildTextTranscriptMessage,
   type CliShellTranscriptMessage,
 } from "../../../packages/brewva-cli/src/shell/domain/transcript.js";
-import { projectRuntimeTurnSessionWireFrames } from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";
+import {
+  buildSessionWireTranscriptSeedMessages,
+  projectRuntimeTurnSessionWireFrames,
+} from "../../../packages/brewva-cli/src/shell/ports/session-adapter.js";
 import type { CliShellUiPort } from "../../../packages/brewva-cli/src/shell/ports/ui-port.js";
 import { ShellTranscriptProjector } from "../../../packages/brewva-cli/src/shell/projectors/transcript-projector.js";
 
@@ -897,5 +900,167 @@ describe("shell transcript projector", () => {
       { role: "tool", text: "", toolCallId: "tool-read-1" },
       { role: "assistant", text: "Done.", toolCallId: undefined },
     ]);
+  });
+
+  test("surfaces an empty-turn notice when a completed turn produced no reply and no tool call", () => {
+    const { getMessages, projector } = createProjectorHarness();
+    const frames: SessionWireFrame[] = [
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-empty-committed",
+        ts: 1_000,
+        source: "live",
+        durability: "durable",
+        type: "turn.committed",
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "",
+        toolOutputs: [],
+      },
+    ];
+
+    for (const event of projectRuntimeTurnSessionWireFrames(frames)) {
+      projector.handleSessionEvent(event);
+    }
+
+    const assistantTexts = getMessages()
+      .filter((message) => message.role === "assistant")
+      .map((message) =>
+        message.parts
+          .filter(
+            (part): part is Extract<(typeof message.parts)[number], { type: "text" }> =>
+              part.type === "text",
+          )
+          .map((part) => part.text)
+          .join(""),
+      );
+    expect(assistantTexts).toHaveLength(1);
+    expect(assistantTexts[0]).toContain("max_tokens");
+  });
+
+  test("does not surface the empty-turn notice when a completed turn ran a tool", () => {
+    const { getMessages, projector } = createProjectorHarness();
+    const frames: SessionWireFrame[] = [
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-tool-started",
+        ts: 1_000,
+        source: "live",
+        durability: "cache",
+        type: "tool.started",
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        toolCallId: asBrewvaToolCallId("tool-read-1"),
+        toolName: asBrewvaToolName("read"),
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-tool-finished",
+        ts: 1_010,
+        source: "live",
+        durability: "cache",
+        type: "tool.finished",
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        toolCallId: asBrewvaToolCallId("tool-read-1"),
+        toolName: asBrewvaToolName("read"),
+        verdict: "pass",
+        isError: false,
+        text: "src/app.ts",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-committed",
+        ts: 1_020,
+        source: "live",
+        durability: "durable",
+        type: "turn.committed",
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "",
+        toolOutputs: [
+          {
+            toolCallId: asBrewvaToolCallId("tool-read-1"),
+            toolName: asBrewvaToolName("read"),
+            verdict: "pass",
+            isError: false,
+            text: "src/app.ts",
+            ts: 1_010,
+          },
+        ],
+      },
+    ];
+
+    for (const event of projectRuntimeTurnSessionWireFrames(frames)) {
+      projector.handleSessionEvent(event);
+    }
+
+    const assistantTexts = getMessages()
+      .filter((message) => message.role === "assistant")
+      .map((message) =>
+        message.parts
+          .filter(
+            (part): part is Extract<(typeof message.parts)[number], { type: "text" }> =>
+              part.type === "text",
+          )
+          .map((part) => part.text)
+          .join(""),
+      );
+    expect(assistantTexts.some((text) => text.includes("max_tokens"))).toBe(false);
+    expect(getMessages().some((message) => message.role === "tool")).toBe(true);
+  });
+
+  test("buildSessionWireTranscriptSeedMessages surfaces an empty-turn notice on replay", () => {
+    const frames: SessionWireFrame[] = [
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-input",
+        ts: 1_000,
+        source: "live",
+        durability: "durable",
+        type: "turn.input",
+        turnId: "turn-1",
+        trigger: "user",
+        promptText: "build the whole app",
+      },
+      {
+        schema: SESSION_WIRE_SCHEMA,
+        sessionId: asBrewvaSessionId("session-1"),
+        frameId: "frame-committed",
+        ts: 1_010,
+        source: "live",
+        durability: "durable",
+        type: "turn.committed",
+        turnId: "turn-1",
+        attemptId: "attempt-1",
+        status: "completed",
+        assistantText: "",
+        toolOutputs: [],
+      },
+    ];
+
+    const messages = buildSessionWireTranscriptSeedMessages(frames) as ReadonlyArray<{
+      readonly role: string;
+      readonly content: ReadonlyArray<{ readonly type: string; readonly text?: string }>;
+    }>;
+
+    const assistantMessages = messages.filter((message) => message.role === "assistant");
+    expect(assistantMessages).toHaveLength(1);
+    const [notice] = assistantMessages;
+    if (!notice) {
+      throw new Error("expected an empty-turn notice assistant message");
+    }
+    const noticeText = notice.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text ?? "")
+      .join("");
+    expect(noticeText).toContain("max_tokens");
   });
 });
