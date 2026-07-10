@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
+import { assertCapabilitySelectionPremise } from "./capability-premise.js";
 import type { EvalScenario, EvalTelemetry, OutputContract } from "./types.js";
 
 // Generic-scenario runtime execution (the seam RuntimeExecutor refused to fake):
@@ -197,21 +198,29 @@ async function runPrintTurn(input: {
   }
 }
 
-export async function executeGenericRuntimeScenario(
-  input: GenericRuntimeExecutionInput,
-): Promise<GenericRuntimeExecutionResult> {
-  const workspace = mkdtempSync(join(tmpdir(), `brewva-eval-${input.scenario.id}-`));
-  const workspaceFiles = input.scenario.context.workspace_files ?? {};
-  for (const [relativePath, content] of Object.entries(workspaceFiles)) {
+/**
+ * Materialize scenario workspace_files into the hermetic workspace. Exported
+ * so premise tests stage EXACTLY what the runtime stages.
+ */
+export function stageScenarioWorkspaceFiles(scenario: EvalScenario, workspace: string): void {
+  for (const [relativePath, content] of Object.entries(scenario.context.workspace_files ?? {})) {
     const absolutePath = resolve(workspace, relativePath);
     if (absolutePath !== workspace && !absolutePath.startsWith(`${workspace}/`)) {
       throw new Error(
-        `Scenario ${input.scenario.id}: workspace_files path escapes the workspace: ${relativePath}`,
+        `Scenario ${scenario.id}: workspace_files path escapes the workspace: ${relativePath}`,
       );
     }
     mkdirSync(dirname(absolutePath), { recursive: true });
     writeFileSync(absolutePath, content, "utf8");
   }
+}
+
+export async function executeGenericRuntimeScenario(
+  input: GenericRuntimeExecutionInput,
+): Promise<GenericRuntimeExecutionResult> {
+  const workspace = mkdtempSync(join(tmpdir(), `brewva-eval-${input.scenario.id}-`));
+  const workspaceFiles = input.scenario.context.workspace_files ?? {};
+  stageScenarioWorkspaceFiles(input.scenario, workspace);
   if (input.variantText && input.variantText.trim().length > 0) {
     if (Object.hasOwn(workspaceFiles, "AGENTS.md")) {
       // Silently replacing a scenario-carried AGENTS.md would swap "statements
@@ -236,6 +245,14 @@ export async function executeGenericRuntimeScenario(
         }
       : undefined;
   const prompt = buildGenericScenarioPrompt(input.scenario);
+  // Premise gate: checked against the real intent scorer BEFORE the turn is
+  // spent. A violated premise throws (a visible scenario error) instead of
+  // letting a truthful model answer about runtime state grade as 0%.
+  assertCapabilitySelectionPremise({
+    scenario: input.scenario,
+    workspaceDir: workspace,
+    prompt,
+  });
   const startedAt = performance.now();
   const rawText = await runPrintTurn({
     prompt,

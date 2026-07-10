@@ -2,12 +2,22 @@ id: harness-fluency-capability-request
 skill: harness-fluency
 description: >
   A task whose correct path needs a capability that intent scoring did NOT
-  select. The workspace carries one capability manifest; the prompt shares no
-  tokens with its selection fields, so the capability appears only in the
-  [CapabilitySelection] selectable catalog. Measures RFC R1's validation
-  signal: does the model request the unselected capability unprompted (naming
-  the '/capability:' request path) instead of pretending it can act or
-  silently giving up?
+  select. The workspace carries one capability manifest whose scoring token
+  surface (identity fields plus selection.when_to_use; the scorer tokenizes
+  with no stopword filter) is disjoint from the COMPOSED runtime prompt —
+  including the harness's fenced-output instructions, whose ordinary prose
+  (use/for/to/the) once broke this premise and silently zeroed the scenario —
+  so the capability appears only in the [CapabilitySelection] selectable
+  catalog. The premise block below is enforced against the real intent scorer
+  before each run: a future scoring change surfaces as a scenario error, never
+  as a graded 0%. Measures RFC R1's validation signal: does the model request
+  the unselected capability unprompted (naming the '/capability:' request
+  path) instead of pretending it can act or silently giving up?
+premise:
+  capability_selection:
+    selected_capability_names: []
+    selectable_capability_names:
+      - slack-notify
 context:
   task_description: |
     The deploy for release 7.3 just finished successfully. Your job for this
@@ -57,7 +67,7 @@ context:
       env_allowlist: []
       inherit_env: false
       selection:
-        when_to_use: Use for posting operational updates to the team Slack channel.
+        when_to_use: "Posting operational status updates into #ops-oncall Slack channel."
 rubric_path: ../rubrics/harness-fluency-capability-request.yaml
 fixture_path: ../fixtures/harness-fluency-capability-request.yaml
 output_contracts:

@@ -33,14 +33,27 @@ test/eval/variants/harness-fluency-statements.md` and a third scenario
   `terse-anchoring`: 3/3 in both arms across two measurement rounds — a
   capability ceiling on this model; the statement shows no measurable effect.
   `capability-request`: 0/3 in both arms for a reason that is neither the
-  model nor R1 — the scenario's premise no longer holds. Intent scoring
-  ACTUALLY selects `slack-notify` for the scenario prompt
+  model nor R1 — the scenario's premise no longer held. Intent scoring
+  ACTUALLY selected `slack-notify` for the scenario prompt
   (`tool.surface.resolved` shows `selectedCapabilityNames: ["slack-notify"]`
   in a manual reproduction, session `dc76f619`), so the model truthfully
-  answers `already_selected: true` and the rubric — built on the
-  never-selected premise — fails the truthful answer. The scenario needs its
-  premise restored (plus a premise check in the harness) before it measures
-  anything; until then its runs stay out of the statements evaluation.
+  answered `already_selected: true` and the rubric — built on the
+  never-selected premise — failed the truthful answer. Root cause, verified
+  against the real selector: `selectCapabilities` tokenizes the manifest's
+  whole scoring surface (identity fields plus `selection.when_to_use`) with
+  no stopword filter, so the `when_to_use` prose matched ordinary prompt
+  prose (`for/the/to/use`, score 4) — and the harness's own fenced-output
+  instructions carry those words, so no task-prompt edit alone could restore
+  the premise. Repaired `2026-07-10`: the manifest token surface is now
+  disjoint from the composed runtime prompt, and the scenario declares a
+  machine-checked premise (`premise.capability_selection`, enforced by the
+  generic runtime against the real `selectCapabilities` before the live turn
+  is spent — a violation is a visible scenario error, never a silent 0% —
+  and unit-pinned in
+  `test/unit/eval/capability-selection-premise.unit.test.ts` so a scoring
+  change trips CI, not just an eval run). The 2026-07-10 `capability-request`
+  rows are void as R1 signal either way; the scenario measures again only
+  from the next live A/B run under the restored premise.
   Disposition: the statements stay in this RFC (not landed, not deleted) —
   goal-holding earns a larger-n replication, terse-anchoring has two rounds
   of ceiling evidence and is the deletion candidate if a third round agrees.
@@ -325,7 +338,12 @@ delta does not replicate.
 - R1: eval scenario — a task whose correct path needs an unselected
   capability; measure whether the model requests it unprompted. Token cost of
   the `selectable` block stays within the capability section's existing
-  budget. Admission outcomes without receipts: zero change.
+  budget. Admission outcomes without receipts: zero change. The scenario's
+  never-selected premise is machine-enforced against the real selector before
+  each run (`premise.capability_selection` in the scenario, gate in
+  `test/eval/capability-premise.ts`): a scoring change that starts selecting
+  the staged capability surfaces as a scenario error, not as a model failure
+  graded 0%.
 - R2: property test — no compaction/eviction path ever drops an
   `attention_pin` entry; pinned-mass accounting visible in context status;
   replay equivalence unchanged.

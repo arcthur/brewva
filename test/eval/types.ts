@@ -12,11 +12,37 @@ export interface OutputContract {
 
 export type EvalScenarioKind = "generic" | "recall" | "harness";
 
+export interface EvalCapabilitySelectionPremise {
+  /**
+   * Exact capability names the real intent scorer must select for the
+   * composed runtime prompt (usually empty: the scenario measures the
+   * request path for an UNSELECTED capability).
+   */
+  selected_capability_names: string[];
+  /**
+   * Capability names that must stay requestable: present under the staged
+   * registry roots, unselected, and not policy-forbidden, so they render in
+   * the [CapabilitySelection] selectable catalog.
+   */
+  selectable_capability_names?: string[];
+}
+
+/**
+ * Scenario preconditions verified against the real production selection code
+ * BEFORE a live turn is spent. A violated premise is a scenario error
+ * (visible, non-zero exit), never a graded 0% — a model truthfully reporting
+ * runtime state must not be scored as a failure.
+ */
+export interface EvalScenarioPremise {
+  capability_selection?: EvalCapabilitySelectionPremise;
+}
+
 export interface EvalScenario {
   id: string;
   skill: string;
   kind?: EvalScenarioKind;
   description: string;
+  premise?: EvalScenarioPremise;
   context: {
     task_description: string;
     available_artifacts?: Record<string, unknown>;
