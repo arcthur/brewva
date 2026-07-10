@@ -21,6 +21,8 @@ import { type ClipboardCopy, hasOpenTuiSelectedText } from "./selection.js";
 import { SubagentFooterPanel } from "./subagent-footer.js";
 import { ToastStrip } from "./toast.js";
 import { createToolRenderCache, type ToolRenderCache } from "./tool-render.js";
+import { TranscriptRowSpacingProvider } from "./transcript-row-spacing.js";
+import { projectTranscriptRowHints, transcriptRowHint } from "./transcript-rows.js";
 import { TranscriptMessageView } from "./transcript.js";
 import { cloneOverlayPayload } from "./utils.js";
 
@@ -163,6 +165,7 @@ export function BrewvaFullScreenShell(input: {
   );
   const transcriptWidth = createMemo(() => Math.max(20, dimensions().width - 6));
   const messages = createMemo(() => state.transcript.messages);
+  const rowHints = createMemo(() => projectTranscriptRowHints(messages()));
   const promptInputBlocked = createMemo(
     () =>
       Boolean(state.overlay.active) ||
@@ -218,28 +221,34 @@ export function BrewvaFullScreenShell(input: {
             }}
           >
             <For each={messages()}>
-              {(message, index) => (
-                <box
-                  id={`transcript-row:${message.id}`}
-                  width="100%"
-                  flexDirection="column"
-                  flexShrink={0}
-                  overflow="visible"
-                >
-                  <TranscriptMessageView
-                    message={message}
-                    theme={theme()}
-                    toolDefinitions={toolDefinitions}
-                    toolRenderCache={toolRenderCache}
-                    transcriptWidth={transcriptWidth()}
-                    showToolDetails={state.view.toolDetails}
-                    index={index()}
-                    isLast={index() === messages().length - 1}
-                    assistantLabel={assistantLabel()}
-                    modelLabel={modelLabel()}
-                  />
-                </box>
-              )}
+              {(message, index) => {
+                const hint = createMemo(() => transcriptRowHint(rowHints(), message.id));
+                return (
+                  <box
+                    id={`transcript-row:${message.id}`}
+                    width="100%"
+                    flexDirection="column"
+                    flexShrink={0}
+                    overflow="visible"
+                  >
+                    <TranscriptRowSpacingProvider value={{ compactTop: () => hint().compactTop }}>
+                      <TranscriptMessageView
+                        message={message}
+                        theme={theme()}
+                        toolDefinitions={toolDefinitions}
+                        toolRenderCache={toolRenderCache}
+                        transcriptWidth={transcriptWidth()}
+                        showToolDetails={state.view.toolDetails}
+                        index={index()}
+                        isLast={index() === messages().length - 1}
+                        showAssistantLabel={hint().showAssistantLabel}
+                        assistantLabel={assistantLabel()}
+                        modelLabel={modelLabel()}
+                      />
+                    </TranscriptRowSpacingProvider>
+                  </box>
+                );
+              }}
             </For>
           </scrollbox>
 

@@ -296,6 +296,30 @@ world — the panel makes the world navigable, diffable, and reversible.`
   permission layer staying outside the loop. Under the line `A tool the model never
 reaches for is a heuristic wearing a schema.`
 
+- [RFC: Streaming Transcript Output Legibility — Dim The Tools, Fold The Code, Converge The Blocks](./rfc-streaming-transcript-output-legibility.md):
+  active render-layer RFC fixing three co-occurring transcript complaints — code
+  renders as one giant uncapped chunk, a normal interleaved turn stacks a dozen
+  heavy blocks, and the descriptive prose drowns between them. Diagnoses each to
+  the render layer (assistant code and whole-file writes/diffs are uncapped while
+  tool output IS capped — the ceiling is inverted; the wire fold splits the
+  assistant segment on every tool frame and each part carries a fixed `marginTop`;
+  completed tools stay full-strength while borderless prose recedes) and borrows
+  `opencode`'s organizing move — let tools recede (dim + single-line + packed) so
+  narration advances — with **no new dependency** (the installed
+  `@opentui/core@0.4.2` already ships the `CodeRenderable` / `createMarkdownCodeBlockRenderer`
+  fold hooks). Three pillars, render-layer only: (1) dim completed tools + a pure
+  `groupTranscriptMessages` static projection that packs consecutive same-`turn`
+  tool rows into one group (chosen over porting opencode's rejected per-frame
+  `setPreLayoutSiblingMargin` — declarative, unit-testable, no per-frame cost);
+  (2) information-density-first folding of long code / whole-file writes / diffs
+  under one cap-policy home, reviving the dead `splitTranscriptTextBlocks`, folding
+  only at `stable` so streaming stays live; (3) light block convergence via
+  per-turn label dedupe. Net-zero Surface Budget (no config key, no persisted
+  format, no public surface); wire-fold, the tape, and the transcript projector are
+  untouched. The block-explosion **root** (per-tool-frame segment split) is
+  diagnosed but deferred to a data-layer follow-up by design. Under the line
+  `Let the tools recede so the narration advances — and put a ceiling on every large payload.`
+
 When new unresolved design work starts, add one focused note here and link it
 from this README. If the stable docs already carry the accepted contract, create
 or update a decision/archive record instead of reopening this directory as a

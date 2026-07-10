@@ -13,6 +13,7 @@ import type {
   CliShellTranscriptToolPart,
 } from "../../src/shell/domain/transcript.js";
 import { useRenderer } from "../opentui/index.js";
+import { capLineWidth, collapseCodeContent, splitFoldableCodeBlocks } from "./code-fold.js";
 import { DiffView, formatDiffFileTitle } from "./diff-view.js";
 import { MarkdownTranscriptBlock } from "./markdown-transcript-block.js";
 import { MermaidBlock } from "./mermaid/mermaid-block.js";
@@ -22,6 +23,7 @@ import {
   getTranscriptSyntaxStyle,
   type SessionPalette,
 } from "./palette.js";
+import { summarizeReasoning } from "./reasoning-summary.js";
 import { useShellRenderContext } from "./render-context.js";
 import { createSyntaxStyleMemo } from "./syntax-style.js";
 import {
@@ -42,7 +44,9 @@ import {
   summarizeInput,
   type ToolRenderCache,
 } from "./tool-render.js";
+import { resolveInlineToolTone } from "./tool-tone.js";
 import { classifyTranscriptTextBlock } from "./transcript-markdown.js";
+import { useTranscriptRowSpacing } from "./transcript-row-spacing.js";
 
 /**
  * The `▣ <assistantLabel> · <modelLabel>` header rendered beneath an assistant
@@ -98,6 +102,60 @@ function safetyToneColor(theme: SessionPalette, tone: OperatorSafetyShellTone): 
   }
 }
 
+/**
+ * A long fenced code block lifted out of committed assistant prose (Pillar 2a),
+ * folded to `CODE_COLLAPSED_LINE_LIMIT` lines with a click-to-expand affordance. The
+ * expand state is a local signal (not persisted): a committed message's identity is
+ * stable, so the state survives its lifetime, and there is no per-tool cache to key
+ * against for prose code.
+ */
+function CollapsibleCodeBlock(input: {
+  content: string;
+  lang: string | undefined;
+  theme: SessionPalette;
+}) {
+  const renderer = useRenderer();
+  const syntax = createSyntaxStyleMemo(() => getTranscriptSyntaxStyle(input.theme));
+  const [expanded, setExpanded] = createSignal(false);
+  const collapsed = createMemo(() =>
+    collapseCodeContent({
+      content: input.content,
+      limit: CODE_COLLAPSED_LINE_LIMIT,
+      expanded: expanded(),
+      maxLineWidth: COLLAPSED_LINE_CHAR_LIMIT,
+    }),
+  );
+  const toggle = () => {
+    if (!collapsed().collapsible) {
+      return;
+    }
+    if (renderer.getSelection()?.getSelectedText()) {
+      return;
+    }
+    setExpanded((value) => !value);
+  };
+  const collapseHint = createMemo(() =>
+    formatCollapseHint({
+      expanded: expanded(),
+      hiddenLineCount: collapsed().hiddenLineCount,
+      totalLineCount: collapsed().totalLineCount,
+    }),
+  );
+  return (
+    <box flexDirection="column" gap={0} onMouseUp={toggle}>
+      <code
+        fg={input.theme.text}
+        filetype={input.lang}
+        syntaxStyle={syntax()}
+        content={collapsed().visibleContent}
+      />
+      <Show when={collapsed().collapsible}>
+        <text fg={input.theme.textMuted}>{collapseHint()}</text>
+      </Show>
+    </box>
+  );
+}
+
 function TranscriptTextBlockView(input: {
   content: string;
   theme: SessionPalette;
@@ -108,10 +166,45 @@ function TranscriptTextBlockView(input: {
     const current = classification();
     return current.kind === "mermaid" ? current.source : undefined;
   });
+  // Only committed (non-streaming) text is split, and only when it actually carries
+  // a long fenced code block — otherwise the whole content renders as one markdown
+  // block exactly as before (no prose fragmentation, no mid-stream reflow).
+  const foldableSegments = createMemo(() => {
+    if (input.markdownStreaming) {
+      return undefined;
+    }
+    // Lift only blocks that will actually fold (body > limit), so an exactly-limit
+    // block is not fragmented out of prose for zero fold benefit.
+    const segments = splitFoldableCodeBlocks(input.content, CODE_COLLAPSED_LINE_LIMIT + 1);
+    return segments.some((segment) => segment.kind === "code") ? segments : undefined;
+  });
   return (
     <Switch>
       <Match when={mermaidSource()}>
         {(source) => <MermaidBlock source={source()} theme={input.theme} />}
+      </Match>
+      <Match when={foldableSegments()}>
+        {(segments) => (
+          <box flexDirection="column" gap={0}>
+            <For each={segments()}>
+              {(segment) =>
+                segment.kind === "code" ? (
+                  <CollapsibleCodeBlock
+                    content={segment.content}
+                    lang={segment.lang}
+                    theme={input.theme}
+                  />
+                ) : (
+                  <MarkdownTranscriptBlock
+                    content={segment.content}
+                    theme={input.theme}
+                    streaming={false}
+                  />
+                )
+              }
+            </For>
+          </box>
+        )}
       </Match>
       <Match when={true}>
         <MarkdownTranscriptBlock
@@ -154,19 +247,22 @@ function InlineTool(input: {
     }
     input.onSelect?.();
   };
-  const tone = createMemo(() => {
-    if (input.part.status === "error") {
-      return input.theme.error;
-    }
-    if (hovered() && actionable()) {
-      return input.theme.accent;
-    }
-    return safetyToneColor(input.theme, input.part.safety.tone);
-  });
+  const spacing = useTranscriptRowSpacing();
+  const tone = createMemo(() =>
+    resolveInlineToolTone({
+      status: input.part.status,
+      hovered: hovered(),
+      actionable: actionable(),
+      mutedColor: input.theme.textMuted,
+      accentColor: input.theme.accent,
+      errorColor: input.theme.error,
+      fallbackColor: safetyToneColor(input.theme, input.part.safety.tone),
+    }),
+  );
   return (
     <box
       id={`tool-${input.part.id}`}
-      marginTop={1}
+      marginTop={spacing.compactTop() ? 0 : 1}
       paddingLeft={3}
       paddingRight={2}
       flexDirection="column"
@@ -286,10 +382,26 @@ function ReasoningPartView(input: {
   theme: SessionPalette;
 }) {
   const shellContext = useShellRenderContext();
+  const renderer = useRenderer();
   const content = createMemo(() => input.part.text.replace("[REDACTED]", "").trim());
   const streaming = createMemo(() => input.part.renderMode === "streaming");
   const codeStreaming = createPersistentStreamingCodePath(streaming);
   const reasoningSyntax = createSyntaxStyleMemo(() => getReasoningSyntaxStyle(input.theme));
+  const summary = createMemo(() => summarizeReasoning(content()));
+  const [expanded, setExpanded] = createSignal(false);
+  // Collapse committed reasoning to its title line so it stops drowning the turn
+  // (density-first, same posture as code folding). Keep it fully visible while it
+  // streams — the reader watches it think — and when there is nothing to hide.
+  const collapsed = createMemo(() => !streaming() && !expanded() && summary().hasMore);
+  const toggle = () => {
+    if (streaming() || !summary().hasMore) {
+      return;
+    }
+    if (renderer.getSelection()?.getSelectedText()) {
+      return;
+    }
+    setExpanded((value) => !value);
+  };
   return (
     <Show when={shellContext.showThinking() && content().length > 0}>
       <box
@@ -299,15 +411,23 @@ function ReasoningPartView(input: {
         flexDirection="column"
         border={["left"]}
         borderColor={input.theme.backgroundElement}
+        onMouseUp={toggle}
       >
-        <code
-          filetype="markdown"
-          drawUnstyledText={!codeStreaming()}
-          streaming={codeStreaming()}
-          syntaxStyle={reasoningSyntax()}
-          content={`_Thinking:_ ${content()}`}
-          fg={input.theme.textMuted}
-        />
+        <Show
+          when={collapsed()}
+          fallback={
+            <code
+              filetype="markdown"
+              drawUnstyledText={!codeStreaming()}
+              streaming={codeStreaming()}
+              syntaxStyle={reasoningSyntax()}
+              content={`_Thinking:_ ${content()}`}
+              fg={input.theme.textMuted}
+            />
+          }
+        >
+          <text fg={input.theme.textMuted}>▸ Thought: {summary().title}</text>
+        </Show>
       </box>
     </Show>
   );
@@ -345,10 +465,42 @@ function ReadToolView(input: { part: CliShellTranscriptToolPart; theme: SessionP
   );
 }
 
-function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: SessionPalette }) {
+function WriteToolView(input: {
+  part: CliShellTranscriptToolPart;
+  theme: SessionPalette;
+  toolRenderCache: ToolRenderCache;
+}) {
   const path = createMemo(() => readToolPath(input.part) ?? "file");
   const content = createMemo(() => readToolTextInput(input.part) ?? "");
   const writeSyntax = createSyntaxStyleMemo(() => getTranscriptSyntaxStyle(input.theme));
+  const interactionState = readTranscriptToolInteractionState(
+    input.toolRenderCache,
+    input.part.toolCallId,
+  );
+  const [expanded, setExpanded] = createSignal(Boolean(interactionState.writeExpanded));
+  const collapsed = createMemo(() =>
+    collapseCodeContent({
+      content: content(),
+      limit: CODE_COLLAPSED_LINE_LIMIT,
+      expanded: expanded(),
+      maxLineWidth: COLLAPSED_LINE_CHAR_LIMIT,
+    }),
+  );
+  const toggleExpanded = () => {
+    if (!collapsed().collapsible) {
+      return;
+    }
+    const next = !expanded();
+    interactionState.writeExpanded = next;
+    setExpanded(next);
+  };
+  const collapseHint = createMemo(() =>
+    formatCollapseHint({
+      expanded: expanded(),
+      hiddenLineCount: collapsed().hiddenLineCount,
+      totalLineCount: collapsed().totalLineCount,
+    }),
+  );
   return (
     <Switch>
       <Match when={content().length > 0 && input.part.status === "completed"}>
@@ -356,14 +508,18 @@ function WriteToolView(input: { part: CliShellTranscriptToolPart; theme: Session
           title={formatOperatorSafetyShellTitle(input.part.safety, `Wrote ${path()}`)}
           part={input.part}
           theme={input.theme}
+          onSelect={collapsed().collapsible ? toggleExpanded : undefined}
         >
-          <box paddingLeft={1}>
+          <box paddingLeft={1} flexDirection="column" gap={0}>
             <code
               fg={input.theme.text}
               filetype={inferFiletype(path())}
               syntaxStyle={writeSyntax()}
-              content={content()}
+              content={collapsed().visibleContent}
             />
+            <Show when={collapsed().collapsible}>
+              <text fg={input.theme.textMuted}>{collapseHint()}</text>
+            </Show>
           </box>
         </BlockTool>
       </Match>
@@ -478,16 +634,14 @@ function DiffToolView(input: {
 
 const EXEC_COLLAPSED_LINE_LIMIT = 10;
 const GENERIC_COLLAPSED_LINE_LIMIT = 5;
+// Whole-file writes (and assistant fenced code) fold to this many lines. Larger
+// than the exec/generic caps because code is denser and more often worth reading
+// than shell chatter, but still bounded so a 400-line write cannot flood the view.
+const CODE_COLLAPSED_LINE_LIMIT = 16;
 // Cap the width of a collapsed line so a single huge line (e.g. 200KB of
 // minified output on one line) can't blow up the render — line-count collapse
 // alone lets it through. Expanding restores the untruncated text.
 const COLLAPSED_LINE_CHAR_LIMIT = 2000;
-
-function capCollapsedLine(line: string): string {
-  return line.length > COLLAPSED_LINE_CHAR_LIMIT
-    ? `${line.slice(0, COLLAPSED_LINE_CHAR_LIMIT)}…`
-    : line;
-}
 
 function formatCollapseHint(input: {
   expanded: boolean;
@@ -525,6 +679,7 @@ function firstNonEmptyLine(text: string): string | undefined {
 interface TranscriptToolInteractionState {
   execExpanded?: boolean;
   genericExpanded?: boolean;
+  writeExpanded?: boolean;
 }
 
 function readTranscriptToolInteractionState(
@@ -565,7 +720,9 @@ function ExecToolView(input: {
   });
   const collapsedOutputLines = createMemo(() => {
     const source = summaryLines().length > 0 ? summaryLines() : outputLines();
-    return source.slice(0, EXEC_COLLAPSED_LINE_LIMIT).map(capCollapsedLine);
+    return source
+      .slice(0, EXEC_COLLAPSED_LINE_LIMIT)
+      .map((line) => capLineWidth(line, COLLAPSED_LINE_CHAR_LIMIT));
   });
   const collapsible = createMemo(
     () => outputLines().length > EXEC_COLLAPSED_LINE_LIMIT || summaryLines().length > 0,
@@ -941,7 +1098,11 @@ function ToolPartView(input: {
         <ReadToolView part={input.part} theme={input.theme} />
       </Match>
       <Match when={input.part.toolName === "write"}>
-        <WriteToolView part={input.part} theme={input.theme} />
+        <WriteToolView
+          part={input.part}
+          theme={input.theme}
+          toolRenderCache={input.toolRenderCache}
+        />
       </Match>
       <Match when={input.part.toolName === "edit" || input.part.toolName === "apply_patch"}>
         <DiffToolView
@@ -979,6 +1140,7 @@ function AssistantMessageView(input: {
   transcriptWidth: number;
   showToolDetails: boolean;
   isLast: boolean;
+  showAssistantLabel?: boolean;
   assistantLabel: string;
   modelLabel: string;
 }) {
@@ -1008,7 +1170,11 @@ function AssistantMessageView(input: {
           return null;
         }}
       </Index>
-      <Show when={input.isLast || input.message.renderMode !== "streaming"}>
+      <Show
+        when={
+          input.showAssistantLabel ?? (input.isLast || input.message.renderMode !== "streaming")
+        }
+      >
         <box paddingLeft={3}>
           <AssistantLabelLine
             theme={input.theme}
@@ -1142,6 +1308,7 @@ export function TranscriptMessageView(input: {
   showToolDetails: boolean;
   index: number;
   isLast: boolean;
+  showAssistantLabel?: boolean;
   assistantLabel: string;
   modelLabel: string;
 }) {
@@ -1158,6 +1325,7 @@ export function TranscriptMessageView(input: {
         transcriptWidth={input.transcriptWidth}
         showToolDetails={input.showToolDetails}
         isLast={input.isLast}
+        showAssistantLabel={input.showAssistantLabel}
         assistantLabel={input.assistantLabel}
         modelLabel={input.modelLabel}
       />
