@@ -135,6 +135,15 @@ interface CompactionGateState {
   autoCompactionAttemptId: number;
   activeAutoCompactionAttemptId: number | null;
   /**
+   * Auto attempt whose session_compact commit already landed but whose
+   * onComplete has not run yet. The managed deferred flow emits session_compact
+   * — which clears the active execution state, watchdog included — BEFORE the
+   * request's onComplete, so the attempt id must be parked here for that
+   * trailing onComplete to emit `context.compaction.auto.completed` exactly
+   * once; without it the breaker never observes a success and stays open.
+   */
+  committedAutoCompactionAttemptId: number | null;
+  /**
    * Last skip reason that produced telemetry. Pressure checks now run per
    * provider request, so an unchanged skip reason would otherwise repeat one
    * receipt per request for the whole pressure episode.
@@ -379,6 +388,7 @@ function getOrCreateGateState(
     autoCompactionWatchdog: null,
     autoCompactionAttemptId: 0,
     activeAutoCompactionAttemptId: null,
+    committedAutoCompactionAttemptId: null,
     lastAutoCompactionSkipReason: null,
   };
   store.set(sessionId, created);
@@ -522,6 +532,14 @@ export function createHostedCompactionController(
     const clearInFlight = () => {
       clearAutoCompactionExecutionState(state);
     };
+    const completeAutoCompaction = () => {
+      runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
+      telemetry.emitAutoCompleted({
+        sessionId: input.sessionId,
+        turn: state.turnIndex,
+        reason: compactionReason,
+      });
+    };
     const recordCompactionFailure = (error: unknown) => {
       if (state.activeAutoCompactionAttemptId !== attemptId) {
         return;
@@ -541,16 +559,20 @@ export function createHostedCompactionController(
       compact({
         customInstructions: getRuntimeContextCompactionInstructions(runtime),
         onComplete: () => {
+          if (state.committedAutoCompactionAttemptId === attemptId) {
+            // Deferred flow: the session_compact commit already cleared the
+            // execution state for this attempt. Consuming the parked id keeps
+            // the completion receipt exactly-once even if onComplete re-runs
+            // (salvage paths invoke it again).
+            state.committedAutoCompactionAttemptId = null;
+            completeAutoCompaction();
+            return;
+          }
           if (state.activeAutoCompactionAttemptId !== attemptId) {
             return;
           }
           clearInFlight();
-          runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
-          telemetry.emitAutoCompleted({
-            sessionId: input.sessionId,
-            turn: state.turnIndex,
-            reason: compactionReason,
-          });
+          completeAutoCompaction();
         },
         onError: (error) => {
           recordCompactionFailure(error);
@@ -591,6 +613,14 @@ export function createHostedCompactionController(
         input.sessionId,
         previousUsage,
       ).required;
+      // Park the in-flight attempt id before clearing: in the managed deferred
+      // flow this commit IS the active attempt's, and its onComplete (which
+      // emits auto.completed) only runs after this hook. The clear must still
+      // happen unconditionally so a manual compaction landing during an
+      // in-flight auto attempt disarms the watchdog.
+      if (state.activeAutoCompactionAttemptId !== null) {
+        state.committedAutoCompactionAttemptId = state.activeAutoCompactionAttemptId;
+      }
       clearAutoCompactionExecutionState(state);
       runtime.ops.context.compaction.rememberDeferredReason(input.sessionId, null);
       const sanitizedSummary =
@@ -655,6 +685,12 @@ export function createHostedCompactionController(
       const state = gateStateBySession.get(input.sessionId);
       if (state) {
         clearAutoCompactionExecutionState(state);
+        // `clearAutoCompactionExecutionState` intentionally preserves the
+        // committed slot (sessionCompact clears execution state right after
+        // parking it), so drop it explicitly on shutdown — otherwise an
+        // onComplete closure that still holds this state by reference could
+        // emit a post-shutdown auto.completed for a disposed session.
+        state.committedAutoCompactionAttemptId = null;
       }
       gateStateBySession.delete(input.sessionId);
       delegationAdvisoryTracker.clearSession(input.sessionId);
