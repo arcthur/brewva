@@ -60,7 +60,7 @@ describe("harness cli output", () => {
     const patrol = formatHarnessCandidatesText([
       {
         schema: "brewva.harness.pattern_candidate.v1",
-        candidateId: "candidate-1",
+        patternId: "harness_pattern:cluster-1",
         kind: "provider_failure",
         sourceSnapshotIds: ["snapshot-1"],
         sourceEventIds: ["event-1"],
@@ -75,7 +75,7 @@ describe("harness cli output", () => {
     const compare = formatHarnessComparisonText({
       schema: "brewva.harness.eval_report.v1",
       mode: "manifest",
-      candidateId: "harness_candidate_pair:test",
+      candidateId: "harness_candidate:test",
       sourceSessionId: "source-session",
       targetSessionId: "target-session",
       divergeAt: "event-diverge",
@@ -91,8 +91,9 @@ describe("harness cli output", () => {
     });
 
     expect(snapshots).toContain("snapshot=snapshot-1");
+    expect(patrol).toContain("pattern=harness_pattern:cluster-1");
     expect(patrol).toContain("kind=provider_failure");
-    expect(compare).toContain("candidateId=harness_candidate_pair:test");
+    expect(compare).toContain("candidateId=harness_candidate:test");
     expect(compare).toContain("sideEffectPolicy=no_provider_or_tool_execution");
     expect(compare).toContain("executedManifest=-");
     expect(compare).toContain("promptSource=-");
@@ -102,7 +103,7 @@ describe("harness cli output", () => {
     const compare = formatHarnessComparisonText({
       schema: "brewva.harness.eval_report.v1",
       mode: "fixture",
-      candidateId: "harness_candidate_pair:test",
+      candidateId: "harness_candidate:test",
       sourceSessionId: "source-session",
       targetSessionId: "target-session",
       divergeAt: "event-diverge",

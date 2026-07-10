@@ -99,7 +99,6 @@ describe("compaction input provenance", () => {
         consumedRefs: [],
         pinnedRefs: [],
         ignoredRefs: [],
-        verifyPlanRefs: [],
       },
     });
   });
@@ -204,7 +203,6 @@ describe("compaction input provenance", () => {
       consumedRefs: [],
       pinnedRefs: [],
       ignoredRefs: [],
-      verifyPlanRefs: [],
     });
   });
 
@@ -357,6 +355,8 @@ describe("compaction input provenance", () => {
           },
         },
         {
+          // Historical events from the retired verify_plan action stay
+          // readable raw records but no longer project into a typed field.
           type: ATTENTION_METRIC_EVENT_TYPE,
           payload: {
             metricKey: "attention.verify_plan",
@@ -373,7 +373,6 @@ describe("compaction input provenance", () => {
       consumedRefs: ["skill:runtime-orientation"],
       pinnedRefs: ["skill:runtime-orientation"],
       ignoredRefs: ["precedent:docs/solutions/stale.md"],
-      verifyPlanRefs: ["skill:runtime-orientation"],
     });
     expect(provenance.readFiles).toEqual([]);
     expect(provenance.modifiedFiles).toEqual([]);

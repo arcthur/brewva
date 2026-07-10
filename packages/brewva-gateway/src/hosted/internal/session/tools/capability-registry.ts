@@ -399,8 +399,11 @@ function scoreManifestTokens(
   return score;
 }
 
+// Policy authority binds ONLY through the structured default key: the key's
+// tokens must appear in the intent. There is deliberately no fallback to
+// manifest description tokens — descriptive matching may rank views
+// (`deterministic`), never mint `policy` authority (axiom 18).
 function policyDefaultMatchesIntent(input: {
-  manifest: CapabilityManifest;
   defaultKeyTokens: ReadonlySet<string>;
   intentTokens: ReadonlySet<string>;
 }): boolean {
@@ -408,7 +411,7 @@ function policyDefaultMatchesIntent(input: {
   for (const token of input.defaultKeyTokens) {
     if (input.intentTokens.has(token)) return true;
   }
-  return scoreManifestTokens(input.manifest, input.intentTokens) > 0;
+  return false;
 }
 
 function manifestPolicyExclusion(
@@ -522,7 +525,6 @@ export function selectCapabilities(input: SelectCapabilitiesInput): CapabilitySe
         ([key, capabilityName]) =>
           capabilityName === manifest.name &&
           policyDefaultMatchesIntent({
-            manifest,
             defaultKeyTokens: defaultKeyTokens.get(key) ?? new Set<string>(),
             intentTokens,
           }),
@@ -666,6 +668,16 @@ export function resolveCarriedCapabilityReceipt(
     if (exclusion) {
       droppedFilteredOut.push({ name: entry.name, reason: exclusion });
       policyDecisions.push(`carried_selection_dropped: ${entry.name} ${exclusion}`);
+      continue;
+    }
+    // A policy grant only outlives its rule: when the administrator removes
+    // or remaps the default that minted this entry, the carried authority
+    // dies with it instead of persisting as an orphaned grant.
+    if (
+      entry.source === "policy" &&
+      !Object.values(input.policy.defaults ?? {}).includes(entry.name)
+    ) {
+      policyDecisions.push(`carried_selection_dropped: ${entry.name} policy_default_removed`);
       continue;
     }
     kept.push(Object.assign({}, entry));

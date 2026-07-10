@@ -134,6 +134,27 @@ describe("harness candidate materialization", () => {
     });
   });
 
+  test("an explicit JSON null model refuses the same removal direction", () => {
+    const base = manifest();
+    // A loaded candidate file can spell removal as `"model": null`; the
+    // runtime value defeats an undefined-only guard and would leak a null
+    // into the string-typed session override.
+    const candidate = manifest({
+      provider: { provider: "faux", api: "faux-api", model: null as unknown as string },
+    });
+
+    const resolution = resolveHarnessCandidateMaterialization({
+      base,
+      candidate,
+      changedFields: diffHarnessManifestFields(base, candidate),
+    });
+
+    expect(resolution).toEqual({
+      ok: false,
+      blockedFields: [{ field: "provider.model", reason: "field_removal_not_materializable" }],
+    });
+  });
+
   test("unclassified fields refuse fail-closed so future manifest fields arrive blocked", () => {
     const base = manifest();
     const candidate = manifest({

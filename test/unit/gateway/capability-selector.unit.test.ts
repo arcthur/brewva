@@ -74,6 +74,35 @@ describe("capability selector", () => {
     ]);
   });
 
+  test("policy defaults bind only through key tokens, never manifest description", () => {
+    // Intent overlaps the manifest's descriptive tokens ("search email") but
+    // not the default key ("calendar"). Descriptive matching may rank views
+    // (deterministic), never mint policy authority (axiom 18).
+    const receipt = selectCapabilities({
+      manifests: [manifest("gmail-search")],
+      intentText: "search email",
+      trigger: "user_message",
+      policy: { ...POLICY, defaults: { calendar: "gmail-search" } },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(receipt.selected_capabilities.map((entry) => entry.source)).toEqual(["deterministic"]);
+  });
+
+  test("a policy default whose key matches intent mints policy authority", () => {
+    const receipt = selectCapabilities({
+      manifests: [manifest("gmail-search")],
+      intentText: "search email",
+      trigger: "user_message",
+      policy: { ...POLICY, defaults: { email: "gmail-search" } },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    expect(
+      receipt.selected_capabilities.map((entry) => ({ name: entry.name, source: entry.source })),
+    ).toEqual([{ name: "gmail-search", source: "policy" }]);
+  });
+
   test("filters scope and account mismatches fail closed", () => {
     const receipt = selectCapabilities({
       manifests: [manifest("gmail-search")],
@@ -264,6 +293,62 @@ describe("capability selector", () => {
     expect(resolved.policy_decisions).toEqual([
       `carried selection ${previous.selection_id} revalidated against the current registry and policy`,
       "carried_selection_dropped: gmail-search account_restriction",
+    ]);
+  });
+
+  test("a removed policy default revokes the carried policy-sourced entry", () => {
+    const manifests = [manifest("gmail-search")];
+    const registryVersion = computeCapabilityRegistryVersion(manifests);
+    const previous = selectCapabilities({
+      manifests,
+      intentText: "search email",
+      trigger: "user_message",
+      policy: { ...POLICY, defaults: { email: "gmail-search" } },
+      registryVersion,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(previous.selected_capabilities.map((entry) => entry.source)).toEqual(["policy"]);
+
+    const resolved = resolveCarriedCapabilityReceipt({
+      registry: { manifests, registryVersion },
+      policy: POLICY,
+      previous,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(resolved.trigger).toBe("policy_change");
+    expect(resolved.selected_capabilities).toEqual([]);
+    expect(resolved.policy_decisions).toEqual([
+      `carried selection ${previous.selection_id} revalidated against the current registry and policy`,
+      "carried_selection_dropped: gmail-search policy_default_removed",
+    ]);
+  });
+
+  test("a remapped policy default revokes the orphaned carried entry", () => {
+    const manifests = [manifest("gmail-search"), manifest("gmail-draft", { riskLevel: "draft" })];
+    const registryVersion = computeCapabilityRegistryVersion(manifests);
+    const previous = selectCapabilities({
+      manifests,
+      intentText: "search email",
+      trigger: "user_message",
+      policy: { ...POLICY, defaults: { email: "gmail-search" } },
+      registryVersion,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(previous.selected_capabilities.map((entry) => entry.source)).toEqual(["policy"]);
+
+    const resolved = resolveCarriedCapabilityReceipt({
+      registry: { manifests, registryVersion },
+      policy: { ...POLICY, defaults: { email: "gmail-draft" } },
+      previous,
+      createdAt: "2026-01-01T00:01:00.000Z",
+    });
+
+    expect(resolved.trigger).toBe("policy_change");
+    expect(resolved.selected_capabilities).toEqual([]);
+    expect(resolved.policy_decisions).toEqual([
+      `carried selection ${previous.selection_id} revalidated against the current registry and policy`,
+      "carried_selection_dropped: gmail-search policy_default_removed",
     ]);
   });
 

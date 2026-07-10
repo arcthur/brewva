@@ -28,6 +28,7 @@ import {
 } from "./turn/physics.js";
 
 export { CANONICAL_EVENT_TYPES, RUNTIME_RECOVERY_CAUSES };
+export { isForkReplayEventId } from "./turn/physics.js";
 
 export type {
   AbortToolCallInput,

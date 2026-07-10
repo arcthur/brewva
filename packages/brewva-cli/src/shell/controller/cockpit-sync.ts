@@ -141,7 +141,6 @@ function fallbackWorkCard(input: {
       consumedRefs: [],
       pinnedRefs: [],
       ignoredRefs: [],
-      verifyPlanRefs: [],
     },
     authority: {
       selectedCapabilities: [],

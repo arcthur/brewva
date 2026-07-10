@@ -50,7 +50,6 @@ export interface TaskWorkCardProjection extends ProtocolRecord {
     readonly consumedRefs: readonly string[];
     readonly pinnedRefs: readonly string[];
     readonly ignoredRefs: readonly string[];
-    readonly verifyPlanRefs: readonly string[];
   };
   readonly authority: {
     readonly selectedCapabilities: readonly string[];

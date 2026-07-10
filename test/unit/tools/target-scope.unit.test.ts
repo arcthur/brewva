@@ -12,6 +12,57 @@ import {
   resolveToolTargetScope,
 } from "@brewva/brewva-tools/runtime-port";
 
+describe("resolveToolTargetScope root grants", () => {
+  const trialRoot = mkdtempSync(join(tmpdir(), "brewva-scope-trial-"));
+  const operatorRoot = mkdtempSync(join(tmpdir(), "brewva-scope-operator-"));
+
+  function runtimeWithDescriptor(
+    rootGrants?: "descriptor_only" | "descriptor_and_prompt",
+  ): unknown {
+    return {
+      identity: { cwd: trialRoot },
+      capabilities: {
+        task: {
+          target: {
+            getDescriptor: () => ({
+              primaryRoot: trialRoot,
+              roots: [trialRoot],
+              ...(rootGrants ? { rootGrants } : {}),
+            }),
+          },
+        },
+        events: {
+          records: {
+            // A replayed source prompt routinely cites the operator's real
+            // workspace by absolute path.
+            query: () => [
+              { payload: { prompt: `Fix the flaky test under ${operatorRoot} first.` } },
+            ],
+          },
+        },
+      },
+    };
+  }
+
+  const ctx = {
+    cwd: trialRoot,
+    sessionManager: { getSessionId: () => "trial-target-session" },
+  };
+
+  test("prompt-mentioned external roots are granted by default", () => {
+    const scope = resolveToolTargetScope(runtimeWithDescriptor() as never, ctx);
+    expect(scope.allowedRoots).toHaveLength(2);
+    expect(scope.allowedRoots[0]).toBe(trialRoot);
+  });
+
+  test("descriptor_only seals prompt-derived roots to the descriptor", () => {
+    const scope = resolveToolTargetScope(runtimeWithDescriptor("descriptor_only") as never, ctx);
+    expect(scope.allowedRoots).toEqual([trialRoot]);
+    expect(scope.primaryRoot).toBe(trialRoot);
+    expect(scope.baseCwd).toBe(trialRoot);
+  });
+});
+
 describe("resolveToolTargetScope readable skill roots", () => {
   const sessionRoot = mkdtempSync(join(tmpdir(), "brewva-scope-session-"));
   const skillRoot = mkdtempSync(join(tmpdir(), "brewva-scope-skills-"));

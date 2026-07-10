@@ -47,7 +47,6 @@ function workCard(overrides: Partial<TaskWorkCardProjection> = {}): TaskWorkCard
       consumedRefs: ["current_request"],
       pinnedRefs: ["reference:rfc"],
       ignoredRefs: [],
-      verifyPlanRefs: ["verify:1"],
     },
     authority: {
       selectedCapabilities: ["capabilities.cost.posture.get"],

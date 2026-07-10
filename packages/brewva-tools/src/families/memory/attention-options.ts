@@ -924,33 +924,53 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
       const optionId = params.option_id.trim();
       const reason = readNonEmptyString(params.reason) ?? ATTENTION_PIN_RETENTION_HINT;
       const scope = resolveToolTargetScope(attentionPinTool.runtime, ctx);
-      // A pin preserves the option's content, not just its id: resolve first
-      // so the surviving workbench entry is useful after the option's source
-      // is gone. Unresolvable options pin their id with an explicit marker.
+      // A pin preserves the option's content, not just its id: the retention
+      // contract this tool advertises is "resolved content survives with the
+      // pin". An option whose content cannot be resolved therefore FAILS with
+      // the same typed errors as attention_consume — persisting a placeholder
+      // while returning ok would manufacture durable content that does not
+      // exist.
       const resolution = resolveConsumedContent({
         runtime: attentionPinTool.runtime,
         sessionId,
         optionId,
         searchRoots: scope.allowedRoots,
       });
+      if (resolution.status === "unknown_option") {
+        return errTextResult(`attention_pin could not resolve option ${optionId}.`, {
+          ok: false,
+          optionId,
+          error: "unknown_option",
+        });
+      }
+      if (resolution.status === "content_unavailable") {
+        return errTextResult(
+          [
+            `attention_pin cannot materialize content for ${optionId}.`,
+            `hint: ${resolution.hint}`,
+            `refs: ${resolution.refs.join(",") || "none"}`,
+          ].join("\n"),
+          {
+            ok: false,
+            optionId,
+            error: "content_unavailable",
+            hint: resolution.hint,
+            refs: resolution.refs,
+          },
+        );
+      }
       const note = readNonEmptyString(params.note);
-      const resolvedContent =
-        resolution.status === "resolved"
-          ? truncateText(resolution.content, MAX_CONSUMED_CHARS, { marker: "\n..." })
-          : undefined;
+      const resolvedContent = truncateText(resolution.content, MAX_CONSUMED_CHARS, {
+        marker: "\n...",
+      });
       const contentParts = [
         note ?? `Pinned attention option for explicit follow-up: ${optionId}`,
-        ...(resolvedContent ? ["", resolvedContent] : []),
-        ...(resolution.status !== "resolved"
-          ? [
-              "",
-              `content_unresolved: ${resolution.status === "content_unavailable" ? resolution.hint : "unknown_option"}`,
-            ]
-          : []),
+        "",
+        resolvedContent,
       ];
       const entry = noteWorkbench(attentionPinTool.runtime, sessionId, {
         content: contentParts.join("\n"),
-        sourceRefs: [optionId, ...(resolution.status !== "unknown_option" ? resolution.refs : [])],
+        sourceRefs: [optionId, ...resolution.refs],
         reason,
         retentionHint: ATTENTION_PIN_RETENTION_HINT,
       });
@@ -967,7 +987,7 @@ export function createAttentionOptionTools(options: BrewvaToolOptions): ToolDefi
         entryId: entry.id ?? null,
         digest: entry.digest,
         sourceRefs: entry.sourceRefs,
-        contentResolved: resolution.status === "resolved",
+        contentResolved: true,
       });
     },
   });

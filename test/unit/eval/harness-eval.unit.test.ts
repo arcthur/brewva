@@ -13,6 +13,9 @@ describe("harness eval runtime executor", () => {
       context: {
         task_description: "Compare Harness manifests.",
         available_artifacts: {
+          // The delta-hash id is minted where the manifests exist; an
+          // id-only scenario carries it explicitly.
+          candidateId: "harness_candidate:eval-manifest-comparison",
           sourceSessionId: "source-session",
           targetSessionId: "candidate-session",
           divergeAt: "event-diverge",
@@ -32,6 +35,7 @@ describe("harness eval runtime executor", () => {
       report: {
         schema: "brewva.harness.eval_report.v1",
         mode: "manifest",
+        candidateId: "harness_candidate:eval-manifest-comparison",
         sideEffectPolicy: "no_provider_or_tool_execution",
       },
     });

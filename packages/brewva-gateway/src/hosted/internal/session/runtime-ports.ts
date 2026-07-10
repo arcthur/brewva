@@ -48,6 +48,14 @@ export type HostedRuntimeAdapterOptions = Omit<BrewvaRuntimeOptions, "physics"> 
   readonly physics?: RuntimePhysicsDeclaration;
   /** Evaluation clock for display-time projections; defaults to Date.now. */
   readonly clock?: () => number;
+  /**
+   * Root-grant policy for tool target descriptors built over this adapter.
+   * `descriptor_only` seals tool write scope to the adapter's workspace root —
+   * required for trial/replay adapters whose prompts are replayed text.
+   * Defaults to `descriptor_and_prompt` (prompt-mentioned external roots are
+   * granted, the interactive-session behavior).
+   */
+  readonly toolTargetRootGrants?: "descriptor_only" | "descriptor_and_prompt";
 };
 
 export type RuntimeAdapterOpsPort = HostedRuntimeOpsPort;
@@ -286,6 +294,7 @@ export function createHostedRuntimeAdapter(
     runtime,
     listSessionIds: () => [...observedSessionIds].toSorted(),
     ...(options.clock ? { clock: options.clock } : {}),
+    ...(options.toolTargetRootGrants ? { toolTargetRootGrants: options.toolTargetRootGrants } : {}),
   });
   // Release a session's router ports when its state is cleared, so the registry
   // does not grow unbounded across the adapter's lifetime.

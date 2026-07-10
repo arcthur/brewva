@@ -1,13 +1,15 @@
 import { existsSync } from "node:fs";
-import { cp, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { cp, readdir, readFile } from "node:fs/promises";
+import { join, relative, resolve } from "node:path";
 import { parseArgs as parseNodeArgs } from "node:util";
 import {
   createIsolatedWorkspace,
   type IsolatedWorkspaceHandle,
 } from "@brewva/brewva-gateway/delegation";
 import {
+  absolutizeHarnessDataRoots,
   appendHarnessCandidateLifecycleRecord,
+  buildHarnessCandidatePatch,
   clusterHarnessTraceSnapshots,
   compareHarnessCandidate,
   diffHarnessManifestFields,
@@ -15,6 +17,8 @@ import {
   readHarnessCandidateLifecycleRecords,
   resolveHarnessCandidateMaterialization,
   toHarnessRuntimeFactory,
+  type HarnessAttachedTrialRuntime,
+  type HarnessCandidateExecutionPorts,
   type HarnessCandidateMaterialization,
 } from "@brewva/brewva-gateway/harness";
 import {
@@ -24,6 +28,7 @@ import {
   type HostedRuntimeAdapterPort,
   type HostedSession,
 } from "@brewva/brewva-gateway/hosted";
+import type { CanonicalEvent } from "@brewva/brewva-runtime";
 import {
   createSessionIndex,
   type SessionIndex,
@@ -31,12 +36,16 @@ import {
   type SessionIndexHarnessTraceSnapshot,
 } from "@brewva/brewva-session-index";
 import {
+  buildHarnessEvaluationId,
   buildHarnessManifest,
+  HARNESS_CANDIDATE_ID_PREFIX,
   HARNESS_CANDIDATE_LIFECYCLE_SCHEMA,
+  isHarnessCandidateId,
   stableHarnessId,
   type BuildHarnessManifestInput,
+  type HarnessCandidateDecisionReceipt,
+  type HarnessCandidateEvaluationReceipt,
   type HarnessCandidateLifecycleAction,
-  type HarnessCandidateLifecycleRecord,
   type HarnessComparisonReport,
   type HarnessManifest,
 } from "@brewva/brewva-vocabulary/harness";
@@ -171,6 +180,21 @@ export function runHarnessCandidateVerb(
     );
     return 1;
   }
+  // Decisions apply to candidate patches only. Patrol pattern ids
+  // (`harness_pattern:`), snapshot ids, and free text refuse instead of
+  // minting a decision about something that is not an executable candidate.
+  if (!isHarnessCandidateId(options.candidateId)) {
+    console.error(
+      `Error: '${options.candidateId}' is not a candidate id (expected ${HARNESS_CANDIDATE_ID_PREFIX}<hash>). Patrol patterns are report artifacts — run a compare to mint the candidate this decision is about.`,
+    );
+    return 1;
+  }
+  if (options.candidateAction === "evaluated") {
+    console.error(
+      "Error: 'evaluated' rows are appended by compare runs; the decision verbs are accept | reject | archive.",
+    );
+    return 1;
+  }
   // Candidates span checkouts and time (the ledger is per-workspace, and a
   // compare may have run elsewhere or before the ledger existed), so an
   // unknown id warns instead of refusing: the accountable decision stands,
@@ -183,15 +207,25 @@ export function runHarnessCandidateVerb(
       `Warning: candidate ${options.candidateId} has no ledger records in this workspace (compare may have run in another checkout, or before the ledger existed). Recording the decision anyway — double-check the id against the compare report.`,
     );
   }
-  const record: HarnessCandidateLifecycleRecord = {
+  const record: HarnessCandidateDecisionReceipt = {
     schema: HARNESS_CANDIDATE_LIFECYCLE_SCHEMA,
     candidateId: options.candidateId,
     action: options.candidateAction,
     at: new Date().toISOString(),
-    actor: "operator_cli",
+    actor: "cli_invocation",
     reason: options.reason,
   };
-  appendHarnessCandidateLifecycleRecord(workspaceRoot, record);
+  try {
+    appendHarnessCandidateLifecycleRecord(workspaceRoot, record);
+  } catch (error) {
+    // A decision that could not be durably recorded did not happen: unlike a
+    // compare (whose expensive report already printed), refusing here is
+    // cheap and honest.
+    console.error(
+      `Error: failed to record the decision (${error instanceof Error ? error.message : String(error)}).`,
+    );
+    return 1;
+  }
   if (options.json) {
     console.log(JSON.stringify({ record }, null, 2));
   } else {
@@ -226,7 +260,7 @@ export function formatHarnessCandidatesText(
   return candidates
     .map((candidate) =>
       [
-        `candidate=${candidate.candidateId}`,
+        `pattern=${candidate.patternId}`,
         `kind=${candidate.kind}`,
         `occurrences=${candidate.occurrenceCount}`,
         `severity=${candidate.severity}`,
@@ -249,7 +283,7 @@ export function formatHarnessComparisonText(report: HarnessComparisonReport): st
     `base=${report.baseManifestId}`,
     `candidate=${report.candidateManifestId}`,
     report.metrics.execution
-      ? `executedManifest=${report.metrics.execution.executedManifestId}`
+      ? `executedManifest=${report.metrics.execution.executedManifestId ?? "-"}`
       : "executedManifest=-",
     report.metrics.execution
       ? `workspace=${report.metrics.execution.workspaceMode}`
@@ -425,6 +459,10 @@ async function runHarnessCompare(
     if (options.mode === "manifest") {
       report = compareHarnessCandidate({
         mode: options.mode,
+        candidateId: buildHarnessCandidatePatch({
+          base: baseManifest,
+          candidate: candidateManifest,
+        }).candidateId,
         sourceSessionId: options.sourceSessionId,
         targetSessionId,
         divergeAt: options.divergeAt,
@@ -482,32 +520,67 @@ async function runHarnessCompare(
   } else {
     console.log(formatHarnessComparisonText(report));
   }
-  // Every compare appends an `evaluated` receipt to the workspace candidate
-  // ledger — the shared identity a later accept/reject/archive decision (and
-  // any eval report over the same manifest pair) traces back to. The report
-  // is already printed: a ledger IO failure must not eat a completed (and
-  // possibly expensive) comparison, so it degrades to a warning.
+  return appendHarnessEvaluationReceipt(runtime.identity.workspaceRoot, report);
+}
+
+/**
+ * The comparison ran and its report printed, but the durable evaluation
+ * receipt could not be appended. Distinct from 1 (the compare itself failed)
+ * so scripted callers can retry the receipt without rerunning the compare.
+ */
+export const HARNESS_EXIT_PARTIAL_RECEIPT_FAILURE = 3;
+
+/**
+ * Execution-backed compares (fixture/real) append an evaluation receipt to
+ * the workspace candidate ledger — the evidence-bearing row a later
+ * accept/reject/archive decision traces back to. Manifest-only diffing
+ * executed nothing, so it appends nothing: an `evaluated` row must always
+ * point at a run. The report is already printed when this runs; a ledger IO
+ * failure must not eat a completed (and possibly expensive) comparison, so
+ * the report stands and the exit code reports the partial failure.
+ */
+export function appendHarnessEvaluationReceipt(
+  workspaceRoot: string,
+  report: HarnessComparisonReport,
+): number {
+  if (report.mode === "manifest") {
+    return 0;
+  }
   try {
-    appendHarnessCandidateLifecycleRecord(runtime.identity.workspaceRoot, {
+    const receipt: HarnessCandidateEvaluationReceipt = {
       schema: HARNESS_CANDIDATE_LIFECYCLE_SCHEMA,
       candidateId: report.candidateId,
       action: "evaluated",
       at: new Date().toISOString(),
-      actor: "operator_cli",
+      actor: "cli_invocation",
+      evaluationId: buildHarnessEvaluationId({
+        candidateId: report.candidateId,
+        sourceSessionId: report.sourceSessionId,
+        divergeAt: report.divergeAt,
+        targetSessionId: report.targetSessionId,
+        mode: report.mode,
+      }),
       baseManifestId: report.baseManifestId,
       candidateManifestId: report.candidateManifestId,
       sourceSessionId: report.sourceSessionId,
+      divergeAt: report.divergeAt,
       ...(report.targetSessionId ? { targetSessionId: report.targetSessionId } : {}),
       mode: report.mode,
+      executedManifestId: report.metrics.execution?.executedManifestId ?? null,
+      ...(report.metrics.execution?.trialWorldBasisId
+        ? { trialWorldBasisId: report.metrics.execution.trialWorldBasisId }
+        : {}),
       recommendation: report.promotion.recommendation,
       regressionCount: report.metrics.regressions.length,
-    });
+    };
+    appendHarnessCandidateLifecycleRecord(workspaceRoot, receipt);
   } catch (error) {
     console.error(
       `Warning: failed to append the evaluated receipt to the candidate ledger (${
         error instanceof Error ? error.message : String(error)
       }); the report above is complete, but ${report.candidateId} has no evaluated row.`,
     );
+    return HARNESS_EXIT_PARTIAL_RECEIPT_FAILURE;
   }
   return 0;
 }
@@ -535,92 +608,76 @@ async function runHarnessReplayCompare(input: {
   if (realMode && !input.materialization) {
     throw new Error("harness_real_compare_requires_materialization");
   }
-  const requestedModel = input.materialization?.overrides.model;
-  let hostedSession: HostedSession | undefined;
-  let trialWorld: IsolatedWorkspaceHandle | undefined;
-  try {
-    // Real mode always runs in a disposable copy-on-write fork of the
-    // operator workspace: filesystem tool effects land in the trial world,
-    // never the live cwd, and the basis world id records exactly what the
-    // fork saw. Durable evidence (tape/ledger) stays in the operator store
-    // via the runtime factory's data-root absolutization. NOTE: the fork
-    // copy plus basis capture reads and hashes the whole tracked tree —
-    // large workspaces pay real IO here, and oversized trees fail closed
-    // through the world-store enumeration caps.
-    trialWorld = realMode
-      ? await createIsolatedWorkspace(input.runtime.identity.cwd, "brewva-harness-trial-")
-      : undefined;
-    if (trialWorld) {
-      // Project settings are config, not run data: the fork copy excludes
-      // `.brewva` wholesale, but model presets and routing fallback chains
-      // must resolve in the trial session exactly as they would in this
-      // workspace, or the comparison measures a configuration that exists
-      // nowhere.
-      const settingsDir = join(input.runtime.identity.cwd, ".brewva", "agent");
-      if (existsSync(settingsDir)) {
-        await cp(settingsDir, join(trialWorld.root, ".brewva", "agent"), {
-          recursive: true,
-          force: true,
-        });
-      }
-    }
-    const ports = realMode
-      ? await createRealHarnessExecutionPorts({
-          runtime: input.runtime,
-          options: input.options,
-          targetSessionId: input.targetSessionId,
-          cwd: trialWorld?.root ?? input.options.cwd,
-          model: requestedModel,
-        })
-      : undefined;
-    hostedSession = ports?.session;
-    // A materialized model claim is verified, not assumed: session creation
-    // may silently fall back when the requested model's provider auth is not
-    // connected, which would execute a model the report does not describe.
-    if (requestedModel !== undefined && ports) {
-      const active = ports.ports.activeModelId();
-      if (ports.modelFallbackMessage || active !== requestedModel) {
-        throw new Error(
-          `harness_materialized_model_unavailable: requested '${requestedModel}' but the trial session resolved '${active ?? "-"}'${
-            ports.modelFallbackMessage ? ` (${ports.modelFallbackMessage})` : ""
-          }. Connect the model's provider auth or drop the provider.model delta.`,
-        );
-      }
-    }
-    const report = await executeHarnessCandidateComparison({
-      mode: realMode ? "real" : "fixture",
-      runtime: toHarnessRuntimeFactory(input.runtime, trialWorld ? { cwd: trialWorld.root } : {}),
+  if (!realMode) {
+    return executeHarnessCandidateComparison({
+      mode: "fixture",
+      runtime: toHarnessRuntimeFactory(input.runtime),
       sourceSessionId: input.options.sourceSessionId,
       targetSessionId: input.targetSessionId,
       divergeAt: input.options.divergeAt,
       baseManifest: input.baseManifest,
       candidateManifest: input.candidateManifest,
-      // Fixture mode: the guard rejects loaded manifests, so the candidate
-      // always describes the current runtime. Real mode: the materializer
-      // proved every changed field flows through a seam or is recomputed by
-      // definition (and the API re-derives that proof), so the candidate is
-      // what the fork executes.
-      executedManifestId: input.candidateManifest.manifestId,
-      workspace: trialWorld
-        ? {
-            mode: "trial_world",
-            root: trialWorld.root,
-            basisWorldId: trialWorld.basisWorldId,
-            source: trialWorld.basisSource,
-          }
-        : { mode: "shared_operator_cwd" },
-      ...(input.materialization && input.materialization.materializedFields.length > 0
-        ? { materializedFields: input.materialization.materializedFields }
-        : {}),
+      workspace: { mode: "shared_operator_cwd" },
       sourceEvents,
       changedFields: input.changedFields,
-      ...(ports ? { ports: ports.ports } : {}),
+    });
+  }
+  const requestedModel = input.materialization?.overrides.model;
+  let trial: HarnessTrialRunOwner | undefined;
+  try {
+    // One owner for the whole trial run: the trial world, the trial-rooted
+    // runtime identity (and with it every tool root), the execution ports,
+    // and the single tape writer for the target session all come from
+    // `createHarnessTrialRunOwner` as a unit — there is no seam where a
+    // second runtime or a live-workspace root can slip in.
+    trial = await createHarnessTrialRunOwner({
+      runtime: input.runtime,
+      configPath: input.options.configPath,
+      sourceSessionId: input.options.sourceSessionId,
+      sourceEvents,
+      divergeAt: input.options.divergeAt,
+      targetSessionId: input.targetSessionId,
+      forkTag: `harness:${input.candidateManifest.manifestId}`,
+      model: requestedModel,
+    });
+    // A materialized model claim is verified, not assumed: session creation
+    // may silently fall back when the requested model's provider auth is not
+    // connected, which would execute a model the report does not describe.
+    if (requestedModel !== undefined) {
+      const active = trial.ports.activeModelId();
+      if (trial.modelFallbackMessage || active !== requestedModel) {
+        throw new Error(
+          `harness_materialized_model_unavailable: requested '${requestedModel}' but the trial session resolved '${active ?? "-"}'${
+            trial.modelFallbackMessage ? ` (${trial.modelFallbackMessage})` : ""
+          }. Connect the model's provider auth or drop the provider.model delta.`,
+        );
+      }
+    }
+    const report = await executeHarnessCandidateComparison({
+      mode: "real",
+      runtime: toHarnessRuntimeFactory(input.runtime),
+      attachedRuntime: trial.attachedRuntime,
+      sourceSessionId: input.options.sourceSessionId,
+      targetSessionId: input.targetSessionId,
+      divergeAt: input.options.divergeAt,
+      baseManifest: input.baseManifest,
+      candidateManifest: input.candidateManifest,
+      workspace: {
+        mode: "trial_world",
+        root: trial.world.root,
+        basisWorldId: trial.world.basisWorldId,
+        source: trial.world.basisSource,
+        ...(trial.settingsHash ? { settingsHash: trial.settingsHash } : {}),
+      },
+      sourceEvents,
+      changedFields: input.changedFields,
+      ports: trial.ports,
     });
     // Mid-turn provider fallback can swap models transparently; a report for
     // a run that finished on a different model is not candidate evidence, so
     // refuse to return it rather than label it.
-    if (requestedModel !== undefined && ports) {
-      const active = ports.ports.activeModelId();
+    if (requestedModel !== undefined) {
+      const active = trial.ports.activeModelId();
       if (active !== requestedModel) {
         throw new Error(
           `harness_materialized_model_diverged: the run started on '${requestedModel}' but ended on '${active ?? "-"}' (provider fallback during the turn). The fallback selection is recorded on the target session's tape.`,
@@ -629,40 +686,196 @@ async function runHarnessReplayCompare(input: {
     }
     return report;
   } finally {
-    try {
-      hostedSession?.dispose();
-    } finally {
-      await trialWorld?.dispose();
-    }
+    await trial?.dispose();
   }
 }
 
-async function createRealHarnessExecutionPorts(input: {
-  readonly runtime: HostedRuntimeAdapterPort;
-  readonly options: HarnessCliOptions;
-  readonly targetSessionId: string;
-  readonly cwd?: string;
-  readonly model?: string;
-}): Promise<{
-  readonly session: HostedSession;
+interface HarnessTrialRunOwner {
+  readonly world: IsolatedWorkspaceHandle;
   readonly ports: ReturnType<typeof createHostedHarnessRuntimeExecutionPorts>;
+  readonly attachedRuntime: HarnessAttachedTrialRuntime;
+  readonly settingsHash?: string;
   readonly modelFallbackMessage?: string;
-}> {
-  const result = await createHostedSession({
-    runtime: input.runtime,
-    cwd: input.cwd ?? input.options.cwd,
-    configPath: input.options.configPath,
-    sessionId: input.targetSessionId,
-    ...(input.model !== undefined ? { model: input.model } : {}),
-    deferPersistenceUntilPrompt: true,
-  });
-  return {
-    session: result.session,
-    ports: createHostedHarnessRuntimeExecutionPorts(result.session, {
-      actionAdmissionOverrides: input.runtime.config.security.actionAdmissionOverrides,
-    }),
-    ...(result.modelFallbackMessage ? { modelFallbackMessage: result.modelFallbackMessage } : {}),
+  dispose(): Promise<void>;
+}
+
+/**
+ * Assemble the trial run as ONE owner:
+ *
+ * - The trial world is a disposable copy-on-write fork of the operator
+ *   WORKSPACE root (never the invocation subdirectory). The fork copy plus
+ *   basis capture reads and hashes the whole tracked tree — large workspaces
+ *   pay real IO here, and oversized trees fail closed through the
+ *   world-store enumeration caps.
+ * - The trial adapter is a fresh hosted runtime rooted at the fork: its
+ *   `identity.cwd` and `identity.workspaceRoot` are the trial root, so task
+ *   descriptors and tool allowed roots resolve inside the fork, and
+ *   `toolTargetRootGrants: "descriptor_only"` seals prompt-derived external
+ *   writable roots (replayed prompts routinely cite the operator's real
+ *   workspace). Durable data roots are absolutized to the operator store so
+ *   the fork's tape/ledger evidence survives the world's disposal.
+ * - The trial adapter's physics IS the replay-then-real fork, with provider/
+ *   tool/authority thunks late-bound to the hosted session's ports. The
+ *   hosted session is created over this same adapter, so the target session
+ *   has exactly one tape writer: replayed prefix, provider-manifest
+ *   advisories, and turn/tool events share one commit port.
+ */
+async function createHarnessTrialRunOwner(input: {
+  readonly runtime: HostedRuntimeAdapterPort;
+  readonly configPath?: string;
+  readonly sourceSessionId: string;
+  readonly sourceEvents: readonly CanonicalEvent[];
+  readonly divergeAt: string;
+  readonly targetSessionId: string;
+  readonly forkTag: string;
+  readonly model?: string;
+}): Promise<HarnessTrialRunOwner> {
+  const operatorWorkspaceRoot = input.runtime.identity.workspaceRoot;
+  const world = await createIsolatedWorkspace(operatorWorkspaceRoot, "brewva-harness-trial-");
+  let hostedSession: HostedSession | undefined;
+  let trialAdapter: HostedRuntimeAdapterPort | undefined;
+  const portCell: { ports?: HarnessCandidateExecutionPorts } = {};
+  const requireTrialPorts = (): HarnessCandidateExecutionPorts => {
+    if (!portCell.ports) {
+      throw new Error("harness_trial_ports_unbound");
+    }
+    return portCell.ports;
   };
+  try {
+    // Project settings are config, not run data: the fork copy excludes
+    // `.brewva` wholesale, but model presets and routing fallback chains must
+    // resolve in the trial session exactly as they would in this workspace,
+    // or the comparison measures a configuration that exists nowhere. The
+    // basis id excludes data roots by the same rule, so the copied settings
+    // are fingerprinted separately — from the tree the fork will actually
+    // execute, after the copy — and recorded on the report.
+    let settingsHash: string | undefined;
+    const settingsDir = join(operatorWorkspaceRoot, ".brewva", "agent");
+    if (existsSync(settingsDir)) {
+      const copiedSettingsDir = join(world.root, ".brewva", "agent");
+      await cp(settingsDir, copiedSettingsDir, {
+        recursive: true,
+        force: true,
+      });
+      settingsHash = await hashHarnessTrialSettings(copiedSettingsDir);
+    }
+    trialAdapter = createHostedRuntimeAdapter({
+      cwd: world.root,
+      agentId: input.runtime.identity.agentId,
+      config: absolutizeHarnessDataRoots(input.runtime),
+      toolTargetRootGrants: "descriptor_only",
+      physics: {
+        mode: "replay-then-real",
+        source: {
+          sessionId: input.sourceSessionId,
+          events: input.sourceEvents,
+        },
+        divergeAt: input.divergeAt,
+        target: {
+          sessionId: input.targetSessionId,
+          forkTag: input.forkTag,
+        },
+        provider: {
+          stream: (streamInput) => requireTrialPorts().provider.stream(streamInput),
+        },
+        toolExecutor: {
+          execute: (commitment, executorInput) =>
+            requireTrialPorts().toolExecutor.execute(commitment, executorInput),
+        },
+        resolveToolAuthority: (toolName, args, sessionId) => {
+          const resolver = requireTrialPorts().resolveToolAuthority;
+          if (!resolver) {
+            throw new Error("harness_trial_authority_unbound");
+          }
+          return resolver(toolName, args, sessionId);
+        },
+      },
+    });
+    const session = await createHostedSession({
+      runtime: trialAdapter,
+      cwd: world.root,
+      configPath: input.configPath,
+      sessionId: input.targetSessionId,
+      ...(input.model !== undefined ? { model: input.model } : {}),
+      deferPersistenceUntilPrompt: true,
+      // No delegation inside a trial: a child session would get a FRESH
+      // adapter without this owner's root seal (prompt-mentioned operator
+      // paths would become writable again), and candidate evidence must come
+      // from the harness under test, not from subagents it spawns.
+      enableSubagents: false,
+    });
+    hostedSession = session.session;
+    const ownedAdapter = trialAdapter;
+    const ports = createHostedHarnessRuntimeExecutionPorts(session.session, {
+      actionAdmissionOverrides: ownedAdapter.config.security.actionAdmissionOverrides,
+    });
+    return {
+      world,
+      ports,
+      attachedRuntime: {
+        runtime: ownedAdapter.runtime,
+        bindPorts: (boundPorts) => {
+          portCell.ports = boundPorts;
+        },
+      },
+      ...(settingsHash ? { settingsHash } : {}),
+      ...(session.modelFallbackMessage
+        ? { modelFallbackMessage: session.modelFallbackMessage }
+        : {}),
+      async dispose() {
+        // Close order: the hosted session first (it feeds the runtime's
+        // ports), then the runtime (tape close is idempotent — an unstarted
+        // runtime holds no descriptors), then the disposable world.
+        try {
+          hostedSession?.dispose();
+        } finally {
+          try {
+            await ownedAdapter.runtime.close();
+          } finally {
+            await world.dispose();
+          }
+        }
+      },
+    };
+  } catch (error) {
+    // Same close discipline on the construction error path; each step runs
+    // even when an earlier one throws, and the ORIGINAL error is what
+    // propagates (a cleanup failure must not mask the cause).
+    try {
+      hostedSession?.dispose();
+    } catch {
+      // Session teardown best-effort; the construction error is the story.
+    }
+    try {
+      await trialAdapter?.runtime.close();
+    } catch {
+      // An unstarted runtime's close is normally a no-op; ignore.
+    }
+    try {
+      await world.dispose();
+    } catch {
+      // The OS temp dir reaper collects an undisposed trial world.
+    }
+    throw error;
+  }
+}
+
+/**
+ * Deterministic content fingerprint of the settings tree copied into the
+ * trial world: sorted relative paths mapped to content hashes. Two trial runs
+ * with the same basis world id and the same settings hash executed the same
+ * environment.
+ */
+async function hashHarnessTrialSettings(settingsDir: string): Promise<string> {
+  const files: Record<string, string> = {};
+  const entries = await readdir(settingsDir, { recursive: true, withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const absolute = join(entry.parentPath, entry.name);
+    const relativePath = relative(settingsDir, absolute);
+    files[relativePath] = stableHarnessId("file", await readFile(absolute, "utf8"));
+  }
+  return stableHarnessId("harness_trial_settings", files);
 }
 
 function resolveHarnessCompareTargetSession(options: HarnessCliOptions): string | undefined {
@@ -898,5 +1111,5 @@ Candidate materialization (--candidate-manifest with --mode real):
   every changed field must flow through an execution seam (today: provider.model) or be a hash the run recomputes; anything else refuses with the field named. The base manifest must still describe the current runtime.
 
 Candidate lifecycle:
-  every compare appends an "evaluated" receipt to .brewva/harness/candidates.jsonl under the report's candidateId (stable across compare runs and eval reports over the same base/candidate manifest pair). accept | reject | archive record the operator's decision with a required --reason; the runtime derives no authority from these receipts — promotion stays a human act.`);
+  execution-backed compares (fixture/real) append an "evaluated" receipt to .brewva/harness/candidates.jsonl under the report's candidateId — the hash of the candidate's normalized field delta, so the same edit evaluated against different bases stays one candidate. Manifest-only diffing appends nothing. accept | reject | archive record the operator's decision with a required --reason and refuse non-candidate ids (patrol pattern ids are report artifacts); the runtime derives no authority from these receipts — promotion stays a human act. A compare whose receipt append fails still prints its report and exits 3 (partial failure).`);
 }

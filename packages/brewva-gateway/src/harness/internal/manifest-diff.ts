@@ -38,7 +38,12 @@ function collectChangedManifestFields(
   }
 }
 
-function stableCompareJson(value: unknown): string {
+/**
+ * Canonical JSON for manifest field values: sorted keys, undefined-stripped
+ * records, arrays in order. Shared by the diff and by the executed-delta
+ * verification so "equal" means the same thing on both sides.
+ */
+export function stableCompareJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableCompareJson).join(",")}]`;
   }
@@ -54,4 +59,21 @@ function stableCompareJson(value: unknown): string {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Read one dot-path leaf from a manifest, with the same path grammar the diff
+ * emits. Missing intermediate records and absent leaves both read as
+ * `undefined` — the diff already distinguished "changed" from "equal", so the
+ * reader only needs the target value.
+ */
+export function readManifestFieldValue(manifest: HarnessManifest, field: string): unknown {
+  let current: unknown = manifest;
+  for (const segment of field.split(".")) {
+    if (!isPlainRecord(current)) {
+      return undefined;
+    }
+    current = current[segment];
+  }
+  return current;
 }

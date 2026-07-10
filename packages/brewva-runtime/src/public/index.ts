@@ -4,6 +4,7 @@ export type { DeepReadonly } from "../core/index.js";
 export {
   CANONICAL_EVENT_TYPES,
   createBrewvaRuntime,
+  isForkReplayEventId,
   RUNTIME_RECOVERY_CAUSES,
 } from "../runtime/runtime.js";
 export {

@@ -53,6 +53,7 @@ export function createHostedRuntimeOps(options: {
   readonly runtime: BrewvaRuntime;
   readonly listSessionIds?: () => readonly string[];
   readonly clock?: () => number;
+  readonly toolTargetRootGrants?: "descriptor_only" | "descriptor_and_prompt";
 }): HostedRuntimeOpsPort {
   const ctx = createHostedRuntimeOpsContext(options);
   const ops: HostedRuntimeOpsPort = {

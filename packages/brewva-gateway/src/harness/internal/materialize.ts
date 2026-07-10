@@ -118,6 +118,18 @@ const PROVENANCE_FIELD_PREFIXES = ["refs."] as const;
 
 type HarnessManifestFieldClass = "materializable" | "derived" | "provenance" | "blocked";
 
+/**
+ * True for changed fields that carry no authorable candidate intent: derived
+ * hashes/outcomes the execution recomputes and provenance identifying the
+ * source attempt. The candidate patch (and therefore the candidate id)
+ * excludes exactly these — the classifier stays the single source of that
+ * boundary.
+ */
+export function isHarnessNonEditableManifestField(field: string): boolean {
+  const kind = classifyField(field).kind;
+  return kind === "derived" || kind === "provenance";
+}
+
 function classifyField(field: string): {
   readonly kind: HarnessManifestFieldClass;
   readonly reason?: HarnessBlockedFieldReason;
@@ -175,7 +187,10 @@ export function resolveHarnessCandidateMaterialization(input: {
   // The removal direction has no seam: "execute with no model" is not a
   // materializable intent — the session would fall back to the operator's
   // default selection while the report claimed the candidate's absence.
-  if (materializedFields.includes("provider.model") && model === undefined) {
+  // `== null` deliberately: a loaded JSON candidate can spell the removal as
+  // an explicit `"model": null`, which must refuse the same way as absence
+  // (and must never leak a null into the string-typed override).
+  if (materializedFields.includes("provider.model") && model == null) {
     blockedFields.push({
       field: "provider.model",
       reason: "field_removal_not_materializable",
@@ -192,7 +207,7 @@ export function resolveHarnessCandidateMaterialization(input: {
   }
 
   const overrides: { model?: string } = {};
-  if (materializedFields.includes("provider.model") && model !== undefined) {
+  if (materializedFields.includes("provider.model") && model != null) {
     overrides.model = model;
   }
   return {

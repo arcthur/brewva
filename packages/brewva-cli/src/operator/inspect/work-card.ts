@@ -91,7 +91,6 @@ export function buildTaskWorkCardProjection(report: InspectReport): TaskWorkCard
       consumedRefs: attentionRefs(attention, "consumedRefs"),
       pinnedRefs: attentionRefs(attention, "pinnedRefs"),
       ignoredRefs: attentionRefs(attention, "ignoredRefs"),
-      verifyPlanRefs: attentionRefs(attention, "verifyPlanRefs"),
     },
     authority: {
       selectedCapabilities,
@@ -154,7 +153,7 @@ export function formatTaskWorkCardText(
     `Goal: ${projection.goal.current ?? "n/a"} phase=${projection.goal.phase ?? "n/a"} health=${projection.goal.health ?? "n/a"} refs=${renderList(projection.goal.targetRoots)}`,
     `Goal control: ${projection.persistentGoal?.objective ?? "n/a"} status=${projection.persistentGoal?.status ?? "none"} tokens=${projection.persistentGoal?.tokensUsed ?? 0}${projection.persistentGoal?.tokenBudget === null || projection.persistentGoal?.tokenBudget === undefined ? "" : `/${projection.persistentGoal.tokenBudget}`}`,
     `Context: pressure=${projection.context.pressure} workbench=${projection.context.workbenchEntryCount} skills=${projection.context.skillInvocationRefs.length} recall=${projection.context.recallResultRefs.length} baseline=${projection.context.compactBaselineRef ?? "none"}`,
-    `Options: generated=${projection.options.generatedCount} consumed=${projection.options.consumedRefs.length} pinned=${projection.options.pinnedRefs.length} ignored=${projection.options.ignoredRefs.length} verifyPlans=${projection.options.verifyPlanRefs.length}`,
+    `Options: generated=${projection.options.generatedCount} consumed=${projection.options.consumedRefs.length} pinned=${projection.options.pinnedRefs.length} ignored=${projection.options.ignoredRefs.length}`,
     `Authority: capabilities=${renderList(projection.authority.selectedCapabilities)} pendingAsks=${projection.authority.pendingAskCount} denials=${projection.authority.denialCount} receipts=${renderList(projection.authority.capabilityReceiptRefs)}`,
     `Work: activeRuns=${projection.work.activeRunCount} workerPatches=${projection.work.pendingWorkerPatchCount} knowledge=${projection.work.pendingKnowledgeAdoptionCount} unreadEvidence=${projection.work.unreadEvidenceCount} blockedOrFailed=${projection.work.blockedOrFailedRunCount} nextReceiptOwner=${projection.work.recoveryNextOwner}`,
     `Evidence: outcome=${projection.evidence.verificationOutcome ?? "n/a"} level=${projection.evidence.verificationLevel ?? "n/a"} perspective=${projection.evidence.verificationPerspective} basis=${renderList(projection.evidence.independenceBasis)} failed=${renderList(projection.evidence.failedChecks)} missing=${renderList([...projection.evidence.missingChecks, ...projection.evidence.missingEvidence])} verificationDebt=${projection.evidence.verificationDebtCount} reviewDebt=${projection.evidence.reviewDebt} patch=${projection.evidence.latestPatchSetRef ?? "none"}`,
@@ -208,10 +207,7 @@ function resolveContextPressure(report: InspectReport): TaskWorkCardContextPress
 
 function attentionRefs(
   attention: SessionCompactionAttentionRefs | undefined,
-  key: keyof Pick<
-    SessionCompactionAttentionRefs,
-    "consumedRefs" | "pinnedRefs" | "ignoredRefs" | "verifyPlanRefs"
-  >,
+  key: keyof Pick<SessionCompactionAttentionRefs, "consumedRefs" | "pinnedRefs" | "ignoredRefs">,
 ): readonly string[] {
   return attention?.[key] ?? [];
 }

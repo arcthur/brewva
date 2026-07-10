@@ -432,12 +432,14 @@ function readAttentionOptionRefFromPayload(payload: unknown): string | null {
   );
 }
 
+// Historical `attention.verify_plan` metric events (the action was retired
+// with the `attention_verify_plan` tool) stay readable as raw tape records;
+// they no longer project into a typed field.
 function readAttentionRefsFromEvents(
   events: readonly CompactionProvenanceEvent[],
-): Pick<SessionCompactionAttentionRefs, "consumedRefs" | "ignoredRefs" | "verifyPlanRefs"> {
+): Pick<SessionCompactionAttentionRefs, "consumedRefs" | "ignoredRefs"> {
   const consumedRefs = new Set<string>();
   const ignoredRefs = new Set<string>();
-  const verifyPlanRefs = new Set<string>();
   for (const event of events) {
     if (event.type !== ATTENTION_METRIC_EVENT_TYPE || !isRecord(event.payload)) {
       continue;
@@ -450,14 +452,11 @@ function readAttentionRefsFromEvents(
       consumedRefs.add(optionRef);
     } else if (event.payload.metricKey === "attention.ignore") {
       ignoredRefs.add(optionRef);
-    } else if (event.payload.metricKey === "attention.verify_plan") {
-      verifyPlanRefs.add(optionRef);
     }
   }
   return {
     consumedRefs: [...consumedRefs],
     ignoredRefs: [...ignoredRefs],
-    verifyPlanRefs: [...verifyPlanRefs],
   };
 }
 
@@ -486,7 +485,6 @@ function buildAttentionRefs(input: CompactionProvenanceInput): SessionCompaction
     consumedRefs: eventRefs.consumedRefs,
     pinnedRefs: readAttentionPinnedRefsFromWorkbench(input.workbenchEntries),
     ignoredRefs: eventRefs.ignoredRefs,
-    verifyPlanRefs: eventRefs.verifyPlanRefs,
   };
 }
 

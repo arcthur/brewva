@@ -188,12 +188,15 @@ export interface AttentionOptionProjection extends ProtocolRecord {
 // observations remain readable as raw records.
 export type AttentionOptionActionKind = "consume" | "pin" | "ignore";
 
+// `verifyPlanRefs` was deleted with the `verify_plan` action: a live typed
+// projection for a retired action is compat residue that hands every new
+// session a dead zero-field. Historical `attention.verify_plan` metric events
+// stay readable as raw tape records.
 export interface SessionCompactionAttentionRefs extends ProtocolRecord {
   readonly generationIds: readonly string[];
   readonly consumedRefs: readonly string[];
   readonly pinnedRefs: readonly string[];
   readonly ignoredRefs: readonly string[];
-  readonly verifyPlanRefs: readonly string[];
 }
 
 export const SESSION_COMPACTION_INPUT_PROVENANCE_SCHEMA_V2 =

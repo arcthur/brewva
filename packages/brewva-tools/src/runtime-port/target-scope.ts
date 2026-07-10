@@ -265,6 +265,15 @@ export interface RuntimeArtifactReadRejection {
 interface ToolTargetDescriptor {
   primaryRoot?: string;
   roots?: string[];
+  /**
+   * Root-grant policy for this session's tools. `descriptor_and_prompt`
+   * (default, and the behavior when the field is absent) additionally admits
+   * absolute paths the user mentioned in the latest prompt as writable roots.
+   * `descriptor_only` seals the scope to the descriptor roots — the contract
+   * for trial/replay sessions, whose prompts are REPLAYED text that routinely
+   * cites the operator's real workspace and must never re-grant it.
+   */
+  rootGrants?: "descriptor_only" | "descriptor_and_prompt";
 }
 
 export function resolveToolTargetScope(
@@ -286,9 +295,10 @@ export function resolveToolTargetScope(
     descriptor?.roots && descriptor.roots.length > 0
       ? descriptor.roots.map((root) => resolve(root))
       : [primaryRoot];
-  const promptRoots = resolvePromptMentionTargetRoots(
-    queryLatestTurnPromptText(runtime, sessionId),
-  );
+  const promptRoots =
+    descriptor?.rootGrants === "descriptor_only"
+      ? []
+      : resolvePromptMentionTargetRoots(queryLatestTurnPromptText(runtime, sessionId));
   const coveredDescriptorRoots = uniqueResolvedRoots(descriptorRoots);
   const externalPromptRoots = promptRoots.filter(
     (root) => !isRootCoveredBy(root, coveredDescriptorRoots),

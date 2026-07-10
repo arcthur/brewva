@@ -147,6 +147,17 @@ function forkReplayEventId(sourceEventId: string, targetSessionId: SessionId): s
   return `evt_replay_${encodeURIComponent(targetSessionId)}_${sourceEventId}`;
 }
 
+/**
+ * True for events a replay-then-real fork copied from its source prefix (as
+ * opposed to events the target session's real continuation produced). The id
+ * format is minted by {@link forkReplayEventId}; keeping the predicate beside
+ * the mint lets readers distinguish "replayed history" from "this run's own
+ * record" without re-deriving the encoding.
+ */
+export function isForkReplayEventId(eventId: string, targetSessionId: SessionId): boolean {
+  return eventId.startsWith(`evt_replay_${encodeURIComponent(targetSessionId)}_`);
+}
+
 function remapReplayEventIdReferences(
   value: unknown,
   eventIdMap: ReadonlyMap<string, string>,

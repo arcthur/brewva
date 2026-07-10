@@ -75,13 +75,20 @@ shape (`projection.dir=.orchestrator/projection`,
     appended on enqueue, tombstoned on consume, and the unconsumed survivors replay
     on restart. Next-turn custom messages are transient context and are not persisted.
 - Harness candidate ledger (`preservable receipts`): `.brewva/harness/candidates.jsonl`
-  - workspace-scoped append-only lifecycle receipts for harness candidates:
-    every `brewva harness compare` appends an `evaluated` row under the
-    report's `candidateId`, and `brewva harness candidate accept|reject|archive`
-    records the operator's accountable decision with its reason. Cross-session
-    by design (candidates outlive the sessions that produced them), fsync-durable
-    per append, never read by any authority path — wipe it and you lose the
-    audit trail behind promoted learnings, not any runtime behavior.
+  - workspace-scoped append-only lifecycle receipts for harness candidates,
+    two discriminated entities in one file: execution-backed
+    `brewva harness compare` runs (fixture/real, never manifest-only diffing)
+    append an `evaluated` evaluation receipt (evaluationId + tape-derived
+    executedManifestId + trial-world basis), and
+    `brewva harness candidate accept|reject|archive` records a decision
+    receipt with its required reason. `candidateId` hashes the candidate's
+    normalized field delta, so the same edit stays one candidate across
+    sessions. Cross-session by design (candidates outlive the sessions that
+    produced them), fsync-durable per append behind a writer lock
+    (`candidates.jsonl.lock`, transient — safe to delete when no compare is
+    running) that repairs a crash-torn tail before appending; symlinked paths
+    refuse. Never read by any authority path — wipe it and you lose the audit
+    trail behind promoted learnings, not any runtime behavior.
 - Working projection file (`rebuildable state`): `.orchestrator/projection/sessions/sess_<base64url(sessionId)>/<projection.workingFile>` — read by inspect when present; not currently written by the runtime. Projections are recomputed from tape on demand, with no persisted unit log or cache-state file.
 - These projection files are rebuildable execution helpers. They are not the
   history-view baseline and they are not receipt authority.

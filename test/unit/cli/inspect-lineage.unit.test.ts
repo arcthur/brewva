@@ -213,7 +213,7 @@ describe("cli inspect lineage reporting", () => {
     expect(text).toContain("Context cockpit capabilities: receipts=capability-selection-1");
     expect(text).toContain("Context cockpit recall: results=precedent:docs/solutions/runtime.md");
     expect(text).toContain(
-      "Context cockpit compaction: baseline=compact-1 provenance=brewva.compaction.input-provenance.v2:hiddenRecallSearch=false:attention=0/0/0/0",
+      "Context cockpit compaction: baseline=compact-1 provenance=brewva.compaction.input-provenance.v2:hiddenRecallSearch=false:attention=0/0/0",
     );
     expect(text).toContain("Context cockpit cache: status=warm read=42 write=0");
     expect(compactionText).toContain(

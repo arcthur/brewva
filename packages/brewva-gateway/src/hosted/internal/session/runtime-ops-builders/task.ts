@@ -134,9 +134,15 @@ export function buildTaskRuntimeOps(ctx: HostedRuntimeOpsContext): HostedRuntime
       },
     },
     target: {
+      // The descriptor is the adapter-level containment fact: which roots
+      // this runtime's tools may write, and whether prompt-mentioned external
+      // paths may widen them. A trial/replay adapter passes `descriptor_only`
+      // so replayed prompts citing the operator's real workspace can never
+      // re-grant it.
       getDescriptor: () => ({
         primaryRoot: ctx.runtime.identity.workspaceRoot,
         roots: [ctx.runtime.identity.workspaceRoot],
+        rootGrants: ctx.toolTargetRootGrants,
       }),
     },
     acceptance: {

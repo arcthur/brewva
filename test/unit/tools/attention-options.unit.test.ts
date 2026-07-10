@@ -550,6 +550,36 @@ describe("attention option tools", () => {
     expect(text).toContain('stable_ids: ["tape:other-session:event-9"]');
   });
 
+  test("pinning an unresolvable option fails typed instead of storing a placeholder", async () => {
+    const runtime = createRuntimeFixture();
+    const sessionId = "attention-pin-refusal-session";
+    const pinTool = createAttentionOptionTools({
+      runtime: createBundledToolRuntime(runtime),
+    }).find((tool) => tool.name === "attention_pin");
+    if (!pinTool) {
+      throw new Error("expected_attention_pin_tool_registered");
+    }
+
+    const result = await pinTool.execute(
+      "attention-pin-unknown-option",
+      { option_id: "precedent:docs/solutions/does-not-exist.md", note: "Keep this." },
+      new AbortController().signal,
+      async () => undefined,
+      toolContext(sessionId) as never,
+    );
+
+    // The pin contract stores RESOLVED content. An unresolvable option must
+    // fail the same way attention_consume does — persisting a
+    // `content_unresolved` placeholder while returning ok would manufacture
+    // durable content that does not exist.
+    expect(toolOutcomePayload(result)).toMatchObject({
+      ok: false,
+      error: "content_unavailable",
+      refs: ["docs/solutions/does-not-exist.md"],
+    });
+    expect(runtime.ops.workbench.list(sessionId)).toEqual([]);
+  });
+
   test("options include bounded docs/solutions precedent cards without consuming full content", async () => {
     const runtime = createRuntimeFixture();
     const solutionDir = join(runtime.identity.workspaceRoot, "docs", "solutions");

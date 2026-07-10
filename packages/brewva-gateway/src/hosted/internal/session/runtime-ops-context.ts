@@ -81,6 +81,13 @@ export type HostedRuntimeOpsContext = {
   readonly projections: HostedProjections;
   /** Evaluation clock for display-time projections; never authority-bearing. */
   readonly clock: () => number;
+  /**
+   * Root-grant policy stamped on tool target descriptors. `descriptor_only`
+   * seals tool scope to the runtime's workspace root (trial/replay adapters);
+   * `descriptor_and_prompt` (default) additionally grants prompt-mentioned
+   * external roots.
+   */
+  readonly toolTargetRootGrants: "descriptor_only" | "descriptor_and_prompt";
   readonly emptyCostSummary: SessionCostSummary;
   readonly emptyContextStatus: ContextStatus;
   readonly emptyContextUsage: ContextBudgetUsage;
@@ -207,6 +214,7 @@ export function createHostedRuntimeOpsContext(options: {
   readonly runtime: BrewvaRuntime;
   readonly listSessionIds?: () => readonly string[];
   readonly clock?: () => number;
+  readonly toolTargetRootGrants?: "descriptor_only" | "descriptor_and_prompt";
 }): HostedRuntimeOpsContext {
   const clock = options.clock ?? Date.now;
   const state: HostedRuntimeOpsState = {
@@ -454,6 +462,7 @@ export function createHostedRuntimeOpsContext(options: {
     state,
     projections,
     clock,
+    toolTargetRootGrants: options.toolTargetRootGrants ?? "descriptor_and_prompt",
     emptyCostSummary: EMPTY_COST_SUMMARY,
     emptyContextStatus: EMPTY_CONTEXT_STATUS,
     emptyContextUsage: EMPTY_CONTEXT_USAGE,

@@ -53,7 +53,6 @@ function workCard(): TaskWorkCardProjection {
       consumedRefs: [],
       pinnedRefs: [],
       ignoredRefs: [],
-      verifyPlanRefs: [],
     },
     authority: {
       selectedCapabilities: [],

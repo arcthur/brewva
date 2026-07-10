@@ -12,21 +12,29 @@ import type {
   RuntimeToolExecutorPort,
   TurnFrame,
 } from "@brewva/brewva-runtime";
-import { createBrewvaRuntime } from "@brewva/brewva-runtime";
+import { createBrewvaRuntime, isForkReplayEventId } from "@brewva/brewva-runtime";
 import { createActionPolicyRegistry, resolveToolAuthority } from "@brewva/brewva-runtime/security";
 import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   HARNESS_EVAL_REPORT_SCHEMA,
   HARNESS_TRACE_SNAPSHOT_SCHEMA,
-  buildHarnessCandidateId,
   buildHarnessTraceSnapshotId,
+  readHarnessManifestRecordedAdvisoryEvent,
   type HarnessComparisonReport,
   type HarnessManifest,
   type HarnessTraceSignal,
   type HarnessTraceSnapshot,
 } from "@brewva/brewva-vocabulary/harness";
-import { diffHarnessManifestFields } from "./internal/manifest-diff.js";
-import { resolveHarnessCandidateMaterialization } from "./internal/materialize.js";
+import { buildHarnessCandidatePatch } from "./internal/candidate-patch.js";
+import {
+  diffHarnessManifestFields,
+  readManifestFieldValue,
+  stableCompareJson,
+} from "./internal/manifest-diff.js";
+import {
+  resolveHarnessCandidateMaterialization,
+  type HarnessCandidateMaterialization,
+} from "./internal/materialize.js";
 
 export { clusterHarnessTraceSnapshots } from "@brewva/brewva-vocabulary/harness";
 export {
@@ -34,6 +42,10 @@ export {
   readHarnessCandidateLifecycleRecords,
   resolveHarnessCandidateLedgerPath,
 } from "./internal/candidate-ledger.js";
+export {
+  buildHarnessCandidatePatch,
+  type HarnessCandidatePatch,
+} from "./internal/candidate-patch.js";
 export { diffHarnessManifestFields } from "./internal/manifest-diff.js";
 export {
   resolveHarnessCandidateMaterialization,
@@ -67,6 +79,14 @@ export type BuildPreflightHarnessTraceSnapshotInput = BuildHarnessTraceSnapshotI
 
 export interface CompareHarnessCandidateInput {
   readonly mode?: "manifest" | "fixture" | "real";
+  /**
+   * Candidate identity minted from the normalized editable delta
+   * (`buildHarnessCandidatePatch`). Callers that hold both manifests derive
+   * it there; callers with only ids must carry the id produced by the run
+   * that had them — there is no pair-of-ids fallback, because a session-bound
+   * manifest pair would split one edit into many candidates.
+   */
+  readonly candidateId: string;
   readonly sourceSessionId: string;
   readonly targetSessionId?: string;
   readonly divergeAt: string;
@@ -88,42 +108,50 @@ export interface HarnessRuntimeFactory {
  * keeps replay-fork creation explicit in the harness and lets the hosted adapter
  * drop its general `createRuntime` surface (WS3).
  *
- * `options.cwd` roots the fork somewhere other than the adapter's live
- * working directory — real-mode comparisons pass the trial world here so the
- * fork's path authority never resolves against the operator's workspace.
+ * Fixture comparisons create their fork from this factory. Real comparisons do
+ * NOT — they attach the caller-owned trial runtime (see
+ * `ExecuteHarnessCandidateComparisonInput.attachedRuntime`) so the target
+ * session has exactly one tape writer.
  */
-export function toHarnessRuntimeFactory(
-  adapter: {
-    readonly identity: Pick<BrewvaRuntimeIdentity, "cwd" | "agentId">;
-    readonly config: DeepReadonly<BrewvaConfig>;
-    readonly runtime: Pick<BrewvaRuntime, "tape">;
-  },
-  options: { readonly cwd?: string } = {},
-): HarnessRuntimeFactory {
+export function toHarnessRuntimeFactory(adapter: {
+  readonly identity: Pick<BrewvaRuntimeIdentity, "cwd" | "agentId">;
+  readonly config: DeepReadonly<BrewvaConfig>;
+  readonly runtime: Pick<BrewvaRuntime, "tape">;
+}): HarnessRuntimeFactory {
   return {
     runtime: { tape: adapter.runtime.tape },
-    createRuntime: ({ physics }) => {
-      const config = structuredClone(adapter.config) as BrewvaConfig;
-      if (options.cwd && options.cwd !== adapter.identity.cwd) {
-        // Tool path authority roots at the trial world, but durable evidence
-        // does not move with it: absolutize the runtime data roots against
-        // the operator workspace so the fork's tape/ledger survive the trial
-        // world's disposal, the target session stays auditable, and the
-        // target-emptiness guard inspects the same store the fork writes.
-        const operatorRoot = adapter.identity.cwd;
-        config.tape.dir = resolve(operatorRoot, config.tape.dir);
-        config.ledger.path = resolve(operatorRoot, config.ledger.path);
-        config.projection.dir = resolve(operatorRoot, config.projection.dir);
-        config.worlds.dir = resolve(operatorRoot, config.worlds.dir);
-      }
-      return createBrewvaRuntime({
-        cwd: options.cwd ?? adapter.identity.cwd,
+    createRuntime: ({ physics }) =>
+      createBrewvaRuntime({
+        cwd: adapter.identity.cwd,
         agentId: adapter.identity.agentId,
-        config,
+        config: structuredClone(adapter.config) as BrewvaConfig,
         physics,
-      });
-    },
+      }),
   };
+}
+
+/**
+ * Clone a hosted adapter's config with every durable data root absolutized
+ * against the adapter's WORKSPACE root (config data paths are
+ * workspace-relative by contract — `createRuntimeTape` resolves against
+ * `identity.workspaceRoot`, so anchoring on `cwd` would silently split the
+ * store when the operator runs from a subdirectory). A runtime created over a
+ * trial world with this config keeps its tool-path authority at the trial
+ * root while its tape/ledger/projection/worlds evidence lands in the operator
+ * store — the fork's durable trace survives the trial world's disposal and
+ * the target-emptiness guard inspects the same store the fork writes.
+ */
+export function absolutizeHarnessDataRoots(adapter: {
+  readonly identity: Pick<BrewvaRuntimeIdentity, "workspaceRoot">;
+  readonly config: DeepReadonly<BrewvaConfig>;
+}): BrewvaConfig {
+  const config = structuredClone(adapter.config) as BrewvaConfig;
+  const operatorRoot = adapter.identity.workspaceRoot;
+  config.tape.dir = resolve(operatorRoot, config.tape.dir);
+  config.ledger.path = resolve(operatorRoot, config.ledger.path);
+  config.projection.dir = resolve(operatorRoot, config.projection.dir);
+  config.worlds.dir = resolve(operatorRoot, config.worlds.dir);
+  return config;
 }
 
 export interface HarnessCandidateExecutionPorts {
@@ -141,8 +169,36 @@ export type HarnessExecutionWorkspace =
       readonly basisWorldId: string;
       /** Enumeration backend the basis capture used. */
       readonly source: "git" | "walk";
+      /**
+       * Content hash of the operator settings tree copied into the fork
+       * (`.brewva/agent`). The basis id excludes runtime data roots by
+       * design, so this is the second half of the trial environment's
+       * identity.
+       */
+      readonly settingsHash?: string;
     }
   | { readonly mode: "shared_operator_cwd" };
+
+/**
+ * Real-mode execution substrate: the caller-owned trial runtime. Its physics
+ * already declares the replay-then-real fork, its tape is the ONLY writer for
+ * the target session (the hosted session that supplies the execution ports is
+ * built over this same runtime, so provider-manifest advisories and turn/tool
+ * events share one commit port and one parent chain), and its lifecycle stays
+ * with the caller — the comparison starts it and reads its tape, but closing
+ * it must outlive the hosted session feeding its ports.
+ */
+export interface HarnessAttachedTrialRuntime {
+  readonly runtime: BrewvaRuntime;
+  /**
+   * Bind the execution ports the trial runtime's late-bound physics thunks
+   * will consume. The comparison calls this exactly once, with its
+   * instrumented (execution-probed) view of the caller's ports, before
+   * starting the runtime — so instrumentation cannot be skipped by wiring
+   * ports around the API.
+   */
+  bindPorts(ports: HarnessCandidateExecutionPorts): void;
+}
 
 export interface ExecuteHarnessCandidateComparisonInput {
   readonly mode: "fixture" | "real";
@@ -152,24 +208,18 @@ export interface ExecuteHarnessCandidateComparisonInput {
   readonly baseManifest: HarnessManifest;
   readonly candidateManifest: HarnessManifest;
   /**
-   * Manifest id describing the harness the fork actually executes. A caller
-   * may pass the candidate's id only when materialization proved every
-   * changed field flows through an execution seam or is recomputed by
-   * definition; real mode re-derives that proof internally and records any
-   * unmaterializable field as an execution regression, so a mismatch — or a
-   * skipped proof — can never label a candidate the fork did not run.
-   */
-  readonly executedManifestId: string;
-  /**
    * Where the fork's tool effects land. The trial-world arm couples the
    * containment claim to its evidence: a caller cannot declare `trial_world`
-   * without the fork root and the basis world id it rests on.
+   * without the fork root and the basis world id it rests on. Real mode
+   * refuses anything but `trial_world` — there is no honest real execution
+   * against the operator's live tree.
    */
   readonly workspace: HarnessExecutionWorkspace;
-  /** Candidate fields applied through an execution seam (materialization). */
-  readonly materializedFields?: readonly string[];
   readonly sourceEvents: readonly CanonicalEvent[];
+  /** Fixture-fork creation and operator-store tape reads. */
   readonly runtime: HarnessRuntimeFactory;
+  /** Required in real mode: the single-writer trial runtime. */
+  readonly attachedRuntime?: HarnessAttachedTrialRuntime;
   readonly changedFields?: readonly string[];
   readonly regressions?: readonly string[];
   readonly ports?: HarnessCandidateExecutionPorts;
@@ -258,10 +308,7 @@ export function compareHarnessCandidate(
   return {
     schema: HARNESS_EVAL_REPORT_SCHEMA,
     mode,
-    candidateId: buildHarnessCandidateId({
-      baseManifestId: input.baseManifestId,
-      candidateManifestId: input.candidateManifestId,
-    }),
+    candidateId: input.candidateId,
     sourceSessionId: input.sourceSessionId,
     ...(input.targetSessionId === undefined ? {} : { targetSessionId: input.targetSessionId }),
     divergeAt: input.divergeAt,
@@ -301,61 +348,91 @@ export async function executeHarnessCandidateComparison(
     throw new Error("harness_compare_target_session_must_be_empty");
   }
 
-  const prompt = resolveReplayContinuationPrompt({
-    events: input.sourceEvents,
-    divergeAt: input.divergeAt,
+  const candidatePatch = buildHarnessCandidatePatch({
+    base: input.baseManifest,
+    candidate: input.candidateManifest,
   });
   const regressions = [...(input.regressions ?? [])];
-  if (input.executedManifestId !== input.candidateManifest.manifestId) {
-    regressions.push(
-      `execution_candidate_delta_not_executed:${input.candidateManifest.manifestId}`,
-    );
-  }
   // Real mode re-derives the materialization proof from the manifests
-  // themselves (not the caller's changedFields): any changed field without an
-  // execution seam is an execution regression, so the enforcement holds for
-  // every caller, not just the CLI's pre-check.
+  // themselves (not the caller's changedFields) and refuses BEFORE any
+  // runtime or port exists: a blocked candidate must produce zero provider
+  // and tool calls, not a red label on a run that already had side effects.
+  // The enforcement therefore holds for every caller, not just the CLI's
+  // pre-check.
+  let materialization: HarnessCandidateMaterialization | undefined;
   if (input.mode === "real") {
+    if (input.workspace.mode !== "trial_world") {
+      throw new Error("harness_real_compare_requires_trial_world");
+    }
+    if (!input.attachedRuntime) {
+      throw new Error("harness_real_compare_requires_attached_runtime");
+    }
     const enforcement = resolveHarnessCandidateMaterialization({
       base: input.baseManifest,
       candidate: input.candidateManifest,
       changedFields: diffHarnessManifestFields(input.baseManifest, input.candidateManifest),
     });
     if (!enforcement.ok) {
-      for (const blocked of enforcement.blockedFields) {
-        regressions.push(`execution_candidate_field_not_materializable:${blocked.field}`);
-      }
+      throw new Error(
+        `harness_candidate_not_materializable:${enforcement.blockedFields
+          .map((blocked) => `${blocked.field}(${blocked.reason})`)
+          .join(",")}`,
+      );
     }
+    materialization = enforcement;
   }
+
+  const prompt = resolveReplayContinuationPrompt({
+    events: input.sourceEvents,
+    divergeAt: input.divergeAt,
+  });
   const ports = wrapProviderExecutionProbe(
     input.mode === "fixture"
       ? createFixtureHarnessExecutionPorts()
       : requireRealExecutionPorts(input),
   );
-  const runtime = input.runtime.createRuntime({
-    physics: {
-      mode: "replay-then-real",
-      source: {
-        sessionId: input.sourceSessionId,
-        events: input.sourceEvents,
+  let runtime: BrewvaRuntime;
+  let ownsRuntime: boolean;
+  if (input.mode === "real" && input.attachedRuntime) {
+    // Single-writer coupling: the trial runtime's physics thunks resolve to
+    // exactly the probed ports bound here, and every event of the target
+    // session — replayed prefix, provider-manifest advisory, turn and tool
+    // commits — flows through this one runtime's commit port.
+    input.attachedRuntime.bindPorts(ports);
+    runtime = input.attachedRuntime.runtime;
+    ownsRuntime = false;
+  } else {
+    runtime = input.runtime.createRuntime({
+      physics: {
+        mode: "replay-then-real",
+        source: {
+          sessionId: input.sourceSessionId,
+          events: input.sourceEvents,
+        },
+        divergeAt: input.divergeAt,
+        target: {
+          sessionId: input.targetSessionId,
+          forkTag: `harness:${input.candidateManifest.manifestId}`,
+        },
+        provider: ports.provider,
+        toolExecutor: ports.toolExecutor,
+        ...(ports.resolveToolAuthority ? { resolveToolAuthority: ports.resolveToolAuthority } : {}),
       },
-      divergeAt: input.divergeAt,
-      target: {
-        sessionId: input.targetSessionId,
-        forkTag: `harness:${input.candidateManifest.manifestId}`,
-      },
-      provider: ports.provider,
-      toolExecutor: ports.toolExecutor,
-      ...(ports.resolveToolAuthority ? { resolveToolAuthority: ports.resolveToolAuthority } : {}),
-    },
-  });
+    });
+    ownsRuntime = true;
+  }
   const counters = createExecutionFrameCounters();
   const startedAt = Date.now();
-  // The harness owns the forked replay runtime it created above, so it must
-  // close it. The outer caller only closes the adapter's own runtime. `close()`
-  // runs exactly once in `finally` across success, start failure, and turn
-  // failure; the report reads `runtime.tape` before the close fires.
+  // The harness owns a fixture fork it created above and must close it; an
+  // attached trial runtime belongs to the caller, whose close must outlive
+  // the hosted session feeding the ports. Either way the report reads
+  // `runtime.tape` before this function returns.
   try {
+    // NOTE: no post-start emptiness re-check — replay-then-real physics seeds
+    // the target fork into the runtime's tape at CREATION (initialEvents), so
+    // the pre-start read of the operator store above is the emptiness
+    // authority; the fork's own tape is never empty by the time it is
+    // observable here.
     await runtime.start();
     try {
       for await (const frame of runtime.turn({
@@ -368,8 +445,29 @@ export async function executeHarnessCandidateComparison(
       regressions.push(`execution_error:${classifyExecutionError(error)}`);
     }
 
+    const targetEvents = runtime.tape.list(input.targetSessionId);
+    // Execution honesty is read back from the target tape, never asserted:
+    // the manifest the trial's provider pipeline recorded is the executed
+    // identity, and every materialized delta field must verify against it.
+    const executedManifest = latestRecordedHarnessManifest(targetEvents, input.targetSessionId);
+    const deltaVerifiedFields: string[] = [];
+    if (input.mode === "real") {
+      for (const field of materialization?.materializedFields ?? []) {
+        const claimed = candidatePatch.delta.find((entry) => entry.field === field)?.to ?? null;
+        const executed = executedManifest
+          ? (readManifestFieldValue(executedManifest, field) ?? null)
+          : null;
+        if (executedManifest && jsonEquals(claimed, executed)) {
+          deltaVerifiedFields.push(field);
+        } else {
+          regressions.push(`execution_candidate_delta_not_executed:${field}`);
+        }
+      }
+    }
+
     return compareHarnessCandidate({
       mode: input.mode,
+      candidateId: candidatePatch.candidateId,
       sourceSessionId: input.sourceSessionId,
       targetSessionId: input.targetSessionId,
       divergeAt: input.divergeAt,
@@ -378,17 +476,23 @@ export async function executeHarnessCandidateComparison(
       changedFields: input.changedFields,
       regressions,
       execution: {
-        executedManifestId: input.executedManifestId,
+        executedManifestId: executedManifest?.manifestId ?? null,
+        ...(deltaVerifiedFields.length > 0 ? { deltaVerifiedFields } : {}),
         workspaceMode: input.workspace.mode,
-        ...(input.materializedFields ? { materializedFields: input.materializedFields } : {}),
+        ...(materialization && materialization.materializedFields.length > 0
+          ? { materializedFields: materialization.materializedFields }
+          : {}),
         ...(input.workspace.mode === "trial_world"
           ? {
               trialWorldBasisId: input.workspace.basisWorldId,
               trialWorldSource: input.workspace.source,
+              ...(input.workspace.settingsHash
+                ? { trialSettingsHash: input.workspace.settingsHash }
+                : {}),
             }
           : {}),
         replayEventCount: replayEventCountThroughDivergence(input.sourceEvents, input.divergeAt),
-        targetEventCount: runtime.tape.list(input.targetSessionId).length,
+        targetEventCount: targetEvents.length,
         frameCount: counters.frameCount,
         runtimeEventFrameCount: counters.runtimeEventFrameCount,
         textFrameCount: counters.textFrameCount,
@@ -403,8 +507,46 @@ export async function executeHarnessCandidateComparison(
       },
     });
   } finally {
-    await runtime.close();
+    if (ownsRuntime) {
+      await runtime.close();
+    }
   }
+}
+
+/**
+ * The manifest advisory the trial's provider pipeline recorded for the LAST
+ * attempt of the continuation turn — the executed harness identity. Absent
+ * when the run never dispatched a provider payload (fixture pipelines and
+ * failed-before-dispatch runs record none). The target tape also carries the
+ * REPLAYED source prefix (which routinely contains the source session's own
+ * manifest advisories); those are history, not this run's record, so events
+ * the fork copied (`isForkReplayEventId`) are skipped — otherwise a run that
+ * never dispatched would claim the source's manifest as executed. A malformed
+ * advisory (schema drift, hand-edited tape) is skipped, never fatal: the
+ * comparison already ran, and an unreadable advisory means "nothing recorded",
+ * not "throw away the report".
+ */
+function latestRecordedHarnessManifest(
+  events: readonly CanonicalEvent[],
+  targetSessionId: string,
+): HarnessManifest | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event || isForkReplayEventId(event.id, targetSessionId)) continue;
+    try {
+      const manifest = readHarnessManifestRecordedAdvisoryEvent(event);
+      if (manifest) {
+        return manifest;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
+}
+
+function jsonEquals(left: unknown, right: unknown): boolean {
+  return stableCompareJson(left) === stableCompareJson(right);
 }
 
 function sideEffectPolicyForMode(

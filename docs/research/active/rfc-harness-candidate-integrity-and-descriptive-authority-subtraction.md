@@ -3,8 +3,10 @@
 ## Metadata
 
 - Status: active
-- Implementation state: ALL PHASES (P1-P6) landed on the working branch, each
-  with a post-review evolution note. P1 (D1): coarse registry-version comparison was
+- Implementation state: ALL PHASES (P1-P6) landed on the working branch AND
+  corrected by a second deep review (see "Deep-review correction round" below;
+  the first landing's enforcement had real holes — the phase notes below
+  describe the corrected state). P1 (D1): coarse registry-version comparison was
   replaced by per-entry `manifestHash` revalidation (authorization requires a
   matching content hash; carry revalidates every entry against the current
   registry and policy each carried turn), the prompt block now renders
@@ -19,19 +21,23 @@
   evidence block still renders for the rest of the session once armed —
   decay is an open product call. P3 (D3 phase A): the CLI flag is spelled
   `--candidate-manifest`; replay modes reject loaded manifests with
-  `harness_candidate_delta_not_materialized`, `executedManifestId` is a
-  REQUIRED field of every execution block, and the API pushes an
-  `execution_candidate_delta_not_executed` regression (recommendation
-  `reject`) whenever a report's executed manifest differs from its
-  candidate. P4 (D4): `attention_verify_plan` is deleted (tool, kernel
+  `harness_candidate_delta_not_materialized`. Corrected in the deep-review
+  round: `executedManifestId` is no longer a caller assertion — the API reads
+  the manifest the target tape actually recorded (nullable; fixture pipelines
+  record none) and verifies every materialized delta field against it
+  (`deltaVerifiedFields`), pushing an
+  `execution_candidate_delta_not_executed:<field>` regression (recommendation
+  `reject`) per unverified field. P4 (D4): `attention_verify_plan` is deleted (tool, kernel
   admission entry, action-kind union member, docs); consume resolves
   `precedent:` ids to the knowledge document body and refuses
   non-materializable ids (for example `tape:` recall hits) with a typed
   `content_unavailable` error that names the `recall_search` stable-id path —
   reusing the existing deep-read tool instead of duplicating broker wiring
   was the landed refinement of D4's rootRef-resolution sketch; pin stores
-  the resolved content with the workbench entry; ignore suppresses the
-  option from later card sets for the session. P5 (D3 phase B): landed with
+  the resolved content with the workbench entry and (corrected) fails with
+  the same typed errors as consume when the content cannot be resolved,
+  instead of persisting a placeholder under an ok result; ignore suppresses
+  the option from later card sets for the session. P5 (D3 phase B): landed with
   substantial review-driven evolution. The trial world reuses
   `createIsolatedWorkspace` (the delegation fork substrate: CoW copy,
   git-scoped enumeration, basis world capture, atomic dispose) rather than a
@@ -53,12 +59,25 @@
   (creation-time fallback: `harness_materialized_model_unavailable`) and
   after it (mid-turn provider fallback:
   `harness_materialized_model_diverged`; the fallback selection also lands
-  durably on the target session's tape). The fork's durable evidence does
-  not die with the trial world: `toHarnessRuntimeFactory` absolutizes the
-  runtime data roots (tape/ledger/projection/worlds) against the operator
-  workspace, so the target session stays auditable and the target-emptiness
-  guard inspects the store the fork writes, while tool path authority roots
-  at the trial world. Project settings (`.brewva/agent`) are copied into the
+  durably on the target session's tape). Corrected in the deep-review round
+  into a single TrialRunOwner: the CLI builds ONE trial adapter whose
+  identity (cwd AND workspace root, hence task descriptor roots and tool
+  allowed roots) is the fork, whose descriptor seals prompt-derived external
+  writable roots (`rootGrants: "descriptor_only"` — replayed prompts cite the
+  operator's real workspace and must never re-grant it), whose config data
+  roots are absolutized against the operator WORKSPACE root
+  (`absolutizeHarnessDataRoots`; the first landing anchored on `identity.cwd`
+  and reused the operator runtime for the hosted session, which left task
+  roots on the live workspace and two tape writers on the target session),
+  and whose physics IS the replay-then-real fork with late-bound port thunks
+  — the hosted session that supplies provider/tool/authority ports is built
+  over this same adapter, so the target session has exactly one tape writer
+  and the provider-manifest advisory lands on the same parent chain the turn
+  events do. The fork source is the workspace root (not the invocation
+  subdirectory), an unmaterializable candidate now throws before any port or
+  runtime exists (zero provider/tool calls), and the copied settings tree is
+  fingerprinted (`trialSettingsHash`) since the basis id excludes data roots
+  by design. Project settings (`.brewva/agent`) are copied into the
   fork (config, not run data) so model presets and routing chains resolve as
   they would in the workspace. Known cost, documented in `--help`: the fork
   copy plus basis capture reads and hashes the tracked tree; linked-worktree
@@ -68,20 +87,30 @@
   artifacts (created against one session's base, evaluated in another,
   decided later with no session at all), and session tapes are deliberately
   single-writer, so the receipts live in a workspace-scoped append-only
-  sidecar — `.brewva/harness/candidates.jsonl`, fsync-durable per append
-  (`appendFileDurable`), read through the substrate's shared torn-tail
-  boundary (`scanAppendOnly`), registered in
+  sidecar — `.brewva/harness/candidates.jsonl`, registered in
   `docs/reference/artifacts-and-paths.md` as preservable receipts. And
   `created` is subsumed by the first `evaluated` row (there is no authoring
-  touchpoint that could mint it earlier). `candidateId` is the stable hash
-  of the (base, candidate) manifest-id pair, minted by
-  `compareHarnessCandidate` into every report — eval A/B reports inherit it
-  through the same factory — and printed by the CLI text format. `brewva
-harness candidate accept|reject|archive --candidate <id> --reason <text>`
-  appends the accountable decision (unknown ids warn but still record: the
-  ledger is per-workspace while candidates span checkouts); no code path
-  reads the ledger for authority. The surface budget correction: +0 event
-  types, +1 durable sidecar format, +3 CLI verbs as promised. The exit
+  touchpoint that could mint it earlier). Corrected in the deep-review round
+  into three discriminated entities instead of one loose record: a
+  CandidatePatch (`buildHarnessCandidatePatch` — the normalized editable
+  delta; `candidateId` hashes exactly that, so the same edit against held-in
+  and held-out bases is one candidate, where the first landing's
+  manifest-pair hash split it per session), an evaluation receipt (appended
+  only by execution-backed fixture/real compares — manifest-only diffing
+  appends nothing — carrying `evaluationId`, the tape-derived
+  `executedManifestId`, and the trial-world basis), and a decision receipt
+  (`brewva harness candidate accept|reject|archive --candidate <id> --reason
+<text>`; refuses non-candidate ids — patrol patterns are `patternId` now —
+  while well-formed unknown ids warn but still record: the ledger is
+  per-workspace while candidates span checkouts). The recorded actor is
+  `cli_invocation` (factual provenance, not a trust claim). Writer
+  discipline: appends run inside an exclusive lock that repairs a crash-torn
+  tail first (a torn fragment would otherwise eat the next record), are
+  fsync-durable with O_NOFOLLOW after symlink/realpath containment checks,
+  and a compare whose receipt append fails exits `3` (report printed,
+  receipt retryable). No code path reads the ledger for authority. The
+  surface budget correction: +0 event types, +1 durable sidecar format
+  (plus its transient `.lock`), +3 CLI verbs as promised. The exit
   criterion holds against the ledger: one candidateId traces from its first
   evaluated row through the operator's decision receipt.
 - Owner: Gateway, tools, and CLI maintainers
@@ -706,9 +735,96 @@ Settled at landing time (P1-P4):
 - P2: `gateArmed` keeps its event name for tape continuity; the evidence
   block's decay (it renders for the rest of the session once armed) stays an
   open product call, recorded in the implementation-state note.
-- P3: `executedManifestId` landed as a REQUIRED field of the (optional)
-  execution block with no schema version bump; the only producer and all
-  fixtures were updated in the same change, and no persisted reader exists.
+- P3: `executedManifestId` first landed as a REQUIRED caller-supplied field;
+  the deep-review round replaced it with the tape-derived nullable form (see
+  the correction round below). No schema version bump either time — the only
+  producer and all fixtures moved in the same change, and no persisted reader
+  exists.
+
+## Deep-Review Correction Round (2026-07-10)
+
+A second line-level review of the landed branch found the first landing's
+enforcement leaked in fourteen places. All are fixed on the same branch; the
+implementation-state notes above describe the corrected semantics. The list,
+by severity:
+
+- P0-1 (trial-run ownership): real compare created the hosted session over
+  the OPERATOR runtime with only `cwd` swapped — task descriptor roots and
+  tool allowed roots stayed on the live workspace, and prompt-mentioned
+  absolute paths (replayed prompts always cite the operator workspace) minted
+  external writable roots. Fixed by the TrialRunOwner assembly: a dedicated
+  trial adapter rooted at the fork with `rootGrants: "descriptor_only"`
+  sealing prompt-derived grants (`resolveToolTargetScope` honors the
+  descriptor field).
+- P0-2 (two target tape writers): the hosted session recorded the
+  provider-manifest advisory through the operator adapter's tape while the
+  replay runtime wrote turn/tool events through its own — two in-memory
+  leaves, forked parent chains. Fixed by making the trial adapter's physics
+  BE the replay-then-real fork (late-bound port thunks); one runtime, one
+  commit port, one chain. `executeHarnessCandidateComparison` now requires
+  the attached runtime in real mode and never creates a second one.
+- P1-1 (descriptive policy authority): `policyDefaultMatchesIntent` fell back
+  to manifest description tokens, minting `source: "policy"` from
+  `whenToUse` text. The fallback is deleted; policy binds only through the
+  structured default key (axiom 18).
+- P1-2 (orphaned carried grants): carry revalidation now drops a
+  policy-sourced entry whose default rule was deleted or remapped
+  (`policy_default_removed`).
+- P1-3 (executed-manifest honesty): caller-writable `executedManifestId`
+  deleted; the API reads the manifest the target tape recorded and verifies
+  each materialized delta field against it (`deltaVerifiedFields` /
+  `execution_candidate_delta_not_executed:<field>`).
+- P1-4 (blocked-candidate side effects): materialization refusal now throws
+  before any port or runtime exists — zero provider/tool calls, verified by
+  test.
+- P1-5 (basis/inputs drift): the fork sources from the WORKSPACE root, data
+  roots absolutize against `identity.workspaceRoot` (tape-dir resolution
+  contract), and the copied settings tree is fingerprinted
+  (`trialSettingsHash`) since basis capture excludes data roots by design.
+- P1-6 (ledger torn-tail/exit): appends run in a writer lock that repairs a
+  torn tail first; a compare whose receipt append fails exits `3`; a decision
+  that cannot append fails closed with exit `1`.
+- P1-7 (candidate entity): candidateId now hashes the normalized editable
+  delta (CandidatePatch), evaluation receipts bind scenario evidence
+  (`evaluationId`, executed manifest, world basis) and exist only for
+  execution-backed compares, decisions are their own receipt shape, and
+  patrol patterns renamed to `patternId` with verbs refusing non-candidate
+  ids.
+- P1-8 (ledger containment): symlink components refuse, the parent realpath
+  must stay inside the workspace realpath, and the file opens O_NOFOLLOW
+  with owner-only mode.
+- P2-1: `attention_pin` fails typed (`unknown_option` /
+  `content_unavailable`) instead of persisting a `content_unresolved`
+  placeholder under `ok: true`.
+- P2-2: the dead `verifyPlanRefs` projection field is deleted end to end
+  (vocabulary, compaction provenance, work card, cockpit renderers);
+  historical `attention.verify_plan` events stay readable as raw records.
+- P2-3: ledger actor renamed `operator_cli` → `cli_invocation` — factual
+  provenance, not a trust claim.
+- P2-4: this section replaces the premature unqualified "all landed" claim.
+
+A third adversarial pass over the correction round itself caught and fixed
+three more leaks before merge: (1) the executed-manifest read-back scanned the
+whole target tape, so a run that never dispatched could claim a manifest from
+the REPLAYED source prefix as its own — the scanner now skips fork-replayed
+events (`isForkReplayEventId`, the predicate exported beside the id mint) and
+degrades malformed advisories to "nothing recorded" instead of throwing away
+a finished report; (2) the root seal did not survive delegation (a child
+session builds a fresh adapter with default grants), so trial sessions now
+run with `enableSubagents: false` — candidate evidence must come from the
+harness under test anyway; (3) the ledger's stale-lock break was a stat→rm
+TOCTOU that could elect two writers (whose lock-scoped truncate could then
+destroy the other's fsync'd receipt) — breaking now renames the stale lock to
+a unique name so exactly one breaker wins. Smaller: the ledger regained the
+parent-directory fsync on first create; the model-removal guard covers an
+explicit JSON `null`; the settings fingerprint hashes the tree actually
+copied into the fork. Settled by decision, not bugs: pre-release ledger rows
+written with `actor: "operator_cli"` (only ever minted on this unmerged
+branch) do not migrate — the guard skips them; and an empty delta is "the
+null patch", one candidate by definition — all no-edit baseline compares
+deliberately share its id, since everything that differs between them is
+derived or provenance and belongs to evaluation receipts, not candidate
+identity.
 
 Open for the P5 design review (proposed resolutions, to be confirmed before
 build):

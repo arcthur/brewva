@@ -108,6 +108,11 @@ export class RuntimeExecutor implements SkillExecutor {
         : {};
       const report = compareHarnessCandidate({
         mode: "manifest",
+        // The candidate id is the normalized-delta hash minted where the
+        // manifests exist (compare CLI / buildHarnessCandidatePatch); an
+        // id-only scenario must carry it, because a pair-of-ids fallback
+        // would split one edit into per-session candidates.
+        candidateId: readRequiredArtifactString(artifacts, "candidateId", scenario.id),
         sourceSessionId: readRequiredArtifactString(artifacts, "sourceSessionId", scenario.id),
         targetSessionId: readOptionalArtifactString(artifacts, "targetSessionId"),
         divergeAt: readRequiredArtifactString(artifacts, "divergeAt", scenario.id),

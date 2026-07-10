@@ -44,20 +44,29 @@ pair; the target must be empty, so repeated runs should pass an explicit fresh
 
 `real` mode uses hosted provider/tool/authority ports, requires a target
 session, and refuses to run against the source session. It always executes in
-a disposable copy-on-write fork of the workspace (a trial world): filesystem
-tool effects land in the fork while the fork's durable tape/ledger evidence
-stays in the operator store under the target session. Forking copies and
-hashes the tracked tree — large workspaces pay real IO, oversized trees fail
-closed — and forks from a linked git worktree are git-less (reported as
-`trialWorldSource: "walk"`). A loaded `--candidate-manifest` is admitted only
-through materialization: every changed field must flow through an execution
-seam (today exactly `provider.model`, applied as the trial session's model and
-verified before and after the run) or be a hash the run recomputes; anything
-else — including removing the model — refuses with the blocked fields named,
-and the base manifest must still describe the current runtime. The report's
-`executedManifestId` must equal its `candidateManifestId` for the report to be
-candidate evidence; any mismatch or unmaterializable field is recorded as a
-rejecting regression.
+a disposable copy-on-write fork of the workspace (a trial world) under a
+single trial-run owner: one trial-rooted runtime whose identity (cwd,
+workspace root, task descriptor roots, tool allowed roots) is the fork, whose
+prompt-derived external writable roots are sealed (`descriptor_only` — a
+replayed prompt citing the operator's real workspace cannot re-grant it), and
+whose tape is the only writer for the target session. Filesystem tool effects
+land in the fork while the fork's durable tape/ledger evidence stays in the
+operator store under the target session; the operator settings tree copied
+into the fork (`.brewva/agent`) is fingerprinted as `trialSettingsHash`.
+Forking copies and hashes the tracked tree — large workspaces pay real IO,
+oversized trees fail closed — and forks from a linked git worktree are
+git-less (reported as `trialWorldSource: "walk"`). A loaded
+`--candidate-manifest` is admitted only through materialization: every changed
+field must flow through an execution seam (today exactly `provider.model`,
+applied as the trial session's model and verified before and after the run) or
+be a hash the run recomputes; anything else — including removing the model —
+refuses with the blocked fields named before any provider or tool call, and
+the base manifest must still describe the current runtime. Execution honesty
+is read back, never asserted: the report's `executedManifestId` is the
+manifest the target tape actually recorded (null when the run recorded none),
+and every materialized delta field is verified against it
+(`deltaVerifiedFields`); a mismatch is recorded as a rejecting
+`execution_candidate_delta_not_executed:<field>` regression.
 
 Replay-backed compare modes choose a continuation prompt from the first source
 turn after the divergence event, then the divergence turn itself, then a
@@ -74,14 +83,26 @@ silently using the wrong base manifest.
 brewva harness candidate accept|reject|archive --candidate <candidateId> --reason <text> [--json]
 ```
 
-Every compare report mints a stable `candidateId` from its (base, candidate)
-manifest-id pair and appends an `evaluated` receipt to the workspace candidate
-ledger (`.brewva/harness/candidates.jsonl`, see
-`docs/reference/artifacts-and-paths.md`). The lifecycle verbs record the
-operator's accountable decision with a required reason; an id the local ledger
-has never seen warns but still records, since candidates span checkouts. No
-runtime path reads the ledger for authority — promotion remains explicit
-governance.
+Every compare report mints a stable `candidateId` by hashing the candidate's
+normalized field delta — the sorted (field, target value) edits, with
+derived/provenance fields stripped — so the same edit evaluated against
+different base sessions (held-in and held-out) stays ONE candidate.
+Execution-backed compares (fixture/real) append an `evaluated` evaluation
+receipt to the workspace candidate ledger (`.brewva/harness/candidates.jsonl`,
+see `docs/reference/artifacts-and-paths.md`) binding the run's evidence:
+`evaluationId` (candidate × source × divergence × target × mode), the
+tape-derived `executedManifestId`, and the trial-world basis. Manifest-only
+diffing appends nothing — an `evaluated` row always points at a run. A compare
+whose receipt append fails still prints its report and exits `3` (partial
+failure), so the receipt can be retried without re-running the compare.
+
+The lifecycle verbs record a decision receipt with a required reason. They
+refuse ids that are not candidate ids — a patrol `patternId` is a report
+artifact, not a decidable candidate — while a well-formed id the local ledger
+has never seen warns but still records, since candidates span checkouts. The
+recorded `actor` is `cli_invocation`: factual provenance of the door the
+record came through, not a trust claim. No runtime path reads the ledger for
+authority — promotion remains explicit governance.
 
 ## Related Docs
 

@@ -165,34 +165,61 @@ export const HARNESS_CANDIDATE_LIFECYCLE_ACTIONS = [
 export type HarnessCandidateLifecycleAction = (typeof HARNESS_CANDIDATE_LIFECYCLE_ACTIONS)[number];
 
 /**
- * One append-only lifecycle receipt for a harness candidate. `evaluated`
- * records are appended by compare runs and carry the report's key facts;
- * `accepted`/`rejected`/`archived` are accountable operator decisions
- * (`brewva harness candidate <verb>`) and carry the operator's reason. The
- * runtime holds no promotion authority: these records are the audit trail of
- * human decisions, never an input to any gate.
+ * Two discriminated ledger entities share the candidate lifecycle sidecar:
+ *
+ * - {@link HarnessCandidateEvaluationReceipt} (`action: "evaluated"`) is
+ *   appended by execution-backed compare runs (fixture/real, never
+ *   manifest-only diffing) and points at its durable evidence: the target
+ *   session tape (`targetSessionId` + `divergeAt`), the trial-world basis,
+ *   and the manifest the run actually recorded (`executedManifestId`).
+ * - {@link HarnessCandidateDecisionReceipt} (`accepted`/`rejected`/
+ *   `archived`) records an accountable human decision with a required reason.
+ *
+ * `actor` is factual provenance, not trust: `cli_invocation` says which door
+ * the record came through, not who stood behind it — anything able to run the
+ * CLI can append. The runtime holds no promotion authority: these records are
+ * an audit trail, never an input to any gate.
  */
-export interface HarnessCandidateLifecycleRecord {
+export interface HarnessCandidateEvaluationReceipt {
   readonly schema: typeof HARNESS_CANDIDATE_LIFECYCLE_SCHEMA;
   readonly candidateId: string;
-  readonly action: HarnessCandidateLifecycleAction;
+  readonly action: "evaluated";
   readonly at: string;
-  readonly actor: "operator_cli";
-  readonly baseManifestId?: string;
-  readonly candidateManifestId?: string;
-  readonly sourceSessionId?: string;
+  readonly actor: "cli_invocation";
+  /** Binds this evaluation to its scenario: candidate × source × divergence × target × mode. */
+  readonly evaluationId: string;
+  readonly baseManifestId: string;
+  readonly candidateManifestId: string;
+  readonly sourceSessionId: string;
+  readonly divergeAt: string;
   readonly targetSessionId?: string;
-  readonly mode?: HarnessComparisonReport["mode"];
-  readonly recommendation?: HarnessComparisonReport["promotion"]["recommendation"];
-  readonly regressionCount?: number;
-  readonly reason?: string;
+  readonly mode: "fixture" | "real";
+  /** Manifest id the target tape recorded for the executed attempt; null when the run recorded none (fixture). */
+  readonly executedManifestId: string | null;
+  readonly trialWorldBasisId?: string;
+  readonly recommendation: HarnessComparisonReport["promotion"]["recommendation"];
+  readonly regressionCount: number;
 }
+
+export interface HarnessCandidateDecisionReceipt {
+  readonly schema: typeof HARNESS_CANDIDATE_LIFECYCLE_SCHEMA;
+  readonly candidateId: string;
+  readonly action: "accepted" | "rejected" | "archived";
+  readonly at: string;
+  readonly actor: "cli_invocation";
+  readonly reason: string;
+}
+
+export type HarnessCandidateLifecycleRecord =
+  | HarnessCandidateEvaluationReceipt
+  | HarnessCandidateDecisionReceipt;
 
 /**
  * Guard for ledger lines: the schema owner decides what counts as a record so
- * readers never drift from the vocabulary. The action check derives from the
- * const action list — an unknown action (newer writer, hand edit) is not a
- * record rather than a lie to the type system.
+ * readers never drift from the vocabulary. Each action arm checks the fields
+ * that make its entity meaningful — an evaluated row without its evidence
+ * bindings, or a decision without a reason, is not a record rather than a lie
+ * to the type system. Unknown actions (newer writer, hand edit) are skipped.
  */
 export function isHarnessCandidateLifecycleRecord(
   value: unknown,
@@ -200,30 +227,93 @@ export function isHarnessCandidateLifecycleRecord(
   if (!isProtocolRecord(value)) {
     return false;
   }
-  const record = value as Partial<HarnessCandidateLifecycleRecord>;
-  return (
+  const record = value as Partial<HarnessCandidateEvaluationReceipt> &
+    Partial<HarnessCandidateDecisionReceipt>;
+  const shared =
     record.schema === HARNESS_CANDIDATE_LIFECYCLE_SCHEMA &&
     typeof record.candidateId === "string" &&
     record.candidateId.length > 0 &&
-    typeof record.action === "string" &&
-    (HARNESS_CANDIDATE_LIFECYCLE_ACTIONS as readonly string[]).includes(record.action) &&
     typeof record.at === "string" &&
-    record.actor === "operator_cli"
+    record.actor === "cli_invocation";
+  if (!shared) {
+    return false;
+  }
+  if (record.action === "evaluated") {
+    return (
+      typeof record.evaluationId === "string" &&
+      record.evaluationId.length > 0 &&
+      typeof record.baseManifestId === "string" &&
+      typeof record.candidateManifestId === "string" &&
+      typeof record.sourceSessionId === "string" &&
+      typeof record.divergeAt === "string" &&
+      (record.mode === "fixture" || record.mode === "real") &&
+      (typeof record.executedManifestId === "string" || record.executedManifestId === null) &&
+      typeof record.recommendation === "string" &&
+      typeof record.regressionCount === "number"
+    );
+  }
+  if (
+    record.action === "accepted" ||
+    record.action === "rejected" ||
+    record.action === "archived"
+  ) {
+    return typeof record.reason === "string" && record.reason.length > 0;
+  }
+  return false;
+}
+
+/** One normalized field edit of a candidate patch: set `field` to `to` (null = remove the field). */
+export interface HarnessCandidateDeltaEntry {
+  readonly field: string;
+  readonly to: unknown;
+}
+
+export const HARNESS_CANDIDATE_ID_PREFIX = "harness_candidate:";
+
+/**
+ * The candidate identity is the normalized editable delta — the sorted list
+ * of (field, target value) edits, nothing else. Two consequences carry the
+ * lifecycle semantics: the same edit authored against different base
+ * sessions/turns collapses to one candidate (held-in and held-out evaluations
+ * of "set provider.model to X" unify), and provenance/derived recomputations
+ * never enter the identity (they belong to evaluation receipts). Callers pass
+ * a delta already stripped of derived/provenance fields — the classifier that
+ * decides which fields those are lives with the materializer, not here.
+ */
+export function buildHarnessCandidateId(input: {
+  readonly delta: readonly HarnessCandidateDeltaEntry[];
+}): string {
+  const delta = [...input.delta]
+    .map((entry) => ({ field: entry.field, to: entry.to ?? null }))
+    .toSorted((left, right) => (left.field < right.field ? -1 : left.field > right.field ? 1 : 0));
+  return stableHarnessId("harness_candidate", { delta });
+}
+
+export function isHarnessCandidateId(value: string): boolean {
+  return (
+    value.startsWith(HARNESS_CANDIDATE_ID_PREFIX) &&
+    value.length > HARNESS_CANDIDATE_ID_PREFIX.length
   );
 }
 
 /**
- * The candidate identity is the (base, candidate) manifest pair — both ids
- * are content hashes, so the same delta authored twice collapses to one
- * candidate across compare runs, eval reports, and lifecycle receipts.
+ * One evaluation of one candidate in one scenario: the id that lets a later
+ * decision cite exactly which run produced its evidence, and that keeps
+ * repeated evaluations of the same candidate distinguishable in the ledger.
  */
-export function buildHarnessCandidateId(input: {
-  readonly baseManifestId: string;
-  readonly candidateManifestId: string;
+export function buildHarnessEvaluationId(input: {
+  readonly candidateId: string;
+  readonly sourceSessionId: string;
+  readonly divergeAt: string;
+  readonly targetSessionId?: string;
+  readonly mode: "fixture" | "real";
 }): string {
-  return stableHarnessId("harness_candidate_pair", {
-    baseManifestId: input.baseManifestId,
-    candidateManifestId: input.candidateManifestId,
+  return stableHarnessId("harness_evaluation", {
+    candidateId: input.candidateId,
+    sourceSessionId: input.sourceSessionId,
+    divergeAt: input.divergeAt,
+    targetSessionId: input.targetSessionId ?? null,
+    mode: input.mode,
   });
 }
 
@@ -293,7 +383,14 @@ export interface HarnessTraceSnapshotIdentityInput {
 
 export interface HarnessPatternCandidate {
   readonly schema: typeof HARNESS_PATTERN_CANDIDATE_SCHEMA;
-  readonly candidateId: string;
+  /**
+   * Pattern identity, NOT a candidate identity: a patrol pattern is a report
+   * artifact clustering observed snapshots. It never enters the candidate
+   * lifecycle — decision verbs validate the `harness_candidate:` prefix, so a
+   * pattern id cannot be accepted or rejected as if it were an executable
+   * candidate patch.
+   */
+  readonly patternId: string;
   readonly kind: HarnessTraceSignalKind;
   readonly sourceSnapshotIds: readonly string[];
   readonly sourceEventIds: readonly string[];
@@ -309,9 +406,12 @@ export interface HarnessComparisonReport {
   readonly schema: typeof HARNESS_EVAL_REPORT_SCHEMA;
   readonly mode: "manifest" | "fixture" | "real";
   /**
-   * Stable candidate identity across the improvement workflows: the same
-   * (base, candidate) manifest pair yields the same id in a harness compare,
-   * an eval A/B report, and a lifecycle accept/reject/archive receipt.
+   * Stable candidate identity across the improvement workflows: the hash of
+   * the candidate's normalized editable delta (see
+   * {@link buildHarnessCandidateId}), so the same edit yields the same id in
+   * a harness compare, an eval A/B report, and a lifecycle
+   * accept/reject/archive receipt — regardless of which base session it was
+   * authored against.
    */
   readonly candidateId: string;
   readonly sourceSessionId: string;
@@ -329,12 +429,30 @@ export interface HarnessComparisonReport {
     readonly regressions: readonly string[];
     readonly execution?: {
       /**
-       * Manifest describing the harness that actually executed the fork. A
-       * replay report is candidate evidence only when this equals
-       * `candidateManifestId`; a mismatch is recorded as an execution
-       * regression and must never promote.
+       * Manifest id the TARGET TAPE recorded for the executed attempt — read
+       * back after the run, never asserted by a caller. `null` when the run
+       * recorded no manifest (fixture provider pipelines record none). A
+       * report is candidate evidence only when every materialized delta field
+       * verifies against this recorded manifest
+       * (`deltaVerifiedFields`); a mismatch is an execution regression and
+       * must never promote.
        */
-      readonly executedManifestId: string;
+      readonly executedManifestId: string | null;
+      /**
+       * Materialized candidate fields whose values were read back from the
+       * executed manifest and matched the candidate's claim. Fields that
+       * failed verification appear in `regressions` as
+       * `execution_candidate_delta_not_executed:<field>`.
+       */
+      readonly deltaVerifiedFields?: readonly string[];
+      /**
+       * Content hash of the operator settings tree copied into the trial
+       * world (`.brewva/agent`). The trial-world basis id deliberately
+       * excludes runtime data roots, so this hash is the missing half of the
+       * execution environment's identity: same basis + same settings hash =
+       * same trial inputs.
+       */
+      readonly trialSettingsHash?: string;
       /**
        * Where the fork's tool effects landed: `trial_world` is a disposable
        * copy-on-write fork of the workspace (real mode, always), while
@@ -570,7 +688,7 @@ export function clusterHarnessTraceSnapshots(
     );
     candidates.push({
       schema: HARNESS_PATTERN_CANDIDATE_SCHEMA,
-      candidateId: stableHarnessId("harness_candidate", {
+      patternId: stableHarnessId("harness_pattern", {
         kind,
         sourceSnapshotIds,
         manifestIds,
