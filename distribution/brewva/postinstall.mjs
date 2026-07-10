@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -47,6 +47,10 @@ assertSupportedNodeRuntime();
 
 const require = createRequire(import.meta.url);
 
+// Must mirror the CURRENT config file schema only. Removed fields (e.g. the
+// retired skills.routing / skills.overrides) must never appear here: this
+// module runs as a workspace postinstall on every `bun install`, so anything
+// seeded here lands in the operator's real global config.
 export function buildDefaultGlobalBrewvaConfig() {
   return {
     ui: {
@@ -55,11 +59,6 @@ export function buildDefaultGlobalBrewvaConfig() {
     skills: {
       roots: [],
       disabled: [],
-      overrides: {},
-      routing: {
-        enabled: false,
-        scopes: ["core", "domain"],
-      },
     },
   };
 }
@@ -107,52 +106,21 @@ function resolveGlobalBrewvaRootDir(env = process.env) {
   return resolve(homedir(), ".config", "brewva");
 }
 
-function isRecord(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function cloneJsonValue(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function deepMerge(base, override) {
-  if (!isRecord(base)) return cloneJsonValue(override);
-  if (!isRecord(override)) return cloneJsonValue(base);
-
-  const result = cloneJsonValue(base);
-  for (const [key, value] of Object.entries(override)) {
-    const current = result[key];
-    if (isRecord(current) && isRecord(value)) {
-      result[key] = deepMerge(current, value);
-      continue;
-    }
-    result[key] = cloneJsonValue(value);
-  }
-  return result;
-}
-
-function seedGlobalConfig(globalRoot, defaultConfig) {
+// Seed-if-absent only. An installer carries no user intent about config
+// content, so an existing config — whatever its shape — is never read,
+// merged, or rewritten. The old deep-merge "renew" branch silently re-added
+// removed fields' defaults to the operator's global config on every
+// `bun install` (workspace postinstall), which is how retired keys kept
+// resurrecting after being cleaned.
+export function seedGlobalConfig(globalRoot, defaultConfig) {
   mkdirSync(globalRoot, { recursive: true });
   const configPath = join(globalRoot, "brewva.json");
 
-  if (!existsSync(configPath)) {
-    writeFileSync(configPath, `${JSON.stringify(defaultConfig, null, 2)}\n`, "utf8");
-    console.log(`brewva: created global config at ${configPath}`);
+  if (existsSync(configPath)) {
     return;
   }
-
-  try {
-    const existing = JSON.parse(readFileSync(configPath, "utf8"));
-    if (!isRecord(existing)) {
-      console.warn(`brewva: skipped renewing config (not an object): ${configPath}`);
-      return;
-    }
-    const merged = deepMerge(defaultConfig, existing);
-    writeFileSync(configPath, `${JSON.stringify(merged, null, 2)}\n`, "utf8");
-    console.log(`brewva: renewed global config at ${configPath}`);
-  } catch {
-    console.warn(`brewva: skipped renewing config (invalid JSON): ${configPath}`);
-  }
+  writeFileSync(configPath, `${JSON.stringify(defaultConfig, null, 2)}\n`, "utf8");
+  console.log(`brewva: created global config at ${configPath}`);
 }
 
 export function main() {
