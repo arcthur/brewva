@@ -1,39 +1,44 @@
-import { readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { loadBrewvaConfigResolution } from "@brewva/brewva-runtime/config";
 import {
-  loadCapabilityRegistry,
-  selectCapabilities,
+  manifestTokens,
+  textTokens,
   type CapabilityManifest,
   type CapabilitySelectionReceipt,
 } from "../../packages/brewva-gateway/src/hosted/internal/session/tools/capability-registry.js";
-import { extractExplicitCapability } from "../../packages/brewva-gateway/src/hosted/internal/session/tools/capability-selection.js";
+import {
+  selectableCapabilities,
+  selectCapabilityReceiptForPrompt,
+} from "../../packages/brewva-gateway/src/hosted/internal/session/tools/capability-selection.js";
 import type { EvalCapabilitySelectionPremise, EvalScenario } from "./types.js";
 
 // Premise gate for generic runtime scenarios that stage capability manifests.
 //
-// It re-runs the REAL production selection path (`loadCapabilityRegistry` +
-// `selectCapabilities`, the same wiring as `selectCapabilityReceiptForPrompt`
-// in capability-selection.ts: staged workspace as cwd, the composed --print
-// prompt as intent text) and fails LOUDLY when the scenario's declared premise
-// does not hold. Selection is deterministic given (manifests, policy, prompt),
-// so this static check predicts the hermetic run's first-turn receipt without
+// Fidelity is the whole design: the gate runs the REAL production pieces —
+// `loadBrewvaConfigResolution` (the same JSONC parse + normalization the
+// spawned CLI applies to --config), `selectCapabilityReceiptForPrompt` (the
+// exact selection wiring `beforeAgentStart` runs on the turn prompt), and
+// `selectableCapabilities` (the exact catalog projection the prompt block
+// renders) — against the staged workspace and the composed --print prompt.
+// Selection is deterministic given (config, manifests, prompt), so this
+// static check predicts the hermetic run's first-turn receipt without
 // spending the turn. History that motivates it: the capability-request
-// scenario silently scored 0% for months of one measurement day because the
-// scorer's stopword-free tokenizer matched `use/for/to/the` in
-// `selection.when_to_use` against ordinary prompt prose, so the capability
-// was ALREADY selected and the rubric failed the model's truthful answer.
+// scenario silently scored 0% because the scorer's stopword-free tokenizer
+// matched `use/for/to/the` in `selection.when_to_use` against ordinary
+// prompt prose, so the capability was ALREADY selected and the rubric failed
+// the model's truthful answer.
 
-/** Catalog cap mirrored from capability-selection.ts SELECTABLE_CAPABILITY_LIMIT. */
-const SELECTABLE_CAPABILITY_LIMIT = 8;
+/**
+ * The exact workspace_files key that makes the generic runtime pass --config
+ * to the spawned CLI. The premise gate keys off the SAME literal so it can
+ * never validate a config the live run does not load.
+ */
+export const SCENARIO_CARRIED_CONFIG_KEY = ".brewva/brewva.json";
 
-interface StagedCapabilityConfig {
-  roots: string[];
-  policy: {
-    agentScope: string[];
-    workspaceScope: string[];
-    allowedAccounts: string[];
-    defaults: Record<string, string>;
-  };
+export interface CapabilitySelectionPremiseCheck {
+  /** Names the real selector actually selected (sorted, deduplicated). */
+  selectedCapabilityNames: string[];
+  /** The exact selectable catalog the prompt block would render, in order. */
+  selectableCapabilityNames: string[];
 }
 
 function premiseError(scenarioId: string, message: string): Error {
@@ -47,98 +52,15 @@ function readStringArray(value: unknown, scenarioId: string, field: string): str
   return [...new Set(value as string[])].toSorted((left, right) => left.localeCompare(right));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readOptionalStringArray(value: unknown, fallback: string[]): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
-    : fallback;
-}
-
 /**
- * Read capability roots/policy from the scenario-carried config, the same file
- * the runtime passes as --config. Roots are required verbatim: guessing the
- * config loader's defaults here would let the premise check and the live run
- * silently diverge. Policy fields read leniently (empty defaults); an
- * over-strict empty scope cannot pass unnoticed because the selectable
- * assertion below fails loudly on a policy-filtered manifest.
- */
-function readStagedCapabilityConfig(
-  scenarioId: string,
-  workspaceDir: string,
-): StagedCapabilityConfig {
-  const configPath = join(workspaceDir, ".brewva", "brewva.json");
-  let raw: string;
-  try {
-    raw = readFileSync(configPath, "utf8");
-  } catch {
-    throw premiseError(
-      scenarioId,
-      "the premise requires a scenario-carried .brewva/brewva.json (hermetic capability policy; the runtime passes it as --config).",
-    );
-  }
-  const parsed: unknown = JSON.parse(raw);
-  const capabilities =
-    isRecord(parsed) && isRecord(parsed.capabilities) ? parsed.capabilities : undefined;
-  if (!capabilities) {
-    throw premiseError(
-      scenarioId,
-      "the staged .brewva/brewva.json declares no capabilities block.",
-    );
-  }
-  const roots = readOptionalStringArray(capabilities.roots, []);
-  if (roots.length === 0) {
-    throw premiseError(
-      scenarioId,
-      "the staged capabilities block must declare explicit roots (the premise check refuses to guess loader defaults).",
-    );
-  }
-  const policy = isRecord(capabilities.policy) ? capabilities.policy : {};
-  const defaults = isRecord(capabilities.defaults)
-    ? Object.fromEntries(
-        Object.entries(capabilities.defaults).filter(
-          (entry): entry is [string, string] => typeof entry[1] === "string",
-        ),
-      )
-    : {};
-  return {
-    roots,
-    policy: {
-      agentScope: readOptionalStringArray(policy.agentScope, []),
-      workspaceScope: readOptionalStringArray(policy.workspaceScope, []),
-      allowedAccounts: readOptionalStringArray(policy.allowedAccounts, []),
-      defaults,
-    },
-  };
-}
-
-/**
- * Advisory diagnostics only — the verdict comes from the real selector above.
- * Mirrors textTokens/manifestTokens in capability-registry.ts so a violation
- * names the exact tokens to scrub from the manifest or the prompt.
+ * Advisory diagnostics only — the verdict comes from the real selector.
+ * Uses the production tokenizer so the error names the exact tokens to scrub
+ * from the manifest or the prompt.
  */
 function promptManifestTokenOverlap(prompt: string, manifest: CapabilityManifest): string[] {
-  const tokenize = (value: string): Set<string> =>
-    new Set(value.toLowerCase().match(/[a-z0-9_-]+/gu) ?? []);
-  const manifestTokens = tokenize(
-    [
-      manifest.name,
-      manifest.provider,
-      manifest.domain,
-      manifest.action,
-      ...manifest.toolNames,
-      ...manifest.resourceTypes,
-      manifest.selection?.whenToUse,
-      ...(manifest.selection?.triggers ?? []),
-      ...(manifest.selection?.pathGlobs ?? []),
-    ]
-      .filter((entry): entry is string => Boolean(entry))
-      .join(" "),
-  );
-  return [...tokenize(prompt)]
-    .filter((token) => manifestTokens.has(token))
+  const tokens = manifestTokens(manifest);
+  return [...textTokens(prompt)]
+    .filter((token) => tokens.has(token))
     .toSorted((left, right) => left.localeCompare(right));
 }
 
@@ -158,28 +80,24 @@ function describeSelectedCandidates(
     .join(" | ");
 }
 
-/**
- * Mirrors policyForbiddenNames in capability-selection.ts: only policy filters
- * (scope/account/risk/conflict) forbid; `not_ranked` stays requestable.
- */
-function policyForbiddenReasons(receipt: CapabilitySelectionReceipt): Map<string, string> {
-  const reasons = new Map<string, string>();
-  for (const entry of receipt.filtered_out) {
-    if (entry.reason !== "not_ranked") {
-      reasons.set(entry.name, entry.reason);
-    }
+/** Advisory diagnostics: echo why the receipt keeps a name out of the catalog. */
+function describeCatalogExclusion(
+  name: string,
+  receipt: CapabilitySelectionReceipt,
+  selectedNames: ReadonlySet<string>,
+): string {
+  if (selectedNames.has(name)) {
+    return "it is SELECTED this turn";
   }
-  for (const conflict of receipt.conflicts) {
-    for (const name of conflict.candidates) {
-      reasons.set(name, `conflict (${conflict.reason})`);
-    }
+  const filtered = receipt.filtered_out.find((entry) => entry.name === name);
+  if (filtered) {
+    return `the receipt filtered it out (reason: ${filtered.reason})`;
   }
-  return reasons;
-}
-
-export interface CapabilitySelectionPremiseCheck {
-  /** Names the real selector actually selected (sorted, deduplicated). */
-  selectedCapabilityNames: string[];
+  const conflict = receipt.conflicts.find((entry) => entry.candidates.includes(name));
+  if (conflict) {
+    return `it sits in a conflict group (${conflict.reason})`;
+  }
+  return "it fell outside the rendered catalog (entry cap or missing manifest)";
 }
 
 /**
@@ -215,18 +133,22 @@ export function assertCapabilitySelectionPremise(input: {
           "premise.capability_selection.selectable_capability_names",
         );
 
-  const config = readStagedCapabilityConfig(scenarioId, input.workspaceDir);
-  const registry = loadCapabilityRegistry({
-    roots: config.roots.map((root) => resolve(input.workspaceDir, root)),
+  if (!Object.hasOwn(input.scenario.context.workspace_files ?? {}, SCENARIO_CARRIED_CONFIG_KEY)) {
+    throw premiseError(
+      scenarioId,
+      `the premise requires a scenario-carried config under the exact workspace_files key "${SCENARIO_CARRIED_CONFIG_KEY}" — that literal key is what makes the runtime pass --config, so any other spelling would validate a config the live run never loads.`,
+    );
+  }
+  const resolution = loadBrewvaConfigResolution({
+    cwd: input.workspaceDir,
+    configPath: SCENARIO_CARRIED_CONFIG_KEY,
   });
-  const explicitCapability = extractExplicitCapability(input.prompt);
-  const receipt = selectCapabilities({
-    manifests: registry.manifests,
-    intentText: input.prompt,
-    explicitCapability,
-    policy: config.policy,
-    trigger: explicitCapability ? "explicit_capability" : "user_message",
-    registryVersion: registry.registryVersion,
+  const { registry, receipt } = selectCapabilityReceiptForPrompt({
+    runtime: {
+      identity: { cwd: input.workspaceDir, workspaceRoot: input.workspaceDir },
+      config: { capabilities: resolution.config.capabilities },
+    },
+    prompt: input.prompt,
   });
   const manifestsByName = new Map(registry.manifests.map((manifest) => [manifest.name, manifest]));
 
@@ -248,39 +170,21 @@ export function assertCapabilitySelectionPremise(input: {
   }
 
   const selectedSet = new Set(actualSelected);
-  const forbidden = policyForbiddenReasons(receipt);
+  const catalogNames = selectableCapabilities({
+    receipt,
+    manifests: registry.manifests,
+  }).map((entry) => entry.name);
   for (const name of expectedSelectable) {
-    const manifest = manifestsByName.get(name);
-    if (!manifest) {
+    if (!catalogNames.includes(name)) {
       throw premiseError(
         scenarioId,
-        `selectable capability '${name}' has no manifest under the staged roots [${config.roots.join(", ")}].`,
-      );
-    }
-    if (selectedSet.has(name)) {
-      throw premiseError(
-        scenarioId,
-        `selectable capability '${name}' is SELECTED, so it cannot appear in the selectable catalog.`,
-      );
-    }
-    const forbiddenReason = forbidden.get(name);
-    if (forbiddenReason) {
-      throw premiseError(
-        scenarioId,
-        `selectable capability '${name}' is policy-forbidden (${forbiddenReason}) and never renders as selectable; fix the staged policy or manifest scopes.`,
+        `capability '${name}' does not render in the selectable catalog [${catalogNames.join(", ")}] because ${describeCatalogExclusion(
+          name,
+          receipt,
+          selectedSet,
+        )}; fix the staged policy, manifest, or catalog pressure.`,
       );
     }
   }
-  // The prompt block caps the catalog at 8 entries; membership beyond the cap
-  // depends on receipt ordering this check deliberately does not replicate.
-  const catalogSize = registry.manifests.filter(
-    (manifest) => !selectedSet.has(manifest.name) && !forbidden.has(manifest.name),
-  ).length;
-  if (expectedSelectable.length > 0 && catalogSize > SELECTABLE_CAPABILITY_LIMIT) {
-    throw premiseError(
-      scenarioId,
-      `${catalogSize} capabilities compete for the ${SELECTABLE_CAPABILITY_LIMIT}-entry selectable catalog; stage fewer manifests so selectable membership stays decidable.`,
-    );
-  }
-  return { selectedCapabilityNames: actualSelected };
+  return { selectedCapabilityNames: actualSelected, selectableCapabilityNames: catalogNames };
 }

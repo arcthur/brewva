@@ -8,6 +8,7 @@ import {
   type CapabilitySelectionPremiseCheck,
 } from "../../eval/capability-premise.js";
 import {
+  assertPremiseCompatibleCliOverrides,
   buildGenericScenarioPrompt,
   stageScenarioWorkspaceFiles,
 } from "../../eval/generic-runtime.js";
@@ -73,7 +74,9 @@ function syntheticManifestYaml(whenToUse: string): string {
     "  - default",
     "auth_profile: ops-slack",
     "selection:",
-    `  when_to_use: ${whenToUse}`,
+    // JSON.stringify double-quotes the scalar: an unquoted " #..." tail
+    // would silently parse as a YAML comment and truncate the staged value.
+    `  when_to_use: ${JSON.stringify(whenToUse)}`,
     "",
   ].join("\n");
 }
@@ -81,7 +84,7 @@ function syntheticManifestYaml(whenToUse: string): string {
 function syntheticScenario(input: {
   whenToUse: string;
   policyAgentScope?: string[];
-  includeConfig?: boolean;
+  configKey?: string | null;
 }): EvalScenario {
   const config = {
     capabilities: {
@@ -93,6 +96,7 @@ function syntheticScenario(input: {
       },
     },
   };
+  const configKey = input.configKey === undefined ? ".brewva/brewva.json" : input.configKey;
   return {
     id: "premise-synthetic",
     skill: "harness-fluency",
@@ -107,9 +111,7 @@ function syntheticScenario(input: {
       task_description:
         "The deploy for release 7.3 just finished. Use the workspace integration to tell the on-call crew.",
       workspace_files: {
-        ...(input.includeConfig === false
-          ? {}
-          : { ".brewva/brewva.json": JSON.stringify(config, null, 2) }),
+        ...(configKey === null ? {} : { [configKey]: JSON.stringify(config, null, 2) }),
         "capabilities/slack-notify.yaml": syntheticManifestYaml(input.whenToUse),
       },
     },
@@ -120,6 +122,8 @@ function syntheticScenario(input: {
   };
 }
 
+const DISJOINT_WHEN_TO_USE = "Posting operational status updates into #ops-oncall Slack channel.";
+
 describe("capability-selection premise gate", () => {
   test("the shipped capability-request scenario declares the premise and it holds against the real selector", () => {
     const scenario = parse(readFileSync(SCENARIO_PATH, "utf8")) as EvalScenario;
@@ -127,7 +131,10 @@ describe("capability-selection premise gate", () => {
     expect(scenario.premise?.capability_selection?.selectable_capability_names).toEqual([
       "slack-notify",
     ]);
-    expect(assertPremiseOnStagedWorkspace(scenario)).toEqual({ selectedCapabilityNames: [] });
+    expect(assertPremiseOnStagedWorkspace(scenario)).toEqual({
+      selectedCapabilityNames: [],
+      selectableCapabilityNames: ["slack-notify"],
+    });
   });
 
   test("prose stopwords in when_to_use break the premise, and the error names score and token overlap", () => {
@@ -142,27 +149,70 @@ describe("capability-selection premise gate", () => {
   });
 
   test("a token-disjoint manifest surface satisfies the premise", () => {
-    const scenario = syntheticScenario({
-      whenToUse: "Posting operational status updates into #ops-oncall Slack channel.",
+    const scenario = syntheticScenario({ whenToUse: DISJOINT_WHEN_TO_USE });
+    expect(assertPremiseOnStagedWorkspace(scenario)).toEqual({
+      selectedCapabilityNames: [],
+      selectableCapabilityNames: ["slack-notify"],
     });
-    expect(assertPremiseOnStagedWorkspace(scenario)).toEqual({ selectedCapabilityNames: [] });
   });
 
   test("a policy-filtered manifest fails the selectable assertion loudly", () => {
     const scenario = syntheticScenario({
-      whenToUse: "Posting operational status updates into #ops-oncall Slack channel.",
+      whenToUse: DISJOINT_WHEN_TO_USE,
       policyAgentScope: ["review-agent"],
     });
     const error = captureError(() => assertPremiseOnStagedWorkspace(scenario));
-    expect(error.message).toContain("policy-forbidden (agent_scope)");
+    expect(error.message).toContain("does not render in the selectable catalog");
+    expect(error.message).toContain("reason: agent_scope");
   });
 
   test("a premise without a scenario-carried config is refused", () => {
+    const scenario = syntheticScenario({ whenToUse: DISJOINT_WHEN_TO_USE, configKey: null });
+    const error = captureError(() => assertPremiseOnStagedWorkspace(scenario));
+    expect(error.message).toContain('exact workspace_files key ".brewva/brewva.json"');
+  });
+
+  test("a config staged under a different key spelling is refused (that key gates --config)", () => {
     const scenario = syntheticScenario({
-      whenToUse: "Posting operational status updates into #ops-oncall Slack channel.",
-      includeConfig: false,
+      whenToUse: DISJOINT_WHEN_TO_USE,
+      configKey: "./.brewva/brewva.json",
     });
     const error = captureError(() => assertPremiseOnStagedWorkspace(scenario));
-    expect(error.message).toContain("scenario-carried .brewva/brewva.json");
+    expect(error.message).toContain('exact workspace_files key ".brewva/brewva.json"');
+  });
+});
+
+describe("premise-compatible cli overrides", () => {
+  test("overrides pointing at the staged workspace pass; divergent --cwd is rejected", () => {
+    const scenario = syntheticScenario({ whenToUse: DISJOINT_WHEN_TO_USE });
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-premise-"));
+    tempDirs.push(workspace);
+    assertPremiseCompatibleCliOverrides({
+      scenario,
+      workspace,
+      extraArgs: ["--cwd", workspace, "--config", ".brewva/brewva.json"],
+    });
+    const error = captureError(() =>
+      assertPremiseCompatibleCliOverrides({
+        scenario,
+        workspace,
+        extraArgs: ["--cwd", "/somewhere/else"],
+      }),
+    );
+    expect(error.message).toContain("premise cannot be guaranteed");
+  });
+
+  test("a divergent --config override is rejected for premise scenarios", () => {
+    const scenario = syntheticScenario({ whenToUse: DISJOINT_WHEN_TO_USE });
+    const workspace = mkdtempSync(join(tmpdir(), "brewva-premise-"));
+    tempDirs.push(workspace);
+    const error = captureError(() =>
+      assertPremiseCompatibleCliOverrides({
+        scenario,
+        workspace,
+        extraArgs: ["--config", "/etc/other-brewva.json"],
+      }),
+    );
+    expect(error.message).toContain('cli override "--config /etc/other-brewva.json"');
   });
 });

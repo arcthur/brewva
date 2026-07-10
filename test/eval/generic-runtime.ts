@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
-import { assertCapabilitySelectionPremise } from "./capability-premise.js";
+import {
+  assertCapabilitySelectionPremise,
+  SCENARIO_CARRIED_CONFIG_KEY,
+} from "./capability-premise.js";
 import type { EvalScenario, EvalTelemetry, OutputContract } from "./types.js";
 
 // Generic-scenario runtime execution (the seam RuntimeExecutor refused to fake):
@@ -215,6 +218,38 @@ export function stageScenarioWorkspaceFiles(scenario: EvalScenario, workspace: s
   }
 }
 
+/**
+ * A capability-selection premise is only predictive when the spawned CLI
+ * resolves the same workspace and config the gate validated. Reject --cwd or
+ * --config overrides that point elsewhere instead of letting the guarantee
+ * void silently (harness-injected extraArgs are the documented override
+ * channel, so they must agree with the staged workspace).
+ */
+export function assertPremiseCompatibleCliOverrides(input: {
+  scenario: EvalScenario;
+  workspace: string;
+  extraArgs: readonly string[];
+}): void {
+  if (!input.scenario.premise?.capability_selection) {
+    return;
+  }
+  for (let index = 0; index < input.extraArgs.length - 1; index += 1) {
+    const flag = input.extraArgs[index];
+    if (flag !== "--cwd" && flag !== "--config") {
+      continue;
+    }
+    const value = input.extraArgs[index + 1] ?? "";
+    const resolved = resolve(input.workspace, value);
+    const expected =
+      flag === "--cwd" ? input.workspace : resolve(input.workspace, SCENARIO_CARRIED_CONFIG_KEY);
+    if (resolved !== expected) {
+      throw new Error(
+        `Scenario ${input.scenario.id}: cli override "${flag} ${value}" diverges from the premise-validated workspace (expected ${expected}); the capability-selection premise cannot be guaranteed.`,
+      );
+    }
+  }
+}
+
 export async function executeGenericRuntimeScenario(
   input: GenericRuntimeExecutionInput,
 ): Promise<GenericRuntimeExecutionResult> {
@@ -234,8 +269,8 @@ export async function executeGenericRuntimeScenario(
   }
   // A scenario-carried config keeps capability/policy state hermetic instead
   // of leaking the operator's global configuration into the measurement.
-  const scenarioConfigArgs = Object.hasOwn(workspaceFiles, ".brewva/brewva.json")
-    ? ["--config", ".brewva/brewva.json"]
+  const scenarioConfigArgs = Object.hasOwn(workspaceFiles, SCENARIO_CARRIED_CONFIG_KEY)
+    ? ["--config", SCENARIO_CARRIED_CONFIG_KEY]
     : [];
   const cliOverrides: GenericRuntimeCliOverrides | undefined =
     scenarioConfigArgs.length > 0 || input.cli
@@ -248,6 +283,11 @@ export async function executeGenericRuntimeScenario(
   // Premise gate: checked against the real intent scorer BEFORE the turn is
   // spent. A violated premise throws (a visible scenario error) instead of
   // letting a truthful model answer about runtime state grade as 0%.
+  assertPremiseCompatibleCliOverrides({
+    scenario: input.scenario,
+    workspace,
+    extraArgs: input.cli?.extraArgs ?? [],
+  });
   assertCapabilitySelectionPremise({
     scenario: input.scenario,
     workspaceDir: workspace,

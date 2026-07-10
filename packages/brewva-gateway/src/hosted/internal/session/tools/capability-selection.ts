@@ -429,8 +429,11 @@ function policyForbiddenNames(receipt: CapabilitySelectionReceipt): Set<string> 
  * remaining registry manifests by name (enforced here, not assumed from the
  * registry). `not_ranked` is requestable, not forbidden — only policy filters
  * (scope/account/risk/conflict) forbid.
+ *
+ * Exported for the eval harness premise gate, which must certify selectable
+ * membership from the SAME code that renders the catalog.
  */
-function selectableCapabilities(input: {
+export function selectableCapabilities(input: {
   receipt: CapabilitySelectionReceipt;
   manifests: readonly CapabilityManifest[];
 }): Array<{ name: string; whenToUse?: string }> {

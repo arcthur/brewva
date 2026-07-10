@@ -341,7 +341,8 @@ export function loadCapabilityRegistry(input: { roots: readonly string[] }): Cap
   };
 }
 
-function textTokens(value: string | undefined): Set<string> {
+/** Exported for the eval harness premise gate's token-overlap diagnostics. */
+export function textTokens(value: string | undefined): Set<string> {
   return new Set((value ?? "").toLowerCase().match(/[a-z0-9_-]+/gu) ?? []);
 }
 
@@ -352,7 +353,8 @@ function intersects(left: readonly string[] | undefined, right: ReadonlySet<stri
 
 const manifestTokenCache = new WeakMap<CapabilityManifest, Set<string>>();
 
-function manifestTokens(manifest: CapabilityManifest): Set<string> {
+/** Exported for the eval harness premise gate's token-overlap diagnostics. */
+export function manifestTokens(manifest: CapabilityManifest): Set<string> {
   const cached = manifestTokenCache.get(manifest);
   if (cached) {
     return cached;
