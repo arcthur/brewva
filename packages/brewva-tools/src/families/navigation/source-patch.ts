@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
 import { sha256Hex, shortSha256Hex } from "@brewva/brewva-std/hash";
 import {
   createBrewvaResourceRouter,
@@ -1787,7 +1788,11 @@ async function resourceRouterForRoot(input: {
   readonly cwd: string;
   readonly roots?: readonly string[];
 }): Promise<BrewvaResourceRouter> {
-  const cacheKey = `${input.cwd}\0${(input.roots ?? [input.cwd]).join("\0")}`;
+  // Skill discovery treats resolve(agentDir, "..") as the global skill root,
+  // so the loader needs the real agent config dir; passing cwd here made the
+  // first read walk the workspace parent (sibling repos, shared temp dirs).
+  const agentDir = resolveBrewvaAgentDir();
+  const cacheKey = `${input.cwd}\0${agentDir}\0${(input.roots ?? [input.cwd]).join("\0")}`;
   const cached = RESOURCE_ROUTERS.get(cacheKey);
   if (cached) {
     return cached;
@@ -1795,7 +1800,7 @@ async function resourceRouterForRoot(input: {
   const created = Promise.resolve(
     createBrewvaResourceRouter({
       cwd: input.cwd,
-      loader: () => createHostedResourceLoader({ cwd: input.cwd, agentDir: input.cwd }),
+      loader: () => createHostedResourceLoader({ cwd: input.cwd, agentDir }),
       roots: input.roots,
     }),
   );

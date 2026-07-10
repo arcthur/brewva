@@ -6,6 +6,21 @@ import type { BrewvaHostedSkill, BrewvaHostedSkillLoadResult } from "./resource-
 const BREWVA_CONFIG_DIR_RELATIVE = ".brewva";
 const BREWVA_CONFIG_FILE_NAME = "brewva.json";
 const LOADABLE_SKILL_CATEGORIES = ["core", "domain", "operator", "meta", "internal", "project"];
+// Discovery walks must stay bounded even when a caller hands over an
+// accidental root (a workspace parent, a shared temp dir): dependency trees
+// are never skill roots, and legitimate skill layouts are shallow and small.
+// Depth alone cannot bound wide trees, so the directory and entry budgets
+// carry the wall-time bound; exhausting any of them surfaces as a
+// truncation diagnostic instead of silently dropping skills.
+const MAX_SKILL_DISCOVERY_DEPTH = 8;
+const MAX_SKILL_DISCOVERY_DIRECTORIES = 1024;
+const MAX_SKILL_DISCOVERY_ENTRIES = 10_000;
+const SKILL_DISCOVERY_TRUNCATED_MESSAGE = "skill_discovery_truncated: walk budget exceeded";
+const IGNORED_SKILL_DISCOVERY_DIRECTORIES = new Set(["node_modules", ".git"]);
+
+function shouldSkipDiscoveryEntry(name: string): boolean {
+  return name.startsWith(".") || IGNORED_SKILL_DISCOVERY_DIRECTORIES.has(name);
+}
 
 interface SkillDiscoveryConfig {
   roots: string[];
@@ -25,44 +40,71 @@ function hasSkillCategoryDirectories(skillDir: string): boolean {
   return LOADABLE_SKILL_CATEGORIES.some((category) => isDirectory(join(skillDir, category)));
 }
 
-function hasSkillDocuments(rootDir: string): boolean {
+function hasSkillDocuments(rootDir: string): { found: boolean; truncated: boolean } {
   if (!isDirectory(rootDir)) {
-    return false;
+    return { found: false, truncated: false };
   }
-  const stack = [resolve(rootDir)];
+  const stack: Array<{ dir: string; depth: number }> = [{ dir: resolve(rootDir), depth: 0 }];
+  let remainingDirectories = MAX_SKILL_DISCOVERY_DIRECTORIES;
+  let remainingEntries = MAX_SKILL_DISCOVERY_ENTRIES;
+  let truncated = false;
   while (stack.length > 0) {
+    if (remainingDirectories <= 0) {
+      truncated = true;
+      break;
+    }
+    remainingDirectories -= 1;
     const current = stack.pop();
     if (!current) {
       continue;
     }
     let entries: Array<import("node:fs").Dirent>;
     try {
-      entries = readdirSync(current, { withFileTypes: true });
+      entries = readdirSync(current.dir, { withFileTypes: true });
     } catch {
       continue;
     }
+    // Already-read entries are still scanned for SKILL.md; the exhausted
+    // budget only stops further descent.
+    remainingEntries -= entries.length;
     for (const entry of entries) {
-      if (entry.name.startsWith(".")) continue;
-      const full = join(current, entry.name);
+      if (shouldSkipDiscoveryEntry(entry.name)) continue;
+      const full = join(current.dir, entry.name);
       if (entry.isDirectory()) {
-        stack.push(full);
+        if (remainingEntries >= 0 && current.depth < MAX_SKILL_DISCOVERY_DEPTH) {
+          stack.push({ dir: full, depth: current.depth + 1 });
+        } else {
+          truncated = true;
+        }
         continue;
       }
       if (entry.isFile() && entry.name === "SKILL.md") {
-        return true;
+        return { found: true, truncated };
       }
     }
   }
-  return false;
+  return { found: false, truncated };
 }
 
-function resolveSkillDirectory(rootDir: string): string | undefined {
+function resolveSkillDirectory(rootDir: string): {
+  skillDir: string | undefined;
+  truncated: boolean;
+} {
   const normalizedRoot = resolve(rootDir);
   const direct = normalizedRoot;
   const nested = join(normalizedRoot, "skills");
-  if (hasSkillCategoryDirectories(direct) || hasSkillDocuments(direct)) return direct;
-  if (hasSkillCategoryDirectories(nested) || hasSkillDocuments(nested)) return nested;
-  return undefined;
+  const directDocuments = hasSkillCategoryDirectories(direct)
+    ? { found: true, truncated: false }
+    : hasSkillDocuments(direct);
+  if (directDocuments.found) return { skillDir: direct, truncated: false };
+  const nestedDocuments = hasSkillCategoryDirectories(nested)
+    ? { found: true, truncated: false }
+    : hasSkillDocuments(nested);
+  if (nestedDocuments.found) return { skillDir: nested, truncated: false };
+  return {
+    skillDir: undefined,
+    truncated: directDocuments.truncated || nestedDocuments.truncated,
+  };
 }
 
 function normalizePathInput(input: string): string {
@@ -110,21 +152,35 @@ function resolveWorkspaceRootDir(cwd: string): string {
   );
 }
 
-function walkFiles(rootDir: string, predicate: (path: string) => boolean): string[] {
-  if (!isDirectory(rootDir)) return [];
+function walkFiles(
+  rootDir: string,
+  predicate: (path: string) => boolean,
+): { files: string[]; truncated: boolean } {
+  if (!isDirectory(rootDir)) return { files: [], truncated: false };
   const resolvedRoot = resolve(rootDir);
   const out: string[] = [];
+  let remainingDirectories = MAX_SKILL_DISCOVERY_DIRECTORIES;
+  let remainingEntries = MAX_SKILL_DISCOVERY_ENTRIES;
+  let truncated = false;
 
-  const walk = (dir: string): void => {
+  const walk = (dir: string, depth: number): void => {
+    if (remainingDirectories <= 0 || remainingEntries < 0) {
+      truncated = true;
+      return;
+    }
+    remainingDirectories -= 1;
     let entries: Array<import("node:fs").Dirent>;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
+    // Already-read entries are still matched below; the exhausted budget
+    // only stops further descent.
+    remainingEntries -= entries.length;
 
     for (const entry of entries) {
-      if (entry.name.startsWith(".")) continue;
+      if (shouldSkipDiscoveryEntry(entry.name)) continue;
       const full = join(dir, entry.name);
       let isDir = entry.isDirectory();
       let isFile = entry.isFile();
@@ -143,7 +199,11 @@ function walkFiles(rootDir: string, predicate: (path: string) => boolean): strin
       }
 
       if (isDir) {
-        walk(full);
+        if (depth < MAX_SKILL_DISCOVERY_DEPTH) {
+          walk(full, depth + 1);
+        } else {
+          truncated = true;
+        }
         continue;
       }
       if (isFile && predicate(full)) {
@@ -152,8 +212,11 @@ function walkFiles(rootDir: string, predicate: (path: string) => boolean): strin
     }
   };
 
-  walk(resolvedRoot);
-  return out.toSorted((left, right) => left.localeCompare(right));
+  walk(resolvedRoot, 0);
+  return {
+    files: out.toSorted((left, right) => left.localeCompare(right)),
+    truncated,
+  };
 }
 
 function readSkillDiscoveryConfig(rootDir: string, workspaceRoot: string): SkillDiscoveryConfig {
@@ -199,9 +262,21 @@ function readSkillDiscoveryConfig(rootDir: string, workspaceRoot: string): Skill
   }
 }
 
-function appendSkillRoot(roots: string[], seen: Set<string>, rootDir: string): void {
-  const skillDir = resolveSkillDirectory(rootDir);
-  if (!skillDir) return;
+function appendSkillRoot(
+  roots: string[],
+  seen: Set<string>,
+  rootDir: string,
+  diagnostics: Array<{ path: string; message: string }>,
+): void {
+  const { skillDir, truncated } = resolveSkillDirectory(rootDir);
+  if (!skillDir) {
+    // A probe that gave up before finding any SKILL.md must not silently
+    // drop the root — the configured skills would just vanish.
+    if (truncated) {
+      diagnostics.push({ path: resolve(rootDir), message: SKILL_DISCOVERY_TRUNCATED_MESSAGE });
+    }
+    return;
+  }
   const normalized = resolve(skillDir);
   if (seen.has(normalized)) return;
   seen.add(normalized);
@@ -242,12 +317,13 @@ export function discoverHostedSkills(input: {
   const projectConfig = readSkillDiscoveryConfig(projectRoot, workspaceRoot);
   const roots: string[] = [];
   const seenRoots = new Set<string>();
+  const diagnostics = [...globalConfig.diagnostics, ...projectConfig.diagnostics];
 
-  appendSkillRoot(roots, seenRoots, join(globalRoot, "skills", ".system"));
-  appendSkillRoot(roots, seenRoots, globalRoot);
-  appendSkillRoot(roots, seenRoots, projectRoot);
+  appendSkillRoot(roots, seenRoots, join(globalRoot, "skills", ".system"), diagnostics);
+  appendSkillRoot(roots, seenRoots, globalRoot, diagnostics);
+  appendSkillRoot(roots, seenRoots, projectRoot, diagnostics);
   for (const root of [...globalConfig.roots, ...projectConfig.roots]) {
-    appendSkillRoot(roots, seenRoots, root);
+    appendSkillRoot(roots, seenRoots, root, diagnostics);
   }
 
   const disabled = new Set<string>([
@@ -255,10 +331,13 @@ export function discoverHostedSkills(input: {
     ...projectConfig.disabled.values(),
   ]);
   const skillsByName = new Map<string, BrewvaHostedSkill>();
-  const diagnostics = [...globalConfig.diagnostics, ...projectConfig.diagnostics];
 
   for (const root of roots) {
-    for (const filePath of walkFiles(root, (candidate) => basename(candidate) === "SKILL.md")) {
+    const walked = walkFiles(root, (candidate) => basename(candidate) === "SKILL.md");
+    if (walked.truncated) {
+      diagnostics.push({ path: root, message: SKILL_DISCOVERY_TRUNCATED_MESSAGE });
+    }
+    for (const filePath of walked.files) {
       try {
         const skill = describeSkill(filePath);
         if (disabled.has(skill.name)) {

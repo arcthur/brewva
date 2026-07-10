@@ -21,6 +21,7 @@ import {
   type DelegationRunRecord,
 } from "@brewva/brewva-vocabulary/delegation";
 import type { SourcePatchPlan, SourceSnapshot } from "@brewva/brewva-vocabulary/workbench";
+import { patchProcessEnv } from "../../helpers/global-state.js";
 import { createBundledToolRuntime, createRuntimeInstanceFixture } from "../../helpers/runtime.js";
 import { toolOutcomePayload } from "../../helpers/tool-outcome.js";
 import { extractTextContent, fakeContext } from "./tools-flow.helpers.js";
@@ -895,6 +896,61 @@ describe("source_read and source_patch tools", () => {
     expect(
       extractTextContent(result as { content: Array<{ type: string; text?: string }> }),
     ).toContain('"small answer"');
+  });
+
+  test("resource_read loads hosted skills from the brewva agent dir, not the workspace parent", async () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "brewva-resource-read-agentdir-"));
+    const workspace = join(sandbox, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    const writeSkillFixture = (path: string, name: string): void => {
+      mkdirSync(join(path, ".."), { recursive: true });
+      writeFileSync(path, `---\nname: ${name}\ndescription: ${name}\n---\n\n${name} body.\n`);
+    };
+    // Discovery treats resolve(agentDir, "..") as the global skill root, so a
+    // SKILL.md beside the workspace must stay invisible to skill:// reads.
+    writeSkillFixture(join(sandbox, "leaked-skill", "SKILL.md"), "leaked-skill");
+    const agentDir = join(sandbox, "config", "agent");
+    mkdirSync(agentDir, { recursive: true });
+    writeSkillFixture(
+      join(sandbox, "config", "skills", "configured-skill", "SKILL.md"),
+      "configured-skill",
+    );
+
+    const restoreEnv = patchProcessEnv({ BREWVA_CODING_AGENT_DIR: agentDir });
+    try {
+      const runtime = createBundledToolRuntime(createRuntimeInstanceFixture({ cwd: workspace }));
+      const tool = createResourceReadTool({ runtime });
+
+      const startedAt = performance.now();
+      const configured = await tool.execute(
+        "tc-resource-agentdir",
+        { uri: "skill://configured-skill" },
+        undefined,
+        undefined,
+        fakeContext("tc-resource-agentdir"),
+      );
+      const elapsedMs = performance.now() - startedAt;
+
+      expect(
+        extractTextContent(configured as { content: Array<{ type: string; text?: string }> }),
+      ).toContain("configured-skill body");
+      // Loader materialization must stay bounded to the agent config dir; the
+      // parent-of-cwd walk regressed first reads to minutes in shared temp dirs.
+      expect(elapsedMs).toBeLessThan(1000);
+
+      const leaked = await tool.execute(
+        "tc-resource-agentdir-leak",
+        { uri: "skill://leaked-skill" },
+        undefined,
+        undefined,
+        fakeContext("tc-resource-agentdir-leak"),
+      );
+      expect(
+        extractTextContent(leaked as { content: Array<{ type: string; text?: string }> }),
+      ).toContain("reason: not_found");
+    } finally {
+      restoreEnv();
+    }
   });
 
   test("worker_results_apply prepares worker patches as SourcePatchPlan before applying", async () => {
