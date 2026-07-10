@@ -48,6 +48,14 @@ export function normalizeScheduleConfig(
     ),
     selfImprove: {
       enabled: normalizeBoolean(selfImproveInput.enabled, defaults.selfImprove.enabled),
+      // Absence inherits the default; an unrecognized explicit value fails
+      // CLOSED to "suspend" (garbage must never grant the envelope).
+      approvalMode:
+        selfImproveInput.approvalMode === undefined
+          ? defaults.selfImprove.approvalMode
+          : selfImproveInput.approvalMode === "auto_within_envelope"
+            ? "auto_within_envelope"
+            : "suspend",
       parentSessionId: asBrewvaSessionId(
         normalizeNonEmptyString(
           selfImproveInput.parentSessionId,

@@ -8,6 +8,7 @@ const ROOT_SCRIPT_REFERENCE_PATTERN =
 const ROOT_SCRIPT_FILE_PATTERN = /\.(?:ts|sh)$/u;
 
 const SUPPORT_SCRIPT_FILES = new Set([
+  "script/promotion-gates.ts",
   "script/provider-model-catalog.ts",
   "script/test-policy/model.ts",
   "script/test-policy/rules.ts",

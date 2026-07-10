@@ -13,6 +13,23 @@ Governance rule: `active/` is for unresolved design work only. When the target
 stable docs already carry the accepted contract, convert the note to
 `docs/research/decisions/` rather than keeping it as a shadow reference.
 
+## Machine-Decidable Promotion Gates
+
+A promotion criterion that a machine can check declares its check as a gate
+line nested under the criterion bullet:
+
+```markdown
+- The surface ceiling fitness landed and enforced.
+  - gate: `bun test test/fitness/tool-surface-ceiling.fitness.test.ts`
+```
+
+Gates must be repo-runnable `bun test` / `bun run` commands;
+`bun run analyze:promotion-readiness` lists them per note (`--run` executes),
+and a docs fitness keeps every declared gate well-formed and its test paths
+existing. Only mechanically checkable criteria get gates — prose criteria stay
+prose, and promotion itself remains a reviewed human act; the readiness table
+is a report, never a trigger.
+
 ## Shared Projection Discipline
 
 Projection-bearing active notes share one product discipline:

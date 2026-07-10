@@ -27,6 +27,7 @@ import type {
 } from "@brewva/brewva-substrate/provider";
 import type { ContextStatusView } from "@brewva/brewva-vocabulary/context";
 import type { SessionWireFrame } from "@brewva/brewva-vocabulary/wire";
+import { resumeDelegatedApprovalsWithinEnvelope } from "../../../delegation/api.js";
 import { recordSessionShutdownIfMissing } from "../../../utils/runtime.js";
 import {
   createHostedSession as createGatewaySession,
@@ -512,6 +513,7 @@ async function handleSend(
     walReplayId: message.payload.walReplayId,
     trigger: message.payload.trigger,
     source: message.payload.source,
+    approvalMode: message.payload.approvalMode,
   });
 }
 
@@ -522,16 +524,19 @@ async function runTurn(input: {
   walReplayId?: string;
   trigger?: Extract<ParentToWorkerMessage, { kind: "send" }>["payload"]["trigger"];
   source?: "gateway" | "heartbeat" | "schedule";
+  approvalMode?: "suspend" | "auto_within_envelope";
 }): Promise<void> {
   if (!sessionResult) {
     activeTurnId = null;
     return;
   }
+  const workerSession = sessionResult.session;
+  const workerRuntime = sessionResult.runtime;
   const releaseSessionWireRelay = sessionWireRelayGate.pause();
   try {
-    await runHostedTurnEnvelope({
-      session: sessionResult.session,
-      runtime: sessionResult.runtime,
+    const output = await runHostedTurnEnvelope({
+      session: workerSession,
+      runtime: workerRuntime,
       sessionId: input.agentSessionId,
       prompt: input.prompt,
       turnId: input.turnId,
@@ -544,6 +549,44 @@ async function runTurn(input: {
       classifyThrownError: () =>
         pendingUserCancellationTurnId === input.turnId ? "cancelled" : "failed",
     });
+    // The config-authored self-improve schedule runs unattended: like a
+    // delegated child, its effect boundary is already governed, so within the
+    // human-declared envelope an approval suspension auto-resolves and the run
+    // resumes. Each decision is recorded (actor = the schedule envelope) so the
+    // auto-approval stays auditable. The daemon only ever sets this mode for
+    // the config-identity intent — model-minted intents cannot reach it.
+    if (input.source === "schedule" && input.approvalMode === "auto_within_envelope") {
+      await resumeDelegatedApprovalsWithinEnvelope({
+        initial: output,
+        sessionId: input.agentSessionId,
+        listPendingApprovals: (sessionId) =>
+          workerRuntime.ops.proposals.requests.listPending(sessionId),
+        acceptApproval: (sessionId, requestId) =>
+          workerRuntime.ops.proposals.requests.decide(sessionId, requestId, {
+            decision: "accept",
+            actor: "schedule-envelope",
+            reason:
+              "config-authored self-improve schedule auto-approves effectful tools within its governed envelope",
+          }),
+        resumeTurn: (resolveApproval) =>
+          runHostedTurnEnvelope({
+            session: workerSession,
+            runtime: workerRuntime,
+            sessionId: input.agentSessionId,
+            prompt: "",
+            // Reuse the original turnId: the supervisor resolves the parent's
+            // pending sendPrompt on the `turn.committed` frame KEYED BY turnId,
+            // so a resume that minted a fresh id would complete invisibly and
+            // leave the schedule runner waiting forever.
+            turnId: input.turnId,
+            source: "schedule",
+            resolveApproval,
+            onFrame: (frame) => {
+              sendSessionWireFrame(requestedSessionId, frame);
+            },
+          }),
+      });
+    }
   } catch (error) {
     log("error", "worker turn envelope failed", {
       requestedSessionId,

@@ -2,6 +2,7 @@ export {
   createDetachedSubagentBackgroundController,
   type HostedSubagentBackgroundController,
 } from "./background/controller.js";
+export { resumeDelegatedApprovalsWithinEnvelope } from "./resume-delegated-approvals.js";
 export {
   HostedDelegationStore,
   buildDelegationLifecyclePayload,

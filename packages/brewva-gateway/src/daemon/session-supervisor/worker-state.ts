@@ -32,6 +32,7 @@ export interface QueuedTurn {
   source: "gateway" | "heartbeat" | "schedule";
   walReplayId?: string;
   trigger?: SendPromptTrigger;
+  approvalMode?: "suspend" | "auto_within_envelope";
   waitForCompletion: boolean;
   walId?: BrewvaWalId;
   resolve: (result: SendPromptResult) => void;

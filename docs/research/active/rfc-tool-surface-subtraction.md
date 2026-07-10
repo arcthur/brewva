@@ -389,12 +389,15 @@ trigger: next config-schema change).
 - Per-family invocation view landed in the offline calibration recipe
   (`analyze:advisory-receipts`) and the surface ceiling fitness landed and enforced
   (pinned, then lowered with the demotion).
+  - gate: `bun test test/fitness/tool-surface-ceiling.fitness.test.ts`
 - Cross-model re-measurement (at least two more models, including the
   taught-ontology control arm) confirms near-zero for the demoted families.
 - Boundary-receipt equivalence verified (or the receipt moved to the boundary) for
   every receipt-bearing demoted family.
 - `skills.routing` migration shim landed with a regression test that an existing
   config carrying the removed keys loads with a warning.
+  - gate: `bun test test/unit/runtime/config-removed-field-migration.unit.test.ts`
+  - gate: `bun test test/unit/gateway/tool-surface-skill-gate.unit.test.ts`
 - On acceptance: ADR in `docs/research/decisions/`; contract text in
   `docs/architecture/system-architecture.md`; the compressed default surface in
   `packages/brewva-tools/src/registry/managed-metadata.ts`.

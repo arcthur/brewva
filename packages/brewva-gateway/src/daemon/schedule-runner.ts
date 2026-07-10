@@ -19,6 +19,7 @@ import {
   recordRuntimeScheduleWakeup,
 } from "../hosted/api.js";
 import type {
+  ScheduleApprovalMode,
   SchedulePromptAnchor,
   SchedulePromptTrigger,
   SessionBackend,
@@ -42,6 +43,32 @@ function hasScheduleContinuationAnchorMetadata(
   anchor: SchedulePromptAnchor | null | undefined,
 ): anchor is SchedulePromptAnchor {
   return Boolean(anchor && decideContinuationAnchorRelevance(anchor).include);
+}
+
+/**
+ * The approval envelope for a scheduled run is derived from CONFIG IDENTITY,
+ * never from the intent record: only the config-authored self-improve intent
+ * (matching intentId AND parentSessionId) with the config explicitly set to
+ * `auto_within_envelope` gets it. Intents minted by model-facing tools
+ * (`schedule_intent`, `follow_up`) always resolve to "suspend" regardless of
+ * any fields their WAL records carry — a model must never be able to schedule
+ * itself a future auto-approved session (fail-closed, axiom 4: govern effects).
+ */
+export function resolveScheduleApprovalMode(input: {
+  intent: Pick<ScheduleIntentProjectionRecord, "intentId" | "parentSessionId">;
+  selfImprovePolicy: {
+    readonly enabled: boolean;
+    readonly approvalMode: ScheduleApprovalMode;
+    readonly intentId: string;
+    readonly parentSessionId: string;
+  };
+}): ScheduleApprovalMode {
+  const policy = input.selfImprovePolicy;
+  if (!policy.enabled) return "suspend";
+  if (policy.approvalMode !== "auto_within_envelope") return "suspend";
+  if (input.intent.intentId !== policy.intentId) return "suspend";
+  if (input.intent.parentSessionId !== policy.parentSessionId) return "suspend";
+  return "auto_within_envelope";
 }
 
 export function buildScheduleWorkerSessionId(input: {
@@ -126,6 +153,7 @@ export async function executeScheduleIntentRun(input: {
   configPath?: string;
   model?: string;
   managedToolMode?: ManagedToolMode;
+  approvalMode?: ScheduleApprovalMode;
 }): Promise<{ evaluationSessionId: string; workerSessionId: string }> {
   const runIndex = input.intent.runCount + 1;
   const workerSessionId = buildScheduleWorkerSessionId({
@@ -177,6 +205,7 @@ export async function executeScheduleIntentRun(input: {
       waitForCompletion: true,
       source: "schedule",
       trigger,
+      ...(input.approvalMode ? { approvalMode: input.approvalMode } : {}),
     });
     const evaluationSessionId = result.agentSessionId?.trim() || agentSessionId;
     recordRuntimeScheduleChildFinished(input.runtime, input.intent.parentSessionId, {

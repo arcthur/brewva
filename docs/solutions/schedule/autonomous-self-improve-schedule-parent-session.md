@@ -55,6 +55,64 @@ existing semantic contract:
 - scheduler remains the recurring trigger, not the policy brain
 - `self-improve` still stops at promotion candidates rather than direct writes
 
+## Approval Posture (`schedule.selfImprove.approvalMode`)
+
+Scheduled workers have no interactive approver, so an effectful tool (`exec`)
+would suspend the run. `approvalMode` controls that hop:
+
+- `"auto_within_envelope"` (default for the config-authored lane): the worker
+  auto-approves its own effectful tools inside its governed effect boundary and
+  resumes, mirroring the delegated-child envelope. Every decision is recorded
+  (actor `schedule-envelope`) so the auto-approval stays auditable.
+- `"suspend"`: keep the interactive approval hop (set explicitly to opt out).
+  An unrecognized explicit value also fails CLOSED to `"suspend"` — garbage
+  never grants the envelope.
+
+Authorization comes from CONFIG IDENTITY, never from intent records: the daemon
+grants the envelope only to the intent whose `intentId` and `parentSessionId`
+match the config-authored `schedule.selfImprove` entry with the mode explicitly
+set. Intents minted by the model-facing `schedule_intent` / `follow_up` tools
+always run with `"suspend"`, whatever fields their records carry — a model must
+never be able to schedule itself a future auto-approved session.
+
+## Default Lane: The Calibration-Report Pass
+
+The calibration-report pass IS the default `schedule.selfImprove` lane: with a
+running gateway daemon and default config, a weekly worker follows the
+`calibration-report` skill and writes report artifacts plus promotion
+candidates — nothing else. Opt out with `schedule.selfImprove.enabled: false`
+(or disable the scheduler entirely; an unavailable scheduler disarms the lane
+with a warning instead of failing daemon startup). The block below shows the
+shape for customizing cadence, task, or approval posture:
+
+```jsonc
+{
+  "schedule": {
+    "selfImprove": {
+      "enabled": true, // ON by default; set false to opt out
+      "parentSessionId": "self-improve-parent",
+      "intentId": "calibration-report-weekly",
+      "reason": "weekly harness calibration report",
+      "goalRef": "calibration-report",
+      "continuityMode": "inherit",
+      "cron": "0 6 * * 1",
+      "maxRuns": 52,
+      "approvalMode": "auto_within_envelope",
+      "taskSpec": {
+        "goal": "Follow the calibration-report skill: aggregate advisory receipts, run the offline evals, and write the dated report with proposals for human review.",
+        "constraints": ["Report artifacts only; never change rules, config, or schedules."],
+      },
+    },
+  },
+}
+```
+
+The goal text names the `calibration-report` skill, so skill selection renders
+it on the wakeup turn (explicit mention) and the tools its document instructs
+surface automatically for that turn. Reports land under
+`.brewva/reports/calibration/` for human review; promotion of any proposal
+stays a reviewed code change.
+
 ## When to Apply
 
 Use this pattern when a recurring scheduled pass is supposed to keep the same

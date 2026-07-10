@@ -710,6 +710,7 @@ export class SessionSupervisor implements SessionBackend {
         source,
         walReplayId: replayWalId,
         trigger: options.trigger,
+        approvalMode: options.approvalMode,
         waitForCompletion,
         walId,
         resolve: resolveQueued,

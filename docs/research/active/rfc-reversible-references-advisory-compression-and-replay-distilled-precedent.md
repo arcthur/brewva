@@ -579,12 +579,16 @@ Move this note to `docs/research/decisions/` only after:
   under fitness tests, through the shared redaction layer, with proven
   `unresolvable_reference` and `sensitive_payload_withheld` postures and no second
   source of truth
+  - gate: `bun test test/unit/recall/rcr-resolver.unit.test.ts`
+  - gate: `bun test test/unit/tools/rcr-expand.unit.test.ts`
 - ACR candidates are advisory-only under fitness tests, the emergency hint stays
   non-authoritative, and the default path applies no automatic reduction
+  - gate: `bun test test/unit/tools/context-route.unit.test.ts`
 - RDP writes only promotion candidates, gates active promotion through
   `knowledge_capture` with `investigation_record` authority, is explicit-pull
   only, obeys the power order, and aggregates no cross-repository data under
   fitness tests
+  - gate: `bun test test/unit/recall/rdp.unit.test.ts`
 - the fact-ownership boundary tracked by the context-OS RFC is documented as
   resolved by RCR in stable docs
 - stable docs carry the accepted contracts for all three capabilities

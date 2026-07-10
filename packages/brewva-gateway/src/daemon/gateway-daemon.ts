@@ -79,7 +79,7 @@ import {
   type RecoveryWalStore,
   type SchedulerService,
 } from "./recovery.js";
-import { executeScheduleIntentRun } from "./schedule-runner.js";
+import { executeScheduleIntentRun, resolveScheduleApprovalMode } from "./schedule-runner.js";
 import {
   isSessionBackendCapacityError,
   isSessionBackendStateError,
@@ -536,9 +536,13 @@ export class GatewayDaemon {
         ? "events_disabled"
         : undefined;
     if (runtimeConfig.schedule.selfImprove.enabled && this.schedulerUnavailableReason) {
-      throw new Error(
-        `schedule.selfImprove requires scheduler availability (reason=${this.schedulerUnavailableReason}).`,
-      );
+      // selfImprove is ON by default, so an unavailable scheduler is no longer
+      // proof of an explicit misconfiguration — degrade to a visible warning
+      // and leave the lane disarmed (the reconcile below is scheduler-gated)
+      // instead of failing daemon startup.
+      this.logger.warn("schedule.selfImprove disarmed: scheduler unavailable", {
+        reason: this.schedulerUnavailableReason,
+      });
     }
     this.schedulerRuntime = !this.schedulerUnavailableReason
       ? createHostedRuntimeAdapter({
@@ -580,6 +584,10 @@ export class GatewayDaemon {
             configPath: options.configPath,
             model: options.model,
             managedToolMode: options.managedToolMode,
+            approvalMode: resolveScheduleApprovalMode({
+              intent,
+              selfImprovePolicy: runtimeConfig.schedule.selfImprove,
+            }),
           });
         },
       });

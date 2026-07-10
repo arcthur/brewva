@@ -54,12 +54,20 @@ export interface SessionWorkerInfo {
   ready: boolean;
 }
 
+export type ScheduleApprovalMode = "suspend" | "auto_within_envelope";
+
 export interface SendPromptOptions {
   turnId?: string;
   waitForCompletion?: boolean;
   source?: "gateway" | "heartbeat" | "schedule";
   walReplayId?: string;
   trigger?: SendPromptTrigger;
+  /**
+   * Only meaningful for `source: "schedule"`. Set by the daemon from CONFIG
+   * identity (the config-authored self-improve intent) — never from intent
+   * records, so model-minted intents cannot smuggle an approval envelope.
+   */
+  approvalMode?: ScheduleApprovalMode;
 }
 
 export interface SendPromptOutput {

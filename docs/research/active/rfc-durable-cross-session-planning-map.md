@@ -544,6 +544,7 @@ Move to `docs/research/decisions/` only after:
       the fog family (`record_fog` / `graduate_fog`), `rescope_plan_ticket`, and the
       `/map` interactive + owner-gated channel command all land with `bun run check`
       and `bun run test:ci` green.
+  - gate: `bun test test/fitness/plan-map-plan-not-execute.fitness.test.ts`
 - [ ] A measured cross-session demand signal: real efforts span multiple sessions
       often enough that the durable map beats a compaction-only baseline — needs
       production telemetry (Phase 3), not code alone.

@@ -129,7 +129,7 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     },
   },
   schedule: {
-    enabled: false,
+    enabled: true,
     projectionPath: ".brewva/schedule/intents.jsonl",
     leaseDurationMs: 60_000,
     maxActiveIntentsPerSession: 5,
@@ -139,23 +139,23 @@ export const DEFAULT_BREWVA_CONFIG: BrewvaConfig = {
     maxRecoveryCatchUps: 5,
     staleOneShotRecoveryThresholdMs: 3_600_000,
     selfImprove: {
-      enabled: false,
+      enabled: true,
+      approvalMode: "auto_within_envelope",
       parentSessionId: asBrewvaSessionId("schedule:policy:self-improve"),
       intentId: asBrewvaIntentId("schedule:policy:self-improve:recurring"),
       reason:
-        "Run the self-improve skill on recurring repository friction and only emit reviewable promotion candidates.",
-      goalRef: "schedule:self-improve",
+        "Run the weekly calibration-report pass and only emit report artifacts and reviewable promotion candidates.",
+      goalRef: "schedule:calibration-report",
       continuityMode: "inherit",
       cron: "0 9 * * 1",
       maxRuns: 10_000,
       taskSpec: {
-        goal: "Run the self-improve skill against repeated repository delivery friction and generate only reviewable promotion candidates or a quiet no-signal outcome.",
+        goal: "Follow the calibration-report skill: aggregate advisory receipts, run the offline evals, distill precedent candidates, and write the dated report with proposals for human review.",
         expectedBehavior:
-          "Inspect repeated review, retro, runtime, and promotion evidence; keep the loop proposal-only; and exit cleanly when fewer than two independent occurrences qualify.",
+          "Read the previous report for deltas, run each pass leg (recording skipped legs honestly), and produce the fixed-section report plus a workbench pin; exit quietly when the corpus is unchanged.",
         constraints: [
-          "Do not patch skill files or write repository docs directly from the scheduled run.",
-          "Require at least two independent occurrences before calling a pattern systemic.",
-          "If evidence is insufficient, stop without operator-visible noise beyond inspectable runtime evidence.",
+          "Report artifacts and promotion candidates only; never change rules, config, skills, registries, or schedules.",
+          "If a leg fails, record the failure in the report and continue with the legs that ran.",
         ],
       },
     },

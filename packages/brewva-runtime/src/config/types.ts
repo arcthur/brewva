@@ -48,6 +48,16 @@ export interface BrewvaSecurityExactCallLoopConfig {
 
 export interface BrewvaScheduleSelfImproveConfig {
   enabled: boolean;
+  /**
+   * Approval posture for the config-authored self-improve schedule's worker
+   * sessions. "suspend" (default, fail-closed) keeps the interactive approval
+   * hop; "auto_within_envelope" lets the scheduled worker auto-approve its own
+   * effectful tools inside its governed effect boundary — the human authoring
+   * this config IS the authorization (the permission layer stays outside the
+   * loop). Model-minted schedule intents can never receive this envelope: the
+   * daemon derives it from config identity, not from intent records.
+   */
+  approvalMode: "suspend" | "auto_within_envelope";
   parentSessionId: BrewvaSessionId;
   intentId: BrewvaIntentId;
   reason: string;

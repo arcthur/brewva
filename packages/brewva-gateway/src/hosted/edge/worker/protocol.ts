@@ -27,6 +27,7 @@ export type ParentToWorkerMessage =
         walReplayId?: string;
         trigger?: SendPromptTrigger;
         source?: "gateway" | "heartbeat" | "schedule";
+        approvalMode?: "suspend" | "auto_within_envelope";
       };
     }
   | {

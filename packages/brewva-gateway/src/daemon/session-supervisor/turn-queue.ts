@@ -70,6 +70,7 @@ export class SessionTurnQueueCoordinator {
           walReplayId: queued.walReplayId,
           trigger: queued.trigger,
           source: queued.source,
+          approvalMode: queued.approvalMode,
         },
       });
 
