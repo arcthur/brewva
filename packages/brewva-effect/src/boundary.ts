@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { Effect } from "effect";
 import {
   BrewvaBoundaryFailure,
@@ -44,7 +45,7 @@ function toBrewvaBoundaryError(error: unknown, wasCancelled = false): BrewvaBoun
     });
   }
   return new BrewvaBoundaryFailure({
-    message: error instanceof Error ? error.message : String(error),
+    message: toErrorMessage(error),
     cause: error,
   });
 }
@@ -65,7 +66,7 @@ export function fromBoundaryPromise<A>(
       error instanceof BrewvaBoundaryFailure
         ? error
         : new BrewvaBoundaryFailure({
-            message: error instanceof Error ? error.message : String(error),
+            message: toErrorMessage(error),
             cause: error,
           }),
   });

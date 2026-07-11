@@ -4,6 +4,7 @@ import {
   classifyToolBoundaryRequest,
   evaluateBoundaryClassification,
 } from "@brewva/brewva-runtime/security";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   EXEC_FAILED_EVENT_TYPE,
@@ -320,7 +321,7 @@ export function createExecTool(options?: ExecToolOptions): ToolDefinition {
             if (isExecAbortedError(error) || signal?.aborted) {
               throw error;
             }
-            const message = error instanceof Error ? error.message : String(error);
+            const message = toErrorMessage(error);
             const auditError = redactTextForAudit(message);
             recordExecEvent(
               runtime,

@@ -1,4 +1,4 @@
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   readToolResultRecordedEventPayload,
@@ -386,7 +386,7 @@ export function maybeAdjudicateLatestTaskStall(
       payload: {
         detectedAt: detected.detectedAt,
         baselineProgressAt: detected.baselineProgressAt,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       },
     });
     return null;

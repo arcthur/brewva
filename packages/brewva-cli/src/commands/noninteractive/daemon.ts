@@ -14,6 +14,7 @@ import {
 } from "@brewva/brewva-gateway/daemon";
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   SCHEDULE_CHILD_SESSION_FAILED_EVENT_TYPE,
   SCHEDULE_CHILD_SESSION_FINISHED_EVENT_TYPE,
@@ -101,9 +102,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
       cwd: runtime.identity.workspaceRoot,
     });
   } catch (error) {
-    console.error(
-      `brewva scheduler daemon: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    console.error(`brewva scheduler daemon: ${toErrorMessage(error)}`);
     process.exitCode = 1;
     return;
   }
@@ -273,11 +272,7 @@ export async function runDaemon(parsed: RunDaemonOptions): Promise<void> {
             await Promise.all([closeSummaryInterval(summaryInterval), supervisor.stop()]);
           } catch (error) {
             if (parsed.verbose) {
-              console.error(
-                `[daemon] shutdown cleanup failed: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-              );
+              console.error(`[daemon] shutdown cleanup failed: ${toErrorMessage(error)}`);
             }
           } finally {
             emitSummaryWindow("shutdown");

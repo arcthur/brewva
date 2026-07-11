@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { parseJsonc } from "@brewva/brewva-runtime/config";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { normalizeAgentId } from "@brewva/brewva-vocabulary/session";
 import { createHostedRuntimeAdapter } from "../hosted/api.js";
 import type { HostedRuntimeAdapterPort } from "../hosted/api.js";
@@ -92,10 +92,7 @@ async function loadAgentConfigOverlay(workspaceRoot: string, agentId: string): P
     }
     return parsed;
   } catch (error) {
-    throw new Error(
-      `invalid_agent_config:${agentId}:${error instanceof Error ? error.message : String(error)}`,
-      { cause: error },
-    );
+    throw new Error(`invalid_agent_config:${agentId}:${toErrorMessage(error)}`, { cause: error });
   }
 }
 

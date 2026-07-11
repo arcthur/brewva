@@ -1,4 +1,5 @@
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { ProviderStreamError, readErrorStatus } from "../contracts/index.js";
 
 function readRetryableFlag(error: unknown): boolean | undefined {
@@ -30,7 +31,7 @@ export function toProviderStreamError(error: unknown): ProviderStreamError {
   }
   const retryable = readRetryableFlag(error);
   return new ProviderStreamError({
-    message: error instanceof Error ? error.message : String(error),
+    message: toErrorMessage(error),
     cause: error,
     ...(retryable === undefined ? {} : { retryable }),
   });

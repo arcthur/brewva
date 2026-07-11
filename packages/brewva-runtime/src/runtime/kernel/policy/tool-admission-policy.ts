@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { analyzeShellCommand } from "../../../security/command-policy.js";
 import { analyzeVirtualReadonlyEligibility } from "../../../security/virtual-readonly-policy.js";
 import { normalizeToolName } from "../../../utils/tool-name.js";
@@ -100,7 +101,7 @@ function readCommandArgument(args: Record<string, unknown> | undefined): string 
 
 function hasUserProvidedEnvironment(args: Record<string, unknown> | undefined): boolean {
   const env = args?.env;
-  if (!env || typeof env !== "object" || Array.isArray(env)) {
+  if (!isRecord(env)) {
     return false;
   }
   return Object.keys(env as Record<string, unknown>).length > 0;

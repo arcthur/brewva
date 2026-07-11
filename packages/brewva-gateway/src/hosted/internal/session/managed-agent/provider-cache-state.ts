@@ -8,6 +8,7 @@ import type {
   ProviderCachePolicy,
   ProviderPayloadMetadata,
 } from "@brewva/brewva-provider-core/contracts";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaAgentProtocolTransport } from "@brewva/brewva-substrate/agent-protocol";
 import type { ProviderCacheRenderState } from "@brewva/brewva-vocabulary/context";
 import { ProviderCacheStickyLatches } from "../../provider/cache/index.js";
@@ -69,7 +70,7 @@ export class ManagedSessionProviderCacheState {
     void this.clearSessionState().catch((error) => {
       this.#logger?.warn("provider cache session clear failed", {
         sessionId: this.#getSessionId(),
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       });
     });
   }

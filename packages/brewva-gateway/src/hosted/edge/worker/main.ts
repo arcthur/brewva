@@ -20,6 +20,7 @@ import {
   registerExternalApiProvider,
   unregisterApiProviders,
 } from "@brewva/brewva-provider-core/registry";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaMutableModelCatalog,
   BrewvaProviderModelDefinition,
@@ -473,7 +474,7 @@ async function handleInit(
       kind: "result",
       requestId: message.requestId,
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: toErrorMessage(error),
     });
     await shutdown(1, "init_failed", error);
   }
@@ -627,7 +628,7 @@ async function runTurn(input: {
       requestedSessionId,
       agentSessionId: input.agentSessionId,
       turnId: input.turnId,
-      error: error instanceof Error ? error.message : String(error),
+      error: toErrorMessage(error),
     });
     // A throw inside the schedule approval envelope (a decide() or resume error)
     // must not vanish into a log line: the runtime never reached `turn.ended`, so
@@ -685,7 +686,7 @@ async function handleAbort(
       kind: "result",
       requestId: message.requestId,
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: toErrorMessage(error),
     });
   }
 }
@@ -719,7 +720,7 @@ async function handleSteer(
       kind: "result",
       requestId: message.requestId,
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: toErrorMessage(error),
     });
   }
 }
@@ -883,7 +884,7 @@ function logWorkerEdgeFailure(operation: string, error: unknown): void {
   log("error", "worker edge operation failed", {
     requestedSessionId,
     operation,
-    error: error instanceof Error ? error.message : String(error),
+    error: toErrorMessage(error),
   });
 }
 
@@ -909,7 +910,7 @@ function runWorkerEdgeOperation(
 function handleFatalProcessError(operation: string, message: string, reason: unknown): void {
   log("error", message, {
     requestedSessionId,
-    error: reason instanceof Error ? reason.message : String(reason),
+    error: toErrorMessage(reason),
   });
   void runWorkerEdgeOperation(operation, shutdownEffect(1, operation, reason)).catch((error) => {
     logWorkerEdgeFailure(operation, error);

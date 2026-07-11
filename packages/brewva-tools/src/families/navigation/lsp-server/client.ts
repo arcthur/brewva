@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { isRecord } from "@brewva/brewva-std/unknown";
 
 export interface LspPosition {
   readonly line: number;
@@ -70,9 +71,7 @@ interface PendingRequest {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function findHeaderEnd(buffer: Buffer): number {

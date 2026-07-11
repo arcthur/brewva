@@ -1,5 +1,6 @@
 import { compactWhitespace, truncateText } from "@brewva/brewva-std/text";
 import { computeToolCallArgsDigest } from "@brewva/brewva-std/tool-call-digest";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import {
   readToolResultRecordedEventPayload,
@@ -43,7 +44,7 @@ export interface FailureRecurrenceProjection {
 }
 
 function readArgsDigest(args: unknown): string | null {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  if (!isRecord(args)) return null;
   try {
     return computeToolCallArgsDigest(args as Record<string, unknown>);
   } catch {

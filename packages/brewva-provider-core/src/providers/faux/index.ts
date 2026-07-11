@@ -1,4 +1,5 @@
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import { buildProviderCacheBucketKey, normalizeProviderCachePolicy } from "../../cache/policy.js";
 import type {
@@ -362,7 +363,7 @@ function createErrorMessage(
     model: modelId,
     usage: DEFAULT_USAGE,
     stopReason: "error",
-    errorMessage: error instanceof Error ? error.message : String(error),
+    errorMessage: toErrorMessage(error),
     timestamp: Date.now(),
   };
 }

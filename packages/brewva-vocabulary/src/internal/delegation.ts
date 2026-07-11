@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { type BrewvaEventRecord } from "./events.js";
 import { type VerifierCheck } from "./iteration.js";
 import { readReviewTargetRef, type ReviewTargetRef } from "./review.js";
@@ -500,7 +501,7 @@ export interface DelegationReviewDispatch {
  * degrade field-by-field to their empty/false defaults.
  */
 export function readDelegationReviewDispatch(value: unknown): DelegationReviewDispatch | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   const record = value as ProtocolRecord;

@@ -1,5 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { relative, resolve } from "node:path";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { TOOL_READ_PATH_DISCOVERY_OBSERVED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import { Type } from "@sinclair/typebox";
@@ -547,7 +548,7 @@ export function createGrepTool(options: GrepToolOptions): ToolDefinition {
           },
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = toErrorMessage(error);
         const notFound = /ENOENT|not found|spawn rg/i.test(message);
         const hint = notFound ? " (install ripgrep: rg)" : "";
         return errTextResult(`grep failed: ${message}${hint}`, {
@@ -728,7 +729,7 @@ export function createGlobTool(options: GrepToolOptions): ToolDefinition {
           ...result,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = toErrorMessage(error);
         const notFound = /ENOENT|not found|spawn rg/i.test(message);
         const hint = notFound ? " (install ripgrep: rg)" : "";
         return errTextResult(`glob failed: ${message}${hint}`, {

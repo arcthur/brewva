@@ -1,6 +1,7 @@
 import { parseArgs as parseNodeArgs } from "node:util";
 import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import { loadBrewvaInspectConfigResolution } from "@brewva/brewva-runtime/config";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { createCliInspectPort } from "../../runtime/cli-runtime-ports.js";
 import { resolveInspectDirectory, type InspectDirectory } from "../inspect-analysis.js";
 import {
@@ -115,7 +116,7 @@ export async function runInspectCli(argv: string[]): Promise<number> {
       strict: true,
     });
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Error: ${toErrorMessage(error)}`);
     return 1;
   }
 
@@ -157,7 +158,7 @@ export async function runInspectCli(argv: string[]): Promise<number> {
       typeof parsed.values.dir === "string" ? parsed.values.dir : undefined,
     );
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Error: ${toErrorMessage(error)}`);
     return 1;
   }
 

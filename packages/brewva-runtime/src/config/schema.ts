@@ -1,8 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isRecord } from "@brewva/brewva-std/unknown";
-
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 type SchemaObject = Record<string, unknown>;
 
 let cachedSchema: { schema: SchemaObject; schemaPath: string } | null = null;
@@ -56,7 +55,7 @@ export function loadBrewvaConfigSchema():
     cachedSchema = { schema: parsed, schemaPath };
     return { ok: true, schema: parsed, schemaPath };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     cachedError = new Error(`Failed to load config schema (${schemaPath}): ${message}`);
     return { ok: false, cause: cachedError };
   }

@@ -12,6 +12,7 @@ import type {
 } from "@brewva/brewva-runtime/config";
 import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import {
   DEFAULT_TOOL_OUTCOME_VERSION,
   ToolErrorRecordSchema,
@@ -127,7 +128,7 @@ function describeMcpContentRecord(record: Record<string, unknown>): string {
   }
   if (type === "resource") {
     const resource = record.resource;
-    if (resource && typeof resource === "object" && !Array.isArray(resource)) {
+    if (isRecord(resource)) {
       const resourceRecord = resource as Record<string, unknown>;
       const uri = readString(resourceRecord, "uri") ?? "unknown";
       const mimeType = readString(resourceRecord, "mimeType", "mime_type") ?? "unknown";
@@ -157,7 +158,7 @@ function summarizeReceiptBinary(record: Record<string, unknown>): Record<string,
 
 function summarizeReceiptResource(record: Record<string, unknown>): Record<string, unknown> {
   const resource = record.resource;
-  if (!resource || typeof resource !== "object" || Array.isArray(resource)) {
+  if (!isRecord(resource)) {
     return { type: "resource" };
   }
   const resourceRecord = resource as Record<string, unknown>;
@@ -351,7 +352,7 @@ export async function createHostedMcpToolBundle(
                     serverId,
                     toolName: descriptor.name,
                     hostedToolName,
-                    error: error instanceof Error ? error.message : String(error),
+                    error: toErrorMessage(error),
                   },
                 });
                 throw error;

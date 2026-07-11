@@ -1,4 +1,5 @@
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   readAutoCompactionBreakerOpen,
   resolveCompactionPressureReason,
@@ -167,7 +168,7 @@ interface CompactionGateState {
 export const DEFAULT_AUTO_COMPACTION_WATCHDOG_MS = 30_000;
 
 function extractToTokens(compactionEntry: unknown): number | null {
-  if (!compactionEntry || typeof compactionEntry !== "object" || Array.isArray(compactionEntry)) {
+  if (!isRecord(compactionEntry)) {
     return null;
   }
   const value = (compactionEntry as { toTokens?: unknown }).toTokens;
@@ -177,7 +178,7 @@ function extractToTokens(compactionEntry: unknown): number | null {
 }
 
 function extractTokensBefore(compactionEntry: unknown): number | null {
-  if (!compactionEntry || typeof compactionEntry !== "object" || Array.isArray(compactionEntry)) {
+  if (!isRecord(compactionEntry)) {
     return null;
   }
   const value = (compactionEntry as { tokensBefore?: unknown }).tokensBefore;
@@ -187,7 +188,7 @@ function extractTokensBefore(compactionEntry: unknown): number | null {
 }
 
 function extractCutPointReason(compactionEntry: unknown): string | null {
-  if (!compactionEntry || typeof compactionEntry !== "object" || Array.isArray(compactionEntry)) {
+  if (!isRecord(compactionEntry)) {
     return null;
   }
   const value = (compactionEntry as { cutPointReason?: unknown }).cutPointReason;
@@ -219,15 +220,11 @@ function extractFirstKeptEntryId(input: unknown): string | null {
 function extractSummaryGeneration(
   compactionEntry: unknown,
 ): SessionCompactionGenerationMetadata | undefined {
-  if (!compactionEntry || typeof compactionEntry !== "object" || Array.isArray(compactionEntry)) {
+  if (!isRecord(compactionEntry)) {
     return undefined;
   }
   const summaryGeneration = (compactionEntry as { summaryGeneration?: unknown }).summaryGeneration;
-  if (
-    !summaryGeneration ||
-    typeof summaryGeneration !== "object" ||
-    Array.isArray(summaryGeneration)
-  ) {
+  if (!isRecord(summaryGeneration)) {
     return undefined;
   }
   const strategy = (summaryGeneration as { strategy?: unknown }).strategy;

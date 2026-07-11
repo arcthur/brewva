@@ -1,4 +1,5 @@
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { RUNTIME_OPS_SHADOW_DIVERGENCE_RECORDED_KIND } from "@brewva/brewva-vocabulary/events";
 import { createCliInspectPort } from "../../runtime/cli-runtime-ports.js";
 
@@ -40,7 +41,7 @@ function readString(value: unknown): string | null {
 }
 
 function readDecision(value: unknown): { kind: string; reason: string | null } | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (!isRecord(value)) return null;
   const record = value as { kind?: unknown; reason?: unknown };
   const kind = readString(record.kind);
   return kind ? { kind, reason: readString(record.reason) } : null;

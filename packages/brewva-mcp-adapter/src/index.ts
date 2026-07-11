@@ -7,6 +7,7 @@ import {
 } from "@brewva/brewva-effect";
 import { BrewvaDuration, BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { stableJsonStringify } from "@brewva/brewva-std/json";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   createToolCatalog,
   type JsonSchema,
@@ -323,7 +324,7 @@ export class McpToolCatalogAdapter {
       this.#emit({
         type: "tool_call_failed",
         toolName: input.name,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       });
       throw error;
     }

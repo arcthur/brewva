@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaHostContext, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type { BrewvaToolContentPart } from "@brewva/brewva-substrate/tools";
 import type { BrewvaStructuredEvent } from "@brewva/brewva-vocabulary/events";
@@ -145,7 +146,7 @@ function recordGovernanceDecision(input: {
 
 function readRollbackReason(event: BrewvaStructuredEvent): string | undefined {
   const payload = event.payload;
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return undefined;
   }
   const reason = (payload as { reason?: unknown }).reason;
@@ -159,7 +160,7 @@ function describeHookError(error: unknown): string {
 }
 
 function isLocalHookResult(result: unknown): result is LocalHookResult {
-  if (!result || typeof result !== "object" || Array.isArray(result)) {
+  if (!isRecord(result)) {
     return false;
   }
   const kind = (result as { kind?: unknown }).kind;

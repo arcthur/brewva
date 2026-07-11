@@ -1,4 +1,5 @@
 import { toJsonValue, type JsonValue } from "@brewva/brewva-std/json";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   outcomeIsError,
   outcomeVerdict,
@@ -24,7 +25,7 @@ export interface RuntimeSessionWireProjectionEvent {
 }
 
 export function isRuntimeProjectionRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 function readRuntimeOutcome(value: unknown): BrewvaOutcome {

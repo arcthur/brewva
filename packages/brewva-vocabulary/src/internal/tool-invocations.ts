@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 /**
  * The canonical read-model for "a tool ran this session."
  *
@@ -45,9 +46,7 @@ export interface CommitmentScanEvent {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  return isRecord(value) ? (value as Record<string, unknown>) : null;
 }
 
 function readOutcome(payload: Record<string, unknown>): ToolInvocationOutcome | null {

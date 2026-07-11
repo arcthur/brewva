@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaModelPreset,
   BrewvaModelPresetState,
@@ -47,7 +48,7 @@ function readRoleModels(value: unknown, presetName: string): BrewvaModelRoleMap 
   if (value === undefined) {
     return {};
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`modelPresets.${presetName}.roles must be an object`);
   }
   const models: BrewvaModelRoleMap = {};
@@ -81,7 +82,7 @@ function readPresetName(name: string): string {
 
 function readPreset(name: string, value: unknown): BrewvaModelPreset | undefined {
   const presetName = readPresetName(name);
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error(`modelPresets.${presetName} must be an object`);
   }
   const record = value as Record<string, unknown>;
@@ -124,10 +125,7 @@ export function normalizeHostedModelPresetState(
 ): BrewvaModelPresetState {
   const authored = new Map<string, BrewvaModelPreset>();
   const rawPresets = settings.modelPresets;
-  if (
-    rawPresets !== undefined &&
-    (!rawPresets || typeof rawPresets !== "object" || Array.isArray(rawPresets))
-  ) {
+  if (rawPresets !== undefined && !isRecord(rawPresets)) {
     throw new Error("modelPresets must be an object");
   }
   for (const [name, value] of Object.entries(rawPresets ?? {})) {

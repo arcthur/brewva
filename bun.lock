@@ -118,6 +118,7 @@
       "name": "@brewva/brewva-effect",
       "version": "0.1.0",
       "dependencies": {
+        "@brewva/brewva-std": "workspace:*",
         "@effect/opentelemetry": "4.0.0-beta.83",
         "@effect/platform-node": "4.0.0-beta.83",
         "effect": "4.0.0-beta.83",
@@ -152,6 +153,7 @@
       "dependencies": {
         "@brewva/brewva-channels-telegram": "workspace:*",
         "@brewva/brewva-effect": "workspace:*",
+        "@brewva/brewva-std": "workspace:*",
         "lru-cache": "^11.5.1",
       },
     },
@@ -247,6 +249,7 @@
       "name": "@brewva/brewva-token-estimation",
       "version": "0.1.0",
       "dependencies": {
+        "@brewva/brewva-std": "workspace:*",
         "gpt-tokenizer": "3.4.0",
       },
     },

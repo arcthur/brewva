@@ -1,5 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 
 /**
  * Lightweight event-loop-block tracer, gated by BREWVA_TUI_STATS=1. When a
@@ -54,14 +55,14 @@ export function installDiagnosticErrorCapture(): void {
   process.on("uncaughtException", (error: unknown) => {
     recordDiagnosticError(
       "uncaughtException",
-      error instanceof Error ? error.message : String(error),
+      toErrorMessage(error),
       error instanceof Error ? error.stack : undefined,
     );
   });
   process.on("unhandledRejection", (reason: unknown) => {
     recordDiagnosticError(
       "unhandledRejection",
-      reason instanceof Error ? reason.message : String(reason),
+      toErrorMessage(reason),
       reason instanceof Error ? reason.stack : undefined,
     );
   });

@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { Static, TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { LEGACY_DELEGATION_FIELDS, PUBLIC_DELEGATION_FORBIDDEN_FIELDS } from "./schemas.js";
@@ -14,7 +15,7 @@ export function decodeToolParams<TSchemaValue extends TSchema>(
 }
 
 function collectLegacyDelegationFieldPaths(value: unknown): string[] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return [];
   }
 
@@ -29,7 +30,7 @@ function collectLegacyDelegationFieldPaths(value: unknown): string[] {
 
   if (Array.isArray(record.tasks)) {
     for (const [index, task] of record.tasks.entries()) {
-      if (!task || typeof task !== "object" || Array.isArray(task)) {
+      if (!isRecord(task)) {
         continue;
       }
       for (const field of LEGACY_DELEGATION_FIELDS) {
@@ -44,7 +45,7 @@ function collectLegacyDelegationFieldPaths(value: unknown): string[] {
 }
 
 function collectForbiddenPublicDelegationFieldPaths(value: unknown): string[] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return [];
   }
   const record = value as Record<string, unknown>;
@@ -56,7 +57,7 @@ function collectForbiddenPublicDelegationFieldPaths(value: unknown): string[] {
   }
   if (Array.isArray(record.tasks)) {
     for (const [index, task] of record.tasks.entries()) {
-      if (!task || typeof task !== "object" || Array.isArray(task)) {
+      if (!isRecord(task)) {
         continue;
       }
       for (const field of PUBLIC_DELEGATION_FORBIDDEN_FIELDS) {

@@ -1,4 +1,5 @@
 import { clearApiProviderSessions } from "@brewva/brewva-provider-core/registry";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   type BrewvaAgentProtocolEvent,
   type BrewvaAgentProtocolMessage,
@@ -762,7 +763,7 @@ class BrewvaManagedAgentSession implements BrewvaManagedPromptSession {
       await this.drainDeferredPrompts(undefined);
     } catch (error) {
       this.#logger?.warn("managed_agent_session_steering_recovery_failed", {
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       });
     }
   }

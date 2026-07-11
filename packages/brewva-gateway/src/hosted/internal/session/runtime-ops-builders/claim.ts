@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import { CLAIM_UPSERTED_EVENT_TYPE } from "@brewva/brewva-vocabulary/iteration";
 import type { ClaimState } from "@brewva/brewva-vocabulary/iteration";
@@ -29,7 +30,7 @@ function claimStateFor(ctx: HostedRuntimeOpsContext, sessionId: string): ClaimSt
   let updatedAt: number | null = null;
   for (const event of events) {
     const payload = event.payload;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    if (!isRecord(payload)) {
       continue;
     }
     const claim: ProtocolRecord = { status: "active", ...payload };

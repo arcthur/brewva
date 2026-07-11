@@ -1,5 +1,6 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { TURN_INPUT_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import type { BrewvaToolRuntime } from "../contracts/index.js";
 import { resolveToolRuntimeEventPort, resolveToolRuntimeTaskPort } from "./extensions.js";
@@ -39,9 +40,7 @@ function isRootCoveredBy(root: string, existingRoots: readonly string[]): boolea
 }
 
 function readRecordPayload(record: unknown): unknown {
-  return record && typeof record === "object" && !Array.isArray(record)
-    ? (record as { payload?: unknown }).payload
-    : undefined;
+  return isRecord(record) ? (record as { payload?: unknown }).payload : undefined;
 }
 
 function readString(value: unknown): string | undefined {
@@ -54,7 +53,7 @@ function readPromptContentText(content: unknown): string | undefined {
   }
   const text = content
     .map((part) => {
-      if (!part || typeof part !== "object" || Array.isArray(part)) {
+      if (!isRecord(part)) {
         return "";
       }
       const record = part as {
@@ -79,7 +78,7 @@ function readPromptContentText(content: unknown): string | undefined {
 }
 
 function readPromptText(payload: unknown): string | undefined {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return undefined;
   }
   const promptText = (payload as { promptText?: unknown }).promptText;

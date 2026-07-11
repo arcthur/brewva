@@ -1015,7 +1015,7 @@ export class SessionSupervisor implements SessionBackend {
       this.options.logger.warn("failed to close worker scope", {
         sessionId: handle.sessionId,
         pid: handle.child.pid,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       });
     }
   }
@@ -1143,7 +1143,7 @@ export class SessionSupervisor implements SessionBackend {
         this.options.logger.warn("failed to stop idle worker session", {
           sessionId: handle.sessionId,
           pid: handle.child.pid,
-          error: error instanceof Error ? error.message : String(error),
+          error: toErrorMessage(error),
         });
       }
     }
@@ -1287,7 +1287,7 @@ export class SessionSupervisor implements SessionBackend {
     } catch (error) {
       this.options.logger.warn("failed to persist worker registry", {
         path: this.childrenRegistryPath,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       });
     }
   }

@@ -1,4 +1,5 @@
 import type { ToolActionClass } from "@brewva/brewva-runtime/security";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { SESSION_PHASE_KINDS, type SessionPhase } from "@brewva/brewva-substrate/session";
 import { resolveContextUsageTokens } from "@brewva/brewva-token-estimation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
@@ -37,9 +38,7 @@ const EFFECT_LEDGER_ITEM_LIMIT = 12;
 type CockpitQuestion = ShellCockpitProjectionSource["operator"]["questions"][number];
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function phaseKind(phase: SessionPhase): ShellCockpitPhysicsBar["phase"]["kind"] {

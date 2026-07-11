@@ -180,6 +180,47 @@ describe("brewva std utility boundary", () => {
     expect(offenders).toEqual([]);
   });
 
+  test("generic error-message extraction stays behind std toErrorMessage", () => {
+    const offenders: string[] = [];
+    // Matches the hand-written `X instanceof Error ? X.message : String(X)` form
+    // (same identifier in all three positions, String() fallback). std's
+    // toErrorMessage is a strict superset — it also handles string/null/object
+    // inputs — so any occurrence of this exact form is a reimplementation.
+    const handWrittenExtraction =
+      /(\b[A-Za-z_$][\w$]*)\s+instanceof Error\s*\?\s*\1\.message\s*:\s*String\(\1\)/gu;
+    for (const file of listFiles("packages").filter((entry) => entry.endsWith(".ts"))) {
+      if (file.startsWith("packages/brewva-std/src/")) continue;
+      for (const match of readRepoFile(file).matchAll(handWrittenExtraction)) {
+        offenders.push(`${file} -> ${match[0]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  test("production record guards stay behind std isRecord", () => {
+    // Reimplemented isRecord logic: `typeof X` object-check paired with an
+    // `Array.isArray(X)` array-exclusion on the SAME identifier inside a single
+    // expression. Banning the body STRUCTURE (not a helper name) means renaming a
+    // helper (asRecord/isObject/isPlainObject) no longer smuggles a copy past the
+    // guard. The gap forbids `;{}?:` so it never spans a statement boundary or a
+    // ternary — two independent `typeof`/`Array.isArray` statements are not a
+    // reimplementation. Object checks that omit the array exclusion (deliberately
+    // accepting arrays) are not matched and stay legal.
+    const rawGuard = new RegExp(
+      `typeof\\s+(\\w+)\\s*(?:===|!==)\\s*["']object["'][^;{}?:]{0,40}?!?Array\\.isArray\\(\\1\\)` +
+        `|!?Array\\.isArray\\((\\w+)\\)[^;{}?:]{0,40}?typeof\\s+\\2\\s*(?:===|!==)\\s*["']object["']`,
+      "gu",
+    );
+    const offenders: string[] = [];
+    for (const file of listFiles("packages").filter((entry) => entry.endsWith(".ts"))) {
+      if (file.startsWith("packages/brewva-std/src/")) continue;
+      for (const match of readRepoFile(file).matchAll(rawGuard)) {
+        offenders.push(`${file} -> ${match[0].replace(/\s+/gu, " ").slice(0, 80)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   test("known production leaf readers use std text and unknown primitives", () => {
     const offenders: string[] = [];
     const checks: readonly { path: string; pattern: RegExp; message: string }[] = [

@@ -8,6 +8,7 @@ import {
   type ToolRecoveryPolicy,
   type ToolRiskLevel,
 } from "@brewva/brewva-runtime/security";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { SessionPhase } from "@brewva/brewva-substrate/session";
 import { TOOL_EXECUTION_PHASES, type ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import type { PendingEffectCommitmentRequest } from "@brewva/brewva-vocabulary/iteration";
@@ -129,7 +130,7 @@ const READ_ONLY_ACTION_CLASSES = new Set<ToolActionClass>([
 ]);
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;

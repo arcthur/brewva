@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 export interface TuiTheme {
   name: string;
   backgroundApp: string;
@@ -94,7 +95,7 @@ const TUI_THEME_KEYS = [
 ] as const satisfies readonly (keyof TuiTheme)[];
 
 function isTuiThemeDescriptor(value: unknown): value is TuiTheme {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return false;
   }
   return TUI_THEME_KEYS.every((key) => typeof (value as Record<string, unknown>)[key] === "string");

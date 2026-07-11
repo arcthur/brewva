@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   SESSION_CRASH_POINTS,
   SESSION_TERMINATION_REASONS,
@@ -5,7 +6,7 @@ import {
 } from "@brewva/brewva-substrate/session";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;

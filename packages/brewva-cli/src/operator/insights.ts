@@ -6,6 +6,7 @@ import {
   type SessionIndexRecentSession,
   type SessionIndexStatus,
 } from "@brewva/brewva-session-index";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { formatISO } from "date-fns";
 import { createCliInspectPort, type CliInspectPort } from "../runtime/cli-runtime-ports.js";
 import { clampText, resolveInspectDirectory, type InspectFinding } from "./inspect-analysis.js";
@@ -602,7 +603,7 @@ async function buildProjectInsightsReport(input: {
     } catch (error) {
       analysisFailures.push({
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       });
     }
   }
@@ -776,7 +777,7 @@ async function runInsightsCli(argv: string[]): Promise<number> {
       strict: true,
     });
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Error: ${toErrorMessage(error)}`);
     return 1;
   }
 
@@ -812,7 +813,7 @@ async function runInsightsCli(argv: string[]): Promise<number> {
       typeof parsed.values.dir === "string" ? parsed.values.dir : undefined,
     );
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Error: ${toErrorMessage(error)}`);
     return 1;
   }
 

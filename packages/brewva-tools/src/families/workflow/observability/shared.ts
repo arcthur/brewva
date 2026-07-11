@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolContext as ExtensionContext } from "@brewva/brewva-substrate/tools";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { Type } from "@sinclair/typebox";
@@ -131,7 +132,7 @@ export function normalizeTypeList(value: unknown): string[] {
 export function normalizeWhere(
   value: unknown,
 ): Record<string, ObservabilityFilterValue> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
 

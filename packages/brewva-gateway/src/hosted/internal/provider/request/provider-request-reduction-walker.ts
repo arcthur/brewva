@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 export const CLEARED_TOOL_RESULT_PLACEHOLDER =
   "[cleared_for_request: oversized tool output omitted; do not repeat the same broad read/search, use narrower workspace paths]";
 export const RECENT_TOOL_RESULT_RETAIN_COUNT = 4;
@@ -31,7 +32,7 @@ export interface ReductionResult {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   return value as Record<string, unknown>;

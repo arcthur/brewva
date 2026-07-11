@@ -6,6 +6,7 @@ import type {
   ShellCommandAnalysis,
   VirtualReadonlyEligibility,
 } from "@brewva/brewva-runtime/security";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   BOX_ACQUIRED_EVENT_TYPE,
   BOX_BOOTSTRAP_COMPLETED_EVENT_TYPE,
@@ -156,7 +157,7 @@ export async function executeBoxCommandWithAudit(input: {
           );
         },
         onBootstrapFailed: (scope, error, durationMs) => {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = toErrorMessage(error);
           recordExecEvent(
             runtime,
             ownerSessionId,
@@ -410,7 +411,7 @@ export async function executeBoxCommandWithAudit(input: {
       throw error;
     }
 
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     const auditError = redactTextForAudit(message);
     recordExecEvent(
       runtime,

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { delimiter, dirname, extname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { SourcePatchIntent } from "@brewva/brewva-vocabulary/workbench";
 import { Type } from "@sinclair/typebox";
@@ -65,9 +66,7 @@ const POSITION_SCHEMA = {
 } as const;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function splitCommand(value: string): {
@@ -451,7 +450,7 @@ async function withClient<T>(input: {
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: toErrorMessage(error),
       stderr,
     };
   }

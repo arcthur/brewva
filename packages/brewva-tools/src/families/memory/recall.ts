@@ -14,6 +14,7 @@ import {
   isRecallSessionIndexUnavailable,
 } from "@brewva/brewva-recall/broker";
 import { resolveRcrReference } from "@brewva/brewva-recall/evidence";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   RECALL_CURATION_RECORDED_EVENT_TYPE,
@@ -53,7 +54,7 @@ const RECALL_SEARCH_INTENT_SCHEMA = buildStringEnumSchema(RECALL_SEARCH_INTENT_V
 });
 
 function sessionIndexUnavailableResult(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = toErrorMessage(error);
   return errTextResult(`recall_search unavailable (session_index_unavailable): ${message}`, {
     ok: false,
     error: "session_index_unavailable",

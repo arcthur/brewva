@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { DEFAULT_BREWVA_CONFIG } from "./defaults.js";
 import type { BrewvaConfig } from "./types.js";
 export {
@@ -181,7 +181,7 @@ function readConfigFile(configPath: string):
     const raw = readFileSync(configPath, "utf8");
     parsed = parseJsonc(raw);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     throw new BrewvaConfigLoadError({
       code: "config_parse_error",
       message: `Failed to parse config JSONC: ${message}`,
@@ -210,7 +210,7 @@ function readConfigFileForInspect(configPath: string): {
   try {
     parsed = parseJsonc(readFileSync(configPath, "utf8"));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     return {
       metadata,
       warnings: [
@@ -251,9 +251,9 @@ function readConfigFileForInspect(configPath: string): {
     warnings.push({
       code: "config_normalize_skipped",
       configPath,
-      message: `Skipped inspect config because normalization still failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      message: `Skipped inspect config because normalization still failed: ${toErrorMessage(
+        error,
+      )}`,
     });
     return {
       metadata,

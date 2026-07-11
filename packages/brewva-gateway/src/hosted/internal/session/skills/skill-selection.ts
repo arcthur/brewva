@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
 import { compactWhitespace, truncateText } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaHostBeforeAgentStartResult,
   BrewvaHostCustomMessage,
@@ -654,7 +655,7 @@ export function readLatestSkillSelectionReceipt(input: {
   sessionId: string;
 }): SkillSelectionReceipt | undefined {
   const payload = input.runtime.ops.skills.selection.latest(input.sessionId);
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return undefined;
   }
   const receipt = payload as Partial<SkillSelectionReceipt>;

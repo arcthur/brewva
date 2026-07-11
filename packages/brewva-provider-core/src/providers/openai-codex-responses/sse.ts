@@ -1,4 +1,5 @@
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { ResponseStreamEvent } from "openai/resources/responses/responses.js";
 import type {
   AssistantMessage,
@@ -115,7 +116,7 @@ export async function* parseSSE(response: Response): AsyncGenerator<Record<strin
     try {
       yield JSON.parse(data);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toErrorMessage(error);
       throw new Error(`Invalid Codex SSE JSON: ${message}`);
     }
   }

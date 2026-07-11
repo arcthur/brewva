@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sha256Hex } from "@brewva/brewva-std/hash";
-import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
+import { isRecord, readFiniteNumberValue, toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   estimateBrewvaSessionEntryTokens,
   selectBrewvaSessionCompactionCutPoint,
@@ -722,10 +722,7 @@ export class HostedRuntimeTapeSessionStore {
     details?: unknown,
     replaceCurrent?: boolean,
   ): string {
-    const detailRecord =
-      details && typeof details === "object" && !Array.isArray(details)
-        ? (details as Record<string, unknown>)
-        : undefined;
+    const detailRecord = isRecord(details) ? (details as Record<string, unknown>) : undefined;
     const revertId = readOptionalString(detailRecord?.revertId);
     if (revertId) {
       if (replaceCurrent) {
@@ -765,10 +762,7 @@ export class HostedRuntimeTapeSessionStore {
     details?: unknown,
     fromHook?: boolean,
   ): Promise<string> {
-    const detailRecord =
-      details && typeof details === "object" && !Array.isArray(details)
-        ? (details as Record<string, unknown>)
-        : undefined;
+    const detailRecord = isRecord(details) ? (details as Record<string, unknown>) : undefined;
     const summaryGeneration = readCompactionGenerationMetadata(detailRecord?.summaryGeneration);
     const inputProvenance = readCompactionInputProvenance(detailRecord?.inputProvenance);
     const event = commitRuntimeSessionCompaction(this.runtime, this.sessionId, {
@@ -811,10 +805,7 @@ export class HostedRuntimeTapeSessionStore {
     if (parentId !== null && !this.#byId.has(parentId)) {
       throw new Error(`Entry ${parentId} not found`);
     }
-    const detailRecord =
-      details && typeof details === "object" && !Array.isArray(details)
-        ? (details as Record<string, unknown>)
-        : undefined;
+    const detailRecord = isRecord(details) ? (details as Record<string, unknown>) : undefined;
     const contextParentId = parentId === null ? null : this.#nearestContextEntryId(parentId);
     this.#leafId = contextParentId;
     const event = recordHostedRuntimeEvent(this.runtime, {
@@ -944,7 +935,7 @@ export class HostedRuntimeTapeSessionStore {
       }
       return;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toErrorMessage(error);
       if (!message.includes("session_lineage_root_missing")) {
         throw error;
       }
@@ -1024,7 +1015,7 @@ export class HostedRuntimeTapeSessionStore {
         createdBy: "session-rewind",
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toErrorMessage(error);
       if (!message.includes(`session_lineage_node_exists:${lineageNodeId}`)) {
         throw error;
       }

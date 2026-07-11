@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ResponseInput } from "openai/resources/responses/responses.js";
 import type { ResponseInputItem } from "./contract.js";
 
@@ -28,14 +29,14 @@ function readCodexOutputItem(event: Record<string, unknown>): ResponseInputItem 
     return undefined;
   }
   const item = event.item;
-  if (!item || typeof item !== "object" || Array.isArray(item)) {
+  if (!isRecord(item)) {
     return undefined;
   }
   const type = (item as { type?: unknown }).type;
   if (type !== "message" && type !== "function_call" && type !== "reasoning") {
     return undefined;
   }
-  return item as ResponseInputItem;
+  return item as unknown as ResponseInputItem;
 }
 
 function readCodexResponseId(event: Record<string, unknown>): string | undefined {

@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { OperationalClaim } from "@brewva/brewva-vocabulary/iteration";
 import type {
   ScheduleContinuityMode,
@@ -240,7 +241,7 @@ export async function executeScheduleIntentRun(input: {
       intentId: input.intent.intentId,
       childSessionId: agentSessionId,
       runIndex,
-      error: error instanceof Error ? error.message : String(error),
+      error: toErrorMessage(error),
     });
     throw error;
   } finally {

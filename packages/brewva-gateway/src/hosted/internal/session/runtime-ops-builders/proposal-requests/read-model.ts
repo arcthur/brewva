@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   EffectCommitmentRequestRecord,
   PendingEffectCommitmentRequest,
@@ -44,9 +45,7 @@ type RequestState = ApprovalRequestRow["state"];
 const ARG_SUMMARY_MAX_LENGTH = 240;
 
 function readObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return isRecord(value) ? (value as Record<string, unknown>) : {};
 }
 
 function readString(value: unknown): string | undefined {

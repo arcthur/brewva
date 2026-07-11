@@ -14,7 +14,7 @@ import type {
 } from "@brewva/brewva-runtime";
 import { createBrewvaRuntime, isForkReplayEventId } from "@brewva/brewva-runtime";
 import { createActionPolicyRegistry, resolveToolAuthority } from "@brewva/brewva-runtime/security";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   HARNESS_EVAL_REPORT_SCHEMA,
   HARNESS_TRACE_SNAPSHOT_SCHEMA,
@@ -736,6 +736,6 @@ function observeExecutionFrame(counters: ExecutionFrameCounters, frame: TurnFram
 }
 
 function classifyExecutionError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = toErrorMessage(error);
   return message.replaceAll(/[^a-zA-Z0-9_.:-]+/gu, "_").slice(0, 120) || "unknown";
 }

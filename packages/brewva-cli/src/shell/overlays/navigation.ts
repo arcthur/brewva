@@ -1,8 +1,9 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { CliShellOverlayPayload } from "../domain/overlays/payloads.js";
 import { questionRequestsFromSnapshot } from "../domain/question-utils.js";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;

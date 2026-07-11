@@ -12,6 +12,7 @@ import {
 } from "@brewva/brewva-channels-telegram";
 import { fromBoundaryPromise, runEdgeOperation } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { isRecord } from "@brewva/brewva-std/unknown";
 
 const DEFAULT_INGRESS_PATH = "/ingest/telegram";
 const DEFAULT_MAX_BODY_BYTES = 1_048_576;
@@ -143,7 +144,7 @@ export function createIngressHmacSignature(input: CreateIngressHmacSignatureInpu
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   return value as Record<string, unknown>;

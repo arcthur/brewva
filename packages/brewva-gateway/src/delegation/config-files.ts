@@ -4,8 +4,7 @@ import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
-import { isRecord } from "@brewva/brewva-std/unknown";
-
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 export type HostedDelegationBuiltinToolName = "read" | "edit" | "write";
 export type HostedWorkspaceSubagentConfigKind = "envelope" | "agentSpec";
 export type HostedWorkspaceSubagentConfigSource = "json" | "markdown";
@@ -106,10 +105,9 @@ async function readHostedWorkspaceConfigDirectory(input: {
         raw,
       });
     } catch (error) {
-      throw new Error(
-        `invalid_subagent_config:${entry.name}:${error instanceof Error ? error.message : String(error)}`,
-        { cause: error },
-      );
+      throw new Error(`invalid_subagent_config:${entry.name}:${toErrorMessage(error)}`, {
+        cause: error,
+      });
     }
     if (!isRecord(parsed)) {
       throw new Error(`invalid_subagent_config:${entry.name}:root must be an object`);
@@ -120,10 +118,9 @@ async function readHostedWorkspaceConfigDirectory(input: {
         defaultKind: "agentSpec",
       });
     } catch (error) {
-      throw new Error(
-        `invalid_subagent_config:${entry.name}:${error instanceof Error ? error.message : String(error)}`,
-        { cause: error },
-      );
+      throw new Error(`invalid_subagent_config:${entry.name}:${toErrorMessage(error)}`, {
+        cause: error,
+      });
     }
     files.push({
       fileName: entry.name,

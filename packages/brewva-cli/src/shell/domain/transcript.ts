@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ToolExecutionPhase } from "@brewva/brewva-substrate/tools";
 import type { ToolOutputDisplayView, ToolOutputView } from "@brewva/brewva-vocabulary/wire";
 import {
@@ -109,7 +110,7 @@ export interface CliTranscriptToolExecutionUpdate {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;

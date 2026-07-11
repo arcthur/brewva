@@ -196,7 +196,7 @@ export class HeartbeatScheduler {
       } catch (error) {
         this.options.logger.warn("heartbeat execution failed", {
           ruleId: rule.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: toErrorMessage(error),
         });
       } finally {
         this.nextRunByRule.set(rule.id, Date.now() + rule.intervalMinutes * 60_000);

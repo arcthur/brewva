@@ -13,7 +13,7 @@ import { createHostedRuntimeAdapter } from "@brewva/brewva-gateway/hosted";
 import { createBrewvaRuntime } from "@brewva/brewva-runtime";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
 import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
-import { toErrorMessage } from "@brewva/brewva-std/unknown";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { normalizeTaskSpec } from "@brewva/brewva-vocabulary/task";
 import type { TaskSpec } from "@brewva/brewva-vocabulary/task";
@@ -70,7 +70,7 @@ function okCliValue<T>(value: T): CliValueResult<T> {
 }
 
 function parseTaskSpec(value: unknown): TaskSpecParseResult {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return { ok: false, reason: "TaskSpec must be an object" };
   }
   return { ok: true, spec: normalizeTaskSpec(value) };
@@ -142,7 +142,7 @@ function loadTaskSpec(parsed: CliArgs): CliValueResult<TaskSpec | undefined> {
       raw = readFileSync(absolute, "utf8");
     } catch (error) {
       return cliValueError(
-        `Error: failed to read TaskSpec file (${absolute}): ${error instanceof Error ? error.message : String(error)}`,
+        `Error: failed to read TaskSpec file (${absolute}): ${toErrorMessage(error)}`,
       );
     }
   }
@@ -151,9 +151,7 @@ function loadTaskSpec(parsed: CliArgs): CliValueResult<TaskSpec | undefined> {
   try {
     value = JSON.parse(raw);
   } catch (error) {
-    return cliValueError(
-      `Error: failed to parse TaskSpec JSON (${error instanceof Error ? error.message : String(error)}).`,
-    );
+    return cliValueError(`Error: failed to parse TaskSpec JSON (${toErrorMessage(error)}).`);
   }
 
   const result = parseTaskSpec(value);

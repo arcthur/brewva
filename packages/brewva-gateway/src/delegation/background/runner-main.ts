@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { DelegationRunRecord } from "@brewva/brewva-vocabulary/delegation";
 import { SUBAGENT_RUNNING_EVENT_TYPE } from "@brewva/brewva-vocabulary/delegation";
 import {
@@ -385,7 +385,7 @@ async function main(): Promise<void> {
       receipt: finalizationReceipt,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     const patches =
       executionPlan.producesPatches && isolatedWorkspace
         ? await capturePatchSetFromIsolatedWorkspace({
@@ -475,7 +475,7 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = toErrorMessage(error);
   console.error(message);
   process.exit(1);
 });

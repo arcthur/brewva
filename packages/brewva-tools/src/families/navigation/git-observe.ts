@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { Type } from "@sinclair/typebox";
 import type { BrewvaToolOptions } from "../../contracts/index.js";
@@ -198,7 +199,7 @@ export function createGitStatusTool(options: GitObserveToolOptions): ToolDefinit
         try {
           cwd = resolveWorkdir("git_status", runtime, ctx, params.workdir);
         } catch (error) {
-          return errTextResult(error instanceof Error ? error.message : String(error), {
+          return errTextResult(toErrorMessage(error), {
             ok: false,
           });
         }
@@ -260,7 +261,7 @@ export function createGitDiffTool(options: GitObserveToolOptions): ToolDefinitio
         try {
           cwd = resolveWorkdir("git_diff", runtime, ctx, params.workdir);
         } catch (error) {
-          return errTextResult(error instanceof Error ? error.message : String(error), {
+          return errTextResult(toErrorMessage(error), {
             ok: false,
           });
         }
@@ -332,7 +333,7 @@ export function createGitLogTool(options: GitObserveToolOptions): ToolDefinition
         try {
           cwd = resolveWorkdir("git_log", runtime, ctx, params.workdir);
         } catch (error) {
-          return errTextResult(error instanceof Error ? error.message : String(error), {
+          return errTextResult(toErrorMessage(error), {
             ok: false,
           });
         }

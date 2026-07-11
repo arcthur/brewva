@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { normalizeAgentId } from "@brewva/brewva-vocabulary/session";
 
 const REGISTRY_SCHEMA = "brewva.channel-agent-registry.v1";
@@ -76,7 +77,7 @@ function toModel(value: unknown): string | undefined {
 function normalizeRegistryState(raw: unknown): PersistedRegistryState {
   const now = Date.now();
   const initial = buildInitialState(now);
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     return initial;
   }
   const candidate = raw as Record<string, unknown>;
@@ -93,7 +94,7 @@ function normalizeRegistryState(raw: unknown): PersistedRegistryState {
 
   const agents: Record<string, ChannelAgentRecord> = {};
   for (const [key, value] of Object.entries(agentsRaw)) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    if (!isRecord(value)) continue;
     const record = value as Record<string, unknown>;
     const agentId = normalizeAgentId(
       typeof record.agentId === "string"

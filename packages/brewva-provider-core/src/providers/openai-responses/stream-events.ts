@@ -1,4 +1,5 @@
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type OpenAI from "openai";
 import type {
   ResponseFunctionToolCall,
@@ -32,13 +33,13 @@ function readReasoningSummaryIndex(event: { summary_index?: unknown }): number |
 }
 
 function readReasoningSummaryPart(part: unknown): ResponseReasoningSummaryPart | null {
-  if (!part || typeof part !== "object" || Array.isArray(part)) {
+  if (!isRecord(part)) {
     return null;
   }
   if (typeof (part as { text?: unknown }).text !== "string") {
     return null;
   }
-  return part as ResponseReasoningSummaryPart;
+  return part as unknown as ResponseReasoningSummaryPart;
 }
 
 function ensureReasoningSummaryPart(

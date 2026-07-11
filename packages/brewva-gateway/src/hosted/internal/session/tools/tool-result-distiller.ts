@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import { distillToolOutput } from "./tool-output-distiller.js";
@@ -27,7 +28,7 @@ function extractArtifactRef(details: Record<string, unknown> | undefined): strin
     return direct.trim();
   }
   const outputArtifact = details?.outputArtifact;
-  if (outputArtifact && typeof outputArtifact === "object" && !Array.isArray(outputArtifact)) {
+  if (isRecord(outputArtifact)) {
     const artifactRef = (outputArtifact as { artifactRef?: unknown }).artifactRef;
     if (typeof artifactRef === "string" && artifactRef.trim().length > 0) {
       return artifactRef.trim();

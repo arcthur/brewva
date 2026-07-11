@@ -7,7 +7,7 @@ import {
 } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { sha256Hex } from "@brewva/brewva-std/hash";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { HostedAuthCredential } from "../../session/settings/hosted-auth-store.js";
 import type {
   ProviderAuthHandler,
@@ -315,11 +315,7 @@ async function handleOpenAICodexOAuthRequest(
       });
       res.end();
     } catch (submitError) {
-      writeOpenAICodexHtml(
-        res,
-        400,
-        htmlError(submitError instanceof Error ? submitError.message : String(submitError)),
-      );
+      writeOpenAICodexHtml(res, 400, htmlError(toErrorMessage(submitError)));
     }
     return;
   }
@@ -345,11 +341,7 @@ async function handleOpenAICodexOAuthRequest(
 function createOpenAICodexOAuthServer(): ReturnType<typeof createServer> {
   return createServer((req, res) => {
     void handleOpenAICodexOAuthRequest(req, res).catch((error: unknown) => {
-      writeOpenAICodexHtml(
-        res,
-        500,
-        htmlError(error instanceof Error ? error.message : String(error)),
-      );
+      writeOpenAICodexHtml(res, 500, htmlError(toErrorMessage(error)));
     });
   });
 }

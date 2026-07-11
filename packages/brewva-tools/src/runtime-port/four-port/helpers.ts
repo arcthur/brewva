@@ -1,9 +1,8 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 
 export function readRecord(value: unknown): ProtocolRecord {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as ProtocolRecord)
-    : {};
+  return isRecord(value) ? (value as ProtocolRecord) : {};
 }
 
 export function readNumber(record: ProtocolRecord, key: string): number {

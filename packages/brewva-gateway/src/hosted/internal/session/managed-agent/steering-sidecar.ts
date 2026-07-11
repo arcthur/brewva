@@ -6,6 +6,7 @@ import {
   appendFileDurable,
   loadAppendOnly,
 } from "@brewva/brewva-std/node/fs";
+import { isRecord } from "@brewva/brewva-std/unknown";
 
 /**
  * The two in-session user-prompt channels a managed session defers AND persists:
@@ -65,9 +66,7 @@ function isPromptContentParts(value: unknown): boolean {
     Array.isArray(value) &&
     value.every(
       (part) =>
-        part !== null &&
-        typeof part === "object" &&
-        !Array.isArray(part) &&
+        isRecord(part) &&
         PROMPT_PART_TYPES.has((part as { readonly type?: unknown }).type as string),
     )
   );
@@ -80,7 +79,7 @@ function classifySteeringLine(line: string): AppendOnlyClassification<SteeringLi
   } catch {
     return { ok: false, issueClass: "invalid_json", tag: "steering" };
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     return { ok: false, issueClass: "non_object", tag: "steering" };
   }
   const record = parsed as Record<string, unknown>;

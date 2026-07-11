@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type {
   DelegationPacket,
   SubagentCancelResult,
@@ -506,7 +507,7 @@ export function createDetachedSubagentBackgroundController(
             reviewDispatch: input.reviewDispatch,
           }),
           "failed",
-          error instanceof Error ? error.message : String(error),
+          toErrorMessage(error),
         );
       }
       const initialRecord: DelegationRunRecord = buildDelegationRunRecordSeed({
@@ -579,11 +580,7 @@ export function createDetachedSubagentBackgroundController(
         // writeTerminalFailure releases the acquired slot and records a terminal
         // event, so a throw before the detached spec is written cannot leak the
         // reservation.
-        return writeTerminalFailure(
-          initialRecord,
-          "failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        return writeTerminalFailure(initialRecord, "failed", toErrorMessage(error));
       }
 
       const spec: DetachedSubagentRunSpec = {
@@ -645,11 +642,7 @@ export function createDetachedSubagentBackgroundController(
             runId,
           });
         } catch {}
-        return writeTerminalFailure(
-          initialRecord,
-          "failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        return writeTerminalFailure(initialRecord, "failed", toErrorMessage(error));
       }
 
       let child: ReturnType<DetachedRunAdapter["start"]> | undefined;
@@ -678,11 +671,7 @@ export function createDetachedSubagentBackgroundController(
             runId,
           });
         } catch {}
-        return writeTerminalFailure(
-          initialRecord,
-          "failed",
-          error instanceof Error ? error.message : String(error),
-        );
+        return writeTerminalFailure(initialRecord, "failed", toErrorMessage(error));
       }
 
       const pid = child.pid ?? 0;

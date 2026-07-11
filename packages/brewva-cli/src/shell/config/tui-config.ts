@@ -6,7 +6,7 @@ import {
   resolvePathInput,
   resolveProjectBrewvaRootDir,
 } from "@brewva/brewva-runtime/config";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaShortcutValue,
   BrewvaTuiConfig,
@@ -302,7 +302,7 @@ function readTuiConfigFile(
     ctx.warnings.push({
       code: "invalid_config",
       path,
-      message: error instanceof Error ? error.message : String(error),
+      message: toErrorMessage(error),
     });
     return {};
   }

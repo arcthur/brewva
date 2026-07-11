@@ -12,6 +12,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveBrewvaAgentDir } from "@brewva/brewva-runtime/config";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import {
   createBrewvaResourceRouter,
   createHostedResourceLoader,
@@ -159,9 +160,7 @@ function getSeenLineSet(snapshot: SourceSnapshot): Set<number> {
   return seen;
 }
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function sha256(input: string): string {
@@ -1101,7 +1100,7 @@ async function buildSummary(filePath: string, workspaceRoot: string): Promise<st
       ...document.diagnostics.slice(0, 12).map((entry) => `${entry.severity}: ${entry.message}`),
     ];
   } catch (error) {
-    return [`summary_unavailable: ${error instanceof Error ? error.message : String(error)}`];
+    return [`summary_unavailable: ${toErrorMessage(error)}`];
   }
 }
 
@@ -1506,7 +1505,7 @@ function preparePlan(input: {
 }
 
 function normalizeIntent(raw: unknown): SourcePatchIntent | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     return null;
   }
   const record = raw as Record<string, unknown>;

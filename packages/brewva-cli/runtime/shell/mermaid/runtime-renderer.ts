@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { SessionPalette } from "../palette.js";
 
 export interface MermaidTerminalGraphicsProfile {
@@ -110,7 +111,7 @@ export function renderMermaidWithRuntime(input: {
   } catch (error) {
     const artifact: CachedMermaidRuntimePreview = {
       kind: "failed",
-      reason: error instanceof Error ? error.message : String(error),
+      reason: toErrorMessage(error),
     };
     return { ...artifact, inline };
   }

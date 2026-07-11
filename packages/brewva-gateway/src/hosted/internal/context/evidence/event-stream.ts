@@ -1,4 +1,5 @@
 import type { JsonValue } from "@brewva/brewva-runtime/core";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptAssistantMessageEvent,
@@ -108,7 +109,7 @@ function extractMessageText(message: unknown): string {
 }
 
 function messageModelLabel(message: unknown): string | undefined {
-  if (!message || typeof message !== "object" || Array.isArray(message)) {
+  if (!isRecord(message)) {
     return undefined;
   }
   const record = message as { readonly provider?: unknown; readonly model?: unknown };

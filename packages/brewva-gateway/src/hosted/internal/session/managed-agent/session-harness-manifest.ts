@@ -1,4 +1,5 @@
 import { toJsonValue } from "@brewva/brewva-std/json";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ProviderDriftSample } from "@brewva/brewva-vocabulary/context";
 import {
   stableHarnessId,
@@ -29,9 +30,7 @@ export function recordRuntimeHarnessManifest(input: {
 }
 
 function readRecordValue(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function readStringValue(value: unknown): string | undefined {

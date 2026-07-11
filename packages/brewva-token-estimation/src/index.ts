@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   countTokens as countCl100kTokens,
   decode as decodeCl100kTokens,
@@ -310,7 +311,7 @@ interface PayloadStringContext {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   return value as Record<string, unknown>;

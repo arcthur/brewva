@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { forEachUtf8LineSync } from "@brewva/brewva-std/node/fs";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   buildManagedSessionContext,
   type BrewvaBranchSummaryEntry,
@@ -152,9 +152,7 @@ function parseJsonLine(line: string, sourcePath: string, lineNumber: number): un
     return JSON.parse(line);
   } catch (error) {
     throw new Error(
-      `invalid session artifact ${sourcePath}:${lineNumber}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `invalid session artifact ${sourcePath}:${lineNumber}: ${toErrorMessage(error)}`,
       {
         cause: error,
       },

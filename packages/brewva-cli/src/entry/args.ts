@@ -1,5 +1,6 @@
 import { parseArgs as parseNodeArgs } from "node:util";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { normalizeAgentId } from "@brewva/brewva-vocabulary/session";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import { printHelp, printVersion } from "./help.js";
@@ -230,7 +231,7 @@ export function parseCliArgs(argv: string[]): CliParseResult {
       tokens: true,
     });
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Error: ${toErrorMessage(error)}`);
     printHelp();
     return { kind: "error" };
   }

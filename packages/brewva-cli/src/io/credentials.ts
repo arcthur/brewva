@@ -3,6 +3,7 @@ import process from "node:process";
 import { parseArgs as parseNodeArgs } from "node:util";
 import { loadBrewvaConfig, resolveWorkspaceRootDir } from "@brewva/brewva-runtime/config";
 import { createCredentialVaultServiceFromSecurityConfig } from "@brewva/brewva-runtime/security";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 
 function printCredentialsHelp(): void {
   console.log(`Brewva Credentials - encrypted credential vault management
@@ -168,7 +169,7 @@ export async function runCredentialsCli(argv: string[]): Promise<number> {
       strict: true,
     });
   } catch (error) {
-    return printError(error instanceof Error ? error.message : String(error));
+    return printError(toErrorMessage(error));
   }
 
   if (parsed.values.help === true) {

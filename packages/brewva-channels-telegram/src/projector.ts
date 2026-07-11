@@ -1,4 +1,5 @@
 import { shortSha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   buildChannelDedupeKey,
   buildChannelSessionId,
@@ -334,7 +335,7 @@ function summarizeState(value: unknown): string | undefined {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   return value as Record<string, unknown>;

@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, relative, sep } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ShellCommand, ShellCommandProvider } from "./command-provider.js";
 
 interface FileCommandProviderSpec {
@@ -90,7 +91,7 @@ function readArguments(value: unknown, path: string): FileCommandArgument[] {
     throw new Error(`${path}: frontmatter.arguments must be an array`);
   }
   return value.map((entry, index) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    if (!isRecord(entry)) {
       throw new Error(`${path}: frontmatter.arguments[${index}] must be an object`);
     }
     const record = entry as Record<string, unknown>;

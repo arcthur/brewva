@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   PromptStabilityState,
   ProviderCacheObservationState,
@@ -212,7 +213,7 @@ export function recordProviderCacheObservationEvidence(input: {
 }
 
 function parseContextEvidenceSample(raw: unknown): ContextEvidenceSample | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     return null;
   }
   const record = raw as Record<string, unknown>;

@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaHostContext, InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaHostAgentEndEvent as AgentEndEvent,
@@ -24,11 +25,11 @@ function getSessionId(ctx: BrewvaHostContext): string {
 }
 
 function readTotalTokens(message: unknown): number {
-  if (!message || typeof message !== "object" || Array.isArray(message)) {
+  if (!isRecord(message)) {
     return 0;
   }
   const usage = (message as { usage?: unknown }).usage;
-  if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
+  if (!isRecord(usage)) {
     return 0;
   }
   const total = (usage as { totalTokens?: unknown }).totalTokens;

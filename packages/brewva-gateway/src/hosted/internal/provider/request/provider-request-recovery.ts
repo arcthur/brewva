@@ -1,4 +1,5 @@
 import { asLossy } from "@brewva/brewva-std/honesty";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { InternalHostPluginApi } from "@brewva/brewva-substrate/host-api";
 import { MESSAGE_END_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import {
@@ -20,7 +21,7 @@ const OUTPUT_BUDGET_PATHS = [
 ] as const;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   return value as Record<string, unknown>;

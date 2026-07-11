@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ContextEntryRecord } from "@brewva/brewva-vocabulary/context";
 import type { ProtocolRecord } from "@brewva/brewva-vocabulary/events";
 import type { ForkPoint, SessionLineageTree } from "@brewva/brewva-vocabulary/session";
@@ -11,7 +12,7 @@ export function lineageTreeFor(
   const nodesById = new Map<string, MutableSessionLineageNodeRecord>();
   for (const event of ctx.listEvents(sessionId, { type: "session.lineage.node.created" })) {
     const payload = event.payload;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
+    if (!isRecord(payload)) continue;
     const record = payload;
     const lineageNodeId =
       typeof record.lineageNodeId === "string" && record.lineageNodeId.trim().length > 0
@@ -63,7 +64,7 @@ export function lineageTreeFor(
   const selectedByChannel: Record<string, string> = {};
   for (const event of ctx.listEvents(sessionId, { type: "session.lineage.selection.recorded" })) {
     const payload = event.payload;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
+    if (!isRecord(payload)) continue;
     const record = payload;
     if (
       typeof record.channelId === "string" &&
@@ -92,7 +93,7 @@ export function listContextEntryPath(
     .listEvents(sessionId, { type: "context.entry.recorded" })
     .map<ProtocolRecord | undefined>((event) => {
       const payload = event.payload;
-      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      if (!isRecord(payload)) {
         return undefined;
       }
       const record = payload;
@@ -132,7 +133,7 @@ function attachLineageRecords(
 ): void {
   for (const event of ctx.listEvents(sessionId, { type })) {
     const payload = event.payload;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
+    if (!isRecord(payload)) continue;
     const record = payload;
     const lineageNodeId =
       typeof record.lineageNodeId === "string" && record.lineageNodeId.trim().length > 0
@@ -148,7 +149,7 @@ function attachLineageRecords(
 }
 
 function readForkPoint(value: unknown): ForkPoint {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return { kind: "session_root" };
   }
   const record = value as ProtocolRecord;

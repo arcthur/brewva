@@ -12,6 +12,7 @@ import type { RuntimeProviderFrame, RuntimeProviderPort } from "@brewva/brewva-r
 import { createAsyncBridge, linkAbortSignal } from "@brewva/brewva-std/async";
 import { asDurable } from "@brewva/brewva-std/honesty";
 import type { JsonValue } from "@brewva/brewva-std/json";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaAgentProtocolAssistantMessage } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaRegisteredModel } from "@brewva/brewva-substrate/provider";
 import type {
@@ -165,7 +166,7 @@ class ProviderAttemptError extends Error {
     readonly causeError: unknown,
     readonly frame: FrameWitness,
   ) {
-    super(causeError instanceof Error ? causeError.message : String(causeError));
+    super(toErrorMessage(causeError));
     this.name = "ProviderAttemptError";
   }
 }
@@ -187,7 +188,7 @@ function truncateAttemptMessage(message: string): string {
 }
 
 function attemptFailureMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = toErrorMessage(error);
   return message.length > 0 ? message : "provider_stream_failed";
 }
 
@@ -293,7 +294,7 @@ export function classifyProviderFailure(error: unknown): ProviderFailureReason {
       return byStatus;
     }
   }
-  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  const message = toErrorMessage(error).toLowerCase();
   if (/\b(quota|insufficient_quota|billing)\b/u.test(message)) return "quota";
   if (/\b(rate.?limit|429|too many requests)\b/u.test(message)) return "rate_limit";
   if (/\b(auth|api key|unauthorized|forbidden|401|403)\b/u.test(message)) return "auth";

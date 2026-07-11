@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, posix, relative, resolve } from "node:path";
 import { normalizeSearchText } from "@brewva/brewva-search";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   MIN_DELIMITER_FALLBACK_LENGTH,
   type NormalizedEventRecord,
@@ -69,14 +70,14 @@ export function normalizeStringArray(value: unknown): string[] {
 }
 
 export function normalizePayloadRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;
 }
 
 export function normalizeEventRecord(value: unknown): NormalizedEventRecord | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;

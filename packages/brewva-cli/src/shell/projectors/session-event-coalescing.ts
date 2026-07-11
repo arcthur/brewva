@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaPromptSessionEvent } from "@brewva/brewva-substrate/session";
 import { readAssistantTextAppendDelta } from "../../io/message-content.js";
 
@@ -21,7 +22,7 @@ function isMessageUpdateShape(
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;

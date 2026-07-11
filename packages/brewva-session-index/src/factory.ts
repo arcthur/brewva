@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { uniqueNonEmptyStrings } from "@brewva/brewva-std/collections";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import {
   SESSION_INDEX_SCHEMA_VERSION,
   type CreateSessionIndexInput,
@@ -113,7 +114,7 @@ export async function createSessionIndex(input: CreateSessionIndexInput): Promis
 }
 
 function unavailableMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return toErrorMessage(error);
 }
 
 class UnavailableSessionIndex implements SessionIndex {

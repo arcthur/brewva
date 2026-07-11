@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaProviderRegistration,
   BrewvaRegisteredModel,
@@ -234,7 +235,7 @@ export class HostedModelRegistry implements HostedSessionModelRegistry {
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       };
     }
   }

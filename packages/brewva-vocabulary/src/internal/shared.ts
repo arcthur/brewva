@@ -1,9 +1,10 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ProtocolRecord } from "./types/foundation.js";
 
 export type UnknownRecord = { readonly [key: string]: unknown };
 
 export function isProtocolRecord(value: unknown): value is ProtocolRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 export function stringField(record: ProtocolRecord, key: string, fallback: string): string {

@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { CONTEXT_EVIDENCE_APPENDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
 import { SESSION_PRE_COMPACT_PRUNE_EVENT_TYPE } from "@brewva/brewva-vocabulary/session";
 import { createContextBudgetRuntimeController } from "../runtime-ops-context-budget.js";
@@ -82,8 +83,7 @@ export function buildContextRuntimeOps(
         const resolvedSessionId = typeof sessionId === "string" ? sessionId : "default";
         ctx.state.pendingContextCompactionReasons.delete(resolvedSessionId);
         ctx.state.latestCompactionGateStatus.delete(resolvedSessionId);
-        const eventPayload =
-          payload && typeof payload === "object" && !Array.isArray(payload) ? payload : rest;
+        const eventPayload = isRecord(payload) ? payload : rest;
         return ctx.emit(resolvedSessionId, "context.compaction.gate.cleared", eventPayload, {
           timestamp: typeof timestamp === "number" ? timestamp : undefined,
           turn: typeof turn === "number" ? turn : undefined,

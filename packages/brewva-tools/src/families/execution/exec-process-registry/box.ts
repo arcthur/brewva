@@ -1,5 +1,6 @@
 import { BrewvaBoundaryFailure, startBoundaryTimeout } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { finalizeBoxSession } from "./internal/lifecycle.js";
 import {
   appendOutput,
@@ -102,7 +103,7 @@ export function startManagedBoxExec(
       try {
         await input.releaseOnCompletion();
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = toErrorMessage(error);
         appendOutput(
           registry,
           finished,
@@ -244,7 +245,7 @@ export function startManagedBoxExec(
       );
     })
     .catch(async (error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toErrorMessage(error);
       return await settle({ exitCode: 1, error: message }, { release: true });
     });
 

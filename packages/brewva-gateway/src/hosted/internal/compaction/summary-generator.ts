@@ -1,5 +1,6 @@
 import { sanitizeCompactionSummary } from "@brewva/brewva-runtime/security";
 import { redactedStableJsonSha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   BREWVA_COMPACTION_SUMMARY_HEADER,
   buildBrewvaDeterministicCompactionSummary,
@@ -234,7 +235,7 @@ function collectDigestValues(text: string): string[] {
 }
 
 function isCompactionSummaryMessage(message: unknown): boolean {
-  if (!message || typeof message !== "object" || Array.isArray(message)) {
+  if (!isRecord(message)) {
     return false;
   }
   const role = (message as { role?: unknown }).role;

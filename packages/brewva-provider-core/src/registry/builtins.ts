@@ -1,4 +1,5 @@
 import { BrewvaEffect, BrewvaStream } from "@brewva/brewva-effect/primitives";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type {
   Api,
   AssistantMessage,
@@ -68,7 +69,7 @@ function createLazyLoadErrorMessage<TApi extends Api>(
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
     },
     stopReason: "error",
-    errorMessage: error instanceof Error ? error.message : String(error),
+    errorMessage: toErrorMessage(error),
     timestamp: Date.now(),
   };
 }

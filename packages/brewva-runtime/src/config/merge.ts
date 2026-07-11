@@ -1,7 +1,8 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 type AnyObject = Record<string, unknown>;
 
 function isObject(value: unknown): value is AnyObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 export function deepMerge<T>(base: T, patch: Partial<T>): T {

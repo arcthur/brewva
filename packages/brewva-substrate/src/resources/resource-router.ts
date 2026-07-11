@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaHostedResourceLoader } from "./resource-loader.js";
 import type { BrewvaResourceProvider, BrewvaResourceReadResult } from "./resource-types.js";
 
@@ -128,7 +129,7 @@ function selectJsonPath(content: string, fieldPath: string): string | undefined 
     return undefined;
   }
   for (const segment of fieldPath.split(".").filter(Boolean)) {
-    if (!current || typeof current !== "object" || Array.isArray(current)) {
+    if (!isRecord(current)) {
       return undefined;
     }
     const record = current as Record<string, unknown>;

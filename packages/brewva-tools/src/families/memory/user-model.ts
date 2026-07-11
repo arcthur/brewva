@@ -3,6 +3,7 @@ import {
   isRecallSessionIndexUnavailable,
 } from "@brewva/brewva-recall/broker";
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import {
   USER_FACT_SCOPES,
@@ -137,7 +138,7 @@ export function createUserModelTool(options: BrewvaToolOptions): ToolDefinition 
         });
       } catch (error) {
         if (isRecallSessionIndexUnavailable(error)) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = toErrorMessage(error);
           return errTextResult(`user_model unavailable (session_index_unavailable): ${message}`, {
             ok: false,
             error: "session_index_unavailable",

@@ -107,7 +107,7 @@ export function buildTranscriptMessagePayload(message: unknown): Record<string, 
 }
 
 export function readTranscriptMessageFromPayload(payload: unknown): StoredSessionMessage | null {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return null;
   }
   const message = (payload as { message?: unknown }).message;

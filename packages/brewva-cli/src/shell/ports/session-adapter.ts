@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { runHostedPromptTurn, selectNextModelPresetName } from "@brewva/brewva-gateway/hosted";
 import type { HostedPromptTurnResult } from "@brewva/brewva-gateway/hosted";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaPromptContentPart } from "@brewva/brewva-substrate/prompt";
 import type {
   BrewvaPromptAssistantMessageEvent,
@@ -259,7 +259,7 @@ function readLineageStatus(bundle: CliShellSessionBundle): SessionLineageStatusV
       unsupportedReason: null,
     };
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = toErrorMessage(error);
     return {
       lineageNodeId: null,
       kind: null,
@@ -979,7 +979,7 @@ function runtimeToolDetails(frame: RuntimeToolSessionWireFrame): unknown {
 }
 
 function readRuntimeToolOutcomeReason(value: unknown): string | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   const reason = (value as Record<string, unknown>).reason;

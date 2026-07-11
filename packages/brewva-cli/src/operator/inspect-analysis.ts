@@ -7,7 +7,7 @@ import {
   toWorkspaceRelativePath,
 } from "@brewva/brewva-runtime/config";
 import { uniqueNonEmptyStrings as uniqueStrings } from "@brewva/brewva-std/collections";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { CONTEXT_COMPACTION_GATE_ARMED_EVENT_TYPE } from "@brewva/brewva-vocabulary/context";
 import { RUNTIME_OPS_TOOL_INVOCATION_STARTED_KIND } from "@brewva/brewva-vocabulary/events";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
@@ -63,7 +63,7 @@ function isCompactionGateBlockedInvocation(event: BrewvaEventRecord): boolean {
     return false;
   }
   const payload = event.payload;
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return false;
   }
   const record = payload as Record<string, unknown>;
@@ -754,7 +754,7 @@ export function resolveInspectDirectory(
     stats = statSync(absolutePath);
   } catch (error) {
     throw new Error(
-      `failed to stat inspect directory (${absolutePath}): ${error instanceof Error ? error.message : String(error)}`,
+      `failed to stat inspect directory (${absolutePath}): ${toErrorMessage(error)}`,
       {
         cause: error,
       },

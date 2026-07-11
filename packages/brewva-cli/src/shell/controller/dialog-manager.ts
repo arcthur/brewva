@@ -1,4 +1,5 @@
 import { type SessionQuestionRequest } from "@brewva/brewva-gateway";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   type BrewvaInteractiveQuestionRequest,
   type BrewvaUiDialogOptions,
@@ -24,7 +25,7 @@ export interface ShellDialogManagerContext {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;
@@ -179,10 +180,10 @@ export class ShellDialogManager {
     payload: unknown,
     options?: BrewvaUiDialogOptions,
   ): Promise<T> {
-    if (kind !== "question" || !payload || typeof payload !== "object" || Array.isArray(payload)) {
+    if (kind !== "question" || !isRecord(payload)) {
       throw new Error("Unsupported UI custom request.");
     }
-    const interactiveRequest = payload as BrewvaInteractiveQuestionRequest;
+    const interactiveRequest = payload as unknown as BrewvaInteractiveQuestionRequest;
     const request = buildInteractiveQuestionRequest({
       sessionId: this.context.getSessionId(),
       request: interactiveRequest,

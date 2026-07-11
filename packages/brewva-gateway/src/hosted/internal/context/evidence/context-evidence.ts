@@ -872,7 +872,7 @@ function correlateExpectedCacheBreaks(
 }
 
 function readCompactIdPayload(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return null;
   }
   const compactId = (payload as { compactId?: unknown }).compactId;

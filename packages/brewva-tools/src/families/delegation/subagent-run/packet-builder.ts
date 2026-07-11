@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type {
   ExplorerConsultBrief,
   DelegationCompletionPredicate,
@@ -353,7 +354,7 @@ export function buildRunRequestFromParams(input: {
   } catch (error) {
     return {
       ok: false,
-      message: `Error: ${error instanceof Error ? error.message : String(error)}.`,
+      message: `Error: ${toErrorMessage(error)}.`,
     };
   }
   return { ok: true, request };
@@ -443,7 +444,7 @@ export function buildPublicFanoutRequestFromParams(input: {
   } catch (error) {
     return {
       ok: false,
-      message: `Error: ${error instanceof Error ? error.message : String(error)}.`,
+      message: `Error: ${toErrorMessage(error)}.`,
     };
   }
 }

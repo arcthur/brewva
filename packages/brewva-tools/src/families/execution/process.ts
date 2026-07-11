@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { addMilliseconds, isBefore } from "date-fns";
 import { createRuntimeBoundBrewvaToolFactory } from "../../registry/runtime-bound-tool.js";
@@ -309,7 +310,7 @@ export function createProcessTool(options?: ProcessToolOptions): ToolDefinition 
             },
           );
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = toErrorMessage(error);
           return errTextResult(`Failed to write to session ${sessionId}: ${message}`, {
             status: "failed",
           });

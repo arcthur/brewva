@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 import type { HostedRuntimeAdapterPort } from "../runtime-ports.js";
 import type { HostedMcpOperationalEvent, HostedMcpToolBundle } from "./mcp-tools.js";
@@ -113,7 +114,7 @@ export function installHostedMcpBundleDisposal(
     void disposePromise
       .catch((error: unknown) => {
         recordDisposeFailure({
-          error: error instanceof Error ? error.message : String(error),
+          error: toErrorMessage(error),
           ...(timedOut ? { afterTimeout: true } : {}),
         });
       })

@@ -1,3 +1,4 @@
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import { SOURCE_INTELLIGENCE_PARSER_VERSION } from "../cache.js";
 import type { SourceDiagnostic, SourceDocument } from "../ir.js";
 import {
@@ -24,9 +25,7 @@ function escapeRegExp(value: string): string {
 }
 
 function stringRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  return isRecord(value) ? (value as Record<string, unknown>) : null;
 }
 
 function findLineForKey(
@@ -138,7 +137,7 @@ function parsePackageManifest(input: SourceParseInput): SourceDocument {
     diagnostics = [
       {
         severity: "error",
-        message: error instanceof Error ? error.message : String(error),
+        message: toErrorMessage(error),
         source: "package-json",
       },
     ];

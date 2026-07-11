@@ -1,5 +1,6 @@
 import { extname, isAbsolute, relative } from "node:path";
 import process from "node:process";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaRenderableComponent,
   BrewvaToolDefinition,
@@ -49,7 +50,7 @@ export function createToolRenderCache(): ToolRenderCache {
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;

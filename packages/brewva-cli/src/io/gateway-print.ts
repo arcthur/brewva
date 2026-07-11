@@ -6,7 +6,7 @@ import { startBoundaryTimeout, type BoundaryTimeoutHandle } from "@brewva/brewva
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { connectGatewayClient, readGatewayToken } from "@brewva/brewva-gateway";
 import { queryGatewayStatus, resolveGatewayPaths } from "@brewva/brewva-gateway/admin";
-import { toErrorMessage } from "@brewva/brewva-std/unknown";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 
 export type CliBackendKind = "auto" | "embedded" | "gateway";
@@ -37,7 +37,7 @@ export interface TryGatewayPrintInput {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;

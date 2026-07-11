@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { Ajv, type ErrorObject, type ValidateFunction } from "ajv";
 import { loadBrewvaConfigSchema } from "./schema.js";
 
@@ -43,7 +44,7 @@ function getValidator():
     cachedValidator = { validate, schemaPath: schemaLoad.schemaPath };
     return { ok: true, validate, schemaPath: schemaLoad.schemaPath };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     cachedError = new Error(`Failed to compile config schema validator: ${message}`);
     return { ok: false, cause: cachedError };
   }

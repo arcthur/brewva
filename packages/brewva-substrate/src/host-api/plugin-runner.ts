@@ -6,6 +6,7 @@ import {
   type BrewvaBoundaryError,
 } from "@brewva/brewva-effect";
 import { BrewvaEffect, BrewvaSchema } from "@brewva/brewva-effect/primitives";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaSourceInfo } from "../contracts/source-info.js";
 import type { BrewvaToolContentPart, BrewvaToolDefinition } from "../contracts/tool.js";
 import {
@@ -320,7 +321,7 @@ function normalizeStablePluginPayload(value: unknown): unknown {
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 export async function createBrewvaHostPluginRunner(

@@ -3,6 +3,7 @@ import { runEdgeOperation } from "@brewva/brewva-effect";
 import { BrewvaEffect } from "@brewva/brewva-effect/primitives";
 import { runGatewayCliOperation } from "@brewva/brewva-gateway/admin";
 import type { RuntimeResult } from "@brewva/brewva-runtime/core";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { ManagedToolMode } from "@brewva/brewva-vocabulary/session";
 
 type CliValueResult<T> = RuntimeResult<{ value: T }>;
@@ -133,7 +134,7 @@ export async function runOnboardCliOperation(argv: string[]): Promise<number> {
       strict: true,
     });
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Error: ${toErrorMessage(error)}`);
     return 1;
   }
 

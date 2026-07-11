@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { estimateTokenCount } from "../../utils/token.js";
 import type { ToolExecutionOutcome } from "../kernel/port.js";
 import type {
@@ -28,9 +29,7 @@ function checkpointSummary(payload: unknown): string {
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  return isRecord(value) ? (value as Record<string, unknown>) : null;
 }
 
 function readString(value: unknown): string | null {

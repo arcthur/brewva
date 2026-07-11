@@ -296,9 +296,7 @@ export class HostedAuthStore {
 
 function isProviderCredentials(value: unknown): value is HostedAuthProviderCredentials {
   return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
+    isRecord(value) &&
     typeof (value as { activeSlot?: unknown }).activeSlot === "string" &&
     Boolean((value as { slots?: unknown }).slots) &&
     typeof (value as { slots?: unknown }).slots === "object" &&

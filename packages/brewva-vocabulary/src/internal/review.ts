@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { payloadOf } from "./events.js";
 import type { WriteInvocationPath } from "./tool-invocations.js";
 import type { ProtocolRecord } from "./types/foundation.js";
@@ -55,7 +56,7 @@ export type ReviewTargetRef =
  * parser, shared across both receipt kinds that carry a target ref.
  */
 export function readReviewTargetRef(value: unknown): ReviewTargetRef | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   const record = value as ProtocolRecord;

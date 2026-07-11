@@ -1,4 +1,5 @@
 import { Effect, runPlatformEdgeOperation } from "@brewva/brewva-effect/edge";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import { LRUCache } from "lru-cache";
 
 const TELEGRAM_SECRET_HEADER = "x-telegram-bot-api-secret-token";
@@ -96,7 +97,7 @@ export function handleTelegramWebhookFetchEffect(
         jsonResponse(500, {
           ok: false,
           code: "internal_error",
-          message: error instanceof Error ? error.message : String(error),
+          message: toErrorMessage(error),
         }),
       ),
     ),
@@ -308,7 +309,7 @@ function jsonResponse(status: number, body: JsonRecord): Response {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (!isRecord(value)) return null;
   return value as Record<string, unknown>;
 }
 
@@ -326,7 +327,7 @@ function normalizeId(value: unknown): string | null {
 function resolveNestedId(parent: Record<string, unknown>, ...path: string[]): string | null {
   let cursor: unknown = parent;
   for (const segment of path) {
-    if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) {
+    if (!isRecord(cursor)) {
       return null;
     }
     cursor = (cursor as Record<string, unknown>)[segment];
@@ -501,7 +502,7 @@ export function createTelegramWebhookWorker(
     try {
       config = resolveWorkerConfig(env);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toErrorMessage(error);
       return jsonResponse(500, {
         ok: false,
         code: "config_error",

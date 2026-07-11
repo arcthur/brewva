@@ -1154,7 +1154,7 @@ export class GatewayDaemon {
       } catch (error) {
         clearTimeout(timer);
         this.logger.warn("gateway websocket close threw error", {
-          error: error instanceof Error ? error.message : String(error),
+          error: toErrorMessage(error),
         });
         finish();
       }
@@ -1194,7 +1194,7 @@ export class GatewayDaemon {
       } catch (error) {
         clearTimeout(timer);
         this.logger.warn("gateway health http close threw error", {
-          error: error instanceof Error ? error.message : String(error),
+          error: toErrorMessage(error),
         });
         finish();
       }

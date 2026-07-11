@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   projectSessionForks,
   WORKER_RESULT_RECORDED_EVENT_TYPE,
@@ -146,11 +147,7 @@ export function buildSessionRuntimeOps(
         return tree.nodes.filter((node) => childIds.has(node.lineageNodeId));
       },
       getContextEntryPath: (sessionId, query) =>
-        listContextEntryPath(
-          ctx,
-          sessionId,
-          query && typeof query === "object" && !Array.isArray(query) ? query : {},
-        ),
+        listContextEntryPath(ctx, sessionId, isRecord(query) ? query : {}),
       createNode(sessionId, payload) {
         return ctx.emit(sessionId, "session.lineage.node.created", payload);
       },

@@ -1,5 +1,6 @@
 import { stableJsonStringify } from "@brewva/brewva-std/json";
 import { readNonEmptyString } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { ResponseInput } from "openai/resources/responses/responses.js";
 import { resolveOpenAIResponsesCacheRender } from "../../cache/render/openai-responses.js";
 import type { Context, Model } from "../../contracts/index.js";
@@ -169,7 +170,7 @@ function responseInputItemsHaveSameProtocolIdentity(
 }
 
 function normalizeContinuationComparableItem(item: ResponseInput[number]): unknown {
-  if (!item || typeof item !== "object" || Array.isArray(item)) {
+  if (!isRecord(item)) {
     return item;
   }
   const normalized = { ...(item as unknown as Record<string, unknown>) };

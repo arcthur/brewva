@@ -1,4 +1,5 @@
 import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaAgentProtocolController } from "@brewva/brewva-substrate/agent-protocol";
 import type { BrewvaHostContext, BrewvaHostPluginRunner } from "@brewva/brewva-substrate/host-api";
 import { estimateStructuredTokenCount } from "@brewva/brewva-token-estimation";
@@ -57,7 +58,7 @@ export interface CreateProviderPayloadPipelineOptions {
 }
 
 function providerToolSurfaceHash(payload: unknown, api: string): string {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return stableJsonSha256Hex({ present: false });
   }
   const payloadRecord = payload as Record<string, unknown>;

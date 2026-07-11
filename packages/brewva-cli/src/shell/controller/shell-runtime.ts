@@ -9,6 +9,7 @@ import {
   recordRuntimeGoalContinuationQueued,
 } from "@brewva/brewva-gateway/hosted";
 import { safeParseJson, type JsonObject } from "@brewva/brewva-std/json";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaUiDialogOptions } from "@brewva/brewva-substrate/host-api";
 import type {
   BrewvaPromptSessionEvent,
@@ -198,7 +199,7 @@ function trimProcessOutput(value: unknown): string {
 }
 
 function isJsonObject(value: unknown): value is JsonObject {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 function runApprovalAllowKey(request: PendingEffectCommitmentRequest): string {
@@ -275,7 +276,7 @@ function formatSteerDropReason(reason: unknown): string {
 }
 
 function isQueuedPromptView(value: unknown): value is BrewvaQueuedPromptView {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return false;
   }
   const record = value as Record<string, unknown>;
@@ -813,10 +814,7 @@ export class CliShellRuntime {
       await this.#sessionHandler.switchBundle(await this.#operatorPort.openSession(sessionId));
       this.ui.notify(`Opened session ${sessionId}.`, "info");
     } catch (error) {
-      this.ui.notify(
-        `Failed to open session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-        "warning",
-      );
+      this.ui.notify(`Failed to open session ${sessionId}: ${toErrorMessage(error)}`, "warning");
     }
   }
 
@@ -2088,7 +2086,7 @@ export class CliShellRuntime {
     } catch (error) {
       return {
         ok: false,
-        message: error instanceof Error ? error.message : String(error),
+        message: toErrorMessage(error),
         stdout: trimProcessOutput(
           error instanceof Error && "stdout" in error ? error.stdout : undefined,
         ),

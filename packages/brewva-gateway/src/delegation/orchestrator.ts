@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { BrewvaConfig } from "@brewva/brewva-runtime";
 import { asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaModelRoleAlias } from "@brewva/brewva-substrate/session";
 import type {
   BrewvaToolOrchestration,
@@ -368,7 +369,7 @@ export function createHostedSubagentAdapter(
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       };
     }
     const forkTurns = input.request.forkTurns ?? "none";
@@ -406,7 +407,7 @@ export function createHostedSubagentAdapter(
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       };
     }
 
@@ -559,7 +560,7 @@ export function createHostedSubagentAdapter(
         modelRouting: options.modelRouting,
       });
     } catch (error) {
-      return immediateFailure(error instanceof Error ? error.message : String(error));
+      return immediateFailure(toErrorMessage(error));
     }
 
     const parallel = acquireRuntimeParallelSlot(options.runtime, input.parentSessionId, runId);
@@ -602,7 +603,7 @@ export function createHostedSubagentAdapter(
       });
     } catch (error) {
       releaseRuntimeParallelSlot(options.runtime, input.parentSessionId, runId);
-      return immediateFailure(error instanceof Error ? error.message : String(error));
+      return immediateFailure(toErrorMessage(error));
     }
 
     const liveRun: LiveHostedDelegationRun = {
@@ -835,7 +836,7 @@ export function createHostedSubagentAdapter(
         liveRun.record = finalizationReceipt.record;
         return finalizationReceipt.outcome;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = toErrorMessage(error);
         const terminalStatus: Extract<DelegationRunRecord["status"], "failed" | "cancelled"> =
           timeoutTriggered ? "failed" : cancellationReason ? "cancelled" : "failed";
         const terminalCostSummary =
@@ -1005,7 +1006,7 @@ export function createHostedSubagentAdapter(
       });
     } catch (error) {
       releaseRuntimeParallelSlot(options.runtime, input.fromSessionId, runId);
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toErrorMessage(error);
       const failedRecord: DelegationRunRecord = {
         ...initialRecord,
         status: "failed",
@@ -1127,9 +1128,7 @@ export function createHostedSubagentAdapter(
     } catch (error) {
       const message = timeoutTriggered
         ? `timeout:${input.request.timeoutMs}`
-        : error instanceof Error
-          ? error.message
-          : String(error);
+        : toErrorMessage(error);
       const failedRecord: DelegationRunRecord = {
         ...(delegationStore.getRun(input.fromSessionId, runId) ?? initialRecord),
         status: "failed",

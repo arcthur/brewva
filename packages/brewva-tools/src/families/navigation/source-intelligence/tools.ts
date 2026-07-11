@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { scoreDocumentsByTfIdf, type TfIdfSearchDocument } from "@brewva/brewva-search";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import { estimateTokenCount } from "@brewva/brewva-token-estimation";
 import { Type } from "@sinclair/typebox";
@@ -116,7 +117,7 @@ function ensureExistingFile(filePath: string): string | null {
       return `Error: Path is not a file: ${filePath}`;
     }
   } catch (error) {
-    return `Error: ${error instanceof Error ? error.message : String(error)}`;
+    return `Error: ${toErrorMessage(error)}`;
   }
   return null;
 }
@@ -128,13 +129,13 @@ function ensureExistingPath(path: string): string | null {
   try {
     statSync(path);
   } catch (error) {
-    return `Error: ${error instanceof Error ? error.message : String(error)}`;
+    return `Error: ${toErrorMessage(error)}`;
   }
   return null;
 }
 
 function sourceIntelligenceError(error: unknown): string {
-  return `Error: ${error instanceof Error ? error.message : String(error)}`;
+  return `Error: ${toErrorMessage(error)}`;
 }
 
 function summarizeDigestDisplay(text: string): string {

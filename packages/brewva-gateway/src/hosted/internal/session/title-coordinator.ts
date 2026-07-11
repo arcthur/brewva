@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaMutableModelCatalog,
   BrewvaRegisteredModel,
@@ -161,7 +162,7 @@ export class SessionTitleCoordinator {
         source: candidate.source,
         model: candidate.modelText,
         presetName: candidate.presetName,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       });
     }
     return undefined;
@@ -194,7 +195,7 @@ export class SessionTitleCoordinator {
     } catch (error) {
       this.#logger?.warn("session_title_generation_failed", {
         sessionId: this.#sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        error: toErrorMessage(error),
       });
     }
   }

@@ -3,6 +3,7 @@ import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { rewriteFileAtomic } from "@brewva/brewva-std/node/fs";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { cloneCliShellPromptSnapshot, cloneCliShellPromptStashEntry } from "./prompt-parts.js";
 import type { ShellCompletionUsageEntry } from "./prompt.js";
 import type {
@@ -120,9 +121,7 @@ interface CliShellUiPrefs {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function readUiPrefsFile(filePath: string): CliShellUiPrefs {

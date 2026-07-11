@@ -1,4 +1,5 @@
 import { asBrewvaIntentId, asBrewvaSessionId } from "@brewva/brewva-runtime/core";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type { ConvergencePredicate } from "@brewva/brewva-vocabulary/iteration";
 import type {
@@ -132,7 +133,7 @@ function normalizeTaskPhase(value: unknown): TaskPhase | undefined {
 }
 
 function normalizeConvergencePredicate(value: unknown): ConvergencePredicate | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   const candidate = value as Record<string, unknown>;

@@ -7,6 +7,7 @@ import type {
   ProviderCacheRetention,
   ProviderCacheWriteMode,
 } from "@brewva/brewva-provider-core/contracts";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaDiffPreferences,
   BrewvaShellViewPreferences,
@@ -127,7 +128,7 @@ function readSettingsFile(path: string): HostedSettingsData {
 }
 
 function rejectRemovedModelDefaultSettings(path: string, parsed: unknown): void {
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     return;
   }
   const record = parsed as Record<string, unknown>;
@@ -200,7 +201,7 @@ function mergeSettings(base: HostedSettingsData, override: HostedSettingsData): 
 }
 
 function readModelPreferenceRef(value: unknown): { provider: string; id: string } | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   const record = value as Record<string, unknown>;
@@ -279,7 +280,7 @@ function normalizeCacheReason(value: unknown): ProviderCachePolicyReason {
 }
 
 function normalizeFallbackChains(value: unknown): HostedModelRoutingSettings["fallbackChains"] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return {};
   }
   const chains: Partial<Record<BrewvaModelRoleAlias, readonly string[]>> = {};

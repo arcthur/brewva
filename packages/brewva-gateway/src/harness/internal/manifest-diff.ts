@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { HarnessManifest } from "@brewva/brewva-vocabulary/harness";
 
 /**
@@ -58,7 +59,7 @@ export function stableCompareJson(value: unknown): string {
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 /**

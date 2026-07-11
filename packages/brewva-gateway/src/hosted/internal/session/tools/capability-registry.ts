@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { stableJsonSha256Hex } from "@brewva/brewva-std/hash";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import { parse as parseYaml } from "yaml";
 
 export type CapabilityRiskLevel = "read" | "draft" | "write" | "destructive" | "cross_system";
@@ -214,7 +214,7 @@ export function parseCapabilityManifestContent(
   try {
     parsed = parseYaml(content);
   } catch (error) {
-    failCapabilityManifest(filePath, error instanceof Error ? error.message : String(error));
+    failCapabilityManifest(filePath, toErrorMessage(error));
   }
   if (!isRecord(parsed)) {
     failCapabilityManifest(filePath, "manifest must parse to an object.");

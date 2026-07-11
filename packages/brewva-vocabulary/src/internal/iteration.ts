@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readStringList } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { type ContextBudgetUsage } from "./context.js";
 import { payloadOf, type BrewvaEventRecord } from "./events.js";
 // Single-homed in fitness.ts (where the projection mints it); the receipt only
@@ -465,7 +466,7 @@ function readIndependenceBasisArray(value: unknown): IndependenceBasis[] {
 }
 
 function readReviewerContext(value: unknown): ReviewerContext | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   const record = value as ProtocolRecord;

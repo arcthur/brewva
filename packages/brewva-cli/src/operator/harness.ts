@@ -32,6 +32,7 @@ import {
   type SessionIndexHarnessPatternCandidate,
   type SessionIndexHarnessTraceSnapshot,
 } from "@brewva/brewva-session-index";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import {
   buildHarnessEvaluationId,
   buildHarnessManifest,
@@ -218,9 +219,7 @@ export function runHarnessCandidateVerb(
     // A decision that could not be durably recorded did not happen: unlike a
     // compare (whose expensive report already printed), refusing here is
     // cheap and honest.
-    console.error(
-      `Error: failed to record the decision (${error instanceof Error ? error.message : String(error)}).`,
-    );
+    console.error(`Error: failed to record the decision (${toErrorMessage(error)}).`);
     return 1;
   }
   if (options.json) {
@@ -521,7 +520,7 @@ async function runHarnessCompare(
       });
     }
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Error: ${toErrorMessage(error)}`);
     return 1;
   }
   if (options.json) {
@@ -585,9 +584,9 @@ export function appendHarnessEvaluationReceipt(
     appendHarnessCandidateLifecycleRecord(workspaceRoot, receipt);
   } catch (error) {
     console.error(
-      `Warning: failed to append the evaluated receipt to the candidate ledger (${
-        error instanceof Error ? error.message : String(error)
-      }); the report above is complete, but ${report.candidateId} has no evaluated row.`,
+      `Warning: failed to append the evaluated receipt to the candidate ledger (${toErrorMessage(
+        error,
+      )}); the report above is complete, but ${report.candidateId} has no evaluated row.`,
     );
     return HARNESS_EXIT_PARTIAL_RECEIPT_FAILURE;
   }
@@ -978,7 +977,7 @@ function firstHarnessSnapshot(
 export { diffHarnessManifestFields } from "@brewva/brewva-gateway/harness";
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 function parseHarnessArgs(
@@ -995,7 +994,7 @@ function parseHarnessArgs(
       allowPositionals: true,
     });
   } catch (error) {
-    return { kind: "error", message: error instanceof Error ? error.message : String(error) };
+    return { kind: "error", message: toErrorMessage(error) };
   }
   if (parsed.values.help) {
     return { kind: "help" };

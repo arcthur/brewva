@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { BoxPlaneError } from "../errors.js";
 import { readRecord } from "../internal/guards.js";
 
@@ -40,7 +41,7 @@ async function loadBoxLiteSdk(): Promise<Record<string, unknown>> {
     return (await import(packageName)) as Record<string, unknown>;
   } catch (error) {
     throw new BoxPlaneError("Unable to load @boxlite-ai/boxlite", "boxlite_sdk_unavailable", {
-      cause: error instanceof Error ? error.message : String(error),
+      cause: toErrorMessage(error),
     });
   }
 }

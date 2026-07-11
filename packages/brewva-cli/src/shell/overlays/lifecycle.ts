@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import { getBrewvaToolMetadata } from "@brewva/brewva-tools/registry";
 import type { SessionRewindMode, SessionRewindSummary } from "@brewva/brewva-vocabulary/session";
 import type { OverlayPriority } from "../../internal/tui/index.js";
@@ -66,9 +67,7 @@ interface AuthorityCapabilitySelectionSummary {
 }
 
 function readRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function readAuthorityCapabilitySelection(
@@ -153,7 +152,7 @@ function buildAuthorityToolAccessRows(input: {
       rows.push({
         toolName,
         allowed: false,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: toErrorMessage(error),
       });
     }
   }

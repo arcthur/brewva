@@ -1,5 +1,5 @@
 import { normalizeStringList, readNonEmptyString } from "@brewva/brewva-std/text";
-import { isRecord, readFiniteNumberValue } from "@brewva/brewva-std/unknown";
+import { isRecord, readFiniteNumberValue, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaQuestionOption, BrewvaQuestionPrompt } from "@brewva/brewva-substrate/host-api";
 import type {
   ExplorerConsultConfidence,
@@ -650,7 +650,7 @@ export function extractStructuredOutcomeData(input: {
   } catch (error) {
     return {
       narrativeText: normalized.narrativeText,
-      parseError: error instanceof Error ? error.message : String(error),
+      parseError: toErrorMessage(error),
     };
   }
   const parsedSkillName = isRecord(parsed) ? readString(parsed.skillName) : undefined;

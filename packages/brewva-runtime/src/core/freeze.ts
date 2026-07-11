@@ -1,7 +1,8 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { DeepReadonly } from "./deep-readonly.js";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return isRecord(value);
 }
 
 export function deepFreezeValue<T>(value: T): DeepReadonly<T> {

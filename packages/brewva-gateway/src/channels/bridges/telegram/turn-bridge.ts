@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type {
   ChannelAdapter,
   ChannelTurnBridge,
@@ -47,7 +48,7 @@ export function createRuntimeChannelTurnBridge(
         sessionId: "channel:system",
         payload: {
           adapterId: options.adapter.id,
-          error: error instanceof Error ? error.message : String(error),
+          error: toErrorMessage(error),
         },
       });
       await options.onAdapterError?.(error);

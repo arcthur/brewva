@@ -7,6 +7,7 @@ import {
   rewriteFileAtomic,
   scanAppendOnly,
 } from "@brewva/brewva-std/node/fs";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaEventQuery,
   BrewvaEventRecord,
@@ -77,9 +78,7 @@ const TERMINAL_WAL_STATUSES = new Set(["done", "failed", "expired"]);
 export const RECOVERABLE_WAL_STATUSES = new Set(["pending", "inflight"]);
 
 function readRecord(value: unknown): WalRecord {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as ProtocolRecord)
-    : {};
+  return isRecord(value) ? (value as ProtocolRecord) : {};
 }
 
 function readFiniteNumber(value: unknown, fallback: number): number {
@@ -87,7 +86,7 @@ function readFiniteNumber(value: unknown, fallback: number): number {
 }
 
 function isTurnEnvelope(value: unknown): value is TurnEnvelope {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return false;
   }
   const record = value as ProtocolRecord;
@@ -310,7 +309,7 @@ function classifyWalRecord(
   } catch {
     return { ok: false, issueClass: "invalid_json" };
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     return { ok: false, issueClass: "not_object" };
   }
   const row = readRecord(parsed);
@@ -742,7 +741,7 @@ export function createRecoveryWalRecovery(
   }
 
   function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
+    return toErrorMessage(error);
   }
 
   function recordRecoveryEvent(event: RecoveryWalLifecycleEvent): void {
@@ -812,7 +811,7 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
   }
 
   function readSchedulerRecord(value: unknown): WalRecord {
-    return value && typeof value === "object" && !Array.isArray(value) ? (value as WalRecord) : {};
+    return isRecord(value) ? (value as WalRecord) : {};
   }
 
   function intentIdFor(input: WalRecord): string {
@@ -822,7 +821,7 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
 
   function recordScheduleEvent(record: WalRecord, kind: string): void {
     const scheduleEvents = readSchedulerRecord(options.runtime).scheduleEvents;
-    if (!scheduleEvents || typeof scheduleEvents !== "object" || Array.isArray(scheduleEvents)) {
+    if (!isRecord(scheduleEvents)) {
       return;
     }
     const recordIntent = (scheduleEvents as { recordIntent?: unknown }).recordIntent;
@@ -834,7 +833,7 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
 
   function recordDeferredIntent(record: SchedulerIntentRecord, reason: string): void {
     const scheduleEvents = readSchedulerRecord(options.runtime).scheduleEvents;
-    if (!scheduleEvents || typeof scheduleEvents !== "object" || Array.isArray(scheduleEvents)) {
+    if (!isRecord(scheduleEvents)) {
       return;
     }
     const recordRecoveryDeferred = (scheduleEvents as { recordRecoveryDeferred?: unknown })
@@ -1024,7 +1023,7 @@ export function createSchedulerService(options: SchedulerServiceOptions = {}): S
       await executeIntent(fired);
       settle();
     } catch (error) {
-      settle(error instanceof Error ? error.message : String(error));
+      settle(toErrorMessage(error));
     }
   }
 

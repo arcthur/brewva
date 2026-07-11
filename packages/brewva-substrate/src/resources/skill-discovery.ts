@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseMarkdownFrontmatter } from "@brewva/brewva-std/markdown";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaHostedSkill, BrewvaHostedSkillLoadResult } from "./resource-loader.js";
 
 const BREWVA_CONFIG_DIR_RELATIVE = ".brewva";
@@ -255,7 +256,7 @@ function readSkillDiscoveryConfig(rootDir: string, workspaceRoot: string): Skill
       diagnostics: [
         {
           path: configPath,
-          message: error instanceof Error ? error.message : String(error),
+          message: toErrorMessage(error),
         },
       ],
     };
@@ -347,7 +348,7 @@ export function discoverHostedSkills(input: {
       } catch (error) {
         diagnostics.push({
           path: filePath,
-          message: error instanceof Error ? error.message : String(error),
+          message: toErrorMessage(error),
         });
       }
     }

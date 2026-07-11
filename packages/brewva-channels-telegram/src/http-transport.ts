@@ -1,5 +1,5 @@
 import { sleepAtBoundary } from "@brewva/brewva-effect";
-import { isRecord } from "@brewva/brewva-std/unknown";
+import { isRecord, toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { TelegramChannelTransport, TelegramChannelTransportSendResult } from "./adapter.js";
 import type { TelegramOutboundRequest, TelegramUpdate } from "./types.js";
 
@@ -238,7 +238,7 @@ function buildHttpError(
 }
 
 function buildNetworkError(method: string, cause: unknown): TelegramTransportError {
-  const message = cause instanceof Error ? cause.message : String(cause);
+  const message = toErrorMessage(cause);
   return new TelegramTransportError(
     method,
     "network",
@@ -435,7 +435,7 @@ export class TelegramHttpTransport implements TelegramChannelTransport {
     try {
       parsed = (await response.json()) as TelegramApiResponse<T>;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toErrorMessage(error);
       throw buildApiError(method, `invalid json response (${message})`);
     }
 

@@ -8,6 +8,7 @@ import {
   readNonEmptyString as readTrimmedString,
   truncateText,
 } from "@brewva/brewva-std/text";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import Fuse from "fuse.js";
 import type { FuseResultMatch } from "fuse.js";
 
@@ -303,10 +304,9 @@ function loadKnowledgeDocs(searchRoot: string, workspaceRoot: string): LoadedKno
       try {
         ({ data, body } = parseMarkdownFrontmatter(raw));
       } catch (error) {
-        throw new Error(
-          `invalid_knowledge_document:${relativePath}:${error instanceof Error ? error.message : String(error)}`,
-          { cause: error },
-        );
+        throw new Error(`invalid_knowledge_document:${relativePath}:${toErrorMessage(error)}`, {
+          cause: error,
+        });
       }
       const title =
         readTrimmedString(data.title) ?? extractHeadingTitle(body) ?? basename(absolutePath);

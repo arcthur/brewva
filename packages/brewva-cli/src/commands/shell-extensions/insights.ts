@@ -5,6 +5,7 @@ import {
   type HostedExtensionApi,
 } from "@brewva/brewva-gateway/extensions";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { clampText, resolveInspectDirectory } from "../../operator/inspect-analysis.js";
 
 const DEFAULT_MAX_NOTIFICATION_LINES = 28;
@@ -90,10 +91,7 @@ export function createInsightsCommandExtension(
               }),
             );
           } catch (error) {
-            ctx.ui.notify(
-              `Insights failed: ${error instanceof Error ? error.message : String(error)}`,
-              "warning",
-            );
+            ctx.ui.notify(`Insights failed: ${toErrorMessage(error)}`, "warning");
           }
         },
       });

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync }
 import { writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { resolveSessionPatchHistoryDirectory } from "@brewva/brewva-vocabulary/workbench";
 
 /**
@@ -127,7 +128,7 @@ function readOptionalString(value: unknown): string | undefined | null {
 }
 
 function readManifestEntry(value: unknown): RollbackManifestEntry | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
   const candidate = value as Record<string, unknown>;
@@ -194,7 +195,7 @@ function readValidatedManifest(input: {
   } catch {
     return { reason: "rollback_artifact_invalid" };
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     return { reason: "rollback_artifact_invalid" };
   }
   const candidate = parsed as Record<string, unknown>;

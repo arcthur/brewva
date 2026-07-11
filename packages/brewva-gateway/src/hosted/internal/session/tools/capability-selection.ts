@@ -1,6 +1,7 @@
 import { basename, resolve } from "node:path";
 import type { ToolActionClass } from "@brewva/brewva-runtime/security";
 import { compactWhitespace, truncateText } from "@brewva/brewva-std/text";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   buildBrewvaCapabilitySelectionPromptBlock,
   type BrewvaSystemPromptCapabilitySelection,
@@ -267,7 +268,7 @@ export function readLatestCapabilitySelectionReceipt(input: {
   sessionId: string;
 }): CapabilitySelectionReceipt | undefined {
   const payload = input.runtime.ops.tools.capabilitySelection.latest(input.sessionId);
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return undefined;
   }
   const receipt = payload as Partial<CapabilitySelectionReceipt>;

@@ -12,6 +12,7 @@ import {
   evaluateBoundaryClassification,
   resolveBoundaryPolicy,
 } from "@brewva/brewva-runtime/security";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   listFourPortRuntimeEvents,
   recordFourPortRuntimeOpsEvent,
@@ -205,9 +206,7 @@ function listDurableTapeSessionIds(runtime: BrewvaRuntime): string[] {
 }
 
 function readObjectPayload(value: unknown): ProtocolRecord {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as ProtocolRecord)
-    : {};
+  return isRecord(value) ? (value as ProtocolRecord) : {};
 }
 
 export function createHostedRuntimeOpsContext(options: {
@@ -410,10 +409,10 @@ export function createHostedRuntimeOpsContext(options: {
       const payload = args[1];
       return {
         sessionId: first,
-        payload: payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {},
+        payload: isRecord(payload) ? payload : {},
       };
     }
-    if (first && typeof first === "object" && !Array.isArray(first)) {
+    if (isRecord(first)) {
       return first as RuntimeEventInput;
     }
     return {};
@@ -429,14 +428,13 @@ export function createHostedRuntimeOpsContext(options: {
 
   function latestRecordedPayload(sessionId: string, type: string): object | undefined {
     const latest = listEvents(sessionId, { type, last: 1 })[0]?.payload;
-    return latest && typeof latest === "object" && !Array.isArray(latest) ? latest : undefined;
+    return isRecord(latest) ? latest : undefined;
   }
 
   function recordInputPayload(type: string): RuntimeInputRecorder {
     return (inputValue: { readonly sessionId?: string } & Record<string, unknown>) => {
       const { payload, sessionId, timestamp, turn, ...rest } = inputValue;
-      const eventPayload =
-        payload && typeof payload === "object" && !Array.isArray(payload) ? payload : rest;
+      const eventPayload = isRecord(payload) ? payload : rest;
       return emit(sessionId ?? "default", type, eventPayload, {
         timestamp: typeof timestamp === "number" ? timestamp : undefined,
         turn: typeof turn === "number" ? turn : undefined,

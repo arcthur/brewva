@@ -5,6 +5,7 @@ import {
   type HostedExtensionApi,
 } from "@brewva/brewva-gateway/extensions";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BrewvaHostContext } from "@brewva/brewva-substrate/host-api";
 import { clampText, resolveInspectDirectory } from "../../operator/inspect-analysis.js";
 import { buildSessionInspectReport, formatInspectText } from "../../operator/inspect.js";
@@ -84,10 +85,7 @@ export function createInspectCommandExtension(
             resolveVerdictNotifyLevel(report.verdict),
           );
         } catch (error) {
-          ctx.ui.notify(
-            `Inspect failed: ${error instanceof Error ? error.message : String(error)}`,
-            "warning",
-          );
+          ctx.ui.notify(`Inspect failed: ${toErrorMessage(error)}`, "warning");
         }
       };
 

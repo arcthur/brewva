@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { Type } from "@sinclair/typebox";
 import type { TArray, TIntersect, TObject, TSchema, TUnion } from "@sinclair/typebox";
 import { Errors } from "@sinclair/typebox/errors";
@@ -67,12 +68,7 @@ export function createTypeBoxStreamingParse(parameters: TSchema): StreamingParse
 
   return {
     safeParse(input: unknown): StreamingParseResult {
-      if (
-        input === null ||
-        input === undefined ||
-        typeof input !== "object" ||
-        Array.isArray(input)
-      ) {
+      if (!isRecord(input)) {
         return { status: "incomplete", output: {} };
       }
 

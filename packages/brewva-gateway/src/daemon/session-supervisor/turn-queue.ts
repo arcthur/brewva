@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { SendPromptOutput } from "../session-backend.js";
 import { extractBusyTurnId } from "./worker-rpc.js";
 import { type TurnQueueControllerDeps, type WorkerHandle } from "./worker-state.js";
@@ -102,11 +103,7 @@ export class SessionTurnQueueCoordinator {
       }
 
       if (queued.walId) {
-        this.deps.markRecoveryWalFailed(
-          handle,
-          queued.requestedTurnId,
-          error instanceof Error ? error.message : String(error),
-        );
+        this.deps.markRecoveryWalFailed(handle, queued.requestedTurnId, toErrorMessage(error));
       }
       this.deps.rejectPendingTurn(handle, queued.requestedTurnId, error);
       queued.reject(error instanceof Error ? error : new Error(String(error)));

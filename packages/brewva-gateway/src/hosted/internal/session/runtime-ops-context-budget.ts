@@ -1,4 +1,5 @@
 import { CONTEXT_CRITICAL_ALLOWED_TOOLS } from "@brewva/brewva-runtime/security";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   decideCompaction,
   deriveContextBudgetState,
@@ -26,7 +27,7 @@ function finiteNumber(value: unknown): number | null {
 }
 
 function readPayloadNumber(payload: unknown, key: string): number | null {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  if (!isRecord(payload)) return null;
   return finiteNumber((payload as Record<string, unknown>)[key]);
 }
 

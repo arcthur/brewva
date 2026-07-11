@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import type { BoxScope } from "../contract.js";
 import { BoxPlaneError } from "../errors.js";
 import { isNodeError, readRecord } from "../internal/guards.js";
@@ -28,7 +29,7 @@ export async function loadPersistedBoxIndex(indexPath: string): Promise<StoredBo
     if (isNodeError(error) && error.code === "ENOENT") return [];
     throw new BoxPlaneError("Unable to load Brewva box plane index", "box_unavailable", {
       path: indexPath,
-      cause: error instanceof Error ? error.message : String(error),
+      cause: toErrorMessage(error),
     });
   }
 }

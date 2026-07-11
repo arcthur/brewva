@@ -12,6 +12,7 @@ import {
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
 import type { BrewvaForensicConfigWarning } from "@brewva/brewva-runtime/config";
 import { projectDelegationInspectionState } from "@brewva/brewva-session-index";
+import { toErrorMessage, isRecord } from "@brewva/brewva-std/unknown";
 import type { DelegationInspectionProjection } from "@brewva/brewva-vocabulary/delegation";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import type { FitnessDiscrepancy } from "@brewva/brewva-vocabulary/fitness";
@@ -366,7 +367,7 @@ function toIso(timestamp: number | null | undefined): string | null {
 }
 
 function readPayloadString(payload: unknown, key: string): string | null {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return null;
   }
   const value = (payload as Record<string, unknown>)[key];
@@ -374,11 +375,11 @@ function readPayloadString(payload: unknown, key: string): string | null {
 }
 
 function readPayloadStringRecord(payload: unknown, key: string): Record<string, string> {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return {};
   }
   const value = (payload as Record<string, unknown>)[key];
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return {};
   }
   const record: Record<string, string> = {};
@@ -391,13 +392,11 @@ function readPayloadStringRecord(payload: unknown, key: string): Record<string, 
 }
 
 function readPayloadObject(payload: unknown, key: string): Record<string, unknown> {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return {};
   }
   const value = (payload as Record<string, unknown>)[key];
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return isRecord(value) ? (value as Record<string, unknown>) : {};
 }
 
 function readText(value: unknown): string | null {
@@ -461,7 +460,7 @@ function buildLineageInspection(
       outcomeCount: 0,
       adoptedOutcomeCount: 0,
       selectedByChannel: {},
-      unsupportedReason: error instanceof Error ? error.message : String(error),
+      unsupportedReason: toErrorMessage(error),
     };
   }
 }

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { sha256Hex } from "@brewva/brewva-std/hash";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaToolDefinition as ToolDefinition } from "@brewva/brewva-substrate/tools";
 import type {
   WorkerApplyReport,
@@ -108,9 +109,7 @@ function formatApplyReport(report: WorkerApplyReport): string {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  return isRecord(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 function workerIdOf(result: WorkerResult, index: number): string {

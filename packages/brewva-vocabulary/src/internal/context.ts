@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { finiteNumber, isProtocolRecord } from "./shared.js";
 import type { ProtocolRecord } from "./types/foundation.js";
 
@@ -301,7 +302,7 @@ export interface TransientReductionState extends ProtocolRecord {
 }
 
 export function coerceContextBudgetUsage(value: unknown): ContextBudgetUsage | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   const record = value as ProtocolRecord;

@@ -1,5 +1,6 @@
 import process from "node:process";
 import { BrewvaConfigLoadError } from "@brewva/brewva-runtime/config";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 
 const NODE_VERSION_RANGE = "^20.19.0 || >=22.13.0";
 
@@ -58,6 +59,6 @@ export function printStartupError(error: unknown): void {
     console.error(`[config:error] ${error.configPath}: ${error.message}`);
     return;
   }
-  const message = error instanceof Error ? error.message : String(error);
+  const message = toErrorMessage(error);
   console.error(`Error: ${message}`);
 }

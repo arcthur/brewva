@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import {
   estimateBrewvaSessionEntryTokens,
   selectBrewvaSessionCompactionCutPoint,
@@ -248,7 +249,7 @@ function appendMessage(entry: BrewvaSessionEntry, messages: BrewvaStoredAgentMes
 }
 
 function readActiveSummaryKey(details: unknown): string | null {
-  if (typeof details !== "object" || details === null || Array.isArray(details)) {
+  if (!isRecord(details)) {
     return null;
   }
   const value = (details as { activeSummaryKey?: unknown }).activeSummaryKey;

@@ -254,7 +254,7 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
         : undefined;
     const handleAdapterError = async (error: unknown): Promise<void> => {
       if (options.verbose) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = toErrorMessage(error);
         console.error(`[channel:${channel}:error] ${message}`);
       }
     };
@@ -275,7 +275,7 @@ export async function runChannelModeOperation(options: RunChannelModeOptions): P
     };
     bundle = channelLaunchers[channel](launcherInput);
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`Error: ${toErrorMessage(error)}`);
     process.exitCode = 1;
     return;
   }

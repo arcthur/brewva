@@ -1,3 +1,4 @@
+import { isRecord } from "@brewva/brewva-std/unknown";
 import { parse as partialParse } from "partial-json";
 import type {
   StreamingParseRegistry,
@@ -39,7 +40,7 @@ export function parseStreamingJson(
   }
 
   if (!schema) {
-    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+    if (isRecord(parsed)) {
       return { parseStatus: undefined, output: parsed as Record<string, unknown> };
     }
     return { parseStatus: undefined, output: {} };

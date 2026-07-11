@@ -5,6 +5,7 @@ import {
   appendFileDurable,
   scanAppendOnly,
 } from "@brewva/brewva-std/node/fs";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type { BrewvaEventRecord } from "@brewva/brewva-vocabulary/events";
 import { PLAN_MAP_EVENT_TYPES, type PlanMapEventType } from "@brewva/brewva-vocabulary/plan-map";
 
@@ -46,7 +47,7 @@ function classifyPlanMapLine(line: string): AppendOnlyClassification<BrewvaEvent
   } catch {
     return { ok: false, issueClass: "invalid_json", tag: "plan-map" };
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!isRecord(parsed)) {
     return { ok: false, issueClass: "non_object", tag: "plan-map" };
   }
   const record = parsed as Record<string, unknown>;

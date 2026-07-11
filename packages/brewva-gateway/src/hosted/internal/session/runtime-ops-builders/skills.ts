@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
+import { toErrorMessage } from "@brewva/brewva-std/unknown";
 import { SKILL_SELECTION_RECORDED_EVENT_TYPE } from "@brewva/brewva-vocabulary/harness";
 import { parseSkillDocument } from "@brewva/brewva-vocabulary/session";
 import type { SkillDocument, SkillRegistryLoadReport } from "@brewva/brewva-vocabulary/session";
@@ -113,7 +114,7 @@ export function composeSkillCatalog(input: {
       } catch (error) {
         failed.push({
           filePath,
-          error: error instanceof Error ? error.message : String(error),
+          error: toErrorMessage(error),
         });
       }
     }

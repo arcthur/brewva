@@ -7,6 +7,7 @@ import {
   runHostedPromptTurn,
 } from "@brewva/brewva-gateway/hosted";
 import type { HostedRuntimeAdapterPort } from "@brewva/brewva-gateway/hosted";
+import { isRecord } from "@brewva/brewva-std/unknown";
 import type {
   BrewvaManagedPromptSession,
   BrewvaPromptSessionEvent,
@@ -69,7 +70,7 @@ function writeStdout(text: string): void {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return undefined;
   }
   return value as Record<string, unknown>;
